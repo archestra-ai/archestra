@@ -1,6 +1,5 @@
 import { and, eq, isNull } from "drizzle-orm";
 import db, { schema } from "@/database";
-import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import { knowledgeSourceAccessControlService } from "@/knowledge-base";
 import logger from "@/logging";
 import {
@@ -152,19 +151,12 @@ async function resolveAgentName(
   requestedName: string,
   organizationId: string,
 ): Promise<string> {
-  const existing = await db
-    .select({ id: schema.agentsTable.id })
-    .from(schema.agentsTable)
-    .where(
-      and(
-        eq(schema.agentsTable.name, requestedName),
-        eq(schema.agentsTable.organizationId, organizationId),
-        notDeleted(schema.agentsTable),
-      ),
-    )
-    .limit(1);
+  const existing = await AgentModel.activeNameExistsInOrganization({
+    name: requestedName,
+    organizationId,
+  });
 
-  if (existing.length === 0) {
+  if (!existing) {
     return requestedName;
   }
 
@@ -172,19 +164,12 @@ async function resolveAgentName(
   let candidate = `${requestedName} (imported)`;
 
   for (let counter = 2; counter <= 100; counter++) {
-    const dup = await db
-      .select({ id: schema.agentsTable.id })
-      .from(schema.agentsTable)
-      .where(
-        and(
-          eq(schema.agentsTable.name, candidate),
-          eq(schema.agentsTable.organizationId, organizationId),
-          notDeleted(schema.agentsTable),
-        ),
-      )
-      .limit(1);
+    const dup = await AgentModel.activeNameExistsInOrganization({
+      name: candidate,
+      organizationId,
+    });
 
-    if (dup.length === 0) {
+    if (!dup) {
       return candidate;
     }
 
@@ -323,20 +308,13 @@ async function resolveAndAssignDelegations(
   if (delegationRefs.length === 0) return;
 
   for (const ref of delegationRefs) {
-    const [targetAgent] = await db
-      .select({ id: schema.agentsTable.id })
-      .from(schema.agentsTable)
-      .where(
-        and(
-          eq(schema.agentsTable.name, ref.targetAgentName),
-          eq(schema.agentsTable.organizationId, organizationId),
-          eq(schema.agentsTable.agentType, "agent"),
-          notDeleted(schema.agentsTable),
-        ),
-      )
-      .limit(1);
+    const targetAgentId = await AgentModel.findActiveIdByNameInOrganization({
+      name: ref.targetAgentName,
+      organizationId,
+      agentType: "agent",
+    });
 
-    if (!targetAgent) {
+    if (!targetAgentId) {
       warnings.push({
         type: "delegation",
         name: ref.targetAgentName,
@@ -348,7 +326,7 @@ async function resolveAndAssignDelegations(
     // Enforce delegation visibility for non-admin users by using the same
     // team-filtered agent lookup pattern used in other routes.
     const accessibleTarget = await AgentModel.findById(
-      targetAgent.id,
+      targetAgentId,
       userId,
       false,
     );
@@ -362,7 +340,7 @@ async function resolveAndAssignDelegations(
     }
 
     try {
-      await AgentToolModel.assignDelegation(agentId, targetAgent.id);
+      await AgentToolModel.assignDelegation(agentId, targetAgentId);
     } catch (error) {
       logger.warn(
         { agentId, targetAgentName: ref.targetAgentName, error: String(error) },

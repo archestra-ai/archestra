@@ -80,6 +80,49 @@ class AgentModel {
       .orderBy(desc(schema.agentsTable.createdAt));
   }
 
+  static async activeNameExistsInOrganization(params: {
+    name: string;
+    organizationId: string;
+  }): Promise<boolean> {
+    const [row] = await db
+      .select({ id: schema.agentsTable.id })
+      .from(schema.agentsTable)
+      .where(
+        and(
+          eq(schema.agentsTable.name, params.name),
+          eq(schema.agentsTable.organizationId, params.organizationId),
+          notDeleted(schema.agentsTable),
+        ),
+      )
+      .limit(1);
+
+    return row !== undefined;
+  }
+
+  static async findActiveIdByNameInOrganization(params: {
+    name: string;
+    organizationId: string;
+    agentType?: AgentType;
+  }): Promise<string | null> {
+    const conditions: SQL[] = [
+      eq(schema.agentsTable.name, params.name),
+      eq(schema.agentsTable.organizationId, params.organizationId),
+      notDeleted(schema.agentsTable),
+    ];
+
+    if (params.agentType) {
+      conditions.push(eq(schema.agentsTable.agentType, params.agentType));
+    }
+
+    const [row] = await db
+      .select({ id: schema.agentsTable.id })
+      .from(schema.agentsTable)
+      .where(and(...conditions))
+      .limit(1);
+
+    return row?.id ?? null;
+  }
+
   /**
    * Populate author identity on agents by looking up users in one batch.
    */

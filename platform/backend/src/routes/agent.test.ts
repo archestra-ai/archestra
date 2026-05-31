@@ -720,7 +720,7 @@ describe("agent routes", () => {
       expect(restoreResponse.json().agentType).toBe("llm_proxy");
     });
 
-    test("returns 409 when restoring would create a duplicate active slug", async () => {
+    test("returns 409 when restoring would create a duplicate active name", async () => {
       const { default: AgentModel } = await import("@/models/agent");
       const suffix = crypto.randomUUID().slice(0, 8);
       const deleted = await AgentModel.create({
@@ -748,7 +748,7 @@ describe("agent routes", () => {
 
       expect(restoreResponse.statusCode).toBe(409);
       expect(restoreResponse.json().error.message).toContain(
-        "another active MCP gateway is already using this slug",
+        "another active MCP gateway is already using this name",
       );
     });
 

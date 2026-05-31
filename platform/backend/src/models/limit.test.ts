@@ -2864,6 +2864,92 @@ describe("checkLimitsBeforeRequest cleanup integration", () => {
     expect(result).not.toBeNull();
   });
 
+  test("checkEntityLimits ignores stale usage rows outside a model-scoped limit", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({ name: "Test Agent" });
+
+    const limit = await LimitModel.create({
+      entityType: "agent",
+      entityId: agent.id,
+      limitType: "token_cost",
+      limitValue: 1,
+      model: null,
+    });
+
+    await LimitModel.updateTokenLimitUsage(
+      "agent",
+      agent.id,
+      "claude-3-5-sonnet-20241022",
+      1_000_000_000,
+      1_000_000_000,
+    );
+
+    await LimitModel.patch(limit.id, {
+      model: ["gpt-4o"],
+      lastCleanup: new Date(),
+    });
+
+    const result = await LimitValidationService.checkLimitsBeforeRequest({
+      agentId: agent.id,
+      model: "gpt-4o",
+    });
+
+    expect(result).toBeNull();
+  });
+
+  test("checkEntityLimits skips organization limits scoped to another request model", async ({
+    makeAgent,
+    makeMember,
+    makeOrganization,
+    makeTeam,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const team = await makeTeam(org.id, user.id);
+    const agent = await makeAgent({ name: "Test Agent" });
+    await makeMember(user.id, org.id, { role: "admin" });
+    await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
+
+    const orgLimit = await LimitModel.create({
+      entityType: "organization",
+      entityId: org.id,
+      limitType: "token_cost",
+      limitValue: 1,
+      model: ["gpt-4o"],
+    });
+
+    await LimitModel.updateTokenLimitUsage(
+      "organization",
+      org.id,
+      "gpt-4o",
+      1_000_000_000,
+      1_000_000_000,
+    );
+
+    await LimitModel.patch(orgLimit.id, { lastCleanup: new Date() });
+
+    const allowedResult = await LimitValidationService.checkLimitsBeforeRequest(
+      {
+        agentId: agent.id,
+        model: "claude-3-5-sonnet-20241022",
+      },
+    );
+
+    expect(allowedResult).toBeNull();
+
+    const blockedResult = await LimitValidationService.checkLimitsBeforeRequest(
+      {
+        agentId: agent.id,
+        model: "gpt-4o",
+      },
+    );
+
+    expect(blockedResult).not.toBeNull();
+    expect(blockedResult?.[1]).toContain("organization-level");
+  });
+
   test("checkEntityLimits allows request when usage is under limit value", async ({
     makeAgent,
   }) => {

@@ -8,6 +8,7 @@ import {
   type ModelsDevApiResponse,
   modelsDevClient,
 } from "@/clients/models-dev-client";
+import { ollamaClient } from "@/clients/ollama-client";
 import logger from "@/logging";
 import {
   LlmProviderApiKeyModelLinkModel,
@@ -94,10 +95,11 @@ class ModelSyncService {
       // Use the API key's provider (not the fetcher's detected provider) so that
       // models from OpenAI-compatible proxies are stored under the correct provider
       // instead of being mis-classified by heuristic model ID prefix detection.
-      const modelsToUpsert = buildModelsToUpsert({
+      const modelsToUpsert = await buildModelsToUpsert({
         provider,
         models: providerModels,
         modelsDevData,
+        baseUrl,
       });
 
       const upsertedModels = forceRefresh
@@ -239,47 +241,61 @@ interface ProviderModelCapabilities {
   completionPricePerToken: string | null;
 }
 
-export function buildModelsToUpsert(params: {
+export async function buildModelsToUpsert(params: {
   provider: SupportedProvider;
   models: Array<{ id: string; capabilities?: FetchedModelCapabilities }>;
   modelsDevData: ModelsDevApiResponse;
-}): CreateModel[] {
-  const { provider, models, modelsDevData } = params;
+  baseUrl?: string | null;
+}): Promise<CreateModel[]> {
+  const { provider, models, modelsDevData, baseUrl } = params;
   const capabilitiesMap = buildCapabilitiesMap(modelsDevData, provider);
 
-  return models.map((model) => {
-    const capabilities = resolveModelCapabilities({
-      provider,
-      modelId: model.id,
-      capabilities: capabilitiesMap.get(model.id),
-      fetched: model.capabilities,
-    });
+  return Promise.all(
+    models.map(async (model) => {
+      const capabilities = await resolveModelCapabilities({
+        provider,
+        modelId: model.id,
+        capabilities: capabilitiesMap.get(model.id),
+        fetched: model.capabilities,
+        baseUrl,
+      });
 
-    return {
-      externalId: `${provider}/${model.id}`,
-      provider,
-      modelId: model.id,
-      description: capabilities.description,
-      contextLength: capabilities.contextLength,
-      inputModalities: capabilities.inputModalities,
-      outputModalities: capabilities.outputModalities,
-      supportsToolCalling: capabilities.supportsToolCalling,
-      promptPricePerToken: capabilities.promptPricePerToken,
-      completionPricePerToken: capabilities.completionPricePerToken,
-      embeddingDimensions: inferEmbeddingDimensions(model.id, provider),
-      lastSyncedAt: new Date(),
-    };
-  });
+      return {
+        externalId: `${provider}/${model.id}`,
+        provider,
+        modelId: model.id,
+        description: capabilities.description,
+        contextLength: capabilities.contextLength,
+        inputModalities: capabilities.inputModalities,
+        outputModalities: capabilities.outputModalities,
+        supportsToolCalling: capabilities.supportsToolCalling,
+        promptPricePerToken: capabilities.promptPricePerToken,
+        completionPricePerToken: capabilities.completionPricePerToken,
+        embeddingDimensions: await inferEmbeddingDimensions(
+          model.id,
+          provider,
+          baseUrl,
+        ),
+        lastSyncedAt: new Date(),
+      };
+    }),
+  );
 }
 
 /**
  * Best-effort inference of embedding dimensions for known models.
  * Unknown models return null and can be configured manually in the model editor.
  */
-function inferEmbeddingDimensions(
+async function inferEmbeddingDimensions(
   modelId: string,
   provider: SupportedProvider,
-): SupportedEmbeddingDimension | null {
+  baseUrl?: string | null,
+): Promise<SupportedEmbeddingDimension | null> {
+  if (provider === "ollama") {
+    const caps = await ollamaClient.inferModelCapabilities(modelId, baseUrl);
+    return caps.embeddingDimensions;
+  }
+
   const id = modelId.toLowerCase();
   if (
     (provider === "openai" || provider === "azure") &&
@@ -315,18 +331,20 @@ function inferEmbeddingDimensions(
 }
 
 /** @public — exported for testability */
-export function resolveModelCapabilities(params: {
+export async function resolveModelCapabilities(params: {
   provider: SupportedProvider;
   modelId: string;
   /** Capabilities from models.dev enrichment. */
   capabilities?: ProviderModelCapabilities;
   /** Capabilities read directly from the provider's models endpoint. Highest priority. */
   fetched?: FetchedModelCapabilities;
-}): ProviderModelCapabilities {
-  const { provider, modelId, capabilities, fetched } = params;
-  const inferredCapabilities = inferModelCapabilities({
+  baseUrl?: string | null;
+}): Promise<ProviderModelCapabilities> {
+  const { provider, modelId, capabilities, fetched, baseUrl } = params;
+  const inferredCapabilities = await inferModelCapabilities({
     provider,
     modelId,
+    baseUrl,
   });
 
   // Priority per field: fetcher -> models.dev -> hardcoded inference.
@@ -434,11 +452,12 @@ function parseModalities<T>(
   return validated.length > 0 ? validated : null;
 }
 
-function inferModelCapabilities(params: {
+async function inferModelCapabilities(params: {
   provider: SupportedProvider;
   modelId: string;
-}): ProviderModelCapabilities {
-  const { provider, modelId } = params;
+  baseUrl?: string | null;
+}): Promise<ProviderModelCapabilities> {
+  const { provider, modelId, baseUrl } = params;
 
   if (provider === "azure") {
     return inferAzureCapabilities(modelId);
@@ -448,7 +467,25 @@ function inferModelCapabilities(params: {
     return inferGeminiCapabilities(modelId);
   }
 
+  if (provider === "ollama") {
+    return inferOllamaCapabilities(modelId, baseUrl);
+  }
+
   return emptyCapabilities();
+}
+
+async function inferOllamaCapabilities(
+  modelId: string,
+  baseUrl?: string | null,
+): Promise<ProviderModelCapabilities> {
+  const caps = await ollamaClient.inferModelCapabilities(modelId, baseUrl);
+
+  return {
+    description: null,
+    promptPricePerToken: null,
+    completionPricePerToken: null,
+    ...caps,
+  };
 }
 
 function inferAzureCapabilities(modelId: string): ProviderModelCapabilities {

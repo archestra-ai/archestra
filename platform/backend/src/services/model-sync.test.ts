@@ -281,8 +281,8 @@ describe("ModelSyncService", () => {
     expect(flashAfterResync?.outputModalities).toEqual(["text", "image"]);
   });
 
-  test("normalizes gemini-embedding-2-preview as multimodal during sync", () => {
-    const capabilities = resolveModelCapabilities({
+  test("normalizes gemini-embedding-2-preview as multimodal during sync", async () => {
+    const capabilities = await resolveModelCapabilities({
       provider: "gemini",
       modelId: "gemini-embedding-2-preview",
       capabilities: {
@@ -301,8 +301,8 @@ describe("ModelSyncService", () => {
     expect(capabilities.supportsToolCalling).toBe(false);
   });
 
-  test("prefers fetcher capabilities over models.dev with per-field fallthrough", () => {
-    const capabilities = resolveModelCapabilities({
+  test("prefers fetcher capabilities over models.dev with per-field fallthrough", async () => {
+    const capabilities = await resolveModelCapabilities({
       provider: "openrouter",
       modelId: "deepseek/deepseek-chat-v3.1:free",
       capabilities: {

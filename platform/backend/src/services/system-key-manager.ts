@@ -218,7 +218,7 @@ class SystemKeyManager {
 
     // Merge provider models with models.dev capabilities, falling back to
     // inferred capabilities when models.dev lacks metadata for a specific model.
-    const modelsToUpsert: CreateModel[] = buildModelsToUpsert({
+    const modelsToUpsert: CreateModel[] = await buildModelsToUpsert({
       provider,
       models,
       modelsDevData,

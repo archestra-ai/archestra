@@ -113,6 +113,8 @@ export { default as processedEmailsTable } from "./processed-email";
 export { default as scheduleTriggersTable } from "./schedule-trigger";
 export { default as scheduleTriggerRunsTable } from "./schedule-trigger-run";
 export { default as secretsTable } from "./secret";
+export { default as serviceAccountsTable } from "./service-account";
+export { default as serviceAccountTokensTable } from "./service-account-token";
 export { default as sessionsTable } from "./session";
 export { default as siteNotificationsTable } from "./site-notification";
 export { default as skillsTable } from "./skill";

@@ -128,8 +128,8 @@ import {
   useSyncAgentDelegations,
 } from "@/lib/agent-tools.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useIdentityProviders } from "@/lib/auth/identity-provider-read.query";
 import { useChatProfileMcpTools } from "@/lib/chat/chat.query";
-import config from "@/lib/config/config";
 import { useFeature } from "@/lib/config/config.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useAppName } from "@/lib/hooks/use-app-name";
@@ -145,15 +145,6 @@ import {
   normalizeSuggestedPrompts,
   shouldShowDescriptionField,
 } from "./agent-dialog.utils";
-
-const { useIdentityProviders } = config.enterpriseFeatures.core
-  ? // biome-ignore lint/style/noRestrictedImports: conditional EE query import for IdP selector
-    await import("@/lib/auth/identity-provider.query.ee")
-  : {
-      useIdentityProviders: (_params?: { enabled?: boolean }) => ({
-        data: [] as Array<{ id: string; providerId: string; issuer: string }>,
-      }),
-    };
 
 type Agent = archestraApiTypes.GetAllAgentsResponses["200"][number];
 type ToolExposureMode = Agent["toolExposureMode"];

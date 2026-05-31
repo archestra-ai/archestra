@@ -65,6 +65,7 @@ export const allAvailableActions: Record<Resource, Action[]> = {
 
   // Administration (overrides better-auth defaults to add "read" where needed)
   apiKey: ["read", "create", "delete"],
+  serviceAccount: ["read", "create", "update", "delete"],
   auditLog: ["read"],
   agentSettings: ["read", "update"],
   llmSettings: ["read", "update"],
@@ -124,6 +125,7 @@ export const editorPermissions: Record<Resource, Action[]> = {
 
   // Administration (overrides better-auth defaults to add "read" where needed)
   apiKey: ["read", "create", "delete"],
+  serviceAccount: [],
   auditLog: [],
   agentSettings: [],
   llmSettings: ["read", "update"],
@@ -183,6 +185,7 @@ export const memberPermissions: Record<Resource, Action[]> = {
 
   // Administration (overrides better-auth defaults to add "read" where needed)
   apiKey: ["read", "create", "delete"],
+  serviceAccount: [],
   auditLog: [],
   agentSettings: [],
   llmSettings: [],
@@ -364,6 +367,10 @@ export const permissionDescriptions: Record<string, string> = {
   "apiKey:read": "View API keys",
   "apiKey:create": "Create API keys",
   "apiKey:delete": "Delete API keys",
+  "serviceAccount:read": "View service accounts",
+  "serviceAccount:create": "Create service accounts",
+  "serviceAccount:update": "Modify service accounts",
+  "serviceAccount:delete": "Delete service accounts",
   "auditLog:read":
     "View the organization-wide audit log of administrative actions",
   "organizationSettings:read":
@@ -826,6 +833,30 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.DeleteApiKey]: {
     apiKey: ["delete"],
   },
+  [RouteId.GetServiceAccounts]: {
+    serviceAccount: ["read"],
+  },
+  [RouteId.GetServiceAccount]: {
+    serviceAccount: ["read"],
+  },
+  [RouteId.CreateServiceAccount]: {
+    serviceAccount: ["create"],
+  },
+  [RouteId.UpdateServiceAccount]: {
+    serviceAccount: ["update"],
+  },
+  [RouteId.DeleteServiceAccount]: {
+    serviceAccount: ["delete"],
+  },
+  [RouteId.CreateServiceAccountToken]: {
+    serviceAccount: ["update"],
+  },
+  [RouteId.UpdateServiceAccountToken]: {
+    serviceAccount: ["update"],
+  },
+  [RouteId.DeleteServiceAccountToken]: {
+    serviceAccount: ["update"],
+  },
   [RouteId.GetAllVirtualApiKeys]: {
     llmVirtualKey: ["read"],
   },
@@ -1243,6 +1274,7 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   // Settings
   "/settings/account": {},
   "/settings/api-keys": { apiKey: ["read"] },
+  "/settings/service-accounts": { serviceAccount: ["read"] },
   "/settings/llm": { llmSettings: ["read"] },
   "/settings/agents": { agentSettings: ["read"] },
   "/settings/knowledge": { knowledgeSettings: ["read"] },
@@ -1252,5 +1284,4 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/settings/identity-providers": { identityProvider: ["read"] },
   "/settings/secrets": { secret: ["read"] },
   "/settings/organization": { organizationSettings: ["read"] },
-  "/settings/connection": { organizationSettings: ["read"] },
 };

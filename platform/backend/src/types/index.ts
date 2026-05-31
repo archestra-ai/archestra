@@ -56,6 +56,7 @@ export * from "./role";
 export * from "./schedule-trigger";
 export * from "./secret";
 export * from "./secrets-manager";
+export * from "./service-account";
 export * from "./session";
 export * from "./skill";
 export * from "./skill-sandbox";

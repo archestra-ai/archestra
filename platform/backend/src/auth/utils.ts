@@ -2,11 +2,13 @@ import type { IncomingHttpHeaders } from "node:http";
 import type { Action, Permissions, Resource } from "@shared";
 import { auth as betterAuth } from "@/auth/better-auth";
 import logger from "@/logging";
-import { UserModel } from "@/models";
+import { ServiceAccountModel, UserModel } from "@/models";
+import type { SelectServiceAccount } from "@/types";
 
 export const hasPermission = async (
   permissions: Permissions,
   requestHeaders: IncomingHttpHeaders,
+  serviceAccount?: SelectServiceAccount,
 ): Promise<{ success: boolean; error: Error | null }> => {
   const headers = new Headers(requestHeaders as HeadersInit);
   logger.trace(
@@ -15,6 +17,20 @@ export const hasPermission = async (
   );
 
   try {
+    if (serviceAccount) {
+      const serviceAccountPermissions =
+        await ServiceAccountModel.getPermissions(serviceAccount);
+      const hasAllPermissions = hasRequiredPermissions(
+        serviceAccountPermissions,
+        permissions,
+      );
+
+      return {
+        success: hasAllPermissions,
+        error: hasAllPermissions ? null : new Error("Forbidden"),
+      };
+    }
+
     const result = await betterAuth.api.hasPermission({
       headers,
       body: {
@@ -74,10 +90,48 @@ export const hasPermission = async (
             error: hasAllPermissions ? null : new Error("Forbidden"),
           };
         }
-        logger.trace("[hasPermission] API key verification returned invalid");
+        logger.trace(
+          "[hasPermission] API key verification returned invalid, trying service account token",
+        );
+        const serviceAccountResult =
+          await ServiceAccountModel.verifyToken(authHeader);
+        if (serviceAccountResult) {
+          const serviceAccountPermissions =
+            await ServiceAccountModel.getPermissions(
+              serviceAccountResult.serviceAccount,
+            );
+          const hasAllPermissions = hasRequiredPermissions(
+            serviceAccountPermissions,
+            permissions,
+          );
+
+          return {
+            success: hasAllPermissions,
+            error: hasAllPermissions ? null : new Error("Forbidden"),
+          };
+        }
       } catch (_apiKeyError) {
-        // Not a valid API key, return original error
-        logger.trace("[hasPermission] API key verification failed");
+        logger.trace(
+          "[hasPermission] API key verification failed, trying service account token",
+        );
+        const serviceAccountResult =
+          await ServiceAccountModel.verifyToken(authHeader);
+        if (serviceAccountResult) {
+          const serviceAccountPermissions =
+            await ServiceAccountModel.getPermissions(
+              serviceAccountResult.serviceAccount,
+            );
+          const hasAllPermissions = hasRequiredPermissions(
+            serviceAccountPermissions,
+            permissions,
+          );
+
+          return {
+            success: hasAllPermissions,
+            error: hasAllPermissions ? null : new Error("Forbidden"),
+          };
+        }
+
         return { success: false, error: new Error("Invalid API key") };
       }
     }
@@ -99,11 +153,24 @@ export const userHasPermission = async (
   resource: Resource,
   action: Action,
 ): Promise<boolean> => {
-  const permissions = await UserModel.getUserPermissions(
+  const permissions = await getPermissionsForUserContext({
     userId,
     organizationId,
-  );
+  });
+
   return permissions[resource]?.includes(action) ?? false;
+};
+
+export const getPermissionsForUserContext = async (params: {
+  userId: string;
+  organizationId: string;
+}): Promise<Permissions> => {
+  const serviceAccount = await getServiceAccountFromSyntheticUserId(params);
+  if (serviceAccount) {
+    return ServiceAccountModel.getPermissions(serviceAccount);
+  }
+
+  return UserModel.getUserPermissions(params.userId, params.organizationId);
 };
 
 function hasRequiredPermissions(
@@ -119,4 +186,21 @@ function hasRequiredPermissions(
   }
 
   return true;
+}
+
+async function getServiceAccountFromSyntheticUserId(params: {
+  userId: string;
+  organizationId: string;
+}): Promise<SelectServiceAccount | null> {
+  const prefix = "service-account:";
+  if (!params.userId.startsWith(prefix)) return null;
+
+  const serviceAccountId = params.userId.slice(prefix.length);
+  const serviceAccount = await ServiceAccountModel.findById(
+    serviceAccountId,
+    params.organizationId,
+  );
+
+  if (serviceAccount?.disabled) return null;
+  return serviceAccount;
 }

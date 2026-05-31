@@ -5,7 +5,7 @@ import type { FastifyReply, FastifyRequest } from "fastify";
 import { betterAuth, hasPermission } from "@/auth";
 import config from "@/config";
 import logger from "@/logging";
-import { UserModel } from "@/models";
+import { ServiceAccountModel, UserModel } from "@/models";
 import { MODEL_ROUTER_PREFIX } from "@/routes/proxy/common";
 import {
   ARCHESTRA_CATALOG_PROXY_PREFIX,
@@ -179,28 +179,35 @@ export class Authnz {
       }
       logger.trace("[Authnz] No session found");
     } catch (error) {
-      /**
-       * If getSession fails (e.g., "No active organization"), try API key verification
-       */
       logger.trace(
         { error: error instanceof Error ? error.message : "unknown" },
         "[Authnz] Session authentication failed, trying API key",
       );
-      const authHeader = headers.get("authorization");
-      if (authHeader) {
-        try {
-          logger.trace("[Authnz] Attempting API key authentication");
-          const { valid } = await betterAuth.api.verifyApiKey({
-            body: { key: authHeader },
-          });
+    }
 
+    const authHeader = headers.get("authorization");
+    if (authHeader) {
+      try {
+        logger.trace("[Authnz] Attempting API key authentication");
+        const { valid } = await betterAuth.api.verifyApiKey({
+          body: { key: authHeader },
+        });
+
+        if (valid) {
           logger.trace({ valid }, "[Authnz] API key verification result");
-          return valid;
-        } catch (_apiKeyError) {
-          // API key verification failed, return unauthenticated
-          logger.trace("[Authnz] API key verification failed");
-          return false;
+          return true;
         }
+      } catch (_apiKeyError) {
+        logger.trace(
+          "[Authnz] API key verification failed, trying service account token",
+        );
+      }
+
+      const serviceAccountResult =
+        await ServiceAccountModel.verifyToken(authHeader);
+      if (serviceAccountResult) {
+        logger.trace("[Authnz] Service account token verification succeeded");
+        return true;
       }
     }
 
@@ -260,7 +267,11 @@ export class Authnz {
       },
       "[Authnz] Checking required permissions",
     );
-    const result = await hasPermission(requiredPermissions, request.headers);
+    const result = await hasPermission(
+      requiredPermissions,
+      request.headers,
+      request.serviceAccount,
+    );
     logger.info({ routeId, result }, "[Authnz] DEBUG: hasPermission result");
     return result;
   };
@@ -337,10 +348,40 @@ export class Authnz {
             return;
           }
         } catch (_apiKeyError) {
-          // API key verification failed
           logger.trace(
-            "[Authnz] populateUserInfo: API key verification failed",
+            "[Authnz] populateUserInfo: API key verification failed, trying service account token",
           );
+        }
+
+        const serviceAccountResult =
+          await ServiceAccountModel.verifyToken(authHeader);
+        if (serviceAccountResult) {
+          const serviceAccount = serviceAccountResult.serviceAccount;
+          request.user = {
+            id: `service-account:${serviceAccount.id}`,
+            name: serviceAccount.name,
+            email: `${serviceAccount.id}@service-account.local`,
+            emailVerified: true,
+            image: null,
+            createdAt: serviceAccount.createdAt,
+            updatedAt: serviceAccount.updatedAt,
+            role: null,
+            banned: false,
+            banReason: null,
+            banExpires: null,
+            twoFactorEnabled: false,
+          };
+          request.organizationId = serviceAccount.organizationId;
+          request.serviceAccount = serviceAccount;
+          request.authMethod = "service_account";
+          logger.trace(
+            {
+              serviceAccountId: serviceAccount.id,
+              organizationId: serviceAccount.organizationId,
+            },
+            "[Authnz] populateUserInfo: populated from service account token",
+          );
+          return;
         }
       }
     } catch (error) {

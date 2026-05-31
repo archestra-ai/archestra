@@ -109,11 +109,16 @@ class McpToolCallModel {
         .select({
           ...getTableColumns(schema.mcpToolCallsTable),
           userName: schema.usersTable.name,
+          agentDeletedAt: schema.agentsTable.deletedAt,
         })
         .from(schema.mcpToolCallsTable)
         .leftJoin(
           schema.usersTable,
           eq(schema.mcpToolCallsTable.userId, schema.usersTable.id),
+        )
+        .leftJoin(
+          schema.agentsTable,
+          eq(schema.mcpToolCallsTable.agentId, schema.agentsTable.id),
         )
         .where(whereClause)
         .orderBy(orderByClause)
@@ -126,7 +131,7 @@ class McpToolCallModel {
     ]);
 
     return createPaginatedResult(
-      data as McpToolCall[],
+      data.map(toVisibleMcpToolCall),
       Number(total),
       pagination,
     );
@@ -162,11 +167,16 @@ class McpToolCallModel {
       .select({
         ...getTableColumns(schema.mcpToolCallsTable),
         userName: schema.usersTable.name,
+        agentDeletedAt: schema.agentsTable.deletedAt,
       })
       .from(schema.mcpToolCallsTable)
       .leftJoin(
         schema.usersTable,
         eq(schema.mcpToolCallsTable.userId, schema.usersTable.id),
+      )
+      .leftJoin(
+        schema.agentsTable,
+        eq(schema.mcpToolCallsTable.agentId, schema.agentsTable.id),
       )
       .where(eq(schema.mcpToolCallsTable.id, id));
 
@@ -190,7 +200,7 @@ class McpToolCallModel {
       }
     }
 
-    return mcpToolCall;
+    return toVisibleMcpToolCall(mcpToolCall);
   }
 
   static async getAllMcpToolCallsForAgent(
@@ -291,3 +301,18 @@ class McpToolCallModel {
 }
 
 export default McpToolCallModel;
+
+function toVisibleMcpToolCall(
+  row: McpToolCall & { agentDeletedAt?: Date | null },
+): McpToolCall {
+  const { agentDeletedAt: _agentDeletedAt, ...toolCall } = row;
+
+  if (row.agentDeletedAt) {
+    return {
+      ...toolCall,
+      agentId: null,
+    };
+  }
+
+  return toolCall;
+}

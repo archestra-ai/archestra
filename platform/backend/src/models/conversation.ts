@@ -126,6 +126,7 @@ class ConversationModel {
             systemPrompt: schema.agentsTable.systemPrompt,
             agentType: schema.agentsTable.agentType,
             llmApiKeyId: schema.agentsTable.llmApiKeyId,
+            deletedAt: schema.agentsTable.deletedAt,
           },
         })
         .from(schema.conversationsTable)
@@ -182,8 +183,7 @@ class ConversationModel {
             continue;
           }
           conversationMap.set(conversationId, {
-            ...row.conversation,
-            agent: row.agent,
+            ...withVisibleAgent(row.conversation, row.agent),
             share: row.share?.id ? row.share : null,
             messages: [],
             chatErrors: [],
@@ -223,6 +223,7 @@ class ConversationModel {
             systemPrompt: schema.agentsTable.systemPrompt,
             agentType: schema.agentsTable.agentType,
             llmApiKeyId: schema.agentsTable.llmApiKeyId,
+            deletedAt: schema.agentsTable.deletedAt,
           },
         })
         .from(schema.conversationsTable)
@@ -241,8 +242,7 @@ class ConversationModel {
         .orderBy(desc(schema.conversationsTable.lastMessageAt));
 
       return rows.map((row) => ({
-        ...row.conversation,
-        agent: row.agent,
+        ...withVisibleAgent(row.conversation, row.agent),
         share: row.share?.id ? row.share : null,
         messages: [], // Messages fetched separately via findById
         chatErrors: [],
@@ -274,6 +274,7 @@ class ConversationModel {
           systemPrompt: schema.agentsTable.systemPrompt,
           agentType: schema.agentsTable.agentType,
           llmApiKeyId: schema.agentsTable.llmApiKeyId,
+          deletedAt: schema.agentsTable.deletedAt,
         },
       })
       .from(schema.conversationsTable)
@@ -320,8 +321,7 @@ class ConversationModel {
     }
 
     return {
-      ...firstRow.conversation,
-      agent: firstRow.agent,
+      ...withVisibleAgent(firstRow.conversation, firstRow.agent),
       share: firstRow.share?.id ? firstRow.share : null,
       messages,
       chatErrors,
@@ -377,6 +377,7 @@ class ConversationModel {
           systemPrompt: schema.agentsTable.systemPrompt,
           agentType: schema.agentsTable.agentType,
           llmApiKeyId: schema.agentsTable.llmApiKeyId,
+          deletedAt: schema.agentsTable.deletedAt,
         },
       })
       .from(schema.conversationsTable)
@@ -421,8 +422,7 @@ class ConversationModel {
     }
 
     return {
-      ...firstRow.conversation,
-      agent: firstRow.agent,
+      ...withVisibleAgent(firstRow.conversation, firstRow.agent),
       share: firstRow.share?.id ? firstRow.share : null,
       messages,
       chatErrors,
@@ -540,6 +540,41 @@ function addMessagePersistenceMetadata(message: {
     metadata: {
       ...metadata,
       createdAt: message.createdAt.toISOString(),
+    },
+  };
+}
+
+type JoinedConversationAgent = {
+  id: string | null;
+  name: string | null;
+  systemPrompt: string | null;
+  agentType: "profile" | "mcp_gateway" | "llm_proxy" | "agent" | null;
+  llmApiKeyId: string | null;
+  deletedAt: Date | null;
+} | null;
+
+function withVisibleAgent(
+  conversation: typeof schema.conversationsTable.$inferSelect,
+  agent: JoinedConversationAgent,
+): typeof schema.conversationsTable.$inferSelect & {
+  agent: Conversation["agent"];
+} {
+  if (!agent?.id || agent.deletedAt !== null) {
+    return {
+      ...conversation,
+      agentId: null,
+      agent: null,
+    };
+  }
+
+  return {
+    ...conversation,
+    agent: {
+      id: agent.id,
+      name: agent.name ?? "",
+      systemPrompt: agent.systemPrompt,
+      agentType: agent.agentType ?? "agent",
+      llmApiKeyId: agent.llmApiKeyId,
     },
   };
 }

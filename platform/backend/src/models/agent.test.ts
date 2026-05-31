@@ -2693,6 +2693,9 @@ describe("AgentModel", () => {
         AgentModel.findOrganizationId(deleted.id),
       ).resolves.toBeNull();
       await expect(
+        AgentModel.findIdentityProviderId(deleted.id),
+      ).resolves.toBeNull();
+      await expect(
         AgentModel.findDelegationTarget(deleted.id),
       ).resolves.toBeNull();
       await expect(

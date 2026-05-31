@@ -166,17 +166,13 @@ async function extractProfileIdFromResourcePath(
 async function getExternalIdpIssuerForProfile(
   profileId: string,
 ): Promise<string | null> {
-  const [agent] = await db
-    .select({ identityProviderId: dbSchema.agentsTable.identityProviderId })
-    .from(dbSchema.agentsTable)
-    .where(eq(dbSchema.agentsTable.id, profileId));
-
-  if (!agent?.identityProviderId) return null;
+  const identityProviderId = await AgentModel.findIdentityProviderId(profileId);
+  if (!identityProviderId) return null;
 
   const [provider] = await db
     .select({ issuer: dbSchema.identityProvidersTable.issuer })
     .from(dbSchema.identityProvidersTable)
-    .where(eq(dbSchema.identityProvidersTable.id, agent.identityProviderId));
+    .where(eq(dbSchema.identityProvidersTable.id, identityProviderId));
 
   return provider?.issuer ?? null;
 }

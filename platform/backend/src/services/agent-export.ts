@@ -4,6 +4,7 @@ import {
 } from "@shared";
 import { and, eq, inArray } from "drizzle-orm";
 import db, { schema } from "@/database";
+import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import type { Agent } from "@/types";
 import type { AgentExportPayload } from "@/types/agent-export";
 
@@ -180,6 +181,7 @@ async function resolveDelegationReferences(
       and(
         inArray(schema.agentsTable.id, targetAgentIds),
         eq(schema.agentsTable.organizationId, agent.organizationId),
+        notDeleted(schema.agentsTable),
       ),
     );
 

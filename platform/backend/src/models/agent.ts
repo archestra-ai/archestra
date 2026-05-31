@@ -1132,6 +1132,16 @@ class AgentModel {
     return result?.organizationId ?? null;
   }
 
+  static async findIdentityProviderId(id: string): Promise<string | null> {
+    const [result] = await db
+      .select({ identityProviderId: schema.agentsTable.identityProviderId })
+      .from(schema.agentsTable)
+      .where(and(eq(schema.agentsTable.id, id), notDeleted(schema.agentsTable)))
+      .limit(1);
+
+    return result?.identityProviderId ?? null;
+  }
+
   static async findIdsByOrganizationId(
     organizationId: string,
   ): Promise<string[]> {

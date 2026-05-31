@@ -206,6 +206,7 @@ export class Authnz {
       const serviceAccountResult =
         await ServiceAccountModel.verifyToken(authHeader);
       if (serviceAccountResult) {
+        request.serviceAccountAuthResult = serviceAccountResult;
         logger.trace("[Authnz] Service account token verification succeeded");
         return true;
       }
@@ -354,33 +355,11 @@ export class Authnz {
         }
 
         const serviceAccountResult =
-          await ServiceAccountModel.verifyToken(authHeader);
+          request.serviceAccountAuthResult ??
+          (await ServiceAccountModel.verifyToken(authHeader));
         if (serviceAccountResult) {
-          const serviceAccount = serviceAccountResult.serviceAccount;
-          request.user = {
-            id: `service-account:${serviceAccount.id}`,
-            name: serviceAccount.name,
-            email: `${serviceAccount.id}@service-account.local`,
-            emailVerified: true,
-            image: null,
-            createdAt: serviceAccount.createdAt,
-            updatedAt: serviceAccount.updatedAt,
-            role: null,
-            banned: false,
-            banReason: null,
-            banExpires: null,
-            twoFactorEnabled: false,
-          };
-          request.organizationId = serviceAccount.organizationId;
-          request.serviceAccount = serviceAccount;
-          request.authMethod = "service_account";
-          logger.trace(
-            {
-              serviceAccountId: serviceAccount.id,
-              organizationId: serviceAccount.organizationId,
-            },
-            "[Authnz] populateUserInfo: populated from service account token",
-          );
+          request.serviceAccountAuthResult = serviceAccountResult;
+          this.populateServiceAccountUserInfo(request, serviceAccountResult);
           return;
         }
       }
@@ -418,5 +397,38 @@ export class Authnz {
       // Silently fail if Sentry is not configured or there's an error
       // We don't want authentication to fail due to Sentry issues
     }
+  };
+
+  private populateServiceAccountUserInfo = (
+    request: FastifyRequest,
+    serviceAccountResult: NonNullable<
+      FastifyRequest["serviceAccountAuthResult"]
+    >,
+  ): void => {
+    const serviceAccount = serviceAccountResult.serviceAccount;
+    request.user = {
+      id: `service-account:${serviceAccount.id}`,
+      name: serviceAccount.name,
+      email: `${serviceAccount.id}@service-account.local`,
+      emailVerified: true,
+      image: null,
+      createdAt: serviceAccount.createdAt,
+      updatedAt: serviceAccount.updatedAt,
+      role: null,
+      banned: false,
+      banReason: null,
+      banExpires: null,
+      twoFactorEnabled: false,
+    };
+    request.organizationId = serviceAccount.organizationId;
+    request.serviceAccount = serviceAccount;
+    request.authMethod = "service_account";
+    logger.trace(
+      {
+        serviceAccountId: serviceAccount.id,
+        organizationId: serviceAccount.organizationId,
+      },
+      "[Authnz] populateUserInfo: populated from service account token",
+    );
   };
 }

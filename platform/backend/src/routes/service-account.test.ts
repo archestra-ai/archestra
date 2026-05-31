@@ -3,7 +3,7 @@ import ConversationModel from "@/models/conversation";
 import ServiceAccountModel from "@/models/service-account";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
-import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { afterEach, beforeEach, describe, expect, test, vi } from "@/test";
 import type { User } from "@/types";
 
 describe("service account routes", () => {
@@ -143,6 +143,42 @@ describe("service account routes", () => {
       },
     });
   });
+
+  test("rejects token creation after the service account token limit", async () => {
+    const serviceAccount = await ServiceAccountModel.create({
+      organizationId,
+      name: "Token limit automation",
+      role: ADMIN_ROLE_NAME,
+    });
+
+    for (
+      let index = 0;
+      index < ServiceAccountModel.MAX_TOKENS_PER_SERVICE_ACCOUNT;
+      index += 1
+    ) {
+      await ServiceAccountModel.createToken({
+        serviceAccountId: serviceAccount.id,
+        organizationId,
+        name: `Token ${index + 1}`,
+      });
+    }
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/service-accounts/${serviceAccount.id}/tokens`,
+      payload: {
+        name: "One token too many",
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toEqual({
+      error: {
+        message: "Service account token limit exceeded",
+        type: "api_validation_error",
+      },
+    });
+  });
 });
 
 describe("service account API authentication", () => {
@@ -194,6 +230,38 @@ describe("service account API authentication", () => {
         name: "Read-only automation",
       },
     ]);
+  });
+
+  test("reuses service account token verification during request authentication", async ({
+    makeCustomRole,
+    makeOrganization,
+  }) => {
+    const organization = await makeOrganization();
+    const role = await makeCustomRole(organization.id, {
+      permission: { serviceAccount: ["read"] },
+    });
+    const serviceAccount = await ServiceAccountModel.create({
+      organizationId: organization.id,
+      name: "Cached token automation",
+      role: role.role,
+    });
+    const serviceToken = await ServiceAccountModel.createToken({
+      serviceAccountId: serviceAccount.id,
+      organizationId: organization.id,
+      name: "Route token",
+    });
+    const verifyTokenSpy = vi.spyOn(ServiceAccountModel, "verifyToken");
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/service-accounts",
+      headers: {
+        authorization: serviceToken.token,
+      },
+    });
+
+    expect(response.statusCode, JSON.stringify(response.json())).toBe(200);
+    expect(verifyTokenSpy).toHaveBeenCalledOnce();
   });
 
   test("rejects protected routes when the service account role lacks permission", async ({

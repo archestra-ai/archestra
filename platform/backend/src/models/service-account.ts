@@ -25,6 +25,8 @@ import type {
 import OrganizationRoleModel from "./organization-role";
 
 class ServiceAccountModel {
+  static readonly MAX_TOKENS_PER_SERVICE_ACCOUNT = 50;
+
   static async listByOrganizationId(
     organizationId: string,
   ): Promise<ServiceAccountResponse[]> {
@@ -167,6 +169,12 @@ class ServiceAccountModel {
     );
     if (!serviceAccount) {
       throw new Error("Service account not found");
+    }
+    if (
+      serviceAccount.tokenCount >=
+      ServiceAccountModel.MAX_TOKENS_PER_SERVICE_ACCOUNT
+    ) {
+      throw new Error("Service account token limit exceeded");
     }
 
     const token = createTokenValue();

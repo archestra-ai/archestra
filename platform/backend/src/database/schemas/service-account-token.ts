@@ -4,6 +4,7 @@ import {
   pgTable,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 import serviceAccountsTable from "./service-account";
@@ -28,7 +29,9 @@ const serviceAccountTokensTable = pgTable(
       table.serviceAccountId,
     ),
     index("service_account_tokens_token_start_idx").on(table.tokenStart),
-    index("service_account_tokens_token_hash_idx").on(table.tokenHash),
+    uniqueIndex("service_account_tokens_token_hash_unique_idx").on(
+      table.tokenHash,
+    ),
   ],
 );
 

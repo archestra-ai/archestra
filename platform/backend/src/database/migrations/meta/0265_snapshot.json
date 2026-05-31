@@ -1,5 +1,5 @@
 {
-  "id": "23e34871-e469-488a-8322-9e75b4d179ee",
+  "id": "8a9503b0-1c95-41f3-891f-e6fa09e2825d",
   "prevId": "24de4da8-bc2e-4b05-97dd-8099560b9b68",
   "version": "7",
   "dialect": "postgresql",
@@ -8951,8 +8951,8 @@
           "method": "btree",
           "with": {}
         },
-        "service_account_tokens_token_hash_idx": {
-          "name": "service_account_tokens_token_hash_idx",
+        "service_account_tokens_token_hash_unique_idx": {
+          "name": "service_account_tokens_token_hash_unique_idx",
           "columns": [
             {
               "expression": "token_hash",
@@ -8961,7 +8961,7 @@
               "nulls": "last"
             }
           ],
-          "isUnique": false,
+          "isUnique": true,
           "concurrently": false,
           "method": "btree",
           "with": {}

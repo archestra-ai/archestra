@@ -131,6 +131,34 @@ describe("getExternalProxyUrls", () => {
     expect(result).toEqual(["https://gateway.example.com/v1"]);
   });
 
+  it("should use the backend proxy URL for local browser origins", () => {
+    delete process.env.NEXT_PUBLIC_ARCHESTRA_API_BASE_URL;
+    delete process.env.NEXT_PUBLIC_ARCHESTRA_INTERNAL_API_BASE_URL;
+    delete process.env.ARCHESTRA_INTERNAL_API_BASE_URL;
+    Object.defineProperty(window, "location", {
+      value: { origin: "http://localhost:3000" },
+      writable: true,
+    });
+
+    const result = getExternalProxyUrls();
+
+    expect(result).toEqual(["http://localhost:9000/v1"]);
+  });
+
+  it("should honor the configured backend proxy URL for local browser origins", () => {
+    delete process.env.NEXT_PUBLIC_ARCHESTRA_API_BASE_URL;
+    process.env.NEXT_PUBLIC_ARCHESTRA_INTERNAL_API_BASE_URL =
+      "http://localhost:9500";
+    Object.defineProperty(window, "location", {
+      value: { origin: "http://127.0.0.1:3000" },
+      writable: true,
+    });
+
+    const result = getExternalProxyUrls();
+
+    expect(result).toEqual(["http://localhost:9500/v1"]);
+  });
+
   it("should return single URL with /v1 suffix when one URL is set", () => {
     process.env.NEXT_PUBLIC_ARCHESTRA_API_BASE_URL =
       "https://api.archestra.com";

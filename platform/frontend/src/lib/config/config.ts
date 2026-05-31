@@ -64,6 +64,15 @@ const appendProxySuffix = (baseUrl: string): string => {
   return `${baseUrl}${proxyUrlSuffix}`;
 };
 
+const isLocalBrowserOrigin = (origin: string): boolean => {
+  try {
+    const { hostname } = new URL(origin);
+    return hostname === "localhost" || hostname === "127.0.0.1";
+  } catch {
+    return false;
+  }
+};
+
 /**
  * Get all configured external proxy URLs (with /v1 suffix).
  * Supports comma-separated list in NEXT_PUBLIC_ARCHESTRA_API_BASE_URL.
@@ -72,9 +81,13 @@ const appendProxySuffix = (baseUrl: string): string => {
 export const getExternalProxyUrls = (): string[] => {
   const externalUrl = env("NEXT_PUBLIC_ARCHESTRA_API_BASE_URL");
   if (!externalUrl) {
-    return typeof window !== "undefined"
-      ? [appendProxySuffix(window.location.origin)]
-      : [];
+    if (typeof window === "undefined") return [];
+    const origin = window.location.origin;
+    return [
+      isLocalBrowserOrigin(origin)
+        ? getInternalProxyUrl()
+        : appendProxySuffix(origin),
+    ];
   }
   return externalUrl
     .split(",")

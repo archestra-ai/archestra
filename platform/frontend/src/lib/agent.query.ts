@@ -20,6 +20,7 @@ const {
   getDefaultLlmProxy,
   getAgent,
   importAgent,
+  restoreAgent,
   updateAgent,
   getLabelKeys,
   getLabelValues,
@@ -104,6 +105,7 @@ export function useProfilesPaginated(
     excludeAuthorIds,
     excludeOtherPersonalAgents,
     labels,
+    status,
   } = params || {};
 
   // Check if we can use initialData (server-side fetched data)
@@ -121,6 +123,7 @@ export function useProfilesPaginated(
     excludeAuthorIds === undefined &&
     excludeOtherPersonalAgents === undefined &&
     labels === undefined &&
+    status === undefined &&
     (limit === undefined || limit === DEFAULT_TABLE_LIMIT);
 
   return useQuery({
@@ -139,6 +142,7 @@ export function useProfilesPaginated(
         excludeAuthorIds,
         excludeOtherPersonalAgents,
         labels,
+        status,
       },
     ],
     queryFn: async () =>
@@ -157,6 +161,7 @@ export function useProfilesPaginated(
             excludeAuthorIds,
             excludeOtherPersonalAgents,
             labels,
+            status,
           },
         })
       ).data ?? null,
@@ -280,6 +285,25 @@ export function useDeleteProfile() {
     onSuccess: (data) => {
       if (!data) return;
       queryClient.invalidateQueries({ queryKey: ["agents"] });
+    },
+  });
+}
+
+export function useRestoreProfile() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { data, error } = await restoreAgent({ path: { id } });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data;
+    },
+    onSuccess: (data) => {
+      if (!data) return;
+      queryClient.invalidateQueries({ queryKey: ["agents"] });
+      queryClient.setQueryData(["agents", data.id], data);
     },
   });
 }

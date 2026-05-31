@@ -9,6 +9,7 @@ export const RouteId = {
   GetDefaultLlmProxy: "getDefaultLlmProxy",
   UpdateAgent: "updateAgent",
   DeleteAgent: "deleteAgent",
+  RestoreAgent: "restoreAgent",
   ExportAgent: "exportAgent",
   ImportAgent: "importAgent",
   GetLabelKeys: "getLabelKeys",

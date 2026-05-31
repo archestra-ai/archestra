@@ -1,5 +1,6 @@
 "use client";
 
+import type { Permissions } from "@shared";
 import { X } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
@@ -29,6 +30,7 @@ import { useTeams } from "@/lib/teams/team.query";
 
 type ScopeValue = "personal" | "team" | "org" | "built_in";
 type OwnerValue = "mine" | "others";
+type StatusValue = "active" | "deleted";
 
 export function AgentScopeFilter({
   showBuiltIn = false,
@@ -238,6 +240,47 @@ export function AgentScopeFilter({
   );
 }
 
+export function AgentDeletedStatusFilter({
+  deletePermission,
+}: {
+  deletePermission: Permissions;
+}) {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
+  const { data: canDelete } = useHasPermissions(deletePermission);
+
+  const status = (searchParams.get("status") as StatusValue | null) ?? "active";
+
+  const handleStatusChange = useCallback(
+    (value: string) => {
+      const params = new URLSearchParams(searchParams.toString());
+      if (value === "deleted") {
+        params.set("status", "deleted");
+      } else {
+        params.delete("status");
+      }
+      params.set("page", "1");
+      router.push(`${pathname}?${params.toString()}`, { scroll: false });
+    },
+    [searchParams, router, pathname],
+  );
+
+  if (!canDelete) return null;
+
+  return (
+    <Select value={status} onValueChange={handleStatusChange}>
+      <SelectTrigger className="w-[150px]">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent position="popper" side="bottom" align="start">
+        <SelectItem value="active">Active</SelectItem>
+        <SelectItem value="deleted">Deleted</SelectItem>
+      </SelectContent>
+    </Select>
+  );
+}
+
 export function ActiveFilterBadges() {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -247,6 +290,7 @@ export function ActiveFilterBadges() {
   const authorIdsParam = searchParams.get("authorIds");
   const labelsParam = searchParams.get("labels");
   const scopeParam = searchParams.get("scope");
+  const statusParam = searchParams.get("status");
   const { data: session } = useSession();
   const currentUserId = session?.user?.id;
   const { data: canReadTeams } = useHasPermissions({ team: ["read"] });
@@ -346,8 +390,15 @@ export function ActiveFilterBadges() {
   const hasUnavailableTeamsFilter = !!teamIdsParam && !canReadTeams;
   const hasUsers = showsSpecificOtherUsers && selectedUsers.length > 0;
   const hasLabels = parsedLabels && Object.keys(parsedLabels).length > 0;
+  const hasDeletedStatus = statusParam === "deleted";
 
-  if (!hasTeams && !hasUsers && !hasLabels && !hasUnavailableTeamsFilter)
+  if (
+    !hasTeams &&
+    !hasUsers &&
+    !hasLabels &&
+    !hasDeletedStatus &&
+    !hasUnavailableTeamsFilter
+  )
     return null;
 
   return (
@@ -403,6 +454,28 @@ export function ActiveFilterBadges() {
         </div>
       )}
       {hasLabels && <LabelFilterBadges onRemoveLabel={handleRemoveLabel} />}
+      {hasDeletedStatus && (
+        <div className="flex items-center gap-1.5">
+          <span className="text-xs text-muted-foreground">Status</span>
+          <Badge variant="outline" className="gap-1 pr-1">
+            Deleted
+            <button
+              type="button"
+              onClick={() => {
+                const params = new URLSearchParams(searchParams.toString());
+                params.delete("status");
+                params.set("page", "1");
+                router.push(`${pathname}?${params.toString()}`, {
+                  scroll: false,
+                });
+              }}
+              className="ml-0.5 rounded-full hover:bg-muted-foreground/20 p-0.5"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </Badge>
+        </div>
+      )}
     </div>
   );
 }

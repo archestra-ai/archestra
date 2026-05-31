@@ -15,6 +15,7 @@ import {
   eq,
   ilike,
   inArray,
+  isNotNull,
   isNull,
   min,
   ne,
@@ -26,7 +27,7 @@ import {
 import { clearChatMcpClient } from "@/clients/chat-mcp-client";
 import db, { schema, type Transaction } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
-import { hardDelete, softDelete } from "@/database/soft-delete";
+import { hardDelete, restore, softDelete } from "@/database/soft-delete";
 import {
   createPaginatedResult,
   type PaginatedResult,
@@ -285,6 +286,7 @@ class AgentModel {
       excludeBuiltIn?: boolean;
       scope?: AgentScope;
       excludeOtherPersonalAgents?: boolean;
+      status?: AgentRecordStatus;
     },
   ): Promise<Agent[]> {
     let query = db
@@ -301,7 +303,9 @@ class AgentModel {
       .$dynamic();
 
     // Build where conditions
-    const whereConditions: SQL[] = [notDeleted(schema.agentsTable)];
+    const whereConditions: SQL[] = [
+      getAgentStatusCondition(options?.status ?? "active"),
+    ];
 
     // Filter by agentTypes if specified (array of types)
     if (options?.agentTypes && options.agentTypes.length > 0) {
@@ -694,6 +698,7 @@ class AgentModel {
       excludeAuthorIds?: string[];
       excludeOtherPersonalAgents?: boolean;
       labels?: Record<string, string[]>;
+      status?: AgentRecordStatus;
     },
     userId?: string,
     isAgentAdmin?: boolean,
@@ -704,7 +709,9 @@ class AgentModel {
       AgentModel.getPersonalAgentPriorityOrderClauses(userId);
 
     // Build where clause for filters and access control
-    const whereConditions: SQL[] = [notDeleted(schema.agentsTable)];
+    const whereConditions: SQL[] = [
+      getAgentStatusCondition(filters?.status ?? "active"),
+    ];
 
     // Add name filter if provided
     if (filters?.name) {
@@ -1383,6 +1390,63 @@ class AgentModel {
     return result;
   }
 
+  static async findDeletedByIdForOrganization(
+    id: string,
+    organizationId: string,
+  ): Promise<Agent | null> {
+    const rows = await db
+      .select()
+      .from(schema.agentsTable)
+      .leftJoin(
+        schema.agentToolsTable,
+        eq(schema.agentsTable.id, schema.agentToolsTable.agentId),
+      )
+      .leftJoin(
+        schema.toolsTable,
+        eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
+      )
+      .where(
+        and(
+          eq(schema.agentsTable.id, id),
+          eq(schema.agentsTable.organizationId, organizationId),
+          isNotNull(schema.agentsTable.deletedAt),
+        ),
+      );
+
+    if (rows.length === 0) {
+      return null;
+    }
+
+    const agent = rows[0].agents;
+    const tools = rows
+      .map((row) => row.tools)
+      .filter((tool): tool is NonNullable<typeof tool> => tool !== null);
+
+    const [teams, labels, knowledgeBaseIds, connectorIds] = await Promise.all([
+      AgentTeamModel.getTeamDetailsForAgent(id),
+      AgentLabelModel.getLabelsForAgent(id),
+      AgentKnowledgeBaseModel.getKnowledgeBaseIds(id),
+      AgentConnectorAssignmentModel.getConnectorIds(id),
+    ]);
+
+    const result: Agent = {
+      ...agent,
+      tools,
+      teams,
+      labels,
+      knowledgeBaseIds,
+      connectorIds,
+      suggestedPrompts: [],
+    };
+
+    await Promise.all([
+      AgentModel.populateAuthorNames([result]),
+      AgentModel.populateSuggestedPrompts([result]),
+    ]);
+
+    return result;
+  }
+
   static async getLLMProxyOrCreateDefault(
     organizationId?: string,
   ): Promise<Agent> {
@@ -1726,6 +1790,82 @@ class AgentModel {
       eq(schema.agentsTable.id, id),
     );
     return count > 0;
+  }
+
+  static async restore(id: string, tx?: Transaction): Promise<boolean> {
+    const count = await restore(
+      tx ?? db,
+      schema.agentsTable,
+      eq(schema.agentsTable.id, id),
+    );
+    return count > 0;
+  }
+
+  static async getRestoreConflictMessage(agent: Agent): Promise<string | null> {
+    if (agent.slug) {
+      const [slugConflict] = await db
+        .select({ id: schema.agentsTable.id })
+        .from(schema.agentsTable)
+        .where(
+          and(
+            eq(schema.agentsTable.slug, agent.slug),
+            ne(schema.agentsTable.id, agent.id),
+            notDeleted(schema.agentsTable),
+          ),
+        )
+        .limit(1);
+
+      if (slugConflict) {
+        return "Cannot restore because another active agent is already using this slug.";
+      }
+    }
+
+    if (
+      agent.agentType === "mcp_gateway" &&
+      agent.isPersonalGateway &&
+      agent.authorId
+    ) {
+      const [personalGatewayConflict] = await db
+        .select({ id: schema.agentsTable.id })
+        .from(schema.agentsTable)
+        .where(
+          and(
+            eq(schema.agentsTable.organizationId, agent.organizationId),
+            eq(schema.agentsTable.authorId, agent.authorId),
+            eq(schema.agentsTable.agentType, "mcp_gateway"),
+            eq(schema.agentsTable.isPersonalGateway, true),
+            ne(schema.agentsTable.id, agent.id),
+            notDeleted(schema.agentsTable),
+          ),
+        )
+        .limit(1);
+
+      if (personalGatewayConflict) {
+        return "Cannot restore because this user already has an active personal MCP gateway.";
+      }
+    }
+
+    if (agent.isDefault) {
+      const [defaultConflict] = await db
+        .select({ id: schema.agentsTable.id })
+        .from(schema.agentsTable)
+        .where(
+          and(
+            eq(schema.agentsTable.organizationId, agent.organizationId),
+            eq(schema.agentsTable.agentType, agent.agentType),
+            eq(schema.agentsTable.isDefault, true),
+            ne(schema.agentsTable.id, agent.id),
+            notDeleted(schema.agentsTable),
+          ),
+        )
+        .limit(1);
+
+      if (defaultConflict) {
+        return `Cannot restore because another active default ${getAgentTypeLabel(agent.agentType)} already exists.`;
+      }
+    }
+
+    return null;
   }
 
   static async hardDelete(id: string, tx?: Transaction): Promise<boolean> {
@@ -2176,6 +2316,27 @@ class AgentModel {
 const PERSONAL_MCP_GATEWAY_NAME = "My Gateway";
 const PERSONAL_MCP_GATEWAY_DESCRIPTION =
   "All MCP servers you install are automatically connected to this gateway.";
+
+type AgentRecordStatus = "active" | "deleted";
+
+function getAgentStatusCondition(status: AgentRecordStatus): SQL {
+  return status === "deleted"
+    ? isNotNull(schema.agentsTable.deletedAt)
+    : notDeleted(schema.agentsTable);
+}
+
+function getAgentTypeLabel(agentType: AgentType): string {
+  switch (agentType) {
+    case "mcp_gateway":
+      return "MCP gateway";
+    case "llm_proxy":
+      return "LLM proxy";
+    case "agent":
+      return "agent";
+    case "profile":
+      return "profile";
+  }
+}
 
 function errorMentions(error: unknown, needle: string): boolean {
   if (!(error instanceof Error)) return false;

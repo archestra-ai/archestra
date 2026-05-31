@@ -427,6 +427,7 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.CloneAgent]: {},
   [RouteId.UpdateAgent]: {},
   [RouteId.DeleteAgent]: {},
+  [RouteId.RestoreAgent]: {},
   // Export/Import: agent-type permission checked dynamically in handler
   [RouteId.ExportAgent]: {},
   [RouteId.ImportAgent]: {},

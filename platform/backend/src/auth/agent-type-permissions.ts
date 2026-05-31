@@ -106,6 +106,12 @@ export async function getAgentTypePermissionChecker(params: {
         (r) => permissions[r]?.includes("read") ?? false,
       );
     },
+    getAgentTypesWithPermission(action: Action): AgentType[] {
+      return AGENT_TYPES.filter((agentType) => {
+        const resource = getResourceForAgentType(agentType);
+        return permissions[resource]?.includes(action) ?? false;
+      });
+    },
     hasAnyAdminPermission(): boolean {
       return AGENT_TYPE_RESOURCES.some(
         (r) => permissions[r]?.includes("admin") ?? false,
@@ -229,12 +235,20 @@ export interface AgentTypePermissionChecker {
   isTeamAdmin(agentType: AgentType): boolean;
   /** Returns true if the user has read on any of the three agent-type resources. */
   hasAnyReadPermission(): boolean;
+  /** Returns agent types for which the user has the requested permission. */
+  getAgentTypesWithPermission(action: Action): AgentType[];
   /** Returns true if the user has admin on any of the three agent-type resources. */
   hasAnyAdminPermission(): boolean;
 }
 
 // ===== Internal helpers =====
 
+const AGENT_TYPES: AgentType[] = [
+  "profile",
+  "mcp_gateway",
+  "llm_proxy",
+  "agent",
+];
 const AGENT_TYPE_RESOURCES: Resource[] = ["agent", "mcpGateway", "llmProxy"];
 
 async function hasAnyAgentTypePermission(params: {

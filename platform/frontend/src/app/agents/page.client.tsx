@@ -13,6 +13,7 @@ import { AgentIcon } from "@/components/agent-icon";
 import { AgentNameCell } from "@/components/agent-name-cell";
 import {
   ActiveFilterBadges,
+  AgentDeletedStatusFilter,
   AgentScopeFilter,
 } from "@/components/agent-scope-filter";
 import {
@@ -37,6 +38,7 @@ import {
   useProfile,
   useProfiles,
   useProfilesPaginated,
+  useRestoreProfile,
 } from "@/lib/agent.query";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
@@ -121,6 +123,10 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
   const authorIdsFromUrl = searchParams.get("authorIds");
   const excludeAuthorIdsFromUrl = searchParams.get("excludeAuthorIds");
   const labelsFromUrl = searchParams.get("labels");
+  const statusFromUrl = searchParams.get("status") as
+    | "active"
+    | "deleted"
+    | null;
 
   // Default sorting
   const sortBy = sortByFromUrl || DEFAULT_SORT_BY;
@@ -147,6 +153,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
         ? true
         : undefined,
     labels: labelsFromUrl || undefined,
+    status: statusFromUrl || undefined,
   });
   const { data: canReadTeams } = useHasPermissions({ team: ["read"] });
 
@@ -202,6 +209,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
   );
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
   const exportAgent = useExportAgent();
+  const restoreAgent = useRestoreProfile();
 
   // Handle 'create' URL parameter to open the Create Agent dialog
   useEffect(() => {
@@ -287,7 +295,13 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
   const agents = agentsResponse?.data || [];
   const pagination = agentsResponse?.pagination;
   const showLoading = isPending && !initialData?.agents;
-  const hasActiveFilters = !!(nameFilter || scopeFromUrl || labelsFromUrl);
+  const isDeletedView = statusFromUrl === "deleted";
+  const hasActiveFilters = !!(
+    nameFilter ||
+    scopeFromUrl ||
+    labelsFromUrl ||
+    isDeletedView
+  );
 
   const clearFilters = useCallback(() => {
     updateQueryParams({
@@ -298,6 +312,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
       authorIds: null,
       excludeAuthorIds: null,
       labels: null,
+      status: null,
     });
   }, [updateQueryParams]);
 
@@ -449,6 +464,14 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
               setViewingAgent(agentData);
             }}
             onDelete={setDeletingAgentId}
+            onRestore={(agentId) => {
+              restoreAgent.mutate(agentId, {
+                onSuccess: (data) => {
+                  if (!data) return;
+                  toast.success("Agent restored successfully");
+                },
+              });
+            }}
             onClone={handleClone}
             onExport={(agentData) => {
               exportAgent.mutate(agentData.id, {
@@ -516,6 +539,9 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
                   paramName="name"
                 />
                 <AgentScopeFilter showBuiltIn ownerLabelPlural="agents" />
+                <AgentDeletedStatusFilter
+                  deletePermission={{ agent: ["delete"] }}
+                />
               </div>
               {!canReadTeams && (
                 <PermissionRequirementHint
@@ -542,7 +568,11 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
                 onPaginationChange={handlePaginationChange}
                 emptyMessage="No agents found"
                 hasActiveFilters={hasActiveFilters}
-                filteredEmptyMessage="No agents match your filters. Try adjusting your search."
+                filteredEmptyMessage={
+                  isDeletedView
+                    ? "No deleted agents found."
+                    : "No agents match your filters. Try adjusting your search."
+                }
                 onClearFilters={clearFilters}
               />
             </div>

@@ -409,7 +409,7 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
       availableTools: ["known_tool"],
     });
     const payload1 = capturedInnerOnError?.(unavailableToolError);
-    const payload2 = capturedInnerOnError?.(unavailableToolError);
+    const payload2 = capturedInnerOnError?.(unavailableToolError.message);
 
     expect(payload1).toBe(payload2);
     expect(payload1).toContain(

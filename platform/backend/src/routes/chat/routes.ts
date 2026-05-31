@@ -864,9 +864,18 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                     // prompt on reload (#4030).
                     generateMessageId: generateId,
                     onError: (error) => {
+                      if (chatErrorHandled) {
+                        return serializedChatError;
+                      }
+
                       const unavailableToolError =
                         getUnavailableToolErrorDetails(error);
                       if (unavailableToolError) {
+                        chatErrorHandled = true;
+                        serializedChatError =
+                          formatUnavailableToolErrorDetails(
+                            unavailableToolError,
+                          );
                         logger.info(
                           {
                             conversationId,
@@ -874,12 +883,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                           },
                           "Returning unavailable tool error as tool-level error",
                         );
-                        return formatUnavailableToolErrorDetails(
-                          unavailableToolError,
-                        );
-                      }
-
-                      if (chatErrorHandled) {
                         return serializedChatError;
                       }
                       chatErrorHandled = true;

@@ -290,7 +290,6 @@ export function ActiveFilterBadges() {
   const authorIdsParam = searchParams.get("authorIds");
   const labelsParam = searchParams.get("labels");
   const scopeParam = searchParams.get("scope");
-  const statusParam = searchParams.get("status");
   const { data: session } = useSession();
   const currentUserId = session?.user?.id;
   const { data: canReadTeams } = useHasPermissions({ team: ["read"] });
@@ -390,15 +389,8 @@ export function ActiveFilterBadges() {
   const hasUnavailableTeamsFilter = !!teamIdsParam && !canReadTeams;
   const hasUsers = showsSpecificOtherUsers && selectedUsers.length > 0;
   const hasLabels = parsedLabels && Object.keys(parsedLabels).length > 0;
-  const hasDeletedStatus = statusParam === "deleted";
 
-  if (
-    !hasTeams &&
-    !hasUsers &&
-    !hasLabels &&
-    !hasDeletedStatus &&
-    !hasUnavailableTeamsFilter
-  )
+  if (!hasTeams && !hasUsers && !hasLabels && !hasUnavailableTeamsFilter)
     return null;
 
   return (
@@ -454,28 +446,6 @@ export function ActiveFilterBadges() {
         </div>
       )}
       {hasLabels && <LabelFilterBadges onRemoveLabel={handleRemoveLabel} />}
-      {hasDeletedStatus && (
-        <div className="flex items-center gap-1.5">
-          <span className="text-xs text-muted-foreground">Status</span>
-          <Badge variant="outline" className="gap-1 pr-1">
-            Deleted
-            <button
-              type="button"
-              onClick={() => {
-                const params = new URLSearchParams(searchParams.toString());
-                params.delete("status");
-                params.set("page", "1");
-                router.push(`${pathname}?${params.toString()}`, {
-                  scroll: false,
-                });
-              }}
-              className="ml-0.5 rounded-full hover:bg-muted-foreground/20 p-0.5"
-            >
-              <X className="h-3 w-3" />
-            </button>
-          </Badge>
-        </div>
-      )}
     </div>
   );
 }

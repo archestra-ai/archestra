@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import {
@@ -493,6 +494,92 @@ describe("executeMcpTool error handling", () => {
     content: [],
     isError: true,
     ...overrides,
+  });
+
+  test("deduplicates concurrent approved tool executions with the same toolCallId", async ({
+    makeAgent,
+    makeMember,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const organization = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, organization.id, { role: "admin" });
+    const agent = await makeAgent({
+      organizationId: organization.id,
+      authorId: user.id,
+      scope: "personal",
+    });
+    const toolCallId = `approval-call-${randomUUID()}`;
+
+    vi.mocked(mcpClient.executeToolCall).mockImplementationOnce(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 25));
+      return {
+        id: toolCallId,
+        name: "test_tool",
+        content: [{ type: "text", text: "Tool ran once" }],
+        isError: false,
+      } as never;
+    });
+
+    const ctx = {
+      ...baseCtx,
+      agentId: agent.id,
+      userId: user.id,
+      organizationId: organization.id,
+      toolCallId,
+      deduplicateToolExecution: true,
+    };
+
+    const [first, second] = await Promise.all([
+      chatClient.__test.executeMcpTool(ctx),
+      chatClient.__test.executeMcpTool(ctx),
+    ]);
+
+    expect(mcpClient.executeToolCall).toHaveBeenCalledTimes(1);
+    expect(first.content).toBe("Tool ran once");
+    expect(second.content).toBe("Tool ran once");
+  });
+
+  test("returns the stored result when an approved toolCallId is repeated after completion", async ({
+    makeAgent,
+    makeMember,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const organization = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, organization.id, { role: "admin" });
+    const agent = await makeAgent({
+      organizationId: organization.id,
+      authorId: user.id,
+      scope: "personal",
+    });
+    const toolCallId = `approval-call-${randomUUID()}`;
+
+    vi.mocked(mcpClient.executeToolCall).mockResolvedValueOnce({
+      id: toolCallId,
+      name: "test_tool",
+      content: [{ type: "text", text: "Cached tool result" }],
+      isError: false,
+    } as never);
+
+    const ctx = {
+      ...baseCtx,
+      agentId: agent.id,
+      userId: user.id,
+      organizationId: organization.id,
+      toolCallId,
+      deduplicateToolExecution: true,
+    };
+
+    const first = await chatClient.__test.executeMcpTool(ctx);
+    vi.mocked(mcpClient.executeToolCall).mockClear();
+    const second = await chatClient.__test.executeMcpTool(ctx);
+
+    expect(mcpClient.executeToolCall).not.toHaveBeenCalled();
+    expect(first.content).toBe("Cached tool result");
+    expect(second.content).toBe("Cached tool result");
   });
 
   test("returns error text from text content array", async () => {

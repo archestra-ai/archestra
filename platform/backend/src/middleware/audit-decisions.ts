@@ -460,6 +460,10 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "chat active run event stream; child of chatActiveRunsTable",
   },
+  mcpToolExecutionsTable: {
+    audited: false,
+    reason: "MCP tool execution idempotency ledger; runtime safety state",
+  },
 
   // =========================================================================
   // Site notifications

@@ -99,6 +99,7 @@ export { default as mcpServersTable } from "./mcp-server";
 export { default as mcpServerInstallationRequestsTable } from "./mcp-server-installation-request";
 export { default as mcpServerUsersTable } from "./mcp-server-user";
 export { default as mcpToolCallsTable } from "./mcp-tool-call";
+export { default as mcpToolExecutionsTable } from "./mcp-tool-execution";
 export { default as membersTable } from "./member";
 export { default as messagesTable } from "./message";
 export { default as modelsTable } from "./model";

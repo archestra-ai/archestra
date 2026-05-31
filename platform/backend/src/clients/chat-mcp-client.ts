@@ -41,6 +41,7 @@ import {
   TrustedDataPolicyModel,
   UserTokenModel,
 } from "@/models";
+import McpToolExecutionModel from "@/models/mcp-tool-execution";
 import ToolInvocationPolicyModel from "@/models/tool-invocation-policy";
 import { metrics } from "@/observability";
 import {
@@ -50,6 +51,7 @@ import {
 import { resolveSessionExternalIdpToken } from "@/services/identity-providers/session-token";
 import type {
   AgentType,
+  CommonToolResult,
   GlobalToolPolicy,
   UnsafeContextBoundary,
 } from "@/types";
@@ -933,7 +935,7 @@ export async function getChatMcpTools({
                 },
               }
             : {}),
-          execute: async (args: unknown) => {
+          execute: async (args: unknown, options) => {
             if (blockOnApprovalRequired) {
               await throwIfApprovalRequired(
                 mcpTool.name,
@@ -949,6 +951,16 @@ export async function getChatMcpTools({
 
             const toolArguments = isRecord(args) ? args : undefined;
             const { serverName } = parseFullToolName(mcpTool.name);
+            const deduplicateToolExecution =
+              await ToolInvocationPolicyModel.checkApprovalRequired(
+                mcpTool.name,
+                toolArguments ?? {},
+                {
+                  teamIds: [],
+                  externalAgentId: getChatExternalAgentId(),
+                },
+                globalToolPolicy,
+              );
 
             const toolStartTime = Date.now();
 
@@ -1029,6 +1041,8 @@ export async function getChatMcpTools({
                     globalToolPolicy,
                     considerContextUntrusted,
                     abortSignal,
+                    toolCallId: options.toolCallId,
+                    deduplicateToolExecution,
                   });
                 } catch (error) {
                   reportToolMetrics({
@@ -1419,6 +1433,68 @@ interface ToolExecutionContext {
   globalToolPolicy: GlobalToolPolicy;
   considerContextUntrusted: boolean;
   abortSignal?: AbortSignal;
+  toolCallId?: string;
+  deduplicateToolExecution?: boolean;
+}
+
+function buildDuplicateToolCallInProgressResult(toolCall: {
+  id: string;
+  name: string;
+}): CommonToolResult {
+  const error =
+    "This approved tool call is already being executed in another request. Please wait for the original response instead of approving it again.";
+
+  return {
+    id: toolCall.id,
+    name: toolCall.name,
+    content: [{ type: "text", text: error }],
+    isError: true,
+    error,
+  };
+}
+
+function buildFailedToolExecutionResult(
+  toolCall: { id: string; name: string },
+  error: unknown,
+): CommonToolResult {
+  const message = error instanceof Error ? error.message : String(error);
+
+  return {
+    id: toolCall.id,
+    name: toolCall.name,
+    content: [{ type: "text", text: message }],
+    isError: true,
+    error: message,
+  };
+}
+
+async function markToolExecutionCompleted(params: {
+  toolCallId: string;
+  result: CommonToolResult;
+}) {
+  try {
+    await McpToolExecutionModel.markCompleted(params);
+  } catch (error) {
+    logger.error(
+      { error, toolCallId: params.toolCallId },
+      "Failed to mark MCP tool execution completed",
+    );
+  }
+}
+
+async function markToolExecutionFailed(params: {
+  toolCallId: string;
+  result: CommonToolResult;
+  error: string;
+}) {
+  try {
+    await McpToolExecutionModel.markFailed(params);
+  } catch (dbError) {
+    logger.error(
+      { error: dbError, toolCallId: params.toolCallId },
+      "Failed to mark MCP tool execution failed",
+    );
+  }
 }
 
 /**
@@ -1482,45 +1558,84 @@ async function executeMcpTool(ctx: ToolExecutionContext): Promise<{
     }
   }
 
-  // Execute via mcpClient
+  // Execute via mcpClient. Use the AI SDK toolCallId when available so
+  // approval-gated executions can be claimed idempotently across requests.
   const toolCall = {
-    id: randomUUID(),
+    id: ctx.toolCallId ?? randomUUID(),
     name: toolName,
     arguments: toolArguments ?? {},
   };
 
   let result: Awaited<ReturnType<typeof mcpClient.executeToolCall>>;
-  try {
-    result = await mcpClient.executeToolCall(
+  const executeToolCall = async () => {
+    try {
+      const toolResult = await mcpClient.executeToolCall(
+        toolCall,
+        agentId,
+        mcpGwToken
+          ? {
+              tokenId: mcpGwToken.tokenId,
+              teamId: mcpGwToken.teamId,
+              isOrganizationToken: mcpGwToken.isOrganizationToken,
+              organizationId,
+              userId,
+            }
+          : undefined,
+        { conversationId },
+      );
+      reportToolMetrics({
+        toolName,
+        agentId,
+        agentName,
+        startTime,
+        isError: toolResult.isError ?? false,
+      });
+      return toolResult;
+    } catch (error) {
+      reportToolMetrics({
+        toolName,
+        agentId,
+        agentName,
+        startTime,
+        isError: true,
+      });
+      throw error;
+    }
+  };
+
+  if (ctx.deduplicateToolExecution && ctx.toolCallId) {
+    const claim = await McpToolExecutionModel.claim({
+      toolCallId: ctx.toolCallId,
+      agentId,
+      conversationId,
+      userId,
+      toolName,
       toolCall,
-      agentId,
-      mcpGwToken
-        ? {
-            tokenId: mcpGwToken.tokenId,
-            teamId: mcpGwToken.teamId,
-            isOrganizationToken: mcpGwToken.isOrganizationToken,
-            organizationId,
-            userId,
-          }
-        : undefined,
-      { conversationId },
-    );
-    reportToolMetrics({
-      toolName,
-      agentId,
-      agentName,
-      startTime,
-      isError: result.isError ?? false,
     });
-  } catch (error) {
-    reportToolMetrics({
-      toolName,
-      agentId,
-      agentName,
-      startTime,
-      isError: true,
-    });
-    throw error;
+
+    if (claim.kind === "claimed") {
+      try {
+        result = await executeToolCall();
+        await markToolExecutionCompleted({
+          toolCallId: ctx.toolCallId,
+          result,
+        });
+      } catch (error) {
+        const failedResult = buildFailedToolExecutionResult(toolCall, error);
+        await markToolExecutionFailed({
+          toolCallId: ctx.toolCallId,
+          result: failedResult,
+          error: failedResult.error ?? "Tool execution failed",
+        });
+        throw error;
+      }
+    } else if (claim.kind === "completed" || claim.kind === "failed") {
+      result = claim.result;
+    } else {
+      result = buildDuplicateToolCallInProgressResult(toolCall);
+    }
+  } else {
+    result = await executeToolCall();
   }
   throwIfAborted(abortSignal);
 

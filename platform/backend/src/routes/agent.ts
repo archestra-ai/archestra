@@ -14,6 +14,7 @@ import {
   requireAgentModifyPermission,
 } from "@/auth";
 import { knowledgeSourceAccessControlService } from "@/knowledge-base";
+import logger from "@/logging";
 import {
   AgentLabelModel,
   AgentModel,
@@ -499,15 +500,25 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       };
       const agent = await AgentModel.create(createData, user.id);
 
+      // Record the initial prompt version. This is a secondary, best-effort
+      // signal: a failure here must not fail the agent creation that already
+      // committed, so we swallow and log rather than propagate.
       if (agent.systemPrompt) {
-        await AgentVersionModel.record({
-          agentId: agent.id,
-          organizationId,
-          systemPrompt: agent.systemPrompt,
-          source: "create",
-          userId: user.id,
-          userName: user.name,
-        });
+        try {
+          await AgentVersionModel.record({
+            agentId: agent.id,
+            organizationId,
+            systemPrompt: agent.systemPrompt,
+            source: "create",
+            userId: user.id,
+            userName: user.name,
+          });
+        } catch (error) {
+          logger.error(
+            { err: error, agentId: agent.id },
+            "Failed to record initial agent prompt version",
+          );
+        }
       }
 
       // We need to re-init metrics with the new label keys in case label keys changed.
@@ -963,15 +974,26 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Agent not found");
       }
 
+      // Record the new prompt version when the prompt was part of this update.
+      // Best-effort: the agent update already committed, so a versioning
+      // failure must not turn a successful save into a 500. The model dedups
+      // when the prompt is unchanged.
       if (updateData.systemPrompt !== undefined) {
-        await AgentVersionModel.record({
-          agentId: agent.id,
-          organizationId,
-          systemPrompt: agent.systemPrompt,
-          source: "update",
-          userId: user.id,
-          userName: user.name,
-        });
+        try {
+          await AgentVersionModel.record({
+            agentId: agent.id,
+            organizationId,
+            systemPrompt: agent.systemPrompt,
+            source: "update",
+            userId: user.id,
+            userName: user.name,
+          });
+        } catch (error) {
+          logger.error(
+            { err: error, agentId: agent.id },
+            "Failed to record updated agent prompt version",
+          );
+        }
       }
 
       // Only re-init metrics when labels were part of the update payload,

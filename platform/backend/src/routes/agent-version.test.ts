@@ -1,5 +1,4 @@
 import { vi } from "vitest";
-import AgentVersionModel from "@/models/agent-version";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -320,9 +319,7 @@ describe("agent-version routes", () => {
       expect(body.target.label).toBe("current");
     });
 
-    test("returns 404 when target version belongs to a different agent", async ({
-      makeAgent,
-    }) => {
+    test("returns 404 when target version belongs to a different agent", async () => {
       const agent1 = await createAgentWithPrompt("Agent 1 prompt");
       const agent2 = await createAgentWithPrompt("Agent 2 prompt");
 
@@ -344,6 +341,25 @@ describe("agent-version routes", () => {
       });
 
       expect(res.statusCode).toBe(404);
+    });
+
+    test("returns 400 when against is neither 'current' nor a valid UUID", async () => {
+      const agent = await createAgentWithPrompt("Prompt A");
+
+      const listRes = await app.inject({
+        method: "GET",
+        url: `/api/agents/${agent.id}/versions`,
+      });
+      const v1Id = listRes.json().data[0].id;
+
+      const res = await app.inject({
+        method: "GET",
+        url: `/api/agents/${agent.id}/versions/${v1Id}/diff?against=not-a-uuid`,
+      });
+
+      // Rejected at querystring validation rather than reaching a uuid column
+      // lookup (which would surface as a 500).
+      expect(res.statusCode).toBe(400);
     });
   });
 
@@ -496,8 +512,6 @@ describe("agent-version routes", () => {
     test("GET /versions returns 404 when caller lacks read permission", async ({
       makeAgent,
       makeOrganization,
-      makeUser,
-      makeMember,
     }) => {
       // Cross-org agent: the caller's organizationId won't match, so 404.
       const otherOrg = await makeOrganization();

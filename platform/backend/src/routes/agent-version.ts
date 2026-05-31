@@ -167,7 +167,10 @@ const agentVersionRoutes: FastifyPluginAsyncZod = async (fastify) => {
           versionId: UuidIdSchema,
         }),
         querystring: z.object({
-          against: z.string().min(1),
+          // Either the live agent prompt ("current") or another version's UUID.
+          // Constrained here so a malformed value is rejected at validation
+          // instead of reaching a uuid column lookup and surfacing as a 500.
+          against: z.union([z.literal("current"), UuidIdSchema]),
         }),
         response: constructResponseSchema(
           z.object({

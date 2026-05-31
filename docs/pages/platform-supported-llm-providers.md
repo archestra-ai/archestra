@@ -3,7 +3,7 @@ title: Supported LLM Providers
 category: LLM Proxy
 order: 2
 description: LLM providers supported by Archestra Platform
-lastUpdated: 2026-02-22
+lastUpdated: 2026-05-31
 ---
 
 <!--
@@ -24,7 +24,8 @@ The model router exposes one OpenAI-compatible interface for models across confi
 
 - **Responses API** (`/responses`) - ✅ Supported for text requests across model-router-compatible providers
 - **Chat Completions API** (`/chat/completions`) - ✅ Supported for text chat requests across model-router-compatible providers
-- **Models API** (`/models`) - ✅ Returns provider-qualified model IDs
+- **Embeddings API** (`/embeddings`) - ✅ Supported for OpenAI embedding models
+- **Models API** (`/models`) - ✅ Returns provider-qualified chat and embedding model IDs
 
 ### Model Router Connection Details
 
@@ -33,7 +34,7 @@ The model router exposes one OpenAI-compatible interface for models across confi
 
 ### List Models
 
-Call `GET /v1/model-router/{llm-proxy-id}/models` to list OpenAI-compatible model objects. Model IDs are returned as `<provider>:<model-id>` and only include providers mapped to the virtual key or LLM OAuth client used for the request. See [Authentication](/docs/platform-llm-proxy-authentication) for configuration details.
+Call `GET /v1/model-router/{llm-proxy-id}/models` to list OpenAI-compatible model objects. Model IDs are returned as `<provider>:<model-id>` and only include providers mapped to the virtual key or LLM OAuth client used for the request. The list includes chat models and embedding models. See [Authentication](/docs/platform-llm-proxy-authentication) for configuration details.
 
 ### Model Resolution
 
@@ -45,12 +46,17 @@ The `/models` response includes model-router-compatible text models for the prov
 
 Model Router translation is text-first. Anthropic, Gemini, and Cohere routes currently drop non-text content parts such as OpenAI `image_url` message parts; Bedrock supports base64 data URL images.
 
+### Model Router Embeddings
+
+Call `POST /v1/model-router/{llm-proxy-id}/embeddings` with an OpenAI-compatible embedding request. Use the provider-qualified embedding model ID from `/models`, for example `openai:text-embedding-3-small`. Embedding requests currently route to OpenAI embedding models.
+
 ## OpenAI
 
 ### Supported OpenAI APIs
 
 - **Chat Completions API** (`/chat/completions`) - ✅ Fully supported
 - **Responses API** (`/responses`) - ✅ Fully supported
+- **Embeddings API** (`/embeddings`) - ✅ Fully supported
 
 ### OpenAI Connection Details
 

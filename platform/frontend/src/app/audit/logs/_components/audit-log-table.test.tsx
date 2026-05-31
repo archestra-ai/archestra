@@ -321,12 +321,13 @@ describe("AuditLogTable", () => {
     expect(ALL_OUTCOMES).toHaveLength(3);
   });
 
-  it("ALL_ACTOR_TYPES covers user, api_key, sso, and system", () => {
+  it("ALL_ACTOR_TYPES covers user, api_key, service_account, sso, and system", () => {
     expect(ALL_ACTOR_TYPES).toContain("user");
     expect(ALL_ACTOR_TYPES).toContain("api_key");
+    expect(ALL_ACTOR_TYPES).toContain("service_account");
     expect(ALL_ACTOR_TYPES).toContain("sso");
     expect(ALL_ACTOR_TYPES).toContain("system");
-    expect(ALL_ACTOR_TYPES).toHaveLength(4);
+    expect(ALL_ACTOR_TYPES).toHaveLength(5);
   });
 
   it("renders the empty state when no rows and no filters are active", () => {

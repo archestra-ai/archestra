@@ -223,23 +223,23 @@ export class Authnz {
       | RouteId
       | undefined;
 
-    logger.info({ routeId }, "[Authnz] Checking authorization for route");
+    logger.trace({ routeId }, "[Authnz] Checking authorization for route");
 
     const requiredPermissions = routeId
       ? requiredEndpointPermissionsMap[routeId]
       : undefined;
 
-    logger.info(
+    logger.trace(
       {
         routeId,
         requiredPermissions,
         hasPermissions: requiredPermissions !== undefined,
       },
-      "[Authnz] DEBUG: permissions lookup result",
+      "[Authnz] Permissions lookup result",
     );
 
     if (requiredPermissions === undefined) {
-      logger.info(
+      logger.trace(
         { routeId },
         "[Authnz] Route not configured in permissions map, denying by default",
       );
@@ -253,14 +253,14 @@ export class Authnz {
 
     // If no specific permissions are required (empty object), allow any authenticated user
     if (Object.keys(requiredPermissions).length === 0) {
-      logger.info(
+      logger.trace(
         { routeId },
         "[Authnz] No specific permissions required, allowing access",
       );
       return { success: true, error: null };
     }
 
-    logger.info(
+    logger.trace(
       {
         routeId,
         requiredPermissions,
@@ -273,7 +273,7 @@ export class Authnz {
       request.headers,
       request.serviceAccount,
     );
-    logger.info({ routeId, result }, "[Authnz] DEBUG: hasPermission result");
+    logger.trace({ routeId, result }, "[Authnz] hasPermission result");
     return result;
   };
 

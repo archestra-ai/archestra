@@ -25,4 +25,5 @@ ALTER TABLE "service_accounts" ADD CONSTRAINT "service_accounts_organization_id_
 CREATE INDEX "service_account_tokens_service_account_id_idx" ON "service_account_tokens" USING btree ("service_account_id");--> statement-breakpoint
 CREATE INDEX "service_account_tokens_token_start_idx" ON "service_account_tokens" USING btree ("token_start");--> statement-breakpoint
 CREATE UNIQUE INDEX "service_account_tokens_token_hash_unique_idx" ON "service_account_tokens" USING btree ("token_hash");--> statement-breakpoint
-CREATE INDEX "service_accounts_organization_id_idx" ON "service_accounts" USING btree ("organization_id");
+CREATE INDEX "service_accounts_organization_id_idx" ON "service_accounts" USING btree ("organization_id");--> statement-breakpoint
+CREATE UNIQUE INDEX "service_accounts_organization_id_name_unique_idx" ON "service_accounts" USING btree ("organization_id","name");

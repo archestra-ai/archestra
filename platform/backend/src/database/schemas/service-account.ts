@@ -4,6 +4,7 @@ import {
   pgTable,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 import organizationsTable from "./organization";
@@ -26,6 +27,10 @@ const serviceAccountsTable = pgTable(
   },
   (table) => [
     index("service_accounts_organization_id_idx").on(table.organizationId),
+    uniqueIndex("service_accounts_organization_id_name_unique_idx").on(
+      table.organizationId,
+      table.name,
+    ),
   ],
 );
 

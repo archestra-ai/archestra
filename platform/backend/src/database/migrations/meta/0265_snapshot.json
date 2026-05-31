@@ -1,5 +1,5 @@
 {
-  "id": "8a9503b0-1c95-41f3-891f-e6fa09e2825d",
+  "id": "ad1ead2b-41d1-4c9c-924c-d61021cbfd44",
   "prevId": "24de4da8-bc2e-4b05-97dd-8099560b9b68",
   "version": "7",
   "dialect": "postgresql",
@@ -9051,6 +9051,27 @@
             }
           ],
           "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "service_accounts_organization_id_name_unique_idx": {
+          "name": "service_accounts_organization_id_name_unique_idx",
+          "columns": [
+            {
+              "expression": "organization_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "name",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
           "concurrently": false,
           "method": "btree",
           "with": {}

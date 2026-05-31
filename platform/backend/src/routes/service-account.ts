@@ -169,7 +169,13 @@ const serviceAccountRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ) {
           throw new ApiError(400, "Service account token limit exceeded");
         }
-        throw new ApiError(404, "Service account not found");
+        if (
+          error instanceof Error &&
+          error.message === "Service account not found"
+        ) {
+          throw new ApiError(404, "Service account not found");
+        }
+        throw error;
       }
     },
   );

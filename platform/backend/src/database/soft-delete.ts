@@ -2,7 +2,7 @@ import { and, isNull, not, type SQL } from "drizzle-orm";
 import type { PgTable, PgUpdateSetSource } from "drizzle-orm/pg-core";
 import type db from "@/database";
 import type { Transaction } from "@/database";
-import type { SoftDeletableTable } from "@/database/schemas/_soft-delete";
+import type { SoftDeletableTable } from "@/database/schemas/soft-deletable-table";
 
 type Executor = typeof db | Transaction;
 type SoftDeletablePgTable = PgTable & SoftDeletableTable;

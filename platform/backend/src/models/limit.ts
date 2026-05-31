@@ -1,6 +1,6 @@
 import { and, eq, inArray, lt, or, type SQL, sql } from "drizzle-orm";
 import db, { schema, withDbTransaction } from "@/database";
-import { notDeleted } from "@/database/schemas/_soft-delete";
+import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import logger from "@/logging";
 import type {
   CreateLimit,

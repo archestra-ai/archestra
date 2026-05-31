@@ -16,10 +16,10 @@ import type {
   ToolAssignmentMode,
   ToolExposureMode,
 } from "@/types/agent";
-import { softPgTable } from "./_soft-delete";
 import identityProvidersTable from "./identity-provider";
 import llmProviderApiKeysTable from "./llm-provider-api-key";
 import modelsTable from "./model";
+import { softDeletablePgTable } from "./soft-deletable-table";
 import usersTable from "./user";
 
 /**
@@ -41,7 +41,7 @@ import usersTable from "./user";
  *   - Can delegate to other internal agents via delegation tools
  *   - Can be triggered by ChatOps providers
  */
-const agentsTable = softPgTable(
+const agentsTable = softDeletablePgTable(
   "agents",
   {
     id: uuid("id").primaryKey().defaultRandom(),

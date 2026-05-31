@@ -1,6 +1,6 @@
 import { and, asc, eq, inArray } from "drizzle-orm";
 import db, { schema, withDbTransaction } from "@/database";
-import { notDeleted } from "@/database/schemas/_soft-delete";
+import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import type { SuggestedPromptInput } from "@/types";
 
 class AgentSuggestedPromptModel {

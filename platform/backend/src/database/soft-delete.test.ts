@@ -2,7 +2,7 @@ import { eq, sql } from "drizzle-orm";
 import { pgTable, text, uuid } from "drizzle-orm/pg-core";
 import db from "@/database";
 import { describe, expect, test } from "@/test";
-import { notDeleted, softDeleteColumns } from "./schemas/_soft-delete";
+import { notDeleted, softDeleteColumns } from "./schemas/soft-deletable-table";
 import { hardDelete, restore, softDelete } from "./soft-delete";
 
 const scratchTable = pgTable("soft_delete_scratch", {

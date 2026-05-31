@@ -25,7 +25,7 @@ import {
 } from "drizzle-orm";
 import { clearChatMcpClient } from "@/clients/chat-mcp-client";
 import db, { schema, type Transaction } from "@/database";
-import { notDeleted } from "@/database/schemas/_soft-delete";
+import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import { hardDelete, softDelete } from "@/database/soft-delete";
 import {
   createPaginatedResult,

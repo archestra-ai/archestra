@@ -1,6 +1,6 @@
 import { and, eq, getTableColumns, inArray } from "drizzle-orm";
 import db, { schema } from "@/database";
-import { notDeleted } from "@/database/schemas/_soft-delete";
+import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import type { AgentKnowledgeBase } from "@/types";
 
 class AgentKnowledgeBaseModel {

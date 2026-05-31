@@ -1,11 +1,11 @@
 import { sql } from "drizzle-orm";
 import { text, uuid } from "drizzle-orm/pg-core";
 import db from "@/database";
-import { softPgTable } from "@/database/schemas/_soft-delete";
+import { softDeletablePgTable } from "@/database/schemas/soft-deletable-table";
 import { describe, expect, test } from "@/test";
 import { SoftDeletableModel } from "./soft-deletable-model";
 
-const scratchTable = softPgTable("soft_deletable_model_scratch", {
+const scratchTable = softDeletablePgTable("soft_deletable_model_scratch", {
   id: uuid("id").primaryKey().defaultRandom(),
   name: text("name").notNull(),
 });

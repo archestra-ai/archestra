@@ -4,7 +4,7 @@ import db, { type Transaction } from "@/database";
 import {
   notDeleted,
   type SoftDeletableTable,
-} from "@/database/schemas/_soft-delete";
+} from "@/database/schemas/soft-deletable-table";
 import {
   hardDelete,
   restore as restoreHelper,

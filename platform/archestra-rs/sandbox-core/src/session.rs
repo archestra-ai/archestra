@@ -164,6 +164,7 @@ where
 }
 
 async fn spawn() -> Result<Arc<SessionHandle>> {
+    tracing::info!("spawning dagger session");
     let (msg_tx, msg_rx) = mpsc::channel::<SessionMsg>(CHANNEL_CAPACITY);
     let (ready_tx, ready_rx) = oneshot::channel::<()>();
     let (fail_tx, fail_rx) = oneshot::channel::<SandboxError>();
@@ -183,16 +184,19 @@ async fn spawn() -> Result<Arc<SessionHandle>> {
             Ok(())
         })
         .await;
-        if let Err(err) = result {
-            if let Some(tx) = fail_tx.take() {
-                let _ = tx.send(SandboxError::engine(err));
-            }
+        if let Err(err) = result
+            && let Some(tx) = fail_tx.take()
+        {
+            let _ = tx.send(SandboxError::engine(err));
         }
     });
 
     tokio::select! {
         ready = ready_rx => match ready {
-            Ok(()) => Ok(Arc::new(SessionHandle { tx: msg_tx })),
+            Ok(()) => {
+                tracing::info!("dagger session ready");
+                Ok(Arc::new(SessionHandle { tx: msg_tx }))
+            }
             Err(_) => Err(SandboxError::EngineUnreachable(
                 "the Dagger session task exited before reporting ready".to_string(),
             )),
@@ -215,7 +219,10 @@ async fn run_loop(client: DaggerConn, mut rx: mpsc::Receiver<SessionMsg>) {
         warm: OnceCell::new(),
     });
     let permits = Arc::new(Semaphore::new(MAX_CONCURRENT_HANDLERS));
-    // kick warmup off in the background so it overlaps with the first request
+    // kick warmup off in the background so it overlaps with the first request.
+    // this runs detached and shared across callers, so its `warm_base.build`
+    // span has no caller traceparent and lands as its own root trace rather than
+    // nested under whichever request triggered the cold start.
     {
         let session = session.clone();
         tokio::spawn(async move {
@@ -225,11 +232,24 @@ async fn run_loop(client: DaggerConn, mut rx: mpsc::Receiver<SessionMsg>) {
     while let Some(msg) = rx.recv().await {
         // back-pressure: hold the recv loop until a permit is available, so we
         // never spawn more than MAX_CONCURRENT_HANDLERS tasks against Dagger.
-        let permit = permits
-            .clone()
-            .acquire_owned()
-            .await
-            .expect("session semaphore was closed");
+        // a failed try_acquire means the handler pool is saturated — the one
+        // back-pressure signal worth surfacing for capacity tuning.
+        let permit = match permits.clone().try_acquire_owned() {
+            Ok(permit) => permit,
+            Err(_) => {
+                tracing::debug!(
+                    max = MAX_CONCURRENT_HANDLERS,
+                    "dagger handler pool saturated; waiting for a permit"
+                );
+                match permits.clone().acquire_owned().await {
+                    Ok(permit) => permit,
+                    // the semaphore lives as long as this loop and is never
+                    // closed; an error means it was dropped out from under us,
+                    // so stop accepting work and let the session tear down.
+                    Err(_) => break,
+                }
+            }
+        };
         let session = session.clone();
         tokio::spawn(async move {
             let _permit = permit;
@@ -244,10 +264,6 @@ pub(crate) struct Session {
 }
 
 impl Session {
-    pub(crate) fn client(&self) -> &DaggerConn {
-        &self.client
-    }
-
     pub(crate) async fn ensure_warm(&self) -> Result<Container> {
         let container = self
             .warm
@@ -386,9 +402,12 @@ if __name__ == "__main__":
     sys.exit(main())
 "##;
 
+#[tracing::instrument(name = "sandbox.warm_base.build", skip_all, fields(image = tracing::field::Empty))]
 async fn build_warm_base(client: &DaggerConn) -> Result<Container> {
     let image = env::var("ARCHESTRA_DAGGER_RUNTIME_IMAGE")
         .unwrap_or_else(|_| DEFAULT_BASE_IMAGE.to_string());
+    tracing::Span::current().record("image", image.as_str());
+    tracing::info!(%image, "building warm base image");
     let apt_packages = DEFAULT_APT_PACKAGES.join(" ");
     let py_requirements = DEFAULT_PYTHON_REQUIREMENTS.join(" ");
 
@@ -428,6 +447,8 @@ async fn build_warm_base(client: &DaggerConn) -> Result<Container> {
         .await
         .map_err(SandboxError::engine)
         .map(|id| client.load_container_from_id(id))
+        .inspect(|_| tracing::info!("warm base image ready"))
+        .inspect_err(|err| tracing::warn!(error = %err, "warm base image build failed"))
 }
 
 async fn handle(session: Arc<Session>, msg: SessionMsg) {
@@ -456,10 +477,9 @@ where
         .catch_unwind()
         .await
         .unwrap_or_else(|payload| {
-            Err(SandboxError::Internal(format!(
-                "rust panic: {}",
-                panic_message(payload.as_ref()),
-            )))
+            let message = panic_message(payload.as_ref());
+            tracing::error!(panic = message, "recovered a panic in a dagger handler");
+            Err(SandboxError::Internal(format!("rust panic: {message}")))
         })
 }
 

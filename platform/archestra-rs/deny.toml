@@ -24,6 +24,9 @@ allow = [
   "BSD-2-Clause",
   "BSD-3-Clause",
   "CC0-1.0",
+  # permissive data license covering webpki-roots' bundled mozilla CA set,
+  # pulled in by the sandbox-rs OTLP exporter's rustls stack.
+  "CDLA-Permissive-2.0",
   "ISC",
   "MIT",
   "MPL-2.0",

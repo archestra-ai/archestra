@@ -3,6 +3,7 @@ import {
   ARCHESTRA_MCP_CATALOG_ID,
   BUILT_IN_AGENT_IDS,
   BUILT_IN_AGENT_NAMES,
+  CHAT_TITLE_GENERATION_SYSTEM_PROMPT,
   CONTEXT_COMPACTION_SYSTEM_PROMPT,
   DUAL_LLM_MAIN_SYSTEM_PROMPT,
   DUAL_LLM_QUARANTINE_SYSTEM_PROMPT,
@@ -109,6 +110,16 @@ export async function syncBuiltInAgents(): Promise<void> {
       systemPrompt: CONTEXT_COMPACTION_SYSTEM_PROMPT,
       builtInAgentConfig: {
         name: BUILT_IN_AGENT_IDS.CONTEXT_COMPACTION,
+      } as const,
+    },
+    {
+      builtInAgentId: BUILT_IN_AGENT_IDS.CHAT_TITLE_GENERATION,
+      name: BUILT_IN_AGENT_NAMES.CHAT_TITLE_GENERATION,
+      description:
+        "Generates concise titles for chat conversations using the configured title generation model",
+      systemPrompt: CHAT_TITLE_GENERATION_SYSTEM_PROMPT,
+      builtInAgentConfig: {
+        name: BUILT_IN_AGENT_IDS.CHAT_TITLE_GENERATION,
       } as const,
     },
   ];

@@ -103,7 +103,7 @@ vi.mock("@/components/llm-provider-api-key-form", () => ({
   },
 }));
 
-vi.mock("@/components/llm-provider-options", () => ({
+vi.mock("@/components/llm-provider-select-items", () => ({
   LlmProviderSelectItems: () => null,
 }));
 

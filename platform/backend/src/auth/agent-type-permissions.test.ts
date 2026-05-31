@@ -1,5 +1,6 @@
 import { ADMIN_ROLE_NAME, EDITOR_ROLE_NAME, MEMBER_ROLE_NAME } from "@shared";
 import { describe, expect, test } from "@/test";
+import type { AgentScope } from "@/types";
 import { ApiError } from "@/types";
 import {
   getAgentTypePermissionChecker,
@@ -8,6 +9,7 @@ import {
   isAgentTypeAdmin,
   requireAgentModifyPermission,
   requireAgentTypePermission,
+  requireScopedModifyPermission,
 } from "./agent-type-permissions";
 
 describe("requireAgentTypePermission", () => {
@@ -799,5 +801,38 @@ describe("requireAgentModifyPermission", () => {
         userId: user.id,
       }),
     ).toThrow(ApiError);
+  });
+});
+
+describe("requireScopedModifyPermission", () => {
+  test("fails closed on an out-of-union scope", () => {
+    // a corrupted/unknown scope must be denied, not fall through and grant
+    expect(() =>
+      requireScopedModifyPermission({
+        isAdmin: false,
+        isTeamAdmin: false,
+        scope: "bogus" as AgentScope,
+        authorId: "author-id",
+        resourceTeamIds: [],
+        userTeamIds: [],
+        userId: "author-id",
+        resourceLabel: "skill",
+      }),
+    ).toThrow(ApiError);
+  });
+
+  test("admins still bypass before the scope switch", () => {
+    expect(() =>
+      requireScopedModifyPermission({
+        isAdmin: true,
+        isTeamAdmin: false,
+        scope: "bogus" as AgentScope,
+        authorId: null,
+        resourceTeamIds: [],
+        userTeamIds: [],
+        userId: "u1",
+        resourceLabel: "skill",
+      }),
+    ).not.toThrow();
   });
 });

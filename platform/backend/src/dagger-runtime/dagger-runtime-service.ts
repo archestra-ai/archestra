@@ -214,6 +214,18 @@ class DaggerRuntimeService {
         "ARCHESTRA_ENGINE_UNREACHABLE",
       ),
     );
+    // best-effort flush of the native OTLP batch so the last spans/logs aren't
+    // lost on process exit. force_flush is idempotent, so it's safe even when
+    // shutdown fires on the last consumer detaching mid-process. only meaningful
+    // if the addon was ever loaded (telemetry inits lazily on first sandbox use).
+    if (nativeBindings) {
+      try {
+        const native = await nativeBindings;
+        await native.flushTelemetry();
+      } catch (error) {
+        logger.warn({ error }, "sandbox-rs telemetry flush failed");
+      }
+    }
   }
 
   // === private ===

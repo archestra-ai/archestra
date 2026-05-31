@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use base64::Engine;
-use dagger_sdk::{Container, ContainerWithExecOpts, DaggerConn, ReturnType};
+use dagger_sdk::{Container, ContainerWithExecOpts, ReturnType};
 use serde::Deserialize;
 use tracing::Span;
 
@@ -30,15 +30,32 @@ struct SupervisorResult {
     duration_ms: u32,
 }
 
+#[tracing::instrument(
+    name = "sandbox.run",
+    skip_all,
+    fields(
+        cwd = %req.cwd,
+        command.len = req.command.len(),
+        snapshots = req.snapshots.len(),
+        replay.len = req.replay_commands.len(),
+        timeout_s = req.timeout_seconds,
+        exit_code = tracing::field::Empty,
+        duration_ms = tracing::field::Empty,
+        timed_out = tracing::field::Empty,
+        truncated = tracing::field::Empty,
+    )
+)]
 pub(crate) async fn execute_run(
     session: Arc<Session>,
     req: RunRequest,
 ) -> Result<CommandExecution> {
+    // parent this span under the caller's trace (work runs in a detached actor
+    // task, so the W3C traceparent is the only link back to the TS span).
     attach_trace(req.traceparent.as_deref());
     validate_cwd(&req.cwd)?;
 
     let warm = session.ensure_warm().await?;
-    let materialized = materialize(session.client(), warm, &req).await?;
+    let materialized = materialize(warm, &req).await?;
 
     let argv = supervised_argv(&req.command, req.timeout_seconds, &req.limits);
     let executed = materialized
@@ -53,16 +70,33 @@ pub(crate) async fn execute_run(
         SandboxError::internal(format!("failed to parse command supervisor output: {e}"))
     })?;
 
+    let truncated = result.stdout_truncated || result.stderr_truncated;
+    let span = Span::current();
+    span.record("exit_code", result.exit_code);
+    span.record("duration_ms", result.duration_ms);
+    span.record("timed_out", result.timed_out);
+    span.record("truncated", truncated);
+
     Ok(CommandExecution {
         stdout: mark_truncated(result.stdout, result.stdout_truncated),
         stderr: mark_truncated(result.stderr, result.stderr_truncated),
         exit_code: result.exit_code,
         duration_ms: result.duration_ms,
         timed_out: result.timed_out,
-        truncated: result.stdout_truncated || result.stderr_truncated,
+        truncated,
     })
 }
 
+#[tracing::instrument(
+    name = "sandbox.read_artifact",
+    skip_all,
+    fields(
+        path = %req.path,
+        snapshots = req.snapshots.len(),
+        replay.len = req.replay_commands.len(),
+        size_bytes = tracing::field::Empty,
+    )
+)]
 pub(crate) async fn execute_read_artifact(
     session: Arc<Session>,
     req: ArtifactRequest,
@@ -86,7 +120,7 @@ pub(crate) async fn execute_read_artifact(
         traceparent: None,
         pythonpath: req.pythonpath,
     };
-    let materialized = materialize(session.client(), warm, &run).await?;
+    let materialized = materialize(warm, &run).await?;
     let bytes_limit = u64::from(req.limits.file_size_limit_bytes);
     let command = format!(
         "[ -e {path} ] || {{ echo 'artifact not found: {path}' >&2; exit {not_found}; }}; _s=$(stat -c '%s' {path}) && [ \"$_s\" -le {limit} ] || {{ echo 'artifact is too large' >&2; exit {too_large}; }}; base64 -w0 {path}",
@@ -140,12 +174,14 @@ pub(crate) async fn execute_read_artifact(
         .decode(&data_base64)
         .map_err(|e| SandboxError::internal(format!("failed to decode artifact bytes: {e}")))?;
     let size_bytes = data.len().min(u32::MAX as usize) as u32;
+    Span::current().record("size_bytes", size_bytes);
     Ok(ArtifactBytes {
         data_base64,
         size_bytes,
     })
 }
 
+#[tracing::instrument(name = "sandbox.check_session", skip_all)]
 pub(crate) async fn execute_check_session(
     session: Arc<Session>,
     traceparent: Option<String>,
@@ -156,7 +192,12 @@ pub(crate) async fn execute_check_session(
     Ok(())
 }
 
-async fn materialize(client: &DaggerConn, warm: Container, req: &RunRequest) -> Result<Container> {
+#[tracing::instrument(
+    name = "sandbox.materialize",
+    skip_all,
+    fields(snapshots = req.snapshots.len(), replay.len = req.replay_commands.len())
+)]
+async fn materialize(warm: Container, req: &RunRequest) -> Result<Container> {
     let mut container = warm;
 
     if !req.snapshots.is_empty() {
@@ -203,7 +244,6 @@ async fn materialize(client: &DaggerConn, warm: Container, req: &RunRequest) -> 
             .with_exec_opts(argv, any_exit_opts());
     }
 
-    let _ = client; // reserved for future host()-based bulk uploads
     Ok(container)
 }
 

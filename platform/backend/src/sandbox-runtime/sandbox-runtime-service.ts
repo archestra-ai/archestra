@@ -16,21 +16,21 @@ function loadNative(): Promise<NativeBindings> {
   return nativeBindings;
 }
 
-type DaggerRuntimeStatus =
+type SandboxRuntimeStatus =
   | "disabled"
   | "initializing"
   | "ready"
   | "error"
   | "stopped";
 
-export class DaggerRuntimeError extends Error {
+export class SandboxRuntimeError extends Error {
   readonly code: NativeSandboxErrorCode;
   constructor(
     message: string,
     code: NativeSandboxErrorCode = "ARCHESTRA_INTERNAL",
   ) {
     super(message);
-    this.name = "DaggerRuntimeError";
+    this.name = "SandboxRuntimeError";
     this.code = code;
   }
 }
@@ -89,18 +89,19 @@ interface ReadArtifactResult {
 }
 
 /**
- * Process-singleton Dagger runtime — every shell command (skill sandbox or
+ * Process-singleton sandbox runtime — every shell command (skill sandbox or
  * python script) flows through this service. The native side keeps one
- * long-lived Dagger session with a pre-warmed base container, so per-call
- * overhead is dominated by the command itself rather than session/image setup.
+ * long-lived session with a pre-warmed base container, so per-call overhead is
+ * dominated by the command itself rather than session/image setup. The backend
+ * is currently Dagger; this wrapper is the seam where another could slot in.
  */
 interface Waiter {
   resolve: () => void;
-  reject: (err: DaggerRuntimeError) => void;
+  reject: (err: SandboxRuntimeError) => void;
 }
 
-class DaggerRuntimeService {
-  private status: DaggerRuntimeStatus = "disabled";
+class SandboxRuntimeService {
+  private status: SandboxRuntimeStatus = "disabled";
   private initPromise: Promise<void> | null = null;
   private lastInitAttemptAt = 0;
   private activeRuns = 0;
@@ -209,8 +210,8 @@ class DaggerRuntimeService {
     if (this.status === "disabled") return;
     this.status = "stopped";
     this.drainWaiters(
-      new DaggerRuntimeError(
-        "the Dagger runtime is shutting down",
+      new SandboxRuntimeError(
+        "the sandbox runtime is shutting down",
         "ARCHESTRA_ENGINE_UNREACHABLE",
       ),
     );
@@ -232,23 +233,23 @@ class DaggerRuntimeService {
 
   private async ensureReady(): Promise<void> {
     if (!config.daggerRuntime.enabled) {
-      throw new DaggerRuntimeError(
-        "the Dagger runtime is not enabled",
+      throw new SandboxRuntimeError(
+        "the sandbox runtime is not enabled",
         "ARCHESTRA_INVALID_INPUT",
       );
     }
     await this.init();
     switch (this.status) {
       case "stopped":
-        throw new DaggerRuntimeError(
-          "the Dagger runtime has been stopped",
+        throw new SandboxRuntimeError(
+          "the sandbox runtime has been stopped",
           "ARCHESTRA_ENGINE_UNREACHABLE",
         );
       case "ready":
         return;
       default:
-        throw new DaggerRuntimeError(
-          "the Dagger runtime is not available (engine unreachable)",
+        throw new SandboxRuntimeError(
+          "the sandbox runtime is not available (engine unreachable)",
           "ARCHESTRA_ENGINE_UNREACHABLE",
         );
     }
@@ -268,16 +269,16 @@ class DaggerRuntimeService {
       await checkSession({ traceparent: getTraceparent() });
       // shutdown() may have fired while we were awaiting; don't revive it.
       // re-read status as the union type since TS narrows past the await.
-      if ((this.status as DaggerRuntimeStatus) === "stopped") return;
+      if ((this.status as SandboxRuntimeStatus) === "stopped") return;
       this.status = "ready";
-      logger.info("[DaggerRuntime] ready — shared session + warm base online");
+      logger.info("[SandboxRuntime] ready — shared session + warm base online");
     } catch (error) {
-      if ((this.status as DaggerRuntimeStatus) !== "stopped") {
+      if ((this.status as SandboxRuntimeStatus) !== "stopped") {
         this.status = "error";
       }
       logger.error(
         { err: error },
-        "[DaggerRuntime] failed to initialize — sandbox execution unavailable",
+        "[SandboxRuntime] failed to initialize — sandbox execution unavailable",
       );
       throw error;
     }
@@ -311,8 +312,8 @@ class DaggerRuntimeService {
       return;
     }
     if (this.waiters.length >= config.daggerRuntime.maxQueueLength) {
-      throw new DaggerRuntimeError(
-        "the Dagger runtime is at capacity — too many runs are already queued",
+      throw new SandboxRuntimeError(
+        "the sandbox runtime is at capacity — too many runs are already queued",
         "ARCHESTRA_ENGINE_UNREACHABLE",
       );
     }
@@ -330,7 +331,7 @@ class DaggerRuntimeService {
     }
   }
 
-  private drainWaiters(err: DaggerRuntimeError): void {
+  private drainWaiters(err: SandboxRuntimeError): void {
     while (this.waiters.length > 0) {
       const w = this.waiters.shift();
       w?.reject(err);
@@ -354,11 +355,11 @@ class DaggerRuntimeService {
           if (this.status !== "stopped") this.status = "error";
           logger.error(
             { totalMs },
-            "[DaggerRuntime] native call exceeded backstop — engine assumed wedged",
+            "[SandboxRuntime] native call exceeded backstop — engine assumed wedged",
           );
           reject(
-            new DaggerRuntimeError(
-              "the Dagger runtime native call did not return within the backstop window",
+            new SandboxRuntimeError(
+              "the sandbox runtime native call did not return within the backstop window",
               "ARCHESTRA_ENGINE_UNREACHABLE",
             ),
           );
@@ -370,15 +371,15 @@ class DaggerRuntimeService {
     }
   }
 
-  private normalizeError(error: unknown): DaggerRuntimeError {
-    if (error instanceof DaggerRuntimeError) return error;
+  private normalizeError(error: unknown): SandboxRuntimeError {
+    if (error instanceof SandboxRuntimeError) return error;
     const native = getNativeSandboxError(error);
     switch (native.code) {
       case "ARCHESTRA_ARTIFACT_NOT_FOUND":
       case "ARCHESTRA_ARTIFACT_TOO_LARGE":
       case "ARCHESTRA_COMMAND_FAILED":
       case "ARCHESTRA_INVALID_INPUT":
-        return new DaggerRuntimeError(native.message, native.code);
+        return new SandboxRuntimeError(native.message, native.code);
       case "ARCHESTRA_ENGINE_UNREACHABLE":
         // genuine engine outage — flip status so the cooldown gate kicks in.
         // never overwrite 'stopped': shutdown is the terminal state and
@@ -386,10 +387,10 @@ class DaggerRuntimeService {
         if (this.status !== "stopped") this.status = "error";
         logger.error(
           { err: error, code: native.code },
-          "[DaggerRuntime] engine unreachable",
+          "[SandboxRuntime] engine unreachable",
         );
-        return new DaggerRuntimeError(
-          "the Dagger runtime is not available (engine unreachable)",
+        return new SandboxRuntimeError(
+          "the sandbox runtime is not available (engine unreachable)",
           "ARCHESTRA_ENGINE_UNREACHABLE",
         );
       case "ARCHESTRA_INTERNAL":
@@ -398,17 +399,17 @@ class DaggerRuntimeService {
         // surface the original message and leave runtime status untouched.
         logger.warn(
           { err: error, code: native.code },
-          "[DaggerRuntime] execution failed",
+          "[SandboxRuntime] execution failed",
         );
-        return new DaggerRuntimeError(
-          native.message || "the Dagger runtime call failed",
+        return new SandboxRuntimeError(
+          native.message || "the sandbox runtime call failed",
           "ARCHESTRA_INTERNAL",
         );
     }
   }
 }
 
-export const daggerRuntimeService = new DaggerRuntimeService();
+export const sandboxRuntimeService = new SandboxRuntimeService();
 
 const INIT_RETRY_COOLDOWN_MS = 10_000;
 // artifact reads have no per-call timeout; cap their backstop budget here.

@@ -2886,6 +2886,26 @@ describe("AgentModel", () => {
         new Set([matchesFirst.id, matchesSecond.id, matchesBoth.id]),
       );
     });
+
+    test("excludes soft-deleted agents", async ({ makeAgent }) => {
+      const active = await makeAgent({
+        name: "Active Label Match",
+        labels: [{ key: "team", value: "alpha" }],
+      });
+      const deleted = await makeAgent({
+        name: "Deleted Label Match",
+        labels: [{ key: "team", value: "alpha" }],
+      });
+      const labels = await AgentLabelModel.getLabelsForAgent(active.id);
+
+      await AgentModel.delete(deleted.id);
+
+      const result = await AgentModel.findByLabels([
+        { keyId: labels[0].keyId, valueId: labels[0].valueId },
+      ]);
+
+      expect(result.map((agent) => agent.id)).toEqual([active.id]);
+    });
   });
 
   describe("toolAssignmentMode transitions", () => {

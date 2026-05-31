@@ -6,6 +6,7 @@ import {
 import { getArchestraMcpTools } from "@/archestra-mcp-server";
 import db, { schema } from "@/database";
 import { describe, expect, test } from "@/test";
+import AgentModel from "./agent";
 import AgentToolModel from "./agent-tool";
 import OrganizationModel from "./organization";
 import ToolModel from "./tool";
@@ -254,6 +255,37 @@ describe("Archestra Tools Dynamic Assignment", () => {
     expect(toolsB.map((t) => t.name)).not.toContain(
       TOOL_ACTIVATE_SKILL_FULL_NAME,
     );
+  });
+
+  test("backfillSkillToolsToOrgAgents skips soft-deleted agents", async ({
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const activeAgent = await makeAgent({
+      organizationId: org.id,
+      name: "Active Agent",
+    });
+    const deletedAgent = await makeAgent({
+      organizationId: org.id,
+      name: "Deleted Agent",
+    });
+
+    await AgentModel.delete(deletedAgent.id);
+    await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+
+    const count = await ToolModel.backfillSkillToolsToOrgAgents(org.id);
+
+    expect(count).toBe(1);
+    const activeTools = await ToolModel.getMcpToolsByAgent(activeAgent.id);
+    expect(activeTools.map((tool) => tool.name)).toContain(
+      TOOL_ACTIVATE_SKILL_FULL_NAME,
+    );
+
+    const deletedToolIds = await AgentToolModel.findToolIdsByAgent(
+      deletedAgent.id,
+    );
+    expect(deletedToolIds).toHaveLength(0);
   });
 
   test("assignSkillToolsToAgent no-ops when org flag is off", async ({

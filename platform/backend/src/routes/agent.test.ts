@@ -4,7 +4,9 @@ import {
   DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
 } from "@shared";
+import { eq } from "drizzle-orm";
 import { vi } from "vitest";
+import db, { schema } from "@/database";
 import { AgentToolModel, ToolModel } from "@/models";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
@@ -412,8 +414,9 @@ describe("agent routes", () => {
 
   describe("DELETE /api/agents/:id", () => {
     test("should delete an agent", async ({ makeAgent }) => {
+      const suffix = crypto.randomUUID().slice(0, 8);
       const created = await makeAgent({
-        name: `Agent for Delete ${crypto.randomUUID().slice(0, 8)}`,
+        name: `Agent for Delete ${suffix}`,
         organizationId,
         scope: "personal",
         authorId: user.id,
@@ -438,6 +441,34 @@ describe("agent routes", () => {
       });
 
       expect(getResponse.statusCode).toBe(404);
+
+      const [row] = await db
+        .select({ deletedAt: schema.agentsTable.deletedAt })
+        .from(schema.agentsTable)
+        .where(eq(schema.agentsTable.id, created.id));
+      expect(row.deletedAt).toBeInstanceOf(Date);
+
+      const paginatedResponse = await app.inject({
+        method: "GET",
+        url: `/api/agents?limit=10&offset=0&name=${suffix}`,
+      });
+      expect(paginatedResponse.statusCode).toBe(200);
+      expect(
+        paginatedResponse
+          .json()
+          .data.some((agent: { id: string }) => agent.id === created.id),
+      ).toBe(false);
+
+      const allResponse = await app.inject({
+        method: "GET",
+        url: "/api/agents/all",
+      });
+      expect(allResponse.statusCode).toBe(200);
+      expect(
+        allResponse
+          .json()
+          .some((agent: { id: string }) => agent.id === created.id),
+      ).toBe(false);
     });
 
     test("returns 403 when deleting a personal MCP gateway and the row remains", async () => {

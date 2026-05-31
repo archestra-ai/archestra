@@ -461,6 +461,7 @@ export async function handleLLMProxy<
         agentId: resolvedAgentId,
         userId,
         virtualKeyId,
+        model: requestAdapter.getModel(),
       });
 
     if (limitViolation) {

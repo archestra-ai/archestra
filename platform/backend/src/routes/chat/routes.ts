@@ -2484,6 +2484,11 @@ export async function generateConversationTitle(
       model,
       system: systemPrompt,
       prompt: titlePrompt,
+      // The Anthropic SDK throws "Streaming is required for operations that may take longer than 10 minutes"
+      // when new large models default to 32k on non-streaming requests
+      // so we limit maxOutputTokens to 20, since the prompt requests "3-6 words" (~10 tokens)
+      // https://platform.claude.com/docs/en/api/sdks/typescript#long-requests
+      maxOutputTokens: 20,
     });
 
     logger.debug(

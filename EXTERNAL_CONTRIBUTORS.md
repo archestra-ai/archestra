@@ -505,3 +505,4 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @nagyminyo-cmyk
 - @Meru143
 - @AllanLeal11
+- @bernardev254

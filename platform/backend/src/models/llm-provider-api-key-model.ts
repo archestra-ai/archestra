@@ -1,18 +1,7 @@
-import {
-  type CompleteModelSelection,
-  MODEL_MARKER_PATTERNS,
-  type SupportedProvider,
-} from "@shared";
-import { and, asc, desc, eq, inArray, or, sql } from "drizzle-orm";
+import { MODEL_MARKER_PATTERNS, type SupportedProvider } from "@shared";
+import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import db, { schema, withDbTransaction } from "@/database";
 import type { LlmProviderApiKey, Model } from "@/types";
-
-/** Aggregate of an API key's linked-model count and oldest sync timestamp. */
-export interface ModelSyncState {
-  apiKeyId: string;
-  linkedModelCount: number;
-  oldestLastSyncedAt: Date | null;
-}
 
 /**
  * Model class for the api_key_models join table.
@@ -94,7 +83,7 @@ class LlmProviderApiKeyModelLinkModel {
   /**
    * Sync models for an API key.
    * This replaces all existing model links with the new set.
-   * Also detects and marks the "best" model for the provider.
+   * Also detects and marks the "fastest" and "best" models for the provider.
    *
    * @param apiKeyId - The database ID of the API key
    * @param models - Array of models with their database ID and modelId string
@@ -117,7 +106,7 @@ class LlmProviderApiKeyModelLinkModel {
 
       // Insert new links
       if (uniqueModels.length > 0) {
-        // Detect the best model using pattern matching
+        // Detect fastest and best models using pattern matching
         // Patterns are checked in order (first pattern = highest priority)
         const patterns = MODEL_MARKER_PATTERNS[provider];
         const sorted = [...uniqueModels].sort((a, b) =>
@@ -125,12 +114,20 @@ class LlmProviderApiKeyModelLinkModel {
         );
 
         // Find first matching model respecting pattern priority order
-        const bestModel = findFirstMatchByPatternPriority(sorted, patterns);
+        const fastestModel = findFirstMatchByPatternPriority(
+          sorted,
+          patterns.fastest,
+        );
+        const bestModel = findFirstMatchByPatternPriority(
+          sorted,
+          patterns.best,
+        );
 
         // Build values with markers
         const values = uniqueModels.map((model) => ({
           apiKeyId,
           modelId: model.id,
+          isFastest: model.id === fastestModel?.id,
           isBest: model.id === bestModel?.id,
         }));
 
@@ -147,6 +144,7 @@ class LlmProviderApiKeyModelLinkModel {
                 schema.llmProviderApiKeyModelsTable.modelId,
               ],
               set: {
+                isFastest: sql`excluded.is_fastest`,
                 isBest: sql`excluded.is_best`,
               },
             });
@@ -158,11 +156,12 @@ class LlmProviderApiKeyModelLinkModel {
   /**
    * Get all models with their linked API keys.
    * Only returns models that have at least one API key linked.
-   * Includes isBest marker (true if ANY linked API key has the marker).
+   * Includes isFastest and isBest markers (true if ANY linked API key has the marker).
    */
   static async getAllModelsWithApiKeys(): Promise<
     Array<{
       model: Model;
+      isFastest: boolean;
       isBest: boolean;
       apiKeys: Array<{
         id: string;
@@ -179,6 +178,7 @@ class LlmProviderApiKeyModelLinkModel {
     const relationships = await db
       .select({
         model: schema.modelsTable,
+        isFastest: schema.llmProviderApiKeyModelsTable.isFastest,
         isBest: schema.llmProviderApiKeyModelsTable.isBest,
         apiKeyId: schema.llmProviderApiKeysTable.id,
         apiKeyName: schema.llmProviderApiKeysTable.name,
@@ -204,11 +204,12 @@ class LlmProviderApiKeyModelLinkModel {
       );
 
     // Group by model, collecting API keys for each
-    // isBest is true if ANY linked API key has the marker
+    // isFastest/isBest are true if ANY linked API key has the marker
     const modelMap = new Map<
       string,
       {
         model: Model;
+        isFastest: boolean;
         isBest: boolean;
         apiKeys: Array<{
           id: string;
@@ -227,6 +228,7 @@ class LlmProviderApiKeyModelLinkModel {
       if (!entry) {
         entry = {
           model: rel.model,
+          isFastest: false,
           isBest: false,
           apiKeys: [],
         };
@@ -234,6 +236,7 @@ class LlmProviderApiKeyModelLinkModel {
       }
 
       // Set markers if any relationship has them
+      if (rel.isFastest) entry.isFastest = true;
       if (rel.isBest) entry.isBest = true;
 
       entry.apiKeys.push({
@@ -299,96 +302,30 @@ class LlmProviderApiKeyModelLinkModel {
     return result?.count ?? 0;
   }
 
-  static async getModelSyncStatesForApiKeys(
-    apiKeyIds: string[],
-  ): Promise<Map<string, ModelSyncState>> {
-    if (apiKeyIds.length === 0) {
-      return new Map();
-    }
-
-    const results = await db
-      .select({
-        apiKeyId: schema.llmProviderApiKeyModelsTable.apiKeyId,
-        linkedModelCount: sql<number>`count(*)::int`.as("linked_model_count"),
-        oldestLastSyncedAt:
-          sql<Date | null>`min(${schema.modelsTable.lastSyncedAt})`.as(
-            "oldest_last_synced_at",
-          ),
-      })
-      .from(schema.llmProviderApiKeyModelsTable)
-      .innerJoin(
-        schema.modelsTable,
-        eq(schema.llmProviderApiKeyModelsTable.modelId, schema.modelsTable.id),
-      )
-      .where(inArray(schema.llmProviderApiKeyModelsTable.apiKeyId, apiKeyIds))
-      .groupBy(schema.llmProviderApiKeyModelsTable.apiKeyId);
-
-    return new Map(
-      results.map((result) => [
-        result.apiKeyId,
-        {
-          ...result,
-          oldestLastSyncedAt: toDateOrNull(result.oldestLastSyncedAt),
-        },
-      ]),
-    );
-  }
-
-  static async getLinkedModelSelectionKeys(
-    selections: CompleteModelSelection[],
-  ): Promise<Set<string>> {
-    if (selections.length === 0) {
-      return new Set();
-    }
-
-    const uniqueSelections = Array.from(
-      new Map(
-        selections.map((selection) => [selectionKey(selection), selection]),
-      ).values(),
-    );
-
-    const conditions = uniqueSelections.map((selection) =>
-      and(
-        eq(schema.llmProviderApiKeyModelsTable.modelId, selection.modelId),
-        eq(schema.llmProviderApiKeyModelsTable.apiKeyId, selection.apiKeyId),
-      ),
-    );
-    const whereClause = or(...conditions);
-    if (!whereClause) {
-      return new Set();
-    }
-
-    const rows = await db
-      .select({
-        modelId: schema.llmProviderApiKeyModelsTable.modelId,
-        apiKeyId: schema.llmProviderApiKeyModelsTable.apiKeyId,
-      })
-      .from(schema.llmProviderApiKeyModelsTable)
-      .where(whereClause);
-
-    return new Set(rows.map(selectionKey));
-  }
-
   /**
    * Get unique models for a list of API key IDs.
-   * Returns models with their data and isBest marker,
+   * Returns models with their data and isBest/isFastest markers,
    * ordered by provider and modelId.
-   * A model is marked as best if ANY of the provided API keys marks it so.
+   * A model is marked as best/fastest if ANY of the provided API keys marks it so.
    */
   static async getModelsForApiKeyIds(
     apiKeyIds: string[],
-  ): Promise<Array<{ model: Model; isBest: boolean }>> {
+  ): Promise<Array<{ model: Model; isBest: boolean; isFastest: boolean }>> {
     if (apiKeyIds.length === 0) {
       return [];
     }
 
-    // Get models with aggregated best marker (true if ANY linked key has the marker)
+    // Get models with aggregated markers (true if ANY linked key has the marker)
     const results = await db
       .select({
         model: schema.modelsTable,
         isBest:
           sql<boolean>`bool_or(${schema.llmProviderApiKeyModelsTable.isBest})`.as(
             "is_best_agg",
+          ),
+        isFastest:
+          sql<boolean>`bool_or(${schema.llmProviderApiKeyModelsTable.isFastest})`.as(
+            "is_fastest_agg",
           ),
       })
       .from(schema.llmProviderApiKeyModelsTable)
@@ -406,6 +343,7 @@ class LlmProviderApiKeyModelLinkModel {
     return results.map((r) => ({
       model: r.model,
       isBest: r.isBest,
+      isFastest: r.isFastest,
     }));
   }
   /**
@@ -539,6 +477,33 @@ class LlmProviderApiKeyModelLinkModel {
   }
 
   /**
+   * Get the "fastest" model for a specific API key.
+   * Returns the model marked with is_fastest=true, or falls back to the first model.
+   */
+  static async getFastestModel(apiKeyId: string): Promise<Model | null> {
+    const [result] = await db
+      .select({ model: schema.modelsTable })
+      .from(schema.llmProviderApiKeyModelsTable)
+      .innerJoin(
+        schema.modelsTable,
+        eq(schema.llmProviderApiKeyModelsTable.modelId, schema.modelsTable.id),
+      )
+      .where(
+        and(
+          eq(schema.llmProviderApiKeyModelsTable.apiKeyId, apiKeyId),
+          eq(schema.llmProviderApiKeyModelsTable.isFastest, true),
+        ),
+      )
+      .limit(1);
+
+    if (result?.model) {
+      return result.model;
+    }
+
+    return LlmProviderApiKeyModelLinkModel.getFirstModelForApiKey(apiKeyId);
+  }
+
+  /**
    * Get the first model linked to an API key (used as fallback).
    */
   static async getFirstModelForApiKey(apiKeyId: string): Promise<Model | null> {
@@ -562,20 +527,6 @@ export default LlmProviderApiKeyModelLinkModel;
 // ============================================================================
 // Helper functions
 // ============================================================================
-
-export function selectionKey(selection: CompleteModelSelection): string {
-  return `${selection.apiKeyId}:${selection.modelId}`;
-}
-
-function toDateOrNull(value: Date | string | null): Date | null {
-  if (value == null) {
-    return null;
-  }
-  if (value instanceof Date) {
-    return value;
-  }
-  return new Date(value);
-}
 
 /**
  * Find the first model matching patterns, respecting pattern priority order.

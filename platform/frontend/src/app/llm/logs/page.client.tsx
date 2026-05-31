@@ -258,8 +258,6 @@ function SessionsTable({
       {
         id: "session",
         header: "Session",
-        size: 300,
-        minSize: 220,
         cell: ({ row }) => {
           const session = row.original;
           const {
@@ -271,10 +269,10 @@ function SessionsTable({
           } = getSessionDisplayData(session);
 
           return (
-            <div className="flex max-w-full min-w-0 items-center gap-2 overflow-hidden text-xs">
+            <div className="flex items-center gap-1 text-xs">
               {isArchestraChat ? (
                 <>
-                  <span className="min-w-0 flex-1 truncate">
+                  <span className="truncate">
                     {(conversationTitle ?? "").length > 60
                       ? `${(conversationTitle ?? "").slice(0, 60)}...`
                       : conversationTitle}
@@ -295,7 +293,7 @@ function SessionsTable({
                 </>
               ) : isClaudeCodeSession ? (
                 <>
-                  <span className="min-w-0 flex-1 truncate">
+                  <span className="truncate">
                     {displayText
                       ? displayText.length > 80
                         ? `${displayText.slice(0, 80)}...`
@@ -310,21 +308,19 @@ function SessionsTable({
                   </Badge>
                 </>
               ) : lastUserMessage ? (
-                <span className="min-w-0 max-w-full truncate">
+                <span>
                   {lastUserMessage.length > 80
                     ? `${lastUserMessage.slice(0, 80)}...`
                     : lastUserMessage}
                 </span>
               ) : session.source?.startsWith("knowledge:") ? (
-                <span className="min-w-0 max-w-full truncate text-muted-foreground">
+                <span className="text-muted-foreground">
                   {INTERACTION_SOURCE_DISPLAY[
                     session.source as keyof typeof INTERACTION_SOURCE_DISPLAY
                   ]?.label ?? session.source}
                 </span>
               ) : (
-                <span className="min-w-0 max-w-full truncate text-muted-foreground">
-                  No message
-                </span>
+                <span className="text-muted-foreground">No message</span>
               )}
             </div>
           );
@@ -333,8 +329,6 @@ function SessionsTable({
       {
         id: "requests",
         header: "Requests",
-        size: 96,
-        minSize: 88,
         cell: ({ row }) => (
           <span className="font-mono text-xs">
             {row.original.requestCount.toLocaleString()}
@@ -388,21 +382,13 @@ function SessionsTable({
       {
         id: "source",
         header: "Source",
-        size: 220,
-        minSize: 170,
-        cell: ({ row }) => (
-          <div className="max-w-full min-w-0 overflow-hidden">
-            <SessionSourceBadge session={row.original} />
-          </div>
-        ),
+        cell: ({ row }) => <SessionSourceBadge session={row.original} />,
       },
       {
         id: "time",
         header: "Time",
-        size: 160,
-        minSize: 145,
         cell: ({ row }) => (
-          <div className="flex min-w-0 flex-col gap-0.5 font-mono text-xs">
+          <div className="flex flex-col gap-0.5 font-mono text-xs">
             {row.original.lastRequestTime && (
               <span>
                 {formatDate({ date: String(row.original.lastRequestTime) })}
@@ -424,19 +410,17 @@ function SessionsTable({
       {
         id: "details",
         header: "Details",
-        size: 280,
-        minSize: 220,
         cell: ({ row }) => {
           const agent = agents?.find((a) => a.id === row.original.profileId);
           return (
-            <div className="flex max-w-full min-w-0 flex-wrap gap-1 overflow-hidden">
-              <Badge variant="secondary" className="min-w-0 max-w-full text-xs">
+            <div className="flex flex-wrap gap-1">
+              <Badge variant="secondary" className="text-xs max-w-[200px]">
                 {row.original.source?.startsWith("knowledge:") ? (
                   <Database className="h-3 w-3 mr-1 shrink-0" />
                 ) : (
                   <Layers className="h-3 w-3 mr-1 shrink-0" />
                 )}
-                <span className="min-w-0 truncate">
+                <span className="truncate">
                   {agent?.name ??
                     row.original.profileName ??
                     (row.original.source?.startsWith("knowledge:")
@@ -450,10 +434,10 @@ function SessionsTable({
                 <Badge
                   key={userName}
                   variant="outline"
-                  className="min-w-0 max-w-full text-xs"
+                  className="text-xs max-w-[150px]"
                 >
                   <User className="h-3 w-3 mr-1 shrink-0" />
-                  <span className="min-w-0 truncate">{userName}</span>
+                  <span className="truncate">{userName}</span>
                 </Badge>
               ))}
             </div>
@@ -586,17 +570,13 @@ function SessionSourceBadge({ session }: { session: SessionData }) {
     return (
       <SourceBadge
         source={session.source ?? sources[0]}
-        className="max-w-[11rem] min-w-0 overflow-hidden"
-        labelClassName="min-w-0"
+        className="max-w-[12.5rem]"
       />
     );
   }
 
   return (
-    <Badge
-      variant="outline"
-      className="max-w-[11rem] min-w-0 overflow-hidden text-xs"
-    >
+    <Badge variant="outline" className="max-w-[12.5rem] text-xs">
       <span className="flex min-w-0 items-center gap-1.5">
         <Layers className="h-3 w-3 shrink-0" />
         <span className="truncate">Mixed Sources</span>

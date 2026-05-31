@@ -1,10 +1,7 @@
 import { randomUUID } from "node:crypto";
 import {
-  BUILT_IN_AGENT_IDS,
   buildUserSystemPromptContext,
-  CHAT_TITLE_GENERATION_SYSTEM_PROMPT,
   type ChatErrorResponse,
-  type ContextWindowEstimate,
   isModelSelectionComplete,
   ResourceVisibilityScopeSchema,
   RouteId,
@@ -16,10 +13,8 @@ import {
   convertToModelMessages,
   createUIMessageStream,
   createUIMessageStreamResponse,
-  generateId,
   generateText,
   hasToolCall,
-  NoSuchToolError,
   stepCountIs,
   streamText,
   type UIMessage,
@@ -37,7 +32,7 @@ import {
   type ToolUiResourceData,
 } from "@/clients/chat-mcp-client";
 import {
-  createLLMModel,
+  createDirectLLMModel,
   createLLMModelForAgent,
   isApiKeyRequired,
 } from "@/clients/llm-client";
@@ -88,10 +83,11 @@ import {
   UpdateConversationSchema,
   UuidIdSchema,
 } from "@/types";
+import { resolveProviderApiKey } from "@/utils/llm-api-key-resolution";
 import {
-  resolveAgentLlmOrDefault,
   resolveConversationLlmSelectionForAgent,
   resolveConversationModel,
+  resolveFastModelName,
 } from "@/utils/llm-resolution";
 import { estimateMessagesSize } from "@/utils/message-size";
 import {
@@ -157,17 +153,6 @@ function getMinimalFrontendError(errorForFrontend: ChatErrorResponse) {
     ...(errorForFrontend.spanId ? { spanId: errorForFrontend.spanId } : {}),
   };
 }
-
-const UNAVAILABLE_TOOL_ERROR_MESSAGE =
-  "The requested tool is not available in this chat. Available tools are listed in the details below; use an exact available tool name for the next tool call.";
-
-type UnavailableToolErrorDetails = {
-  type: "unavailable_tool";
-  message: string;
-  requestedToolName: string;
-  availableToolNames: string[];
-  originalErrorMessage: string;
-};
 
 const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.post(
@@ -459,7 +444,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   messages: messages as ChatMessage[],
                   organizationId,
                   userId: user.id,
-                  agentId: conversation.agentId ?? undefined,
                 })
               : (messages as ChatMessage[]);
 
@@ -509,21 +493,12 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
               );
             }
 
-            // Cleared on every execute() exit path: the normal completion below
-            // and the top-level onError (which fires when execute throws, e.g.
-            // a non-context-length error during the context-trim probe).
-            let heartbeatInterval: ReturnType<typeof setInterval> | undefined;
-
             // Create stream with token usage data support
             const uiMessageStream = createUIMessageStream({
               // Preserve incoming message IDs so the client updates existing
               // assistant messages instead of rendering duplicate ones.
               originalMessages: messages as UIMessage[],
               onError: (error) => {
-                if (heartbeatInterval) clearInterval(heartbeatInterval);
-                // unlike the tool-level stream handler, a NoSuchToolError here
-                // is not a recoverable tool result: it must mark the run failed
-                // and persist, so it falls through to the normal error path.
                 activeRunError =
                   error instanceof Error ? error.message : String(error);
                 // Persist messages on stream-level errors (e.g. errors thrown
@@ -596,7 +571,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
               execute: async ({ writer }) => {
                 // Send heartbeat every 5s to prevent connection drops
                 // during long-running tool executions / subagent calls.
-                heartbeatInterval = setInterval(() => {
+                const heartbeatInterval = setInterval(() => {
                   try {
                     writer.write({
                       type: "data-heartbeat",
@@ -717,19 +692,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   });
                 }
 
-                // Seed the context indicator with the size of what we are about
-                // to send, on the same yardstick that triggers auto-compaction,
-                // so the bar is correct before the first token (and reflects a
-                // compaction drop immediately). Per-step usage refines it below.
-                if (compactionResult.inputTokenEstimate !== undefined) {
-                  writer.write({
-                    type: "data-context-window-estimate",
-                    data: {
-                      estimatedTokens: compactionResult.inputTokenEstimate,
-                    } satisfies ContextWindowEstimate,
-                  });
-                }
-
                 const modelMessages = await buildModelMessagesForProvider({
                   messages: compactionResult.messages,
                   provider,
@@ -742,19 +704,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   stopWhen: buildChatStopConditions(),
                   abortSignal: chatAbortController.signal,
                   onChunk: streamTextOnChunk,
-                  // Emit per-step usage so the context indicator tracks the
-                  // prompt growing across tool round-trips, instead of jumping
-                  // only once when the whole turn finishes.
-                  onStepFinish: ({ usage }) => {
-                    writer.write({
-                      type: "data-token-usage",
-                      data: {
-                        inputTokens: usage.inputTokens,
-                        outputTokens: usage.outputTokens,
-                        totalTokens: usage.totalTokens,
-                      } satisfies TokenUsage,
-                    });
-                  },
                   onFinish: async ({ usage, finishReason }) => {
                     removeAbortListeners();
                     logger.info(
@@ -804,11 +753,10 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   } catch (error) {
                     const maxTokens = parseMaxInputTokens(error);
                     if (maxTokens !== null) {
-                      const trimmed = trimMessagesToTokenLimit({
-                        messages: modelMessages,
+                      const trimmed = trimMessagesToTokenLimit(
+                        modelMessages,
                         maxTokens,
-                        systemPrompt,
-                      });
+                      );
                       logger.info(
                         {
                           maxTokens,
@@ -855,30 +803,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 writer.merge(
                   result.toUIMessageStream({
                     originalMessages: messages as UIMessage[],
-                    // Give the streamed assistant message a stable id. Without
-                    // generateMessageId the AI SDK leaves the response message
-                    // id empty, so the persisted assistant row can't be matched
-                    // when the approval resume re-sends the turn — the resolved
-                    // turn is appended as new rows while the original
-                    // approval-requested row is orphaned and re-renders a stale
-                    // prompt on reload (#4030).
-                    generateMessageId: generateId,
                     onError: (error) => {
-                      const unavailableToolError =
-                        getUnavailableToolErrorDetails(error);
-                      if (unavailableToolError) {
-                        logger.info(
-                          {
-                            conversationId,
-                            unavailableToolError,
-                          },
-                          "Returning unavailable tool error as tool-level error",
-                        );
-                        return formatUnavailableToolErrorDetails(
-                          unavailableToolError,
-                        );
-                      }
-
                       if (chatErrorHandled) {
                         return serializedChatError;
                       }
@@ -2069,27 +1994,35 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         return reply.send(conversation);
       }
 
-      const titleAgent = await AgentModel.getBuiltInAgent(
-        BUILT_IN_AGENT_IDS.CHAT_TITLE_GENERATION,
-        organizationId,
-      );
-      const titleLlm = await resolveAgentLlmOrDefault({
-        agent: titleAgent,
-        organizationId,
-        userId: user.id,
-        conversationId: id,
-      });
-      const systemPrompt =
-        renderSystemPrompt(
-          titleAgent?.systemPrompt ?? CHAT_TITLE_GENERATION_SYSTEM_PROMPT,
-        ) ?? CHAT_TITLE_GENERATION_SYSTEM_PROMPT;
+      // Use the conversation's model provider for title generation so the
+      // title is generated with the same provider as the chat.
+      const { provider } = await resolveConversationModel(conversation.modelId);
 
       logger.debug(
-        { conversationId: id, provider: titleLlm.provider },
-        "Title generation: resolved built-in agent LLM",
+        { conversationId: id, resolvedProvider: provider },
+        "Title generation: resolved provider",
       );
 
-      if (isApiKeyRequired(titleLlm.provider, titleLlm.apiKey)) {
+      // Resolve API key using the centralized function (handles all providers)
+      const { apiKey, chatApiKeyId, baseUrl } = await resolveProviderApiKey({
+        organizationId,
+        userId: user.id,
+        provider,
+        conversationId: id,
+      });
+
+      logger.debug(
+        {
+          conversationId: id,
+          provider,
+          hasApiKey: !!apiKey,
+          chatApiKeyId,
+          baseUrl,
+        },
+        "Title generation: resolved API key",
+      );
+
+      if (isApiKeyRequired(provider, apiKey)) {
         throw new ApiError(
           400,
           "LLM Provider API key not configured. Please configure it in Provider Settings.",
@@ -2098,18 +2031,17 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Generate title using the extracted function
       const generatedTitle = await generateConversationTitle({
-        ...titleLlm,
-        agentId: titleAgent?.id ?? id,
-        userId: user.id,
-        conversationId: id,
-        systemPrompt,
+        provider,
+        apiKey,
+        chatApiKeyId,
+        baseUrl,
         firstUserMessage,
         firstAssistantMessage,
       });
 
       if (!generatedTitle) {
         logger.warn(
-          { conversationId: id, provider: titleLlm.provider },
+          { conversationId: id, provider },
           "Title generation: returned null (generation failed)",
         );
         // Return the conversation without title update on error
@@ -2416,9 +2348,11 @@ export function buildTitlePrompt(
     ? `User: ${firstUserMessage}\n\nAssistant: ${firstAssistantMessage}`
     : `User: ${firstUserMessage}`;
 
-  return `Chat conversation messages:
+  return `Generate a short, concise title (3-6 words) for a chat conversation that includes the following messages:
 
-${contextMessages}`;
+${contextMessages}
+
+The title should capture the main topic or theme of the conversation. Respond with ONLY the title, no quotes, no explanation. DON'T WRAP THE TITLE IN QUOTES!!!`;
 }
 
 /**
@@ -2427,12 +2361,8 @@ ${contextMessages}`;
 export interface GenerateTitleParams {
   provider: SupportedProvider;
   apiKey: string | undefined;
-  modelName: string;
+  chatApiKeyId?: string;
   baseUrl: string | null;
-  agentId: string;
-  userId: string;
-  conversationId: string;
-  systemPrompt: string;
   firstUserMessage: string;
   firstAssistantMessage: string;
 }
@@ -2447,33 +2377,28 @@ export async function generateConversationTitle(
   const {
     provider,
     apiKey,
-    modelName,
+    chatApiKeyId,
     baseUrl,
-    agentId,
-    userId,
-    conversationId,
-    systemPrompt,
     firstUserMessage,
     firstAssistantMessage,
   } = params;
 
-  const titlePrompt = buildTitlePrompt(firstUserMessage, firstAssistantMessage);
+  const modelName = await resolveFastModelName(provider, chatApiKeyId);
 
   logger.debug(
-    { provider, modelName, hasApiKey: !!apiKey, baseUrl },
-    "Title generation: creating logged LLM model",
+    { provider, modelName, chatApiKeyId, hasApiKey: !!apiKey, baseUrl },
+    "Title generation: creating direct LLM model",
   );
 
-  const model = createLLMModel({
+  // Create model for title generation (direct call, not through LLM Proxy)
+  const model = createDirectLLMModel({
     provider,
     apiKey,
-    agentId,
     modelName,
-    userId,
-    sessionId: conversationId,
-    source: "chat:title_generation",
     baseUrl,
   });
+
+  const titlePrompt = buildTitlePrompt(firstUserMessage, firstAssistantMessage);
 
   try {
     logger.debug(
@@ -2482,7 +2407,6 @@ export async function generateConversationTitle(
     );
     const result = await generateText({
       model,
-      system: systemPrompt,
       prompt: titlePrompt,
     });
 
@@ -2504,37 +2428,6 @@ export async function generateConversationTitle(
 // Helper Functions
 // ============================================================================
 
-function getUnavailableToolErrorDetails(
-  error: unknown,
-): UnavailableToolErrorDetails | null {
-  if (!NoSuchToolError.isInstance(error)) {
-    return null;
-  }
-
-  return {
-    type: "unavailable_tool",
-    message: UNAVAILABLE_TOOL_ERROR_MESSAGE,
-    requestedToolName: error.toolName,
-    availableToolNames: error.availableTools ?? [],
-    originalErrorMessage: error.message,
-  };
-}
-
-function formatUnavailableToolErrorDetails(
-  details: UnavailableToolErrorDetails,
-): string {
-  return `${details.message}\n\nDetails:\n${JSON.stringify(
-    {
-      type: details.type,
-      requestedToolName: details.requestedToolName,
-      availableToolNames: details.availableToolNames,
-      originalErrorMessage: details.originalErrorMessage,
-    },
-    null,
-    2,
-  )}`;
-}
-
 /**
  * Persists new messages to the database for a conversation.
  * Strips images if browser streaming is enabled and handles empty message parts.
@@ -2550,7 +2443,7 @@ async function persistNewMessages(
   context: string,
 ): Promise<number> {
   try {
-    // Fetch existing messages to classify incoming ones as new or changed
+    // Get existing messages count to know how many are new
     const existingMessages =
       await MessageModel.findByConversation(conversationId);
     const uiMessages = messages as ChatMessage[];
@@ -2559,88 +2452,61 @@ async function persistNewMessages(
       uiMessages,
     });
 
-    // Tool approvals resolve after the assistant message is first persisted.
-    // Only the onFinish persist carries the server-authoritative final
-    // messages, so content updates are applied from that path alone.
-    const changedMessages: Array<{ id: string; content: ChatMessage }> =
-      context === "onFinish"
-        ? getMessagesWithChangedContent({ existingMessages, uiMessages })
-        : [];
-
-    if (newMessages.length === 0 && changedMessages.length === 0) {
+    if (newMessages.length === 0) {
       return 0;
     }
 
-    let persistedCount = 0;
-
-    if (newMessages.length > 0) {
-      // Check if last message has empty parts and strip it if so
-      let messagesToSave = newMessages;
-      if (newMessages[newMessages.length - 1].parts?.length === 0) {
-        messagesToSave = newMessages.slice(0, -1);
-      }
-
-      if (messagesToSave.length > 0) {
-        let messagesToStore: ChatMessage[];
-
-        // Strip base64 images and large browser tool results before storing
-        if (context === "onFinish") {
-          // Log size reduction only for onFinish (where we have complete messages)
-          const beforeSize = estimateMessagesSize(messagesToSave);
-          messagesToStore = normalizeChatMessages(messagesToSave);
-          const afterSize = estimateMessagesSize(messagesToStore);
-
-          logger.info(
-            {
-              messageCount: messagesToSave.length,
-              beforeSizeKB: Math.round(beforeSize.length / 1024),
-              afterSizeKB: Math.round(afterSize.length / 1024),
-              savedKB: Math.round(
-                (beforeSize.length - afterSize.length) / 1024,
-              ),
-              sizeEstimateReliable:
-                !beforeSize.isEstimated && !afterSize.isEstimated,
-            },
-            "[Chat] Stripped messages before saving to DB",
-          );
-        } else {
-          // For onError, just strip without detailed logging
-          messagesToStore = normalizeChatMessages(messagesToSave);
-        }
-
-        const now = Date.now();
-        const messageData = messagesToStore.map((msg, index) => ({
-          conversationId,
-          role: msg.role ?? "assistant",
-          content: msg,
-          createdAt: new Date(now + index),
-        }));
-
-        await MessageModel.bulkCreate(messageData);
-        persistedCount += messagesToSave.length;
-
-        logger.info(
-          `Appended ${messagesToSave.length} new messages to conversation ${conversationId} (${context})`,
-        );
-      }
+    // Check if last message has empty parts and strip it if so
+    let messagesToSave = newMessages;
+    if (newMessages[newMessages.length - 1].parts?.length === 0) {
+      messagesToSave = newMessages.slice(0, -1);
     }
 
-    // Persist content updates for messages that already exist but changed
-    // (e.g. an assistant turn whose tool call was approved or declined).
-    for (const changedMessage of changedMessages) {
-      await MessageModel.updateContent(
-        changedMessage.id,
-        changedMessage.content,
-      );
+    if (messagesToSave.length === 0) {
+      return 0;
     }
 
-    if (changedMessages.length > 0) {
+    let messagesToStore: ChatMessage[];
+
+    // Strip base64 images and large browser tool results before storing
+    if (context === "onFinish") {
+      // Log size reduction only for onFinish (where we have complete messages)
+      const beforeSize = estimateMessagesSize(messagesToSave);
+      messagesToStore = normalizeChatMessages(messagesToSave);
+      const afterSize = estimateMessagesSize(messagesToStore);
+
       logger.info(
-        `Updated ${changedMessages.length} changed messages in conversation ${conversationId} (${context})`,
+        {
+          messageCount: messagesToSave.length,
+          beforeSizeKB: Math.round(beforeSize.length / 1024),
+          afterSizeKB: Math.round(afterSize.length / 1024),
+          savedKB: Math.round((beforeSize.length - afterSize.length) / 1024),
+          sizeEstimateReliable:
+            !beforeSize.isEstimated && !afterSize.isEstimated,
+        },
+        "[Chat] Stripped messages before saving to DB",
       );
+    } else {
+      // For onError, just strip without detailed logging
+      messagesToStore = normalizeChatMessages(messagesToSave);
     }
 
-    return persistedCount + changedMessages.length;
+    // Append only new messages with timestamps
+    const now = Date.now();
+    const messageData = messagesToStore.map((msg, index) => ({
+      conversationId,
+      role: msg.role ?? "assistant",
+      content: msg,
+      createdAt: new Date(now + index),
+    }));
+
+    await MessageModel.bulkCreate(messageData);
+
+    logger.info(
+      `Appended ${messagesToSave.length} new messages to conversation ${conversationId} (${context})`,
+    );
+
+    return messagesToSave.length;
   } catch (error) {
     logger.error(
       { error, conversationId, context },
@@ -2731,77 +2597,6 @@ function getMessagesNotYetPersisted(params: {
 
     return true;
   });
-}
-
-const TERMINAL_TOOL_STATES: ReadonlySet<string> = new Set([
-  "output-available",
-  "output-error",
-  "output-denied",
-]);
-
-/**
- * Returns the stored rows that should be overwritten in place by an incoming
- * message — specifically, an assistant turn whose tool call is still in
- * `approval-requested` state and whose `toolCallId` arrives in a terminal
- * state (`output-available`, `output-error`, `output-denied`).
- *
- * Scoped tightly to the approval-resolution flow so this update path cannot
- * be repurposed to overwrite arbitrary earlier messages whose parts happen
- * to differ — those edits still go through `updateTextPartAndDeleteSubsequent`.
- */
-function getMessagesWithChangedContent(params: {
-  existingMessages: Array<{ id: string; content: unknown }>;
-  uiMessages: ChatMessage[];
-}): Array<{ id: string; content: ChatMessage }> {
-  // Index stored rows by the toolCallId of any approval-requested tool part
-  // they carry — those are the only rows this update path can target.
-  const pendingByToolCallId = new Map<
-    string,
-    { id: string; content: unknown }
-  >();
-  for (const existing of params.existingMessages) {
-    if (typeof existing.content !== "object" || existing.content === null) {
-      continue;
-    }
-    const parts = (existing.content as { parts?: unknown }).parts;
-    if (!Array.isArray(parts)) continue;
-    for (const part of parts) {
-      if (
-        typeof part === "object" &&
-        part !== null &&
-        (part as { state?: unknown }).state === "approval-requested" &&
-        typeof (part as { toolCallId?: unknown }).toolCallId === "string"
-      ) {
-        pendingByToolCallId.set(
-          (part as { toolCallId: string }).toolCallId,
-          existing,
-        );
-      }
-    }
-  }
-  if (pendingByToolCallId.size === 0) {
-    return [];
-  }
-
-  const changedMessages: Array<{ id: string; content: ChatMessage }> = [];
-  for (const incoming of normalizeChatMessages(params.uiMessages)) {
-    for (const part of incoming.parts ?? []) {
-      const state = (part as { state?: unknown }).state;
-      if (typeof state !== "string" || !TERMINAL_TOOL_STATES.has(state)) {
-        continue;
-      }
-      const toolCallId = (part as { toolCallId?: unknown }).toolCallId;
-      if (typeof toolCallId !== "string") continue;
-      const stored = pendingByToolCallId.get(toolCallId);
-      if (!stored) continue;
-      changedMessages.push({ id: stored.id, content: incoming });
-      // Each approval-requested row resolves at most once per sweep.
-      pendingByToolCallId.delete(toolCallId);
-      break;
-    }
-  }
-
-  return changedMessages;
 }
 
 function getMessageContentId(content: unknown): string | null {
@@ -3362,8 +3157,6 @@ async function validateChatApiKeyAccess(
 
 export const __test = {
   getMessagesNotYetPersisted,
-  getMessagesWithChangedContent,
-  persistNewMessages,
   prepareMessagesForProvider,
 };
 

@@ -25,7 +25,6 @@ const nativeBinding = loadBinding();
 module.exports.checkSession = wrapNative("checkSession");
 module.exports.runSandbox = wrapNative("runSandbox");
 module.exports.readArtifact = wrapNative("readArtifact");
-module.exports.flushTelemetry = wrapNativeSync("flushTelemetry");
 
 if (typeof nativeBinding.__testPanic === "function") {
   module.exports.__testPanic = wrapNativeSync("__testPanic");

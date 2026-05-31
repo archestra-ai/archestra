@@ -1036,7 +1036,7 @@ const config = {
         process.env.ARCHESTRA_CHAT_ACTIVE_RUN_NOTIFY_DATABASE_URL?.trim() || "",
     },
     secretScanEnabled:
-      process.env.ARCHESTRA_CHAT_SECRET_SCAN_ENABLED !== "false",
+      process.env.ARCHESTRA_CHAT_SECRET_SCAN_ENABLED === "true",
   },
   enterpriseFeatures: {
     core: process.env.ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED === "true",

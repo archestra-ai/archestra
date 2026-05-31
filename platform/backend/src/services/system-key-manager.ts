@@ -231,7 +231,7 @@ class SystemKeyManager {
       "Upserted models to database",
     );
 
-    // Link models to the API key with best-model detection
+    // Link models to the API key with fastest/best detection
     const modelsWithIds = upsertedModels.map((m) => ({
       id: m.id,
       modelId: m.modelId,

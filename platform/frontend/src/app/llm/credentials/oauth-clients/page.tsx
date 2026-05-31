@@ -7,7 +7,8 @@ import { useEffect, useMemo, useState } from "react";
 import { CopyableCode } from "@/components/copyable-code";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { FormDialog } from "@/components/form-dialog";
-import { LlmProviderApiKeyDropdown } from "@/components/llm-provider-api-key-dropdown";
+import { PROVIDER_CONFIG } from "@/components/llm-provider-api-key-form";
+import { LlmProviderApiKeyFilterSelect } from "@/components/llm-provider-options";
 import {
   formatProviderKeySummary,
   type ProviderApiKeyMap,
@@ -67,8 +68,6 @@ export default function OAuthClientsPage() {
     clientId: string;
     clientSecret: string;
   } | null>(null);
-  const [providerApiKeyFilterOpen, setProviderApiKeyFilterOpen] =
-    useState(false);
   const [deletingOAuthClient, setDeletingOAuthClient] =
     useState<LlmOauthClient | null>(null);
   const [editingOAuthClient, setEditingOAuthClient] =
@@ -174,32 +173,24 @@ export default function OAuthClientsPage() {
           searchFields={["name"]}
           paramName="search"
         />
-        <LlmProviderApiKeyDropdown
-          availableKeys={providerApiKeys}
-          selectedApiKeyId={
-            providerApiKeyIdFilter === "all" ? null : providerApiKeyIdFilter
+        <LlmProviderApiKeyFilterSelect
+          value={providerApiKeyIdFilter}
+          onValueChange={(value) =>
+            updateQueryParams({
+              providerApiKeyId: value === "all" ? null : value,
+              page: "1",
+            })
           }
-          open={providerApiKeyFilterOpen}
-          onOpenChange={setProviderApiKeyFilterOpen}
-          onSelectKey={(value) => {
-            updateQueryParams({
-              providerApiKeyId: value,
-              page: "1",
-            });
-            setProviderApiKeyFilterOpen(false);
-          }}
-          triggerVariant="select"
-          triggerClassName="w-full sm:w-[280px] h-9 text-sm"
-          popoverClassName="w-[var(--radix-popover-trigger-width)]"
-          allOptionLabel="All provider API keys"
-          allOptionSelected={providerApiKeyIdFilter === "all"}
-          onSelectAllOption={() => {
-            updateQueryParams({
-              providerApiKeyId: null,
-              page: "1",
-            });
-            setProviderApiKeyFilterOpen(false);
-          }}
+          allLabel="All provider API keys"
+          options={providerApiKeys.map((key) => {
+            const config = PROVIDER_CONFIG[key.provider];
+            return {
+              value: key.id,
+              icon: config.icon,
+              providerName: config.name,
+              keyName: key.name,
+            };
+          })}
         />
       </div>
 

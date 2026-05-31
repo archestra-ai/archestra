@@ -17,11 +17,12 @@ import {
   Layers,
   Loader2,
   Mic,
+  RefreshCw,
   Settings2,
   Video,
   XIcon,
 } from "lucide-react";
-import { memo, useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ModelSelectorContent,
   ModelSelectorEmpty,
@@ -54,6 +55,7 @@ import {
   type LlmModel,
   type ModelCapabilities,
   useLlmModelsByProvider,
+  useSyncLlmModels,
 } from "@/lib/llm-models.query";
 import { cn, formatContextLength } from "@/lib/utils";
 
@@ -400,10 +402,14 @@ function ModelFiltersBar({
   filters,
   onFiltersChange,
   availableModalities,
+  onRefresh,
+  isRefreshing,
 }: {
   filters: ModelFilters;
   onFiltersChange: (filters: ModelFilters) => void;
   availableModalities: Set<FilterableModality>;
+  onRefresh: () => void;
+  isRefreshing: boolean;
 }) {
   const toggleModality = useCallback(
     (modality: FilterableModality, pressed: boolean) => {
@@ -457,6 +463,26 @@ function ModelFiltersBar({
         </>
       )}
       {visibleModalityFilters.length === 0 && <div className="flex-1" />}
+      <TooltipProvider delayDuration={300}>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              onClick={onRefresh}
+              disabled={isRefreshing}
+              className="rounded-sm p-1 opacity-70 ring-offset-background transition-opacity hover:opacity-100 hover:bg-muted focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:opacity-50"
+            >
+              <RefreshCw
+                className={cn("size-4", isRefreshing && "animate-spin")}
+              />
+              <span className="sr-only">Refresh models</span>
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom" className="text-xs">
+            Refresh models from providers
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
       <DialogClose className="rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2">
         <XIcon className="size-4" />
         <span className="sr-only">Close</span>
@@ -514,7 +540,7 @@ function modelMatchesFilters(model: LlmModel, filters: ModelFilters): boolean {
  * - Search functionality to filter models
  * - Models filtered by configured API keys
  */
-export const ModelSelector = memo(function ModelSelector({
+export function ModelSelector({
   selectedModel,
   onModelChange,
   disabled = false,
@@ -532,6 +558,7 @@ export const ModelSelector = memo(function ModelSelector({
     apiKeyId: apiKeyId ?? undefined,
     enabled,
   });
+  const syncMutation = useSyncLlmModels();
   const [open, setOpen] = useState(false);
   const [filters, setFilters] = useState<ModelFilters>(INITIAL_FILTERS);
 
@@ -786,6 +813,8 @@ export const ModelSelector = memo(function ModelSelector({
             filters={filters}
             onFiltersChange={setFilters}
             availableModalities={availableModalities}
+            onRefresh={() => syncMutation.mutate()}
+            isRefreshing={syncMutation.isPending}
           />
           <ModelSelectorInput placeholder="Search models..." autoFocus />
           <ModelSelectorList>
@@ -898,4 +927,4 @@ export const ModelSelector = memo(function ModelSelector({
       </ModelSelectorRoot>
     </div>
   );
-});
+}

@@ -35605,21 +35605,6 @@
                                   "name"
                                 ],
                                 "additionalProperties": false
-                              },
-                              {
-                                "type": "object",
-                                "properties": {
-                                  "name": {
-                                    "type": "string",
-                                    "enum": [
-                                      "chat-title-generation-subagent"
-                                    ]
-                                  }
-                                },
-                                "required": [
-                                  "name"
-                                ],
-                                "additionalProperties": false
                               }
                             ]
                           },
@@ -36358,20 +36343,6 @@
                         "required": [
                           "name"
                         ]
-                      },
-                      {
-                        "type": "object",
-                        "properties": {
-                          "name": {
-                            "type": "string",
-                            "enum": [
-                              "chat-title-generation-subagent"
-                            ]
-                          }
-                        },
-                        "required": [
-                          "name"
-                        ]
                       }
                     ]
                   },
@@ -36644,21 +36615,6 @@
                               "type": "string",
                               "enum": [
                                 "context-compaction-subagent"
-                              ]
-                            }
-                          },
-                          "required": [
-                            "name"
-                          ],
-                          "additionalProperties": false
-                        },
-                        {
-                          "type": "object",
-                          "properties": {
-                            "name": {
-                              "type": "string",
-                              "enum": [
-                                "chat-title-generation-subagent"
                               ]
                             }
                           },
@@ -37445,21 +37401,6 @@
                               "name"
                             ],
                             "additionalProperties": false
-                          },
-                          {
-                            "type": "object",
-                            "properties": {
-                              "name": {
-                                "type": "string",
-                                "enum": [
-                                  "chat-title-generation-subagent"
-                                ]
-                              }
-                            },
-                            "required": [
-                              "name"
-                            ],
-                            "additionalProperties": false
                           }
                         ]
                       },
@@ -38170,21 +38111,6 @@
                             "name"
                           ],
                           "additionalProperties": false
-                        },
-                        {
-                          "type": "object",
-                          "properties": {
-                            "name": {
-                              "type": "string",
-                              "enum": [
-                                "chat-title-generation-subagent"
-                              ]
-                            }
-                          },
-                          "required": [
-                            "name"
-                          ],
-                          "additionalProperties": false
                         }
                       ]
                     },
@@ -38888,21 +38814,6 @@
                               "type": "string",
                               "enum": [
                                 "context-compaction-subagent"
-                              ]
-                            }
-                          },
-                          "required": [
-                            "name"
-                          ],
-                          "additionalProperties": false
-                        },
-                        {
-                          "type": "object",
-                          "properties": {
-                            "name": {
-                              "type": "string",
-                              "enum": [
-                                "chat-title-generation-subagent"
                               ]
                             }
                           },
@@ -39962,21 +39873,6 @@
                                 "name"
                               ],
                               "additionalProperties": false
-                            },
-                            {
-                              "type": "object",
-                              "properties": {
-                                "name": {
-                                  "type": "string",
-                                  "enum": [
-                                    "chat-title-generation-subagent"
-                                  ]
-                                }
-                              },
-                              "required": [
-                                "name"
-                              ],
-                              "additionalProperties": false
                             }
                           ]
                         },
@@ -40734,21 +40630,6 @@
                             "name"
                           ],
                           "additionalProperties": false
-                        },
-                        {
-                          "type": "object",
-                          "properties": {
-                            "name": {
-                              "type": "string",
-                              "enum": [
-                                "chat-title-generation-subagent"
-                              ]
-                            }
-                          },
-                          "required": [
-                            "name"
-                          ],
-                          "additionalProperties": false
                         }
                       ]
                     },
@@ -41439,20 +41320,6 @@
                         "required": [
                           "name"
                         ]
-                      },
-                      {
-                        "type": "object",
-                        "properties": {
-                          "name": {
-                            "type": "string",
-                            "enum": [
-                              "chat-title-generation-subagent"
-                            ]
-                          }
-                        },
-                        "required": [
-                          "name"
-                        ]
                       }
                     ]
                   },
@@ -41730,21 +41597,6 @@
                               "type": "string",
                               "enum": [
                                 "context-compaction-subagent"
-                              ]
-                            }
-                          },
-                          "required": [
-                            "name"
-                          ],
-                          "additionalProperties": false
-                        },
-                        {
-                          "type": "object",
-                          "properties": {
-                            "name": {
-                              "type": "string",
-                              "enum": [
-                                "chat-title-generation-subagent"
                               ]
                             }
                           },
@@ -42739,21 +42591,6 @@
                               "type": "string",
                               "enum": [
                                 "context-compaction-subagent"
-                              ]
-                            }
-                          },
-                          "required": [
-                            "name"
-                          ],
-                          "additionalProperties": false
-                        },
-                        {
-                          "type": "object",
-                          "properties": {
-                            "name": {
-                              "type": "string",
-                              "enum": [
-                                "chat-title-generation-subagent"
                               ]
                             }
                           },
@@ -68757,10 +68594,6 @@
                         "type": "string",
                         "format": "date-time"
                       },
-                      "lastMessageAt": {
-                        "type": "string",
-                        "format": "date-time"
-                      },
                       "createdAt": {
                         "type": "string",
                         "format": "date-time"
@@ -69022,7 +68855,6 @@
                       "todoList",
                       "artifact",
                       "pinnedAt",
-                      "lastMessageAt",
                       "createdAt",
                       "updatedAt",
                       "agent",
@@ -69427,10 +69259,6 @@
                       "type": "string",
                       "format": "date-time"
                     },
-                    "lastMessageAt": {
-                      "type": "string",
-                      "format": "date-time"
-                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -69692,7 +69520,6 @@
                     "todoList",
                     "artifact",
                     "pinnedAt",
-                    "lastMessageAt",
                     "createdAt",
                     "updatedAt",
                     "agent",
@@ -70074,10 +69901,6 @@
                       "type": "string",
                       "format": "date-time"
                     },
-                    "lastMessageAt": {
-                      "type": "string",
-                      "format": "date-time"
-                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -70339,7 +70162,6 @@
                     "todoList",
                     "artifact",
                     "pinnedAt",
-                    "lastMessageAt",
                     "createdAt",
                     "updatedAt",
                     "agent",
@@ -70762,10 +70584,6 @@
                       "type": "string",
                       "format": "date-time"
                     },
-                    "lastMessageAt": {
-                      "type": "string",
-                      "format": "date-time"
-                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -71027,7 +70845,6 @@
                     "todoList",
                     "artifact",
                     "pinnedAt",
-                    "lastMessageAt",
                     "createdAt",
                     "updatedAt",
                     "agent",
@@ -72287,10 +72104,6 @@
                       "type": "string",
                       "format": "date-time"
                     },
-                    "lastMessageAt": {
-                      "type": "string",
-                      "format": "date-time"
-                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -72552,7 +72365,6 @@
                     "todoList",
                     "artifact",
                     "pinnedAt",
-                    "lastMessageAt",
                     "createdAt",
                     "updatedAt",
                     "agent",
@@ -73301,10 +73113,6 @@
                           "type": "string",
                           "format": "date-time"
                         },
-                        "lastMessageAt": {
-                          "type": "string",
-                          "format": "date-time"
-                        },
                         "createdAt": {
                           "type": "string",
                           "format": "date-time"
@@ -73566,7 +73374,6 @@
                         "todoList",
                         "artifact",
                         "pinnedAt",
-                        "lastMessageAt",
                         "createdAt",
                         "updatedAt",
                         "agent",
@@ -74904,10 +74711,6 @@
                       "type": "string",
                       "format": "date-time"
                     },
-                    "lastMessageAt": {
-                      "type": "string",
-                      "format": "date-time"
-                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -75172,7 +74975,6 @@
                     "todoList",
                     "artifact",
                     "pinnedAt",
-                    "lastMessageAt",
                     "createdAt",
                     "updatedAt",
                     "agent",
@@ -75575,10 +75377,6 @@
                       "type": "string",
                       "format": "date-time"
                     },
-                    "lastMessageAt": {
-                      "type": "string",
-                      "format": "date-time"
-                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -75840,7 +75638,6 @@
                     "todoList",
                     "artifact",
                     "pinnedAt",
-                    "lastMessageAt",
                     "createdAt",
                     "updatedAt",
                     "agent",
@@ -76238,10 +76035,6 @@
                       "type": "string",
                       "format": "date-time"
                     },
-                    "lastMessageAt": {
-                      "type": "string",
-                      "format": "date-time"
-                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -76503,7 +76296,6 @@
                     "todoList",
                     "artifact",
                     "pinnedAt",
-                    "lastMessageAt",
                     "createdAt",
                     "updatedAt",
                     "agent",
@@ -76911,10 +76703,6 @@
                       "type": "string",
                       "format": "date-time"
                     },
-                    "lastMessageAt": {
-                      "type": "string",
-                      "format": "date-time"
-                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -77176,7 +76964,6 @@
                     "todoList",
                     "artifact",
                     "pinnedAt",
-                    "lastMessageAt",
                     "createdAt",
                     "updatedAt",
                     "agent",
@@ -86823,7 +86610,6 @@
                                   "model_router",
                                   "chat",
                                   "chat:compaction",
-                                  "chat:title_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
                                   "email",
@@ -87234,7 +87020,6 @@
                                   "model_router",
                                   "chat",
                                   "chat:compaction",
-                                  "chat:title_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
                                   "email",
@@ -88068,7 +87853,6 @@
                                   "model_router",
                                   "chat",
                                   "chat:compaction",
-                                  "chat:title_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
                                   "email",
@@ -88593,7 +88377,6 @@
                                   "model_router",
                                   "chat",
                                   "chat:compaction",
-                                  "chat:title_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
                                   "email",
@@ -89004,7 +88787,6 @@
                                   "model_router",
                                   "chat",
                                   "chat:compaction",
-                                  "chat:title_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
                                   "email",
@@ -89415,7 +89197,6 @@
                                   "model_router",
                                   "chat",
                                   "chat:compaction",
-                                  "chat:title_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
                                   "email",
@@ -91538,7 +91319,6 @@
                                   "model_router",
                                   "chat",
                                   "chat:compaction",
-                                  "chat:title_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
                                   "email",
@@ -91949,7 +91729,6 @@
                                   "model_router",
                                   "chat",
                                   "chat:compaction",
-                                  "chat:title_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
                                   "email",
@@ -92360,7 +92139,6 @@
                                   "model_router",
                                   "chat",
                                   "chat:compaction",
-                                  "chat:title_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
                                   "email",
@@ -92771,7 +92549,6 @@
                                   "model_router",
                                   "chat",
                                   "chat:compaction",
-                                  "chat:title_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
                                   "email",
@@ -93182,7 +92959,6 @@
                                   "model_router",
                                   "chat",
                                   "chat:compaction",
-                                  "chat:title_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
                                   "email",
@@ -93593,7 +93369,6 @@
                                   "model_router",
                                   "chat",
                                   "chat:compaction",
-                                  "chat:title_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
                                   "email",
@@ -94004,7 +93779,6 @@
                                   "model_router",
                                   "chat",
                                   "chat:compaction",
-                                  "chat:title_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
                                   "email",
@@ -94404,7 +94178,6 @@
                                   "model_router",
                                   "chat",
                                   "chat:compaction",
-                                  "chat:title_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
                                   "email",
@@ -94804,7 +94577,6 @@
                                   "model_router",
                                   "chat",
                                   "chat:compaction",
-                                  "chat:title_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
                                   "email",
@@ -95215,7 +94987,6 @@
                                   "model_router",
                                   "chat",
                                   "chat:compaction",
-                                  "chat:title_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
                                   "email",
@@ -95626,7 +95397,6 @@
                                   "model_router",
                                   "chat",
                                   "chat:compaction",
-                                  "chat:title_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
                                   "email",
@@ -96037,7 +95807,6 @@
                                   "model_router",
                                   "chat",
                                   "chat:compaction",
-                                  "chat:title_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
                                   "email",
@@ -96448,7 +96217,6 @@
                                   "model_router",
                                   "chat",
                                   "chat:compaction",
-                                  "chat:title_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
                                   "email",
@@ -97085,7 +96853,6 @@
                                   "model_router",
                                   "chat",
                                   "chat:compaction",
-                                  "chat:title_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
                                   "email",
@@ -98197,7 +97964,6 @@
                 "model_router",
                 "chat",
                 "chat:compaction",
-                "chat:title_generation",
                 "chatops:slack",
                 "chatops:ms-teams",
                 "email",
@@ -98304,7 +98070,6 @@
                               "model_router",
                               "chat",
                               "chat:compaction",
-                              "chat:title_generation",
                               "chatops:slack",
                               "chatops:ms-teams",
                               "email",
@@ -98323,7 +98088,6 @@
                                 "model_router",
                                 "chat",
                                 "chat:compaction",
-                                "chat:title_generation",
                                 "chatops:slack",
                                 "chatops:ms-teams",
                                 "email",
@@ -99395,7 +99159,6 @@
                             "model_router",
                             "chat",
                             "chat:compaction",
-                            "chat:title_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
                             "email",
@@ -99806,7 +99569,6 @@
                             "model_router",
                             "chat",
                             "chat:compaction",
-                            "chat:title_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
                             "email",
@@ -100640,7 +100402,6 @@
                             "model_router",
                             "chat",
                             "chat:compaction",
-                            "chat:title_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
                             "email",
@@ -101165,7 +100926,6 @@
                             "model_router",
                             "chat",
                             "chat:compaction",
-                            "chat:title_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
                             "email",
@@ -101576,7 +101336,6 @@
                             "model_router",
                             "chat",
                             "chat:compaction",
-                            "chat:title_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
                             "email",
@@ -101987,7 +101746,6 @@
                             "model_router",
                             "chat",
                             "chat:compaction",
-                            "chat:title_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
                             "email",
@@ -104110,7 +103868,6 @@
                             "model_router",
                             "chat",
                             "chat:compaction",
-                            "chat:title_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
                             "email",
@@ -104521,7 +104278,6 @@
                             "model_router",
                             "chat",
                             "chat:compaction",
-                            "chat:title_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
                             "email",
@@ -104932,7 +104688,6 @@
                             "model_router",
                             "chat",
                             "chat:compaction",
-                            "chat:title_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
                             "email",
@@ -105343,7 +105098,6 @@
                             "model_router",
                             "chat",
                             "chat:compaction",
-                            "chat:title_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
                             "email",
@@ -105754,7 +105508,6 @@
                             "model_router",
                             "chat",
                             "chat:compaction",
-                            "chat:title_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
                             "email",
@@ -106165,7 +105918,6 @@
                             "model_router",
                             "chat",
                             "chat:compaction",
-                            "chat:title_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
                             "email",
@@ -106576,7 +106328,6 @@
                             "model_router",
                             "chat",
                             "chat:compaction",
-                            "chat:title_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
                             "email",
@@ -106976,7 +106727,6 @@
                             "model_router",
                             "chat",
                             "chat:compaction",
-                            "chat:title_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
                             "email",
@@ -107376,7 +107126,6 @@
                             "model_router",
                             "chat",
                             "chat:compaction",
-                            "chat:title_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
                             "email",
@@ -107787,7 +107536,6 @@
                             "model_router",
                             "chat",
                             "chat:compaction",
-                            "chat:title_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
                             "email",
@@ -108198,7 +107946,6 @@
                             "model_router",
                             "chat",
                             "chat:compaction",
-                            "chat:title_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
                             "email",
@@ -108609,7 +108356,6 @@
                             "model_router",
                             "chat",
                             "chat:compaction",
-                            "chat:title_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
                             "email",
@@ -109020,7 +108766,6 @@
                             "model_router",
                             "chat",
                             "chat:compaction",
-                            "chat:title_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
                             "email",
@@ -109657,7 +109402,6 @@
                             "model_router",
                             "chat",
                             "chat:compaction",
-                            "chat:title_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
                             "email",
@@ -137710,6 +137454,9 @@
                       "isBest": {
                         "type": "boolean"
                       },
+                      "isFastest": {
+                        "type": "boolean"
+                      },
                       "isFree": {
                         "type": "boolean"
                       },
@@ -138368,6 +138115,9 @@
                         "type": "string",
                         "format": "date-time"
                       },
+                      "isFastest": {
+                        "type": "boolean"
+                      },
                       "isBest": {
                         "type": "boolean"
                       },
@@ -138447,6 +138197,7 @@
                       "lastSyncedAt",
                       "createdAt",
                       "updatedAt",
+                      "isFastest",
                       "isBest",
                       "apiKeys",
                       "pricePerMillionInput",
@@ -182716,10 +182467,6 @@
                       "type": "string",
                       "format": "date-time"
                     },
-                    "lastMessageAt": {
-                      "type": "string",
-                      "format": "date-time"
-                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -182981,7 +182728,6 @@
                     "todoList",
                     "artifact",
                     "pinnedAt",
-                    "lastMessageAt",
                     "createdAt",
                     "updatedAt",
                     "agent",

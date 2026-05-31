@@ -52,7 +52,6 @@ test("prepends the skill activation block to the last user message", async ({
     messages,
     organizationId: org.id,
     userId: user.id,
-    agentId: undefined,
   });
 
   const text = result[0].parts?.[0]?.text ?? "";
@@ -84,7 +83,6 @@ test("ignores a skill that belongs to another organization", async ({
     messages,
     organizationId: org.id,
     userId: user.id,
-    agentId: undefined,
   });
 
   expect(result[0].parts?.[0]?.text).toBe("hello");
@@ -114,7 +112,6 @@ test("ignores a skill the user cannot access under its scope", async ({
     messages,
     organizationId: org.id,
     userId: otherUser.id,
-    agentId: undefined,
   });
 
   expect(result[0].parts?.[0]?.text).toBe("hello");
@@ -148,7 +145,6 @@ test("ignores a slash-command skill when the user lacks skill:read", async ({
     messages,
     organizationId: org.id,
     userId: user.id,
-    agentId: undefined,
   });
 
   expect(result[0].parts?.[0]?.text).toBe("hello");
@@ -169,7 +165,6 @@ test("returns the messages unchanged when no skill metadata is present", async (
     messages,
     organizationId: org.id,
     userId: user.id,
-    agentId: undefined,
   });
 
   expect(result).toBe(messages);

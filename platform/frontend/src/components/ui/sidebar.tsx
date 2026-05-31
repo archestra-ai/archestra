@@ -614,9 +614,7 @@ function SidebarMenuButton({
     />
   );
 
-  const hideTooltip = state !== "collapsed" || isMobile;
-
-  if (!tooltip || hideTooltip) {
+  if (!tooltip) {
     return button;
   }
 
@@ -629,9 +627,12 @@ function SidebarMenuButton({
   return (
     <Tooltip>
       <TooltipTrigger asChild>{button}</TooltipTrigger>
-      {!hideTooltip && (
-        <TooltipContent side="right" align="center" {...tooltip} />
-      )}
+      <TooltipContent
+        side="right"
+        align="center"
+        hidden={state !== "collapsed" || isMobile}
+        {...tooltip}
+      />
     </Tooltip>
   );
 }

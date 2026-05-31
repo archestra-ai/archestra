@@ -3,7 +3,6 @@
 import { type UIMessage, useChat } from "@ai-sdk/react";
 import {
   type ArchestraToolShortName,
-  type ContextWindowEstimate,
   EXTERNAL_AGENT_ID_HEADER,
   getArchestraToolShortName,
   makeSwapAgentPokeText,
@@ -34,15 +33,15 @@ import {
 } from "react";
 import { toast } from "sonner";
 import { filterOptimisticToolCalls } from "@/components/chat/chat-messages.utils";
-import { useGenerateConversationTitle } from "@/lib/chat/chat.query";
+import {
+  useConversation,
+  useGenerateConversationTitle,
+} from "@/lib/chat/chat.query";
 import {
   pruneEmptyTrailingAssistantMessage,
   restoreRenderableAssistantParts,
 } from "@/lib/chat/chat-session-utils";
-import {
-  getChatExternalAgentId,
-  getConversationDisplayTitle,
-} from "@/lib/chat/chat-utils";
+import { getChatExternalAgentId } from "@/lib/chat/chat-utils";
 import {
   extractSwapTargetAgentName,
   getRenderedToolName,
@@ -165,14 +164,7 @@ interface ChatContextValue {
   notifySessionUpdate: () => void;
   scheduleCleanup: (conversationId: string) => void;
   cancelCleanup: (conversationId: string) => void;
-  /** Conversation IDs whose title should currently play the typing animation */
-  animatingTitleIds: Set<string>;
-  /** Mark a conversation's title to play the typing animation (auto-clears after a few seconds) */
-  markTitleAnimating: (conversationId: string) => void;
 }
-
-/** How long a freshly generated title keeps playing the typing animation */
-const TITLE_ANIMATION_DURATION = 3000;
 
 const ChatContext = createContext<ChatContextValue | null>(null);
 
@@ -184,37 +176,10 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   const [sessions, setSessions] = useState<Set<string>>(new Set());
   // Version counter to trigger re-renders when sessions update
   const [sessionVersion, setSessionVersion] = useState(0);
-  // Conversation IDs currently playing the title typing animation
-  const [animatingTitleIds, setAnimatingTitleIds] = useState<Set<string>>(
-    new Set(),
-  );
-  // Per-conversation timers that clear the animation, so they don't cancel each other
-  const titleAnimationTimersRef = useRef(new Map<string, NodeJS.Timeout>());
 
   // Increment version when sessions change (triggers re-renders in consumers)
   const notifySessionUpdate = useCallback(() => {
     setSessionVersion((v) => v + 1);
-  }, []);
-
-  const markTitleAnimating = useCallback((conversationId: string) => {
-    setAnimatingTitleIds((prev) => new Set(prev).add(conversationId));
-
-    // Reset any in-flight timer for this conversation so the window restarts
-    const existingTimer = titleAnimationTimersRef.current.get(conversationId);
-    if (existingTimer) {
-      clearTimeout(existingTimer);
-    }
-
-    const timer = setTimeout(() => {
-      titleAnimationTimersRef.current.delete(conversationId);
-      setAnimatingTitleIds((prev) => {
-        const next = new Set(prev);
-        next.delete(conversationId);
-        return next;
-      });
-    }, TITLE_ANIMATION_DURATION);
-
-    titleAnimationTimersRef.current.set(conversationId, timer);
   }, []);
 
   const cancelCleanup = useCallback((conversationId: string) => {
@@ -334,10 +299,6 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       for (const timer of cleanupTimersRef.current.values()) {
         clearTimeout(timer);
       }
-
-      for (const timer of titleAnimationTimersRef.current.values()) {
-        clearTimeout(timer);
-      }
     };
   }, []);
 
@@ -349,8 +310,6 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       notifySessionUpdate,
       scheduleCleanup,
       cancelCleanup,
-      animatingTitleIds,
-      markTitleAnimating,
     }),
     [
       registerSession,
@@ -359,8 +318,6 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       notifySessionUpdate,
       scheduleCleanup,
       cancelCleanup,
-      animatingTitleIds,
-      markTitleAnimating,
     ],
   );
 
@@ -374,7 +331,6 @@ export function ChatProvider({ children }: { children: ReactNode }) {
           initialMessages={initialMessagesRef.current.get(conversationId) ?? []}
           sessionsRef={sessionsRef}
           notifySessionUpdate={notifySessionUpdate}
-          markTitleAnimating={markTitleAnimating}
         />
       ))}
       {children}
@@ -387,13 +343,11 @@ function ChatSessionHook({
   initialMessages,
   sessionsRef,
   notifySessionUpdate,
-  markTitleAnimating,
 }: {
   conversationId: string;
   initialMessages: UIMessage[];
   sessionsRef: React.MutableRefObject<Map<string, ChatSession>>;
   notifySessionUpdate: () => void;
-  markTitleAnimating: (conversationId: string) => void;
 }) {
   const queryClient = useQueryClient();
   const appName = useAppName();
@@ -417,6 +371,8 @@ function ChatSessionHook({
       lastCompaction: null,
     });
   const generateTitleMutation = useGenerateConversationTitle();
+  // Read from the shared TanStack cache so we only auto-title untitled chats
+  const { data: conversation } = useConversation(conversationId);
   // Track if title generation has been attempted for this conversation
   const titleGenerationAttemptedRef = useRef(false);
   // Track when swap_agent was called so we can auto-poke the new agent on finish
@@ -454,16 +410,6 @@ function ChatSessionHook({
     [],
   );
 
-  // a dropped connection between compaction-start and compaction-finish would
-  // otherwise leave the spinner stuck on; clear it on any stream end.
-  const clearActiveContextCompaction = useCallback(() => {
-    setContextCompaction((current) => ({
-      ...current,
-      isCompacting: false,
-      trigger: null,
-    }));
-  }, []);
-
   // Track early UI data from data-tool-ui-start events (toolCallId → resource data)
   const [earlyToolUiStarts, setEarlyToolUiStarts] = useState<
     ChatSession["earlyToolUiStarts"]
@@ -498,9 +444,8 @@ function ChatSessionHook({
 
     experimental_throttle: 100,
     id: conversationId,
-    onFinish: async ({ message, isAbort }) => {
+    onFinish: ({ message, isAbort }) => {
       setOptimisticToolCalls([]);
-      clearActiveContextCompaction();
 
       // When the user stops mid-tool-call, the assistant message is left with a
       // tool part that never produced output, which the UI renders as a
@@ -522,12 +467,8 @@ function ChatSessionHook({
         });
       }
 
-      const conversationInvalidate = queryClient.invalidateQueries({
+      queryClient.invalidateQueries({
         queryKey: ["conversation", conversationId],
-      });
-
-      const conversationsSidebarInvalidate = queryClient.invalidateQueries({
-        queryKey: ["conversations"],
       });
 
       // After a swap_agent stop, poke the new agent so it responds.
@@ -552,42 +493,11 @@ function ChatSessionHook({
       // Free early UI HTML blobs now that all tool calls have rendered.
       setEarlyToolUiStarts({});
 
-      await Promise.all([
-        conversationInvalidate,
-        conversationsSidebarInvalidate,
-      ]);
-
-      // Auto-generate title after the first settled exchange if still untitled
-      const cachedTitle = queryClient.getQueryData<{ title?: string | null }>([
-        "conversation",
-        conversationId,
-      ])?.title;
-      const firstUserText = getConversationDisplayTitle(null, stableMessages);
-
-      const shouldGenerateTitle =
-        !titleGenerationAttemptedRef.current &&
-        (!cachedTitle || cachedTitle === firstUserText);
-
-      if (shouldGenerateTitle) {
-        titleGenerationAttemptedRef.current = true;
-        generateTitleMutation.mutate(
-          {
-            id: conversationId,
-            regenerate: cachedTitle === firstUserText,
-          },
-          {
-            onSuccess: (data) => {
-              if (data) {
-                markTitleAnimating(conversationId);
-              }
-            },
-          },
-        );
-      }
+      // Attempt to generate title after first assistant response
+      // This will be checked when messages update in the effect below
     },
     onError: (chatError) => {
       setOptimisticToolCalls([]);
-      clearActiveContextCompaction();
       queryClient.invalidateQueries({
         queryKey: ["conversation", conversationId],
       });
@@ -699,22 +609,8 @@ function ChatSessionHook({
       if (dataPart.type === "data-token-usage") {
         const usage = dataPart.data as TokenUsage;
         setTokenUsage(usage);
-        // The indicator tracks context-window occupancy, which is the prompt
-        // (input) size; totalTokens additionally folds in output and would
-        // overstate how full the window is.
-        const occupancy = usage.inputTokens ?? usage.totalTokens;
-        if (typeof occupancy === "number") {
-          setContextTokensUsed(occupancy);
-        }
-      }
-
-      // Seed the indicator at turn start with the backend's estimate of the
-      // outgoing prompt, on the same yardstick as auto-compaction. Per-step
-      // data-token-usage events then refine it with the provider's real count.
-      if (dataPart.type === "data-context-window-estimate") {
-        const data = dataPart.data as ContextWindowEstimate;
-        if (typeof data.estimatedTokens === "number") {
-          setContextTokensUsed(data.estimatedTokens);
+        if (typeof usage.totalTokens === "number") {
+          setContextTokensUsed(usage.totalTokens);
         }
       }
 
@@ -734,7 +630,10 @@ function ChatSessionHook({
           originalTokenEstimate?: number;
           compactedTokenEstimate?: number;
         };
-        recordContextCompaction(data);
+        recordContextCompaction({
+          ...data,
+          updateContextTokens: data.trigger !== "auto",
+        });
         queryClient.invalidateQueries({
           queryKey: ["conversation", conversationId],
         });
@@ -813,6 +712,45 @@ function ChatSessionHook({
       filterOptimisticToolCalls(stableMessages, current),
     );
   }, [stableMessages, optimisticToolCalls.length]);
+
+  // Auto-generate title after the first settled exchange
+  useEffect(() => {
+    // Skip if already attempted or currently generating
+    if (
+      titleGenerationAttemptedRef.current ||
+      generateTitleMutation.isPending
+    ) {
+      return;
+    }
+
+    // Only auto-title a conversation that doesn't have a title yet. This
+    // replaces relying on exact message counts, which breaks when an agent
+    // swap inserts an extra tool-only assistant message and an auto-poke
+    // user message into the first exchange.
+    if (!conversation || conversation.title || status !== "ready") {
+      return;
+    }
+
+    const hasUserMessage = stableMessages.some((m) => m.role === "user");
+    const hasAssistantMessage = stableMessages.some(
+      (m) => m.role === "assistant",
+    );
+
+    // Title once a turn has settled. Assistant *text* is intentionally not
+    // required: an agent swap and tool-only answers produce assistant
+    // messages with no text, and the backend titles from the user message
+    // when no assistant text exists.
+    if (hasUserMessage && hasAssistantMessage) {
+      titleGenerationAttemptedRef.current = true;
+      generateTitleMutation.mutate({ id: conversationId });
+    }
+  }, [
+    stableMessages,
+    status,
+    conversationId,
+    conversation,
+    generateTitleMutation,
+  ]);
 
   // Always keep the session ref up-to-date with the latest values (including
   // function references from useChat which change every render). This is a ref

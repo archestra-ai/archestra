@@ -428,9 +428,8 @@ describe("KnowledgeSettingsPage", () => {
 
       renderPage();
 
-      const embeddingKeyTrigger = screen.getByRole("button", {
-        name: /OpenAI Key/,
-      });
+      const triggers = screen.getAllByRole("combobox");
+      const embeddingKeyTrigger = triggers[0];
       expect(embeddingKeyTrigger).toBeDisabled();
     });
   });
@@ -471,9 +470,9 @@ describe("KnowledgeSettingsPage", () => {
       ];
       renderPage();
 
-      const embeddingKeyTrigger = screen.getByRole("button", {
-        name: /Select embedding API key/,
-      });
+      // The embedding key selector trigger should have pulse classes
+      const triggers = screen.getAllByRole("combobox");
+      const embeddingKeyTrigger = triggers[0];
       expect(embeddingKeyTrigger.className).toContain("animate-pulse");
       expect(embeddingKeyTrigger.className).toContain("ring-primary/40");
     });

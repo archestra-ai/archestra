@@ -4,7 +4,6 @@ use serde::{Deserialize, Serialize};
 
 mod runtime;
 mod session;
-pub mod telemetry;
 mod tracing_ctx;
 
 pub use session::{DEFAULT_APT_PACKAGES, DEFAULT_BASE_IMAGE};
@@ -207,25 +206,18 @@ pub struct ArtifactBytes {
     pub size_bytes: u32,
 }
 
-#[tracing::instrument(name = "sandbox.check_session.request", skip_all)]
+#[tracing::instrument(skip_all, fields(traceparent = input.traceparent.as_deref()))]
 pub async fn check_session(input: CheckSessionInput) -> Result<()> {
-    let span = tracing::Span::current();
-    tracing_ctx::attach_parent(&span, input.traceparent.as_deref());
-    let traceparent = tracing_ctx::current_traceparent(&span).or(input.traceparent);
-    session::submit(move |reply| session::SessionMsg::CheckSession { traceparent, reply }).await
+    session::submit(|reply| session::SessionMsg::CheckSession {
+        traceparent: input.traceparent,
+        reply,
+    })
+    .await
 }
 
-#[tracing::instrument(
-    name = "sandbox.run.request",
-    skip_all,
-    fields(cwd = %input.cwd, command.len = input.command.len())
-)]
+#[tracing::instrument(skip_all, fields(traceparent = input.traceparent.as_deref()))]
 pub async fn run_sandbox(input: RunSandboxInput) -> Result<CommandExecution> {
-    let span = tracing::Span::current();
-    tracing_ctx::attach_parent(&span, input.traceparent.as_deref());
-    // forward this request span as the work span's parent so the detached work
-    // nests under it; fall back to the caller traceparent when otel is inactive.
-    let traceparent = tracing_ctx::current_traceparent(&span).or_else(|| input.traceparent.clone());
+    let traceparent = input.traceparent.clone();
     validate_cwd(&input.cwd)?;
     if let Some(pp) = input.pythonpath.as_deref() {
         validate_pythonpath(pp)?;
@@ -246,11 +238,9 @@ pub async fn run_sandbox(input: RunSandboxInput) -> Result<CommandExecution> {
     .await
 }
 
-#[tracing::instrument(name = "sandbox.read_artifact.request", skip_all, fields(path = %input.path))]
+#[tracing::instrument(skip_all, fields(traceparent = input.traceparent.as_deref()))]
 pub async fn read_artifact(input: ReadArtifactInput) -> Result<ArtifactBytes> {
-    let span = tracing::Span::current();
-    tracing_ctx::attach_parent(&span, input.traceparent.as_deref());
-    let traceparent = tracing_ctx::current_traceparent(&span).or_else(|| input.traceparent.clone());
+    let traceparent = input.traceparent.clone();
     validate_artifact_path(&input.path)?;
     validate_cwd(&input.default_cwd)?;
     if let Some(pp) = input.pythonpath.as_deref() {
@@ -301,20 +291,12 @@ pub(crate) fn supervised_argv(command: &str, timeout_seconds: u32, limits: &Limi
 }
 
 pub(crate) fn validate_snapshot_file_path(path: &str) -> Result<()> {
-    if path.starts_with('/') || path.split('/').any(|segment| segment == "..") {
-        return Err(SandboxError::InvalidInput(format!(
-            "invalid snapshot file path: {path:?}"
-        )));
+    match path {
+        _ if path.starts_with('/') || path.split('/').any(|segment| segment == "..") => Err(
+            SandboxError::InvalidInput(format!("invalid snapshot file path: {path:?}")),
+        ),
+        _ => Ok(()),
     }
-    Ok(())
-}
-
-/// true when `path` is exactly one of the sandbox roots or nested beneath it.
-/// the single source of truth for the artifact/cwd/pythonpath allowlist checks.
-fn within_sandbox_roots(path: &str) -> bool {
-    [SKILL_SANDBOX_ROOT, SKILL_SANDBOX_HOME]
-        .iter()
-        .any(|root| path == *root || path.strip_prefix(root).is_some_and(|r| r.starts_with('/')))
 }
 
 pub(crate) fn validate_artifact_path(path: &str) -> Result<()> {
@@ -331,10 +313,15 @@ pub(crate) fn validate_artifact_path(path: &str) -> Result<()> {
             "invalid artifact path: {path:?}"
         )));
     }
-    if path.starts_with('/') && !within_sandbox_roots(path) {
-        return Err(SandboxError::InvalidInput(format!(
-            "artifact path must be under {SKILL_SANDBOX_ROOT} or {SKILL_SANDBOX_HOME}: {path:?}"
-        )));
+    if path.starts_with('/') {
+        let allowed = [SKILL_SANDBOX_ROOT, SKILL_SANDBOX_HOME]
+            .iter()
+            .any(|root| path == *root || path.starts_with(&format!("{root}/")));
+        if !allowed {
+            return Err(SandboxError::InvalidInput(format!(
+                "artifact path must be under {SKILL_SANDBOX_ROOT} or {SKILL_SANDBOX_HOME}: {path:?}"
+            )));
+        }
     }
     Ok(())
 }
@@ -362,7 +349,10 @@ pub(crate) fn validate_pythonpath(pythonpath: &str) -> Result<()> {
                 "pythonpath entries must be absolute: {entry:?}"
             )));
         }
-        if !within_sandbox_roots(entry) {
+        let allowed = [SKILL_SANDBOX_ROOT, SKILL_SANDBOX_HOME]
+            .iter()
+            .any(|root| entry == *root || entry.starts_with(&format!("{root}/")));
+        if !allowed {
             return Err(SandboxError::InvalidInput(format!(
                 "pythonpath entries must be under {SKILL_SANDBOX_ROOT} or {SKILL_SANDBOX_HOME}: {entry:?}"
             )));
@@ -380,7 +370,10 @@ pub(crate) fn validate_cwd(cwd: &str) -> Result<()> {
             "cwd must be an absolute path: {cwd:?}"
         )));
     }
-    if !within_sandbox_roots(cwd) {
+    let allowed = [SKILL_SANDBOX_ROOT, SKILL_SANDBOX_HOME]
+        .iter()
+        .any(|root| cwd == *root || cwd.starts_with(&format!("{root}/")));
+    if !allowed {
         return Err(SandboxError::InvalidInput(format!(
             "cwd must be under {SKILL_SANDBOX_ROOT} or {SKILL_SANDBOX_HOME}: {cwd:?}"
         )));
@@ -396,12 +389,12 @@ pub(crate) fn format_artifact_error(prefix: &str, path: &str, stderr: &str) -> S
 }
 
 pub(crate) fn skill_root_path(skill_name: &str) -> Result<String> {
-    if skill_name.contains('/') || skill_name.contains("..") {
-        return Err(SandboxError::InvalidInput(format!(
-            "invalid skill name: {skill_name:?}"
-        )));
+    match skill_name {
+        _ if skill_name.contains('/') || skill_name.contains("..") => Err(
+            SandboxError::InvalidInput(format!("invalid skill name: {skill_name:?}")),
+        ),
+        _ => Ok(format!("{SKILL_SANDBOX_ROOT}/{skill_name}")),
     }
-    Ok(format!("{SKILL_SANDBOX_ROOT}/{skill_name}"))
 }
 
 pub(crate) fn shell_quote(value: &str) -> String {

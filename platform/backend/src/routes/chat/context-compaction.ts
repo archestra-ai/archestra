@@ -29,7 +29,10 @@ import type {
   ConversationCompactionTrigger,
 } from "@/types/conversation-compaction";
 import { resolveProviderApiKey } from "@/utils/llm-api-key-resolution";
-import { resolveAgentLlmOrDefault } from "@/utils/llm-resolution";
+import {
+  resolveConfiguredAgentLlm,
+  resolveFastModelName,
+} from "@/utils/llm-resolution";
 import {
   isAttachmentRefUrl,
   parseAttachmentIdFromUrl,
@@ -46,10 +49,6 @@ const CONTEXT_COMPACTION_CORRECTION_PROMPT =
   "Your previous response did not follow the required format. Reply with EXACTLY ONE <summary>...</summary> block and no text outside the tags.";
 const PDF_BYTES_PER_TOKEN_ESTIMATE = 12;
 const BINARY_BYTES_PER_TOKEN_ESTIMATE = 4;
-// images are billed by dimensions, not byte size; without this ceiling a few-MB
-// image estimates at ~1M tokens (byteLength/4) and spuriously trips the
-// auto-compaction threshold every turn.
-const IMAGE_TOKEN_MAX_ESTIMATE = 1_600;
 const CONTEXT_COMPACTION_TRACE_OPERATION = "context_compaction";
 const ATTR_CONTEXT_COMPACTION_TRIGGER = "archestra.context_compaction.trigger";
 const ATTR_CONTEXT_COMPACTION_STATUS = "archestra.context_compaction.status";
@@ -104,11 +103,6 @@ export type ContextCompactionResult = {
   status: ContextCompactionStatus;
   compaction: ConversationCompaction | null;
   reason?: ContextCompactionReason;
-  // estimated tokens of `messages` (what is actually sent to the model this
-  // turn), on the same yardstick as the auto-compaction threshold. Drives the
-  // live context indicator. Reuses the estimate already computed for the
-  // threshold check, so it adds no extra tokenization on the hot path.
-  inputTokenEstimate?: number;
 };
 
 export type ContextCompactionStreamData = {
@@ -185,20 +179,14 @@ async function runCompactMessagesForChat(
     );
   }
 
-  // estimate of the messages we would send without creating a new summary;
-  // reused both for the threshold decision and to seed the context indicator.
-  let messagesTokenEstimate: number | undefined;
-  let shouldCreate = !policy.requireAutoThreshold;
-  if (!shouldCreate) {
-    const decision = await shouldAutoCompact({
+  const shouldCreate =
+    !policy.requireAutoThreshold ||
+    (await shouldAutoCompact({
       provider: params.provider,
       selectedModel: params.selectedModel,
       systemPrompt: params.systemPrompt,
       messages: existingMessages,
-    });
-    messagesTokenEstimate = decision.estimatedTokens;
-    shouldCreate = decision.shouldCompact;
-  }
+    }));
 
   if (!shouldCreate) {
     return {
@@ -208,7 +196,6 @@ async function runCompactMessagesForChat(
       reason: usableLatestCompaction
         ? "using_existing_summary"
         : "below_threshold",
-      inputTokenEstimate: messagesTokenEstimate,
     };
   }
 
@@ -301,7 +288,6 @@ async function runCompactMessagesForChat(
       messages: compactedMessages,
       status: "created",
       compaction,
-      inputTokenEstimate: compaction.compactedTokenEstimate,
     };
   } catch (error) {
     if (params.abortSignal?.aborted) {
@@ -355,7 +341,6 @@ export const __test = {
   resolveCompactionBoundaryMessageId,
   decodeDataUrl,
   getDataUrlMediaType,
-  estimateBinaryFileTokens,
 };
 
 function resolveContextCompactionPolicy(
@@ -518,22 +503,19 @@ async function shouldAutoCompact(params: {
   selectedModel: string;
   systemPrompt?: string;
   messages: ChatMessage[];
-}): Promise<{ shouldCompact: boolean; estimatedTokens: number }> {
-  const estimatedTokens = estimateChatMessagesTokens(params);
+}): Promise<boolean> {
   const model = await ModelModel.findByProviderAndModelId(
     params.provider,
     params.selectedModel,
   );
   if (!model?.contextLength) {
-    return { shouldCompact: false, estimatedTokens };
+    return false;
   }
 
-  return {
-    shouldCompact:
-      estimatedTokens >=
-      model.contextLength * CONTEXT_COMPACTION_AUTO_THRESHOLD,
-    estimatedTokens,
-  };
+  const estimatedTokens = estimateChatMessagesTokens(params);
+  return (
+    estimatedTokens >= model.contextLength * CONTEXT_COMPACTION_AUTO_THRESHOLD
+  );
 }
 
 async function createConversationCompaction(params: {
@@ -569,28 +551,32 @@ async function createConversationCompaction(params: {
     BUILT_IN_AGENT_IDS.CONTEXT_COMPACTION,
     params.organizationId,
   );
-  const compactionLlm = await resolveAgentLlmOrDefault({
-    agent: compactionAgent,
-    organizationId: params.organizationId,
-    userId: params.userId,
-    conversationId: params.conversationId,
-  });
-  const { provider, apiKey, modelName, baseUrl } = compactionLlm;
+  const configuredCompactionLlm = compactionAgent
+    ? await resolveConfiguredAgentLlm(compactionAgent)
+    : null;
+  const provider = configuredCompactionLlm?.provider ?? params.provider;
+  const fallbackLlm = configuredCompactionLlm?.apiKey
+    ? null
+    : await resolveProviderApiKey({
+        organizationId: params.organizationId,
+        userId: params.userId,
+        provider,
+        conversationId: params.conversationId,
+        agentLlmApiKeyId: configuredCompactionLlm
+          ? null
+          : params.agentLlmApiKeyId,
+      });
+  const apiKey = configuredCompactionLlm?.apiKey ?? fallbackLlm?.apiKey;
+  const baseUrl =
+    configuredCompactionLlm?.baseUrl ?? fallbackLlm?.baseUrl ?? null;
 
   if (isApiKeyRequired(provider, apiKey)) {
     throw new Error("LLM provider API key not configured");
   }
 
-  const prompt = await buildCompactionPrompt({
-    previousSummary: params.previousSummary,
-    messages: params.compactableMessages,
-    conversationId: params.conversationId,
-  });
-  const systemPrompt =
-    renderSystemPrompt(
-      compactionAgent?.systemPrompt ?? CONTEXT_COMPACTION_SYSTEM_PROMPT,
-    ) ?? CONTEXT_COMPACTION_SYSTEM_PROMPT;
-
+  const modelName =
+    configuredCompactionLlm?.modelName ??
+    (await resolveFastModelName(provider, fallbackLlm?.chatApiKeyId));
   const model = createLLMModel({
     provider,
     apiKey,
@@ -601,6 +587,15 @@ async function createConversationCompaction(params: {
     sessionId: params.conversationId,
     source: "chat:compaction",
   });
+  const prompt = await buildCompactionPrompt({
+    previousSummary: params.previousSummary,
+    messages: params.compactableMessages,
+    conversationId: params.conversationId,
+  });
+  const systemPrompt =
+    renderSystemPrompt(
+      compactionAgent?.systemPrompt ?? CONTEXT_COMPACTION_SYSTEM_PROMPT,
+    ) ?? CONTEXT_COMPACTION_SYSTEM_PROMPT;
 
   const result = await generateText({
     model,
@@ -611,7 +606,6 @@ async function createConversationCompaction(params: {
     abortSignal: params.abortSignal,
   });
   const summary = extractTaggedSummary(result.text) ?? result.text.trim();
-
   if (!summary) {
     throw new Error("Compaction summary was empty");
   }
@@ -1297,11 +1291,7 @@ function estimateBinaryFileTokens(params: {
     params.mediaType === "application/pdf"
       ? PDF_BYTES_PER_TOKEN_ESTIMATE
       : BINARY_BYTES_PER_TOKEN_ESTIMATE;
-  const estimate = Math.ceil(params.byteLength / bytesPerToken);
-  if (params.mediaType.startsWith("image/")) {
-    return Math.min(estimate, IMAGE_TOKEN_MAX_ESTIMATE);
-  }
-  return estimate;
+  return Math.ceil(params.byteLength / bytesPerToken);
 }
 
 async function getMessageTextForSummary(
@@ -1448,16 +1438,11 @@ function decodeDataUrl(
 
   const { mediaType, isBase64 } = parseDataUrlMetaString(match[1] ?? "");
   const payload = match[2] ?? "";
-  try {
-    const buffer = isBase64
-      ? Buffer.from(payload, "base64")
-      : Buffer.from(decodeURIComponent(payload), "utf8");
-    return { mediaType, buffer };
-  } catch {
-    // malformed percent-encoding makes decodeURIComponent throw URIError;
-    // treat the url as undecodable rather than aborting the chat turn.
-    return null;
-  }
+  const buffer = isBase64
+    ? Buffer.from(payload, "base64")
+    : Buffer.from(decodeURIComponent(payload), "utf8");
+
+  return { mediaType, buffer };
 }
 
 function parseDataUrlMeta(

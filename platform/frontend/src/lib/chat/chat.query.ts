@@ -140,14 +140,12 @@ export function useCreateConversation() {
       agentId,
       modelId,
       chatApiKeyId,
-      title,
     }: NonNullable<archestraApiTypes.CreateChatConversationData["body"]>) => {
       const { data, error } = await createChatConversation({
         body: {
           agentId,
           modelId,
           chatApiKeyId: chatApiKeyId ?? undefined,
-          title,
         },
       });
       if (error) {
@@ -160,10 +158,12 @@ export function useCreateConversation() {
       if (!newConversation) return;
       queryClient.invalidateQueries({ queryKey: ["conversations"] });
       // Immediately populate the individual conversation cache to avoid loading state
-      queryClient.setQueryData(
-        ["conversation", newConversation.id],
-        newConversation,
-      );
+      if (newConversation) {
+        queryClient.setQueryData(
+          ["conversation", newConversation.id],
+          newConversation,
+        );
+      }
     },
   });
 }
@@ -205,21 +205,14 @@ export function useUpdateConversation() {
         (old: typeof data | undefined) =>
           mergeUpdatedConversationIntoCache(old, data, variables),
       );
-
-      // Update title in cache
-      if (variables.title !== undefined) {
-        queryClient.setQueriesData<
-          archestraApiTypes.GetChatConversationsResponses["200"]
-        >({ queryKey: ["conversations"] }, (old) =>
-          old?.map((c) =>
-            c.id === variables.id ? { ...c, title: data.title } : c,
-          ),
-        );
-      }
       // Only invalidate the conversations list for sidebar-relevant changes
-      // (pin status, agent). Model/key updates don't affect the sidebar
+      // (title, pin status, agent). Model/key updates don't affect the sidebar
       // and unnecessary invalidation causes cascading re-renders.
-      if (variables.pinnedAt !== undefined || variables.agentId) {
+      if (
+        variables.title !== undefined ||
+        variables.pinnedAt !== undefined ||
+        variables.agentId
+      ) {
         queryClient.invalidateQueries({ queryKey: ["conversations"] });
       }
       if (variables.agentId) {
@@ -338,17 +331,14 @@ export function useDeleteConversation() {
       await queryClient.cancelQueries({ queryKey: ["conversations"] });
 
       // Snapshot all conversation list caches (one per search query) for rollback
-      const previousQueries = queryClient.getQueriesData<
-        archestraApiTypes.GetChatConversationsResponses["200"]
-      >({
+      const previousQueries = queryClient.getQueriesData<{ id: string }[]>({
         queryKey: ["conversations"],
       });
 
       // Optimistically remove the conversation from every cached list
-      queryClient.setQueriesData<
-        archestraApiTypes.GetChatConversationsResponses["200"]
-      >({ queryKey: ["conversations"] }, (old) =>
-        old ? old.filter((c) => c.id !== deletedId) : old,
+      queryClient.setQueriesData<{ id: string }[]>(
+        { queryKey: ["conversations"] },
+        (old) => (old ? old.filter((c) => c.id !== deletedId) : old),
       );
 
       return { previousQueries };
@@ -418,22 +408,11 @@ export function useGenerateConversationTitle() {
       return data;
     },
     onSuccess: (data, variables) => {
-      if (!data) {
-        return;
-      }
-
-      queryClient.setQueryData(
-        ["conversation", variables.id],
-        (old: archestraApiTypes.GetChatConversationResponses["200"] | null) =>
-          old ? { ...old, title: data.title } : old,
-      );
-      queryClient.setQueriesData<
-        archestraApiTypes.GetChatConversationsResponses["200"]
-      >({ queryKey: ["conversations"] }, (old) =>
-        old?.map((c) =>
-          c.id === variables.id ? { ...c, title: data.title } : c,
-        ),
-      );
+      if (!data) return;
+      queryClient.invalidateQueries({ queryKey: ["conversations"] });
+      queryClient.invalidateQueries({
+        queryKey: ["conversation", variables.id],
+      });
     },
   });
 }

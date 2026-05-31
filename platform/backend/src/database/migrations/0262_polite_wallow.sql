@@ -1,1 +1,0 @@
-ALTER TABLE "api_key_models" DROP COLUMN "is_fastest";

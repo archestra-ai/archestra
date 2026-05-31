@@ -9,6 +9,7 @@ const ENTROPY_DETECTOR_ID = detectorId("entropy");
 const INTERNAL_LABEL = "high-entropy-token";
 
 const CANDIDATE_PATTERN = /\S{20,}/g;
+const HEX_ONLY_PATTERN = /^[0-9a-fA-F]+$/;
 // matches RFC 3986 scheme followed by "://" — skip these to avoid false
 // positives on URLs (e.g. Google Docs URLs contain high-entropy document IDs).
 const URL_LIKE_PATTERN = /^[a-z][a-z0-9+.-]*:\/\//i;
@@ -18,13 +19,8 @@ const URL_LIKE_PATTERN = /^[a-z][a-z0-9+.-]*:\/\//i;
 // max entropy is capped by log2(min(len, alphabet)). a ratio works uniformly
 // across lengths.
 const ENTROPY_RATIO_THRESHOLD = 0.85;
-// every token is scored against this single reference alphabet (base64-sized).
-// scoring hex against a 16-symbol alphabet would make any uniform hex string
-// (git SHAs, sha256/md5 digests) reach ratio ~1.0 and flag — but a hash and a
-// hex secret are entropy-identical, so that branch only ever produced false
-// positives on content hashes. against the 64-symbol alphabet hex under-fills
-// and falls below threshold, while genuine base64/base62 keys still clear it.
-const REFERENCE_ALPHABET_SIZE = 64;
+const HEX_ALPHABET_SIZE = 16;
+const NON_HEX_ALPHABET_SIZE = 64;
 
 export function shannonEntropy(s: string): number {
   if (s.length === 0) return 0;
@@ -84,7 +80,10 @@ export const entropyDetector: Detector = {
 };
 
 function isHighEntropy(token: string): boolean {
-  const maxEntropy = Math.log2(Math.min(token.length, REFERENCE_ALPHABET_SIZE));
+  const alphabetSize = HEX_ONLY_PATTERN.test(token)
+    ? HEX_ALPHABET_SIZE
+    : NON_HEX_ALPHABET_SIZE;
+  const maxEntropy = Math.log2(Math.min(token.length, alphabetSize));
   if (maxEntropy === 0) return false;
   return shannonEntropy(token) / maxEntropy >= ENTROPY_RATIO_THRESHOLD;
 }

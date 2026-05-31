@@ -19,7 +19,7 @@ import {
   XIcon,
 } from "lucide-react";
 import Link from "next/link";
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ConnectorTypeIcon } from "@/app/knowledge/knowledge-bases/_parts/connector-icons";
 import { LocalServerInstallDialog } from "@/app/mcp/registry/_parts/local-server-install-dialog";
 import { NoAuthInstallDialog } from "@/app/mcp/registry/_parts/no-auth-install-dialog";
@@ -104,7 +104,7 @@ interface InitialAgentSelectorProps {
   onAgentChange: (agentId: string) => void;
 }
 
-export const InitialAgentSelector = memo(function InitialAgentSelector({
+export function InitialAgentSelector({
   currentAgentId,
   currentAgentName,
   onAgentChange,
@@ -232,13 +232,6 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
     setSearch("");
   };
 
-  const handleAddTool = useCallback(() => {
-    if (currentAgentId) {
-      setEditingAgentId(currentAgentId);
-      setDialogView("add-tool");
-    }
-  }, [currentAgentId]);
-
   const editingAgent = useMemo(
     () => allAgents.find((a) => a.id === editingAgentId) ?? null,
     [allAgents, editingAgentId],
@@ -285,7 +278,12 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
               subagents={triggerSubagents}
               connectorTypes={agentConnectorTypes}
               showAddButton={canEditCurrentAgent}
-              onAdd={handleAddTool}
+              onAdd={() => {
+                if (currentAgentId) {
+                  setEditingAgentId(currentAgentId);
+                  setDialogView("add-tool");
+                }
+              }}
             />
           </PromptInputButton>
         </PopoverTrigger>
@@ -512,7 +510,7 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
       )}
     </>
   );
-});
+}
 
 // Reusable dialog header with back button and close
 function DialogHeader({
@@ -2029,7 +2027,7 @@ type SubagentItem = {
   icon?: string | null;
 };
 
-const ToolServerAvatarGroup = memo(function ToolServerAvatarGroup({
+function ToolServerAvatarGroup({
   catalogs,
   subagents = [],
   connectorTypes = [],
@@ -2123,4 +2121,4 @@ const ToolServerAvatarGroup = memo(function ToolServerAvatarGroup({
       )}
     </div>
   );
-});
+}

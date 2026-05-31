@@ -1,5 +1,4 @@
 import { describe, expect, test } from "@/test";
-import LlmProviderApiKeyModel from "./llm-provider-api-key";
 import LlmProviderApiKeyModelLinkModel from "./llm-provider-api-key-model";
 import ModelModel from "./model";
 
@@ -614,7 +613,7 @@ describe("ModelModel", () => {
       expect(model?.externalId).toBe("openai/gpt-4o-mini");
     });
 
-    test("does not mark existing provider-synced models as proxy-discovered", async () => {
+    test("sets discoveredViaLlmProxy=true on existing model", async () => {
       // Create model via normal sync (discoveredViaLlmProxy defaults to false)
       await ModelModel.create({
         externalId: "anthropic/claude-3-5-sonnet",
@@ -638,7 +637,7 @@ describe("ModelModel", () => {
         "anthropic",
         "claude-3-5-sonnet",
       );
-      expect(after?.discoveredViaLlmProxy).toBe(false);
+      expect(after?.discoveredViaLlmProxy).toBe(true);
     });
   });
 
@@ -664,42 +663,6 @@ describe("ModelModel", () => {
   });
 
   describe("deleteOrphanedModels", () => {
-    test("deletes provider-synced models used by chat after their last API key is deleted", async ({
-      makeOrganization,
-      makeSecret,
-      makeLlmProviderApiKey,
-    }) => {
-      const org = await makeOrganization();
-      const model = await ModelModel.create({
-        externalId: "anthropic/claude-opus-4-7",
-        provider: "anthropic",
-        modelId: "claude-opus-4-7",
-        inputModalities: ["text"],
-        outputModalities: ["text"],
-        lastSyncedAt: new Date(),
-      });
-      const secret = await makeSecret({ secret: { apiKey: "test-key" } });
-      const apiKey = await makeLlmProviderApiKey(org.id, secret.id, {
-        provider: "anthropic",
-      });
-      await LlmProviderApiKeyModelLinkModel.syncModelsForApiKey(
-        apiKey.id,
-        [{ id: model.id, modelId: model.modelId }],
-        "anthropic",
-      );
-
-      await ModelModel.ensureModelExists("claude-opus-4-7", "anthropic");
-      await LlmProviderApiKeyModel.delete(apiKey.id);
-
-      expect(await ModelModel.deleteOrphanedModels()).toBe(1);
-      expect(
-        await ModelModel.findByProviderAndModelId(
-          "anthropic",
-          "claude-opus-4-7",
-        ),
-      ).toBeNull();
-    });
-
     test("deletes models without API key links that are not from LLM Proxy", async ({
       makeOrganization,
       makeSecret,

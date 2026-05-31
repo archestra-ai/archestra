@@ -138,6 +138,11 @@ export const TOOL_PERMISSIONS: Record<
   // makes a personal skill, update_skill re-checks the target skill's scope.
   create_skill: { resource: "skill", action: "create" },
   update_skill: { resource: "skill", action: "update" },
+  // Skill sandbox execution — gated by explicit `skill:execute` permission and
+  // per-agent tool assignment. Handlers additionally check `skill:read` per skill.
+  create_skill_sandbox: { resource: "skill", action: "execute" },
+  run_skill_command: { resource: "skill", action: "execute" },
+  get_skill_sandbox_artifact: { resource: "skill", action: "execute" },
 };
 
 /**

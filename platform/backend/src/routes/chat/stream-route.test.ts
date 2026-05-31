@@ -1,3 +1,4 @@
+import { NoSuchToolError } from "ai";
 import { vi } from "vitest";
 import { MessageModel } from "@/models";
 import ActiveChatRunModel from "@/models/chat-active-run";
@@ -375,6 +376,54 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
     const errorsAfterFinish =
       await ConversationChatErrorModel.findByConversation(conversationId);
     expect(errorsAfterFinish).toHaveLength(1);
+  });
+
+  test("formats unavailable tool calls as tool-level errors without persisting chat errors", async ({
+    expect,
+  }) => {
+    const { default: ConversationChatErrorModel } = await import(
+      "@/models/conversation-chat-error"
+    );
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/chat",
+      payload: {
+        id: conversationId,
+        messages: [
+          {
+            id: "msg-1",
+            role: "user",
+            parts: [{ type: "text", text: "hello" }],
+          },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+    expect(capturedInnerOnError).toBeDefined();
+
+    const unavailableToolError = new NoSuchToolError({
+      toolName: "missing_tool",
+      availableTools: ["known_tool"],
+    });
+    const payload1 = capturedInnerOnError?.(unavailableToolError);
+    const payload2 = capturedInnerOnError?.(unavailableToolError);
+
+    expect(payload1).toBe(payload2);
+    expect(payload1).toContain(
+      "The requested tool is not available in this chat.",
+    );
+    expect(payload1).toContain('"requestedToolName": "missing_tool"');
+    expect(payload1).toContain('"availableToolNames"');
+    expect(payload1).toContain("known_tool");
+    expect(payload1).toContain("Model tried to call unavailable tool");
+
+    await new Promise((resolve) => setImmediate(resolve));
+    const persistedErrors =
+      await ConversationChatErrorModel.findByConversation(conversationId);
+    expect(persistedErrors).toHaveLength(0);
   });
 
   test("persists user message with new DB id on provider error and allows subsequent PATCH", async ({

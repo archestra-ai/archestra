@@ -1,6 +1,6 @@
 import { LINKED_IDP_SSO_MODE } from "@shared";
 import { z } from "zod";
-import db, { type Transaction } from "@/database";
+import { type Transaction, withDbTransaction } from "@/database";
 import logger from "@/logging";
 import {
   AccountModel,
@@ -56,7 +56,7 @@ export async function completeLinkedIdentityProviderIntent(params: {
   currentUserId: string;
   currentSessionId: string;
 }) {
-  return await db.transaction(async (tx) => {
+  return await withDbTransaction(async (tx) => {
     const identifier = getLinkedIdentityProviderIntentIdentifier(
       params.intentId,
     );

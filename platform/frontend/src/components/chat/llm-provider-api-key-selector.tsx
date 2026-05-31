@@ -1,30 +1,8 @@
 "use client";
 
-import {
-  E2eTestId,
-  getChatApiKeySelectorOptionTestId,
-  getChatApiKeySelectorProviderGroupTestId,
-  providerDisplayNames,
-  type ResourceVisibilityScope,
-  type SupportedProvider,
-} from "@shared";
-import { Building2, CheckIcon, Key, User, Users } from "lucide-react";
+import type { ResourceVisibilityScope, SupportedProvider } from "@shared";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { PromptInputButton } from "@/components/ai-elements/prompt-input";
-import { Badge } from "@/components/ui/badge";
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "@/components/ui/command";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+import { LlmProviderApiKeyDropdown } from "@/components/llm-provider-api-key-dropdown";
 import { useUpdateConversation } from "@/lib/chat/chat.query";
 import {
   type LlmProviderApiKey,
@@ -51,16 +29,6 @@ interface LlmProviderApiKeySelectorProps {
   /** Agent's configured LLM API key ID - included in available keys even if user lacks direct access */
   agentLlmApiKeyId?: string | null;
 }
-
-const SCOPE_ICONS: Record<ResourceVisibilityScope, React.ReactNode> = {
-  personal: <User className="h-3 w-3" />,
-  team: <Users className="h-3 w-3" />,
-  org: <Building2 className="h-3 w-3" />,
-};
-
-// Note: This stores the API key's database ID (UUID), NOT the actual API key secret.
-// The actual API key value is never exposed to the frontend - it's stored securely on the server.
-// This ID is just a reference to select which key configuration to use, similar to a userId.
 
 /**
  * API Key selector for chat - allows users to select which API key to use for the conversation.
@@ -98,31 +66,6 @@ export function LlmProviderApiKeySelector({
   // without looping when our own mutations cause provider changes.
   const autoSelectedForProviderRef = useRef<string | null>(null);
 
-  // Group keys by provider for display
-  const keysByProvider = useMemo(() => {
-    const grouped = {} as Record<SupportedProvider, LlmProviderApiKey[]>;
-
-    for (const key of availableKeys) {
-      if (!grouped[key.provider]) {
-        grouped[key.provider] = [];
-      }
-      grouped[key.provider].push(key);
-    }
-
-    return grouped;
-  }, [availableKeys]);
-
-  // Get available providers sorted (current provider first)
-  const availableProviders = useMemo(() => {
-    const providers = Object.keys(keysByProvider) as SupportedProvider[];
-    // Sort: current provider first, then alphabetically
-    return providers.sort((a, b) => {
-      if (a === currentProvider) return -1;
-      if (b === currentProvider) return 1;
-      return a.localeCompare(b);
-    });
-  }, [keysByProvider, currentProvider]);
-
   // Group keys by scope (personal, team, org) for auto-selection priority
   const keysByScope = useMemo(() => {
     const grouped: Record<ResourceVisibilityScope, LlmProviderApiKey[]> = {
@@ -137,6 +80,11 @@ export function LlmProviderApiKeySelector({
 
     return grouped;
   }, [availableKeys]);
+
+  const providerKeys = useMemo(() => {
+    if (!currentProvider) return [];
+    return availableKeys.filter((key) => key.provider === currentProvider);
+  }, [availableKeys, currentProvider]);
 
   // Find selected key
   const currentConversationChatApiKey = useMemo(() => {
@@ -176,11 +124,6 @@ export function LlmProviderApiKeySelector({
       return;
     }
 
-    // Get keys for the current provider (prefer matching provider)
-    const providerKeys = currentProvider
-      ? (keysByProvider[currentProvider] ?? [])
-      : [];
-
     // Priority: personal > team > org (within current provider)
     const personalKeys = providerKeys.filter((k) => k.scope === "personal");
     const teamKeys = providerKeys.filter((k) => k.scope === "team");
@@ -219,7 +162,7 @@ export function LlmProviderApiKeySelector({
     isLoading,
     conversationId,
     currentProvider,
-    keysByProvider,
+    providerKeys,
     keysByScope,
     onApiKeyChange,
   ]);
@@ -272,64 +215,15 @@ export function LlmProviderApiKeySelector({
   }
 
   return (
-    <Popover open={open} onOpenChange={handleOpenChange}>
-      <PopoverTrigger asChild>
-        <PromptInputButton
-          disabled={disabled}
-          className="max-w-[220px] min-w-0"
-          data-testid={E2eTestId.ChatApiKeySelectorTrigger}
-        >
-          <Key className="size-4 shrink-0" />
-        </PromptInputButton>
-      </PopoverTrigger>
-      <PopoverContent className="w-80 p-0" align="start">
-        <Command>
-          <CommandInput
-            placeholder="Search API Keys..."
-            data-testid={E2eTestId.ChatApiKeySelectorSearchInput}
-          />
-          <CommandList>
-            <CommandEmpty>No API keys found.</CommandEmpty>
-            {/* Group keys by provider */}
-            {availableProviders.map((provider) => (
-              <CommandGroup
-                key={provider}
-                data-testid={getChatApiKeySelectorProviderGroupTestId(provider)}
-                heading={
-                  providerDisplayNames[provider as SupportedProvider] ??
-                  provider
-                }
-              >
-                {keysByProvider[provider]?.map((key) => (
-                  <CommandItem
-                    key={key.id}
-                    data-testid={getChatApiKeySelectorOptionTestId(key.id)}
-                    value={`${provider} ${key.name} ${key.teamName || ""}`}
-                    onSelect={() => handleSelectKey(key.id)}
-                    className="cursor-pointer"
-                  >
-                    <div className="flex items-center gap-2 flex-1 min-w-0">
-                      {SCOPE_ICONS[key.scope]}
-                      <span className="truncate">{key.name}</span>
-                      {key.scope === "team" && key.teamName && (
-                        <Badge
-                          variant="outline"
-                          className="text-[10px] px-1 py-0"
-                        >
-                          {key.teamName}
-                        </Badge>
-                      )}
-                    </div>
-                    {currentConversationChatApiKeyId === key.id && (
-                      <CheckIcon className="h-4 w-4 shrink-0" />
-                    )}
-                  </CommandItem>
-                ))}
-              </CommandGroup>
-            ))}
-          </CommandList>
-        </Command>
-      </PopoverContent>
-    </Popover>
+    <LlmProviderApiKeyDropdown
+      availableKeys={availableKeys}
+      selectedApiKeyId={currentConversationChatApiKeyId}
+      disabled={disabled}
+      open={open}
+      onOpenChange={handleOpenChange}
+      onSelectKey={handleSelectKey}
+      currentProvider={currentProvider}
+      showChatTestIds
+    />
   );
 }

@@ -79,6 +79,7 @@ describe("config routes", () => {
       isQuickstart: expect.any(Boolean),
       ngrokDomain: expect.any(String),
       virtualKeyDefaultExpirationSeconds: expect.any(Number),
+      chatSecretScanEnabled: true,
     });
     expect(["permissive", "restrictive"]).toContain(
       payload.features.globalToolPolicy,

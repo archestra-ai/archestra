@@ -189,9 +189,9 @@ Tool invocation policies and trusted data policies are still enforced by the pro
 
 ## Dependency Security
 
-**Install Script Protection**: The platform disables automatic execution of install scripts via `ignore-scripts=true` in `.npmrc` to prevent supply chain attacks. Install scripts (`preinstall`, `postinstall`, `install`) can execute arbitrary code, steal secrets, and compromise the system.
+**Install Script Protection**: The platform disables automatic execution of install scripts via `ignoreScripts: true` in `pnpm-workspace.yaml` to prevent supply chain attacks. Install scripts (`preinstall`, `postinstall`, `install`) can execute arbitrary code, steal secrets, and compromise the system.
 
-**Minimum Release Age**: Packages must be published for at least 7 days before installation (`minimum-release-age=10080` minutes in `.npmrc`). This allows time for community detection and removal of malicious releases, which are typically caught within hours.
+**Minimum Release Age**: Packages must be published for at least 7 days before installation (`minimumReleaseAge: 10080` minutes in `pnpm-workspace.yaml`). This allows time for community detection and removal of malicious releases, which are typically caught within hours.
 
 **Working with Disabled Scripts**: Most packages work without install scripts. When needed, manually rebuild specific packages:
 
@@ -320,6 +320,7 @@ pnpm rebuild <package-name>  # Enable scripts for specific package
 
 **Backend**:
 
+- Refer to backend/architecture.md for backend architecture guidelines.
 - Use Drizzle ORM for database operations through MODELS ONLY!
 - Table exports: Use plural names with "Table" suffix (e.g., `profileLabelsTable`, `sessionsTable`)
 - Colocate test files with source (`.test.ts`)
@@ -452,6 +453,17 @@ pnpm rebuild <package-name>  # Enable scripts for specific package
   - **Trusted (policy bypass)**: Archestra tools bypass tool invocation policies and trusted data policies — they are always allowed to execute without policy evaluation
   - **RBAC (user permissions) still enforced**: Every tool is mapped to a `{ resource, action }` permission in `TOOL_PERMISSIONS` (`archestra-mcp-server/rbac.ts`). The `tools/list` endpoint dynamically filters tools so users only see tools they have permission to use. `executeArchestraTool` performs a centralized RBAC check before executing any tool. When adding new tools, add the corresponding entry to `TOOL_PERMISSIONS` (the `Record<ArchestraToolShortName, ...>` type will cause a compile error if a tool is missing).
 
+**Skill Sandbox Runtime**:
+
+- DB-backed, Dagger-materialized execution sandbox for Agent Skills. Code lives in `backend/src/skills-sandbox/` (see its README for replay semantics and limits)
+- MCP tools exposed by `archestra-mcp-server/skill-sandbox.ts`:
+  - `create_skill_sandbox` — snapshots one or more skills into a sandbox recipe; returns a stable sandbox id and per-skill root paths
+  - `run_skill_command` — materializes the recipe in a fresh Dagger container, replays the persisted command log, executes a new command, appends to the log
+  - `get_skill_sandbox_artifact` — exports a file from a materialized sandbox into `skill_sandbox_artifacts` (bytea) and returns a typed `ArtifactRef`
+- All three tools are gated by the `skill:execute` permission (`auth/skill-permissions.ts`). `create_skill_sandbox` also enforces `skill:read` per mounted skill
+- Source of truth is Postgres (`skill_sandboxes`, `skill_sandbox_skills`, `skill_sandbox_commands`, `skill_sandbox_artifacts`); Dagger owns ephemeral filesystem state with no retention guarantee
+- Activation prompt (`skills/skill-activation.ts`) tells the model to inspect files with `read_skill_file` and use the sandbox tools to execute scripts — commands run from the skill root so the Agent Skills spec's relative paths work as-is
+
 **Testing**:
 
 - **Backend**: Vitest with PGLite for in-memory PostgreSQL testing - never mock database interfaces, use real database operations via models for comprehensive integration testing
@@ -521,3 +533,93 @@ await page.waitForTimeout(1000); // Use auto-waiting instead
 Reference: https://playwright.dev/docs/locators#quick-guide
 
 - never amend commits
+
+## Rust / NAPI coding style
+
+Write Rust as a reusable library first. NAPI should be a thin adapter around the Rust core, not the place where product logic lives. The Rust part should be easy to move later into a companion app, CLI, daemon, desktop process, or IPC service.
+
+### Architecture
+
+- Keep core Rust logic independent from Node, JavaScript, and NAPI.
+- No `#[napi]`, `napi::Result`, JS types, or Node-specific assumptions in core Rust modules.
+- NAPI functions should only:
+  1. receive JS input,
+  2. validate and convert it into Rust domain types,
+  3. call the Rust core,
+  4. convert the result or error back to JS.
+- Minimize the JS ↔ Rust API surface. Prefer a few coarse operations over many tiny exported helpers.
+- Do not expose internal implementation details through the NAPI API.
+- Generated TypeScript definitions are part of the public API and should stay clean, stable, and intentional.
+- Keep observability in the core as `tracing` spans and events only. OTLP/exporter wiring belongs in a single feature-gated module, never scattered through the logic. Propagate trace context (W3C `traceparent`) explicitly across detached tasks and actor boundaries — it does not flow implicitly.
+
+### Types and data modeling
+
+- Prefer structs, enums, and newtypes over primitive-heavy signatures, tuples, raw strings, and boolean flags.
+- Use enums for closed sets of states or modes.
+- Use named structs for meaningful data instead of passing many positional arguments.
+- Make invalid states unrepresentable where practical.
+- Treat all JS input as untrusted. Validate it at the boundary and convert it immediately into Rust-native types.
+- Validate untrusted input at the public core entry points, not deep in the call graph. Data validated when first accepted (e.g. persisted or replayed history) is trusted on reuse — document that trust boundary wherever it is not obvious.
+- Keep NAPI-facing DTOs separate from richer internal domain types when that improves clarity.
+
+### Control flow and style
+
+- Prefer `match` for enums, variants, and meaningful branching.
+- Use `if` for simple boolean checks.
+- Prefer early returns for validation and error paths.
+- Avoid deeply nested control flow.
+- Prefer functional style where it improves readability.
+- Do not force iterator chains when a simple loop is clearer.
+- Prefer clear, boring, explicit code over clever abstractions.
+
+### Errors and safety
+
+- Use `Result<T, E>` consistently in core Rust.
+- Prefer domain-specific error enums over generic strings.
+- Convert Rust errors into JS/NAPI errors only at the boundary.
+- Preserve useful error context.
+- No `unwrap`, `expect`, or `panic!` in code reachable from the NAPI boundary.
+- Assume dependencies can still panic despite that rule. Wrap every future that enters the core from the NAPI boundary in `catch_unwind` and convert the payload into a domain error. The host process must never abort on a Rust panic.
+- No `unsafe` unless isolated, documented, and clearly justified.
+
+### Abstractions
+
+- Avoid speculative abstractions.
+- Avoid `dyn Trait` unless runtime polymorphism is clearly needed.
+- Prefer concrete types, enums, generics, or plain functions before trait objects.
+- Keep modules small and named around domain concepts, not patterns.
+- Do not add indirection unless it makes testing, ownership, or API boundaries meaningfully better.
+
+### Cleanliness
+
+- Zero dead code policy.
+- No commented-out code.
+- No unused exports.
+- No unused dependencies.
+- No placeholder modules “for later”.
+- Keep dependencies minimal and justified.
+- Avoid adding crates for trivial functionality.
+
+### Tests and checks
+
+- Test Rust core logic directly, not only through Node.
+- Add tests for validation, parsing, edge cases, and error handling.
+- Use JS/NAPI integration tests only for actual boundary behavior.
+- Keep every `cfg`/feature gate as narrow as its actual use. Code compiled only because a gate is wider than its callers is dead code and will trip `-D warnings`.
+- Run the checks under the default feature set AND the binding's feature set (`napi`, `telemetry`) — not only `--all-features`. Lints, dead code, and broken `cfg` paths hide in feature combinations you never build.
+- Required before merge:
+  - `cargo fmt`
+  - `cargo clippy -- -D warnings`
+  - `cargo test`
+
+### Design target
+
+The desired shape is:
+
+JS/Node → thin NAPI adapter → reusable Rust core
+
+Not:
+
+JS-flavored business logic written in Rust
+
+Deleting or replacing the NAPI layer should not delete or rewrite the product logic.

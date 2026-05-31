@@ -1,4 +1,4 @@
-import ChatAttachmentModel from "@/models/chat-attachment";
+import ConversationAttachmentModel from "@/models/conversation-attachment";
 import { expect, test } from "@/test";
 import type { ChatMessage } from "@/types";
 import { materializeAttachments } from "./materialize-attachments";
@@ -20,14 +20,14 @@ test("rehydrates ref to inline data: URL and adds Anthropic cache_control", asyn
     organizationId: agent.organizationId,
   });
   const bytes = Buffer.from("payload bytes", "utf8");
-  const row = await ChatAttachmentModel.create({
+  const row = await ConversationAttachmentModel.create({
     organizationId: conversation.organizationId,
     conversationId: conversation.id,
     uploadedByUserId: conversation.userId,
     originalName: "doc.txt",
     mimeType: "text/plain",
     fileSize: bytes.byteLength,
-    contentHash: ChatAttachmentModel.computeContentHash(bytes),
+    contentHash: ConversationAttachmentModel.computeContentHash(bytes),
     fileData: bytes,
   });
 
@@ -161,14 +161,14 @@ test("refs scoped to a DIFFERENT conversation are silently ignored", async ({
     organizationId: agent.organizationId,
   });
   const bytes = Buffer.from("cross-convo secret", "utf8");
-  const row = await ChatAttachmentModel.create({
+  const row = await ConversationAttachmentModel.create({
     organizationId: otherConvo.organizationId,
     conversationId: otherConvo.id,
     uploadedByUserId: otherConvo.userId,
     originalName: "secret.txt",
     mimeType: "text/plain",
     fileSize: bytes.byteLength,
-    contentHash: ChatAttachmentModel.computeContentHash(bytes),
+    contentHash: ConversationAttachmentModel.computeContentHash(bytes),
     fileData: bytes,
   });
 
@@ -206,14 +206,14 @@ test("batch-loads multiple refs in a single message", async ({
   const ids: string[] = [];
   for (let i = 0; i < 3; i++) {
     const bytes = Buffer.from(`f${i}`, "utf8");
-    const row = await ChatAttachmentModel.create({
+    const row = await ConversationAttachmentModel.create({
       organizationId: conversation.organizationId,
       conversationId: conversation.id,
       uploadedByUserId: conversation.userId,
       originalName: `f${i}.txt`,
       mimeType: "text/plain",
       fileSize: bytes.byteLength,
-      contentHash: ChatAttachmentModel.computeContentHash(bytes),
+      contentHash: ConversationAttachmentModel.computeContentHash(bytes),
       fileData: bytes,
     });
     ids.push(row.id);

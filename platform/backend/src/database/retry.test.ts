@@ -1,7 +1,13 @@
 import { vi } from "vitest";
 import { afterEach, describe, expect, test } from "@/test";
 
-import { isTransientDbError, withDbRetry, wrapPoolWithRetry } from "./retry";
+import {
+  installDbErrorSafetyNet,
+  isTransientDbError,
+  withDbRetry,
+  withTransactionRetry,
+  wrapPoolWithRetry,
+} from "./retry";
 
 // Suppress logger output during tests
 vi.mock("@/logging", () => ({
@@ -9,6 +15,7 @@ vi.mock("@/logging", () => ({
     warn: vi.fn(),
     error: vi.fn(),
     info: vi.fn(),
+    fatal: vi.fn(),
   },
 }));
 
@@ -237,6 +244,24 @@ describe("withDbRetry", () => {
   });
 });
 
+describe("withTransactionRetry", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  test("retries the whole transaction operation on transient errors", async () => {
+    const runTransaction = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("Connection terminated unexpectedly"))
+      .mockResolvedValue("committed");
+
+    const result = await withTransactionRetry(runTransaction);
+
+    expect(result).toBe("committed");
+    expect(runTransaction).toHaveBeenCalledTimes(2);
+  });
+});
+
 describe("wrapPoolWithRetry", () => {
   afterEach(() => {
     vi.restoreAllMocks();
@@ -329,5 +354,76 @@ describe("wrapPoolWithRetry", () => {
     expect(result).toEqual({ rows: [{ id: 1 }], rowCount: 1 });
     // Should be 2 (1 initial + 1 retry), NOT 4+ from double-wrapped retries
     expect(mockQuery).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("installDbErrorSafetyNet", () => {
+  // installDbErrorSafetyNet is idempotent (module-scoped flag), so capture
+  // the handlers once via a process.on spy on the first install, then drive
+  // them directly. Tests are independent because each invokes a captured
+  // handler reference, not a live process event.
+  const processOnSpy = vi.spyOn(process, "on");
+  installDbErrorSafetyNet();
+  const uncaughtHandler = processOnSpy.mock.calls.find(
+    ([event]) => event === "uncaughtException",
+  )?.[1] as (err: unknown) => void;
+  const rejectionHandler = processOnSpy.mock.calls.find(
+    ([event]) => event === "unhandledRejection",
+  )?.[1] as (reason: unknown) => void;
+  processOnSpy.mockRestore();
+
+  let processExitSpy: ReturnType<typeof vi.spyOn>;
+
+  function armExit(): void {
+    processExitSpy = vi.spyOn(process, "exit").mockImplementation(((
+      code?: number,
+    ) => {
+      throw new Error(`process.exit called with ${code}`);
+    }) as never);
+  }
+
+  afterEach(() => {
+    processExitSpy?.mockRestore();
+  });
+
+  test("registers handlers for uncaughtException and unhandledRejection", () => {
+    expect(uncaughtHandler).toBeDefined();
+    expect(rejectionHandler).toBeDefined();
+  });
+
+  test("swallows transient pg errors on uncaughtException without exiting", () => {
+    armExit();
+    uncaughtHandler(new Error("Connection terminated unexpectedly"));
+    uncaughtHandler(new Error("read ECONNRESET"));
+    expect(processExitSpy).not.toHaveBeenCalled();
+  });
+
+  test("exits on non-transient uncaughtException", () => {
+    armExit();
+    expect(() => uncaughtHandler(new Error("Something unrelated"))).toThrow(
+      /process\.exit called with 1/,
+    );
+    expect(processExitSpy).toHaveBeenCalledWith(1);
+  });
+
+  test("swallows transient pg rejections on unhandledRejection without exiting", () => {
+    armExit();
+    rejectionHandler(new Error("Connection terminated"));
+    expect(processExitSpy).not.toHaveBeenCalled();
+  });
+
+  test("exits on non-transient unhandledRejection", () => {
+    armExit();
+    expect(() => rejectionHandler(new Error("not a connection error"))).toThrow(
+      /process\.exit called with 1/,
+    );
+    expect(processExitSpy).toHaveBeenCalledWith(1);
+  });
+
+  test("is idempotent — second call does not register new handlers", () => {
+    const spy = vi.spyOn(process, "on");
+    installDbErrorSafetyNet();
+    expect(spy).not.toHaveBeenCalled();
+    spy.mockRestore();
   });
 });

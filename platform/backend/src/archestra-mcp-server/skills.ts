@@ -32,8 +32,12 @@ import {
   escapeXmlText,
   formatSkillActivation,
 } from "@/skills/skill-activation";
+import { isSkillSandboxAvailableForAgent } from "@/skills/skill-sandbox-availability";
+import {
+  isSkillNameConflict,
+  refineUniqueFilePaths,
+} from "@/skills/validation";
 import { ApiError, type Skill, SkillFileEncodingSchema } from "@/types";
-import { isUniqueConstraintError } from "@/utils/db";
 import {
   defineArchestraTool,
   defineArchestraTools,
@@ -48,8 +52,11 @@ import type { ArchestraContext } from "./types";
  * `list_skills`, `activate_skill`, and `read_skill_file` implement the
  * progressive-disclosure tiers of the Agent Skills spec: `list_skills` returns
  * the catalog, `activate_skill` returns a named skill's SKILL.md body, and
- * bundled resource files are fetched individually via `read_skill_file`.
- * Scripts are returned as readable text — they are not executed.
+ * bundled resource files are fetched individually via `read_skill_file`. To
+ * execute a skill's scripts or shell commands, the sandbox tools
+ * (`create_skill_sandbox`, `run_skill_command`, `get_skill_sandbox_artifact`)
+ * materialize the selected skills into an isolated container and run commands
+ * from the skill root.
  *
  * `create_skill` and `update_skill` let an agent author skills during a
  * conversation. Chat-authored skills are always `personal` to their author;
@@ -81,6 +88,13 @@ const SkillFileInputSchema = z.object({
   path: z
     .string()
     .min(1)
+    .refine(
+      (p) => !p.startsWith("/") && !p.split("/").some((s) => s === ".."),
+      {
+        message:
+          "path must be relative and must not contain directory traversal sequences",
+      },
+    )
     .describe("Resource path, e.g. references/API.md or scripts/run.py"),
   content: z
     .string()
@@ -113,7 +127,8 @@ const CreateSkillSchema = z
           "for docs, `scripts/` for code, `assets/` for other files.",
       ),
   })
-  .strict();
+  .strict()
+  .superRefine((data, ctx) => refineUniqueFilePaths(data.files, ctx));
 
 const UpdateSkillSchema = z
   .object({
@@ -137,7 +152,8 @@ const UpdateSkillSchema = z
           "read_skill_file.",
       ),
   })
-  .strict();
+  .strict()
+  .superRefine((data, ctx) => refineUniqueFilePaths(data.files, ctx));
 
 const registry = defineArchestraTools([
   defineArchestraTool({
@@ -154,17 +170,22 @@ const registry = defineArchestraTools([
         return errorResult("This tool requires an organization context.");
       }
 
-      return listSkillCatalog(ctx);
+      return listSkillCatalog(ctx, context.agent.id);
     },
   }),
   defineArchestraTool({
     shortName: TOOL_ACTIVATE_SKILL_SHORT_NAME,
     title: "Activate Skill",
+    // a static tool description can't know whether the sandbox tools are
+    // enabled, permitted, and assigned to the calling agent, so it does not
+    // mention them. The activate_skill *result* adds an agent-aware sandbox
+    // hint (see formatSkillActivation) only when they are genuinely available.
     description:
       "Load a specialized Agent Skill — a reusable SKILL.md instruction set. " +
       "Call list_skills first to discover what is available, then call this " +
       "with a skill name to load its full instructions. Activate a skill " +
-      "before attempting the task it covers.",
+      "before attempting the task it covers. To inspect bundled resources " +
+      "use read_skill_file.",
     schema: ActivateSkillSchema,
     async handler({ args, context }) {
       const ctx = requireOrgContext(context);
@@ -189,7 +210,13 @@ const registry = defineArchestraTools([
         "[Skills] Skill activated",
       );
 
-      return successResult(formatSkillActivation({ skill, files }));
+      return successResult(
+        formatSkillActivation({
+          skill,
+          files,
+          canRunSandbox: await canRunSkillSandbox(ctx, context.agent.id),
+        }),
+      );
     },
   }),
   defineArchestraTool({
@@ -197,8 +224,9 @@ const registry = defineArchestraTools([
     title: "Read Skill File",
     description:
       "Read a bundled resource file from a skill. Paths come from the " +
-      "<skill_resources> list returned by activate_skill. Scripts are " +
-      "returned as readable text — they are not executed.",
+      "<skill_resources> list returned by activate_skill. This returns file " +
+      "text for inspection only — to execute a script or run shell commands, " +
+      "create a sandbox with create_skill_sandbox and call run_skill_command.",
     schema: ReadSkillFileSchema,
     async handler({ args, context }) {
       const ctx = requireOrgContext(context);
@@ -229,7 +257,7 @@ const registry = defineArchestraTools([
       }
 
       return successResult(
-        `<skill_file skill="${escapeXmlAttr(skill.name)}" path="${escapeXmlAttr(file.path)}">\n${file.content}\n</skill_file>`,
+        `<skill_file skill="${escapeXmlAttr(skill.name)}" path="${escapeXmlAttr(file.path)}">\n${escapeXmlText(file.content)}\n</skill_file>`,
       );
     },
   }),
@@ -336,7 +364,7 @@ const registry = defineArchestraTools([
             args.files === undefined ? undefined : toSkillFiles(args.files),
         });
       } catch (error) {
-        if (isUniqueConstraintError(error, "skills_org_name_idx")) {
+        if (isSkillNameConflict(error)) {
           return errorResult(`A skill named "${parsed.name}" already exists.`);
         }
         throw error;
@@ -378,14 +406,31 @@ function requireOrgContext(context: ArchestraContext): SkillReadContext | null {
   return { organizationId: context.organizationId, userId: context.userId };
 }
 
+/** `isSkillSandboxAvailableForAgent` for callers that only hold a read context. */
+async function canRunSkillSandbox(
+  ctx: SkillReadContext,
+  agentId: string | undefined,
+): Promise<boolean> {
+  if (ctx.userId === undefined) return false;
+  const checker = await getSkillPermissionChecker({
+    userId: ctx.userId,
+    organizationId: ctx.organizationId,
+  });
+  return isSkillSandboxAvailableForAgent({ checker, agentId });
+}
+
 /**
- * Look up a skill by name and return it only if the caller can access it under
- * the skill's scope. Returns null otherwise — callers surface a generic
- * "no skill named …" so an inaccessible skill's existence is not leaked.
+ * Look up a skill by name and return the one the caller can access. Name
+ * uniqueness is per-scope, so a name can resolve to several rows (the caller's
+ * own personal skill plus a team/org skill of the same name); we keep only the
+ * accessible ones and break ties by scope precedence — a caller's own
+ * `personal` skill shadows a `team` one, which shadows `org`. Returns null when
+ * none are accessible, so callers surface a generic "no skill named …" without
+ * leaking an inaccessible skill's existence.
  */
 async function findAccessibleSkill(ctx: SkillReadContext, name: string) {
-  const skill = await SkillModel.findByName(ctx.organizationId, name);
-  if (!skill) return null;
+  const candidates = await SkillModel.findAllByName(ctx.organizationId, name);
+  if (candidates.length === 0) return null;
 
   const isSkillAdmin =
     ctx.userId !== undefined &&
@@ -395,13 +440,44 @@ async function findAccessibleSkill(ctx: SkillReadContext, name: string) {
         organizationId: ctx.organizationId,
       })
     ).isAdmin;
-  const hasAccess = await SkillTeamModel.userHasSkillAccess({
-    organizationId: ctx.organizationId,
-    userId: ctx.userId,
-    skill,
-    isSkillAdmin,
-  });
-  return hasAccess ? skill : null;
+
+  const accessible: Skill[] = [];
+  for (const skill of candidates) {
+    const hasAccess = await SkillTeamModel.userHasSkillAccess({
+      organizationId: ctx.organizationId,
+      userId: ctx.userId,
+      skill,
+      isSkillAdmin,
+    });
+    if (hasAccess) accessible.push(skill);
+  }
+  if (accessible.length === 0) return null;
+
+  accessible.sort(
+    (a, b) => scopePrecedence(a, ctx.userId) - scopePrecedence(b, ctx.userId),
+  );
+  return accessible[0];
+}
+
+/**
+ * Lower wins: a caller's *own* personal skill shadows a shared one of the same
+ * name. A personal skill authored by someone else (visible only because the
+ * caller is a skill-admin) must never shadow a shared skill, so it ranks last.
+ */
+function scopePrecedence(
+  skill: Pick<Skill, "scope" | "authorId">,
+  userId: string | undefined,
+): number {
+  switch (skill.scope) {
+    case "personal":
+      return skill.authorId === userId ? 0 : 3;
+    case "team":
+      return 1;
+    case "org":
+      return 2;
+    default:
+      return 4;
+  }
 }
 
 /**
@@ -455,15 +531,18 @@ function toSkillFiles(
   }));
 }
 
-async function listSkillCatalog(ctx: SkillReadContext) {
-  const isSkillAdmin =
-    ctx.userId !== undefined &&
-    (
-      await getSkillPermissionChecker({
-        userId: ctx.userId,
-        organizationId: ctx.organizationId,
-      })
-    ).isAdmin;
+async function listSkillCatalog(
+  ctx: SkillReadContext,
+  agentId: string | undefined,
+) {
+  const checker =
+    ctx.userId !== undefined
+      ? await getSkillPermissionChecker({
+          userId: ctx.userId,
+          organizationId: ctx.organizationId,
+        })
+      : null;
+  const isSkillAdmin = checker?.isAdmin ?? false;
   const accessibleSkillIds = isSkillAdmin
     ? undefined
     : await SkillTeamModel.getUserAccessibleSkillIds({
@@ -490,9 +569,20 @@ async function listSkillCatalog(ctx: SkillReadContext) {
     )
     .join("\n");
 
+  // only advertise the sandbox path when it would actually work: the feature
+  // is enabled, the caller can execute skills, and the sandbox tools are
+  // assigned to this agent (so they appear in its tools/list).
+  const instructions = (await isSkillSandboxAvailableForAgent({
+    checker,
+    agentId,
+  }))
+    ? "Call activate_skill with one of these names to load its instructions. " +
+      "To run a skill's scripts or shell commands, create_skill_sandbox with " +
+      "the skill name, then run_skill_command."
+    : "Call activate_skill with one of these names to load its instructions.";
+
   return successResult(
-    `<available_skills>\n${catalog}\n</available_skills>\n` +
-      "Call activate_skill with one of these names to load its instructions.",
+    `<available_skills>\n${catalog}\n</available_skills>\n${instructions}`,
   );
 }
 

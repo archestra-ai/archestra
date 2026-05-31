@@ -90,7 +90,7 @@ describe("RolePermissionBuilder", () => {
 
     await user.click(screen.getByRole("button", { name: "Knowledge" }));
 
-    const createCheckbox = screen.getByLabelText("Create");
+    const createCheckbox = document.getElementById("knowledgeSource-create");
     expect(createCheckbox).toBeDisabled();
 
     expect(

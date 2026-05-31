@@ -1,5 +1,5 @@
 import logger from "@/logging";
-import ChatAttachmentModel from "@/models/chat-attachment";
+import ConversationAttachmentModel from "@/models/conversation-attachment";
 import type { ChatMessage } from "@/types";
 import {
   ATTACHMENT_URL_PREFIX,
@@ -39,7 +39,7 @@ export async function cloneAttachmentsForFork(args: {
     return sourceMessages;
   }
 
-  const allRows = await ChatAttachmentModel.findByIdsWithData(
+  const allRows = await ConversationAttachmentModel.findByIdsWithData(
     Array.from(sourceIds),
   );
   // ACL: only clone rows that actually belong to the source conversation.
@@ -55,7 +55,7 @@ export async function cloneAttachmentsForFork(args: {
   const idMap = new Map<string, string>();
   for (const row of rows) {
     try {
-      const cloned = await ChatAttachmentModel.create({
+      const cloned = await ConversationAttachmentModel.create({
         organizationId: newOrganizationId,
         conversationId: newConversationId,
         uploadedByUserId: newUploadedByUserId,

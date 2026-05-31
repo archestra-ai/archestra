@@ -58,10 +58,14 @@ import { seedRequiredStartingData } from "@/database/seed";
 import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
 import logger from "@/logging";
 import { enterpriseLicenseMiddleware } from "@/middleware";
+import { initAuditDecisions } from "@/middleware/audit-decisions";
+import { registerAuditLogHook } from "@/middleware/audit-log-hook";
+import { initAuditRegistry } from "@/middleware/audit-log-registry";
 import OrganizationModel from "@/models/organization";
 import { initializeObservabilityMetrics } from "@/observability";
 import { enrichOpenApiWithRbac } from "@/openapi/enrich-openapi-with-rbac";
 import { systemKeyManager } from "@/services/system-key-manager";
+import { skillSandboxRuntimeService } from "@/skills-sandbox/skill-sandbox-runtime-service";
 import { taskQueueService } from "@/task-queue";
 import { registerTaskHandlers } from "@/task-queue/handlers";
 import {
@@ -84,10 +88,12 @@ import {
 } from "@/types";
 import websocketService from "@/websocket";
 import * as routes from "./routes";
+import { publicConfigRoutes } from "./routes/config";
 import {
   HEALTH_PATH,
   MCP_GATEWAY_PREFIX,
   READY_PATH,
+  SKILL_MARKETPLACE_PREFIX,
 } from "./routes/route-paths";
 import {
   UserConfigFieldDefaultSchema,
@@ -777,12 +783,15 @@ const startWebServer = async () => {
    * - /health: Kubernetes liveness probe
    * - /ready: Kubernetes readiness probe (checks database connectivity)
    * - GET /v1/mcp/*: MCP Gateway SSE polling (happens every second)
+   * - /skills/m/*: public marketplace git endpoint — URL contains raw share token
    */
   const shouldSkipRequestLogging = (url: string, method: string): boolean => {
     if (url === HEALTH_PATH || url === READY_PATH) return true;
     // Skip MCP Gateway SSE polling (GET requests to /v1/mcp/*)
     if (method === "GET" && url.startsWith(`${MCP_GATEWAY_PREFIX}/`))
       return true;
+    // token is embedded in the URL path; never log it
+    if (url.startsWith(`${SKILL_MARKETPLACE_PREFIX}/`)) return true;
     return false;
   };
 
@@ -819,6 +828,14 @@ const startWebServer = async () => {
     Sentry.setupFastifyErrorHandler(fastify);
   }
 
+  if (config.maintenanceMode) {
+    await registerMaintenanceModeRoutes(fastify);
+    await fastify.listen({ port, host });
+    fastify.log.info(`${name} started in maintenance mode on port ${port}`);
+    registerWebServerShutdown(fastify);
+    return;
+  }
+
   /**
    * The auth plugin is responsible for authentication and authorization checks
    *
@@ -833,6 +850,13 @@ const startWebServer = async () => {
    * This should be registered before routes to ensure enterprise-only features are checked properly.
    */
   fastify.register(enterpriseLicenseMiddleware);
+
+  // Extend the audit registry and audit decisions with EE entries
+  // (identity providers) if applicable, then register the audit hooks.
+  // Done before routes so the hooks are active for all subsequent requests.
+  await initAuditRegistry();
+  await initAuditDecisions();
+  registerAuditLogHook(fastify);
 
   try {
     // Initialize database connection first
@@ -880,6 +904,12 @@ const startWebServer = async () => {
     // Start the sandboxed code runtime in the background (non-blocking pre-warm).
     codeRuntimeService.init().catch((error) => {
       logger.error({ err: error }, "Failed to initialize code runtime");
+    });
+    skillSandboxRuntimeService.init().catch((error) => {
+      logger.error(
+        { err: error },
+        "Failed to initialize skill sandbox runtime",
+      );
     });
 
     // Initialize incoming email provider (if configured)
@@ -983,93 +1013,113 @@ const startWebServer = async () => {
     websocketService.start(fastify.server);
     fastify.log.info("WebSocket service started");
 
-    // Graceful shutdown handling
-    const gracefulShutdown = async (signal: string) => {
-      fastify.log.info(`Received ${signal}, shutting down gracefully...`);
-
-      try {
-        // PRIORITY: Close servers FIRST to release ports immediately
-        // This prevents EADDRINUSE errors during hot-reload when the new server starts
-        // before cleanup operations complete
-
-        // Close metrics server (releases port 9050)
-        if (metricsServerInstance) {
-          await metricsServerInstance.close();
-          fastify.log.info("Metrics server closed");
-        }
-
-        // Close main server (releases port 9000)
-        await fastify.close();
-        fastify.log.info("Main server closed");
-
-        // Close WebSocket server
-        websocketService.stop();
-
-        // Clear email subscription renewal interval
-        clearInterval(emailRenewalIntervalId);
-        clearInterval(processedEmailCleanupIntervalId);
-        fastify.log.info("Email background job intervals cleared");
-
-        // Stop cache manager's background cleanup
-        cacheManager.shutdown();
-
-        // Stop accepting new code-runtime runs
-        await codeRuntimeService.shutdown();
-
-        // Stop task queue worker (waits for in-flight tasks to drain)
-        if (shouldRunWorker) {
-          await taskQueueService.stopWorker();
-        }
-
-        // Track which cleanup operations have completed
-        const completedCleanups = new Set<"emailProvider" | "chatOps">();
-
-        // Run remaining cleanup in parallel with a timeout to avoid blocking shutdown
-        const cleanupPromise = Promise.allSettled([
-          cleanupEmailProvider().then(() => {
-            completedCleanups.add("emailProvider");
-            fastify.log.info("Email provider cleanup completed");
-          }),
-          chatOpsManager.cleanup().then(() => {
-            completedCleanups.add("chatOps");
-            fastify.log.info("ChatOps provider cleanup completed");
-          }),
-        ]).then(() => "completed" as const);
-
-        // Wait for cleanup with timeout, then exit anyway
-        const allCleanupNames = ["emailProvider", "chatOps"] as const;
-        const result = await Promise.race([
-          cleanupPromise,
-          new Promise<"timeout">((resolve) =>
-            setTimeout(() => resolve("timeout"), SHUTDOWN_CLEANUP_TIMEOUT_MS),
-          ),
-        ]);
-
-        if (result === "timeout") {
-          const pendingCleanups = allCleanupNames.filter(
-            (name) => !completedCleanups.has(name),
-          );
-          fastify.log.warn(
-            { pendingCleanups },
-            "Cleanup timed out, proceeding with shutdown",
-          );
-        }
-
-        process.exit(0);
-      } catch (error) {
-        fastify.log.error({ error }, "Error during shutdown");
-        process.exit(1);
-      }
-    };
-
-    // Handle shutdown signals
-    process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
-    process.on("SIGINT", () => gracefulShutdown("SIGINT"));
+    registerWebServerShutdown(fastify, {
+      emailRenewalIntervalId,
+      processedEmailCleanupIntervalId,
+    });
   } catch (err) {
     fastify.log.error(err);
     process.exit(1);
   }
 };
+
+async function registerMaintenanceModeRoutes(
+  fastify: FastifyInstanceWithZod,
+): Promise<void> {
+  await fastify.register(fastifyCors, {
+    origin: corsOrigins,
+    methods: ["GET", "OPTIONS"],
+    allowedHeaders: [
+      "Content-Type",
+      "X-Requested-With",
+      "Cookie",
+      apiKeyAuthorizationHeaderName,
+    ],
+    exposedHeaders: ["Set-Cookie"],
+    credentials: true,
+  });
+  await fastify.register(routes.healthRoutes);
+  await fastify.register(publicConfigRoutes);
+}
+
+function registerWebServerShutdown(
+  fastify: FastifyInstanceWithZod,
+  intervalIds: {
+    emailRenewalIntervalId?: NodeJS.Timeout;
+    processedEmailCleanupIntervalId?: NodeJS.Timeout;
+  } = {},
+): void {
+  const gracefulShutdown = async (signal: string) => {
+    fastify.log.info(`Received ${signal}, shutting down gracefully...`);
+
+    try {
+      if (metricsServerInstance) {
+        await metricsServerInstance.close();
+        fastify.log.info("Metrics server closed");
+      }
+
+      await fastify.close();
+      fastify.log.info("Main server closed");
+
+      websocketService.stop();
+
+      if (intervalIds.emailRenewalIntervalId) {
+        clearInterval(intervalIds.emailRenewalIntervalId);
+      }
+      if (intervalIds.processedEmailCleanupIntervalId) {
+        clearInterval(intervalIds.processedEmailCleanupIntervalId);
+      }
+
+      cacheManager.shutdown();
+
+      // Stop accepting new code-runtime / skill-sandbox runs
+      await codeRuntimeService.shutdown();
+      await skillSandboxRuntimeService.shutdown();
+
+      if (shouldRunWorker) {
+        await taskQueueService.stopWorker();
+      }
+
+      const completedCleanups = new Set<"emailProvider" | "chatOps">();
+      const cleanupPromise = Promise.allSettled([
+        cleanupEmailProvider().then(() => {
+          completedCleanups.add("emailProvider");
+          fastify.log.info("Email provider cleanup completed");
+        }),
+        chatOpsManager.cleanup().then(() => {
+          completedCleanups.add("chatOps");
+          fastify.log.info("ChatOps provider cleanup completed");
+        }),
+      ]).then(() => "completed" as const);
+
+      const allCleanupNames = ["emailProvider", "chatOps"] as const;
+      const result = await Promise.race([
+        cleanupPromise,
+        new Promise<"timeout">((resolve) =>
+          setTimeout(() => resolve("timeout"), SHUTDOWN_CLEANUP_TIMEOUT_MS),
+        ),
+      ]);
+
+      if (result === "timeout") {
+        const pendingCleanups = allCleanupNames.filter(
+          (cleanupName) => !completedCleanups.has(cleanupName),
+        );
+        fastify.log.warn(
+          { pendingCleanups },
+          "Cleanup timed out, proceeding with shutdown",
+        );
+      }
+
+      process.exit(0);
+    } catch (error) {
+      fastify.log.error({ error }, "Error during shutdown");
+      process.exit(1);
+    }
+  };
+
+  process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
+  process.on("SIGINT", () => gracefulShutdown("SIGINT"));
+}
 
 /**
  * Starts the process in worker-only mode.
@@ -1110,6 +1160,12 @@ const startWorker = async () => {
     // Pre-warm the code runtime so scheduled agents avoid a cold first run.
     codeRuntimeService.init().catch((error) => {
       logger.error({ err: error }, "Failed to initialize code runtime");
+    });
+    skillSandboxRuntimeService.init().catch((error) => {
+      logger.error(
+        { err: error },
+        "Failed to initialize skill sandbox runtime",
+      );
     });
 
     // Worker server for Kubernetes probes, Prometheus scraping,
@@ -1163,6 +1219,7 @@ const startWorker = async () => {
         await healthServer.close();
         cacheManager.shutdown();
         await codeRuntimeService.shutdown();
+        await skillSandboxRuntimeService.shutdown();
         await taskQueueService.stopWorker();
         clearTimeout(forceExitTimeout);
         process.exit(0);
@@ -1180,6 +1237,13 @@ const startWorker = async () => {
     process.exit(1);
   }
 };
+
+// Dagger SDK v0.20.8 has a bug in bin.js:198-201 where it throws inside a
+// .catch() callback, creating an unhandled rejection that is never awaited.
+// This handler logs those leaks and keeps the server alive.
+process.on("unhandledRejection", (reason) => {
+  logger.error({ err: reason }, "Unhandled promise rejection");
+});
 
 /**
  * Only start the server if this file is being run directly (not imported)

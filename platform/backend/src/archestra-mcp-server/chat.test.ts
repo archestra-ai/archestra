@@ -10,6 +10,7 @@ import {
   ChatOpsThreadAgentOverrideModel,
   ConversationModel,
   LlmProviderApiKeyModel,
+  LlmProviderApiKeyModelLinkModel,
   ModelModel,
   OrganizationModel,
 } from "@/models";
@@ -229,6 +230,11 @@ describe("chat tool execution", () => {
       inputModalities: null,
       outputModalities: null,
     });
+    await LlmProviderApiKeyModelLinkModel.syncModelsForApiKey(
+      targetApiKey.id,
+      [{ id: targetModel.id, modelId: targetModel.modelId }],
+      "anthropic",
+    );
     const targetAgent = await makeAgent({
       name: "Swap Target Agent",
       agentType: "agent",
@@ -525,6 +531,11 @@ describe("chat tool execution", () => {
       inputModalities: null,
       outputModalities: null,
     });
+    await LlmProviderApiKeyModelLinkModel.syncModelsForApiKey(
+      defaultApiKey.id,
+      [{ id: defaultModel.id, modelId: defaultModel.modelId }],
+      "openai",
+    );
     const defaultAgent = await makeAgent({
       name: "Default Router Agent",
       agentType: "agent",

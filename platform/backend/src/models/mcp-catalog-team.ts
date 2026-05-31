@@ -1,5 +1,5 @@
 import { and, eq, inArray, isNull, or, sql } from "drizzle-orm";
-import db, { schema } from "@/database";
+import db, { schema, withDbTransaction } from "@/database";
 import logger from "@/logging";
 
 class McpCatalogTeamModel {
@@ -119,7 +119,7 @@ class McpCatalogTeamModel {
       { catalogId, teamCount: teamIds.length },
       "McpCatalogTeamModel.syncCatalogTeams: syncing teams",
     );
-    await db.transaction(async (tx) => {
+    await withDbTransaction(async (tx) => {
       await tx
         .delete(schema.mcpCatalogTeamsTable)
         .where(eq(schema.mcpCatalogTeamsTable.catalogId, catalogId));

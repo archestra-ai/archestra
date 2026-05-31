@@ -1,9 +1,8 @@
 import { PermissionsSchema, RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import MemberModel from "@/models/member";
-import OrganizationRoleModel from "@/models/organization-role";
-import { ApiError, constructResponseSchema } from "@/types";
+import { getUserPermissions, listImpersonableUsers } from "@/services/user";
+import { constructResponseSchema } from "@/types";
 
 const ImpersonableUserSchema = z.object({
   id: z.string(),
@@ -24,19 +23,10 @@ const userRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ user, organizationId }, reply) => {
-      // Get user's member record to find their role
-      const member = await MemberModel.getByUserId(user.id, organizationId);
-
-      if (!member || !member.role) {
-        throw new ApiError(404, "User is not a member of any organization");
-      }
-
-      // Get permissions for the user's role
-      const permissions = await OrganizationRoleModel.getPermissions(
-        member.role,
+      const permissions = await getUserPermissions({
+        userId: user.id,
         organizationId,
-      );
-
+      });
       return reply.send(permissions);
     },
   );
@@ -53,9 +43,9 @@ const userRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ user, organizationId }, reply) => {
-      const candidates = await MemberModel.findImpersonationCandidates({
+      const candidates = await listImpersonableUsers({
         organizationId,
-        excludeUserId: user.id,
+        currentUserId: user.id,
       });
       return reply.send(candidates);
     },

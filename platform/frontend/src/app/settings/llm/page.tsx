@@ -96,7 +96,6 @@ export default function LlmSettingsPage() {
     pricePerMillionInput: model.pricePerMillionInput ?? "0",
     pricePerMillionOutput: model.pricePerMillionOutput ?? "0",
     isFree: model.isFree,
-    isFastest: model.isFastest,
     isBest: model.isBest,
   }));
 

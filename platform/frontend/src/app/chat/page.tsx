@@ -7,6 +7,7 @@ import {
   AlertTriangle,
   Bot,
   CornerDownLeftIcon,
+  Download,
   FileText,
   Globe,
   MicIcon,
@@ -93,7 +94,6 @@ import {
   clearSsoSignInRedirectPath,
   getSsoSignInRedirectPath,
 } from "@/lib/auth/sso-sign-in-attempt";
-import { useRecentlyGeneratedTitles } from "@/lib/chat/chat.hook";
 import {
   fetchConversationEnabledTools,
   useCompactConversation,
@@ -118,7 +118,8 @@ import {
   getManualCompactionSkippedMessage,
   mergePersistedMessageMetadata,
 } from "@/lib/chat/chat-utils";
-import { useChatSession } from "@/lib/chat/global-chat.context";
+import { downloadConversationMarkdown } from "@/lib/chat/export-markdown";
+import { useChatSession, useGlobalChat } from "@/lib/chat/global-chat.context";
 import {
   applyPendingActions,
   clearPendingActions,
@@ -627,14 +628,8 @@ export function ChatPageContent({
     setForkAgentId(accessibleSharedAgentId);
   }, [accessibleSharedAgentId, isForkDialogOpen]);
 
-  // Track title generation for typing animation in the header
-  const conversationForTitleTracking = useMemo(
-    () =>
-      conversation ? [{ id: conversation.id, title: conversation.title }] : [],
-    [conversation],
-  );
-  const { recentlyGeneratedTitles: headerAnimatingTitles } =
-    useRecentlyGeneratedTitles(conversationForTitleTracking);
+  // Conversations whose title should play the typing animation (shared via chat context)
+  const { animatingTitleIds: headerAnimatingTitles } = useGlobalChat();
 
   // Initialize artifact panel state when conversation loads or changes
   useEffect(() => {
@@ -1482,7 +1477,10 @@ export function ChatPageContent({
 
   // Handle creating conversation from browser URL input (when no conversation exists)
   const createInitialConversation = useCallback(
-    (onSuccess?: (newConversation: { id: string }) => void | Promise<void>) => {
+    (
+      onSuccess?: (newConversation: { id: string }) => void | Promise<void>,
+      title?: string,
+    ) => {
       if (createConversationMutation.isPending) {
         return false;
       }
@@ -1491,6 +1489,7 @@ export function ChatPageContent({
         agentId: initialAgentId,
         modelId: initialModel,
         chatApiKeyId: initialApiKeyId,
+        title,
       });
       if (!input) {
         return false;
@@ -1556,6 +1555,21 @@ export function ChatPageContent({
     forkConversationMutation,
     forkSharedConversationMutation,
     router,
+  ]);
+
+  const handleExportMarkdown = useCallback(() => {
+    if (!conversationId || messages.length === 0) return;
+    downloadConversationMarkdown({
+      messages,
+      conversationId,
+      title: conversation?.title,
+      agentName: conversation?.agent?.name,
+    });
+  }, [
+    conversationId,
+    messages,
+    conversation?.title,
+    conversation?.agent?.name,
   ]);
 
   // Handle initial agent change (when no conversation exists)
@@ -1641,7 +1655,7 @@ export function ChatPageContent({
         }
 
         selectConversation(newConversation.id);
-      });
+      }, message.text?.trim());
     },
     [
       isPlaywrightSetupVisible,
@@ -1957,6 +1971,12 @@ export function ChatPageContent({
                               Share
                             </>
                           )}
+                        </DropdownMenuItem>
+                      )}
+                      {conversationId && messages.length > 0 && (
+                        <DropdownMenuItem onSelect={handleExportMarkdown}>
+                          <Download className="h-4 w-4" />
+                          Export Markdown
                         </DropdownMenuItem>
                       )}
                       <DropdownMenuItem
@@ -2344,25 +2364,39 @@ export function ChatPageContent({
             onClose={closeRightPanel}
             canShowBrowser={showBrowserButton && !isPlaywrightSetupVisible}
             headerActions={
-              canManageShare ? (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setIsShareDialogOpen(true)}
-                  className="text-xs h-7"
-                >
-                  {isShared ? (
-                    <>
-                      <Users className="h-3 w-3 mr-1 text-primary" />
-                      <span className="text-primary">Shared</span>
-                    </>
-                  ) : (
-                    <>
-                      <Share2 className="h-3 w-3 mr-1" />
-                      Share
-                    </>
+              conversationId && messages.length > 0 ? (
+                <div className="flex items-center gap-1">
+                  {canManageShare && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setIsShareDialogOpen(true)}
+                      className="text-xs h-7"
+                    >
+                      {isShared ? (
+                        <>
+                          <Users className="h-3 w-3 mr-1 text-primary" />
+                          <span className="text-primary">Shared</span>
+                        </>
+                      ) : (
+                        <>
+                          <Share2 className="h-3 w-3 mr-1" />
+                          Share
+                        </>
+                      )}
+                    </Button>
                   )}
-                </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleExportMarkdown}
+                    className="text-xs h-7"
+                    title="Download chat as Markdown"
+                  >
+                    <Download className="h-3 w-3 mr-1" />
+                    Markdown
+                  </Button>
+                </div>
               ) : undefined
             }
             artifact={conversation?.artifact}

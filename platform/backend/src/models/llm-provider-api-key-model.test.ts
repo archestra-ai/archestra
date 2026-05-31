@@ -282,5 +282,48 @@ describe("LlmProviderApiKeyModelLinkModel", () => {
       expect(linkedModels).toHaveLength(1);
       expect(linkedModels[0].id).toBe(model.id);
     });
+
+    test("getLinkedModelSelectionKeys returns only existing links", async ({
+      makeOrganization,
+      makeSecret,
+      makeLlmProviderApiKey,
+    }) => {
+      const org = await makeOrganization();
+      const secret = await makeSecret();
+      const apiKey = await makeLlmProviderApiKey(org.id, secret.id, {
+        provider: "openai",
+      });
+      const otherApiKey = await makeLlmProviderApiKey(org.id, secret.id, {
+        provider: "openai",
+      });
+
+      const model = await ModelModel.create({
+        externalId: "openai/gpt-5.5",
+        provider: "openai",
+        modelId: "gpt-5.5",
+        description: "GPT-5.5",
+        contextLength: 128000,
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+        supportsToolCalling: true,
+        promptPricePerToken: "0.000002",
+        completionPricePerToken: "0.000008",
+        lastSyncedAt: new Date(),
+      });
+
+      await LlmProviderApiKeyModelLinkModel.syncModelsForApiKey(
+        apiKey.id,
+        [{ id: model.id, modelId: model.modelId }],
+        "openai",
+      );
+
+      const linkedSelections =
+        await LlmProviderApiKeyModelLinkModel.getLinkedModelSelectionKeys([
+          { modelId: model.id, apiKeyId: apiKey.id },
+          { modelId: model.id, apiKeyId: otherApiKey.id },
+        ]);
+
+      expect(linkedSelections).toEqual(new Set([`${apiKey.id}:${model.id}`]));
+    });
   });
 });

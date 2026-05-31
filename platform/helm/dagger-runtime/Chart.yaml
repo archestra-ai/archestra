@@ -3,10 +3,10 @@ name: archestra-dagger-runtime
 description: Hardened Dagger runtime for Archestra code execution
 type: application
 version: 0.1.0
-appVersion: "0.20.8"
+appVersion: "0.21.0"
 
 dependencies:
   - name: dagger-helm
     alias: dagger
-    version: "0.20.8"
+    version: "0.21.0"
     repository: oci://registry.dagger.io

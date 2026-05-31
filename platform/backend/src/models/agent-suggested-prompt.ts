@@ -1,5 +1,5 @@
 import { and, asc, eq, inArray } from "drizzle-orm";
-import db, { schema } from "@/database";
+import db, { schema, withDbTransaction } from "@/database";
 import { notDeleted } from "@/database/schemas/_soft-delete";
 import type { SuggestedPromptInput } from "@/types";
 
@@ -12,7 +12,7 @@ class AgentSuggestedPromptModel {
     agentId: string,
     prompts: SuggestedPromptInput[],
   ): Promise<void> {
-    await db.transaction(async (tx) => {
+    await withDbTransaction(async (tx) => {
       await tx
         .delete(schema.agentSuggestedPromptsTable)
         .where(eq(schema.agentSuggestedPromptsTable.agentId, agentId));

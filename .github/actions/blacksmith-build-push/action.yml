@@ -28,6 +28,10 @@ inputs:
     description: Build outputs configuration.
     required: false
     default: ""
+  target:
+    description: Optional Dockerfile target stage.
+    required: false
+    default: ""
   network:
     description: Network mode for the build.
     required: false
@@ -64,6 +68,7 @@ runs:
         load: ${{ inputs.load }}
         tags: ${{ inputs.tags }}
         outputs: ${{ inputs.outputs }}
+        target: ${{ inputs.target }}
         network: ${{ inputs.network }}
         build-args: ${{ inputs.build-args }}
         secrets: ${{ inputs.secrets }}

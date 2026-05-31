@@ -176,6 +176,13 @@ jobs:
           # allow-licenses: MIT
           license-check: "false"
           comment-summary-in-pr: on-failure
+          # GHSA-82j2-j2ch-gfr8 (rustls-webpki <0.103.13 CRL-parsing DoS) is a
+          # transitive dep of dagger-sdk, which pins reqwest 0.11 + rustls-tls
+          # (rustls 0.21 caps rustls-webpki at <0.102) — no patched version is
+          # reachable. The Dagger client only does TLS against a trusted local
+          # engine session, so attacker-controlled CRL parsing is not reachable.
+          # Revisit once dagger-sdk moves to reqwest 0.12 / rustls 0.23.
+          allow-ghsas: GHSA-82j2-j2ch-gfr8
 
   dependency-review-merge-group:
     name: Dependency Review
@@ -252,6 +259,31 @@ jobs:
         uses: ./.github/actions/setup-env
         with:
           working-directory: ./platform
+
+      - name: Setup Rust
+        run: |
+          rustup show
+          rustup target add x86_64-unknown-linux-musl aarch64-unknown-linux-musl
+
+      - name: Install Rust musl toolchain dependencies
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+
+      - name: Verify Dagger version sync
+        run: ./scripts/check-dagger-version-sync.sh
+
+      - name: Rust musl checks
+        working-directory: ./platform/archestra-rs
+        env:
+          CC_x86_64_unknown_linux_musl: musl-gcc
+        run: |
+          cargo check --workspace --locked --target x86_64-unknown-linux-musl
+
+      - name: Install cargo-deny
+        run: cargo install cargo-deny --locked
+
+      - name: Rust dependency policy
+        working-directory: ./platform/archestra-rs
+        run: cargo deny check --config deny.toml advisories bans licenses sources
 
       # setup-env uses --frozen-lockfile, which skips minimum-release-age checks.
       # --fix-lockfile re-resolves and fails on immature deps (ERR_PNPM_NO_MATURE_MATCHING_VERSION).
@@ -440,6 +472,19 @@ jobs:
           dockerfile: ${{ matrix.dockerfile }}
           load: "true"
           tags: ${{ format('{0}:{1}', matrix.local-tag-prefix, github.sha) }}
+          turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
+          turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
+
+      - name: Build sandbox-rs musl smoke target
+        if: ${{ matrix.use-build-action }}
+        uses: ./.github/actions/build-docker-image
+        with:
+          context: ${{ matrix.context }}
+          dockerfile: ${{ matrix.dockerfile }}
+          target: sandbox-rs-musl-smoke
+          # amd64 only: this is a smoke build, and building arm64 here runs under
+          # QEMU emulation, which makes the Rust release compile 2-3x slower.
+          platforms: linux/amd64
           turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
           turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
 

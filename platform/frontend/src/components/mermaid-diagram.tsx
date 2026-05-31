@@ -9,6 +9,18 @@ interface MermaidDiagramProps {
   id?: string;
 }
 
+function formatMermaidRenderError(error: unknown) {
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+
+  if (typeof error === "string" && error.trim()) {
+    return error;
+  }
+
+  return "The Mermaid diagram could not be rendered.";
+}
+
 export function MermaidDiagram({
   chart,
   id = "mermaid-diagram",
@@ -16,9 +28,11 @@ export function MermaidDiagram({
   const ref = useRef<HTMLDivElement>(null);
   const { theme } = useTheme();
   const [isLoaded, setIsLoaded] = useState(false);
+  const [renderError, setRenderError] = useState<string | null>(null);
 
   useEffect(() => {
     setIsLoaded(false);
+    setRenderError(null);
     const isDark = theme === "dark";
 
     mermaid.initialize({
@@ -54,9 +68,10 @@ export function MermaidDiagram({
     const renderDiagram = async () => {
       if (ref.current) {
         ref.current.replaceChildren();
+        let uniqueId: string | null = null;
         try {
           // Generate a unique ID to avoid conflicts
-          const uniqueId = `${id}-${Date.now()}`;
+          uniqueId = `${id}-${Date.now()}`;
           const { svg } = await mermaid.render(uniqueId, chart);
           if (ref.current) {
             // Parse SVG string via DOMParser to avoid innerHTML
@@ -67,10 +82,12 @@ export function MermaidDiagram({
           }
         } catch (error) {
           console.error("Error rendering mermaid diagram:", error);
+          if (uniqueId) {
+            document.getElementById(uniqueId)?.remove();
+          }
           if (ref.current) {
-            const pre = document.createElement("pre");
-            pre.textContent = chart;
-            ref.current.replaceChildren(pre);
+            ref.current.replaceChildren();
+            setRenderError(formatMermaidRenderError(error));
             setIsLoaded(true);
           }
         }
@@ -86,6 +103,18 @@ export function MermaidDiagram({
       className={`flex justify-center w-full [&_svg]:!max-w-full [&_svg]:!h-auto transition-opacity duration-300 motion-reduce:transition-none ${
         isLoaded ? "opacity-100" : "opacity-0"
       }`}
-    />
+    >
+      {renderError ? (
+        <div
+          className="w-full rounded-md border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-700 dark:text-red-300"
+          role="alert"
+        >
+          <p className="font-medium">Unable to render Mermaid diagram</p>
+          <pre className="mt-2 whitespace-pre-wrap break-words font-mono text-xs">
+            {renderError}
+          </pre>
+        </div>
+      ) : null}
+    </div>
   );
 }

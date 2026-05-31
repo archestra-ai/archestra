@@ -4,20 +4,38 @@ set -eu
 root_dir="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 dockerfile="$root_dir/Dockerfile"
 cargo_toml="$root_dir/archestra-rs/sandbox-core/Cargo.toml"
+archestra_chart="$root_dir/helm/archestra/Chart.yaml"
+dagger_runtime_chart="$root_dir/helm/dagger-runtime/Chart.yaml"
+
+# extract the dagger-helm dependency version from a Chart.yaml, tolerant of
+# field order and indentation within the dependency block.
+dagger_helm_chart_version() {
+  awk '
+    /^[[:space:]]*- name: dagger-helm$/ { found=1; next }
+    found && /^[[:space:]]*- name:/ { exit }
+    found && /^[[:space:]]*version:[[:space:]]*"/ {
+      gsub(/^[[:space:]]*version:[[:space:]]*"|"[[:space:]]*$/, "")
+      print; exit
+    }
+  ' "$1"
+}
 
 docker_version="$(sed -n 's/^ARG DAGGER_VERSION=v\{0,1\}\([0-9][^[:space:]]*\)$/\1/p' "$dockerfile")"
 cargo_version="$(sed -n 's/^dagger-sdk = "=\([0-9][^"]*\)"$/\1/p' "$cargo_toml")"
+archestra_chart_version="$(dagger_helm_chart_version "$archestra_chart")"
+dagger_runtime_chart_version="$(dagger_helm_chart_version "$dagger_runtime_chart")"
+dagger_runtime_app_version="$(sed -n 's/^appVersion: "\([0-9][^"]*\)"$/\1/p' "$dagger_runtime_chart")"
 
-case "$docker_version:$cargo_version" in
-  :* | *:)
-    echo "failed to read Dagger versions from Dockerfile and archestra-rs/sandbox-core/Cargo.toml" >&2
+case "$docker_version:$cargo_version:$archestra_chart_version:$dagger_runtime_chart_version:$dagger_runtime_app_version" in
+  *::* | :* | *:)
+    echo "failed to read Dagger versions from Dockerfile, archestra-rs/sandbox-core/Cargo.toml, and Helm charts" >&2
     exit 1
     ;;
-  "$cargo_version:$cargo_version")
+  "$cargo_version:$cargo_version:$cargo_version:$cargo_version:$cargo_version")
     exit 0
     ;;
   *)
-    echo "Dagger version mismatch: Dockerfile has $docker_version, dagger-sdk has $cargo_version" >&2
+    echo "Dagger version mismatch: Dockerfile has $docker_version, dagger-sdk has $cargo_version, archestra chart has $archestra_chart_version, dagger-runtime chart has $dagger_runtime_chart_version, dagger-runtime appVersion has $dagger_runtime_app_version" >&2
     exit 1
     ;;
 esac

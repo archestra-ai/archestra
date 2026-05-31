@@ -153,9 +153,11 @@ describe("Authnz", () => {
         "/v1/model-router/models",
         "/v1/model-router/chat/completions",
         "/v1/model-router/responses",
+        "/v1/model-router/embeddings",
         "/v1/model-router/some-agent-id/models",
         "/v1/model-router/some-agent-id/chat/completions",
         "/v1/model-router/some-agent-id/responses",
+        "/v1/model-router/some-agent-id/embeddings",
       ];
 
       for (const url of modelRouterPaths) {

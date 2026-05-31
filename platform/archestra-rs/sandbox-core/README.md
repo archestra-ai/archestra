@@ -24,7 +24,8 @@ cargo fmt --all                         # format
 The Dagger CLI must be on `PATH` (or pointed to via
 `_EXPERIMENTAL_DAGGER_CLI_BIN`) for execution paths to open an engine session.
 Keep `dagger-sdk` in `Cargo.toml` in sync with `DAGGER_VERSION` in the platform
-`Dockerfile`; `scripts/check-dagger-version-sync.sh` enforces this in CI.
+`Dockerfile` and the managed Dagger Helm charts;
+`scripts/check-dagger-version-sync.sh` enforces this in CI.
 
 ## Tracing
 

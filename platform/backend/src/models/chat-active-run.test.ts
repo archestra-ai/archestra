@@ -84,6 +84,50 @@ test("appends and reads ordered active chat run events", async ({
   ]);
 });
 
+test("appends active chat run events without touching the run every time", async ({
+  makeAgent,
+  makeConversation,
+  makeOrganization,
+  makeUser,
+}) => {
+  const user = await makeUser();
+  const organization = await makeOrganization();
+  const agent = await makeAgent({ organizationId: organization.id });
+  const conversation = await makeConversation(agent.id, {
+    userId: user.id,
+    organizationId: organization.id,
+  });
+  const run = await ActiveChatRunModel.create({
+    conversationId: conversation.id,
+    userId: user.id,
+    organizationId: organization.id,
+  });
+  const oldUpdatedAt = new Date(Date.now() - 60 * 60 * 1000);
+  await db
+    .update(schema.chatActiveRunsTable)
+    .set({ updatedAt: oldUpdatedAt })
+    .where(eq(schema.chatActiveRunsTable.id, run?.id ?? ""));
+
+  await ActiveChatRunModel.appendEvents({
+    runId: run?.id ?? "",
+    seq: 1,
+    payloads: [{ type: "start" }],
+  });
+  const untouchedRun = await ActiveChatRunModel.findById(run?.id ?? "");
+  expect(untouchedRun?.updatedAt.getTime()).toBe(oldUpdatedAt.getTime());
+
+  await ActiveChatRunModel.appendEvents({
+    runId: run?.id ?? "",
+    seq: 2,
+    payloads: [{ type: "finish", finishReason: "stop" }],
+    touchRun: true,
+  });
+  const touchedRun = await ActiveChatRunModel.findById(run?.id ?? "");
+  expect(touchedRun?.updatedAt.getTime()).toBeGreaterThan(
+    oldUpdatedAt.getTime(),
+  );
+});
+
 test("updates stopRequestedAt on the running active chat run", async ({
   makeAgent,
   makeConversation,

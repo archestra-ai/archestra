@@ -1,9 +1,10 @@
 import { eq } from "drizzle-orm";
 import db, { schema } from "@/database";
-import { describe, expect, test } from "@/test";
+import { describe, expect, test, vi } from "@/test";
 import { CreateLimitSchema } from "@/types";
 import AgentTeamModel from "./agent-team";
 import LimitModel, { LimitValidationService } from "./limit";
+import ModelModel from "./model";
 import OrganizationModel from "./organization";
 
 describe("CreateLimitSchema", () => {
@@ -929,6 +930,45 @@ describe("LimitModel", () => {
       // Total cost should be sum of both
       const totalCost = breakdown.reduce((sum, b) => sum + b.cost, 0);
       expect(totalCost).toBeGreaterThanOrEqual(0);
+    });
+
+    test("loads pricing records in one batch", async ({ makeAgent }) => {
+      const agent = await makeAgent({ name: "Test Agent" });
+      const limit = await LimitModel.create({
+        entityType: "agent",
+        entityId: agent.id,
+        limitType: "token_cost",
+        limitValue: 1000000,
+        model: ["batch-model-a", "batch-model-b", "batch-model-c"],
+      });
+      await LimitModel.updateTokenLimitUsage(
+        "agent",
+        agent.id,
+        "batch-model-a",
+        100,
+        50,
+      );
+      await LimitModel.updateTokenLimitUsage(
+        "agent",
+        agent.id,
+        "batch-model-b",
+        200,
+        100,
+      );
+      await LimitModel.updateTokenLimitUsage(
+        "agent",
+        agent.id,
+        "batch-model-c",
+        300,
+        150,
+      );
+      const findByModelIdsOnlySpy = vi.spyOn(ModelModel, "findByModelIdsOnly");
+      const findByModelIdOnlySpy = vi.spyOn(ModelModel, "findByModelIdOnly");
+
+      await LimitModel.getModelUsageBreakdown(limit.id);
+
+      expect(findByModelIdsOnlySpy).toHaveBeenCalledTimes(1);
+      expect(findByModelIdOnlySpy).not.toHaveBeenCalled();
     });
   });
 

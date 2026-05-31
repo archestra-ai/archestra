@@ -62,6 +62,27 @@ export function createOpenAiTestClient(options: OpenAiStubOptions = {}) {
         },
       },
     },
+    embeddings: {
+      create: async (params: OpenAI.Embeddings.EmbeddingCreateParams) => {
+        const inputs = Array.isArray(params.input)
+          ? params.input
+          : [params.input];
+
+        return {
+          object: "list",
+          data: inputs.map((_input, index) => ({
+            object: "embedding",
+            embedding: [0.1, 0.2, 0.3],
+            index,
+          })),
+          model: params.model,
+          usage: {
+            prompt_tokens: inputs.length,
+            total_tokens: inputs.length,
+          },
+        } satisfies OpenAI.Embeddings.CreateEmbeddingResponse;
+      },
+    },
   };
 }
 

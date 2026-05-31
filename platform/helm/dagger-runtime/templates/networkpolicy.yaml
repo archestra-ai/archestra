@@ -31,7 +31,7 @@ spec:
         {{- end }}
       ports:
         - protocol: TCP
-          port: {{ .Values.service.port }}
+          port: {{ .Values.dagger.engine.port | default 1234 }}
     {{- end }}
     {{- with .Values.networkPolicy.ingress.additionalRules }}
     {{- toYaml . | nindent 4 }}

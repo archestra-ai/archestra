@@ -33,6 +33,8 @@ type LimitsCleanupIntervalSqlLiteral =
   | "1 week"
   | "1 month";
 
+type LimitModelUsageRecord = typeof schema.limitModelUsageTable.$inferSelect;
+
 class LimitModel {
   // limitsCleanupIntervalSqlLiterals exists basically to compile-time check set of literals
   static readonly limitsCleanupIntervalSqlLiterals: Record<
@@ -141,38 +143,12 @@ class LimitModel {
   ): Promise<
     Array<{ model: string; tokensIn: number; tokensOut: number; cost: number }>
   > {
-    // Get the model usage records
     const modelUsages = await db
       .select()
       .from(schema.limitModelUsageTable)
       .where(eq(schema.limitModelUsageTable.limitId, limitId));
 
-    // Calculate cost for each model
-    const breakdown = await Promise.all(
-      modelUsages.map(async (usage) => {
-        // Look up model by modelId only — limit usage records don't store provider
-        const modelEntry = await ModelModel.findByModelIdOnly(usage.model);
-        const pricing = ModelModel.getEffectivePricing(modelEntry, usage.model);
-
-        const inputCost =
-          (usage.currentUsageTokensIn *
-            parseFloat(pricing.pricePerMillionInput)) /
-          1_000_000;
-        const outputCost =
-          (usage.currentUsageTokensOut *
-            parseFloat(pricing.pricePerMillionOutput)) /
-          1_000_000;
-
-        return {
-          model: usage.model,
-          tokensIn: usage.currentUsageTokensIn,
-          tokensOut: usage.currentUsageTokensOut,
-          cost: inputCost + outputCost,
-        };
-      }),
-    );
-
-    return breakdown;
+    return (await calculateModelUsageCosts(modelUsages)).breakdown;
   }
 
   /**
@@ -885,44 +861,20 @@ export class LimitValidationService {
               );
               comparisonValue = 0;
             } else {
-              let totalCost = 0;
-
-              for (const usage of modelUsages) {
-                // Track total tokens for metadata
-                totalTokensIn += usage.currentUsageTokensIn;
-                totalTokensOut += usage.currentUsageTokensOut;
-
-                // Look up model by modelId only — limit usage records don't store provider
-                const modelEntry = await ModelModel.findByModelIdOnly(
-                  usage.model,
-                );
-                const pricing = ModelModel.getEffectivePricing(
-                  modelEntry,
-                  usage.model,
-                );
-
-                const inputCost =
-                  (usage.currentUsageTokensIn *
-                    parseFloat(pricing.pricePerMillionInput)) /
-                  1000000;
-                const outputCost =
-                  (usage.currentUsageTokensOut *
-                    parseFloat(pricing.pricePerMillionOutput)) /
-                  1000000;
-                const modelCost = inputCost + outputCost;
-
-                totalCost += modelCost;
-
+              const usageCosts = await calculateModelUsageCosts(modelUsages);
+              for (const usage of usageCosts.breakdown) {
                 logger.debug(
-                  `[LimitValidation] Model ${usage.model}: ${usage.currentUsageTokensIn} in + ${usage.currentUsageTokensOut} out = $${modelCost.toFixed(2)}`,
+                  `[LimitValidation] Model ${usage.model}: ${usage.tokensIn} in + ${usage.tokensOut} out = $${usage.cost.toFixed(2)}`,
                 );
               }
 
-              comparisonValue = totalCost;
+              totalTokensIn = usageCosts.tokensIn;
+              totalTokensOut = usageCosts.tokensOut;
+              comparisonValue = usageCosts.cost;
               limitDescription = "cost_dollars";
 
               logger.debug(
-                `[LimitValidation] Total cost for limit ${limit.id}: $${totalCost.toFixed(2)} across ${modelUsages.length} models`,
+                `[LimitValidation] Total cost for limit ${limit.id}: $${usageCosts.cost.toFixed(2)} across ${modelUsages.length} models`,
               );
             }
           } catch (error) {
@@ -1114,6 +1066,39 @@ function buildCleanupDueCondition(): SQL {
   );
 
   return or(...intervalConditions) as SQL;
+}
+
+async function calculateModelUsageCosts(modelUsages: LimitModelUsageRecord[]) {
+  const modelEntriesByModelId = await ModelModel.findByModelIdsOnly(
+    Array.from(new Set(modelUsages.map((usage) => usage.model))),
+  );
+
+  let cost = 0;
+  let tokensIn = 0;
+  let tokensOut = 0;
+  const breakdown = modelUsages.map((usage) => {
+    tokensIn += usage.currentUsageTokensIn;
+    tokensOut += usage.currentUsageTokensOut;
+
+    const modelEntry = modelEntriesByModelId.get(usage.model) ?? null;
+    const pricing = ModelModel.getEffectivePricing(modelEntry, usage.model);
+    const modelCost =
+      (usage.currentUsageTokensIn * parseFloat(pricing.pricePerMillionInput)) /
+        1_000_000 +
+      (usage.currentUsageTokensOut *
+        parseFloat(pricing.pricePerMillionOutput)) /
+        1_000_000;
+    cost += modelCost;
+
+    return {
+      model: usage.model,
+      tokensIn: usage.currentUsageTokensIn,
+      tokensOut: usage.currentUsageTokensOut,
+      cost: modelCost,
+    };
+  });
+
+  return { breakdown, cost, tokensIn, tokensOut };
 }
 
 async function getDefaultUserLimitUsage(params: {

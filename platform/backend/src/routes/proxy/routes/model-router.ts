@@ -37,6 +37,7 @@ import {
   minimaxAdapterFactory,
   mistralAdapterFactory,
   ollamaAdapterFactory,
+  openAiEmbeddingsAdapterFactory,
   openaiAdapterFactory,
   openrouterAdapterFactory,
   perplexityAdapterFactory,
@@ -182,6 +183,7 @@ type TranslatedModelRouterProvider =
 
 const CHAT_COMPLETIONS_SUFFIX = "/chat/completions";
 const RESPONSES_SUFFIX = "/responses";
+const EMBEDDINGS_SUFFIX = "/embeddings";
 
 const openAiWireProviders = {
   openai: openaiAdapterFactory,
@@ -311,6 +313,47 @@ const modelRouterProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   fastify.post(
+    `${MODEL_ROUTER_PREFIX}${EMBEDDINGS_SUFFIX}`,
+    {
+      bodyLimit: PROXY_BODY_LIMIT,
+      schema: {
+        operationId: RouteId.ModelRouterEmbeddingsWithDefaultAgent,
+        description:
+          "Create embeddings through the OpenAI-compatible model router (default LLM proxy)",
+        tags: ["LLM Proxy"],
+        body: OpenAi.API.EmbeddingRequestSchema,
+        headers: OpenAi.API.ChatCompletionsHeadersSchema,
+        response: constructResponseSchema(OpenAi.API.EmbeddingResponseSchema),
+      },
+    },
+    async (request, reply) => {
+      return routeEmbedding(request, reply);
+    },
+  );
+
+  fastify.post(
+    `${MODEL_ROUTER_PREFIX}/:agentId${EMBEDDINGS_SUFFIX}`,
+    {
+      bodyLimit: PROXY_BODY_LIMIT,
+      schema: {
+        operationId: RouteId.ModelRouterEmbeddingsWithAgent,
+        description:
+          "Create embeddings through the OpenAI-compatible model router (specific LLM proxy)",
+        tags: ["LLM Proxy"],
+        params: z.object({
+          agentId: UuidIdSchema,
+        }),
+        body: OpenAi.API.EmbeddingRequestSchema,
+        headers: OpenAi.API.ChatCompletionsHeadersSchema,
+        response: constructResponseSchema(OpenAi.API.EmbeddingResponseSchema),
+      },
+    },
+    async (request, reply) => {
+      return routeEmbedding(request, reply);
+    },
+  );
+
+  fastify.post(
     `${MODEL_ROUTER_PREFIX}${CHAT_COMPLETIONS_SUFFIX}`,
     {
       bodyLimit: PROXY_BODY_LIMIT,
@@ -435,6 +478,46 @@ async function routeResponse(request: FastifyRequest, reply: FastifyReply) {
     responsesContext,
     request,
     reply,
+  );
+}
+
+async function routeEmbedding(request: FastifyRequest, reply: FastifyReply) {
+  const body = request.body as OpenAi.Types.EmbeddingRequest;
+  const params = request.params as { agentId?: string };
+  const auth = await getModelRouterAuth(request);
+  const agent = params.agentId
+    ? await getModelRouterAgent(params.agentId)
+    : await getDefaultModelRouterAgent();
+  await ensureModelRouterAgentAccess({ agent, auth });
+  const resolution = await resolveModelRoute({
+    requestedModel: body.model,
+    capability: "embeddings",
+    allowedProviders: getMappedProviders(auth),
+    allowedApiKeyIds: getMappedApiKeyIds(auth),
+  });
+  if (resolution.provider !== "openai") {
+    throw new ApiError(
+      501,
+      `Provider "${resolution.provider}" is not yet available through the OpenAI-compatible model router embeddings endpoint.`,
+    );
+  }
+
+  const routedBody = {
+    ...body,
+    model: resolution.modelId,
+  };
+
+  await applyModelRouterAuthOverride({
+    request,
+    auth,
+    provider: resolution.provider,
+  });
+
+  return handleLLMProxy(
+    routedBody,
+    request,
+    reply,
+    openAiEmbeddingsAdapterFactory,
   );
 }
 
@@ -576,13 +659,13 @@ async function listModels(params: { auth: ModelRouterAuth }) {
     linkedModels
       .map(({ model }) => model)
       .filter((model) => {
-        if (!ModelModel.supportsTextChat(model)) {
-          return false;
-        }
         if (!modelRouterSupportedProviders.has(model.provider)) {
           return false;
         }
-        return true;
+        return (
+          ModelModel.supportsTextChat(model) ||
+          ModelModel.supportsEmbeddings(model)
+        );
       }),
   );
 

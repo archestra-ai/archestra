@@ -500,3 +500,8 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @CleanDev-Fix
 - @khabmcit
 - @vivekjhaver
+- @Derifi-A-OWNER
+- @openclow888-rgb
+- @nagyminyo-cmyk
+- @Meru143
+- @AllanLeal11

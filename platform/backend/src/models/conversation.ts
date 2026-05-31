@@ -162,7 +162,7 @@ class ConversationModel {
         )
         .where(and(...conditions))
         .orderBy(
-          desc(schema.conversationsTable.updatedAt),
+          desc(schema.conversationsTable.lastMessageAt),
           schema.messagesTable.createdAt,
         )
         .limit(
@@ -238,7 +238,7 @@ class ConversationModel {
           ),
         )
         .where(and(...conditions))
-        .orderBy(desc(schema.conversationsTable.updatedAt));
+        .orderBy(desc(schema.conversationsTable.lastMessageAt));
 
       return rows.map((row) => ({
         ...row.conversation,

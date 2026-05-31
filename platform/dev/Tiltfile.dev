@@ -65,6 +65,8 @@ code_runtime_enabled = os.getenv('ARCHESTRA_CODE_RUNTIME_ENABLED') == 'true'
 backend_resource_deps = ['db-migrate']
 if code_runtime_enabled:
   backend_resource_deps.append('dagger-runtime-port-forward')
+  # build the napi addon before the backend boots, so it never loads a stale .node
+  backend_resource_deps.append('sandbox-rs-build')
 
 local_resource(
   'pnpm-install',

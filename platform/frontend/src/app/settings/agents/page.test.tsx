@@ -53,21 +53,6 @@ vi.mock("@/components/llm-provider-api-key-form", () => ({
   },
 }));
 
-vi.mock("@/components/llm-provider-options", () => ({
-  LlmProviderApiKeyOptionLabel: ({
-    providerName,
-    keyName,
-  }: {
-    providerName: string;
-    keyName: string;
-  }) => (
-    <span>
-      {providerName} {keyName}
-    </span>
-  ),
-  LlmProviderApiKeySelectItems: () => null,
-}));
-
 vi.mock("@/components/roles/with-permissions", () => ({
   WithPermissions: ({
     children,

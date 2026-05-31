@@ -208,6 +208,12 @@ export function requireScopedModifyPermission(params: {
         );
       }
       return;
+
+    // Fail closed: an out-of-union scope (data corruption, manual write, or a
+    // future scope shipped before this code is updated) must be denied, not
+    // fall through and implicitly grant.
+    default:
+      throw new ApiError(403, `Unknown ${resourceLabel} scope`);
   }
 }
 

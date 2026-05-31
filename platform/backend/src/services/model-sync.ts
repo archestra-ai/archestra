@@ -292,8 +292,7 @@ async function inferEmbeddingDimensions(
   baseUrl?: string | null,
 ): Promise<SupportedEmbeddingDimension | null> {
   if (provider === "ollama") {
-    const caps = await ollamaClient.inferModelCapabilities(modelId, baseUrl);
-    return caps.embeddingDimensions;
+    return ollamaClient.inferEmbeddingDimensions(modelId, baseUrl);
   }
 
   const id = modelId.toLowerCase();
@@ -478,7 +477,7 @@ async function inferOllamaCapabilities(
   modelId: string,
   baseUrl?: string | null,
 ): Promise<ProviderModelCapabilities> {
-  const caps = await ollamaClient.inferModelCapabilities(modelId, baseUrl);
+  const caps = await ollamaClient.inferCapabilities(modelId, baseUrl);
 
   return {
     description: null,

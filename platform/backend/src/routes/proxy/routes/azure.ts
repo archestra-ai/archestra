@@ -9,8 +9,12 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import config from "@/config";
 import logger from "@/logging";
-import { Azure, constructResponseSchema, UuidIdSchema } from "@/types";
-import { azureAdapterFactory, azureResponsesAdapterFactory } from "../adapters";
+import { Azure, constructResponseSchema, OpenAi, UuidIdSchema } from "@/types";
+import {
+  azureAdapterFactory,
+  azureResponsesAdapterFactory,
+} from "../adapters";
+import { makeEmbeddingAdapterFactory } from "../adapters/embeddings";
 import { PROXY_API_PREFIX, PROXY_BODY_LIMIT } from "../common";
 import { handleLLMProxy } from "../llm-proxy-handler";
 import { createProxyPreHandler } from "./proxy-prehandler";
@@ -19,6 +23,12 @@ const azureProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   const API_PREFIX = `${PROXY_API_PREFIX}/azure`;
   const CHAT_COMPLETIONS_SUFFIX = "/chat/completions";
   const RESPONSES_SUFFIX = "/responses";
+  const EMBEDDINGS_SUFFIX = "/embeddings";
+
+  const azureEmbeddingsAdapterFactory = makeEmbeddingAdapterFactory(
+    "azure",
+    () => config.llm.azure.baseUrl || undefined,
+  );
 
   logger.info("[UnifiedProxy] Registering unified Azure AI Foundry routes");
 
@@ -29,7 +39,11 @@ const azureProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       rewritePrefix: "",
       preHandler: createProxyPreHandler({
         apiPrefix: API_PREFIX,
-        endpointSuffix: [CHAT_COMPLETIONS_SUFFIX, RESPONSES_SUFFIX],
+        endpointSuffix: [
+          CHAT_COMPLETIONS_SUFFIX,
+          RESPONSES_SUFFIX,
+          EMBEDDINGS_SUFFIX,
+        ],
         upstream: config.llm.azure.baseUrl,
         providerName: "Azure AI Foundry",
       }),
@@ -145,6 +159,65 @@ const azureProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         "[UnifiedProxy] Handling Azure AI Foundry request (with agent)",
       );
       return handleLLMProxy(request.body, request, reply, azureAdapterFactory);
+    },
+  );
+
+  fastify.post(
+    `${API_PREFIX}${EMBEDDINGS_SUFFIX}`,
+    {
+      bodyLimit: PROXY_BODY_LIMIT,
+      schema: {
+        operationId: RouteId.AzureEmbeddingsWithDefaultAgent,
+        description:
+          "Create embeddings with Azure AI Foundry (uses default agent). Accepts an OpenAI-compatible request and returns an OpenAI-compatible response.",
+        tags: ["LLM Proxy"],
+        body: OpenAi.API.EmbeddingRequestSchema,
+        headers: OpenAi.API.ChatCompletionsHeadersSchema,
+        response: constructResponseSchema(OpenAi.API.EmbeddingResponseSchema),
+      },
+    },
+    async (request, reply) => {
+      logger.debug(
+        { url: request.url },
+        "[UnifiedProxy] Handling Azure AI Foundry embeddings request (default agent)",
+      );
+      return handleLLMProxy(
+        request.body as OpenAi.Types.EmbeddingRequest,
+        request,
+        reply,
+        azureEmbeddingsAdapterFactory,
+      );
+    },
+  );
+
+  fastify.post(
+    `${API_PREFIX}/:agentId${EMBEDDINGS_SUFFIX}`,
+    {
+      bodyLimit: PROXY_BODY_LIMIT,
+      schema: {
+        operationId: RouteId.AzureEmbeddingsWithAgent,
+        description:
+          "Create embeddings with Azure AI Foundry for a specific agent. Accepts an OpenAI-compatible request and returns an OpenAI-compatible response.",
+        tags: ["LLM Proxy"],
+        params: z.object({
+          agentId: UuidIdSchema,
+        }),
+        body: OpenAi.API.EmbeddingRequestSchema,
+        headers: OpenAi.API.ChatCompletionsHeadersSchema,
+        response: constructResponseSchema(OpenAi.API.EmbeddingResponseSchema),
+      },
+    },
+    async (request, reply) => {
+      logger.debug(
+        { url: request.url, agentId: request.params.agentId },
+        "[UnifiedProxy] Handling Azure AI Foundry embeddings request (with agent)",
+      );
+      return handleLLMProxy(
+        request.body as OpenAi.Types.EmbeddingRequest,
+        request,
+        reply,
+        azureEmbeddingsAdapterFactory,
+      );
     },
   );
 };

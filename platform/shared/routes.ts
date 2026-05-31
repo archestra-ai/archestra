@@ -175,6 +175,10 @@ export const RouteId = {
   OpenAiEmbeddingsWithDefaultAgent: "openAiEmbeddingsWithDefaultAgent",
   OpenAiEmbeddingsWithAgent: "openAiEmbeddingsWithAgent",
 
+  // Proxy Routes - Gemini
+  GeminiEmbeddingsWithDefaultAgent: "geminiEmbeddingsWithDefaultAgent",
+  GeminiEmbeddingsWithAgent: "geminiEmbeddingsWithAgent",
+
   // Proxy Routes - OpenAI-compatible model router
   ModelRouterChatCompletionsWithDefaultAgent:
     "modelRouterChatCompletionsWithDefaultAgent",
@@ -270,6 +274,8 @@ export const RouteId = {
   AzureChatCompletionsWithAgent: "azureChatCompletionsWithAgent",
   AzureResponsesWithDefaultAgent: "azureResponsesWithDefaultAgent",
   AzureResponsesWithAgent: "azureResponsesWithAgent",
+  AzureEmbeddingsWithDefaultAgent: "azureEmbeddingsWithDefaultAgent",
+  AzureEmbeddingsWithAgent: "azureEmbeddingsWithAgent",
 
   // Chat Routes
   StreamChat: "streamChat",

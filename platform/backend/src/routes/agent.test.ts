@@ -748,7 +748,7 @@ describe("agent routes", () => {
 
       expect(restoreResponse.statusCode).toBe(409);
       expect(restoreResponse.json().error.message).toContain(
-        "already using this slug",
+        "another active MCP gateway is already using this slug",
       );
     });
 

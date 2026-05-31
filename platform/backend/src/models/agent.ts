@@ -1816,7 +1816,7 @@ class AgentModel {
         .limit(1);
 
       if (slugConflict) {
-        return "Cannot restore because another active agent is already using this slug.";
+        return `Cannot restore because another active ${getAgentTypeLabel(agent.agentType)} is already using this slug.`;
       }
     }
 

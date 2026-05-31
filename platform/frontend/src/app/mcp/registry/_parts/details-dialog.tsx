@@ -177,7 +177,7 @@ export function DetailsDialog({ server, onClose }: DetailsDialogProps) {
           </DialogDescription>
         </DialogHeader>
         <ScrollArea className="h-[60vh] w-full py-4">
-          <div className="space-y-6 pr-4">
+          <div className="space-y-6 px-4">
             <section>
               <h3 className="text-xl font-semibold mb-3 flex items-center gap-2">
                 <Info className="h-5 w-5" />

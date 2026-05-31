@@ -696,6 +696,7 @@ export function McpServerCard({
                 className="inline-flex items-center rounded-full"
               >
                 <ResourceVisibilityBadge
+                  compact
                   scope="org"
                   teams={undefined}
                   authorId={undefined}

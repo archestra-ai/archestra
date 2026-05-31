@@ -302,7 +302,7 @@ function EntriesSection({ canEdit }: { canEdit: boolean }) {
             onClick={() => setRenameOpen(true)}
           >
             <Pencil className="h-4 w-4" />
-            Rename {singular}
+            Rename preset
           </Button>
           <Button
             size="sm"

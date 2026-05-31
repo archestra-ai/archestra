@@ -18,20 +18,30 @@ export function ResourceVisibilityBadge({
   authorId,
   authorName,
   currentUserId,
+  compact,
 }: {
   scope: ResourceVisibilityScope | undefined;
   teams: TeamInfo[] | undefined;
   authorId: string | null | undefined;
   authorName: string | null | undefined;
   currentUserId: string | undefined;
+  compact?: boolean;
 }) {
   const MAX_TEAMS_TO_SHOW = 3;
   const MAX_BADGE_TEXT_LENGTH = 15;
 
   if (scope === "org") {
+    if (compact) {
+      return (
+        <Badge variant="secondary" className="text-xs">
+          <Globe className="h-3 w-3" />
+        </Badge>
+      );
+    }
+
     return (
-      <Badge variant="secondary" className="text-xs">
-        <Globe className="h-3 w-3" />
+      <Badge variant="secondary" className="text-xs gap-1">
+        <Globe className="h-3 w-3" /> Whole organization
       </Badge>
     );
   }

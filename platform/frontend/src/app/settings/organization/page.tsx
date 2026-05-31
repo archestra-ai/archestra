@@ -203,9 +203,12 @@ export default function OrganizationSettingsPage() {
     if (slimChatErrorUi !== null) {
       data.slimChatErrorUi = slimChatErrorUi;
     }
-    if (chatPlaceholders !== null)
+    if (chatPlaceholders !== null) {
+      const filteredPlaceholders = chatPlaceholders.filter(Boolean);
+
       data.chatPlaceholders =
-        chatPlaceholders.length > 0 ? chatPlaceholders : null;
+        filteredPlaceholders.length > 0 ? filteredPlaceholders : null;
+    }
     if (animateChatPlaceholders !== null) {
       data.animateChatPlaceholders = animateChatPlaceholders;
     }

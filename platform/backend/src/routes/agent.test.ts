@@ -58,6 +58,70 @@ describe("agent routes", () => {
     await app.close();
   });
 
+  async function expectAgentTypeSoftDelete(
+    agentType: "mcp_gateway" | "llm_proxy",
+    makeAgent: (overrides: {
+      name: string;
+      agentType: "mcp_gateway" | "llm_proxy";
+      organizationId: string;
+      scope: "org";
+      authorId: string;
+      isPersonalGateway: boolean;
+    }) => Promise<{ id: string }>,
+  ) {
+    const suffix = crypto.randomUUID().slice(0, 8);
+    const created = await makeAgent({
+      name: `${agentType} Delete ${suffix}`,
+      agentType,
+      organizationId,
+      scope: "org",
+      authorId: user.id,
+      isPersonalGateway: false,
+    });
+
+    const deleteResponse = await app.inject({
+      method: "DELETE",
+      url: `/api/agents/${created.id}`,
+    });
+
+    expect(deleteResponse.statusCode).toBe(200);
+    expect(deleteResponse.json()).toEqual({ success: true });
+
+    const getResponse = await app.inject({
+      method: "GET",
+      url: `/api/agents/${created.id}`,
+    });
+    expect(getResponse.statusCode).toBe(404);
+
+    const [row] = await db
+      .select({ deletedAt: schema.agentsTable.deletedAt })
+      .from(schema.agentsTable)
+      .where(eq(schema.agentsTable.id, created.id));
+    expect(row.deletedAt).toBeInstanceOf(Date);
+
+    const paginatedResponse = await app.inject({
+      method: "GET",
+      url: `/api/agents?limit=10&offset=0&agentType=${agentType}&name=${suffix}`,
+    });
+    expect(paginatedResponse.statusCode).toBe(200);
+    expect(
+      paginatedResponse
+        .json()
+        .data.some((agent: { id: string }) => agent.id === created.id),
+    ).toBe(false);
+
+    const allResponse = await app.inject({
+      method: "GET",
+      url: `/api/agents/all?agentType=${agentType}`,
+    });
+    expect(allResponse.statusCode).toBe(200);
+    expect(
+      allResponse
+        .json()
+        .some((agent: { id: string }) => agent.id === created.id),
+    ).toBe(false);
+  }
+
   describe("POST /api/agents", () => {
     test("should create a new agent", async () => {
       const name = `Test Agent ${crypto.randomUUID().slice(0, 8)}`;
@@ -471,6 +535,18 @@ describe("agent routes", () => {
       ).toBe(false);
     });
 
+    test("soft-deletes mcp_gateway rows and hides them from type-filtered routes", async ({
+      makeAgent,
+    }) => {
+      await expectAgentTypeSoftDelete("mcp_gateway", makeAgent);
+    });
+
+    test("soft-deletes llm_proxy rows and hides them from type-filtered routes", async ({
+      makeAgent,
+    }) => {
+      await expectAgentTypeSoftDelete("llm_proxy", makeAgent);
+    });
+
     test("returns 403 when deleting a personal MCP gateway and the row remains", async () => {
       const { default: AgentModel } = await import("@/models/agent");
       const personalGateway = await AgentModel.ensurePersonalMcpGateway({
@@ -824,6 +900,46 @@ describe("agent routes", () => {
       );
       expect(after).not.toBeNull();
       expect(response.json().id).toBe(after?.id);
+    });
+
+    test("creates a new personal gateway when the previous default is soft-deleted", async () => {
+      const { default: AgentModel } = await import("@/models/agent");
+      const original = await AgentModel.ensurePersonalMcpGateway({
+        userId: user.id,
+        organizationId,
+      });
+      await AgentModel.delete(original.id);
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/api/mcp-gateways/default",
+      });
+
+      expect(response.statusCode).toBe(200);
+      const replacement = response.json();
+      expect(replacement.agentType).toBe("mcp_gateway");
+      expect(replacement.isPersonalGateway).toBe(true);
+      expect(replacement.id).not.toBe(original.id);
+    });
+  });
+
+  describe("GET /api/llm-proxy/default", () => {
+    test("creates a new default LLM proxy when the previous default is soft-deleted", async () => {
+      const { default: AgentModel } = await import("@/models/agent");
+      const original =
+        await AgentModel.getLLMProxyOrCreateDefault(organizationId);
+      await AgentModel.delete(original.id);
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/api/llm-proxy/default",
+      });
+
+      expect(response.statusCode).toBe(200);
+      const replacement = response.json();
+      expect(replacement.agentType).toBe("llm_proxy");
+      expect(replacement.isDefault).toBe(true);
+      expect(replacement.id).not.toBe(original.id);
     });
   });
 

@@ -8,6 +8,7 @@ import type {
   OptimizationRule,
   UpdateOptimizationRule,
 } from "@/types";
+import AgentModel from "./agent";
 
 class OptimizationRuleModel {
   /**
@@ -77,6 +78,7 @@ class OptimizationRuleModel {
           and(
             eq(schema.optimizationRulesTable.entityType, "agent"),
             eq(schema.agentsTable.organizationId, organizationId),
+            notDeleted(schema.agentsTable),
           ),
         ),
       )
@@ -133,6 +135,7 @@ class OptimizationRuleModel {
             and(
               eq(schema.optimizationRulesTable.entityType, "agent"),
               eq(schema.agentsTable.organizationId, organizationId),
+              notDeleted(schema.agentsTable),
             ),
           ),
         ),
@@ -173,19 +176,7 @@ class OptimizationRuleModel {
       return !!team;
     }
 
-    const [agent] = await db
-      .select({ id: schema.agentsTable.id })
-      .from(schema.agentsTable)
-      .where(
-        and(
-          eq(schema.agentsTable.id, entityId),
-          eq(schema.agentsTable.organizationId, organizationId),
-          notDeleted(schema.agentsTable),
-        ),
-      )
-      .limit(1);
-
-    return !!agent;
+    return AgentModel.existsInOrganization({ id: entityId, organizationId });
   }
 
   /**

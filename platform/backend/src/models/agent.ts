@@ -26,8 +26,7 @@ import {
 import { clearChatMcpClient } from "@/clients/chat-mcp-client";
 import db, { schema, type Transaction } from "@/database";
 import { notDeleted } from "@/database/schemas/_soft-delete";
-import { SoftDeletableModel } from "@/database/soft-deletable-model";
-import { softDelete } from "@/database/soft-delete";
+import { hardDelete, softDelete } from "@/database/soft-delete";
 import {
   createPaginatedResult,
   type PaginatedResult,
@@ -52,11 +51,7 @@ import AgentToolModel from "./agent-tool";
 import MemberModel from "./member";
 import ToolModel from "./tool";
 
-class AgentModel extends SoftDeletableModel<typeof schema.agentsTable> {
-  constructor() {
-    super(schema.agentsTable);
-  }
-
+class AgentModel {
   static async findBasicByOrganizationIdAndIds(params: {
     organizationId: string;
     agentIds: string[];
@@ -603,11 +598,14 @@ class AgentModel extends SoftDeletableModel<typeof schema.agentsTable> {
         eq(schema.agentLabelsTable.agentId, schema.agentsTable.id),
       )
       .where(
-        or(
-          ...pairs.map((pair) =>
-            and(
-              eq(schema.agentLabelsTable.keyId, pair.keyId),
-              eq(schema.agentLabelsTable.valueId, pair.valueId),
+        and(
+          notDeleted(schema.agentsTable),
+          or(
+            ...pairs.map((pair) =>
+              and(
+                eq(schema.agentLabelsTable.keyId, pair.keyId),
+                eq(schema.agentLabelsTable.valueId, pair.valueId),
+              ),
             ),
           ),
         ),
@@ -833,7 +831,6 @@ class AgentModel extends SoftDeletableModel<typeof schema.agentsTable> {
       whereConditions.push(inArray(schema.agentsTable.id, accessibleAgentIds));
     }
 
-    // soft-delete: whereClause includes notDeleted via whereConditions above.
     const whereClause =
       whereConditions.length > 0 ? and(...whereConditions) : undefined;
 
@@ -894,7 +891,6 @@ class AgentModel extends SoftDeletableModel<typeof schema.agentsTable> {
           direction(sql`COALESCE(${toolsCountSubquery.toolsCount}, 0)`),
         );
     } else if (sorting?.sortBy === "knowledgeSourcesCount") {
-      // soft-delete: subquery is joined under whereClause that filters notDeleted.
       const knowledgeSourcesCountSubquery = db
         .select({
           agentId: schema.agentsTable.id,
@@ -955,7 +951,6 @@ class AgentModel extends SoftDeletableModel<typeof schema.agentsTable> {
 
     // If no agents match, return early
     if (sortedAgentIds.length === 0) {
-      // soft-delete: whereClause filters notDeleted.
       const [{ total }] = await db
         .select({ total: count() })
         .from(schema.agentsTable)
@@ -964,7 +959,6 @@ class AgentModel extends SoftDeletableModel<typeof schema.agentsTable> {
     }
 
     // Step 2: Get full agent data with tools for the paginated agent IDs
-    // soft-delete: sortedAgentIds and count both reuse the filtered whereClause.
     const [agentsData, [{ total: totalResult }]] = await Promise.all([
       db
         .select()
@@ -1107,6 +1101,127 @@ class AgentModel extends SoftDeletableModel<typeof schema.agentsTable> {
       .limit(1);
 
     return result !== undefined;
+  }
+
+  static async existsInOrganization(params: {
+    id: string;
+    organizationId: string;
+  }): Promise<boolean> {
+    const [result] = await db
+      .select({ id: schema.agentsTable.id })
+      .from(schema.agentsTable)
+      .where(
+        and(
+          eq(schema.agentsTable.id, params.id),
+          eq(schema.agentsTable.organizationId, params.organizationId),
+          notDeleted(schema.agentsTable),
+        ),
+      )
+      .limit(1);
+
+    return result !== undefined;
+  }
+
+  static async findOrganizationId(id: string): Promise<string | null> {
+    const [result] = await db
+      .select({ organizationId: schema.agentsTable.organizationId })
+      .from(schema.agentsTable)
+      .where(and(eq(schema.agentsTable.id, id), notDeleted(schema.agentsTable)))
+      .limit(1);
+
+    return result?.organizationId ?? null;
+  }
+
+  static async findIdsByOrganizationId(
+    organizationId: string,
+  ): Promise<string[]> {
+    const agents = await db
+      .select({ id: schema.agentsTable.id })
+      .from(schema.agentsTable)
+      .where(
+        and(
+          eq(schema.agentsTable.organizationId, organizationId),
+          notDeleted(schema.agentsTable),
+        ),
+      );
+
+    return agents.map((agent) => agent.id);
+  }
+
+  static async findAllIds(): Promise<string[]> {
+    const agents = await db
+      .select({ id: schema.agentsTable.id })
+      .from(schema.agentsTable)
+      .where(notDeleted(schema.agentsTable));
+
+    return agents.map((agent) => agent.id);
+  }
+
+  static async findAccessibleIdsForUser(userId: string): Promise<string[]> {
+    const rows = await db
+      .selectDistinct({ id: schema.agentsTable.id })
+      .from(schema.agentsTable)
+      .leftJoin(
+        schema.agentTeamsTable,
+        eq(schema.agentsTable.id, schema.agentTeamsTable.agentId),
+      )
+      .leftJoin(
+        schema.teamMembersTable,
+        and(
+          eq(schema.agentTeamsTable.teamId, schema.teamMembersTable.teamId),
+          eq(schema.teamMembersTable.userId, userId),
+        ),
+      )
+      .where(
+        and(
+          notDeleted(schema.agentsTable),
+          or(
+            eq(schema.agentsTable.scope, "org"),
+            and(
+              eq(schema.agentsTable.scope, "personal"),
+              eq(schema.agentsTable.authorId, userId),
+            ),
+            and(
+              eq(schema.agentsTable.scope, "team"),
+              eq(schema.teamMembersTable.userId, userId),
+            ),
+          ),
+        ),
+      );
+
+    return rows.map((row) => row.id);
+  }
+
+  static async findDelegationTarget(
+    id: string,
+  ): Promise<Pick<Agent, "id" | "name"> | null> {
+    const [targetAgent] = await db
+      .select({ id: schema.agentsTable.id, name: schema.agentsTable.name })
+      .from(schema.agentsTable)
+      .where(and(eq(schema.agentsTable.id, id), notDeleted(schema.agentsTable)))
+      .limit(1);
+
+    return targetAgent ?? null;
+  }
+
+  static async findAccessContextById(
+    id: string,
+  ): Promise<Pick<
+    Agent,
+    "id" | "organizationId" | "scope" | "authorId"
+  > | null> {
+    const [agent] = await db
+      .select({
+        id: schema.agentsTable.id,
+        organizationId: schema.agentsTable.organizationId,
+        scope: schema.agentsTable.scope,
+        authorId: schema.agentsTable.authorId,
+      })
+      .from(schema.agentsTable)
+      .where(and(eq(schema.agentsTable.id, id), notDeleted(schema.agentsTable)))
+      .limit(1);
+
+    return agent ?? null;
   }
 
   /**
@@ -1595,11 +1710,21 @@ class AgentModel extends SoftDeletableModel<typeof schema.agentsTable> {
   }
 
   static async delete(id: string, tx?: Transaction): Promise<boolean> {
-    return agentModelInstance.delete(id, tx);
+    const count = await softDelete(
+      tx ?? db,
+      schema.agentsTable,
+      eq(schema.agentsTable.id, id),
+    );
+    return count > 0;
   }
 
   static async hardDelete(id: string, tx?: Transaction): Promise<boolean> {
-    return agentModelInstance.hardDelete(id, tx);
+    const count = await hardDelete(
+      tx ?? db,
+      schema.agentsTable,
+      eq(schema.agentsTable.id, id),
+    );
+    return count > 0;
   }
 
   /** Check if an agent has any Playwright tools assigned via agent_tools. */
@@ -2054,8 +2179,6 @@ function isQueryKnowledgeSourcesTool(toolName: string): boolean {
     TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME
   );
 }
-
-const agentModelInstance = new AgentModel();
 
 export default AgentModel;
 

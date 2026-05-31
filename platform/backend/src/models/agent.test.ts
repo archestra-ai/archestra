@@ -2663,6 +2663,80 @@ describe("AgentModel", () => {
         .where(eq(schema.agentsTable.id, agent.id));
       expect(rows).toHaveLength(0);
     });
+
+    test("active lookup helpers exclude soft-deleted agents", async ({
+      makeOrganization,
+    }) => {
+      const organization = await makeOrganization();
+      const active = await AgentModel.create({
+        name: "Active Agent",
+        organizationId: organization.id,
+        teams: [],
+        scope: "org",
+      });
+      const deleted = await AgentModel.create({
+        name: "Deleted Agent",
+        organizationId: organization.id,
+        teams: [],
+        scope: "org",
+      });
+
+      await AgentModel.delete(deleted.id);
+
+      await expect(
+        AgentModel.existsInOrganization({
+          id: deleted.id,
+          organizationId: organization.id,
+        }),
+      ).resolves.toBe(false);
+      await expect(
+        AgentModel.findOrganizationId(deleted.id),
+      ).resolves.toBeNull();
+      await expect(
+        AgentModel.findDelegationTarget(deleted.id),
+      ).resolves.toBeNull();
+      await expect(
+        AgentModel.findIdsByOrganizationId(organization.id),
+      ).resolves.toEqual([active.id]);
+    });
+
+    test("findAccessibleIdsForUser excludes soft-deleted agents", async ({
+      makeUser,
+      makeOrganization,
+      makeTeam,
+    }) => {
+      const user = await makeUser();
+      const organization = await makeOrganization();
+      const team = await makeTeam(organization.id, user.id);
+
+      const visibleOrgAgent = await AgentModel.create({
+        name: "Visible Org Agent",
+        organizationId: organization.id,
+        teams: [],
+        scope: "org",
+      });
+      const deletedOrgAgent = await AgentModel.create({
+        name: "Deleted Org Agent",
+        organizationId: organization.id,
+        teams: [],
+        scope: "org",
+      });
+      const deletedTeamAgent = await AgentModel.create({
+        name: "Deleted Team Agent",
+        organizationId: organization.id,
+        teams: [team.id],
+        scope: "team",
+      });
+
+      await AgentModel.delete(deletedOrgAgent.id);
+      await AgentModel.delete(deletedTeamAgent.id);
+
+      const accessibleIds = await AgentModel.findAccessibleIdsForUser(user.id);
+
+      expect(accessibleIds).toContain(visibleOrgAgent.id);
+      expect(accessibleIds).not.toContain(deletedOrgAgent.id);
+      expect(accessibleIds).not.toContain(deletedTeamAgent.id);
+    });
   });
 
   describe("resolveIdFromIdOrSlug", () => {

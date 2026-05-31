@@ -25,9 +25,30 @@ The model router exposes one OpenAI-compatible interface for models across confi
 - **Responses API** (`/responses`) for text requests across model-router-compatible providers
 - **Chat Completions API** (`/chat/completions`) for text chat requests across model-router-compatible providers
 - **Models API** (`/models`) for provider-qualified chat and embedding model IDs
-- **Embeddings API** (`/embeddings`) for OpenAI embedding models only
+- **Embeddings API** (`/embeddings`) for embedding models across supported providers
 
-> ⚠️ Embeddings support for other providers is tracked in [GitHub Issue #5174](https://github.com/archestra-ai/archestra/issues/5174).
+### Embeddings API — Supported Providers
+
+The `/embeddings` endpoint accepts provider-qualified model IDs (e.g. `openai:text-embedding-3-small`, `gemini:gemini-embedding-001`, `azure:text-embedding-ada-002`) and returns an OpenAI-compatible response regardless of the underlying provider.
+
+| Provider | Notes |
+|---|---|
+| OpenAI | All OpenAI embedding models |
+| Azure AI Foundry | Azure OpenAI embedding deployments; supports both API key and Entra ID auth |
+| Gemini | Text and multimodal embedding models (e.g. `gemini-embedding-001`, `gemini-embedding-2-preview`) |
+| Mistral | OpenAI-compatible embedding endpoint |
+| Ollama | Local embedding models via OpenAI-compatible endpoint |
+| vLLM | Self-hosted embedding models via OpenAI-compatible endpoint |
+| Groq | OpenAI-compatible embedding endpoint |
+| Cerebras | OpenAI-compatible embedding endpoint |
+| DeepSeek | OpenAI-compatible embedding endpoint |
+| OpenRouter | OpenAI-compatible embedding endpoint |
+| Perplexity | OpenAI-compatible embedding endpoint |
+| xAI | OpenAI-compatible embedding endpoint |
+| MiniMax | OpenAI-compatible embedding endpoint |
+| Zhipu AI | OpenAI-compatible embedding endpoint |
+
+> Anthropic, Bedrock, and Cohere do not expose a compatible embeddings API and are not supported on the `/embeddings` endpoint.
 
 ### Model Router Connection Details
 

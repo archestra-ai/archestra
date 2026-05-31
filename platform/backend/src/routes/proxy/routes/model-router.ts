@@ -37,7 +37,6 @@ import {
   minimaxAdapterFactory,
   mistralAdapterFactory,
   ollamaAdapterFactory,
-  openAiEmbeddingsAdapterFactory,
   openaiAdapterFactory,
   openrouterAdapterFactory,
   perplexityAdapterFactory,
@@ -45,6 +44,7 @@ import {
   xaiAdapterFactory,
   zhipuaiAdapterFactory,
 } from "../adapters";
+import { makeEmbeddingAdapterFactory } from "../adapters/embeddings";
 import { makeAnthropicOpenaiAdapterFactory } from "../adapters/anthropic-openai";
 import { openaiToAnthropic } from "../adapters/anthropic-openai-translator";
 import { makeBedrockOpenaiAdapterFactory } from "../adapters/bedrock-openai";
@@ -202,6 +202,35 @@ const openAiWireProviders = {
 } satisfies Partial<Record<SupportedProvider, unknown>> as Partial<
   Record<SupportedProvider, OpenAiWireProvider>
 >;
+
+/**
+ * Providers that support embeddings through the model router.
+ * All OpenAI-wire providers expose an OpenAI-compatible /v1/embeddings endpoint.
+ * Gemini is handled via the Google GenAI SDK.
+ * Anthropic, Bedrock, and Cohere do not expose a compatible embeddings API.
+ */
+const embeddingRouterSupportedProviders = new Set<SupportedProvider>([
+  ...(Object.keys(openAiWireProviders) as SupportedProvider[]),
+  "gemini",
+]);
+
+/**
+ * Per-provider embedding adapter factories, built lazily on first use.
+ * Each factory wraps `callEmbedding` from the knowledge-base embedding clients
+ * so the full handleLLMProxy pipeline (logging, cost tracking, etc.) is preserved.
+ */
+const embeddingAdapterCache = new Map<
+  SupportedProvider,
+  ReturnType<typeof makeEmbeddingAdapterFactory>
+>();
+
+function getEmbeddingAdapterForProvider(provider: SupportedProvider) {
+  const cached = embeddingAdapterCache.get(provider);
+  if (cached) return cached;
+  const factory = makeEmbeddingAdapterFactory(provider, () => undefined);
+  embeddingAdapterCache.set(provider, factory);
+  return factory;
+}
 
 const translatedModelRouterProviders = [
   "anthropic",
@@ -495,10 +524,11 @@ async function routeEmbedding(request: FastifyRequest, reply: FastifyReply) {
     allowedProviders: getMappedProviders(auth),
     allowedApiKeyIds: getMappedApiKeyIds(auth),
   });
-  if (resolution.provider !== "openai") {
+
+  if (!embeddingRouterSupportedProviders.has(resolution.provider)) {
     throw new ApiError(
       501,
-      `Provider "${resolution.provider}" is not yet available through the OpenAI-compatible model router embeddings endpoint.`,
+      `Provider "${resolution.provider}" does not support embeddings through the model router. Supported providers: ${[...embeddingRouterSupportedProviders].join(", ")}.`,
     );
   }
 
@@ -507,18 +537,23 @@ async function routeEmbedding(request: FastifyRequest, reply: FastifyReply) {
     model: resolution.modelId,
   };
 
+  logger.info(
+    {
+      requestedModel: resolution.requestedModel,
+      routedModel: resolution.modelId,
+      provider: resolution.provider,
+    },
+    "[ModelRouterProxy] Resolved embedding model route",
+  );
+
   await applyModelRouterAuthOverride({
     request,
     auth,
     provider: resolution.provider,
   });
 
-  return handleLLMProxy(
-    routedBody,
-    request,
-    reply,
-    openAiEmbeddingsAdapterFactory,
-  );
+  const adapterFactory = getEmbeddingAdapterForProvider(resolution.provider);
+  return handleLLMProxy(routedBody, request, reply, adapterFactory);
 }
 
 function getOpenAiChatProviderForResolution(params: {

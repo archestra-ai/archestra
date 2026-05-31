@@ -13,6 +13,7 @@ import {
 } from "fastify-type-provider-zod";
 import { vi } from "vitest";
 import db, { schema } from "@/database";
+import * as embeddingClients from "@/knowledge-base/embedding-clients";
 import {
   InteractionModel,
   LlmOauthClientModel,
@@ -652,10 +653,17 @@ describe("model router proxy routes", () => {
     });
 
     let capturedApiKey: string | undefined;
-    vi.mocked(openaiAdapterFactory.createClient).mockImplementation(
-      (apiKey) => {
-        capturedApiKey = apiKey;
-        return createOpenAiTestClient() as never;
+    vi.spyOn(embeddingClients, "callEmbedding").mockImplementation(
+      async (params) => {
+        capturedApiKey = params.apiKey;
+        return {
+          object: "list",
+          data: (Array.isArray(params.inputs) ? params.inputs : [params.inputs]).map(
+            (_input, index) => ({ object: "embedding", embedding: [0.1, 0.2, 0.3], index }),
+          ),
+          model: params.model,
+          usage: { prompt_tokens: (Array.isArray(params.inputs) ? params.inputs : [params.inputs]).length, total_tokens: (Array.isArray(params.inputs) ? params.inputs : [params.inputs]).length },
+        };
       },
     );
 
@@ -698,6 +706,207 @@ describe("model router proxy routes", () => {
       inputTokens: 2,
       outputTokens: 0,
     });
+  });
+
+  test("routes Gemini embedding models through embeddings", async ({
+    makeAgent,
+    makeOrganization,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const app = createFastifyApp();
+    await app.register(modelRouterProxyRoutes);
+    const provider = "gemini";
+    const modelId = "gemini-embedding-001";
+    await upsertModel({ provider, modelId, embeddingDimensions: 3072 });
+    const organization = await makeOrganization();
+    const { value } = await createModelRouterVirtualKey({
+      organizationId: organization.id,
+      provider,
+      makeSecret,
+      makeLlmProviderApiKey,
+      apiKeyValue: "gemini-api-key",
+    });
+    const agent = await makeAgent({
+      organizationId: organization.id,
+      name: "Model Router Gemini Embedding Agent",
+      agentType: "llm_proxy",
+    });
+
+    let capturedProvider: string | undefined;
+    let capturedApiKey: string | undefined;
+    vi.spyOn(embeddingClients, "callEmbedding").mockImplementation(
+      async (params) => {
+        capturedProvider = params.provider;
+        capturedApiKey = params.apiKey;
+        return {
+          object: "list",
+          data: (Array.isArray(params.inputs) ? params.inputs : [params.inputs]).map(
+            (_input, index) => ({ object: "embedding", embedding: [0.4, 0.5, 0.6], index }),
+          ),
+          model: params.model,
+          usage: { prompt_tokens: 0, total_tokens: 0 },
+        };
+      },
+    );
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/model-router/${agent.id}/embeddings`,
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${value}`,
+        "user-agent": "test-client",
+      },
+      payload: {
+        model: `${provider}:${modelId}`,
+        input: ["hello world"],
+      },
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.json()).toMatchObject({
+      object: "list",
+      model: modelId,
+      data: [{ object: "embedding", index: 0 }],
+    });
+    expect(capturedProvider).toBe("gemini");
+    expect(capturedApiKey).toBe("gemini-api-key");
+
+    const interactions = await InteractionModel.findAllPaginated(
+      { limit: 10, offset: 0 },
+      undefined,
+      undefined,
+      undefined,
+      { profileId: agent.id },
+    );
+    expect(interactions.data[0]).toMatchObject({
+      type: "gemini:embeddings",
+      source: "model_router",
+      model: modelId,
+    });
+  });
+
+  test("routes Azure embedding models through embeddings", async ({
+    makeAgent,
+    makeOrganization,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const app = createFastifyApp();
+    await app.register(modelRouterProxyRoutes);
+    const provider = "azure";
+    const modelId = "text-embedding-ada-002";
+    await upsertModel({ provider, modelId, embeddingDimensions: 1536 });
+    const organization = await makeOrganization();
+    const { value } = await createModelRouterVirtualKey({
+      organizationId: organization.id,
+      provider,
+      makeSecret,
+      makeLlmProviderApiKey,
+      apiKeyValue: "azure-api-key",
+    });
+    const agent = await makeAgent({
+      organizationId: organization.id,
+      name: "Model Router Azure Embedding Agent",
+      agentType: "llm_proxy",
+    });
+
+    let capturedProvider: string | undefined;
+    vi.spyOn(embeddingClients, "callEmbedding").mockImplementation(
+      async (params) => {
+        capturedProvider = params.provider;
+        return {
+          object: "list",
+          data: (Array.isArray(params.inputs) ? params.inputs : [params.inputs]).map(
+            (_input, index) => ({ object: "embedding", embedding: [0.7, 0.8, 0.9], index }),
+          ),
+          model: params.model,
+          usage: { prompt_tokens: 1, total_tokens: 1 },
+        };
+      },
+    );
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/model-router/${agent.id}/embeddings`,
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${value}`,
+        "user-agent": "test-client",
+      },
+      payload: {
+        model: `${provider}:${modelId}`,
+        input: ["embed this"],
+      },
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.json()).toMatchObject({
+      object: "list",
+      model: modelId,
+      data: [{ object: "embedding", index: 0 }],
+    });
+    expect(capturedProvider).toBe("azure");
+
+    const interactions = await InteractionModel.findAllPaginated(
+      { limit: 10, offset: 0 },
+      undefined,
+      undefined,
+      undefined,
+      { profileId: agent.id },
+    );
+    expect(interactions.data[0]).toMatchObject({
+      type: "openai:embeddings",
+      source: "model_router",
+      model: modelId,
+    });
+  });
+
+  test("rejects embeddings for providers without embedding support (anthropic)", async ({
+    makeAgent,
+    makeOrganization,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const app = createFastifyApp();
+    await app.register(modelRouterProxyRoutes);
+    // Manually insert an anthropic model with embedding dimensions to simulate
+    // a misconfigured model that bypasses the normal provider guard.
+    await upsertModel({
+      provider: "anthropic",
+      modelId: "claude-embedding-fake",
+      embeddingDimensions: 1536,
+    });
+    const organization = await makeOrganization();
+    const { value } = await createModelRouterVirtualKey({
+      organizationId: organization.id,
+      provider: "anthropic",
+      makeSecret,
+      makeLlmProviderApiKey,
+    });
+    const agent = await makeAgent({
+      organizationId: organization.id,
+      name: "Model Router Anthropic Embedding Agent",
+      agentType: "llm_proxy",
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/model-router/${agent.id}/embeddings`,
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${value}`,
+        "user-agent": "test-client",
+      },
+      payload: {
+        model: "anthropic:claude-embedding-fake",
+        input: ["test"],
+      },
+    });
+
+    expect(response.statusCode).toBe(501);
+    expect(response.json().error.message).toContain("anthropic");
   });
 
   test("lists embedding models but rejects them on chat completions", async ({

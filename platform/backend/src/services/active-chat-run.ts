@@ -7,8 +7,9 @@ import {
   createActiveChatRunNotifier,
 } from "@/services/active-chat-run-notifier";
 
-const EVENT_FLUSH_INTERVAL_MS = 100;
-const EVENT_BATCH_SIZE = 16;
+const EVENT_FLUSH_INTERVAL_MS = 500;
+const EVENT_BATCH_SIZE = 256;
+const RUN_TOUCH_INTERVAL_MS = 30 * 1000;
 const STALE_RUNNING_MS = 10 * 60 * 1000;
 const TERMINAL_CLEANUP_INTERVAL_MS = 60 * 1000;
 const ACTIVE_CHAT_RUN_TERMINAL_RETENTION_MS = 60 * 60 * 1000;
@@ -273,6 +274,7 @@ class ActiveChatRunEventBatcher {
   private pending: UIMessageChunk[] = [];
   private flushTimer: NodeJS.Timeout | null = null;
   private flushPromise: Promise<void> = Promise.resolve();
+  private lastRunTouchAt = 0;
 
   constructor(
     private readonly runId: string,
@@ -307,6 +309,7 @@ class ActiveChatRunEventBatcher {
 
     const payloads = compactReplayPayloads(this.pending);
     const seq = this.nextSeq;
+    const touchRun = this.shouldTouchRun();
     this.pending = [];
     this.nextSeq += 1;
 
@@ -315,10 +318,24 @@ class ActiveChatRunEventBatcher {
         runId: this.runId,
         seq,
         payloads,
+        touchRun,
       }).then(() => this.onFlush()),
     );
 
     await this.flushPromise;
+  }
+
+  private shouldTouchRun(): boolean {
+    const now = Date.now();
+    if (
+      this.lastRunTouchAt &&
+      now - this.lastRunTouchAt < RUN_TOUCH_INTERVAL_MS
+    ) {
+      return false;
+    }
+
+    this.lastRunTouchAt = now;
+    return true;
   }
 }
 

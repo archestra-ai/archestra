@@ -29,8 +29,18 @@ class ActiveChatRunModel {
     runId: string;
     seq: number;
     payloads: UIMessageChunk[];
+    touchRun?: boolean;
   }): Promise<void> {
     if (params.payloads.length === 0) {
+      return;
+    }
+
+    if (!params.touchRun) {
+      await db.insert(schema.chatActiveRunEventsTable).values({
+        runId: params.runId,
+        seq: params.seq,
+        payloads: params.payloads,
+      });
       return;
     }
 
@@ -40,7 +50,6 @@ class ActiveChatRunModel {
         seq: params.seq,
         payloads: params.payloads,
       });
-
       await tx
         .update(schema.chatActiveRunsTable)
         .set({ updatedAt: new Date() })

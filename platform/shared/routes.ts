@@ -313,6 +313,16 @@ export const RouteId = {
   CreateApiKey: "createApiKey",
   DeleteApiKey: "deleteApiKey",
 
+  // Service Account Routes
+  GetServiceAccounts: "getServiceAccounts",
+  GetServiceAccount: "getServiceAccount",
+  CreateServiceAccount: "createServiceAccount",
+  UpdateServiceAccount: "updateServiceAccount",
+  DeleteServiceAccount: "deleteServiceAccount",
+  CreateServiceAccountToken: "createServiceAccountToken",
+  UpdateServiceAccountToken: "updateServiceAccountToken",
+  DeleteServiceAccountToken: "deleteServiceAccountToken",
+
   // Virtual API Key Routes
   GetAllVirtualApiKeys: "getAllVirtualApiKeys",
   CreateVirtualApiKey: "createVirtualApiKey",

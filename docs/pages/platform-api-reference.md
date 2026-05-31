@@ -10,9 +10,25 @@ Explore the Archestra API using the interactive documentation below.
 
 ## Authentication
 
-To authenticate with the Archestra API, head to the **Settings** → **API Keys** page (`/settings/api-keys`) to create a personal API key (requires `apiKey:read` and `apiKey:create` permissions, see [Access Control](/docs/platform-access-control) for more details).
+Use a personal API key or service account token in the `Authorization` header.
 
-Once you've created an API key, copy the key (it will only be shown once), and include the key in your requests using the `Authorization` header in the endpoints shown below.
+### Personal API Keys
+
+Personal API keys are owned by one user. Create them from **Settings → API Keys**. They use the owner's current role, so permission changes to that user immediately affect the key.
+
+Use personal keys for local scripts, development tools, and user-owned automation.
+
+### Service Accounts
+
+Service accounts are organization-owned identities for automation. Create them
+from **Settings → Service Accounts**, assign a role, and create a token.
+
+Service account requests authorize from the service account's assigned role.
+Disable or delete the service account to stop all of its tokens, or delete an
+individual token when rotating credentials.
+
+Use service accounts for CI, scheduled jobs, shared integrations, and production
+automation that should not depend on an individual user remaining active.
 
 :::swagger-ui
 :::

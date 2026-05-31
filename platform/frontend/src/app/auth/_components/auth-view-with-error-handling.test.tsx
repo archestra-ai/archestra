@@ -42,6 +42,10 @@ vi.mock("@/lib/config/config.query", () => ({
   usePublicConfig: vi.fn(),
 }));
 
+vi.mock("@/lib/auth/identity-provider-read.query", () => ({
+  usePublicIdentityProviders: () => ({ data: [] }),
+}));
+
 vi.mock("@/lib/hooks/use-app-name", () => ({
   useAppName: () => "Test App",
 }));

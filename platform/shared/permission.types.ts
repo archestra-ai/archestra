@@ -70,6 +70,7 @@ export const resources = [
   "invitation",
   "team",
   "apiKey",
+  "serviceAccount",
   "auditLog",
   "simpleView",
   "chatAgentPicker",
@@ -107,6 +108,7 @@ export const resourceLabels: Record<Resource, string> = {
   llmModel: "LLM Models",
   secret: "Secrets",
   apiKey: "API Keys",
+  serviceAccount: "Service Accounts",
   auditLog: "Audit Log",
   organizationSettings: "Organization Settings",
   llmSettings: "LLM Settings",
@@ -151,6 +153,7 @@ export const resourceDescriptions: Record<Resource, string> = {
   identityProvider: "Identity providers for authentication",
   secret: "Secrets manager configuration and connectivity",
   apiKey: "User API keys for programmatic access",
+  serviceAccount: "Service accounts and tokens for programmatic access",
   auditLog:
     "Organization-wide audit trail of administrative actions and auth events",
   organizationSettings:
@@ -216,6 +219,7 @@ export const resourceCategories: Record<string, Resource[]> = {
     "identityProvider",
     "secret",
     "apiKey",
+    "serviceAccount",
     "auditLog",
     "organizationSettings",
     "siteNotification",

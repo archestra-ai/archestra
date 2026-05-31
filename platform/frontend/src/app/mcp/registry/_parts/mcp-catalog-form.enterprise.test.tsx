@@ -33,7 +33,7 @@ vi.mock("@/lib/organization.query", () => ({
   usePresetEntityName: vi.fn(() => ({ singular: "Preset", plural: "Presets" })),
 }));
 
-vi.mock("@/lib/auth/identity-provider.query.ee", () => ({
+vi.mock("@/lib/auth/identity-provider-read.query", () => ({
   useIdentityProviders: useIdentityProvidersMock,
 }));
 

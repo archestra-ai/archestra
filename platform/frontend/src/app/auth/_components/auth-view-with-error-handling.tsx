@@ -1,6 +1,5 @@
 "use client";
 
-import { AuthView } from "@daveyplate/better-auth-ui";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { E2eTestId, GITHUB_REPO_NEW_ISSUE_URL } from "@shared";
 import {
@@ -56,6 +55,11 @@ const IdentityProviderSelector = dynamic(async () => {
   // biome-ignore lint/style/noRestrictedImports: conditional EE component with IdP selector
   const module = await import("@/components/identity-provider-selector.ee");
   return module.IdentityProviderSelector;
+});
+
+const BetterAuthView = dynamic(async () => {
+  const module = await import("@daveyplate/better-auth-ui");
+  return module.AuthView;
 });
 
 /**
@@ -481,7 +485,7 @@ export function AuthViewWithErrorHandling({
           <SignInView callbackURL={callbackURL} />
         ) : (
           alwaysShowAuthView && (
-            <AuthView
+            <BetterAuthView
               path={path}
               callbackURL={callbackURL}
               classNames={{
@@ -493,7 +497,7 @@ export function AuthViewWithErrorHandling({
           )
         )}
         {!isSignInPage && !alwaysShowAuthView && !isBasicAuthDisabled && (
-          <AuthView
+          <BetterAuthView
             path={path}
             callbackURL={callbackURL}
             classNames={{

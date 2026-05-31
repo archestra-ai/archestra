@@ -158,6 +158,17 @@ describe("AuditLogTable", () => {
     expect(screen.queryByText("agent.created")).not.toBeInTheDocument();
   });
 
+  it("renders restore actions with a specific label", () => {
+    mockUseAuditLogs.mockReturnValue(
+      withRows([makeEvent({ action: "agent.restored" })]),
+    );
+
+    renderTable();
+
+    expect(screen.getByText("Agent restored")).toBeInTheDocument();
+    expect(screen.queryByText("Unknown create")).not.toBeInTheDocument();
+  });
+
   it("outcome column renders the correct badge text for each outcome", () => {
     mockUseAuditLogs.mockReturnValue(
       withRows([makeEvent({ outcome: "denied" })]),

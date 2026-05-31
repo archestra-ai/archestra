@@ -2308,6 +2308,7 @@ class AgentModel {
       teams: teams.map((t) => t.name).sort(),
       labels: labels.sort(),
       delegationTargets,
+      deletedAt: row.deletedAt?.toISOString() ?? null,
       createdAt: row.createdAt.toISOString(),
     };
   }

@@ -4,9 +4,10 @@ import {
   DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
 } from "@shared";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { vi } from "vitest";
 import db, { schema } from "@/database";
+import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import { AgentToolModel, ToolModel } from "@/models";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
@@ -48,6 +49,7 @@ describe("agent routes", () => {
         }
       ).organizationId = organizationId;
     });
+    registerAuditLogHook(app);
 
     const { default: agentRoutes } = await import("./agent");
     await app.register(agentRoutes);
@@ -662,6 +664,32 @@ describe("agent routes", () => {
           .json()
           .data.some((agent: { id: string }) => agent.id === created.id),
       ).toBe(true);
+
+      const auditRows = await db
+        .select({
+          action: schema.auditLogsTable.action,
+          resourceType: schema.auditLogsTable.resourceType,
+          resourceId: schema.auditLogsTable.resourceId,
+          before: schema.auditLogsTable.before,
+          after: schema.auditLogsTable.after,
+        })
+        .from(schema.auditLogsTable)
+        .where(
+          and(
+            eq(schema.auditLogsTable.action, "agent.restored"),
+            eq(schema.auditLogsTable.resourceId, created.id),
+          ),
+        );
+      expect(auditRows).toHaveLength(1);
+      expect(auditRows[0]).toMatchObject({
+        action: "agent.restored",
+        resourceType: "agent",
+        resourceId: created.id,
+      });
+      expect(auditRows[0].before).toMatchObject({
+        deletedAt: expect.any(String),
+      });
+      expect(auditRows[0].after).toMatchObject({ deletedAt: null });
     });
 
     test("restores MCP gateway rows through the shared agent restore route", async ({

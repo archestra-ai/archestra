@@ -1,11 +1,11 @@
-import {
-  type Action,
-  type AgentType,
-  getResourceForAgentType,
-  type Resource,
-} from "@shared";
+import { type Action, getResourceForAgentType, type Resource } from "@shared";
 import { UserModel } from "@/models";
-import { type AgentScope, ApiError } from "@/types";
+import {
+  type AgentScope,
+  type AgentType,
+  AgentTypeSchema,
+  ApiError,
+} from "@/types";
 import { userHasPermission } from "./utils";
 
 /** @public — re-exported for testability */
@@ -107,7 +107,7 @@ export async function getAgentTypePermissionChecker(params: {
       );
     },
     getAgentTypesWithPermission(action: Action): AgentType[] {
-      return AGENT_TYPES.filter((agentType) => {
+      return AgentTypeSchema.options.filter((agentType) => {
         const resource = getResourceForAgentType(agentType);
         return permissions[resource]?.includes(action) ?? false;
       });
@@ -243,12 +243,6 @@ export interface AgentTypePermissionChecker {
 
 // ===== Internal helpers =====
 
-const AGENT_TYPES: AgentType[] = [
-  "profile",
-  "mcp_gateway",
-  "llm_proxy",
-  "agent",
-];
 const AGENT_TYPE_RESOURCES: Resource[] = ["agent", "mcpGateway", "llmProxy"];
 
 async function hasAnyAgentTypePermission(params: {

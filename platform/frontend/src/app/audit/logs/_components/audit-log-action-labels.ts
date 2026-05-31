@@ -21,6 +21,7 @@ export const ACTION_LABEL: Record<AuditEventName, string> = {
   "agent.created": "Agent created",
   "agent.updated": "Agent updated",
   "agent.deleted": "Agent deleted",
+  "agent.restored": "Agent restored",
   // Agent tool assignment
   "agentTool.created": "Agent tool added",
   "agentTool.updated": "Agent tool updated",

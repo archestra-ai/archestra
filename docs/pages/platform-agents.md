@@ -74,11 +74,13 @@ When an agent delegates work to another agent, Archestra tracks the full call ch
 
 An agent can be converted into an [Agent Skill](/docs/platform-agent-skills-sharing) — a reusable `SKILL.md` instruction set that any agent can activate from chat. Use this when the agent's value is mostly in its instructions and you want them available as a `/slash-command` rather than as a separate agent to switch to.
 
-The conversion is non-destructive (the source agent is left intact) and inherits the agent's scope. It is also lossy by nature: a skill carries instructions only, with no tools, model, or knowledge of its own. Each field is therefore either carried over or annotated, and a report shows which:
+The **Convert to skill** action on the agents page opens a confirmation dialog where you set the skill's description and choose whether to remove the source agent once the skill is created. The skill inherits the agent's scope. Conversion is lossy by nature: a skill carries instructions only, with no tools, model, or knowledge of its own. Each field is either carried over or annotated:
 
-- the system prompt becomes the skill body; name, description, and scope carry over directly
-- assigned tools, the default model, and knowledge sources have no skill equivalent, so they are listed under a `Requirements` section in the body for the invoking agent to re-attach
+- the system prompt becomes the skill body; name and scope carry over directly
+- the description is required — the agent's own is prefilled, and you must supply one when the agent has none (an activating agent uses it to decide when to run the skill)
+- assigned tools are listed under a `Recommended tools` section so the activating agent knows what to enable; the default model and knowledge sources have no skill equivalent and are reported as not carried, without cluttering the skill body
 - suggested prompts, icon, and labels are folded into the body or metadata, and the origin agent is recorded in metadata so the skill stays linked back to it
+- removing the source agent is optional and off by default; it is a soft delete, so the agent can be restored later from the deleted-agents filter
 
 The same conversion is available to the model through the [`draft_skill_from_agent`](/docs/platform-archestra-mcp-server) MCP tool, which returns a draft manifest the model can edit before persisting it with `create_skill`.
 

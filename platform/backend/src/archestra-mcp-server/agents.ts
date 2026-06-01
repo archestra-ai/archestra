@@ -119,7 +119,7 @@ const DraftSkillFromAgentOutputSchema = z.object({
   annotated: z
     .array(MigrationFieldOutputSchema)
     .describe(
-      "Agent fields with no skill equivalent, folded into the manifest body or metadata.",
+      "Agent fields with no skill equivalent — folded into metadata or reported as not carried.",
     ),
 });
 
@@ -269,8 +269,9 @@ const registry = defineArchestraTools([
     description:
       "Convert an internal agent into a draft SKILL.md manifest for review. " +
       "Returns the manifest plus a summary of what was carried over versus " +
-      "annotated — the agent's tools, model, and knowledge bindings have no " +
-      "skill equivalent and are listed under a Requirements section instead. " +
+      "annotated — the agent's tools are listed under a Recommended tools " +
+      "section, while its model and knowledge bindings have no skill equivalent " +
+      "and are reported as not carried (not written into the body). " +
       "This does NOT create anything: edit the manifest body if you like, then " +
       `call ${TOOL_CREATE_SKILL_SHORT_NAME} with the final manifest to persist ` +
       "it. Keep the metadata block so the skill stays linked to its origin " +

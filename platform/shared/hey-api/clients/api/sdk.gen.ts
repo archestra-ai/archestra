@@ -4812,7 +4812,7 @@ export const createSkill = <ThrowOnError extends boolean = false>(options: Optio
 });
 
 /**
- * Convert an internal agent into a new Agent Skill. The skill inherits the agent's scope; the agent is left intact.
+ * Convert an internal agent into a new Agent Skill. The skill inherits the agent's scope. The source agent is left intact unless deleteAgent is set.
  *
  * Authentication:
  *
@@ -4823,7 +4823,14 @@ export const createSkill = <ThrowOnError extends boolean = false>(options: Optio
  * `agent:read`: View and list agents
  * `skill:create`: Create new agent skills
  */
-export const convertAgentToSkill = <ThrowOnError extends boolean = false>(options: Options<ConvertAgentToSkillData, ThrowOnError>) => (options.client ?? client).post<ConvertAgentToSkillResponses, ConvertAgentToSkillErrors, ThrowOnError>({ url: '/api/agents/{id}/convert-to-skill', ...options });
+export const convertAgentToSkill = <ThrowOnError extends boolean = false>(options: Options<ConvertAgentToSkillData, ThrowOnError>) => (options.client ?? client).post<ConvertAgentToSkillResponses, ConvertAgentToSkillErrors, ThrowOnError>({
+    url: '/api/agents/{id}/convert-to-skill',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
 
 /**
  * Delete a skill and its resource files

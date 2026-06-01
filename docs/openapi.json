@@ -189668,7 +189668,27 @@
         "tags": [
           "Skills"
         ],
-        "description": "Convert an internal agent into a new Agent Skill. The skill inherits the agent's scope; the agent is left intact.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:read`: View and list agents\n`skill:create`: Create new agent skills",
+        "description": "Convert an internal agent into a new Agent Skill. The skill inherits the agent's scope. The source agent is left intact unless deleteAgent is set.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:read`: View and list agents\n`skill:create`: Create new agent skills",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "description": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 1024
+                  },
+                  "deleteAgent": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        },
         "parameters": [
           {
             "schema": {
@@ -189899,11 +189919,15 @@
                         "annotated"
                       ],
                       "additionalProperties": false
+                    },
+                    "deletedAgent": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
                     "skill",
-                    "report"
+                    "report",
+                    "deletedAgent"
                   ],
                   "additionalProperties": false
                 }

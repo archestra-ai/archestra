@@ -8,7 +8,10 @@ import {
 } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { getAgentTypePermissionChecker } from "@/auth/agent-type-permissions";
+import {
+  getAgentTypePermissionChecker,
+  requireAgentModifyPermission,
+} from "@/auth/agent-type-permissions";
 import {
   getSkillPermissionChecker,
   requireSkillModifyPermission,
@@ -17,6 +20,7 @@ import {
 import logger from "@/logging";
 import {
   AgentModel,
+  MemberModel,
   OrganizationModel,
   SkillFileModel,
   SkillModel,
@@ -89,6 +93,18 @@ const MigrationReportSchema = z.object({
 const ConvertAgentToSkillResponseSchema = z.object({
   skill: SkillDetailSchema,
   report: MigrationReportSchema,
+  /** Whether the source agent was deleted as part of the conversion. */
+  deletedAgent: z.boolean(),
+});
+
+/**
+ * Conversion options gathered in the confirm dialog: an explicit skill
+ * description (required there when the agent has none) and whether to delete the
+ * source agent once the skill exists.
+ */
+const ConvertAgentToSkillInputSchema = z.object({
+  description: z.string().trim().min(1).max(1024).optional(),
+  deleteAgent: z.boolean().optional(),
 });
 
 /** Raw resource file as submitted by the in-app editor. */
@@ -278,13 +294,14 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.ConvertAgentToSkill,
         description:
-          "Convert an internal agent into a new Agent Skill. The skill inherits the agent's scope; the agent is left intact.",
+          "Convert an internal agent into a new Agent Skill. The skill inherits the agent's scope. The source agent is left intact unless deleteAgent is set.",
         tags: ["Skills"],
         params: z.object({ id: UuidIdSchema }),
+        body: ConvertAgentToSkillInputSchema,
         response: constructResponseSchema(ConvertAgentToSkillResponseSchema),
       },
     },
-    async ({ params: { id }, user, organizationId }, reply) => {
+    async ({ params: { id }, body, user, organizationId }, reply) => {
       // admin-view load first so we can check the type before leaking existence.
       const agent = await AgentModel.findById(id, user.id, true);
       if (!agent || agent.organizationId !== organizationId) {
@@ -314,7 +331,41 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
-      const { draft, teamIds, report } = agentToSkill(agent);
+      // If the caller wants the source agent gone, prove they may delete it
+      // BEFORE creating the skill, so a permission failure doesn't leave an
+      // orphan skill behind. Mirrors the agent DELETE route's authorization.
+      if (body.deleteAgent) {
+        try {
+          agentChecker.require(agent.agentType, "delete");
+        } catch {
+          throw new ApiError(
+            403,
+            "You do not have permission to delete this agent",
+          );
+        }
+        const agentUserTeamIds = agentChecker.isAdmin(agent.agentType)
+          ? []
+          : await TeamModel.getUserTeamIds(user.id);
+        requireAgentModifyPermission({
+          checker: agentChecker,
+          agentType: agent.agentType,
+          agentScope: agent.scope,
+          agentAuthorId: agent.authorId,
+          agentTeamIds: agent.teams.map((team) => team.id),
+          userTeamIds: agentUserTeamIds,
+          userId: user.id,
+        });
+        if (await MemberModel.isAgentDefault(agent.id)) {
+          throw new ApiError(
+            400,
+            "Cannot delete a default agent. Set another agent as default first.",
+          );
+        }
+      }
+
+      const { draft, teamIds, report } = agentToSkill(agent, {
+        description: body.description,
+      });
 
       // Agent system prompts are unbounded, so enforce the same content-size cap
       // the manual/import paths apply to SKILL.md (SkillManifestInputSchema). An
@@ -371,11 +422,22 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // it carried. The MCP draft path can't and reports it annotated instead.
       report.carried.push({ field: SCOPE_FIELD, detail: draft.scope });
 
+      // Eligibility was checked above; delete now that the skill is safely
+      // persisted. A failed delete leaves both the skill and the agent — better
+      // than silently dropping the new skill.
+      const deletedAgent = body.deleteAgent
+        ? await AgentModel.delete(agent.id)
+        : false;
+
       logger.info(
-        { agentId: agent.id, skillId: skill.id, organizationId },
+        { agentId: agent.id, skillId: skill.id, organizationId, deletedAgent },
         "[Skills] Converted agent to skill",
       );
-      return reply.send({ skill: await loadSkillDetail(skill), report });
+      return reply.send({
+        skill: await loadSkillDetail(skill),
+        report,
+        deletedAgent,
+      });
     },
   );
 

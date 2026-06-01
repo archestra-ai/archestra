@@ -99,6 +99,18 @@ export function AgentActions({
       href: `/chat/new?agent_id=${agent.id}`,
     },
     editOrViewAction,
+    {
+      icon: <Sparkles className="h-4 w-4" />,
+      label: "Convert to skill",
+      permissions: { skill: ["create"] },
+      disabled: isBuiltIn || agent.agentType !== "agent",
+      disabledTooltip: isBuiltIn
+        ? "Built-in agents cannot be converted"
+        : agent.agentType !== "agent"
+          ? "Only internal agents can be converted to skills"
+          : undefined,
+      onClick: () => onConvertToSkill(agent),
+    },
   ];
 
   const dropdownActions: TableRowAction[] = [
@@ -132,18 +144,6 @@ export function AgentActions({
           ? "Only internal agents can be exported"
           : undefined,
       onClick: () => onExport(agent),
-    },
-    {
-      icon: <Sparkles className="h-4 w-4" />,
-      label: "Convert to skill",
-      permissions: { skill: ["create"] },
-      disabled: isBuiltIn || agent.agentType !== "agent",
-      disabledTooltip: isBuiltIn
-        ? "Built-in agents cannot be converted"
-        : agent.agentType !== "agent"
-          ? "Only internal agents can be converted to skills"
-          : undefined,
-      onClick: () => onConvertToSkill(agent),
     },
     {
       icon: <Trash2 className="h-4 w-4" />,

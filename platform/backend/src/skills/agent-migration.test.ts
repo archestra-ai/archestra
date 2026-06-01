@@ -1,3 +1,7 @@
+import {
+  TOOL_ACTIVATE_SKILL_FULL_NAME,
+  TOOL_READ_SKILL_FILE_FULL_NAME,
+} from "@shared";
 import { describe, expect, it } from "vitest";
 import {
   agentToSkill,
@@ -68,18 +72,29 @@ describe("agentToSkill", () => {
     expect(draft.name).toBe("migrated-agent");
   });
 
-  it("synthesizes a description when the agent has none", () => {
+  it("prefers an explicit description override and reports it carried", () => {
+    const { draft, report } = agentToSkill(
+      makeMigratableAgent({ description: "stale" }),
+      { description: "  A crisp, user-written description  " },
+    );
+
+    expect(draft.description).toBe("A crisp, user-written description");
+    expect(report.carried.map((field) => field.field)).toContain("description");
+  });
+
+  it("falls back to the agent name (never a migration line) when no description is available", () => {
     const { draft, report } = agentToSkill(
       makeMigratableAgent({ name: "Helper", description: null }),
     );
 
-    expect(draft.description).toBe('Migrated from the "Helper" agent.');
+    expect(draft.description).toBe("Helper");
+    expect(draft.description).not.toContain("Migrated");
     expect(report.annotated.map((field) => field.field)).toContain(
       "description",
     );
   });
 
-  it("annotates tool/model/knowledge bindings under a Requirements section", () => {
+  it("lists tools as recommended and reports model/knowledge as not carried", () => {
     const { draft, report } = agentToSkill(
       makeMigratableAgent({
         tools: [{ name: "slack__send" }, { name: "github__pr" }],
@@ -89,24 +104,52 @@ describe("agentToSkill", () => {
       }),
     );
 
-    expect(draft.content).toContain("## Requirements");
-    expect(draft.content).toContain("slack__send, github__pr");
-    expect(draft.content).toContain("Knowledge bases: 2");
-    expect(draft.content).toContain("Knowledge connectors: 1");
+    expect(draft.content).toContain("## Recommended tools");
+    expect(draft.content).toContain("- slack__send");
+    expect(draft.content).toContain("- github__pr");
+    // the migration is never mentioned in the body; downstream agents don't care.
+    expect(draft.content).not.toContain("Migrated");
+    expect(draft.content).not.toContain("## Requirements");
+    // model/knowledge have no skill equivalent and stay out of the body.
+    expect(draft.content).not.toContain("Knowledge");
     expect(draft.metadata.originAgentModelId).toBe("model-1");
+    expect(report.carried.map((field) => field.field)).toContain("tools");
     expect(report.annotated.map((field) => field.field)).toEqual(
-      expect.arrayContaining([
-        "tools",
-        "modelId",
-        "knowledgeBaseIds",
-        "connectorIds",
-      ]),
+      expect.arrayContaining(["modelId", "knowledgeBaseIds", "connectorIds"]),
     );
   });
 
-  it("omits the Requirements section when there are no bindings", () => {
+  it("omits the Recommended tools section when the agent has no tools", () => {
     const { draft } = agentToSkill(makeMigratableAgent());
-    expect(draft.content).not.toContain("## Requirements");
+    expect(draft.content).not.toContain("## Recommended tools");
+  });
+
+  it("excludes skill-runtime tools from the recommended list", () => {
+    const { draft } = agentToSkill(
+      makeMigratableAgent({
+        tools: [
+          { name: TOOL_ACTIVATE_SKILL_FULL_NAME },
+          { name: TOOL_READ_SKILL_FILE_FULL_NAME },
+          { name: "slack__send" },
+        ],
+      }),
+    );
+
+    expect(draft.content).toContain("- slack__send");
+    expect(draft.content).not.toContain(TOOL_ACTIVATE_SKILL_FULL_NAME);
+    expect(draft.content).not.toContain(TOOL_READ_SKILL_FILE_FULL_NAME);
+  });
+
+  it("omits the Recommended tools section when only skill-runtime tools are present", () => {
+    const { draft } = agentToSkill(
+      makeMigratableAgent({
+        tools: [
+          { name: TOOL_ACTIVATE_SKILL_FULL_NAME },
+          { name: TOOL_READ_SKILL_FILE_FULL_NAME },
+        ],
+      }),
+    );
+    expect(draft.content).not.toContain("## Recommended tools");
   });
 
   it("lists suggested prompts as examples", () => {

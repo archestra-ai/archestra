@@ -1,5 +1,5 @@
 import { ADMIN_ROLE_NAME } from "@shared";
-import { SkillModel } from "@/models";
+import { AgentModel, SkillModel } from "@/models";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { MAX_SKILL_FILE_BYTES } from "@/skills/github-import";
@@ -20,6 +20,7 @@ interface ConvertResponse {
     metadata: Record<string, string>;
   };
   report: { carried: MigrationField[]; annotated: MigrationField[] };
+  deletedAgent: boolean;
 }
 
 describe("POST /api/agents/:id/convert-to-skill", () => {
@@ -67,6 +68,7 @@ describe("POST /api/agents/:id/convert-to-skill", () => {
     const response = await app.inject({
       method: "POST",
       url: `/api/agents/${agent.id}/convert-to-skill`,
+      payload: {},
     });
 
     expect(response.statusCode).toBe(200);
@@ -77,9 +79,12 @@ describe("POST /api/agents/:id/convert-to-skill", () => {
       "You are a support assistant. Be concise.",
     );
     expect(body.skill.content).toContain("## Example prompts");
+    // the conversion is never mentioned in the body.
+    expect(body.skill.content).not.toContain("Migrated");
     expect(body.skill.metadata.origin).toBe("agent");
     expect(body.skill.metadata.originAgentId).toBe(agent.id);
     expect(body.skill.metadata.icon).toBe("🎧");
+    expect(body.deletedAgent).toBe(false);
     expect(body.report.carried.map((field) => field.field)).toContain(
       "systemPrompt",
     );
@@ -88,15 +93,16 @@ describe("POST /api/agents/:id/convert-to-skill", () => {
       body.report.carried.find((field) => field.field === "scope")?.detail,
     ).toBe("personal");
 
-    // non-destructive: the skill persisted, the agent is untouched.
+    // by default non-destructive: the skill persisted, the agent is untouched.
     const stored = await SkillModel.findByName(
       organizationId,
       "support-helper",
     );
     expect(stored?.metadata.originAgentId).toBe(agent.id);
+    expect(await AgentModel.findById(agent.id, user.id, true)).not.toBeNull();
   });
 
-  test("annotates tool bindings under a Requirements section", async ({
+  test("lists tool bindings as recommended tools", async ({
     makeInternalAgent,
     makeTool,
     makeAgentTool,
@@ -119,12 +125,47 @@ describe("POST /api/agents/:id/convert-to-skill", () => {
     const response = await app.inject({
       method: "POST",
       url: `/api/agents/${agent.id}/convert-to-skill`,
+      payload: {},
     });
 
     expect(response.statusCode).toBe(200);
     const body = response.json() as ConvertResponse;
-    expect(body.skill.content).toContain("## Requirements");
+    expect(body.skill.content).toContain("## Recommended tools");
     expect(body.skill.content).toContain("slack__send");
+    expect(body.skill.content).not.toContain("## Requirements");
+  });
+
+  test("uses an explicit description and can delete the source agent", async ({
+    makeInternalAgent,
+  }) => {
+    const agent = await makeInternalAgent({
+      organizationId,
+      name: "Disposable Agent",
+      scope: "personal",
+      systemPrompt: "Do work.",
+      description: null,
+      teams: [],
+      labels: [],
+      knowledgeBaseIds: [],
+      connectorIds: [],
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/agents/${agent.id}/convert-to-skill`,
+      payload: { description: "Handles disposable work", deleteAgent: true },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json() as ConvertResponse;
+    expect(body.skill.description).toBe("Handles disposable work");
+    expect(body.deletedAgent).toBe(true);
+    expect(body.report.carried.map((field) => field.field)).toContain(
+      "description",
+    );
+
+    // the agent is soft-deleted, so it no longer resolves through normal lookup.
+    expect(await AgentModel.findById(agent.id, user.id, true)).toBeNull();
   });
 
   test("rejects built-in agents", async ({ makeInternalAgent }) => {
@@ -145,6 +186,7 @@ describe("POST /api/agents/:id/convert-to-skill", () => {
     const response = await app.inject({
       method: "POST",
       url: `/api/agents/${agent.id}/convert-to-skill`,
+      payload: {},
     });
 
     expect(response.statusCode).toBe(400);
@@ -165,6 +207,7 @@ describe("POST /api/agents/:id/convert-to-skill", () => {
     const response = await app.inject({
       method: "POST",
       url: `/api/agents/${gateway.id}/convert-to-skill`,
+      payload: {},
     });
 
     expect(response.statusCode).toBe(400);
@@ -201,6 +244,7 @@ describe("POST /api/agents/:id/convert-to-skill", () => {
     const response = await app.inject({
       method: "POST",
       url: `/api/agents/${agent.id}/convert-to-skill`,
+      payload: {},
     });
 
     expect(response.statusCode).toBe(409);
@@ -223,6 +267,7 @@ describe("POST /api/agents/:id/convert-to-skill", () => {
     const response = await app.inject({
       method: "POST",
       url: `/api/agents/${agent.id}/convert-to-skill`,
+      payload: {},
     });
 
     expect(response.statusCode).toBe(400);
@@ -232,6 +277,7 @@ describe("POST /api/agents/:id/convert-to-skill", () => {
     const response = await app.inject({
       method: "POST",
       url: "/api/agents/11111111-1111-4111-8111-111111111111/convert-to-skill",
+      payload: {},
     });
 
     expect(response.statusCode).toBe(404);

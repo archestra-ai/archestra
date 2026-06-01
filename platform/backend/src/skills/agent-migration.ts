@@ -1,5 +1,19 @@
+import {
+  TOOL_ACTIVATE_SKILL_FULL_NAME,
+  TOOL_READ_SKILL_FILE_FULL_NAME,
+} from "@shared";
 import { dump as dumpYaml } from "js-yaml";
 import type { ResourceVisibilityScope } from "@/types/visibility";
+
+/**
+ * Skill-runtime tools that every skill-enabled agent carries. Recommending them
+ * inside a skill is circular noise — the activating agent already has them — so
+ * they are dropped from the Recommended tools list.
+ */
+const SKILL_RUNTIME_TOOL_NAMES: ReadonlySet<string> = new Set([
+  TOOL_ACTIVATE_SKILL_FULL_NAME,
+  TOOL_READ_SKILL_FILE_FULL_NAME,
+]);
 
 /**
  * The subset of an agent the migration actually reads. Declaring it explicitly
@@ -88,7 +102,19 @@ export interface AgentSkillMigration {
   report: MigrationReport;
 }
 
-export function agentToSkill(agent: MigratableAgent): AgentSkillMigration {
+export interface AgentToSkillOptions {
+  /**
+   * Description to use instead of the agent's own. The UI requires the user to
+   * supply one when the agent has no description (a synthesized "migrated from"
+   * line is useless to downstream agents), and lets them refine it otherwise.
+   */
+  description?: string;
+}
+
+export function agentToSkill(
+  agent: MigratableAgent,
+  options: AgentToSkillOptions = {},
+): AgentSkillMigration {
   const carried: MigrationField[] = [];
   const annotated: MigrationField[] = [];
 
@@ -102,7 +128,12 @@ export function agentToSkill(agent: MigratableAgent): AgentSkillMigration {
     });
   }
 
-  const description = deriveDescription(agent, carried, annotated);
+  const description = deriveDescription(
+    agent,
+    options.description,
+    carried,
+    annotated,
+  );
   const metadata = buildMetadata(agent, annotated);
   const content = buildContent({
     agent,
@@ -177,15 +208,23 @@ function toSkillName(agentName: string): string {
 }
 
 /**
- * A skill's `description` is required and drives activation; an agent's is
- * nullable. Use the agent's when present, otherwise synthesize one and record
- * that it was generated.
+ * A skill's `description` is required and drives activation. Prefer the
+ * caller-supplied description (the UI requires one when the agent lacks its
+ * own), then the agent's own; fall back to the agent name only as a last resort
+ * — never a "migrated from" line, which is noise to whatever agent activates the
+ * skill.
  */
 function deriveDescription(
   agent: MigratableAgent,
+  override: string | undefined,
   carried: MigrationField[],
   annotated: MigrationField[],
 ): string {
+  const provided = override?.trim();
+  if (provided) {
+    carried.push({ field: "description", detail: "set during conversion" });
+    return provided;
+  }
   const existing = agent.description?.trim();
   if (existing) {
     carried.push({ field: "description", detail: "carried from the agent" });
@@ -193,9 +232,9 @@ function deriveDescription(
   }
   annotated.push({
     field: "description",
-    detail: "agent had none; a placeholder description was synthesized",
+    detail: "no description provided; using the agent name — add a real one",
   });
-  return `Migrated from the "${agent.name}" agent.`;
+  return agent.name;
 }
 
 function buildMetadata(
@@ -256,68 +295,75 @@ function buildContent(params: {
     });
   }
 
-  const requirements = buildRequirementsSection(agent, annotated);
-  if (requirements) sections.push(requirements);
+  const recommendedTools = buildRecommendedToolsSection(agent, carried);
+  if (recommendedTools) sections.push(recommendedTools);
 
   const examples = buildExamplesSection(agent, annotated);
   if (examples) sections.push(examples);
+
+  // Model/knowledge bindings have no skill equivalent and mean nothing to a
+  // downstream agent, so they are reported to the user but kept out of the body.
+  annotateUnmappedBindings(agent, annotated);
 
   const body = sections.join("\n\n").trim();
   return body || `# ${name}\n\n${description}`;
 }
 
 /**
- * Surface the agent's tool/model/knowledge bindings — which have no native skill
- * equivalent — as a human-readable section, so the loss is visible inside the
- * artifact and the invoking agent knows what to re-attach.
+ * List the agent's tools as a recommendation for whatever agent activates the
+ * skill. Tools have no native skill equivalent, but their names are actionable
+ * guidance — unlike the agent's model/knowledge bindings, which are noise to a
+ * downstream agent and are reported out-of-band instead (see
+ * {@link annotateUnmappedBindings}). No mention of the migration: the skill
+ * stands on its own.
  */
-function buildRequirementsSection(
+function buildRecommendedToolsSection(
+  agent: MigratableAgent,
+  carried: MigrationField[],
+): string | null {
+  const tools = agent.tools.filter(
+    (tool) => !SKILL_RUNTIME_TOOL_NAMES.has(tool.name),
+  );
+  if (tools.length === 0) return null;
+
+  carried.push({
+    field: "tools",
+    detail: `${tools.length} tool(s) listed as recommended`,
+  });
+  return (
+    "## Recommended tools\n\n" +
+    "This skill works best with these tools available:\n\n" +
+    tools.map((tool) => `- ${tool.name}`).join("\n")
+  );
+}
+
+/**
+ * Record the agent bindings that cannot cross into a skill — model and
+ * knowledge sources — so the conversion report stays honest, without polluting
+ * the skill body with details a downstream agent does not care about.
+ */
+function annotateUnmappedBindings(
   agent: MigratableAgent,
   annotated: MigrationField[],
-): string | null {
-  const lines: string[] = [];
-
-  if (agent.tools.length > 0) {
-    lines.push(`- Tools: ${agent.tools.map((tool) => tool.name).join(", ")}`);
-    annotated.push({
-      field: "tools",
-      detail: `${agent.tools.length} tool(s) listed under Requirements`,
-    });
-  }
-
+): void {
   if (agent.modelId || agent.llmModel) {
-    lines.push("- Default model: configured on the source agent");
     annotated.push({
       field: "modelId",
-      detail: "noted under Requirements and in metadata",
+      detail: "agent's default model is not carried over",
     });
   }
-
   if (agent.knowledgeBaseIds.length > 0) {
-    lines.push(`- Knowledge bases: ${agent.knowledgeBaseIds.length}`);
     annotated.push({
       field: "knowledgeBaseIds",
-      detail: `${agent.knowledgeBaseIds.length} knowledge base(s) noted under Requirements`,
+      detail: `${agent.knowledgeBaseIds.length} knowledge base(s) not carried over`,
     });
   }
-
   if (agent.connectorIds.length > 0) {
-    lines.push(`- Knowledge connectors: ${agent.connectorIds.length}`);
     annotated.push({
       field: "connectorIds",
-      detail: `${agent.connectorIds.length} connector(s) noted under Requirements`,
+      detail: `${agent.connectorIds.length} knowledge connector(s) not carried over`,
     });
   }
-
-  if (lines.length === 0) return null;
-
-  return (
-    "## Requirements\n\n" +
-    `Migrated from the "${agent.name}" agent, which had its own tools and ` +
-    "configuration. A skill carries instructions only — re-attach the " +
-    "equivalents to whichever agent invokes this skill:\n\n" +
-    lines.join("\n")
-  );
 }
 
 function buildExamplesSection(

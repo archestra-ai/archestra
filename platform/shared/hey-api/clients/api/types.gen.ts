@@ -49884,7 +49884,10 @@ export type CreateSkillResponses = {
 export type CreateSkillResponse = CreateSkillResponses[keyof CreateSkillResponses];
 
 export type ConvertAgentToSkillData = {
-    body?: never;
+    body: {
+        description?: string;
+        deleteAgent?: boolean;
+    };
     path: {
         id: string;
     };
@@ -50004,6 +50007,7 @@ export type ConvertAgentToSkillResponses = {
                 detail: string;
             }>;
         };
+        deletedAgent: boolean;
     };
 };
 

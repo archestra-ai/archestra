@@ -144,7 +144,7 @@ Required RBAC permission: `agent:read`
 | `carried` | `object[]` | Yes | Agent fields carried over directly to native skill fields. |
 | `carried[].field` | `string` | Yes |  |
 | `carried[].detail` | `string` | Yes |  |
-| `annotated` | `object[]` | Yes | Agent fields with no skill equivalent, folded into the manifest body or metadata. |
+| `annotated` | `object[]` | Yes | Agent fields with no skill equivalent — folded into metadata or reported as not carried. |
 | `annotated[].field` | `string` | Yes |  |
 | `annotated[].detail` | `string` | Yes |  |
 

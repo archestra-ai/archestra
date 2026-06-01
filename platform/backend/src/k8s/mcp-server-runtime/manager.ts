@@ -1,10 +1,10 @@
 import type * as k8s from "@kubernetes/client-node";
 import {
+  checkNamespaceDeployAccess,
   createK8sClients,
-  isK8sNotFoundError,
   loadKubeConfig,
+  namespaceAccessMessage,
   sanitizeLabelValue,
-  validateNamespaceExists,
 } from "@/k8s/shared";
 import logger from "@/logging";
 import {
@@ -33,6 +33,7 @@ import type {
 export class McpServerRuntimeManager {
   private k8sApi?: k8s.CoreV1Api;
   private k8sAppsApi?: k8s.AppsV1Api;
+  private k8sAuthApi?: k8s.AuthorizationV1Api;
   private k8sAttach?: k8s.Attach;
   private k8sLog?: k8s.Log;
   private k8sExec?: k8s.Exec;
@@ -51,6 +52,7 @@ export class McpServerRuntimeManager {
 
       this.k8sApi = clients.coreApi;
       this.k8sAppsApi = clients.appsApi;
+      this.k8sAuthApi = clients.authApi;
       this.k8sAttach = clients.attach;
       this.k8sExec = clients.exec;
       this.k8sLog = clients.log;
@@ -60,6 +62,7 @@ export class McpServerRuntimeManager {
       this.status = "error";
       this.k8sApi = undefined;
       this.k8sAppsApi = undefined;
+      this.k8sAuthApi = undefined;
       this.k8sAttach = undefined;
       this.k8sLog = undefined;
       this.namespace = "";
@@ -81,42 +84,34 @@ export class McpServerRuntimeManager {
   }
 
   async validateNamespace(namespaceName: string): Promise<void> {
-    if (!this.k8sApi) {
+    if (!this.k8sAuthApi) {
       throw new Error("Kubernetes API client not initialized");
     }
-    await validateNamespaceExists(namespaceName, this.k8sApi);
+    const result = await checkNamespaceDeployAccess(
+      namespaceName,
+      this.k8sAuthApi,
+    );
+    if (!result.ok) {
+      throw new Error(namespaceAccessMessage(namespaceName, result.reason));
+    }
   }
 
   async testNamespaceAccess(
     namespaceName: string,
   ): Promise<
     | { accessible: true }
-    | { accessible: false; reason: "not_found" | "forbidden" | "unavailable" }
+    | { accessible: false; reason: "forbidden" | "unavailable" }
   > {
-    if (!this.k8sApi) {
+    if (!this.k8sAuthApi) {
       return { accessible: false, reason: "unavailable" };
     }
-    try {
-      await this.k8sApi.readNamespace({ name: namespaceName });
-      return { accessible: true };
-    } catch (error: unknown) {
-      if (isK8sNotFoundError(error)) {
-        return { accessible: false, reason: "not_found" };
-      }
-      const statusCode =
-        error &&
-        typeof error === "object" &&
-        ("statusCode" in error
-          ? (error as { statusCode: number }).statusCode
-          : "response" in error
-            ? (error as { response: { statusCode: number } }).response
-                ?.statusCode
-            : undefined);
-      if (statusCode === 403) {
-        return { accessible: false, reason: "forbidden" };
-      }
-      return { accessible: false, reason: "unavailable" };
-    }
+    const result = await checkNamespaceDeployAccess(
+      namespaceName,
+      this.k8sAuthApi,
+    );
+    return result.ok
+      ? { accessible: true }
+      : { accessible: false, reason: result.reason };
   }
 
   /**

@@ -387,7 +387,16 @@ function EnvironmentEditorDialog({
     }
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
+    // Verify the platform can deploy to the namespace before saving, and show
+    // the result inline (same surface as the Test button) instead of letting a
+    // raw access error surface as a toast. Block the save if it can't.
+    if (trimmedNamespace) {
+      setNsTest("pending");
+      const result = await testNamespaceAccess(trimmedNamespace);
+      setNsTest(result);
+      if (!result.accessible) return;
+    }
     if (willRestart) {
       setShowConfirm(true);
     } else {

@@ -2,6 +2,7 @@ import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import mcpServerRuntimeManager from "@/k8s/mcp-server-runtime/manager";
+import { namespaceAccessMessage } from "@/k8s/shared";
 import logger from "@/logging";
 import {
   EnvironmentModel,
@@ -236,14 +237,10 @@ const environmentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         return reply.send({ accessible: true });
       }
 
-      const message =
-        result.reason === "not_found"
-          ? `Namespace "${query.namespace}" not found`
-          : result.reason === "forbidden"
-            ? `Access denied — the service account cannot read namespace "${query.namespace}"`
-            : "Could not reach the Kubernetes cluster";
-
-      return reply.send({ accessible: false, message });
+      return reply.send({
+        accessible: false,
+        message: namespaceAccessMessage(query.namespace, result.reason),
+      });
     },
   );
 };

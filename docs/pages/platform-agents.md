@@ -76,13 +76,13 @@ An agent can be converted into an [Agent Skill](/docs/platform-agent-skills-shar
 
 The **Convert to skill** action on the agents page opens a confirmation dialog where you set the skill's description and choose whether to remove the source agent once the skill is created. The skill inherits the agent's scope. Conversion is lossy by nature: a skill carries instructions only, with no tools, model, or knowledge of its own. Each field is either carried over or annotated:
 
-- the system prompt becomes the skill body; name and scope carry over directly
+- the system prompt becomes the skill body, and the scope carries over directly; the name is normalized into a slug (for example `Support Helper` → `support-helper`) so it works as a `/slash-command`
 - the description is required — the agent's own is prefilled, and you must supply one when the agent has none (an activating agent uses it to decide when to run the skill)
 - assigned tools are listed under a `Recommended tools` section so the activating agent knows what to enable; the default model and knowledge sources have no skill equivalent and are reported as not carried, without cluttering the skill body
 - suggested prompts, icon, and labels are folded into the body or metadata, and the origin agent is recorded in metadata so the skill stays linked back to it
 - removing the source agent is optional and off by default; it is a soft delete, so the agent can be restored later from the deleted-agents filter
 
-The same conversion is available to the model through the [`draft_skill_from_agent`](/docs/platform-archestra-mcp-server) MCP tool, which returns a draft manifest the model can edit before persisting it with `create_skill`.
+The model can run the same field mapping through the [`draft_skill_from_agent`](/docs/platform-archestra-mcp-server) MCP tool. It returns a draft manifest — plus the agent's `scope` and `teamIds` — that the model edits and persists separately with `create_skill`; passing that scope through carries the agent's visibility (sharing still requires the matching permission). Unlike the UI action it never deletes the source agent.
 
 ## System Prompt Templating
 

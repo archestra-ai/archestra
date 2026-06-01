@@ -633,7 +633,7 @@ describe("agent RBAC visibility", () => {
     expect(text).not.toContain("Secret personal prompt.");
   });
 
-  test("draft_skill_from_agent reports a team agent's scope as not carried", async ({
+  test("draft_skill_from_agent surfaces a team agent's scope and teams to carry through", async ({
     makeUser,
     makeOrganization,
     makeMember,
@@ -667,13 +667,13 @@ describe("agent RBAC visibility", () => {
     );
 
     expect(result.isError).toBe(false);
-    // the MCP path ends in create_skill (personal-only), so scope is annotated
-    // as not carried — never silently reported as carried.
+    // create_skill now accepts a scope, so the agent's scope is carryable: the
+    // tool surfaces scope + teamIds as structured fields and reports it carried.
     const structured = (result as any).structuredContent;
+    expect(structured.scope).toBe("team");
+    expect(structured.teamIds).toEqual([team.id]);
     const carriedFields = structured.carried.map((f: any) => f.field);
-    const annotatedFields = structured.annotated.map((f: any) => f.field);
-    expect(carriedFields).not.toContain("scope");
-    expect(annotatedFields).toContain("scope");
+    expect(carriedFields).toContain("scope");
   });
 });
 

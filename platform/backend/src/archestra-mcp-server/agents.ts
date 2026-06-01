@@ -113,6 +113,14 @@ const DraftSkillFromAgentOutputSchema = z.object({
     .describe(
       "The complete SKILL.md manifest, as data. Review and edit it, then pass it to create_skill to persist. Keep the metadata block to preserve the link to the origin agent.",
     ),
+  scope: AgentScopeSchema.describe(
+    `The source agent's scope. Pass it to ${TOOL_CREATE_SKILL_SHORT_NAME} (with teamIds when "team") to give the skill the same visibility; omit there to default to a personal skill. Sharing still requires the matching permission.`,
+  ),
+  teamIds: z
+    .array(z.string())
+    .describe(
+      `Teams the agent is scoped to — pass these to ${TOOL_CREATE_SKILL_SHORT_NAME} alongside scope "team". Empty for personal/org agents.`,
+    ),
   carried: z
     .array(MigrationFieldOutputSchema)
     .describe("Agent fields carried over directly to native skill fields."),
@@ -275,10 +283,10 @@ const registry = defineArchestraTools([
       "This does NOT create anything: edit the manifest body if you like, then " +
       `call ${TOOL_CREATE_SKILL_SHORT_NAME} with the final manifest to persist ` +
       "it. Keep the metadata block so the skill stays linked to its origin " +
-      `agent. NOTE: ${TOOL_CREATE_SKILL_SHORT_NAME} always creates a PERSONAL ` +
-      "skill — the agent's scope is not carried over here. If the skill should " +
-      "be shared with a team or the whole org, change its scope in the Skills UI " +
-      "after creating it.",
+      `agent. To give the skill the agent's visibility, pass the returned ` +
+      `\`scope\` (and \`teamIds\` for a team agent) to ${TOOL_CREATE_SKILL_SHORT_NAME}; ` +
+      "omit them to create a personal skill. Sharing requires the matching " +
+      "permission (admin for org, team-admin for team).",
     schema: DraftSkillFromAgentToolArgsSchema,
     outputSchema: DraftSkillFromAgentOutputSchema,
     async handler({ args, context }) {
@@ -309,17 +317,17 @@ const registry = defineArchestraTools([
         return errorResult("Only internal agents can be converted to skills.");
       }
 
-      const { draft, report } = agentToSkill(agent);
+      const { draft, teamIds, report } = agentToSkill(agent);
 
-      // create_skill (the documented next step) always persists a personal skill
-      // and the SKILL.md manifest can't encode scope, so the agent's scope is not
-      // carried through this path. Report it annotated rather than letting the
-      // caller assume the shared/team visibility survived.
-      const annotated = [
-        ...report.annotated,
+      // The SKILL.md manifest can't encode scope, but create_skill now accepts
+      // one — so the scope is carryable through this path as long as the caller
+      // passes the returned scope/teamIds. Report it carried and surface both as
+      // structured fields for the caller to forward.
+      const carried = [
+        ...report.carried,
         {
           field: SCOPE_FIELD,
-          detail: `agent scope "${draft.scope}" not carried — ${TOOL_CREATE_SKILL_SHORT_NAME} makes a personal skill; change scope in the Skills UI.`,
+          detail: `agent scope "${draft.scope}" — pass scope${draft.scope === "team" ? " and teamIds" : ""} to ${TOOL_CREATE_SKILL_SHORT_NAME} to preserve it.`,
         },
       ];
 
@@ -331,8 +339,10 @@ const registry = defineArchestraTools([
       // inert data — the guidance lives in this tool's description instead.
       return structuredSuccessResult({
         manifest: serializeSkillManifest(draft),
-        carried: report.carried,
-        annotated,
+        scope: draft.scope,
+        teamIds,
+        carried,
+        annotated: report.annotated,
       });
     },
   }),

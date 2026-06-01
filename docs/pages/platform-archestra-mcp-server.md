@@ -141,6 +141,8 @@ Required RBAC permission: `agent:read`
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `manifest` | `string` | Yes | The complete SKILL.md manifest, as data. Review and edit it, then pass it to create_skill to persist. Keep the metadata block to preserve the link to the origin agent. |
+| `scope` | `"personal" \| "team" \| "org"` | Yes | The source agent's scope. Pass it to create_skill (with teamIds when "team") to give the skill the same visibility; omit there to default to a personal skill. Sharing still requires the matching permission. |
+| `teamIds` | `string[]` | Yes | Teams the agent is scoped to — pass these to create_skill alongside scope "team". Empty for personal/org agents. |
 | `carried` | `object[]` | Yes | Agent fields carried over directly to native skill fields. |
 | `carried[].field` | `string` | Yes |  |
 | `carried[].detail` | `string` | Yes |  |
@@ -1596,7 +1598,7 @@ Required RBAC permission: None (no additional RBAC permission required)
 | `list_skills` | List the Agent Skills available in this organization — one line per skill (name and description). | `skill:read` |
 | `activate_skill` | Load a specialized Agent Skill — a reusable SKILL.md instruction set. | `skill:read` |
 | `read_skill_file` | Read a bundled resource file from a skill. | `skill:read` |
-| `create_skill` | Create a new Agent Skill from a SKILL.md manifest. | `skill:create` |
+| `create_skill` | Create a new Agent Skill from a SKILL.md manifest, available via list_skills and as a chat slash-command. | `skill:create` |
 | `update_skill` | Update an existing Agent Skill from a SKILL.md manifest. | `skill:update` |
 
 #### list_skills
@@ -1642,6 +1644,8 @@ Required RBAC permission: `skill:create`
 | `files[].path` | `string` | Yes | Resource path, e.g. references/API.md or scripts/run.py |
 | `files[].content` | `string` | Yes | Text content of the file |
 | `files[].encoding` | `"utf8" \| "base64"` | No |  |
+| `scope` | `"personal" \| "team" \| "org"` | No | Visibility scope. Defaults to `personal` (only you). `team` shares it with the teams in `teamIds` and requires team-admin permission in each; `org` shares it organization-wide and requires admin. Omit unless the user asked to share the skill. |
+| `teamIds` | `string[]` | No | Teams to share a `team`-scoped skill with. Required (non-empty) when scope is `team`; ignored otherwise. |
 
 
 #### update_skill

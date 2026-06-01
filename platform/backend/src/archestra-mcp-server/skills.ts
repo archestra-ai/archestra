@@ -1,4 +1,5 @@
 import {
+  ResourceVisibilityScopeSchema,
   TOOL_ACTIVATE_SKILL_SHORT_NAME,
   TOOL_CREATE_SKILL_SHORT_NAME,
   TOOL_LIST_SKILLS_SHORT_NAME,
@@ -7,8 +8,11 @@ import {
 } from "@shared";
 import { z } from "zod";
 import {
+  assertSkillTeams,
+  authorizeSkillScope,
   getSkillPermissionChecker,
   requireSkillModifyPermission,
+  withTeamFkErrorMapped,
 } from "@/auth/skill-permissions";
 import logger from "@/logging";
 import {
@@ -59,10 +63,11 @@ import type { ArchestraContext } from "./types";
  * from the skill root.
  *
  * `create_skill` and `update_skill` let an agent author skills during a
- * conversation. Chat-authored skills are always `personal` to their author;
- * sharing a skill with a team or the whole org stays a deliberate action in
- * the Skills UI. `update_skill` re-checks the target skill's scope so a user
- * cannot edit a skill they only have read access to.
+ * conversation. `create_skill` defaults to a `personal` skill but accepts a
+ * `scope`, authorized identically to `POST /api/skills` (org needs admin, team
+ * needs team-admin + membership). `update_skill` keeps the target skill's
+ * scope and re-checks it so a user cannot edit a skill they only have read
+ * access to.
  *
  * @see https://agentskills.io/specification
  */
@@ -125,6 +130,19 @@ const CreateSkillSchema = z
         "Optional bundled resource files. Each is `{ path, content }` with " +
           "text content; the path prefix classifies the file — `references/` " +
           "for docs, `scripts/` for code, `assets/` for other files.",
+      ),
+    scope: ResourceVisibilityScopeSchema.optional().describe(
+      "Visibility scope. Defaults to `personal` (only you). `team` shares it " +
+        "with the teams in `teamIds` and requires team-admin permission in " +
+        "each; `org` shares it organization-wide and requires admin. Omit " +
+        "unless the user asked to share the skill.",
+    ),
+    teamIds: z
+      .array(z.string())
+      .optional()
+      .describe(
+        "Teams to share a `team`-scoped skill with. Required (non-empty) when " +
+          "scope is `team`; ignored otherwise.",
       ),
   })
   .strict()
@@ -265,12 +283,12 @@ const registry = defineArchestraTools([
     shortName: TOOL_CREATE_SKILL_SHORT_NAME,
     title: "Create Skill",
     description:
-      "Create a new Agent Skill from a SKILL.md manifest. The skill is " +
-      "created as a personal skill owned by you, available via list_skills " +
-      "and as a chat slash-command. Draft the SKILL.md (and any bundled " +
-      "resource files) with the user, then call this to persist it. To " +
-      "share a skill with a team or the whole organization, change its " +
-      "scope in the Skills UI.",
+      "Create a new Agent Skill from a SKILL.md manifest, available via " +
+      "list_skills and as a chat slash-command. Draft the SKILL.md (and any " +
+      "bundled resource files) with the user, then call this to persist it. " +
+      "Defaults to a personal skill owned by you; pass `scope` to share it " +
+      "with a team (`teamIds` required) or the whole organization, subject " +
+      "to your permissions.",
     schema: CreateSkillSchema,
     async handler({ args, context }) {
       const ctx = requireUserContext(context);
@@ -283,32 +301,61 @@ const registry = defineArchestraTools([
         return errorResult(parsed.message);
       }
 
-      // chat-authored skills are personal to their author; sharing them with a
-      // team or the org stays a deliberate action in the Skills UI. A personal
-      // skill owned by its author needs no further scope authorization beyond
-      // the skill:create permission already enforced on this tool.
-      const skill = await SkillModel.createWithFiles({
-        skill: {
-          organizationId: ctx.organizationId,
+      const scope = args.scope ?? "personal";
+      const teamIds = scope === "team" ? [...new Set(args.teamIds ?? [])] : [];
+
+      // org/team scopes are gated exactly as POST /api/skills: a personal skill
+      // needs only the skill:create permission this tool already enforces, but
+      // sharing one requires admin (org) or team-admin + membership (team).
+      const checker = await getSkillPermissionChecker(ctx);
+      const userTeamIds = checker.isAdmin
+        ? []
+        : await TeamModel.getUserTeamIds(ctx.userId);
+
+      let skill: Skill | null;
+      try {
+        authorizeSkillScope({
+          checker,
+          scope,
           authorId: ctx.userId,
-          name: parsed.name,
-          description: parsed.description,
-          content: parsed.content,
-          license: parsed.license,
-          compatibility: parsed.compatibility,
-          metadata: parsed.metadata,
-          sourceType: "manual",
-          scope: "personal",
-        },
-        files: toSkillFiles(args.files ?? []),
-      });
+          requestedTeamIds: teamIds,
+          userTeamIds,
+          userId: ctx.userId,
+        });
+        await assertSkillTeams({
+          scope,
+          teamIds,
+          organizationId: ctx.organizationId,
+        });
+        skill = await withTeamFkErrorMapped(() =>
+          SkillModel.createWithFiles({
+            skill: {
+              organizationId: ctx.organizationId,
+              authorId: ctx.userId,
+              name: parsed.name,
+              description: parsed.description,
+              content: parsed.content,
+              license: parsed.license,
+              compatibility: parsed.compatibility,
+              metadata: parsed.metadata,
+              sourceType: "manual",
+              scope,
+            },
+            files: toSkillFiles(args.files ?? []),
+            teamIds,
+          }),
+        );
+      } catch (error) {
+        if (error instanceof ApiError) return errorResult(error.message);
+        throw error;
+      }
       if (!skill) {
         return errorResult(`A skill named "${parsed.name}" already exists.`);
       }
 
       return successResult(
-        `Created skill "${skill.name}". It is a personal skill, now ` +
-          "available to you via list_skills and as a chat slash-command.",
+        `Created ${scope} skill "${skill.name}", now available via ` +
+          "list_skills and as a chat slash-command.",
       );
     },
   }),

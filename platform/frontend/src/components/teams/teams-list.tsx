@@ -22,11 +22,7 @@ import { Textarea } from "@/components/ui/textarea";
 import config from "@/lib/config/config";
 import { useFeature } from "@/lib/config/config.query";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
-import {
-  useCreateTeam,
-  useDeleteTeam,
-  useTeams,
-} from "@/lib/teams/team.query";
+import { useCreateTeam, useDeleteTeam, useTeams } from "@/lib/teams/team.query";
 import { type TeamToken, useTokens } from "@/lib/teams/team-token.query";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { TeamMembersDialog } from "./team-members-dialog";

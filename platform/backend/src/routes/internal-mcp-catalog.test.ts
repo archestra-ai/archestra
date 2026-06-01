@@ -127,4 +127,53 @@ describe("internal MCP catalog routes", () => {
 
     expect(activeOrgResponse.statusCode).toBe(200);
   });
+
+  test("POST /api/internal_mcp_catalog rejects a clonedFrom in another organization", async ({
+    makeInternalMcpCatalog,
+    makeOrganization,
+  }) => {
+    const otherOrganization = await makeOrganization();
+    const foreignSource = await makeInternalMcpCatalog({
+      name: "foreign-clone-source",
+      organizationId: otherOrganization.id,
+      scope: "org",
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/internal_mcp_catalog",
+      payload: {
+        name: "clone-of-foreign",
+        serverType: "remote",
+        serverUrl: "https://example.com/mcp",
+        clonedFrom: foreignSource.id,
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+  });
+
+  test("POST /api/internal_mcp_catalog accepts a clonedFrom in the active organization", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    const source = await makeInternalMcpCatalog({
+      name: "same-org-clone-source",
+      organizationId,
+      scope: "org",
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/internal_mcp_catalog",
+      payload: {
+        name: "clone-of-same-org",
+        serverType: "remote",
+        serverUrl: "https://example.com/mcp",
+        clonedFrom: source.id,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().clonedFrom).toBe(source.id);
+  });
 });

@@ -279,6 +279,36 @@ ServiceAccount name for the Archestra Platform
 {{- end }}
 
 {{/*
+RBAC rules granting the platform ServiceAccount the permissions it needs to
+manage MCP server workloads in a namespace. Shared by the release-namespace Role
+and the per-namespace Roles generated from rbac.additionalNamespaces, so both
+grant exactly the same access (no drift).
+*/}}
+{{- define "archestra-platform.mcpManagerRules" -}}
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["get", "list", "create", "update", "patch", "delete", "watch"]
+- apiGroups: [""]
+  resources: ["pods/exec"]
+  verbs: ["get", "create"]
+- apiGroups: [""]
+  resources: ["pods/log"]
+  verbs: ["get", "list"]
+- apiGroups: [""]
+  resources: ["pods/attach"]
+  verbs: ["get", "create"]
+- apiGroups: [""]
+  resources: ["services"]
+  verbs: ["get", "list", "create", "update", "patch", "delete", "watch"]
+- apiGroups: [""]
+  resources: ["secrets"]
+  verbs: ["get", "list", "create", "update", "patch", "delete", "watch"]
+- apiGroups: ["apps"]
+  resources: ["deployments"]
+  verbs: ["get", "list", "create", "update", "patch", "delete", "watch"]
+{{- end }}
+
+{{/*
 Worker selector labels
 */}}
 {{- define "archestra-platform.workerSelectorLabels" -}}

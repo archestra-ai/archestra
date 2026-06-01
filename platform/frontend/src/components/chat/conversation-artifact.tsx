@@ -2,6 +2,7 @@
 
 import DOMPurify from "dompurify";
 import { Copy, Download, FileText, GripVertical, X } from "lucide-react";
+import dynamic from "next/dynamic";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Components } from "react-markdown";
 import ReactMarkdown from "react-markdown";
@@ -11,9 +12,16 @@ import {
   CodeBlock,
   CodeBlockCopyButton,
 } from "@/components/ai-elements/code-block";
-import { MermaidDiagram } from "@/components/mermaid-diagram";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+
+const MermaidDiagram = dynamic(
+  async () => {
+    const module = await import("@/components/mermaid-diagram");
+    return module.MermaidDiagram;
+  },
+  { ssr: false },
+);
 
 interface ConversationArtifactPanelProps {
   artifact?: string | null;

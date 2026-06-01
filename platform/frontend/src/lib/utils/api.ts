@@ -1,4 +1,3 @@
-import * as Sentry from "@sentry/nextjs";
 import type { ApiError } from "@shared";
 import { toast } from "sonner";
 
@@ -70,6 +69,10 @@ export function handleApiError(error: ApiSdkError) {
     toast.error(sentryError.message);
   }
 
-  Sentry.captureException(sentryError, { extra: { originalError: error } });
+  void import("@sentry/nextjs")
+    .then(({ captureException }) => {
+      captureException(sentryError, { extra: { originalError: error } });
+    })
+    .catch(() => undefined);
   console.error(sentryError);
 }

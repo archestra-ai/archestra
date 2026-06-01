@@ -1,5 +1,6 @@
 import { and, eq, inArray, lt, or, type SQL, sql } from "drizzle-orm";
 import db, { schema, withDbTransaction } from "@/database";
+import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import logger from "@/logging";
 import type {
   CreateLimit,
@@ -9,6 +10,7 @@ import type {
   LimitType,
   UpdateLimit,
 } from "@/types";
+import AgentModel from "./agent";
 import AgentTeamModel from "./agent-team";
 import ModelModel from "./model";
 
@@ -574,17 +576,10 @@ class LimitModel {
         return Boolean(hit);
       }
       case "agent": {
-        const [hit] = await db
-          .select({ id: schema.agentsTable.id })
-          .from(schema.agentsTable)
-          .where(
-            and(
-              eq(schema.agentsTable.id, entityId),
-              eq(schema.agentsTable.organizationId, organizationId),
-            ),
-          )
-          .limit(1);
-        return Boolean(hit);
+        return AgentModel.existsInOrganization({
+          id: entityId,
+          organizationId,
+        });
       }
       case "user": {
         const [hit] = await db
@@ -654,14 +649,7 @@ export class LimitValidationService {
           organizationId = teams[0].organizationId;
         }
       } else {
-        const [agent] = await db
-          .select({ organizationId: schema.agentsTable.organizationId })
-          .from(schema.agentsTable)
-          .where(eq(schema.agentsTable.id, agentId))
-          .limit(1);
-        if (agent?.organizationId) {
-          organizationId = agent.organizationId;
-        }
+        organizationId = await AgentModel.findOrganizationId(agentId);
       }
 
       const entities: LimitsCleanupOptionsEntities = {
@@ -1031,6 +1019,7 @@ function buildOrganizationLimitScopeCondition(organizationId: string): SQL {
         SELECT 1 FROM ${schema.agentsTable}
         WHERE ${schema.agentsTable.id}::text = ${schema.limitsTable.entityId}
           AND ${schema.agentsTable.organizationId} = ${organizationId}
+          AND ${schema.agentsTable.deletedAt} IS NULL
       )`,
     ),
     and(
@@ -1110,6 +1099,7 @@ async function getDefaultUserLimitUsage(params: {
   const conditions: SQL[] = [
     eq(schema.interactionsTable.userId, params.userId),
     eq(schema.agentsTable.organizationId, params.organizationId),
+    notDeleted(schema.agentsTable),
     sql`${schema.interactionsTable.createdAt} >= now() - ${LimitModel.limitsCleanupIntervalSqlLiterals[params.cleanupInterval]}::interval`,
   ];
 

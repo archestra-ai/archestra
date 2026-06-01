@@ -3280,6 +3280,49 @@ describe("InteractionModel", () => {
       expect(deletedProfileInteraction).toBeDefined();
       expect(existingProfileInteraction).toBeDefined();
     });
+
+    test("findAllPaginated resolves external agent labels after profile deletion", async ({
+      makeAdmin,
+    }) => {
+      const admin = await makeAdmin();
+      const agent = await AgentModel.create({
+        name: "Deleted External Agent",
+        teams: [],
+        scope: "org",
+      });
+
+      await InteractionModel.create({
+        profileId: agent.id,
+        externalAgentId: agent.id,
+        request: { model: "gpt-4", messages: [] },
+        response: {
+          id: "r1",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "gpt-4",
+          choices: [],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      await AgentModel.delete(agent.id);
+
+      const interactions = await InteractionModel.findAllPaginated(
+        { limit: 100, offset: 0 },
+        undefined,
+        admin.id,
+        true,
+        { externalAgentId: agent.id },
+      );
+
+      expect(interactions.data).toHaveLength(1);
+      const [interaction] =
+        interactions.data as ((typeof interactions.data)[number] & {
+          externalAgentIdLabel: string | null;
+        })[];
+      expect(interaction.profileId).toBeNull();
+      expect(interaction.externalAgentIdLabel).toBe(agent.name);
+    });
   });
 
   describe("updateUsageAfterInteraction", () => {

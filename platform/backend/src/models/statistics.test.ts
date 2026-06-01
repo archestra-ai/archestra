@@ -1,5 +1,6 @@
 import type { StatisticsTimeFrame } from "@shared";
 import { describe, expect, test } from "@/test";
+import AgentModel from "./agent";
 import StatisticsModel from "./statistics";
 
 describe("StatisticsModel", () => {
@@ -182,6 +183,37 @@ describe("StatisticsModel", () => {
       );
       expect(result).toBeDefined();
       expect(Array.isArray(result)).toBe(true);
+    });
+
+    test("excludes interactions for soft-deleted agents", async ({
+      makeAgent,
+      makeInteraction,
+      makeUser,
+    }) => {
+      const user = await makeUser();
+      const activeAgent = await makeAgent({ name: "Active Stats Agent" });
+      const deletedAgent = await makeAgent({ name: "Deleted Stats Agent" });
+      await makeInteraction(activeAgent.id, {
+        model: "gpt-4o",
+        inputTokens: 100,
+        outputTokens: 100,
+      });
+      await makeInteraction(deletedAgent.id, {
+        model: "gpt-4o",
+        inputTokens: 100,
+        outputTokens: 100,
+      });
+
+      await AgentModel.delete(deletedAgent.id);
+
+      const result = await StatisticsModel.getAgentStatistics(
+        "24h",
+        user.id,
+        true,
+      );
+
+      expect(result.map((row) => row.agentId)).toContain(activeAgent.id);
+      expect(result.map((row) => row.agentId)).not.toContain(deletedAgent.id);
     });
   });
 

@@ -17,6 +17,7 @@ import {
   sum,
 } from "drizzle-orm";
 import db, { schema } from "@/database";
+import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import {
   createPaginatedResult,
   type PaginatedResult,
@@ -368,10 +369,20 @@ class InteractionModel {
 
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
-    const [data, [{ total }]] = await Promise.all([
+    const [rows, [{ total }]] = await Promise.all([
       db
-        .select()
+        .select({
+          interaction: schema.interactionsTable,
+          activeProfileId: schema.agentsTable.id,
+        })
         .from(schema.interactionsTable)
+        .leftJoin(
+          schema.agentsTable,
+          and(
+            eq(schema.interactionsTable.profileId, schema.agentsTable.id),
+            notDeleted(schema.agentsTable),
+          ),
+        )
         .where(whereClause)
         .orderBy(orderByClause)
         .limit(pagination.limit)
@@ -381,6 +392,10 @@ class InteractionModel {
         .from(schema.interactionsTable)
         .where(whereClause),
     ]);
+    const data = rows.map(({ interaction, activeProfileId }) => ({
+      ...interaction,
+      profileId: activeProfileId,
+    }));
 
     // Resolve external agent IDs (including delegation chains) to agent names
     const allAgentIds = extractAllAgentIdsFromExternalAgentIds(
@@ -444,14 +459,28 @@ class InteractionModel {
     userId?: string,
     isAgentAdmin?: boolean,
   ): Promise<Interaction | null> {
-    const [interaction] = await db
-      .select()
+    const [row] = await db
+      .select({
+        interaction: schema.interactionsTable,
+        activeProfileId: schema.agentsTable.id,
+      })
       .from(schema.interactionsTable)
+      .leftJoin(
+        schema.agentsTable,
+        and(
+          eq(schema.interactionsTable.profileId, schema.agentsTable.id),
+          notDeleted(schema.agentsTable),
+        ),
+      )
       .where(eq(schema.interactionsTable.id, id));
 
-    if (!interaction) {
+    if (!row) {
       return null;
     }
+    const interaction = {
+      ...row.interaction,
+      profileId: row.activeProfileId,
+    };
 
     // Check access control for non-agent admins
     if (userId && !isAgentAdmin) {
@@ -921,8 +950,8 @@ class InteractionModel {
           firstRequestTime: min(schema.interactionsTable.createdAt),
           lastRequestTime: max(schema.interactionsTable.createdAt),
           models: sql<string>`STRING_AGG(DISTINCT ${schema.interactionsTable.model}, ',')`,
-          profileId: schema.interactionsTable.profileId,
-          profileName: schema.agentsTable.name,
+          profileId: sql<string | null>`MAX(${schema.agentsTable.id}::text)`,
+          profileName: max(schema.agentsTable.name),
           externalAgentIds: sql<string>`STRING_AGG(DISTINCT ${schema.interactionsTable.externalAgentId}, ',')`,
           authMethods: sql<string>`STRING_AGG(DISTINCT ${schema.interactionsTable.authMethod}, ',')`,
           authenticatedAppNames: sql<
@@ -935,7 +964,10 @@ class InteractionModel {
         .from(schema.interactionsTable)
         .leftJoin(
           schema.agentsTable,
-          eq(schema.interactionsTable.profileId, schema.agentsTable.id),
+          and(
+            eq(schema.interactionsTable.profileId, schema.agentsTable.id),
+            notDeleted(schema.agentsTable),
+          ),
         )
         .leftJoin(
           schema.usersTable,

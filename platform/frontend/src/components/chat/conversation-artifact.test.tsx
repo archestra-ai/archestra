@@ -57,7 +57,7 @@ describe("ConversationArtifactPanel", () => {
     expect(writeText).toHaveBeenCalledWith("const x = 1;");
   });
 
-  it("still routes mermaid code blocks to the mermaid renderer", () => {
+  it("still routes mermaid code blocks to the mermaid renderer", async () => {
     render(
       <ConversationArtifactPanel
         artifact={"```mermaid\ngraph TD; A-->B;\n```"}
@@ -66,6 +66,6 @@ describe("ConversationArtifactPanel", () => {
       />,
     );
 
-    expect(screen.getByTestId("mermaid-diagram")).toBeInTheDocument();
+    expect(await screen.findByTestId("mermaid-diagram")).toBeInTheDocument();
   });
 });

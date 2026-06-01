@@ -1,6 +1,7 @@
 import type { StatisticsTimeFrame } from "@shared";
 import { and, eq, gte, inArray, lte, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
+import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import type {
   AgentStatistics,
   CostSavingsStatistics,
@@ -310,7 +311,10 @@ class StatisticsModel {
       .from(schema.interactionsTable)
       .innerJoin(
         schema.agentsTable,
-        eq(schema.interactionsTable.profileId, schema.agentsTable.id),
+        and(
+          eq(schema.interactionsTable.profileId, schema.agentsTable.id),
+          notDeleted(schema.agentsTable),
+        ),
       )
       .innerJoin(
         schema.agentTeamsTable,
@@ -484,7 +488,10 @@ class StatisticsModel {
       .from(schema.interactionsTable)
       .innerJoin(
         schema.agentsTable,
-        eq(schema.interactionsTable.profileId, schema.agentsTable.id),
+        and(
+          eq(schema.interactionsTable.profileId, schema.agentsTable.id),
+          notDeleted(schema.agentsTable),
+        ),
       )
       .leftJoin(
         schema.agentTeamsTable,
@@ -623,7 +630,10 @@ class StatisticsModel {
       .from(schema.interactionsTable)
       .innerJoin(
         schema.agentsTable,
-        eq(schema.interactionsTable.profileId, schema.agentsTable.id),
+        and(
+          eq(schema.interactionsTable.profileId, schema.agentsTable.id),
+          notDeleted(schema.agentsTable),
+        ),
       )
       .where(
         and(
@@ -825,7 +835,10 @@ class StatisticsModel {
       .from(schema.interactionsTable)
       .innerJoin(
         schema.agentsTable,
-        eq(schema.interactionsTable.profileId, schema.agentsTable.id),
+        and(
+          eq(schema.interactionsTable.profileId, schema.agentsTable.id),
+          notDeleted(schema.agentsTable),
+        ),
       )
       .where(
         and(

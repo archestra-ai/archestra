@@ -1,4 +1,5 @@
 import db, { schema } from "@/database";
+import AgentModel from "@/models/agent";
 import ChatOpsChannelBindingModel from "@/models/chatops-channel-binding";
 import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
 import KnowledgeBaseConnectorModel from "@/models/knowledge-base-connector";
@@ -421,5 +422,75 @@ describe("audit snapshot scope invariant — cross-org returns null", () => {
       makeTrustedDataPolicy,
     });
     expect(await caseDef.fetch(id, orgA)).toBeNull();
+  });
+});
+
+describe("audit snapshot scope invariant — deleted agent targets return null", () => {
+  test("LimitModel.findByIdForAudit returns null for a limit owned by a deleted agent", async ({
+    makeAgent,
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const agent = await makeAgent({ organizationId: org.id });
+    const [limit] = await db
+      .insert(schema.limitsTable)
+      .values({
+        entityType: "agent",
+        entityId: agent.id,
+        limitType: "token_cost",
+        limitValue: 100,
+      })
+      .returning();
+
+    await AgentModel.delete(agent.id);
+
+    await expect(
+      LimitModel.findByIdForAudit(limit.id, org.id),
+    ).resolves.toBeNull();
+  });
+
+  test("OptimizationRuleModel.findByIdForAudit returns null for a rule targeting a deleted agent", async ({
+    makeAgent,
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const agent = await makeAgent({ organizationId: org.id });
+    const [rule] = await db
+      .insert(schema.optimizationRulesTable)
+      .values({
+        entityType: "agent",
+        entityId: agent.id,
+        conditions: [{ maxLength: 1000 }],
+        provider: "openai",
+        targetModel: "gpt-4o",
+        enabled: true,
+      })
+      .returning();
+
+    await AgentModel.delete(agent.id);
+
+    await expect(
+      OptimizationRuleModel.findByIdForAudit(rule.id, org.id),
+    ).resolves.toBeNull();
+  });
+
+  test("ToolInvocationPolicyModel.findByIdForAudit returns null when only deleted agents assign the tool", async ({
+    makeAgent,
+    makeAgentTool,
+    makeOrganization,
+    makeTool,
+    makeToolPolicy,
+  }) => {
+    const org = await makeOrganization();
+    const agent = await makeAgent({ organizationId: org.id });
+    const tool = await makeTool();
+    await makeAgentTool(agent.id, tool.id);
+    const policy = await makeToolPolicy(tool.id);
+
+    await AgentModel.delete(agent.id);
+
+    await expect(
+      ToolInvocationPolicyModel.findByIdForAudit(policy.id, org.id),
+    ).resolves.toBeNull();
   });
 });

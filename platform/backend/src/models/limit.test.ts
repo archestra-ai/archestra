@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { describe, expect, test, vi } from "@/test";
 import { CreateLimitSchema } from "@/types";
+import AgentModel from "./agent";
 import AgentTeamModel from "./agent-team";
 import LimitModel, { LimitValidationService } from "./limit";
 import ModelModel from "./model";
@@ -321,6 +322,40 @@ describe("LimitModel", () => {
       expect(agentLimits[0].entityType).toBe("agent");
       expect(agentLimits[0].entityId).toBe(agent.id);
     });
+
+    test("organization-scoped lookup excludes limits for soft-deleted agents", async ({
+      makeAgent,
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+      const activeAgent = await makeAgent({ organizationId: org.id });
+      const deletedAgent = await makeAgent({ organizationId: org.id });
+      const activeLimit = await LimitModel.create({
+        entityType: "agent",
+        entityId: activeAgent.id,
+        limitType: "token_cost",
+        limitValue: 1000000,
+        model: ["gpt-4o"],
+      });
+      await LimitModel.create({
+        entityType: "agent",
+        entityId: deletedAgent.id,
+        limitType: "token_cost",
+        limitValue: 2000000,
+        model: ["gpt-4o"],
+      });
+
+      await AgentModel.delete(deletedAgent.id);
+
+      const limits = await LimitModel.findAll(
+        undefined,
+        undefined,
+        undefined,
+        org.id,
+      );
+
+      expect(limits.map((limit) => limit.id)).toEqual([activeLimit.id]);
+    });
   });
 
   describe("findById", () => {
@@ -346,6 +381,29 @@ describe("LimitModel", () => {
         "00000000-0000-0000-0000-000000000000",
       );
       expect(found).toBeNull();
+    });
+  });
+
+  describe("findByIdForAudit", () => {
+    test("returns null for a limit owned by a soft-deleted agent", async ({
+      makeAgent,
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+      const agent = await makeAgent({ organizationId: org.id });
+      const limit = await LimitModel.create({
+        entityType: "agent",
+        entityId: agent.id,
+        limitType: "token_cost",
+        limitValue: 1000000,
+        model: ["gpt-4o"],
+      });
+
+      await AgentModel.delete(agent.id);
+
+      const result = await LimitModel.findByIdForAudit(limit.id, org.id);
+
+      expect(result).toBeNull();
     });
   });
 

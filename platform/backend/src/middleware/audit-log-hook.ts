@@ -111,7 +111,11 @@ export function registerAuditLogHook(fastify: FastifyInstanceWithZod): void {
       (request.headers["user-agent"] as string | undefined) ?? null;
     const httpPath = stripQueryString(request.url).slice(0, 2048);
     const actorType: AuditActorType =
-      request.authMethod === "api_key" ? "api_key" : "user";
+      request.authMethod === "api_key"
+        ? "api_key"
+        : request.authMethod === "service_account"
+          ? "service_account"
+          : "user";
 
     const payload = {
       organizationId: request.organizationId,

@@ -30,6 +30,14 @@ describe("resolveAuditableRouteConfig", () => {
     expect(resolved?.cfg.resourceIdParam).toBe("toolId");
   });
 
+  test("agent restore route uses restored action instead of POST create fallback", () => {
+    const resolved = resolveAuditableRouteConfig("/api/agents/:id/restore");
+    expect(resolved?.viaWalkUp).toBe(false);
+    expect(resolved?.cfg.resourceType).toBe("agent");
+    expect(resolved?.cfg.action).toBe("agent.restored");
+    expect(typeof resolved?.cfg.fetchById).toBe("function");
+  });
+
   test("walk-up match returns viaWalkUp=true with the parent config", () => {
     // /api/mcp_server/:id/some-subroute is not registered; walks up to /api/mcp_server/:id
     const resolved = resolveAuditableRouteConfig(

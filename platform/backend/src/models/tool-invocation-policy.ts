@@ -10,6 +10,7 @@ import { and, desc, eq, inArray, or, sql } from "drizzle-orm";
 import { get } from "lodash-es";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import db, { schema } from "@/database";
+import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import logger from "@/logging";
 import type {
   AutonomyPolicyOperator,
@@ -677,7 +678,10 @@ class ToolInvocationPolicyModel {
       )
       .innerJoin(
         schema.agentsTable,
-        eq(schema.agentToolsTable.agentId, schema.agentsTable.id),
+        and(
+          eq(schema.agentToolsTable.agentId, schema.agentsTable.id),
+          notDeleted(schema.agentsTable),
+        ),
       )
       .where(
         and(
@@ -728,7 +732,10 @@ class ToolInvocationPolicyModel {
       )
       .innerJoin(
         schema.agentsTable,
-        eq(schema.agentsTable.id, schema.agentToolsTable.agentId),
+        and(
+          eq(schema.agentsTable.id, schema.agentToolsTable.agentId),
+          notDeleted(schema.agentsTable),
+        ),
       )
       .where(
         and(

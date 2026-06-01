@@ -290,37 +290,17 @@ export function McpAppSection({
     null,
   );
 
-  const {
-    selectedCanvasId,
-    select,
-    showInSidebar,
-    register,
-    unregister,
-    portalTarget,
-  } = usePinnedCanvas();
+  const { selectedCanvasId, select, showInSidebar, portalTarget } =
+    usePinnedCanvas();
 
   const parsedToolName = parseFullToolName(toolName);
   const shortToolName = parsedToolName.toolName ?? toolName;
-  const serverName = parsedToolName.serverName;
   const isSelected = !!toolCallId && selectedCanvasId === toolCallId;
   const sidebarHostingActive = portalTarget !== null;
   // When the sidebar canvas tab is open, every inline canvas is replaced by a
   // placeholder; only the *selected* canvas's iframe lives in the sidebar.
   const renderInSidebar = sidebarHostingActive && isSelected;
   const renderPlaceholder = sidebarHostingActive;
-
-  // Register the canvas with the conversation-level registry so the sidebar
-  // selector can list it.
-  useEffect(() => {
-    if (!toolCallId) return;
-    register({
-      toolCallId,
-      label: shortToolName,
-      serverName,
-      createdAt: Date.now(),
-    });
-    return () => unregister(toolCallId);
-  }, [toolCallId, shortToolName, serverName, register, unregister]);
 
   // Reconstruct McpCallToolResult for AppFrame
   const toolResult = useMemo((): McpCallToolResult | undefined => {

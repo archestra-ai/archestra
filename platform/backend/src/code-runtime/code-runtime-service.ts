@@ -1,10 +1,10 @@
 import config from "@/config";
-import {
-  DaggerRuntimeError,
-  daggerRuntimeService,
-} from "@/dagger-runtime/dagger-runtime-service";
 import logger from "@/logging";
 import * as metrics from "@/observability/metrics";
+import {
+  SandboxRuntimeError,
+  sandboxRuntimeService,
+} from "@/sandbox-runtime/sandbox-runtime-service";
 import {
   CODE_RUNTIME_LIMITS,
   CodeRuntimeError,
@@ -19,26 +19,26 @@ const SKILL_DIR = `/skills/${SKILL_NAME}`;
 const VENV_PYTHON = "/home/sandbox/.venv/bin/python";
 
 /**
- * Thin adapter over the unified `daggerRuntimeService`. Takes a Python script
+ * Thin adapter over the unified `sandboxRuntimeService`. Takes a Python script
  * (and optional pip requirements), snapshots it into the shared warm sandbox,
  * and runs it. The native side owns the Dagger session + warm venv.
  */
 class CodeRuntimeService {
   get isEnabled(): boolean {
-    return config.codeRuntime.enabled && daggerRuntimeService.isEnabled;
+    return config.codeRuntime.enabled && sandboxRuntimeService.isEnabled;
   }
 
   get isReady(): boolean {
-    return daggerRuntimeService.isReady;
+    return sandboxRuntimeService.isReady;
   }
 
   async init(): Promise<void> {
     if (!config.codeRuntime.enabled) return;
-    await daggerRuntimeService.attach(CONSUMER_ID);
+    await sandboxRuntimeService.attach(CONSUMER_ID);
   }
 
   async shutdown(): Promise<void> {
-    await daggerRuntimeService.detach(CONSUMER_ID);
+    await sandboxRuntimeService.detach(CONSUMER_ID);
   }
 
   async run(params: RunCodeParams): Promise<RunCodeResult> {
@@ -50,7 +50,7 @@ class CodeRuntimeService {
 
     const startedAt = Date.now();
     try {
-      const executed = await daggerRuntimeService.runCommand({
+      const executed = await sandboxRuntimeService.runCommand({
         command: buildPythonCommand(validated.requirements),
         cwd: SKILL_DIR,
         timeoutSeconds,
@@ -116,11 +116,11 @@ export const codeRuntimeService = new CodeRuntimeService();
  */
 function toCodeRuntimeError(error: unknown): CodeRuntimeError {
   if (error instanceof CodeRuntimeError) return error;
-  if (error instanceof DaggerRuntimeError) {
+  if (error instanceof SandboxRuntimeError) {
     switch (error.code) {
       case "ARCHESTRA_INVALID_INPUT":
-        // INVALID_INPUT messages from the runtime layer mention "Dagger"; the
-        // user-facing shape should match skill-sandbox's "not enabled" path.
+        // INVALID_INPUT from the runtime layer means it is not enabled; keep
+        // the user-facing shape aligned with skill-sandbox's "not enabled" path.
         return new CodeRuntimeError("the code runtime is not enabled");
       case "ARCHESTRA_COMMAND_FAILED":
         logger.error({ err: error }, "[CodeRuntime] script command failed");

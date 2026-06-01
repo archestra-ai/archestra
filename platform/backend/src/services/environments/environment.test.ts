@@ -1,4 +1,5 @@
 import { describe, expect } from "vitest";
+import { OrganizationModel } from "@/models";
 import {
   assertCanAssignEnvironment,
   createEnvironment,
@@ -83,7 +84,7 @@ describe("EnvironmentService", () => {
     expect(updated.restricted).toBe(true);
   });
 
-  test("assertCanAssignEnvironment allows the default (null) environment", async ({
+  test("assertCanAssignEnvironment allows the default (null) environment when not restricted", async ({
     makeOrganization,
   }) => {
     const org = await makeOrganization();
@@ -92,6 +93,38 @@ describe("EnvironmentService", () => {
         environmentId: null,
         organizationId: org.id,
         hasEnvironmentAdmin: false,
+      }),
+    ).resolves.toBeUndefined();
+  });
+
+  test("assertCanAssignEnvironment rejects the default (null) environment when restricted, without env-admin (403)", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    await OrganizationModel.patch(org.id, {
+      defaultEnvironmentRestricted: true,
+    });
+    await expect(
+      assertCanAssignEnvironment({
+        environmentId: null,
+        organizationId: org.id,
+        hasEnvironmentAdmin: false,
+      }),
+    ).rejects.toMatchObject({ statusCode: 403 });
+  });
+
+  test("assertCanAssignEnvironment allows the restricted default (null) environment with env-admin", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    await OrganizationModel.patch(org.id, {
+      defaultEnvironmentRestricted: true,
+    });
+    await expect(
+      assertCanAssignEnvironment({
+        environmentId: null,
+        organizationId: org.id,
+        hasEnvironmentAdmin: true,
       }),
     ).resolves.toBeUndefined();
   });

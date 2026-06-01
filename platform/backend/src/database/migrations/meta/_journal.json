@@ -1842,6 +1842,13 @@
       "when": 1780072311037,
       "tag": "0262_slippery_justin_hammer",
       "breakpoints": true
+    },
+    {
+      "idx": 263,
+      "version": "7",
+      "when": 1780300917038,
+      "tag": "0263_colossal_aaron_stack",
+      "breakpoints": true
     }
   ]
 }

@@ -624,8 +624,9 @@ export function useUpdateDefaultEnvironment(
 }
 
 /**
- * Returns the org-configured default environment (name + namespace). When
- * unconfigured, `name` falls back to "Default" and `namespace` to null.
+ * Returns the org-configured default environment (name + namespace +
+ * restricted). When unconfigured, `name` falls back to "Default", `namespace`
+ * to null, and `restricted` to false.
  */
 export function useDefaultEnvironment() {
   const { data: organization } = useOrganization();
@@ -633,6 +634,7 @@ export function useDefaultEnvironment() {
     name: organization?.defaultEnvironmentName ?? "Default",
     namespace: organization?.defaultEnvironmentNamespace ?? null,
     description: organization?.defaultEnvironmentDescription ?? null,
+    restricted: organization?.defaultEnvironmentRestricted ?? false,
   };
 }
 

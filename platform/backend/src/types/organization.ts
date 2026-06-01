@@ -449,13 +449,14 @@ export const UpdatePresetEntityDefaultValidationRegexSchema = z.object({
 /**
  * Clean API shape for configuring the implicit "default" environment. The
  * handler maps these to the org columns (`defaultEnvironmentName`,
- * `defaultEnvironmentNamespace`). Omitting a field leaves it unchanged; an
- * explicit null clears it.
+ * `defaultEnvironmentNamespace`, `defaultEnvironmentRestricted`). Omitting a
+ * field leaves it unchanged; an explicit null clears the nullable ones.
  */
 export const UpdateDefaultEnvironmentSchema = z.object({
   name: z.string().trim().min(1).max(50).nullable().optional(),
   description: z.string().trim().max(500).nullable().optional(),
   namespace: z.string().trim().max(253).nullable().optional(),
+  restricted: z.boolean().optional(),
 });
 
 export type UpdateDefaultEnvironment = z.infer<

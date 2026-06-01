@@ -204,6 +204,47 @@ describe("PATCH /api/organization/default-environment", () => {
     expect(res.json().defaultEnvironmentNamespace).toBeNull();
   });
 
+  test("persists restricted and leaves it unchanged when omitted", async ({
+    makeUser,
+    makeOrganization,
+  }) => {
+    vi.clearAllMocks();
+    mockHasPermission.mockResolvedValue({ success: true, error: null });
+    const user = await makeUser();
+    const organization = await makeOrganization();
+    organizationId = organization.id;
+    app = await buildApp(user, organizationId);
+
+    // Defaults to false.
+    expect(organization.defaultEnvironmentRestricted).toBe(false);
+
+    const setRestricted = await app.inject({
+      method: "PATCH",
+      url: "/api/organization/default-environment",
+      payload: { restricted: true },
+    });
+    expect(setRestricted.statusCode).toBe(200);
+    expect(setRestricted.json().defaultEnvironmentRestricted).toBe(true);
+
+    // PATCH only name; restricted must be preserved.
+    const updateName = await app.inject({
+      method: "PATCH",
+      url: "/api/organization/default-environment",
+      payload: { name: "Renamed" },
+    });
+    expect(updateName.statusCode).toBe(200);
+    expect(updateName.json().defaultEnvironmentRestricted).toBe(true);
+
+    // Turn it back off.
+    const clearRestricted = await app.inject({
+      method: "PATCH",
+      url: "/api/organization/default-environment",
+      payload: { restricted: false },
+    });
+    expect(clearRestricted.statusCode).toBe(200);
+    expect(clearRestricted.json().defaultEnvironmentRestricted).toBe(false);
+  });
+
   test("member without environment:update is forbidden", async ({
     makeUser,
     makeOrganization,

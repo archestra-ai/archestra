@@ -1,4 +1,4 @@
-import { EnvironmentModel } from "@/models";
+import { EnvironmentModel, OrganizationModel } from "@/models";
 import {
   ApiError,
   type CreateEnvironment,
@@ -53,11 +53,13 @@ export async function updateEnvironment(params: {
 }
 
 /**
- * Gate assigning a catalog item to an environment. The default (null)
- * environment and unrestricted environments are open; a `restricted`
- * environment requires the caller to hold `environment:admin`. Callers compute
- * `hasEnvironmentAdmin` with their own auth primitive (route headers vs. MCP
- * user context) and pass the result in, so this stays free of HTTP concerns.
+ * Gate assigning a catalog item to an environment. Unrestricted environments
+ * are open; a `restricted` environment requires the caller to hold
+ * `environment:admin`. The default (null) environment is open unless the org
+ * has marked its default environment restricted, in which case it is gated the
+ * same way. Callers compute `hasEnvironmentAdmin` with their own auth primitive
+ * (route headers vs. MCP user context) and pass the result in, so this stays
+ * free of HTTP concerns.
  */
 export async function assertCanAssignEnvironment(params: {
   environmentId: string | null | undefined;
@@ -65,7 +67,17 @@ export async function assertCanAssignEnvironment(params: {
   hasEnvironmentAdmin: boolean;
 }): Promise<void> {
   const { environmentId, organizationId, hasEnvironmentAdmin } = params;
-  if (!environmentId) return;
+
+  if (!environmentId) {
+    const organization = await OrganizationModel.getById(organizationId);
+    if (organization?.defaultEnvironmentRestricted && !hasEnvironmentAdmin) {
+      throw new ApiError(
+        403,
+        "You do not have permission to assign catalog items to the default environment.",
+      );
+    }
+    return;
+  }
 
   const environment = await EnvironmentModel.findByIdForOrganization(
     environmentId,

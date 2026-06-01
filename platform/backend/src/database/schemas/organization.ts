@@ -250,6 +250,16 @@ const organizationsTable = pgTable("organization", {
   defaultEnvironmentDescription: text("default_environment_description"),
 
   /**
+   * When true, assigning a catalog item to the implicit "default" environment
+   * (environment_id = null) requires the `environment:admin` permission — i.e.
+   * creating a catalog item without choosing an environment is admin-gated.
+   * Mirrors the per-environment `environment.restricted` flag for the default.
+   */
+  defaultEnvironmentRestricted: boolean("default_environment_restricted")
+    .notNull()
+    .default(false),
+
+  /**
    * When true, the Agent Skill tools (`list_skills`, `activate_skill`,
    * `read_skill_file`) are assigned to every agent in the org and added to all
    * new agents. Flipped on

@@ -67,7 +67,6 @@ export function EnvironmentsSection({ canEdit }: { canEdit: boolean }) {
           <TableHeader>
             <TableRow>
               <TableHead>Name</TableHead>
-              <TableHead>Description</TableHead>
               <TableHead>Kubernetes namespace</TableHead>
               <TableHead>Assigned items</TableHead>
               <TableHead>Access</TableHead>
@@ -81,16 +80,24 @@ export function EnvironmentsSection({ canEdit }: { canEdit: boolean }) {
                 name (it has no slug). */}
             <TableRow>
               <TableCell className="font-medium">
-                {defaultEnvironment.name}
-              </TableCell>
-              <TableCell className="max-w-xs truncate text-sm text-muted-foreground">
-                {defaultEnvironment.description ?? "—"}
+                <span className="flex items-center gap-2">
+                  {defaultEnvironment.name}
+                  <Badge variant="outline" className="text-muted-foreground">
+                    Default
+                  </Badge>
+                </span>
               </TableCell>
               <TableCell className="font-mono text-xs text-muted-foreground">
                 {defaultEnvironment.namespace ?? "—"}
               </TableCell>
               <TableCell className="text-muted-foreground">—</TableCell>
-              <TableCell className="text-muted-foreground">—</TableCell>
+              <TableCell>
+                {defaultEnvironment.restricted ? (
+                  <Badge variant="secondary">Restricted</Badge>
+                ) : (
+                  <span className="text-muted-foreground">Open</span>
+                )}
+              </TableCell>
               <TableCell className="text-right">
                 <Button
                   variant="ghost"
@@ -107,7 +114,7 @@ export function EnvironmentsSection({ canEdit }: { canEdit: boolean }) {
             {isLoading ? (
               <TableRow>
                 <TableCell
-                  colSpan={6}
+                  colSpan={5}
                   className="text-center text-sm text-muted-foreground"
                 >
                   Loading…
@@ -118,9 +125,6 @@ export function EnvironmentsSection({ canEdit }: { canEdit: boolean }) {
                 <TableRow key={environment.id}>
                   <TableCell className="font-medium">
                     {environment.name}
-                  </TableCell>
-                  <TableCell className="max-w-xs truncate text-sm text-muted-foreground">
-                    {environment.description ?? "—"}
                   </TableCell>
                   <TableCell className="font-mono text-xs text-muted-foreground">
                     {environment.namespace ?? "—"}
@@ -212,6 +216,7 @@ function EnvironmentEditorDialog({
     name: string;
     namespace: string | null;
     description: string | null;
+    restricted: boolean;
   };
 }) {
   const createMutation = useCreateEnvironment();
@@ -236,6 +241,7 @@ function EnvironmentEditorDialog({
         setName(defaultEnvironment?.name ?? "");
         setNamespace(defaultEnvironment?.namespace ?? "");
         setDescription(defaultEnvironment?.description ?? "");
+        setRestricted(defaultEnvironment?.restricted ?? false);
       } else {
         setName(environment?.name ?? "");
         setNamespace(environment?.namespace ?? "");
@@ -275,6 +281,7 @@ function EnvironmentEditorDialog({
           name: trimmedName,
           namespace: namespaceValue,
           description: descriptionValue,
+          restricted,
         },
         { onSuccess: (updated) => updated && onOpenChange(false) },
       );
@@ -295,7 +302,7 @@ function EnvironmentEditorDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent className="max-w-lg max-h-[85vh] overflow-hidden">
         <DialogHeader>
           <DialogTitle>
             {mode === "create"
@@ -356,23 +363,21 @@ function EnvironmentEditorDialog({
               disabled={isPending}
             />
           </div>
-          {mode !== "default" && (
-            <div className="flex items-start justify-between gap-4">
-              <div className="space-y-1">
-                <Label htmlFor="environment-restricted">Restricted</Label>
-                <p className="text-xs text-muted-foreground">
-                  Only members with the “Assign catalog items to restricted
-                  environments” permission can assign catalog items here.
-                </p>
-              </div>
-              <Switch
-                id="environment-restricted"
-                checked={restricted}
-                onCheckedChange={setRestricted}
-                disabled={isPending}
-              />
+          <div className="flex items-start justify-between gap-4">
+            <div className="space-y-1">
+              <Label htmlFor="environment-restricted">Restricted</Label>
+              <p className="text-xs text-muted-foreground">
+                Only members with the “Assign catalog items to restricted
+                environments” permission can assign catalog items here.
+              </p>
             </div>
-          )}
+            <Switch
+              id="environment-restricted"
+              checked={restricted}
+              onCheckedChange={setRestricted}
+              disabled={isPending}
+            />
+          </div>
         </DialogBody>
         <DialogFooter>
           <Button

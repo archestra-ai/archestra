@@ -1,8 +1,3 @@
----
-name: resolve-conflicts
-description: Resolve merge/rebase conflicts in this repo — Drizzle migration number collisions (platform/backend/src/database/migrations/meta/_journal.json, meta/<NNNN>_snapshot.json), preserving any hand-written data-migration tail (UPDATE/INSERT/DO $$). Use when git reports a conflict in those files, when `drizzle-kit check` fails after a merge, or when conflicted generated clients under platform/shared/hey-api/** need to be reconciled.
----
-
 # Resolving Drizzle migration merge conflicts
 
 When main has landed migrations that collide with your branch's migration

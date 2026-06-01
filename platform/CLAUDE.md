@@ -10,7 +10,6 @@
 
 1. **Use pnpm** for package management
 2. **Use Tilt for development** - `tilt up` to start the full environment
-3. **Use shadcn/ui components** - Add with `npx shadcn@latest add <component>`
 4. **Documentation Updates** - For any feature or system changes, audit `../docs/pages` to determine if existing content needs modification/updates or if new documentation should be added. Follow the writing guidelines in `../docs/docs_writer_prompt.md`
 5. **Always Add Tests** - When working on any feature, ALWAYS add or modify appropriate test cases (unit tests, integration tests, or e2e tests under `platform/e2e-tests/tests`)
 6. **Enterprise Edition Imports** - NEVER directly import from `.ee.ts` files unless the importing file is itself an `.ee.ts` file. Use runtime conditional logic with `config.enterpriseFeatures.core` checks instead to avoid bundling enterprise code into free builds
@@ -23,6 +22,16 @@
 
 Docs are stored at ./docs
 Check ./docs/docs_writer_prompt.md before changing docs files.
+
+## Project Skills
+
+Load these project skills when the task matches their domain:
+
+- `archestra-dev-frontend` - use for frontend Next.js/React work, UI components, forms, TanStack Query hooks, generated API clients, white-label copy, and docs links.
+- `archestra-dev-migrations` - use for Drizzle schema changes, generated migrations, data migrations, custom migrations, `drizzle-kit check` failures, or migration conflict resolution via its `resolve-conflicts.md` subpage.
+- `archestra-dev-e2e` - use for Playwright e2e tests, API/UI fixtures, WireMock setup, local/CI e2e behavior, and locator guidance.
+- `archestra-dev-observability` - use for tracing, metrics, OpenTelemetry, Tempo, Grafana, Prometheus, LLM/MCP spans, or observability label changes.
+- `archestra-dev-rust-napi` - use for Rust core code, NAPI bindings, generated TypeScript bindings, Rust telemetry, and Rust checks.
 
 ## Key URLs
 
@@ -77,22 +86,6 @@ pnpm db:studio       # Open Drizzle Studio
 pnpm db:generate     # Generate new migrations (CI checks for uncommitted migrations)
 drizzle-kit check    # Check consistency of generated SQL migrations history
 
-# Manual Migrations with Data Migration Logic
-# When creating migrations that include data migration (INSERT/UPDATE statements),
-# you must use the Drizzle-generated migration file name to ensure proper tracking:
-# 1. First, update the Drizzle schema files with your schema changes
-# 2. Run `pnpm db:generate` - this creates a migration with a random name (e.g., 0119_military_alice.sql)
-# 3. Add your data migration SQL to the generated file (INSERT, UPDATE statements, etc.)
-# 4. Run `drizzle-kit check` to verify consistency
-# IMPORTANT: Never create manually-named migration files - Drizzle tracks migrations
-# via the meta/_journal.json file which references the generated file names.
-
-# Custom Data-Only Migrations (no schema changes)
-# For pure data migrations (UPDATE, INSERT) with no schema changes, use:
-#   cd backend && npx drizzle-kit generate --custom --name=<descriptive-name>
-# This creates an empty SQL file tracked by Drizzle's journal. Add your SQL, then run:
-#   npx drizzle-kit check
-
 # Database Connection
 # PostgreSQL is running in Kubernetes (managed by Tilt)
 # Connect to database:
@@ -104,34 +97,6 @@ kubectl exec -n archestra-dev postgresql-0 -- env PGPASSWORD=archestra_dev_passw
 tilt logs pnpm-dev-backend           # Get backend logs
 tilt logs pnpm-dev-frontend          # Get frontend logs
 tilt trigger <pnpm-dev-backend|pnpm-dev-frontend|wiremock|etc> # Trigger an update for the specified resource
-
-# E2E setup
-Runs wiremock and seeds test data to database. Note that in development e2e use your development database. This means some of your local data may cause e2e to fail locally.
-tilt trigger e2e-test-dependencies   # Start e2e WireMock
-
-Check wiremock health at:
-http://localhost:9092/__admin/health
-
-ARCHESTRA_OPENAI_BASE_URL=http://localhost:9092/v1
-ARCHESTRA_ANTHROPIC_BASE_URL=http://localhost:9092
-ARCHESTRA_GEMINI_BASE_URL=http://localhost:9092
-
-ARCHESTRA_OPENAI_BASE_URL=http://localhost:9091/v1
-ARCHESTRA_ANTHROPIC_BASE_URL=http://localhost:9091
-ARCHESTRA_GEMINI_BASE_URL=http://localhost:9091
-
-# E2E Testing
-pnpm test:e2e                        # Run Playwright tests
-# Local: docker-compose setup (Tiltfile.test)
-# CI: kind cluster + helm deployment
-#   - kind config: .github/kind.yaml
-#   - helm values: .github/values-ci.yaml
-#   - NodePort services: frontend:3000, backend:9000, metrics:9050
-#   - CI checks in e2e job: drizzle-kit check, codegen, db migrations
-
-# Observability
-tilt trigger observability           # Start full observability stack (Tempo, OTEL Collector, Prometheus, Grafana)
-docker compose -f dev/docker-compose.observability.yml up -d  # Alternative: Start via docker-compose
 ```
 
 ## Environment Variables
@@ -178,14 +143,6 @@ Tool invocation policies and trusted data policies are still enforced by the pro
 - **Route Permissions**: Configure in `shared/access-control.ts`
 - **Request Context**: `request.user` and `request.organizationId`
 - **Schema Files**: Auth schemas in separate files: `account`, `api-key`, `invitation`, `member`, `session`, `two-factor`, `verification`
-
-## Observability
-
-**Tracing**: Follows [OTEL GenAI Semantic Conventions](https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-agent-spans/). LLM spans use `gen_ai.agent.id`, `gen_ai.agent.name`, `gen_ai.provider.name`, `gen_ai.request.model`, `gen_ai.operation.name`, and `archestra.label.<key>` for dynamic labels. MCP spans use `gen_ai.tool.name`, `mcp.server.name`. Session tracking via `gen_ai.conversation.id` (from `X-Archestra-Session-Id` header). Span names: `chat {model}`, `generate_content {model}`, `execute_tool {tool_name}`. Agent label keys fetched from database on startup and included as resource attributes. Traces stored in Grafana Tempo. User identity tracked via `archestra.user.id`, `archestra.user.email`, `archestra.user.name` (when available). LLM spans include `archestra.cost` (USD) and `gen_ai.usage.total_tokens`.
-
-**Metrics**: Prometheus metrics (`llm_request_duration_seconds`, `llm_tokens_total`) include `agent_id` (internal), `agent_name`, `agent_type`, `external_agent_id` (from header), and dynamic agent labels as dimensions. MCP metrics include `agent_id`, `agent_name`, `agent_type`. Agent execution metrics use `external_agent_id` for the client-provided ID. Metrics are reinitialized on startup with current label keys from database.
-
-**Local Setup**: Use `tilt trigger observability` or `docker compose -f dev/docker-compose.observability.yml up` to start Tempo, Prometheus, and Grafana with pre-configured datasources.
 
 ## Dependency Security
 
@@ -303,20 +260,7 @@ pnpm rebuild <package-name>  # Enable scripts for specific package
 
 **Frontend**:
 
-- Use TanStack Query for data fetching (prefer `useQuery` over `useSuspenseQuery` with explicit loading states)
-- Use shadcn/ui components only
-- **Use components from `frontend/src/components/ui` over plain HTML elements**: Never use raw `<button>`, `<input>`, `<select>`, etc. when a component exists in `frontend/src/components/ui` (Button over button, Input over input, etc.)
-- **Do not hardcode `Archestra` in frontend UI copy**: Use `const appName = useAppName();` and interpolate the app name so white-labeled deployments render correctly
-- **Handle toasts in .query.ts files, not in components**: Toast notifications for mutations (success/error) should be defined in the mutation's `onSuccess`/`onError` callbacks within `.query.ts` files, not in components
-- **Never throw on HTTP errors**: In query/mutation functions, never throw errors on HTTP failures. Use `handleApiError(error)` for user notification and return appropriate default values (`null`, `[]`, `{}`). Components should not have try/catch for API calls - all error handling belongs in `.query.ts` files.
-- Small focused components with extracted business logic
-- Flat file structure, avoid barrel files
-- Only export what's needed externally
-- **API Client Guidelines**: Frontend `.query.ts` files should NEVER use `fetch()` directly - always run `pnpm codegen:api-client` first to ensure SDK is up-to-date, then use the generated SDK methods instead of manual API calls for type safety and consistency
-- **Prefer TanStack Query over prop drilling**: When a component needs data that's available via a TanStack Query hook, use the hook directly in that component rather than fetching in a parent and passing via props. TanStack Query's built-in caching ensures no duplicate requests. Only pass minimal identifiers (like `catalogId`) needed for the component to fetch/filter its own data.
-- **Use react-hook-form for forms**: Prefer `useForm` over multiple `useState` hooks for form state management. Pass form objects to child components via `form: UseFormReturn<FormValues>` prop rather than individual state setters. Parent components handle mutations and submission, form components focus on rendering.
-- **Reuse API types from @shared**: Use types from `archestraApiTypes` (e.g., `archestraApiTypes.CreateXxxData["body"]`, `archestraApiTypes.GetXxxResponses["200"]`) instead of defining duplicate types. Import from `@shared`.
-- **Documentation URLs**: Always use `getDocsUrl(DocsPage.PageName, "optional-anchor")` from `@shared` to construct docs links. Never hardcode docs URLs.
+- For frontend work, load the `archestra-dev-frontend` skill before editing React/Next.js UI, forms, query hooks, generated API client usage, copy, or docs links.
 
 **Backend**:
 
@@ -468,10 +412,7 @@ pnpm rebuild <package-name>  # Enable scripts for specific package
 
 - **Backend**: Vitest with PGLite for in-memory PostgreSQL testing - never mock database interfaces, use real database operations via models for comprehensive integration testing
 - **Test What Matters**: Prefer behavior-focused tests over implementation-detail tests. Do not add tests that only assert class names, prop plumbing, or incidental markup unless that detail is itself the contract.
-- **E2E Tests**: Playwright with test fixtures pattern - import from `./fixtures` in API/UI test directories
-- **E2E Test Fixtures**:
-  - API fixtures: `makeApiRequest`, `createAgent`, `deleteAgent`, `createApiKey`, `deleteApiKey`, `createToolInvocationPolicy`, `deleteToolInvocationPolicy`, `createTrustedDataPolicy`, `deleteTrustedDataPolicy`
-  - UI fixtures: `goToPage`, `makeRandomString`
+- **E2E Tests**: Load the `archestra-dev-e2e` skill for Playwright tests, fixtures, WireMock setup, local/CI behavior, and locator guidance.
 - **Backend Test Fixtures**: Import from `@/test` to access Vitest context with fixture functions. Available fixtures: `makeUser`, `makeAdmin`, `makeOrganization`, `makeTeam`, `makeAgent`, `makeTool`, `makeAgentTool`, `makeToolPolicy`, `makeTrustedDataPolicy`, `makeCustomRole`, `makeMember`, `makeMcpServer`, `makeInternalMcpCatalog`, `makeInvitation`, `seedAndAssignArchestraTools`
 
 **Backend Test Fixtures Usage**:
@@ -487,139 +428,4 @@ test("example test", async ({ makeUser, makeOrganization, makeTeam }) => {
 });
 ```
 
-**E2E Test Fixtures Usage**:
-
-```typescript
-import { test } from "./fixtures";
-
-test("API example", async ({ request, createAgent, deleteAgent }) => {
-  const response = await createAgent(request, "Test Agent");
-  const agent = await response.json();
-  // test logic...
-  await deleteAgent(request, agent.id);
-});
-```
-
-**Playwright Locator Best Practices**:
-
-Prefer Playwright's recommended locators over raw `locator()` calls. In priority order:
-
-1. `page.getByRole()` - Accessible elements by ARIA role (buttons, links, headings, etc.)
-2. `page.getByText()` - Find by text content
-3. `page.getByLabel()` - Form controls by label
-4. `page.getByPlaceholder()` - Input elements by placeholder
-5. `page.getByTestId()` - Custom test IDs (use `E2eTestId` constants from `@shared`)
-
-Avoid:
-
-- Raw CSS selectors: `page.locator('.my-class')` or `page.locator('#my-id')`
-- XPath selectors
-- Arbitrary timeouts - use Playwright's auto-waiting instead
-
-Example:
-
-```typescript
-// Good
-await page.getByRole("button", { name: /Submit/i }).click();
-await page.getByLabel(/Email/i).fill("test@example.com");
-await page.getByTestId(E2eTestId.CreateAgentButton).click();
-
-// Avoid
-await page.locator(".submit-btn").click();
-await page.locator("#email-input").fill("test@example.com");
-await page.waitForTimeout(1000); // Use auto-waiting instead
-```
-
-Reference: https://playwright.dev/docs/locators#quick-guide
-
 - never amend commits
-
-## Rust / NAPI coding style
-
-Write Rust as a reusable library first. NAPI should be a thin adapter around the Rust core, not the place where product logic lives. The Rust part should be easy to move later into a companion app, CLI, daemon, desktop process, or IPC service.
-
-### Architecture
-
-- Keep core Rust logic independent from Node, JavaScript, and NAPI.
-- No `#[napi]`, `napi::Result`, JS types, or Node-specific assumptions in core Rust modules.
-- NAPI functions should only:
-  1. receive JS input,
-  2. validate and convert it into Rust domain types,
-  3. call the Rust core,
-  4. convert the result or error back to JS.
-- Minimize the JS ↔ Rust API surface. Prefer a few coarse operations over many tiny exported helpers.
-- Do not expose internal implementation details through the NAPI API.
-- Generated TypeScript definitions are part of the public API and should stay clean, stable, and intentional.
-- Keep observability in the core as `tracing` spans and events only. OTLP/exporter wiring belongs in a single feature-gated module, never scattered through the logic. Propagate trace context (W3C `traceparent`) explicitly across detached tasks and actor boundaries — it does not flow implicitly.
-
-### Types and data modeling
-
-- Prefer structs, enums, and newtypes over primitive-heavy signatures, tuples, raw strings, and boolean flags.
-- Use enums for closed sets of states or modes.
-- Use named structs for meaningful data instead of passing many positional arguments.
-- Make invalid states unrepresentable where practical.
-- Treat all JS input as untrusted. Validate it at the boundary and convert it immediately into Rust-native types.
-- Validate untrusted input at the public core entry points, not deep in the call graph. Data validated when first accepted (e.g. persisted or replayed history) is trusted on reuse — document that trust boundary wherever it is not obvious.
-- Keep NAPI-facing DTOs separate from richer internal domain types when that improves clarity.
-
-### Control flow and style
-
-- Prefer `match` for enums, variants, and meaningful branching.
-- Use `if` for simple boolean checks.
-- Prefer early returns for validation and error paths.
-- Avoid deeply nested control flow.
-- Prefer functional style where it improves readability.
-- Do not force iterator chains when a simple loop is clearer.
-- Prefer clear, boring, explicit code over clever abstractions.
-
-### Errors and safety
-
-- Use `Result<T, E>` consistently in core Rust.
-- Prefer domain-specific error enums over generic strings.
-- Convert Rust errors into JS/NAPI errors only at the boundary.
-- Preserve useful error context.
-- No `unwrap`, `expect`, or `panic!` in code reachable from the NAPI boundary.
-- Assume dependencies can still panic despite that rule. Wrap every future that enters the core from the NAPI boundary in `catch_unwind` and convert the payload into a domain error. The host process must never abort on a Rust panic.
-- No `unsafe` unless isolated, documented, and clearly justified.
-
-### Abstractions
-
-- Avoid speculative abstractions.
-- Avoid `dyn Trait` unless runtime polymorphism is clearly needed.
-- Prefer concrete types, enums, generics, or plain functions before trait objects.
-- Keep modules small and named around domain concepts, not patterns.
-- Do not add indirection unless it makes testing, ownership, or API boundaries meaningfully better.
-
-### Cleanliness
-
-- Zero dead code policy.
-- No commented-out code.
-- No unused exports.
-- No unused dependencies.
-- No placeholder modules “for later”.
-- Keep dependencies minimal and justified.
-- Avoid adding crates for trivial functionality.
-
-### Tests and checks
-
-- Test Rust core logic directly, not only through Node.
-- Add tests for validation, parsing, edge cases, and error handling.
-- Use JS/NAPI integration tests only for actual boundary behavior.
-- Keep every `cfg`/feature gate as narrow as its actual use. Code compiled only because a gate is wider than its callers is dead code and will trip `-D warnings`.
-- Run the checks under the default feature set AND the binding's feature set (`napi`, `telemetry`) — not only `--all-features`. Lints, dead code, and broken `cfg` paths hide in feature combinations you never build.
-- Required before merge:
-  - `cargo fmt`
-  - `cargo clippy -- -D warnings`
-  - `cargo test`
-
-### Design target
-
-The desired shape is:
-
-JS/Node → thin NAPI adapter → reusable Rust core
-
-Not:
-
-JS-flavored business logic written in Rust
-
-Deleting or replacing the NAPI layer should not delete or rewrite the product logic.

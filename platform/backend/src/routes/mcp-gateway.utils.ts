@@ -1035,7 +1035,7 @@ export async function validateExternalIdpToken(
     }
 
     if (!idpProvider.oidcConfig) {
-      logger.debug(
+      logger.warn(
         { profileId, identityProviderId: agent.identityProviderId },
         "validateExternalIdpToken: identity provider has no OIDC config",
       );

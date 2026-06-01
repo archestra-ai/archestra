@@ -1,0 +1,2 @@
+ALTER TABLE "tools" ADD COLUMN "cloned_pending_discovery" boolean DEFAULT false NOT NULL;--> statement-breakpoint
+CREATE INDEX "tools_cloned_pending_discovery_idx" ON "tools" USING btree ("cloned_pending_discovery");

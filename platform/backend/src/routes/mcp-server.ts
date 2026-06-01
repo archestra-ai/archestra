@@ -809,11 +809,38 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 const createdTools =
                   await ToolModel.bulkCreateToolsIfNotExists(toolsToCreate);
 
+                // Clone reconciliation: if this catalog has provisional cloned
+                // tools (first install of a clone), confirm the ones the server
+                // actually exposes and drop the rest. Genuinely-new tools were
+                // just created above with default policies (+ configurator).
+                const provisionalCount =
+                  await ToolModel.countProvisionalForCatalog(capturedCatalogId);
+                let confirmedClonedToolIds: string[] = [];
+                if (provisionalCount > 0) {
+                  const discoveredToolNames = new Set(
+                    toolsToCreate.map((t) => t.name),
+                  );
+                  const { confirmedToolIds } =
+                    await ToolModel.reconcileClonedCatalogTools({
+                      catalogId: capturedCatalogId,
+                      discoveredToolNames,
+                    });
+                  confirmedClonedToolIds = confirmedToolIds;
+                }
+
                 // For personal installs, auto-assign every discovered tool to the
                 // installer's personal gateway alongside any explicit agentIds.
                 // Team-scoped installs only honor explicit agentIds.
                 {
-                  const toolIds = createdTools.map((t) => t.id);
+                  // Confirmed clone tools are usually already in `createdTools`
+                  // (bulkCreateToolsIfNotExists returns existing rows matched by
+                  // name); include them explicitly as defense-in-depth and dedupe.
+                  const toolIds = Array.from(
+                    new Set([
+                      ...createdTools.map((t) => t.id),
+                      ...confirmedClonedToolIds,
+                    ]),
+                  );
                   if (toolIds.length > 0) {
                     const targetAgentIds: string[] = [];
                     if (!mcpServer.teamId) {
@@ -939,11 +966,37 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         const createdTools =
           await ToolModel.bulkCreateToolsIfNotExists(toolsToCreate);
 
+        // Clone reconciliation: if this catalog has provisional cloned
+        // tools (first install of a clone), confirm the ones the server
+        // actually exposes and drop the rest. Genuinely-new tools were
+        // just created above with default policies (+ configurator).
+        const provisionalCount = await ToolModel.countProvisionalForCatalog(
+          catalogItem.id,
+        );
+        let confirmedClonedToolIds: string[] = [];
+        if (provisionalCount > 0) {
+          const discoveredToolNames = new Set(toolsToCreate.map((t) => t.name));
+          const { confirmedToolIds } =
+            await ToolModel.reconcileClonedCatalogTools({
+              catalogId: catalogItem.id,
+              discoveredToolNames,
+            });
+          confirmedClonedToolIds = confirmedToolIds;
+        }
+
         // For personal installs, auto-assign every discovered tool to the
         // installer's personal gateway alongside any explicit agentIds.
         // Team-scoped installs only honor explicit agentIds.
         {
-          const toolIds = createdTools.map((t) => t.id);
+          // Confirmed clone tools are usually already in `createdTools`
+          // (bulkCreateToolsIfNotExists returns existing rows matched by
+          // name); include them explicitly as defense-in-depth and dedupe.
+          const toolIds = Array.from(
+            new Set([
+              ...createdTools.map((t) => t.id),
+              ...confirmedClonedToolIds,
+            ]),
+          );
           if (toolIds.length > 0) {
             const targetAgentIds: string[] = [];
             if (!mcpServer.teamId) {

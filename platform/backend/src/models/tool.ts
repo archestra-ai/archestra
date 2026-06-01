@@ -368,6 +368,7 @@ class ToolModel {
         updatedAt: schema.toolsTable.updatedAt,
         delegateToAgentId: schema.toolsTable.delegateToAgentId,
         meta: schema.toolsTable.meta,
+        clonedPendingDiscovery: schema.toolsTable.clonedPendingDiscovery,
         policiesAutoConfiguredAt: schema.toolsTable.policiesAutoConfiguredAt,
         policiesAutoConfiguringStartedAt:
           schema.toolsTable.policiesAutoConfiguringStartedAt,
@@ -407,8 +408,17 @@ class ToolModel {
      */
     // TODO: this require a re-work.
     // findAll currently used only by the auto-policy configuration and it bypass access control checks.
+    // Chaining `.where()` twice on a dynamic Drizzle query replaces the prior
+    // clause rather than ANDing it, so combine both filters in a single call.
     if (userId && !isAgentAdmin) {
-      query = query.where(isNotNull(schema.toolsTable.catalogId));
+      query = query.where(
+        and(
+          isNotNull(schema.toolsTable.catalogId),
+          eq(schema.toolsTable.clonedPendingDiscovery, false),
+        ),
+      );
+    } else {
+      query = query.where(eq(schema.toolsTable.clonedPendingDiscovery, false));
     }
 
     const results = await query;
@@ -710,6 +720,137 @@ class ToolModel {
     return tools
       .map((t) => resultToolsByName.get(t.name))
       .filter((t): t is Tool => t !== undefined);
+  }
+
+  /**
+   * Copy a source catalog's tools and their guardrail policies into a target
+   * (clone) catalog as PROVISIONAL rows (clonedPendingDiscovery = true). Uses
+   * direct inserts — no default policies are created and the policy-configurator
+   * subagent is never triggered. No agent_tools rows are created. No-op if the
+   * source has no tools.
+   */
+  static async cloneToolsAndPoliciesFromCatalog(params: {
+    sourceCatalogId: string;
+    targetCatalogId: string;
+    targetCatalogName: string;
+  }): Promise<void> {
+    const { sourceCatalogId, targetCatalogId, targetCatalogName } = params;
+
+    const sourceTools = await db
+      .select()
+      .from(schema.toolsTable)
+      .where(eq(schema.toolsTable.catalogId, sourceCatalogId));
+    if (sourceTools.length === 0) return;
+
+    for (const sourceTool of sourceTools) {
+      const rawName = ToolModel.unslugifyName(sourceTool.name);
+      const [clonedTool] = await db
+        .insert(schema.toolsTable)
+        .values({
+          catalogId: targetCatalogId,
+          name: ToolModel.slugifyName(targetCatalogName, rawName),
+          parameters: sourceTool.parameters,
+          description: sourceTool.description,
+          meta: sourceTool.meta,
+          clonedPendingDiscovery: true,
+        })
+        .returning();
+
+      const invocationPolicies = await db
+        .select()
+        .from(schema.toolInvocationPoliciesTable)
+        .where(eq(schema.toolInvocationPoliciesTable.toolId, sourceTool.id));
+      if (invocationPolicies.length > 0) {
+        await db.insert(schema.toolInvocationPoliciesTable).values(
+          invocationPolicies.map((p) => ({
+            toolId: clonedTool.id,
+            conditions: p.conditions,
+            action: p.action,
+            reason: p.reason,
+          })),
+        );
+      }
+
+      const trustedPolicies = await db
+        .select()
+        .from(schema.trustedDataPoliciesTable)
+        .where(eq(schema.trustedDataPoliciesTable.toolId, sourceTool.id));
+      if (trustedPolicies.length > 0) {
+        await db.insert(schema.trustedDataPoliciesTable).values(
+          trustedPolicies.map((p) => ({
+            toolId: clonedTool.id,
+            conditions: p.conditions,
+            action: p.action,
+            description: p.description,
+          })),
+        );
+      }
+    }
+  }
+
+  /** Count provisional (cloned, unconfirmed) tools for a catalog. */
+  static async countProvisionalForCatalog(catalogId: string): Promise<number> {
+    const rows = await db
+      .select({ id: schema.toolsTable.id })
+      .from(schema.toolsTable)
+      .where(
+        and(
+          eq(schema.toolsTable.catalogId, catalogId),
+          eq(schema.toolsTable.clonedPendingDiscovery, true),
+        ),
+      );
+    return rows.length;
+  }
+
+  /**
+   * First-install reconciliation for a clone. For each provisional tool:
+   * confirm (clear the flag) if its slugified name was discovered, otherwise
+   * delete it (policies cascade). Matching is on the full slugified tool name
+   * (`slugifyName(catalogName, rawName)`) — the same slug used both for the
+   * provisional rows and the discovered set — so it is exact and lossless.
+   * Returns the ids of confirmed tools. Does NOT create tools or trigger the
+   * configurator — genuinely-new discovered tools are created by the normal
+   * bulkCreateToolsIfNotExists path.
+   */
+  static async reconcileClonedCatalogTools(params: {
+    catalogId: string;
+    discoveredToolNames: Set<string>;
+  }): Promise<{ confirmedToolIds: string[] }> {
+    const { catalogId, discoveredToolNames } = params;
+
+    const provisional = await db
+      .select()
+      .from(schema.toolsTable)
+      .where(
+        and(
+          eq(schema.toolsTable.catalogId, catalogId),
+          eq(schema.toolsTable.clonedPendingDiscovery, true),
+        ),
+      );
+
+    const confirmedToolIds: string[] = [];
+    const toDelete: string[] = [];
+    for (const tool of provisional) {
+      if (discoveredToolNames.has(tool.name)) {
+        confirmedToolIds.push(tool.id);
+      } else {
+        toDelete.push(tool.id);
+      }
+    }
+
+    if (confirmedToolIds.length > 0) {
+      await db
+        .update(schema.toolsTable)
+        .set({ clonedPendingDiscovery: false })
+        .where(inArray(schema.toolsTable.id, confirmedToolIds));
+    }
+    if (toDelete.length > 0) {
+      await db
+        .delete(schema.toolsTable)
+        .where(inArray(schema.toolsTable.id, toDelete));
+    }
+
+    return { confirmedToolIds };
   }
 
   /**
@@ -1178,6 +1319,7 @@ class ToolModel {
       .where(
         and(
           eq(schema.toolsTable.catalogId, catalogId),
+          eq(schema.toolsTable.clonedPendingDiscovery, false),
           ...hiddenToolNames.map((toolName) =>
             ne(schema.toolsTable.name, toolName),
           ),

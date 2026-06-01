@@ -122,6 +122,17 @@ export async function validateAssignment(
     };
   }
 
+  if (tool.clonedPendingDiscovery) {
+    return {
+      code: "validation_error",
+      error: {
+        message:
+          "Tool is not available for assignment until its server is installed.",
+        type: "validation_error",
+      },
+    };
+  }
+
   const catalogValidationError = await validateCatalogRequirements({
     tool,
     mcpServerId,

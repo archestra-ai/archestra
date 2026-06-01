@@ -3,6 +3,7 @@
 import { format } from "date-fns";
 import { FileText, Globe, GripVertical, Pin, PinOff, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { BrowserPanel } from "@/components/chat/browser-panel";
 import { ConversationArtifactPanel } from "@/components/chat/conversation-artifact";
 import { usePinnedCanvas } from "@/components/chat/pinned-canvas-context";
@@ -191,6 +192,20 @@ export function RightSidePanel({
           <GripVertical className="h-4 w-4 text-muted-foreground" />
         </div>
       </div>
+
+      {/* While dragging, a transparent full-viewport overlay sits above any
+          iframes (MCP App / Browser tabs) so they don't swallow the mouse
+          events that drive the resize — without it, the resize freezes the
+          moment the cursor crosses an iframe. */}
+      {isResizing &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <div
+            className="fixed inset-0 z-[9999] cursor-col-resize"
+            aria-hidden
+          />,
+          document.body,
+        )}
 
       <Tabs
         value={resolvedTab}

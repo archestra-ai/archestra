@@ -18,7 +18,13 @@ pub type Result<T> = std::result::Result<T, SandboxError>;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SandboxError {
-    EngineUnreachable(String),
+    /// an engine/transport-level failure. `fault` refines *how* the session
+    /// broke so the session layer can choose a retry policy without inspecting
+    /// the message text.
+    EngineUnreachable {
+        message: String,
+        fault: EngineFault,
+    },
     /// A command inside the materialised chain returned non-zero exit and the
     /// backend refused to honour "any exit code" (typical for signal-killed
     /// processes, e.g. SIGXFSZ → exit 153). Distinct from `EngineUnreachable`
@@ -39,20 +45,30 @@ pub enum SandboxError {
     Internal(String),
 }
 
+/// refines an [`SandboxError::EngineUnreachable`] with the specific way the
+/// engine session broke. backends classify the fault at their error boundary;
+/// the session layer matches on it instead of grepping the message.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum EngineFault {
+    /// a generic transport/engine failure: unreachable, timed out, or an error
+    /// we can't refine further.
+    Unreachable,
+    /// the engine accepted `/query` but couldn't find this client's session
+    /// attachables. the query never ran, so a fresh session recovers it safely
+    /// even for command-executing operations.
+    StaleAttachables,
+}
+
 impl SandboxError {
     pub fn code(&self) -> &'static str {
         match self {
-            Self::EngineUnreachable(_) => "ARCHESTRA_ENGINE_UNREACHABLE",
+            Self::EngineUnreachable { .. } => "ARCHESTRA_ENGINE_UNREACHABLE",
             Self::CommandFailed { .. } => "ARCHESTRA_COMMAND_FAILED",
             Self::ArtifactTooLarge { .. } => "ARCHESTRA_ARTIFACT_TOO_LARGE",
             Self::ArtifactNotFound { .. } => "ARCHESTRA_ARTIFACT_NOT_FOUND",
             Self::InvalidInput(_) => "ARCHESTRA_INVALID_INPUT",
             Self::Internal(_) => "ARCHESTRA_INTERNAL",
         }
-    }
-
-    pub(crate) fn engine(error: impl fmt::Display) -> Self {
-        Self::EngineUnreachable(error.to_string())
     }
 
     pub(crate) fn internal(message: impl Into<String>) -> Self {
@@ -63,7 +79,7 @@ impl SandboxError {
 impl fmt::Display for SandboxError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::EngineUnreachable(message)
+            Self::EngineUnreachable { message, .. }
             | Self::CommandFailed { message, .. }
             | Self::ArtifactTooLarge { message, .. }
             | Self::ArtifactNotFound { message, .. }

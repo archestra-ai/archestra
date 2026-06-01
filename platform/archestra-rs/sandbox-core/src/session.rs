@@ -12,7 +12,7 @@ use futures_util::future::{BoxFuture, Shared};
 use tokio::sync::{Mutex, OnceCell, Semaphore, mpsc, oneshot};
 
 use crate::backend::{ArtifactRequest, Backend, RunRequest};
-use crate::{ArtifactBytes, CommandExecution, Result, SandboxError};
+use crate::{ArtifactBytes, CommandExecution, EngineFault, Result, SandboxError};
 
 pub(crate) const CHANNEL_CAPACITY: usize = 64;
 // Rust-side cap on concurrent backend handlers. Defense in depth — the TS
@@ -20,7 +20,6 @@ pub(crate) const CHANNEL_CAPACITY: usize = 64;
 // reaches the NAPI surface directly we still want the engine protected.
 const MAX_CONCURRENT_HANDLERS: usize = 32;
 const MAX_SUBMIT_ATTEMPTS: usize = 2;
-const SESSION_ATTACHABLES_WAIT_ERROR: &str = "waiting for client session attachables";
 
 pub(crate) enum SessionMsg {
     Run {
@@ -54,6 +53,22 @@ enum SessionOperation {
     CheckSession,
 }
 
+impl SessionOperation {
+    fn as_str(self) -> &'static str {
+        match self {
+            SessionOperation::Run => "run",
+            SessionOperation::ReadArtifact => "read_artifact",
+            SessionOperation::CheckSession => "check_session",
+        }
+    }
+}
+
+/// label for retry logs, covering the pre-send acquisition failure where the
+/// operation isn't known yet.
+fn operation_label(operation: Option<SessionOperation>) -> &'static str {
+    operation.map_or("unknown", SessionOperation::as_str)
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum RetryReason {
     SessionAcquisition,
@@ -83,9 +98,13 @@ impl SessionHandle {
     }
 
     async fn send(&self, msg: SessionMsg) -> Result<()> {
-        self.tx.send(msg).await.map_err(|_| {
-            SandboxError::EngineUnreachable("the sandbox session is not running".to_string())
-        })
+        self.tx
+            .send(msg)
+            .await
+            .map_err(|_| SandboxError::EngineUnreachable {
+                message: "the sandbox session is not running".to_string(),
+                fault: EngineFault::Unreachable,
+            })
     }
 
     fn is_open(&self) -> bool {
@@ -160,45 +179,106 @@ async fn submit_with_attempts<T, F>(mut build: F, max_attempts: usize) -> Result
 where
     F: FnMut(oneshot::Sender<Result<T>>) -> SessionMsg,
 {
-    let mut attempt = 1;
-    loop {
-        let (reply_tx, reply_rx) = oneshot::channel();
-        let handle = match current().await {
-            Ok(handle) => handle,
-            Err(err) => {
-                if attempt < max_attempts && is_engine_unreachable(&err) {
-                    log_retry(attempt, max_attempts, RetryReason::SessionAcquisition, &err);
-                    attempt += 1;
-                    continue;
+    for attempt in 1..=max_attempts {
+        match attempt_once(&mut build).await {
+            Attempt::Done(result) => {
+                if attempt > 1 && result.is_ok() {
+                    tracing::info!(attempt, "sandbox request recovered on a fresh session");
                 }
+                return result;
+            }
+            // last attempt exhausted: surface the failure that triggered the retry.
+            Attempt::Retry {
+                reason,
+                err,
+                operation,
+            } if attempt == max_attempts => {
+                tracing::warn!(
+                    attempt,
+                    max_attempts,
+                    reason = reason.as_str(),
+                    operation = operation_label(operation),
+                    error_code = err.code(),
+                    error = %err,
+                    "sandbox request failed; retries exhausted"
+                );
                 return Err(err);
             }
+            Attempt::Retry {
+                reason,
+                err,
+                operation,
+            } => log_retry(attempt, max_attempts, reason, operation, &err),
+        }
+    }
+    unreachable!("max_attempts is at least 1, so the loop always returns")
+}
+
+/// the outcome of a single submit attempt: either a terminal result to return as
+/// is, or a retryable failure tagged with why a fresh session might recover it
+/// and which operation was in flight (absent before the request is built).
+enum Attempt<T> {
+    Done(Result<T>),
+    Retry {
+        reason: RetryReason,
+        err: SandboxError,
+        operation: Option<SessionOperation>,
+    },
+}
+
+/// run one acquire -> send -> await-reply cycle. each failure stage classifies
+/// itself as retryable or terminal; the caller owns the attempt bound and logging.
+async fn attempt_once<T, F>(build: &mut F) -> Attempt<T>
+where
+    F: FnMut(oneshot::Sender<Result<T>>) -> SessionMsg,
+{
+    let (reply_tx, reply_rx) = oneshot::channel();
+    let handle = match current().await {
+        Ok(handle) => handle,
+        // the request never left, so a fresh acquire is always side-effect-free.
+        Err(err) if is_engine_unreachable(&err) => {
+            return Attempt::Retry {
+                reason: RetryReason::SessionAcquisition,
+                err,
+                operation: None,
+            };
+        }
+        Err(err) => return Attempt::Done(Err(err)),
+    };
+
+    let msg = build(reply_tx);
+    let operation = msg.operation();
+    if let Err(err) = handle.send(msg).await {
+        // the actor closed before accepting the message: drop it and retry fresh.
+        invalidate_current(&handle, &err).await;
+        return Attempt::Retry {
+            reason: RetryReason::ClosedSession,
+            err,
+            operation: Some(operation),
         };
-        let msg = build(reply_tx);
-        let operation = msg.operation();
-        if let Err(err) = handle.send(msg).await {
-            invalidate_current(&handle, &err).await;
-            if attempt < max_attempts {
-                log_retry(attempt, max_attempts, RetryReason::ClosedSession, &err);
-                attempt += 1;
-                continue;
-            }
-            return Err(err);
+    }
+
+    let result = match reply_rx.await {
+        Ok(result) => result,
+        Err(_) => {
+            return Attempt::Done(Err(SandboxError::internal(
+                "the sandbox session dropped a request before replying",
+            )));
         }
-        let result = reply_rx.await.map_err(|_| {
-            SandboxError::internal("the sandbox session dropped a request before replying")
-        })?;
-        if let Err(err) = &result {
-            invalidate_current_on_engine_error(&handle, err).await;
-            if attempt < max_attempts
-                && let Some(reason) = retry_reason(operation, err)
-            {
-                log_retry(attempt, max_attempts, reason, err);
-                attempt += 1;
-                continue;
+    };
+    match result {
+        Ok(value) => Attempt::Done(Ok(value)),
+        Err(err) => {
+            invalidate_current_on_engine_error(&handle, &err).await;
+            match retry_reason(operation, &err) {
+                Some(reason) => Attempt::Retry {
+                    reason,
+                    err,
+                    operation: Some(operation),
+                },
+                None => Attempt::Done(Err(err)),
             }
         }
-        return result;
     }
 }
 
@@ -209,24 +289,32 @@ fn retry_reason(operation: SessionOperation, err: &SandboxError) -> Option<Retry
     match (operation, err) {
         (
             SessionOperation::ReadArtifact | SessionOperation::CheckSession,
-            SandboxError::EngineUnreachable(_),
+            SandboxError::EngineUnreachable { .. },
         ) => Some(RetryReason::ReadOnlyEngineError),
         _ => None,
     }
 }
 
-fn log_retry(attempt: usize, max_attempts: usize, reason: RetryReason, err: &SandboxError) {
+fn log_retry(
+    attempt: usize,
+    max_attempts: usize,
+    reason: RetryReason,
+    operation: Option<SessionOperation>,
+    err: &SandboxError,
+) {
     tracing::warn!(
         attempt,
         max_attempts,
         reason = reason.as_str(),
+        operation = operation_label(operation),
+        error_code = err.code(),
         error = %err,
-        "retrying sandbox request with a fresh session"
+        "retrying sandbox request on a fresh session"
     );
 }
 
 async fn invalidate_current_on_engine_error(handle: &Arc<SessionHandle>, err: &SandboxError) {
-    if let SandboxError::EngineUnreachable(_) = err {
+    if let SandboxError::EngineUnreachable { .. } = err {
         invalidate_current(handle, err).await;
     }
 }
@@ -237,7 +325,7 @@ async fn invalidate_current(handle: &Arc<SessionHandle>, err: &SandboxError) {
     };
     let mut guard = slot.lock().await;
     if clear_if_current(&mut guard, handle) {
-        tracing::warn!(error = %err, "dropping stale sandbox session");
+        tracing::warn!(error_code = err.code(), error = %err, "dropping stale sandbox session");
     }
 }
 
@@ -252,16 +340,17 @@ fn clear_if_current(slot: &mut Slot, handle: &Arc<SessionHandle>) -> bool {
 }
 
 fn is_stale_attachables_error(err: &SandboxError) -> bool {
-    match err {
-        SandboxError::EngineUnreachable(message) => {
-            message.contains(SESSION_ATTACHABLES_WAIT_ERROR)
+    matches!(
+        err,
+        SandboxError::EngineUnreachable {
+            fault: EngineFault::StaleAttachables,
+            ..
         }
-        _ => false,
-    }
+    )
 }
 
 fn is_engine_unreachable(err: &SandboxError) -> bool {
-    matches!(err, SandboxError::EngineUnreachable(_))
+    matches!(err, SandboxError::EngineUnreachable { .. })
 }
 
 /// drive the actor loop over `backend` until the request channel closes. called
@@ -374,17 +463,22 @@ mod tests {
         assert!(slot.handle.is_none());
     }
 
+    fn engine_error(fault: EngineFault) -> SandboxError {
+        SandboxError::EngineUnreachable {
+            message: "engine boom".to_string(),
+            fault,
+        }
+    }
+
     #[test]
-    fn is_stale_attachables_error_requires_attachables_wait() {
-        assert!(is_stale_attachables_error(
-            &SandboxError::EngineUnreachable(
-                "failed to query dagger engine: domain error: waiting for client session attachables: context deadline exceeded"
-                    .to_string(),
-            ),
-        ));
-        assert!(!is_stale_attachables_error(
-            &SandboxError::EngineUnreachable("connection refused".to_string()),
-        ));
+    fn is_stale_attachables_error_keys_off_the_fault() {
+        assert!(is_stale_attachables_error(&engine_error(
+            EngineFault::StaleAttachables
+        )));
+        assert!(!is_stale_attachables_error(&engine_error(
+            EngineFault::Unreachable
+        )));
+        // a non-engine error never qualifies, regardless of its message.
         assert!(!is_stale_attachables_error(&SandboxError::Internal(
             "waiting for client session attachables".to_string(),
         )));
@@ -392,7 +486,7 @@ mod tests {
 
     #[test]
     fn retry_reason_is_broad_for_read_only_operations_only() {
-        let err = SandboxError::EngineUnreachable("connection reset".to_string());
+        let err = engine_error(EngineFault::Unreachable);
 
         assert_eq!(
             retry_reason(SessionOperation::ReadArtifact, &err),
@@ -407,10 +501,7 @@ mod tests {
 
     #[test]
     fn stale_attachables_retry_applies_to_run_operations() {
-        let err = SandboxError::EngineUnreachable(
-            "failed to query dagger engine: domain error: waiting for client session attachables: context deadline exceeded"
-                .to_string(),
-        );
+        let err = engine_error(EngineFault::StaleAttachables);
 
         assert_eq!(
             retry_reason(SessionOperation::Run, &err),

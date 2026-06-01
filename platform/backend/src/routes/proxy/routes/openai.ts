@@ -6,6 +6,7 @@ import config from "@/config";
 import logger from "@/logging";
 import { constructResponseSchema, OpenAi, UuidIdSchema } from "@/types";
 import {
+  openAiEmbeddingsAdapterFactory,
   openAiResponsesAdapterFactory,
   openaiAdapterFactory,
 } from "../adapters";
@@ -17,6 +18,7 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   const API_PREFIX = `${PROXY_API_PREFIX}/openai`;
   const CHAT_COMPLETIONS_SUFFIX = "/chat/completions";
   const RESPONSES_SUFFIX = "/responses";
+  const EMBEDDINGS_SUFFIX = "/embeddings";
 
   logger.info("[UnifiedProxy] Registering unified OpenAI routes");
 
@@ -26,11 +28,72 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     rewritePrefix: "",
     preHandler: createProxyPreHandler({
       apiPrefix: API_PREFIX,
-      endpointSuffix: [CHAT_COMPLETIONS_SUFFIX, RESPONSES_SUFFIX],
+      endpointSuffix: [
+        CHAT_COMPLETIONS_SUFFIX,
+        RESPONSES_SUFFIX,
+        EMBEDDINGS_SUFFIX,
+      ],
       upstream: config.llm.openai.baseUrl,
       providerName: "OpenAI",
     }),
   });
+
+  fastify.post(
+    `${API_PREFIX}${EMBEDDINGS_SUFFIX}`,
+    {
+      bodyLimit: PROXY_BODY_LIMIT,
+      schema: {
+        operationId: RouteId.OpenAiEmbeddingsWithDefaultAgent,
+        description: "Create embeddings with OpenAI (uses default agent)",
+        tags: ["LLM Proxy"],
+        body: OpenAi.API.EmbeddingRequestSchema,
+        headers: OpenAi.API.ChatCompletionsHeadersSchema,
+        response: constructResponseSchema(OpenAi.API.EmbeddingResponseSchema),
+      },
+    },
+    async (request, reply) => {
+      logger.debug(
+        { url: request.url },
+        "[UnifiedProxy] Handling OpenAI embeddings request (default agent)",
+      );
+      return handleLLMProxy(
+        request.body as OpenAi.Types.EmbeddingRequest,
+        request,
+        reply,
+        openAiEmbeddingsAdapterFactory,
+      );
+    },
+  );
+
+  fastify.post(
+    `${API_PREFIX}/:agentId${EMBEDDINGS_SUFFIX}`,
+    {
+      bodyLimit: PROXY_BODY_LIMIT,
+      schema: {
+        operationId: RouteId.OpenAiEmbeddingsWithAgent,
+        description: "Create embeddings with OpenAI for a specific agent",
+        tags: ["LLM Proxy"],
+        params: z.object({
+          agentId: UuidIdSchema,
+        }),
+        body: OpenAi.API.EmbeddingRequestSchema,
+        headers: OpenAi.API.ChatCompletionsHeadersSchema,
+        response: constructResponseSchema(OpenAi.API.EmbeddingResponseSchema),
+      },
+    },
+    async (request, reply) => {
+      logger.debug(
+        { url: request.url, agentId: request.params.agentId },
+        "[UnifiedProxy] Handling OpenAI embeddings request (with agent)",
+      );
+      return handleLLMProxy(
+        request.body as OpenAi.Types.EmbeddingRequest,
+        request,
+        reply,
+        openAiEmbeddingsAdapterFactory,
+      );
+    },
+  );
 
   fastify.post(
     `${API_PREFIX}${RESPONSES_SUFFIX}`,

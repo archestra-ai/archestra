@@ -121,7 +121,7 @@ function getAllowedDevOrigins(): string[] {
     });
 }
 
-export default withSentryConfig(nextConfig, {
+const sentryWebpackOptions = {
   // For all available options, see:
   // https://www.npmjs.com/package/@sentry/webpack-plugin#options
 
@@ -155,4 +155,8 @@ export default withSentryConfig(nextConfig, {
   // https://docs.sentry.io/product/crons/
   // https://vercel.com/docs/cron-jobs
   automaticVercelMonitors: true,
-});
+};
+
+export default process.env.NODE_ENV === "development"
+  ? nextConfig
+  : withSentryConfig(nextConfig, sentryWebpackOptions);

@@ -8,13 +8,6 @@ serviceAccount:
   annotations: {}
   automountServiceAccountToken: false
 
-service:
-  # expose Dagger's plaintext TCP endpoint only for explicit advanced/local-dev use.
-  create: false
-  type: ClusterIP
-  port: 1234
-  annotations: {}
-
 networkPolicy:
   # optional hardening only; enforcement depends on the cluster CNI.
   create: false
@@ -60,8 +53,9 @@ dagger:
   engine:
     kind: StatefulSet
     # kube-pod:// uses kubectl exec + buildctl dial-stdio, so no TCP listener is
-    # needed by default. Set this to 1234 together with service.create=true only
-    # when intentionally enabling the plaintext tcp:// transport.
+    # needed by default. Set this (e.g. 1234) only when intentionally enabling
+    # the plaintext tcp:// transport; the subchart then renders a Service
+    # automatically (tune via dagger.service.type / dagger.service.annotations).
     port:
 
     existingServiceAccount:

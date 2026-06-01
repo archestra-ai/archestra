@@ -134,16 +134,36 @@ export function computeLayout(req: MaterializeRequest): RevisionPayloadFile[] {
   );
 
   const skillById = new Map(req.skills.map((s) => [s.id, s]));
+  // Guard against two files whose paths differ only in case: on a
+  // case-insensitive filesystem the second write would silently overwrite the
+  // first, making the commit SHA depend on host case-sensitivity and breaking
+  // byte-identical replay. Drop later collisions so the tree is unambiguous.
+  const seenLowerPaths = new Set<string>();
   for (const { id, slug } of resolved) {
     const skill = skillById.get(id);
     if (!skill) continue;
 
     const skillRoot = `${pluginRoot}/skills/${slug}`;
-    files.push(textFile(`${skillRoot}/SKILL.md`, buildSkillMarkdown(skill)));
+    const skillMd = textFile(
+      `${skillRoot}/SKILL.md`,
+      buildSkillMarkdown(skill),
+    );
+    files.push(skillMd);
+    seenLowerPaths.add(skillMd.path.toLowerCase());
 
     for (const file of skill.files) {
       const resolvedFile = resolveResourceFile({ file, skillRoot });
-      if (resolvedFile) files.push(resolvedFile);
+      if (!resolvedFile) continue;
+      const lowerPath = resolvedFile.path.toLowerCase();
+      if (seenLowerPaths.has(lowerPath)) {
+        logger.warn(
+          { path: resolvedFile.path },
+          "materialize: skipping resource file with case-insensitive path collision",
+        );
+        continue;
+      }
+      seenLowerPaths.add(lowerPath);
+      files.push(resolvedFile);
     }
   }
 

@@ -1,5 +1,6 @@
 import { and, eq, inArray, lt, or, type SQL, sql } from "drizzle-orm";
 import db, { schema, withDbTransaction } from "@/database";
+import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import logger from "@/logging";
 import type {
   CreateLimit,
@@ -9,6 +10,7 @@ import type {
   LimitType,
   UpdateLimit,
 } from "@/types";
+import AgentModel from "./agent";
 import AgentTeamModel from "./agent-team";
 import ModelModel from "./model";
 
@@ -32,6 +34,8 @@ type LimitsCleanupIntervalSqlLiteral =
   | "24 hours"
   | "1 week"
   | "1 month";
+
+type LimitModelUsageRecord = typeof schema.limitModelUsageTable.$inferSelect;
 
 class LimitModel {
   // limitsCleanupIntervalSqlLiterals exists basically to compile-time check set of literals
@@ -141,38 +145,12 @@ class LimitModel {
   ): Promise<
     Array<{ model: string; tokensIn: number; tokensOut: number; cost: number }>
   > {
-    // Get the model usage records
     const modelUsages = await db
       .select()
       .from(schema.limitModelUsageTable)
       .where(eq(schema.limitModelUsageTable.limitId, limitId));
 
-    // Calculate cost for each model
-    const breakdown = await Promise.all(
-      modelUsages.map(async (usage) => {
-        // Look up model by modelId only — limit usage records don't store provider
-        const modelEntry = await ModelModel.findByModelIdOnly(usage.model);
-        const pricing = ModelModel.getEffectivePricing(modelEntry, usage.model);
-
-        const inputCost =
-          (usage.currentUsageTokensIn *
-            parseFloat(pricing.pricePerMillionInput)) /
-          1_000_000;
-        const outputCost =
-          (usage.currentUsageTokensOut *
-            parseFloat(pricing.pricePerMillionOutput)) /
-          1_000_000;
-
-        return {
-          model: usage.model,
-          tokensIn: usage.currentUsageTokensIn,
-          tokensOut: usage.currentUsageTokensOut,
-          cost: inputCost + outputCost,
-        };
-      }),
-    );
-
-    return breakdown;
+    return (await calculateModelUsageCosts(modelUsages)).breakdown;
   }
 
   /**
@@ -598,17 +576,10 @@ class LimitModel {
         return Boolean(hit);
       }
       case "agent": {
-        const [hit] = await db
-          .select({ id: schema.agentsTable.id })
-          .from(schema.agentsTable)
-          .where(
-            and(
-              eq(schema.agentsTable.id, entityId),
-              eq(schema.agentsTable.organizationId, organizationId),
-            ),
-          )
-          .limit(1);
-        return Boolean(hit);
+        return AgentModel.existsInOrganization({
+          id: entityId,
+          organizationId,
+        });
       }
       case "user": {
         const [hit] = await db
@@ -678,14 +649,7 @@ export class LimitValidationService {
           organizationId = teams[0].organizationId;
         }
       } else {
-        const [agent] = await db
-          .select({ organizationId: schema.agentsTable.organizationId })
-          .from(schema.agentsTable)
-          .where(eq(schema.agentsTable.id, agentId))
-          .limit(1);
-        if (agent?.organizationId) {
-          organizationId = agent.organizationId;
-        }
+        organizationId = await AgentModel.findOrganizationId(agentId);
       }
 
       const entities: LimitsCleanupOptionsEntities = {
@@ -885,44 +849,20 @@ export class LimitValidationService {
               );
               comparisonValue = 0;
             } else {
-              let totalCost = 0;
-
-              for (const usage of modelUsages) {
-                // Track total tokens for metadata
-                totalTokensIn += usage.currentUsageTokensIn;
-                totalTokensOut += usage.currentUsageTokensOut;
-
-                // Look up model by modelId only — limit usage records don't store provider
-                const modelEntry = await ModelModel.findByModelIdOnly(
-                  usage.model,
-                );
-                const pricing = ModelModel.getEffectivePricing(
-                  modelEntry,
-                  usage.model,
-                );
-
-                const inputCost =
-                  (usage.currentUsageTokensIn *
-                    parseFloat(pricing.pricePerMillionInput)) /
-                  1000000;
-                const outputCost =
-                  (usage.currentUsageTokensOut *
-                    parseFloat(pricing.pricePerMillionOutput)) /
-                  1000000;
-                const modelCost = inputCost + outputCost;
-
-                totalCost += modelCost;
-
+              const usageCosts = await calculateModelUsageCosts(modelUsages);
+              for (const usage of usageCosts.breakdown) {
                 logger.debug(
-                  `[LimitValidation] Model ${usage.model}: ${usage.currentUsageTokensIn} in + ${usage.currentUsageTokensOut} out = $${modelCost.toFixed(2)}`,
+                  `[LimitValidation] Model ${usage.model}: ${usage.tokensIn} in + ${usage.tokensOut} out = $${usage.cost.toFixed(2)}`,
                 );
               }
 
-              comparisonValue = totalCost;
+              totalTokensIn = usageCosts.tokensIn;
+              totalTokensOut = usageCosts.tokensOut;
+              comparisonValue = usageCosts.cost;
               limitDescription = "cost_dollars";
 
               logger.debug(
-                `[LimitValidation] Total cost for limit ${limit.id}: $${totalCost.toFixed(2)} across ${modelUsages.length} models`,
+                `[LimitValidation] Total cost for limit ${limit.id}: $${usageCosts.cost.toFixed(2)} across ${modelUsages.length} models`,
               );
             }
           } catch (error) {
@@ -1079,6 +1019,7 @@ function buildOrganizationLimitScopeCondition(organizationId: string): SQL {
         SELECT 1 FROM ${schema.agentsTable}
         WHERE ${schema.agentsTable.id}::text = ${schema.limitsTable.entityId}
           AND ${schema.agentsTable.organizationId} = ${organizationId}
+          AND ${schema.agentsTable.deletedAt} IS NULL
       )`,
     ),
     and(
@@ -1116,6 +1057,39 @@ function buildCleanupDueCondition(): SQL {
   return or(...intervalConditions) as SQL;
 }
 
+async function calculateModelUsageCosts(modelUsages: LimitModelUsageRecord[]) {
+  const modelEntriesByModelId = await ModelModel.findByModelIdsOnly(
+    Array.from(new Set(modelUsages.map((usage) => usage.model))),
+  );
+
+  let cost = 0;
+  let tokensIn = 0;
+  let tokensOut = 0;
+  const breakdown = modelUsages.map((usage) => {
+    tokensIn += usage.currentUsageTokensIn;
+    tokensOut += usage.currentUsageTokensOut;
+
+    const modelEntry = modelEntriesByModelId.get(usage.model) ?? null;
+    const pricing = ModelModel.getEffectivePricing(modelEntry, usage.model);
+    const modelCost =
+      (usage.currentUsageTokensIn * parseFloat(pricing.pricePerMillionInput)) /
+        1_000_000 +
+      (usage.currentUsageTokensOut *
+        parseFloat(pricing.pricePerMillionOutput)) /
+        1_000_000;
+    cost += modelCost;
+
+    return {
+      model: usage.model,
+      tokensIn: usage.currentUsageTokensIn,
+      tokensOut: usage.currentUsageTokensOut,
+      cost: modelCost,
+    };
+  });
+
+  return { breakdown, cost, tokensIn, tokensOut };
+}
+
 async function getDefaultUserLimitUsage(params: {
   organizationId: string;
   userId: string;
@@ -1125,6 +1099,7 @@ async function getDefaultUserLimitUsage(params: {
   const conditions: SQL[] = [
     eq(schema.interactionsTable.userId, params.userId),
     eq(schema.agentsTable.organizationId, params.organizationId),
+    notDeleted(schema.agentsTable),
     sql`${schema.interactionsTable.createdAt} >= now() - ${LimitModel.limitsCleanupIntervalSqlLiterals[params.cleanupInterval]}::interval`,
   ];
 

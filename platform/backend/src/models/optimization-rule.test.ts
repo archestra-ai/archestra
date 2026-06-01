@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, test } from "@/test";
 import type { InsertOptimizationRule, OptimizationRule } from "@/types";
+import AgentModel from "./agent";
 import OptimizationRuleModel from "./optimization-rule";
 
 describe("OptimizationRuleModel.matchByRules", () => {
@@ -179,5 +180,52 @@ describe("OptimizationRuleModel.getFirstOrganizationId", () => {
 
     // Result could be null or an org ID depending on test isolation
     expect(result === null || typeof result === "string").toBe(true);
+  });
+});
+
+describe("OptimizationRuleModel soft-deleted agents", () => {
+  test("excludes agent rules whose target agent is deleted", async ({
+    makeAgent,
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const activeAgent = await makeAgent({ organizationId: org.id });
+    const deletedAgent = await makeAgent({ organizationId: org.id });
+    const activeRule = await OptimizationRuleModel.create({
+      entityType: "agent",
+      entityId: activeAgent.id,
+      conditions: [{ maxLength: 1000 }],
+      provider: "openai",
+      targetModel: "gpt-4o-mini",
+      enabled: true,
+    });
+    const deletedRule = await OptimizationRuleModel.create({
+      entityType: "agent",
+      entityId: deletedAgent.id,
+      conditions: [{ maxLength: 1000 }],
+      provider: "openai",
+      targetModel: "gpt-4o-mini",
+      enabled: true,
+    });
+
+    await AgentModel.delete(deletedAgent.id);
+
+    await expect(
+      OptimizationRuleModel.entityBelongsToOrganization(
+        "agent",
+        deletedAgent.id,
+        org.id,
+      ),
+    ).resolves.toBe(false);
+
+    const rules = await OptimizationRuleModel.findByOrganizationId(org.id);
+    expect(rules.map((rule) => rule.id)).toEqual([activeRule.id]);
+
+    await expect(
+      OptimizationRuleModel.findByIdForOrganization(deletedRule.id, org.id),
+    ).resolves.toBeNull();
+    await expect(
+      OptimizationRuleModel.findByIdForAudit(deletedRule.id, org.id),
+    ).resolves.toBeNull();
   });
 });

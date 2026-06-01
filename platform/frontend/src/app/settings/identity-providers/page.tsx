@@ -1,17 +1,19 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { EnterpriseLicenseRequired } from "@/components/enterprise-license-required";
 import config from "@/lib/config/config";
 
-const { IdentityProvidersSettingsContent } = config.enterpriseFeatures.core
-  ? // biome-ignore lint/style/noRestrictedImports: conditional ee component with identity providers
-    await import("./_parts/identity-providers-page.ee")
-  : {
-      IdentityProvidersSettingsContent: () => (
-        <EnterpriseLicenseRequired featureName="Identity Providers" />
-      ),
-    };
+const IdentityProvidersSettingsContent = dynamic(async () => {
+  if (!config.enterpriseFeatures.core) {
+    return () => <EnterpriseLicenseRequired featureName="Identity Providers" />;
+  }
+
+  // biome-ignore lint/style/noRestrictedImports: conditional EE component with identity providers
+  const module = await import("./_parts/identity-providers-page.ee");
+  return module.IdentityProvidersSettingsContent;
+});
 
 export default function IdentityProvidersSettingsPage() {
   return (

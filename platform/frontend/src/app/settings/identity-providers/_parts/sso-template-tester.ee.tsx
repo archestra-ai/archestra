@@ -278,8 +278,8 @@ function formatRoleName(role: string) {
 }
 
 async function loadHandlebars(): Promise<HandlebarsRuntime> {
-  const module = await import("handlebars");
-  const handlebars = module.default ?? module;
+  const module = await import("handlebars/dist/handlebars");
+  const handlebars = (module.default ?? module) as HandlebarsRuntime;
   if (helpersRegistered) return handlebars;
   helpersRegistered = true;
 

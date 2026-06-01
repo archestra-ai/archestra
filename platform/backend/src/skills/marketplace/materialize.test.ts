@@ -81,6 +81,32 @@ class InMemoryRevisionStore implements RevisionStore {
   }
 }
 
+/**
+ * Persists the revision (simulating another replica winning the sequence) and
+ * then throws a unique-violation on the first append, to exercise the
+ * cross-replica collision retry in doMaterialize.
+ */
+class CollideOnceRevisionStore extends InMemoryRevisionStore {
+  private collided = false;
+
+  override async append(
+    params: AppendRevisionParams,
+    sequence: number,
+  ): Promise<SkillShareLinkRevision> {
+    const row = await super.append(params, sequence);
+    if (!this.collided) {
+      this.collided = true;
+      throw Object.assign(
+        new Error(
+          'duplicate key value violates unique constraint "skill_share_link_revision_link_seq_idx"',
+        ),
+        { code: "23505", constraint: "skill_share_link_revision_link_seq_idx" },
+      );
+    }
+    return row;
+  }
+}
+
 describe("MarketplaceMaterializer", () => {
   let cacheDir: string;
   let revisionStore: InMemoryRevisionStore;
@@ -175,6 +201,23 @@ describe("MarketplaceMaterializer", () => {
       source: "local",
       path: "./plugins/org-abcd1234-skills",
     });
+  });
+
+  test("recovers from a cross-replica revision sequence collision", async () => {
+    // a concurrent replica wins the sequence with the same content; the unique
+    // violation must be caught and the existing revision reused, not surfaced
+    const colliding = new CollideOnceRevisionStore();
+    const racy = new MarketplaceMaterializer({
+      cacheDir,
+      revisionStore: colliding,
+    });
+
+    const result = await racy.materialize(makeRequest());
+
+    expect(result.reused).toBe(true);
+    expect(result.commitHash).toMatch(/^[0-9a-f]{40}$/);
+    // only the one revision the "winner" wrote exists — no duplicate sequence
+    expect(await colliding.listByLink(makeRequest().linkId)).toHaveLength(1);
   });
 
   test("SKILL.md frontmatter round-trips through the parser", async () => {

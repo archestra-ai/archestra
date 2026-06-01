@@ -9,7 +9,7 @@
     "build": "napi build --release --platform",
     "build:test-helpers": "napi build --release --platform --features test-helpers",
     "check:ci": "cargo fmt --check --all && cargo check --workspace --locked && cargo test --workspace --locked && pnpm build && pnpm smoke && pnpm build:test-helpers && pnpm smoke:panic && pnpm build",
-    "check:musl": "cargo check --workspace --locked && cargo test --workspace --locked && pnpm build && pnpm smoke && pnpm build:test-helpers && pnpm smoke:panic && pnpm build",
+    "check:musl": "cargo test --workspace --locked && pnpm build && pnpm smoke && pnpm build:test-helpers && pnpm smoke:panic",
     "lint": "cargo fmt --check --all",
     "smoke": "node smoke.test.cjs",
     "smoke:panic": "node panic-smoke.test.cjs",

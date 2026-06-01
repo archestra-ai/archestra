@@ -1,9 +1,5 @@
 import type { ReplayCommand, SnapshotFile } from "@archestra/sandbox-rs";
 import config from "@/config";
-import {
-  DaggerRuntimeError,
-  daggerRuntimeService,
-} from "@/dagger-runtime/dagger-runtime-service";
 import logger from "@/logging";
 import {
   SkillSandboxArtifactModel,
@@ -11,6 +7,10 @@ import {
   SkillSandboxFileSnapshotModel,
   SkillSandboxModel,
 } from "@/models";
+import {
+  SandboxRuntimeError,
+  sandboxRuntimeService,
+} from "@/sandbox-runtime/sandbox-runtime-service";
 import type { SkillSandbox, SkillSandboxFileSnapshot } from "@/types";
 import { asSandboxId, type SandboxId } from "@/types";
 import { resolveArtifactMime } from "./mime-sniff";
@@ -44,7 +44,7 @@ const REQUIREMENTS_INSTALL_TIMEOUT_SECONDS = 180;
 
 /**
  * Orchestrates DB-backed skill sandboxes: loads snapshots + replay log,
- * delegates execution to the unified `daggerRuntimeService`, appends the
+ * delegates execution to the unified `sandboxRuntimeService`, appends the
  * result to the command log.
  *
  * Per-sandbox serialization is enforced here (not in the runtime service) so
@@ -58,20 +58,20 @@ class SkillSandboxRuntimeService {
   private readonly sandboxPendingCounts = new Map<string, number>();
 
   get isEnabled(): boolean {
-    return config.skillsSandbox.enabled && daggerRuntimeService.isEnabled;
+    return config.skillsSandbox.enabled && sandboxRuntimeService.isEnabled;
   }
 
   get isReady(): boolean {
-    return daggerRuntimeService.isReady;
+    return sandboxRuntimeService.isReady;
   }
 
   async init(): Promise<void> {
     if (!config.skillsSandbox.enabled) return;
-    await daggerRuntimeService.attach(CONSUMER_ID);
+    await sandboxRuntimeService.attach(CONSUMER_ID);
   }
 
   async shutdown(): Promise<void> {
-    await daggerRuntimeService.detach(CONSUMER_ID);
+    await sandboxRuntimeService.detach(CONSUMER_ID);
   }
 
   async runCommand(params: RunCommandParams): Promise<CommandResult> {
@@ -85,9 +85,11 @@ class SkillSandboxRuntimeService {
       const { snapshots, replayCommands, pythonpath } =
         await this.buildContext(sandbox);
 
-      let executed: Awaited<ReturnType<typeof daggerRuntimeService.runCommand>>;
+      let executed: Awaited<
+        ReturnType<typeof sandboxRuntimeService.runCommand>
+      >;
       try {
-        executed = await daggerRuntimeService.runCommand({
+        executed = await sandboxRuntimeService.runCommand({
           command: params.command,
           cwd,
           timeoutSeconds,
@@ -163,10 +165,10 @@ class SkillSandboxRuntimeService {
         await this.buildContext(sandbox);
 
       let artifact: Awaited<
-        ReturnType<typeof daggerRuntimeService.readArtifact>
+        ReturnType<typeof sandboxRuntimeService.readArtifact>
       >;
       try {
-        artifact = await daggerRuntimeService.readArtifact({
+        artifact = await sandboxRuntimeService.readArtifact({
           snapshots,
           replayCommands,
           path: resolvedPath,
@@ -321,7 +323,7 @@ class SkillSandboxRuntimeService {
 
   private toSkillError(error: unknown): SkillSandboxError {
     if (error instanceof SkillSandboxError) return error;
-    if (error instanceof DaggerRuntimeError) {
+    if (error instanceof SandboxRuntimeError) {
       switch (error.code) {
         case "ARCHESTRA_ARTIFACT_NOT_FOUND":
         case "ARCHESTRA_ARTIFACT_TOO_LARGE":
@@ -335,7 +337,7 @@ class SkillSandboxRuntimeService {
             `a setup or replay command in this sandbox failed: ${error.message}`,
           );
         case "ARCHESTRA_INVALID_INPUT":
-          // INVALID_INPUT from the runtime layer says "the Dagger runtime is
+          // INVALID_INPUT from the runtime layer says "the sandbox runtime is
           // not enabled"; replace with adapter-specific wording so we never
           // leak the underlying implementation to the model/user.
           return new SkillSandboxError(
@@ -410,7 +412,7 @@ export const skillSandboxRuntimeService = new SkillSandboxRuntimeService();
 // === internal helpers ===
 
 function shouldRecordOnFailure(error: unknown): boolean {
-  if (!(error instanceof DaggerRuntimeError)) return false;
+  if (!(error instanceof SandboxRuntimeError)) return false;
   // ARCHESTRA_ENGINE_UNREACHABLE is also raised by the JS-side backstop timer
   // alone (no native attempt). Persisting a synthetic row there would re-run
   // the user's command on every subsequent replay forever, including the

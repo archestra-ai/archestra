@@ -21,6 +21,7 @@ import {
 import { alias } from "drizzle-orm/pg-core";
 import { archestraMcpBranding } from "@/archestra-mcp-server";
 import db, { schema } from "@/database";
+import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import {
   createPaginatedResult,
   type PaginatedResult,
@@ -151,6 +152,7 @@ class AgentToolModel {
         and(
           eq(schema.agentToolsTable.agentId, agentId),
           isNotNull(schema.toolsTable.delegateToAgentId),
+          notDeleted(schema.agentsTable),
         ),
       );
 
@@ -239,6 +241,8 @@ class AgentToolModel {
         and(
           isNotNull(schema.toolsTable.delegateToAgentId),
           eq(schema.agentsTable.organizationId, organizationId),
+          notDeleted(schema.agentsTable),
+          notDeleted(targetAgentsAlias),
         ),
       )
       .$dynamic();
@@ -911,7 +915,9 @@ class AgentToolModel {
         schema.toolsTable,
         eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
       )
-      .where(eq(schema.agentToolsTable.id, id))
+      .where(
+        and(eq(schema.agentToolsTable.id, id), notDeleted(schema.agentsTable)),
+      )
       .limit(1);
     return row;
   }
@@ -942,7 +948,7 @@ class AgentToolModel {
       skipPagination = false,
     } = params;
     // Build WHERE conditions
-    const whereConditions: SQL[] = [];
+    const whereConditions: SQL[] = [notDeleted(schema.agentsTable)];
 
     // Apply access control filtering for users that are not agent admins
     if (userId && !isAgentAdmin) {

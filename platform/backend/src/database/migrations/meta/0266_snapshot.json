@@ -1,5 +1,5 @@
 {
-  "id": "620726a2-a7be-4a6f-b45a-23e945d0e404",
+  "id": "a79ceeb3-2e47-4f78-80f9-396f5573722f",
   "prevId": "ad1ead2b-41d1-4c9c-924c-d61021cbfd44",
   "version": "7",
   "dialect": "postgresql",
@@ -11351,6 +11351,13 @@
           "primaryKey": false,
           "notNull": false
         },
+        "cloned_pending_discovery": {
+          "name": "cloned_pending_discovery",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
         "policies_auto_configured_at": {
           "name": "policies_auto_configured_at",
           "type": "timestamp",
@@ -11396,6 +11403,21 @@
           "columns": [
             {
               "expression": "delegate_to_agent_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "tools_cloned_pending_discovery_idx": {
+          "name": "tools_cloned_pending_discovery_idx",
+          "columns": [
+            {
+              "expression": "cloned_pending_discovery",
               "isExpression": false,
               "asc": true,
               "nulls": "last"

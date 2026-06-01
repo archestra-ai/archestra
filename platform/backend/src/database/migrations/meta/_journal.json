@@ -1867,15 +1867,8 @@
     {
       "idx": 266,
       "version": "7",
-      "when": 1780313644197,
-      "tag": "0266_acoustic_guardian",
-      "breakpoints": true
-    },
-    {
-      "idx": 267,
-      "version": "7",
-      "when": 1780322969888,
-      "tag": "0267_chilly_silver_samurai",
+      "when": 1780326644899,
+      "tag": "0266_silky_slapstick",
       "breakpoints": true
     }
   ]

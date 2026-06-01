@@ -25,6 +25,8 @@ interface CreateCatalogDialogProps {
   onSuccess?: (createdItem: CatalogItem) => void;
   /** When set, seeds the form for a "clone" of an existing catalog item. */
   cloneValues?: McpCatalogFormValues;
+  /** Source catalog item id when cloning; persisted as the new item's `clonedFrom`. */
+  clonedFrom?: string;
 }
 
 type WizardStep = "form" | "catalog-browse";
@@ -34,6 +36,7 @@ export function CreateCatalogDialog({
   onClose,
   onSuccess,
   cloneValues,
+  clonedFrom,
 }: CreateCatalogDialogProps) {
   const [step, setStep] = useState<WizardStep>("form");
   const [prefilledValues, setPrefilledValues] = useState<
@@ -59,7 +62,11 @@ export function CreateCatalogDialog({
   };
 
   const onSubmit = async (values: McpCatalogFormValues) => {
-    const apiData = transformFormToApiData(values);
+    const apiData = {
+      ...transformFormToApiData(values),
+      // Record clone lineage (null for a plain "Add Server").
+      clonedFrom: clonedFrom ?? null,
+    };
     const createdItem = await createMutation.mutateAsync(apiData);
     handleClose();
     if (createdItem) {

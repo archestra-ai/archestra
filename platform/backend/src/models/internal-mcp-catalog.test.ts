@@ -699,4 +699,45 @@ describe("InternalMcpCatalogModel", () => {
       expect(archestraCatalog?.serverType).toBe("builtin");
     });
   });
+
+  describe("clonedFrom lineage", () => {
+    test("persists clonedFrom on create", async ({
+      makeOrganization,
+      makeInternalMcpCatalog,
+    }) => {
+      const org = await makeOrganization();
+      const source = await makeInternalMcpCatalog({ organizationId: org.id });
+      const clone = await makeInternalMcpCatalog({
+        organizationId: org.id,
+        clonedFrom: source.id,
+      });
+
+      const fetched = await InternalMcpCatalogModel.findById(clone.id, {
+        expandSecrets: false,
+      });
+      expect(fetched?.clonedFrom).toBe(source.id);
+    });
+
+    test("nulls clonedFrom when the source is deleted (ON DELETE SET NULL)", async ({
+      makeOrganization,
+      makeInternalMcpCatalog,
+    }) => {
+      const org = await makeOrganization();
+      const source = await makeInternalMcpCatalog({ organizationId: org.id });
+      const clone = await makeInternalMcpCatalog({
+        organizationId: org.id,
+        clonedFrom: source.id,
+      });
+
+      const deleted = await InternalMcpCatalogModel.delete(source.id);
+      expect(deleted).toBe(true);
+
+      const fetched = await InternalMcpCatalogModel.findById(clone.id, {
+        expandSecrets: false,
+      });
+      // The clone survives; only the lineage pointer is cleared.
+      expect(fetched).not.toBeNull();
+      expect(fetched?.clonedFrom).toBeNull();
+    });
+  });
 });

@@ -148,6 +148,7 @@ export function InternalMCPCatalog({
   const [cloneValues, setCloneValues] = useState<McpCatalogFormValues | null>(
     null,
   );
+  const [cloneSourceId, setCloneSourceId] = useState<string | null>(null);
   const [deletingItem, setDeletingItem] = useState<CatalogItem | null>(null);
   const [installingItemId, setInstallingItemId] = useState<string | null>(null);
 
@@ -1165,6 +1166,7 @@ export function InternalMCPCatalog({
 
   const handleClone = (item: CatalogItem) => {
     setCloneValues(buildCloneFormValues(item));
+    setCloneSourceId(item.id);
     openDialog("create");
   };
 
@@ -1478,8 +1480,10 @@ export function InternalMCPCatalog({
       <CreateCatalogDialog
         isOpen={isDialogOpened("create")}
         cloneValues={cloneValues ?? undefined}
+        clonedFrom={cloneSourceId ?? undefined}
         onClose={() => {
           setCloneValues(null);
+          setCloneSourceId(null);
           closeDialog("create");
         }}
         onSuccess={(createdItem) => {

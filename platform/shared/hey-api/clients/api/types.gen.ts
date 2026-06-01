@@ -29201,6 +29201,7 @@ export type GetInternalMcpCatalogResponses = {
         scope: 'personal' | 'team' | 'org';
         parentCatalogItemId: string | null;
         childName: string | null;
+        clonedFrom: string | null;
         presetEntryId: string | null;
         presetFieldValues: {
             [key: string]: UserConfigFieldDefault;
@@ -29336,6 +29337,7 @@ export type CreateInternalMcpCatalogItemData = {
         scope?: 'personal' | 'team' | 'org';
         parentCatalogItemId?: string | null;
         childName?: string | null;
+        clonedFrom?: string | null;
         presetEntryId?: string | null;
         presetFieldValues?: {
             [key: string]: UserConfigFieldDefaultInput;
@@ -29539,6 +29541,7 @@ export type CreateInternalMcpCatalogItemResponses = {
         scope: 'personal' | 'team' | 'org';
         parentCatalogItemId: string | null;
         childName: string | null;
+        clonedFrom: string | null;
         presetEntryId: string | null;
         presetFieldValues: {
             [key: string]: UserConfigFieldDefault;
@@ -29837,6 +29840,7 @@ export type GetInternalMcpCatalogItemResponses = {
         scope: 'personal' | 'team' | 'org';
         parentCatalogItemId: string | null;
         childName: string | null;
+        clonedFrom: string | null;
         presetEntryId: string | null;
         presetFieldValues: {
             [key: string]: UserConfigFieldDefault;
@@ -30173,6 +30177,7 @@ export type UpdateInternalMcpCatalogItemResponses = {
         scope: 'personal' | 'team' | 'org';
         parentCatalogItemId: string | null;
         childName: string | null;
+        clonedFrom: string | null;
         presetEntryId: string | null;
         presetFieldValues: {
             [key: string]: UserConfigFieldDefault;
@@ -31073,6 +31078,7 @@ export type GetCatalogChildrenResponses = {
         scope: 'personal' | 'team' | 'org';
         parentCatalogItemId: string | null;
         childName: string | null;
+        clonedFrom: string | null;
         presetEntryId: string | null;
         presetFieldValues: {
             [key: string]: UserConfigFieldDefault;
@@ -31291,6 +31297,7 @@ export type CreateCatalogChildResponses = {
         scope: 'personal' | 'team' | 'org';
         parentCatalogItemId: string | null;
         childName: string | null;
+        clonedFrom: string | null;
         presetEntryId: string | null;
         presetFieldValues: {
             [key: string]: UserConfigFieldDefault;
@@ -31509,6 +31516,7 @@ export type UpdateCatalogChildResponses = {
         scope: 'personal' | 'team' | 'org';
         parentCatalogItemId: string | null;
         childName: string | null;
+        clonedFrom: string | null;
         presetEntryId: string | null;
         presetFieldValues: {
             [key: string]: UserConfigFieldDefault;

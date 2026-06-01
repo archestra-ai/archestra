@@ -1863,6 +1863,13 @@
       "when": 1780255334907,
       "tag": "0265_kind_zarek",
       "breakpoints": true
+    },
+    {
+      "idx": 266,
+      "version": "7",
+      "when": 1780313644197,
+      "tag": "0266_acoustic_guardian",
+      "breakpoints": true
     }
   ]
 }

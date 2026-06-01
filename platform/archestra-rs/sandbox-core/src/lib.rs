@@ -2,22 +2,17 @@ use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
-mod runtime;
+mod backend;
+mod backends;
 mod session;
+mod supervisor;
 pub mod telemetry;
 mod tracing_ctx;
+mod validation;
 
-pub use session::{DEFAULT_APT_PACKAGES, DEFAULT_BASE_IMAGE};
+use crate::validation::{validate_artifact_path, validate_cwd, validate_pythonpath};
 
-pub(crate) const SKILL_SANDBOX_ROOT: &str = "/skills";
-pub(crate) const SKILL_SANDBOX_HOME: &str = "/home/sandbox";
-pub(crate) const SKILL_SANDBOX_USER: &str = "1000:1000";
-/// path of the command supervisor injected into the warm base via `with_new_file`.
-/// it runs each user command under cpu/memory rlimits and a wall-clock timeout,
-/// caps output, and emits a structured json result (see `ARCHESTRA_RUN_PY`).
-pub(crate) const SUPERVISOR_PATH: &str = "/usr/local/bin/archestra_run";
-pub(crate) const ARTIFACT_TOO_LARGE_EXIT_CODE: isize = 65;
-pub(crate) const ARTIFACT_NOT_FOUND_EXIT_CODE: isize = 66;
+pub use backends::dagger::{DEFAULT_APT_PACKAGES, DEFAULT_BASE_IMAGE};
 
 pub type Result<T> = std::result::Result<T, SandboxError>;
 
@@ -25,7 +20,7 @@ pub type Result<T> = std::result::Result<T, SandboxError>;
 pub enum SandboxError {
     EngineUnreachable(String),
     /// A command inside the materialised chain returned non-zero exit and the
-    /// dagger SDK refused to honour `expect=Any` (typical for signal-killed
+    /// backend refused to honour "any exit code" (typical for signal-killed
     /// processes, e.g. SIGXFSZ → exit 153). Distinct from `EngineUnreachable`
     /// so adapters can surface "command exited N" instead of "engine down".
     CommandFailed {
@@ -60,31 +55,9 @@ impl SandboxError {
         Self::EngineUnreachable(error.to_string())
     }
 
-    /// Categorise an error returned by the dagger SDK during exec evaluation.
-    /// SDK errors with an embedded `exit code: N` come from a container exec
-    /// that returned non-zero (kill-by-signal counts here too); everything
-    /// else is a real transport/engine failure.
-    pub(crate) fn from_sdk(error: impl fmt::Display) -> Self {
-        let message = error.to_string();
-        match parse_sdk_exit_code(&message) {
-            Some(exit_code) => Self::CommandFailed { exit_code, message },
-            None => Self::EngineUnreachable(message),
-        }
-    }
-
     pub(crate) fn internal(message: impl Into<String>) -> Self {
         Self::Internal(message.into())
     }
-}
-
-fn parse_sdk_exit_code(message: &str) -> Option<i32> {
-    const NEEDLE: &str = "exit code: ";
-    let idx = message.find(NEEDLE)?;
-    let rest = &message[idx + NEEDLE.len()..];
-    let end = rest
-        .find(|c: char| !c.is_ascii_digit())
-        .unwrap_or(rest.len());
-    rest[..end].parse().ok()
 }
 
 impl fmt::Display for SandboxError {
@@ -231,7 +204,7 @@ pub async fn run_sandbox(input: RunSandboxInput) -> Result<CommandExecution> {
         validate_pythonpath(pp)?;
     }
     session::submit(move |reply| session::SessionMsg::Run {
-        req: session::RunRequest {
+        req: backend::RunRequest {
             snapshots: input.snapshots,
             replay_commands: input.replay_commands,
             limits: input.limits,
@@ -257,7 +230,7 @@ pub async fn read_artifact(input: ReadArtifactInput) -> Result<ArtifactBytes> {
         validate_pythonpath(pp)?;
     }
     session::submit(move |reply| session::SessionMsg::ReadArtifact {
-        req: session::ArtifactRequest {
+        req: backend::ArtifactRequest {
             snapshots: input.snapshots,
             replay_commands: input.replay_commands,
             limits: input.limits,
@@ -269,235 +242,4 @@ pub async fn read_artifact(input: ReadArtifactInput) -> Result<ArtifactBytes> {
         reply,
     })
     .await
-}
-
-// ============================================================================
-// helpers (used by runtime.rs + tests)
-// ============================================================================
-
-/// build the argv that runs `command` under the in-container supervisor
-/// (`SUPERVISOR_PATH`). the supervisor sets cpu/memory rlimits, enforces the
-/// wall-clock timeout by SIGKILLing the whole process group, caps each output
-/// stream at `output_bytes_limit` bytes, and prints a json result on stdout.
-/// the command itself is handed to `bash -c` so shell syntax still works; cwd
-/// is applied separately via `Container::with_workdir`.
-pub(crate) fn supervised_argv(command: &str, timeout_seconds: u32, limits: &Limits) -> Vec<String> {
-    vec![
-        "python3".to_string(),
-        SUPERVISOR_PATH.to_string(),
-        "--timeout".to_string(),
-        timeout_seconds.to_string(),
-        "--cpu".to_string(),
-        limits.cpu_seconds.to_string(),
-        "--mem".to_string(),
-        limits.memory_bytes.to_string(),
-        "--out-cap".to_string(),
-        limits.output_bytes_limit.to_string(),
-        "--".to_string(),
-        "bash".to_string(),
-        "-c".to_string(),
-        command.to_string(),
-    ]
-}
-
-pub(crate) fn validate_snapshot_file_path(path: &str) -> Result<()> {
-    if path.starts_with('/') || path.split('/').any(|segment| segment == "..") {
-        return Err(SandboxError::InvalidInput(format!(
-            "invalid snapshot file path: {path:?}"
-        )));
-    }
-    Ok(())
-}
-
-/// true when `path` is exactly one of the sandbox roots or nested beneath it.
-/// the single source of truth for the artifact/cwd/pythonpath allowlist checks.
-fn within_sandbox_roots(path: &str) -> bool {
-    [SKILL_SANDBOX_ROOT, SKILL_SANDBOX_HOME]
-        .iter()
-        .any(|root| path == *root || path.strip_prefix(root).is_some_and(|r| r.starts_with('/')))
-}
-
-pub(crate) fn validate_artifact_path(path: &str) -> Result<()> {
-    if path.contains('\0') || path.split('/').any(|segment| segment == "..") {
-        return Err(SandboxError::InvalidInput(format!(
-            "invalid artifact path: {path:?}"
-        )));
-    }
-    if path
-        .chars()
-        .any(|ch| matches!(ch, '"' | '$' | '`' | '\\' | '\n' | '\r'))
-    {
-        return Err(SandboxError::InvalidInput(format!(
-            "invalid artifact path: {path:?}"
-        )));
-    }
-    if path.starts_with('/') && !within_sandbox_roots(path) {
-        return Err(SandboxError::InvalidInput(format!(
-            "artifact path must be under {SKILL_SANDBOX_ROOT} or {SKILL_SANDBOX_HOME}: {path:?}"
-        )));
-    }
-    Ok(())
-}
-
-pub(crate) fn validate_pythonpath(pythonpath: &str) -> Result<()> {
-    // PYTHONPATH is passed straight to `with_env_variable`, but the model can
-    // smuggle additional roots via `:` separators; bound each entry to the
-    // sandbox-allowed roots so it can't escape into `/etc` etc.
-    if pythonpath.is_empty() {
-        return Err(SandboxError::InvalidInput(
-            "pythonpath must not be empty".to_string(),
-        ));
-    }
-    for entry in pythonpath.split(':') {
-        if entry.is_empty()
-            || entry.contains('\0')
-            || entry.split('/').any(|segment| segment == "..")
-        {
-            return Err(SandboxError::InvalidInput(format!(
-                "invalid pythonpath entry: {entry:?}"
-            )));
-        }
-        if !entry.starts_with('/') {
-            return Err(SandboxError::InvalidInput(format!(
-                "pythonpath entries must be absolute: {entry:?}"
-            )));
-        }
-        if !within_sandbox_roots(entry) {
-            return Err(SandboxError::InvalidInput(format!(
-                "pythonpath entries must be under {SKILL_SANDBOX_ROOT} or {SKILL_SANDBOX_HOME}: {entry:?}"
-            )));
-        }
-    }
-    Ok(())
-}
-
-pub(crate) fn validate_cwd(cwd: &str) -> Result<()> {
-    if cwd.contains('\0') || cwd.split('/').any(|segment| segment == "..") {
-        return Err(SandboxError::InvalidInput(format!("invalid cwd: {cwd:?}")));
-    }
-    if !cwd.starts_with('/') {
-        return Err(SandboxError::InvalidInput(format!(
-            "cwd must be an absolute path: {cwd:?}"
-        )));
-    }
-    if !within_sandbox_roots(cwd) {
-        return Err(SandboxError::InvalidInput(format!(
-            "cwd must be under {SKILL_SANDBOX_ROOT} or {SKILL_SANDBOX_HOME}: {cwd:?}"
-        )));
-    }
-    Ok(())
-}
-
-pub(crate) fn format_artifact_error(prefix: &str, path: &str, stderr: &str) -> String {
-    match stderr.trim() {
-        "" => format!("{prefix} at {path}: unknown error"),
-        detail => format!("{prefix} at {path}: {detail}"),
-    }
-}
-
-pub(crate) fn skill_root_path(skill_name: &str) -> Result<String> {
-    if skill_name.contains('/') || skill_name.contains("..") {
-        return Err(SandboxError::InvalidInput(format!(
-            "invalid skill name: {skill_name:?}"
-        )));
-    }
-    Ok(format!("{SKILL_SANDBOX_ROOT}/{skill_name}"))
-}
-
-pub(crate) fn shell_quote(value: &str) -> String {
-    format!("'{}'", value.replace('\'', "'\\''"))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn shell_quote_single_quotes_and_escapes_quotes() {
-        assert_eq!(shell_quote("simple"), "'simple'");
-        assert_eq!(shell_quote("a 'b' c"), "'a '\\''b'\\'' c'");
-    }
-
-    #[test]
-    fn snapshot_path_validation_rejects_traversal_and_absolute_paths() {
-        assert!(validate_snapshot_file_path("scripts/run.sh").is_ok());
-        assert!(validate_snapshot_file_path("/etc/passwd").is_err());
-        assert!(validate_snapshot_file_path("../etc/passwd").is_err());
-        assert!(validate_snapshot_file_path("a/../../etc/passwd").is_err());
-    }
-
-    #[test]
-    fn supervised_argv_builds_supervisor_invocation() {
-        let argv = supervised_argv(
-            "python --version",
-            30,
-            &Limits {
-                output_bytes_limit: 1024,
-                file_size_limit_bytes: 16 * 1024 * 1024,
-                cpu_seconds: 30,
-                memory_bytes: 1024 * 1024 * 1024,
-            },
-        );
-        assert_eq!(argv[0], "python3");
-        assert_eq!(argv[1], SUPERVISOR_PATH);
-        // limits are passed as explicit flags, not baked into a shell string.
-        assert!(argv.contains(&"--timeout".to_string()));
-        assert!(argv.contains(&"30".to_string()));
-        assert!(argv.contains(&"--out-cap".to_string()));
-        assert!(argv.contains(&"1024".to_string()));
-        // the command is handed verbatim to `bash -c` after the `--` separator.
-        let sep = argv
-            .iter()
-            .position(|a| a == "--")
-            .expect("missing separator");
-        assert_eq!(&argv[sep + 1..], ["bash", "-c", "python --version"]);
-    }
-
-    #[test]
-    fn from_sdk_parses_exit_code_into_command_failed() {
-        let err = SandboxError::from_sdk(
-            "process \"/.init bash -c …\" did not complete successfully: exit code: 153",
-        );
-        assert!(matches!(
-            err,
-            SandboxError::CommandFailed { exit_code: 153, .. }
-        ));
-        // a plain transport error stays as EngineUnreachable
-        let err = SandboxError::from_sdk("connection refused");
-        assert!(matches!(err, SandboxError::EngineUnreachable(_)));
-    }
-
-    #[test]
-    fn validate_artifact_path_rejects_shell_metacharacters() {
-        assert!(validate_artifact_path("/skills/alpha/result.txt").is_ok());
-        assert!(validate_artifact_path("/skills/alpha/foo\"bar").is_err());
-        assert!(validate_artifact_path("/skills/alpha/foo$bar").is_err());
-        assert!(validate_artifact_path("/skills/alpha/foo`bar").is_err());
-        assert!(validate_artifact_path("/skills/alpha/foo\\bar").is_err());
-        assert!(validate_artifact_path("/skills/alpha/foo\nbar").is_err());
-    }
-
-    #[test]
-    fn validate_pythonpath_enforces_sandbox_roots() {
-        assert!(validate_pythonpath("/skills/alpha").is_ok());
-        assert!(validate_pythonpath("/skills/alpha:/home/sandbox/lib").is_ok());
-        assert!(validate_pythonpath("/home/sandbox").is_ok());
-        assert!(validate_pythonpath("").is_err());
-        assert!(validate_pythonpath("/etc").is_err());
-        assert!(validate_pythonpath("relative/path").is_err());
-        assert!(validate_pythonpath("/skills/../etc").is_err());
-        assert!(validate_pythonpath("/skills/alpha:").is_err());
-        assert!(validate_pythonpath("/skills/alpha:/etc").is_err());
-    }
-
-    #[test]
-    fn validate_cwd_enforces_sandbox_roots() {
-        assert!(validate_cwd("/skills/alpha").is_ok());
-        assert!(validate_cwd("/home/sandbox").is_ok());
-        assert!(validate_cwd("/home/sandbox/work").is_ok());
-        assert!(validate_cwd("/etc").is_err());
-        assert!(validate_cwd("/proc/self").is_err());
-        assert!(validate_cwd("relative/path").is_err());
-        assert!(validate_cwd("/skills/../etc").is_err());
-    }
 }

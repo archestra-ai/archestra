@@ -89,3 +89,6 @@ specs/
 
 # project-local binaries bootstrapped by dev scripts (e.g., dagger CLI)
 dev/bin/
+
+# local kubeconfigs (may embed live ServiceAccount tokens) — never commit
+*.kubeconfig

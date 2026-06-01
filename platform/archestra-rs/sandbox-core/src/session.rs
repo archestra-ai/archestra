@@ -19,6 +19,8 @@ pub(crate) const CHANNEL_CAPACITY: usize = 64;
 // adapter caps its own queue at a smaller value, but if any other caller ever
 // reaches the NAPI surface directly we still want the engine protected.
 const MAX_CONCURRENT_HANDLERS: usize = 32;
+const MAX_SUBMIT_ATTEMPTS: usize = 2;
+const SESSION_ATTACHABLES_WAIT_ERROR: &str = "waiting for client session attachables";
 
 pub(crate) enum SessionMsg {
     Run {
@@ -33,6 +35,42 @@ pub(crate) enum SessionMsg {
         traceparent: Option<String>,
         reply: oneshot::Sender<Result<()>>,
     },
+}
+
+impl SessionMsg {
+    fn operation(&self) -> SessionOperation {
+        match self {
+            SessionMsg::Run { .. } => SessionOperation::Run,
+            SessionMsg::ReadArtifact { .. } => SessionOperation::ReadArtifact,
+            SessionMsg::CheckSession { .. } => SessionOperation::CheckSession,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum SessionOperation {
+    Run,
+    ReadArtifact,
+    CheckSession,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum RetryReason {
+    SessionAcquisition,
+    ClosedSession,
+    StaleAttachables,
+    ReadOnlyEngineError,
+}
+
+impl RetryReason {
+    fn as_str(self) -> &'static str {
+        match self {
+            RetryReason::SessionAcquisition => "session_acquisition",
+            RetryReason::ClosedSession => "closed_session",
+            RetryReason::StaleAttachables => "stale_attachables",
+            RetryReason::ReadOnlyEngineError => "read_only_engine_error",
+        }
+    }
 }
 
 pub(crate) struct SessionHandle {
@@ -113,14 +151,117 @@ async fn current() -> Result<Arc<SessionHandle>> {
 /// submit a request and await the reply.
 pub(crate) async fn submit<T, F>(build: F) -> Result<T>
 where
-    F: FnOnce(oneshot::Sender<Result<T>>) -> SessionMsg,
+    F: FnMut(oneshot::Sender<Result<T>>) -> SessionMsg,
 {
-    let (reply_tx, reply_rx) = oneshot::channel();
-    let handle = current().await?;
-    handle.send(build(reply_tx)).await?;
-    reply_rx.await.map_err(|_| {
-        SandboxError::internal("the sandbox session dropped a request before replying")
-    })?
+    submit_with_attempts(build, MAX_SUBMIT_ATTEMPTS).await
+}
+
+async fn submit_with_attempts<T, F>(mut build: F, max_attempts: usize) -> Result<T>
+where
+    F: FnMut(oneshot::Sender<Result<T>>) -> SessionMsg,
+{
+    let mut attempt = 1;
+    loop {
+        let (reply_tx, reply_rx) = oneshot::channel();
+        let handle = match current().await {
+            Ok(handle) => handle,
+            Err(err) => {
+                if attempt < max_attempts && is_engine_unreachable(&err) {
+                    log_retry(attempt, max_attempts, RetryReason::SessionAcquisition, &err);
+                    attempt += 1;
+                    continue;
+                }
+                return Err(err);
+            }
+        };
+        let msg = build(reply_tx);
+        let operation = msg.operation();
+        if let Err(err) = handle.send(msg).await {
+            invalidate_current(&handle, &err).await;
+            if attempt < max_attempts {
+                log_retry(attempt, max_attempts, RetryReason::ClosedSession, &err);
+                attempt += 1;
+                continue;
+            }
+            return Err(err);
+        }
+        let result = reply_rx.await.map_err(|_| {
+            SandboxError::internal("the sandbox session dropped a request before replying")
+        })?;
+        if let Err(err) = &result {
+            invalidate_current_on_engine_error(&handle, err).await;
+            if attempt < max_attempts
+                && let Some(reason) = retry_reason(operation, err)
+            {
+                log_retry(attempt, max_attempts, reason, err);
+                attempt += 1;
+                continue;
+            }
+        }
+        return result;
+    }
+}
+
+fn retry_reason(operation: SessionOperation, err: &SandboxError) -> Option<RetryReason> {
+    if is_stale_attachables_error(err) {
+        return Some(RetryReason::StaleAttachables);
+    }
+    match (operation, err) {
+        (
+            SessionOperation::ReadArtifact | SessionOperation::CheckSession,
+            SandboxError::EngineUnreachable(_),
+        ) => Some(RetryReason::ReadOnlyEngineError),
+        _ => None,
+    }
+}
+
+fn log_retry(attempt: usize, max_attempts: usize, reason: RetryReason, err: &SandboxError) {
+    tracing::warn!(
+        attempt,
+        max_attempts,
+        reason = reason.as_str(),
+        error = %err,
+        "retrying sandbox request with a fresh session"
+    );
+}
+
+async fn invalidate_current_on_engine_error(handle: &Arc<SessionHandle>, err: &SandboxError) {
+    if let SandboxError::EngineUnreachable(_) = err {
+        invalidate_current(handle, err).await;
+    }
+}
+
+async fn invalidate_current(handle: &Arc<SessionHandle>, err: &SandboxError) {
+    let Some(slot) = HANDLE_SLOT.get() else {
+        return;
+    };
+    let mut guard = slot.lock().await;
+    if clear_if_current(&mut guard, handle) {
+        tracing::warn!(error = %err, "dropping stale sandbox session");
+    }
+}
+
+fn clear_if_current(slot: &mut Slot, handle: &Arc<SessionHandle>) -> bool {
+    match slot.handle.as_ref() {
+        Some(current) if Arc::ptr_eq(current, handle) => {
+            slot.handle = None;
+            true
+        }
+        _ => false,
+    }
+}
+
+fn is_stale_attachables_error(err: &SandboxError) -> bool {
+    match err {
+        SandboxError::EngineUnreachable(message) => {
+            message.contains(SESSION_ATTACHABLES_WAIT_ERROR)
+        }
+        _ => false,
+    }
+}
+
+fn is_engine_unreachable(err: &SandboxError) -> bool {
+    matches!(err, SandboxError::EngineUnreachable(_))
 }
 
 /// drive the actor loop over `backend` until the request channel closes. called
@@ -205,4 +346,75 @@ fn panic_message(payload: &(dyn Any + Send)) -> &str {
         return s.as_str();
     }
     "unknown panic payload"
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn clear_if_current_only_removes_matching_handle() {
+        let (first_tx, _first_rx) = mpsc::channel(1);
+        let first = Arc::new(SessionHandle::new(first_tx));
+        let (second_tx, _second_rx) = mpsc::channel(1);
+        let second = Arc::new(SessionHandle::new(second_tx));
+        let mut slot = Slot {
+            handle: Some(first.clone()),
+            spawning: None,
+        };
+
+        assert!(!clear_if_current(&mut slot, &second));
+        assert!(
+            slot.handle
+                .as_ref()
+                .is_some_and(|handle| Arc::ptr_eq(handle, &first))
+        );
+
+        assert!(clear_if_current(&mut slot, &first));
+        assert!(slot.handle.is_none());
+    }
+
+    #[test]
+    fn is_stale_attachables_error_requires_attachables_wait() {
+        assert!(is_stale_attachables_error(
+            &SandboxError::EngineUnreachable(
+                "failed to query dagger engine: domain error: waiting for client session attachables: context deadline exceeded"
+                    .to_string(),
+            ),
+        ));
+        assert!(!is_stale_attachables_error(
+            &SandboxError::EngineUnreachable("connection refused".to_string()),
+        ));
+        assert!(!is_stale_attachables_error(&SandboxError::Internal(
+            "waiting for client session attachables".to_string(),
+        )));
+    }
+
+    #[test]
+    fn retry_reason_is_broad_for_read_only_operations_only() {
+        let err = SandboxError::EngineUnreachable("connection reset".to_string());
+
+        assert_eq!(
+            retry_reason(SessionOperation::ReadArtifact, &err),
+            Some(RetryReason::ReadOnlyEngineError),
+        );
+        assert_eq!(
+            retry_reason(SessionOperation::CheckSession, &err),
+            Some(RetryReason::ReadOnlyEngineError),
+        );
+        assert_eq!(retry_reason(SessionOperation::Run, &err), None);
+    }
+
+    #[test]
+    fn stale_attachables_retry_applies_to_run_operations() {
+        let err = SandboxError::EngineUnreachable(
+            "failed to query dagger engine: domain error: waiting for client session attachables: context deadline exceeded"
+                .to_string(),
+        );
+
+        assert_eq!(
+            retry_reason(SessionOperation::Run, &err),
+            Some(RetryReason::StaleAttachables),
+        );
+    }
 }

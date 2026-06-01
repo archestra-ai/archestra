@@ -185,7 +185,11 @@ pub async fn check_session(input: CheckSessionInput) -> Result<()> {
     let span = tracing::Span::current();
     tracing_ctx::attach_parent(&span, input.traceparent.as_deref());
     let traceparent = tracing_ctx::current_traceparent(&span).or(input.traceparent);
-    session::submit(move |reply| session::SessionMsg::CheckSession { traceparent, reply }).await
+    session::submit(move |reply| session::SessionMsg::CheckSession {
+        traceparent: traceparent.clone(),
+        reply,
+    })
+    .await
 }
 
 #[tracing::instrument(
@@ -203,17 +207,18 @@ pub async fn run_sandbox(input: RunSandboxInput) -> Result<CommandExecution> {
     if let Some(pp) = input.pythonpath.as_deref() {
         validate_pythonpath(pp)?;
     }
+    let req = backend::RunRequest {
+        snapshots: input.snapshots,
+        replay_commands: input.replay_commands,
+        limits: input.limits,
+        command: input.command,
+        cwd: input.cwd,
+        timeout_seconds: input.timeout_seconds,
+        traceparent,
+        pythonpath: input.pythonpath,
+    };
     session::submit(move |reply| session::SessionMsg::Run {
-        req: backend::RunRequest {
-            snapshots: input.snapshots,
-            replay_commands: input.replay_commands,
-            limits: input.limits,
-            command: input.command,
-            cwd: input.cwd,
-            timeout_seconds: input.timeout_seconds,
-            traceparent,
-            pythonpath: input.pythonpath,
-        },
+        req: req.clone(),
         reply,
     })
     .await
@@ -229,16 +234,17 @@ pub async fn read_artifact(input: ReadArtifactInput) -> Result<ArtifactBytes> {
     if let Some(pp) = input.pythonpath.as_deref() {
         validate_pythonpath(pp)?;
     }
+    let req = backend::ArtifactRequest {
+        snapshots: input.snapshots,
+        replay_commands: input.replay_commands,
+        limits: input.limits,
+        path: input.path,
+        default_cwd: input.default_cwd,
+        traceparent,
+        pythonpath: input.pythonpath,
+    };
     session::submit(move |reply| session::SessionMsg::ReadArtifact {
-        req: backend::ArtifactRequest {
-            snapshots: input.snapshots,
-            replay_commands: input.replay_commands,
-            limits: input.limits,
-            path: input.path,
-            default_cwd: input.default_cwd,
-            traceparent,
-            pythonpath: input.pythonpath,
-        },
+        req: req.clone(),
         reply,
     })
     .await

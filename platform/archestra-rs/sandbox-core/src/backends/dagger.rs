@@ -223,6 +223,7 @@ impl SandboxBackend for DaggerBackend {
         attach_trace(traceparent.as_deref());
         // ensure_warm covers the engine-reachable + base-image-buildable invariant.
         let _ = self.ensure_warm().await?;
+        self.client.version().await.map_err(from_sdk)?;
         Ok(())
     }
 

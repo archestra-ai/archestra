@@ -15,6 +15,9 @@ catalogs:
     '@better-auth/sso':
       specifier: 1.6.5
       version: 1.6.5
+    ai:
+      specifier: ^6.0.82
+      version: 6.0.90(patch_hash=8234f83330f60e07e41381c776990bea702bdb7251a8e0e67c220e6a743001c2)
     '@typescript/native-preview':
       specifier: beta
       version: 7.0.0-dev.20260421.2
@@ -308,7 +311,7 @@ importers:
         specifier: ^1.1.5
         version: 1.1.5
       ai:
-        specifier: ^6.0.82
+        specifier: 'catalog:'
         version: 6.0.90(patch_hash=8234f83330f60e07e41381c776990bea702bdb7251a8e0e67c220e6a743001c2)(zod@4.3.6)
       asana:
         specifier: 3.1.11
@@ -631,7 +634,7 @@ importers:
         specifier: ^6.0.0
         version: 6.0.0
       ai:
-        specifier: ^6.0.82
+        specifier: 'catalog:'
         version: 6.0.90(patch_hash=8234f83330f60e07e41381c776990bea702bdb7251a8e0e67c220e6a743001c2)(zod@4.3.6)
       better-auth:
         specifier: 'catalog:'
@@ -839,8 +842,8 @@ importers:
   shared:
     dependencies:
       ai:
-        specifier: ^6.0.116
-        version: 6.0.116(zod@4.3.6)
+        specifier: 'catalog:'
+        version: 6.0.90(patch_hash=8234f83330f60e07e41381c776990bea702bdb7251a8e0e67c220e6a743001c2)(zod@4.3.6)
       better-auth:
         specifier: 'catalog:'
         version: 1.6.5(@opentelemetry/api@1.9.1)(drizzle-kit@0.31.9)(drizzle-orm@0.45.2(@electric-sql/pglite@0.3.16)(@opentelemetry/api@1.9.1)(@types/pg@8.18.0)(kysely@0.28.17)(pg@8.20.0))(mongodb@7.1.0(@aws-sdk/credential-providers@3.1009.0)(socks@2.8.7))(next@16.2.6(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(@playwright/test@1.58.2)(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(pg@8.20.0)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(vitest@4.1.0(@opentelemetry/api@1.9.1)(@types/node@25.5.0)(jsdom@29.0.0(@noble/hashes@2.0.1))(msw@2.14.6(@types/node@25.5.0)(typescript@6.0.2))(vite@7.3.2(@types/node@25.5.0)(jiti@2.6.1)(lightningcss@1.31.1)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.4)))

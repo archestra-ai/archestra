@@ -26,7 +26,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "ai": "^6.0.116",
+    "ai": "catalog:",
     "better-auth": "catalog:",
     "zod": "catalog:"
   },

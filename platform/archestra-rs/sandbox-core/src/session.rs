@@ -119,6 +119,10 @@ struct Slot {
     /// the in-flight spawn future, shared so concurrent callers all await the
     /// same connect attempt instead of serially retrying after a 60s timeout.
     spawning: Option<SharedSpawn>,
+    /// session lineage counter, bumped on every invalidation. a spawn captures it
+    /// before awaiting and installs its result only if it is still current, so a
+    /// late waiter cannot resurrect a session another caller already retired.
+    generation: u64,
 }
 
 static HANDLE_SLOT: OnceCell<Mutex<Slot>> = OnceCell::const_new();
@@ -131,13 +135,16 @@ async fn current() -> Result<Arc<SessionHandle>> {
             Mutex::new(Slot {
                 handle: None,
                 spawning: None,
+                generation: 0,
             })
         })
         .await;
 
     // pick up either the live handle or a shared in-flight spawn; release the
     // lock before awaiting so concurrent callers don't block on each other.
-    let spawn_fut = {
+    // capture the generation so the post-await install can detect a concurrent
+    // invalidation that retired this spawn's lineage.
+    let (spawn_fut, generation) = {
         let mut guard = slot.lock().await;
         if let Some(handle) = guard.handle.as_ref() {
             if handle.is_open() {
@@ -145,7 +152,7 @@ async fn current() -> Result<Arc<SessionHandle>> {
             }
             guard.handle = None;
         }
-        if let Some(s) = guard.spawning.clone() {
+        let fut = if let Some(s) = guard.spawning.clone() {
             s
         } else {
             // the one hardcoded backend-selection point.
@@ -154,17 +161,28 @@ async fn current() -> Result<Arc<SessionHandle>> {
             let shared = fut.shared();
             guard.spawning = Some(shared.clone());
             shared
-        }
+        };
+        (fut, guard.generation)
     };
 
     let result = spawn_fut.await;
 
     let mut guard = slot.lock().await;
-    guard.spawning = None;
-    if let Ok(handle) = &result {
-        guard.handle = Some(handle.clone());
-    }
+    finish_spawn(&mut guard, generation, result.as_ref().ok());
     result
+}
+
+/// install a freshly spawned handle, unless a concurrent invalidation advanced
+/// the generation while we awaited — in that case the spawn belongs to a retired
+/// lineage, so its handle is dropped and the slot is left for the new lineage.
+fn finish_spawn(slot: &mut Slot, started_generation: u64, handle: Option<&Arc<SessionHandle>>) {
+    if slot.generation != started_generation {
+        return;
+    }
+    slot.spawning = None;
+    if let Some(handle) = handle {
+        slot.handle = Some(handle.clone());
+    }
 }
 
 /// submit a request and await the reply.
@@ -283,14 +301,19 @@ where
 }
 
 fn retry_reason(operation: SessionOperation, err: &SandboxError) -> Option<RetryReason> {
+    // stale attachables means the engine gave up before serving the query, so
+    // nothing ran — safe to retry for any operation, command execution included.
     if is_stale_attachables_error(err) {
         return Some(RetryReason::StaleAttachables);
     }
+    // a generic engine error is ambiguous about whether work executed. only
+    // check_session is side-effect-free; read_artifact replays the recorded
+    // command log before exporting, so a broad retry could re-run commands that
+    // may have already partially executed. run never gets a broad retry either.
     match (operation, err) {
-        (
-            SessionOperation::ReadArtifact | SessionOperation::CheckSession,
-            SandboxError::EngineUnreachable { .. },
-        ) => Some(RetryReason::ReadOnlyEngineError),
+        (SessionOperation::CheckSession, SandboxError::EngineUnreachable { .. }) => {
+            Some(RetryReason::ReadOnlyEngineError)
+        }
         _ => None,
     }
 }
@@ -333,6 +356,9 @@ fn clear_if_current(slot: &mut Slot, handle: &Arc<SessionHandle>) -> bool {
     match slot.handle.as_ref() {
         Some(current) if Arc::ptr_eq(current, handle) => {
             slot.handle = None;
+            // advance the lineage so an in-flight spawn waiter can't re-store this
+            // handle after we've retired it.
+            slot.generation = slot.generation.wrapping_add(1);
             true
         }
         _ => false,
@@ -441,18 +467,23 @@ fn panic_message(payload: &(dyn Any + Send)) -> &str {
 mod tests {
     use super::*;
 
+    fn make_handle() -> Arc<SessionHandle> {
+        let (tx, _rx) = mpsc::channel(1);
+        Arc::new(SessionHandle::new(tx))
+    }
+
     #[test]
     fn clear_if_current_only_removes_matching_handle() {
-        let (first_tx, _first_rx) = mpsc::channel(1);
-        let first = Arc::new(SessionHandle::new(first_tx));
-        let (second_tx, _second_rx) = mpsc::channel(1);
-        let second = Arc::new(SessionHandle::new(second_tx));
+        let first = make_handle();
+        let second = make_handle();
         let mut slot = Slot {
             handle: Some(first.clone()),
             spawning: None,
+            generation: 0,
         };
 
         assert!(!clear_if_current(&mut slot, &second));
+        assert_eq!(slot.generation, 0, "a no-op clear must not advance lineage");
         assert!(
             slot.handle
                 .as_ref()
@@ -461,6 +492,43 @@ mod tests {
 
         assert!(clear_if_current(&mut slot, &first));
         assert!(slot.handle.is_none());
+        assert_eq!(slot.generation, 1, "retiring a handle must advance lineage");
+    }
+
+    #[test]
+    fn finish_spawn_drops_handle_when_generation_advanced() {
+        let handle = make_handle();
+        let mut slot = Slot {
+            handle: None,
+            spawning: None,
+            generation: 0,
+        };
+        let started = slot.generation;
+        // a concurrent invalidation retired this lineage while we awaited the spawn.
+        slot.generation = slot.generation.wrapping_add(1);
+
+        finish_spawn(&mut slot, started, Some(&handle));
+        assert!(
+            slot.handle.is_none(),
+            "a retired spawn must not resurrect its handle"
+        );
+    }
+
+    #[test]
+    fn finish_spawn_installs_handle_for_current_generation() {
+        let handle = make_handle();
+        let mut slot = Slot {
+            handle: None,
+            spawning: None,
+            generation: 7,
+        };
+
+        finish_spawn(&mut slot, 7, Some(&handle));
+        assert!(
+            slot.handle
+                .as_ref()
+                .is_some_and(|installed| Arc::ptr_eq(installed, &handle))
+        );
     }
 
     fn engine_error(fault: EngineFault) -> SandboxError {
@@ -485,26 +553,34 @@ mod tests {
     }
 
     #[test]
-    fn retry_reason_is_broad_for_read_only_operations_only() {
+    fn generic_engine_retry_is_limited_to_check_session() {
         let err = engine_error(EngineFault::Unreachable);
 
-        assert_eq!(
-            retry_reason(SessionOperation::ReadArtifact, &err),
-            Some(RetryReason::ReadOnlyEngineError),
-        );
         assert_eq!(
             retry_reason(SessionOperation::CheckSession, &err),
             Some(RetryReason::ReadOnlyEngineError),
         );
+        // read_artifact replays the command log before exporting, so a generic
+        // engine error (which may have run some of that history) is not retried.
+        assert_eq!(retry_reason(SessionOperation::ReadArtifact, &err), None);
         assert_eq!(retry_reason(SessionOperation::Run, &err), None);
     }
 
     #[test]
-    fn stale_attachables_retry_applies_to_run_operations() {
+    fn stale_attachables_retry_applies_to_every_operation() {
         let err = engine_error(EngineFault::StaleAttachables);
 
+        // nothing executed, so the command-running and replay paths can retry too.
         assert_eq!(
             retry_reason(SessionOperation::Run, &err),
+            Some(RetryReason::StaleAttachables),
+        );
+        assert_eq!(
+            retry_reason(SessionOperation::ReadArtifact, &err),
+            Some(RetryReason::StaleAttachables),
+        );
+        assert_eq!(
+            retry_reason(SessionOperation::CheckSession, &err),
             Some(RetryReason::StaleAttachables),
         );
     }

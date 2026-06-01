@@ -1,6 +1,5 @@
 "use client";
-import { archestraApiSdk, type archestraApiTypes, E2eTestId } from "@shared";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { type archestraApiTypes, E2eTestId } from "@shared";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Key, Link2, Plus, Trash2, Users, Vault } from "lucide-react";
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
@@ -23,7 +22,11 @@ import { Textarea } from "@/components/ui/textarea";
 import config from "@/lib/config/config";
 import { useFeature } from "@/lib/config/config.query";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
-import { useTeams } from "@/lib/teams/team.query";
+import {
+  useCreateTeam,
+  useDeleteTeam,
+  useTeams,
+} from "@/lib/teams/team.query";
 import { type TeamToken, useTokens } from "@/lib/teams/team-token.query";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { TeamMembersDialog } from "./team-members-dialog";
@@ -47,7 +50,6 @@ const { TeamExternalGroupsDialog } = config.enterpriseFeatures.core
 export function TeamsList() {
   const { searchParams, updateQueryParams } = useDataTableQueryParams();
   const setActionButton = useSetSettingsAction();
-  const queryClient = useQueryClient();
   const byosEnabled = useFeature("byosEnabled");
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [selectedTeam, setSelectedTeam] = useState<Team | null>(null);
@@ -73,43 +75,8 @@ export function TeamsList() {
   const tokens = tokensData?.tokens;
 
   const { data: teams, isLoading } = useTeams();
-
-  const createMutation = useMutation({
-    mutationFn: async (data: { name: string; description?: string }) => {
-      return await archestraApiSdk.createTeam({
-        body: data,
-      });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["teams"] });
-      queryClient.invalidateQueries({ queryKey: ["tokens"] });
-      setCreateDialogOpen(false);
-      setTeamName("");
-      setTeamDescription("");
-      toast.success("Team created successfully");
-    },
-    onError: (error: Error) => {
-      toast.error(error.message || "Failed to create team");
-    },
-  });
-
-  const deleteMutation = useMutation({
-    mutationFn: async (teamId: string) => {
-      return await archestraApiSdk.deleteTeam({
-        path: { id: teamId },
-      });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["teams"] });
-      queryClient.invalidateQueries({ queryKey: ["tokens"] });
-      setDeleteDialogOpen(false);
-      setTeamToDelete(null);
-      toast.success("Team deleted successfully");
-    },
-    onError: (error: Error) => {
-      toast.error(error.message || "Failed to delete team");
-    },
-  });
+  const createMutation = useCreateTeam();
+  const deleteMutation = useDeleteTeam();
 
   const handleCreateTeam = () => {
     if (!teamName.trim()) {
@@ -117,16 +84,31 @@ export function TeamsList() {
       return;
     }
 
-    createMutation.mutate({
-      name: teamName,
-      description: teamDescription || undefined,
-    });
+    createMutation.mutate(
+      {
+        name: teamName,
+        description: teamDescription || undefined,
+      },
+      {
+        onSuccess: (data) => {
+          if (!data) return;
+          setCreateDialogOpen(false);
+          setTeamName("");
+          setTeamDescription("");
+        },
+      },
+    );
   };
 
   const handleDeleteTeam = () => {
-    if (teamToDelete) {
-      deleteMutation.mutate(teamToDelete.id);
-    }
+    if (!teamToDelete) return;
+    deleteMutation.mutate(teamToDelete.id, {
+      onSuccess: (data) => {
+        if (!data) return;
+        setDeleteDialogOpen(false);
+        setTeamToDelete(null);
+      },
+    });
   };
 
   const filteredTeams = useMemo(

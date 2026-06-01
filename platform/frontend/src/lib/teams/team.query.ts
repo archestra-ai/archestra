@@ -1,8 +1,16 @@
 import { archestraApiSdk, type archestraApiTypes } from "@shared";
-import { useQueries, useQuery } from "@tanstack/react-query";
+import {
+  useMutation,
+  useQueries,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
+import { toast } from "sonner";
 import { useFeature } from "@/lib/config/config.query";
+import { handleApiError, toApiError } from "@/lib/utils";
 
-const { getTeams, getTeamVaultFolder } = archestraApiSdk;
+const { createTeam, deleteTeam, getTeams, getTeamVaultFolder } =
+  archestraApiSdk;
 
 type TeamsResponse = archestraApiTypes.GetTeamsResponses["200"];
 export type Team = TeamsResponse["data"][number];
@@ -84,4 +92,48 @@ export function useTeamsWithVaultFolders() {
     data: teamsWithVaultPaths,
     isLoading,
   };
+}
+
+export function useCreateTeam() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (body: archestraApiTypes.CreateTeamData["body"]) => {
+      const { data, error } = await createTeam({ body });
+      if (error) {
+        handleApiError(error);
+        throw toApiError(error);
+      }
+
+      return data;
+    },
+    onSuccess: (data) => {
+      if (!data) return;
+      toast.success("Team created successfully");
+      queryClient.invalidateQueries({ queryKey: ["teams"] });
+      queryClient.invalidateQueries({ queryKey: ["tokens"] });
+    },
+  });
+}
+
+export function useDeleteTeam() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { data, error } = await deleteTeam({ path: { id } });
+      if (error) {
+        handleApiError(error);
+        throw toApiError(error);
+      }
+
+      return data;
+    },
+    onSuccess: (data) => {
+      if (!data) return;
+      toast.success("Team deleted successfully");
+      queryClient.invalidateQueries({ queryKey: ["teams"] });
+      queryClient.invalidateQueries({ queryKey: ["tokens"] });
+    },
+  });
 }

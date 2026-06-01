@@ -23,19 +23,19 @@ export const InsertTeamSchema = createInsertSchema(schema.teamsTable);
 export const UpdateTeamSchema = createUpdateSchema(schema.teamsTable);
 
 export const CreateTeamBodySchema = z.object({
-  name: z.string().min(1, "Team name is required"),
-  description: z.string().optional(),
+  name: z.string().trim().min(1, "Team name is required").max(256),
+  description: z.string().trim().max(500).optional(),
 });
 
 export const UpdateTeamBodySchema = z.object({
-  name: z.string().min(1).optional(),
-  description: z.string().optional(),
+  name: z.string().trim().min(1).max(256).optional(),
+  description: z.string().trim().max(500).optional(),
   convertToolResultsToToon: z.boolean().optional(),
 });
 
 export const AddTeamMemberBodySchema = z.object({
-  userId: z.string(),
-  role: z.string().default(MEMBER_ROLE_NAME),
+  userId: z.string().trim().min(1).max(256),
+  role: z.string().trim().min(1).max(256).default(MEMBER_ROLE_NAME),
 });
 
 // Team External Group schemas for SSO team sync
@@ -47,7 +47,11 @@ export const InsertTeamExternalGroupSchema = createInsertSchema(
 );
 
 export const AddTeamExternalGroupBodySchema = z.object({
-  groupIdentifier: z.string().min(1, "Group identifier is required"),
+  groupIdentifier: z
+    .string()
+    .trim()
+    .min(1, "Group identifier is required")
+    .max(256),
 });
 
 export type Team = z.infer<typeof SelectTeamSchema>;
@@ -78,7 +82,7 @@ export const UpdateTeamVaultFolderSchema = createUpdateSchema(
 );
 
 export const SetTeamVaultFolderBodySchema = z.object({
-  vaultPath: z.string().min(1, "Vault path is required"),
+  vaultPath: z.string().trim().min(1, "Vault path is required").max(1024),
 });
 
 export type TeamVaultFolder = z.infer<typeof SelectTeamVaultFolderSchema>;

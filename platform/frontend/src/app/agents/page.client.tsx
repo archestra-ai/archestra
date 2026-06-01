@@ -32,7 +32,9 @@ import { DataTable } from "@/components/ui/data-table";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { DEFAULT_SORT_BY, DEFAULT_SORT_DIRECTION } from "@/consts";
 import {
+  type AgentToSkillConversion,
   useCloneAgent,
+  useConvertAgentToSkill,
   useDeleteProfile,
   useExportAgent,
   useProfile,
@@ -45,6 +47,7 @@ import { useAppName } from "@/lib/hooks/use-app-name";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import { useTeams } from "@/lib/teams/team.query";
 import { AgentActions } from "./agent-actions";
+import { ConvertToSkillReportDialog } from "./convert-to-skill-report-dialog";
 
 type AgentsInitialData = {
   agents: archestraApiTypes.GetAgentsResponses["200"] | null;
@@ -210,6 +213,19 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
   const exportAgent = useExportAgent();
   const restoreAgent = useRestoreProfile();
+
+  const convertToSkill = useConvertAgentToSkill();
+  const [conversionResult, setConversionResult] =
+    useState<AgentToSkillConversion | null>(null);
+  const handleConvertToSkill = useCallback(
+    async (agentId: string) => {
+      try {
+        const result = await convertToSkill.mutateAsync(agentId);
+        if (result) setConversionResult(result);
+      } catch (_error) {}
+    },
+    [convertToSkill],
+  );
 
   // Handle 'create' URL parameter to open the Create Agent dialog
   useEffect(() => {
@@ -473,6 +489,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
               });
             }}
             onClone={handleClone}
+            onConvertToSkill={(agentData) => handleConvertToSkill(agentData.id)}
             onExport={(agentData) => {
               exportAgent.mutate(agentData.id, {
                 onSuccess: (data) => {
@@ -621,6 +638,13 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
               open={isImportDialogOpen}
               onOpenChange={setIsImportDialogOpen}
               onSuccess={() => {}}
+            />
+
+            <ConvertToSkillReportDialog
+              result={conversionResult}
+              onOpenChange={(open) => {
+                if (!open) setConversionResult(null);
+              }}
             />
           </div>
         </div>

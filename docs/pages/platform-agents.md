@@ -3,7 +3,7 @@ title: Overview
 category: Agents
 order: 1
 description: Agent overview, invocation paths, knowledge sources, and prompt templating
-lastUpdated: 2026-04-27
+lastUpdated: 2026-06-01
 ---
 
 <!--
@@ -69,6 +69,18 @@ See [Knowledge Bases](/docs/platform-knowledge-bases) for how retrieval works an
 ## Delegation
 
 When an agent delegates work to another agent, Archestra tracks the full call chain for observability. Delegated agents also inherit the current [tool guardrails](/docs/platform-ai-tool-guardrails) trust state, so downstream tool policy enforcement does not reset mid-run.
+
+## Convert to Skill
+
+An agent can be converted into an [Agent Skill](/docs/platform-agent-skills-sharing) — a reusable `SKILL.md` instruction set that any agent can activate from chat. Use this when the agent's value is mostly in its instructions and you want them available as a `/slash-command` rather than as a separate agent to switch to.
+
+The conversion is non-destructive (the source agent is left intact) and inherits the agent's scope. It is also lossy by nature: a skill carries instructions only, with no tools, model, or knowledge of its own. Each field is therefore either carried over or annotated, and a report shows which:
+
+- the system prompt becomes the skill body; name, description, and scope carry over directly
+- assigned tools, the default model, and knowledge sources have no skill equivalent, so they are listed under a `Requirements` section in the body for the invoking agent to re-attach
+- suggested prompts, icon, and labels are folded into the body or metadata, and the origin agent is recorded in metadata so the skill stays linked back to it
+
+The same conversion is available to the model through the [`draft_skill_from_agent`](/docs/platform-archestra-mcp-server) MCP tool, which returns a draft manifest the model can edit before persisting it with `create_skill`.
 
 ## System Prompt Templating
 

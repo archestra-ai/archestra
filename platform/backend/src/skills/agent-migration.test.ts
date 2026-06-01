@@ -1,0 +1,194 @@
+import { describe, expect, it } from "vitest";
+import {
+  agentToSkill,
+  type MigratableAgent,
+  SKILL_ORIGIN_AGENT,
+  serializeSkillManifest,
+} from "./agent-migration";
+import { parseSkillManifest } from "./parser";
+
+function makeMigratableAgent(
+  overrides: Partial<MigratableAgent> = {},
+): MigratableAgent {
+  return {
+    id: "agent-1",
+    name: "Support Helper",
+    description: "Helps with support tickets",
+    systemPrompt: "You are a support assistant. Be concise and kind.",
+    icon: null,
+    scope: "personal",
+    modelId: null,
+    llmModel: null,
+    tools: [],
+    teams: [],
+    labels: [],
+    suggestedPrompts: [],
+    knowledgeBaseIds: [],
+    connectorIds: [],
+    ...overrides,
+  };
+}
+
+describe("agentToSkill", () => {
+  it("carries clean fields and keeps the system prompt as the body", () => {
+    const { draft, report } = agentToSkill(makeMigratableAgent());
+
+    expect(draft.name).toBe("support-helper");
+    expect(draft.description).toBe("Helps with support tickets");
+    expect(draft.content).toBe(
+      "You are a support assistant. Be concise and kind.",
+    );
+    expect(draft.scope).toBe("personal");
+    expect(report.carried.map((field) => field.field)).toEqual(
+      expect.arrayContaining(["description", "systemPrompt"]),
+    );
+    // scope is a persistence-surface concern; the transform leaves it to callers.
+    expect(report.carried.map((field) => field.field)).not.toContain("scope");
+    expect(report.annotated.map((field) => field.field)).not.toContain("scope");
+  });
+
+  it("records provenance in metadata", () => {
+    const { draft } = agentToSkill(makeMigratableAgent({ id: "abc-123" }));
+
+    expect(draft.metadata.origin).toBe(SKILL_ORIGIN_AGENT);
+    expect(draft.metadata.originAgentId).toBe("abc-123");
+  });
+
+  it("normalizes a display name into a slash-command-safe slug", () => {
+    const { draft, report } = agentToSkill(
+      makeMigratableAgent({ name: "My Sales Agent!!" }),
+    );
+
+    expect(draft.name).toBe("my-sales-agent");
+    expect(report.annotated.map((field) => field.field)).toContain("name");
+  });
+
+  it("falls back to a stable name when the agent name slugifies to nothing", () => {
+    const { draft } = agentToSkill(makeMigratableAgent({ name: "🤖🤖" }));
+    expect(draft.name).toBe("migrated-agent");
+  });
+
+  it("synthesizes a description when the agent has none", () => {
+    const { draft, report } = agentToSkill(
+      makeMigratableAgent({ name: "Helper", description: null }),
+    );
+
+    expect(draft.description).toBe('Migrated from the "Helper" agent.');
+    expect(report.annotated.map((field) => field.field)).toContain(
+      "description",
+    );
+  });
+
+  it("annotates tool/model/knowledge bindings under a Requirements section", () => {
+    const { draft, report } = agentToSkill(
+      makeMigratableAgent({
+        tools: [{ name: "slack__send" }, { name: "github__pr" }],
+        modelId: "model-1",
+        knowledgeBaseIds: ["kb-1", "kb-2"],
+        connectorIds: ["conn-1"],
+      }),
+    );
+
+    expect(draft.content).toContain("## Requirements");
+    expect(draft.content).toContain("slack__send, github__pr");
+    expect(draft.content).toContain("Knowledge bases: 2");
+    expect(draft.content).toContain("Knowledge connectors: 1");
+    expect(draft.metadata.originAgentModelId).toBe("model-1");
+    expect(report.annotated.map((field) => field.field)).toEqual(
+      expect.arrayContaining([
+        "tools",
+        "modelId",
+        "knowledgeBaseIds",
+        "connectorIds",
+      ]),
+    );
+  });
+
+  it("omits the Requirements section when there are no bindings", () => {
+    const { draft } = agentToSkill(makeMigratableAgent());
+    expect(draft.content).not.toContain("## Requirements");
+  });
+
+  it("lists suggested prompts as examples", () => {
+    const { draft } = agentToSkill(
+      makeMigratableAgent({
+        suggestedPrompts: [
+          { summaryTitle: "Refund", prompt: "How do I issue a refund?" },
+        ],
+      }),
+    );
+
+    expect(draft.content).toContain("## Example prompts");
+    expect(draft.content).toContain("Refund: How do I issue a refund?");
+  });
+
+  it("copies labels and icon into metadata", () => {
+    const { draft } = agentToSkill(
+      makeMigratableAgent({
+        icon: "🎧",
+        labels: [{ key: "team", value: "support" }],
+      }),
+    );
+
+    expect(draft.metadata.icon).toBe("🎧");
+    expect(draft.metadata.team).toBe("support");
+  });
+
+  it("synthesizes a body when the agent has no system prompt and no bindings", () => {
+    const { draft, report } = agentToSkill(
+      makeMigratableAgent({ name: "Empty", systemPrompt: null }),
+    );
+
+    expect(draft.content).toBe("# empty\n\nHelps with support tickets");
+    expect(report.annotated.map((field) => field.field)).toContain(
+      "systemPrompt",
+    );
+  });
+
+  it("carries teams only for team-scoped agents", () => {
+    const teamScoped = agentToSkill(
+      makeMigratableAgent({
+        scope: "team",
+        teams: [{ id: "team-1" }, { id: "team-2" }],
+      }),
+    );
+    expect(teamScoped.teamIds).toEqual(["team-1", "team-2"]);
+
+    const personalScoped = agentToSkill(
+      makeMigratableAgent({ scope: "personal", teams: [{ id: "team-1" }] }),
+    );
+    expect(personalScoped.teamIds).toEqual([]);
+  });
+});
+
+describe("serializeSkillManifest", () => {
+  it("produces a manifest that round-trips through parseSkillManifest", () => {
+    const { draft } = agentToSkill(
+      makeMigratableAgent({
+        name: "Round Trip",
+        description: "Tests serialization: with colons & quotes",
+        icon: "🎧",
+      }),
+    );
+
+    const parsed = parseSkillManifest(serializeSkillManifest(draft));
+
+    expect(parsed.name).toBe(draft.name);
+    expect(parsed.description).toBe(draft.description);
+    expect(parsed.content).toBe(draft.content);
+    expect(parsed.metadata.origin).toBe(SKILL_ORIGIN_AGENT);
+    expect(parsed.metadata.icon).toBe("🎧");
+  });
+
+  it("preserves a system prompt containing code fences through serialization", () => {
+    const { draft } = agentToSkill(
+      makeMigratableAgent({
+        systemPrompt: "Run this:\n```ts\nconst x = 1;\n```\nDone.",
+      }),
+    );
+
+    const parsed = parseSkillManifest(serializeSkillManifest(draft));
+    expect(parsed.content).toContain("```ts");
+    expect(parsed.content).toContain("const x = 1;");
+  });
+});

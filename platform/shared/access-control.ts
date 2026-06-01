@@ -1182,6 +1182,7 @@ export const requiredEndpointPermissionsMap: Partial<
   // Agent Skill Routes - per-instance scope is enforced in the handlers
   [RouteId.GetSkills]: { skill: ["read"] },
   [RouteId.CreateSkill]: { skill: ["create"] },
+  [RouteId.ConvertAgentToSkill]: { skill: ["create"], agent: ["read"] },
   [RouteId.GetSkill]: { skill: ["read"] },
   [RouteId.UpdateSkill]: { skill: ["update"] },
   [RouteId.DeleteSkill]: { skill: ["delete"] },

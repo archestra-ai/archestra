@@ -138,6 +138,9 @@ export const TOOL_PERMISSIONS: Record<
   // makes a personal skill, update_skill re-checks the target skill's scope.
   create_skill: { resource: "skill", action: "create" },
   update_skill: { resource: "skill", action: "update" },
+  // Reads an agent and returns a SKILL.md draft only; persisting is a separate
+  // create_skill call that enforces skill:create. Read-only, so gated on agent:read.
+  draft_skill_from_agent: { resource: "agent", action: "read" },
   // Skill sandbox execution — gated by explicit `skill:execute` permission and
   // per-agent tool assignment. Handlers additionally check `skill:read` per skill.
   create_skill_sandbox: { resource: "skill", action: "execute" },

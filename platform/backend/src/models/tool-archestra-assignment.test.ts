@@ -1,6 +1,7 @@
 import {
   ARCHESTRA_MCP_CATALOG_ID,
   TOOL_ACTIVATE_SKILL_FULL_NAME,
+  TOOL_DRAFT_SKILL_FROM_AGENT_FULL_NAME,
   TOOL_READ_SKILL_FILE_FULL_NAME,
 } from "@shared";
 import { getArchestraMcpTools } from "@/archestra-mcp-server";
@@ -192,6 +193,9 @@ describe("Archestra Tools Dynamic Assignment", () => {
     const skillToolNames = [
       TOOL_ACTIVATE_SKILL_FULL_NAME,
       TOOL_READ_SKILL_FILE_FULL_NAME,
+      // the agent→skill draft tool is part of the opt-in skill toolset, so the
+      // documented "convert, then create_skill" flow is actually reachable.
+      TOOL_DRAFT_SKILL_FROM_AGENT_FULL_NAME,
     ];
     for (const agentId of [agentA.id, agentB.id]) {
       const tools = await ToolModel.getMcpToolsByAgent(agentId);

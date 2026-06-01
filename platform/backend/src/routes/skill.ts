@@ -8,6 +8,7 @@ import {
 } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { getAgentTypePermissionChecker } from "@/auth/agent-type-permissions";
 import {
   getSkillPermissionChecker,
   requireSkillModifyPermission,
@@ -15,6 +16,7 @@ import {
 } from "@/auth/skill-permissions";
 import logger from "@/logging";
 import {
+  AgentModel,
   OrganizationModel,
   SkillFileModel,
   SkillModel,
@@ -23,6 +25,7 @@ import {
   ToolModel,
   UserModel,
 } from "@/models";
+import { agentToSkill, SCOPE_FIELD } from "@/skills/agent-migration";
 import {
   discoverSkills,
   importSkills,
@@ -48,6 +51,7 @@ import {
   type Skill,
   SkillFileEncodingSchema,
   SkillWithFilesSchema,
+  UuidIdSchema,
 } from "@/types";
 import { isForeignKeyConstraintError } from "@/utils/db";
 
@@ -64,6 +68,27 @@ const SkillListItemSchema = SelectSkillSchema.extend({
 /** A skill with its resource files and team assignments. */
 const SkillDetailSchema = SkillWithFilesSchema.extend({
   teams: z.array(SkillTeamSchema),
+});
+
+/** One source-agent field and how the conversion preserved it. */
+const MigrationFieldSchema = z.object({
+  field: z.string(),
+  detail: z.string(),
+});
+
+/**
+ * Record of how an agent→skill conversion mapped each field: `carried` to a
+ * native skill field, or `annotated` into the SKILL.md body / metadata. Nothing
+ * is silently dropped, so the UI can show the user exactly what changed.
+ */
+const MigrationReportSchema = z.object({
+  carried: z.array(MigrationFieldSchema),
+  annotated: z.array(MigrationFieldSchema),
+});
+
+const ConvertAgentToSkillResponseSchema = z.object({
+  skill: SkillDetailSchema,
+  report: MigrationReportSchema,
 });
 
 /** Raw resource file as submitted by the in-app editor. */
@@ -241,6 +266,116 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       return reply.send(await loadSkillDetail(skill));
+    },
+  );
+
+  // Lives in the skill plugin (not the agent plugin) so it can reuse the
+  // skill-create authorization helpers; the button that calls it sits on the
+  // agent page. Non-destructive: the source agent is left untouched.
+  fastify.post(
+    "/api/agents/:id/convert-to-skill",
+    {
+      schema: {
+        operationId: RouteId.ConvertAgentToSkill,
+        description:
+          "Convert an internal agent into a new Agent Skill. The skill inherits the agent's scope; the agent is left intact.",
+        tags: ["Skills"],
+        params: z.object({ id: UuidIdSchema }),
+        response: constructResponseSchema(ConvertAgentToSkillResponseSchema),
+      },
+    },
+    async ({ params: { id }, user, organizationId }, reply) => {
+      // admin-view load first so we can check the type before leaking existence.
+      const agent = await AgentModel.findById(id, user.id, true);
+      if (!agent || agent.organizationId !== organizationId) {
+        throw new ApiError(404, "Agent not found");
+      }
+      if (agent.agentType !== "agent" || agent.builtInAgentConfig) {
+        throw new ApiError(
+          400,
+          "Only internal agents can be converted to skills.",
+        );
+      }
+
+      // caller must be able to read this agent (type-level, then instance scope).
+      const agentChecker = await getAgentTypePermissionChecker({
+        userId: user.id,
+        organizationId,
+      });
+      try {
+        agentChecker.require(agent.agentType, "read");
+      } catch {
+        throw new ApiError(404, "Agent not found");
+      }
+      if (!agentChecker.isAdmin(agent.agentType)) {
+        const accessible = await AgentModel.findById(id, user.id, false);
+        if (!accessible) {
+          throw new ApiError(404, "Agent not found");
+        }
+      }
+
+      const { draft, teamIds, report } = agentToSkill(agent);
+
+      // Agent system prompts are unbounded, so enforce the same content-size cap
+      // the manual/import paths apply to SKILL.md (SkillManifestInputSchema). An
+      // oversized skill would otherwise slip in here and later bloat chat
+      // activation payloads and the model's context.
+      if (draft.content.length > MAX_SKILL_FILE_BYTES) {
+        throw new ApiError(
+          400,
+          `Converted skill content exceeds the ${MAX_SKILL_FILE_BYTES}-character limit. Trim the agent's system prompt before converting.`,
+        );
+      }
+
+      // ...and be allowed to create a skill in the scope inherited from the agent.
+      const skillChecker = await getSkillPermissionChecker({
+        userId: user.id,
+        organizationId,
+      });
+      const userTeamIds = skillChecker.isAdmin
+        ? []
+        : await TeamModel.getUserTeamIds(user.id);
+      authorizeSkillScope({
+        checker: skillChecker,
+        scope: draft.scope,
+        authorId: user.id,
+        requestedTeamIds: teamIds,
+        userTeamIds,
+        userId: user.id,
+      });
+      await assertSkillTeams({ scope: draft.scope, teamIds, organizationId });
+
+      const skill = await withTeamFkErrorMapped(() =>
+        SkillModel.createWithFiles({
+          skill: {
+            organizationId,
+            authorId: user.id,
+            name: draft.name,
+            description: draft.description,
+            content: draft.content,
+            license: draft.license,
+            compatibility: draft.compatibility,
+            metadata: draft.metadata,
+            sourceType: "manual",
+            scope: draft.scope,
+          },
+          files: [],
+          teamIds,
+        }),
+      );
+      if (!skill) {
+        throw skillNameConflict(draft.name);
+      }
+
+      // this surface persists the agent's scope (and teams) verbatim, so report
+      // it carried. The MCP draft path can't and reports it annotated instead.
+      report.carried.push({ field: SCOPE_FIELD, detail: draft.scope });
+
+      logger.info(
+        { agentId: agent.id, skillId: skill.id, organizationId },
+        "[Skills] Converted agent to skill",
+      );
+      return reply.send({ skill: await loadSkillDetail(skill), report });
     },
   );
 

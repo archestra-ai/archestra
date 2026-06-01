@@ -1128,7 +1128,10 @@ export function AgentDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-5xl h-[90vh] flex flex-col overflow-hidden">
+      <DialogContent
+        aria-describedby={undefined}
+        className="max-w-5xl h-[90vh] flex flex-col overflow-hidden"
+      >
         <DialogHeader>
           <div className="flex items-start justify-between gap-4 pr-6">
             <div className="min-w-0 flex-1">

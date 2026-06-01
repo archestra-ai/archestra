@@ -1280,7 +1280,10 @@ function ScheduleTriggerFormDialog({
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md max-h-[85vh] flex flex-col overflow-hidden">
+      <DialogContent
+        aria-describedby={undefined}
+        className="max-w-md max-h-[85vh] flex flex-col overflow-hidden"
+      >
         <DialogHeader>
           <DialogTitle>{isEditing ? "Edit task" : "New task"}</DialogTitle>
         </DialogHeader>

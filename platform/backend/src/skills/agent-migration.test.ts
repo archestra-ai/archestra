@@ -1,6 +1,10 @@
 import {
   TOOL_ACTIVATE_SKILL_FULL_NAME,
+  TOOL_CREATE_SKILL_FULL_NAME,
+  TOOL_DRAFT_SKILL_FROM_AGENT_FULL_NAME,
+  TOOL_LIST_SKILLS_FULL_NAME,
   TOOL_READ_SKILL_FILE_FULL_NAME,
+  TOOL_UPDATE_SKILL_FULL_NAME,
 } from "@shared";
 import { describe, expect, it } from "vitest";
 import {
@@ -124,20 +128,41 @@ describe("agentToSkill", () => {
     expect(draft.content).not.toContain("## Recommended tools");
   });
 
-  it("excludes skill-runtime tools from the recommended list", () => {
+  it("excludes the whole skill toolset from the recommended list", () => {
+    const skillTools = [
+      TOOL_ACTIVATE_SKILL_FULL_NAME,
+      TOOL_READ_SKILL_FILE_FULL_NAME,
+      TOOL_LIST_SKILLS_FULL_NAME,
+      TOOL_CREATE_SKILL_FULL_NAME,
+      TOOL_UPDATE_SKILL_FULL_NAME,
+      TOOL_DRAFT_SKILL_FROM_AGENT_FULL_NAME,
+    ];
     const { draft } = agentToSkill(
       makeMigratableAgent({
         tools: [
-          { name: TOOL_ACTIVATE_SKILL_FULL_NAME },
-          { name: TOOL_READ_SKILL_FILE_FULL_NAME },
+          ...skillTools.map((name) => ({ name })),
           { name: "slack__send" },
         ],
       }),
     );
 
     expect(draft.content).toContain("- slack__send");
-    expect(draft.content).not.toContain(TOOL_ACTIVATE_SKILL_FULL_NAME);
-    expect(draft.content).not.toContain(TOOL_READ_SKILL_FILE_FULL_NAME);
+    for (const name of skillTools) {
+      expect(draft.content).not.toContain(name);
+    }
+  });
+
+  it("excludes skill tools carrying a white-labeled prefix", () => {
+    // white-labeled orgs store skill tools under a branded prefix; only the
+    // short name is stable, so filtering must be prefix-agnostic.
+    const { draft } = agentToSkill(
+      makeMigratableAgent({
+        tools: [{ name: "mycorp__create_skill" }, { name: "slack__send" }],
+      }),
+    );
+
+    expect(draft.content).toContain("- slack__send");
+    expect(draft.content).not.toContain("mycorp__create_skill");
   });
 
   it("omits the Recommended tools section when only skill-runtime tools are present", () => {

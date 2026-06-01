@@ -326,6 +326,43 @@ describe("POST /api/agents/:id/convert-to-skill", () => {
     expect(response.statusCode).toBe(400);
   });
 
+  test("returns 404 (not 400) for a non-agent resource the caller cannot read", async ({
+    makeInternalAgent,
+    makeUser,
+    makeMember,
+    makeCustomRole,
+  }) => {
+    // a role that can create skills but cannot read MCP gateways.
+    const role = await makeCustomRole(organizationId, {
+      permission: { agent: ["read"], skill: ["read", "create"] },
+    });
+    const limited = await makeUser();
+    await makeMember(limited.id, organizationId, { role: role.role });
+
+    const gateway = await makeInternalAgent({
+      organizationId,
+      name: "Hidden Gateway",
+      agentType: "mcp_gateway",
+      scope: "org",
+      teams: [],
+      labels: [],
+      knowledgeBaseIds: [],
+      connectorIds: [],
+    });
+
+    // point the request at the limited user (the onRequest hook reads `user`).
+    user = limited;
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/agents/${gateway.id}/convert-to-skill`,
+      payload: {},
+    });
+
+    // the caller can't read MCP gateways, so existence must not leak as a 400.
+    expect(response.statusCode).toBe(404);
+  });
+
   test("returns 404 for an unknown agent", async () => {
     const response = await app.inject({
       method: "POST",

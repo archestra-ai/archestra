@@ -1,19 +1,17 @@
-import {
-  TOOL_ACTIVATE_SKILL_FULL_NAME,
-  TOOL_READ_SKILL_FILE_FULL_NAME,
-} from "@shared";
+import { parseFullToolName, SKILL_ARCHESTRA_TOOL_SHORT_NAMES } from "@shared";
 import { dump as dumpYaml } from "js-yaml";
 import type { ResourceVisibilityScope } from "@/types/visibility";
 
 /**
- * Skill-runtime tools that every skill-enabled agent carries. Recommending them
- * inside a skill is circular noise — the activating agent already has them — so
- * they are dropped from the Recommended tools list.
+ * Short names of the Archestra skill-runtime/plumbing tools (activate, read,
+ * list, create, update, draft-from-agent). Every skill-enabled agent carries
+ * the whole set once its org opts in, so recommending them inside a generated
+ * skill is circular noise — the activating agent already has them. Matched by
+ * short name (prefix stripped) so white-labeled tool prefixes are caught too.
  */
-const SKILL_RUNTIME_TOOL_NAMES: ReadonlySet<string> = new Set([
-  TOOL_ACTIVATE_SKILL_FULL_NAME,
-  TOOL_READ_SKILL_FILE_FULL_NAME,
-]);
+const SKILL_RUNTIME_TOOL_SHORT_NAMES: ReadonlySet<string> = new Set(
+  SKILL_ARCHESTRA_TOOL_SHORT_NAMES,
+);
 
 /**
  * The subset of an agent the migration actually reads. Declaring it explicitly
@@ -321,9 +319,7 @@ function buildRecommendedToolsSection(
   agent: MigratableAgent,
   carried: MigrationField[],
 ): string | null {
-  const tools = agent.tools.filter(
-    (tool) => !SKILL_RUNTIME_TOOL_NAMES.has(tool.name),
-  );
+  const tools = agent.tools.filter((tool) => !isSkillRuntimeTool(tool.name));
   if (tools.length === 0) return null;
 
   carried.push({
@@ -335,6 +331,12 @@ function buildRecommendedToolsSection(
     "This skill works best with these tools available:\n\n" +
     tools.map((tool) => `- ${tool.name}`).join("\n")
   );
+}
+
+/** True for an Archestra skill-runtime tool, regardless of its server prefix. */
+function isSkillRuntimeTool(toolName: string): boolean {
+  const { toolName: shortName } = parseFullToolName(toolName);
+  return SKILL_RUNTIME_TOOL_SHORT_NAMES.has(shortName);
 }
 
 /**

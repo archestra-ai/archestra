@@ -303,19 +303,17 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { id }, body, user, organizationId }, reply) => {
-      // admin-view load first so we can check the type before leaking existence.
+      // admin-view load bypasses access filtering; the read + scope checks
+      // below re-impose it before we reveal anything about the resource.
       const agent = await AgentModel.findById(id, user.id, true);
       if (!agent || agent.organizationId !== organizationId) {
         throw new ApiError(404, "Agent not found");
       }
-      if (agent.agentType !== "agent" || agent.builtInAgentConfig) {
-        throw new ApiError(
-          400,
-          "Only internal agents can be converted to skills.",
-        );
-      }
 
-      // caller must be able to read this agent (type-level, then instance scope).
+      // caller must be able to read this resource (type-level, then instance
+      // scope) BEFORE we reveal its type — otherwise a user with only
+      // agent:read could distinguish an inaccessible profile/MCP-gateway/
+      // LLM-proxy from a nonexistent id via the "not an internal agent" 400.
       const agentChecker = await getAgentTypePermissionChecker({
         userId: user.id,
         organizationId,
@@ -330,6 +328,15 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         if (!accessible) {
           throw new ApiError(404, "Agent not found");
         }
+      }
+
+      // only now that the caller is allowed to read it do we disclose that it
+      // is the wrong kind of resource for conversion.
+      if (agent.agentType !== "agent" || agent.builtInAgentConfig) {
+        throw new ApiError(
+          400,
+          "Only internal agents can be converted to skills.",
+        );
       }
 
       // If the caller wants the source agent gone, prove they may delete it

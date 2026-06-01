@@ -34,6 +34,7 @@ import { EnvironmentVariablesFormField } from "@/components/environment-variable
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { HeaderDialog, type HeaderDraft } from "@/components/header-dialog";
 import { HeadersReadOnlyTable } from "@/components/headers-read-only-table";
+import { ReinstallConfirmBar } from "@/components/reinstall-confirm-bar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -96,7 +97,6 @@ import {
   transformCatalogItemToFormValues,
   transformFormToApiData,
 } from "./mcp-catalog-form.utils";
-import { ReinstallConfirmBar } from "@/components/reinstall-confirm-bar";
 
 const { useIdentityProviders } = config.enterpriseFeatures.core
   ? // biome-ignore lint/style/noRestrictedImports: conditional EE query import for IdP selector
@@ -935,7 +935,6 @@ export function McpCatalogForm({
                                 : value,
                             )
                           }
-                          disabled={mode === "edit"}
                         >
                           <SelectTrigger className="w-full">
                             <SelectValue />

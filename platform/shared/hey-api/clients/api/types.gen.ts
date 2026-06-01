@@ -30211,6 +30211,7 @@ export type UpdateInternalMcpCatalogItemData = {
             [key: string]: UserConfigFieldDefaultInput;
         };
         presetSecretId?: string | null;
+        environmentId?: string | null;
         catalogReinstallRequired?: boolean;
         labels?: Array<{
             key: string;

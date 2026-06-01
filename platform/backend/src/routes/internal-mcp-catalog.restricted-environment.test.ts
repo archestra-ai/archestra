@@ -143,4 +143,92 @@ describe("Internal MCP Catalog - Restricted Environment Assignment Guard", () =>
     expect(response.statusCode).toBe(200);
     expect(response.json().environmentId).toBe(open.id);
   });
+
+  // PUT /api/internal_mcp_catalog/:id — environment is editable after creation
+  // and the same assignment guard applies. Name is reused across create + update
+  // so the model's name-immutability check passes.
+  function bodyWith(name: string, environmentId: string | null) {
+    return {
+      name,
+      serverType: "remote" as const,
+      serverUrl: "https://example.com/mcp",
+      environmentId,
+    };
+  }
+
+  async function createWith(name: string, environmentId: string | null) {
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/internal_mcp_catalog",
+      payload: bodyWith(name, environmentId),
+    });
+    expect(res.statusCode).toBe(200);
+    return res.json().id as string;
+  }
+
+  test("updating environmentId on an existing catalog item persists, and clearing to default works", async () => {
+    hasEnvironmentAdmin = false;
+    const open = await createEnvironment({
+      organizationId,
+      data: { name: "Staging", restricted: false },
+    });
+    const name = `edit-env-${crypto.randomUUID().slice(0, 8)}`;
+    const id = await createWith(name, null);
+
+    const assigned = await app.inject({
+      method: "PUT",
+      url: `/api/internal_mcp_catalog/${id}`,
+      payload: bodyWith(name, open.id),
+    });
+    expect(assigned.statusCode).toBe(200);
+    expect(assigned.json().environmentId).toBe(open.id);
+
+    const cleared = await app.inject({
+      method: "PUT",
+      url: `/api/internal_mcp_catalog/${id}`,
+      payload: bodyWith(name, null),
+    });
+    expect(cleared.statusCode).toBe(200);
+    expect(cleared.json().environmentId).toBeNull();
+  });
+
+  test("a non-env-admin updating to a RESTRICTED env is rejected (403) and the assignment is unchanged", async () => {
+    hasEnvironmentAdmin = false;
+    const restricted = await createEnvironment({
+      organizationId,
+      data: { name: "Prod", restricted: true },
+    });
+    const name = `edit-env-${crypto.randomUUID().slice(0, 8)}`;
+    const id = await createWith(name, null);
+
+    const response = await app.inject({
+      method: "PUT",
+      url: `/api/internal_mcp_catalog/${id}`,
+      payload: bodyWith(name, restricted.id),
+    });
+    expect(response.statusCode).toBe(403);
+
+    const item = await InternalMcpCatalogModel.findById(id, {
+      expandSecrets: false,
+    });
+    expect(item?.environmentId ?? null).toBeNull();
+  });
+
+  test("an env-admin updating to a RESTRICTED env succeeds", async () => {
+    hasEnvironmentAdmin = true;
+    const restricted = await createEnvironment({
+      organizationId,
+      data: { name: "Prod", restricted: true },
+    });
+    const name = `edit-env-${crypto.randomUUID().slice(0, 8)}`;
+    const id = await createWith(name, null);
+
+    const response = await app.inject({
+      method: "PUT",
+      url: `/api/internal_mcp_catalog/${id}`,
+      payload: bodyWith(name, restricted.id),
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json().environmentId).toBe(restricted.id);
+  });
 });

@@ -956,6 +956,24 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         if (repartitioned.bagValuesRotated) parentPresetBagRotated = true;
       }
 
+      // When the environment assignment changes, gate it the same way create
+      // does — the target must belong to this org, and a restricted environment
+      // (or restricted default) requires environment:admin.
+      if (
+        "environmentId" in restBody &&
+        restBody.environmentId !== originalCatalogItem.environmentId
+      ) {
+        const { success: hasEnvironmentAdmin } = await hasPermission(
+          { environment: ["admin"] },
+          request.headers,
+        );
+        await assertCanAssignEnvironment({
+          environmentId: restBody.environmentId ?? null,
+          organizationId: request.organizationId,
+          hasEnvironmentAdmin,
+        });
+      }
+
       // Update the catalog item
       const catalogItem = await InternalMcpCatalogModel.update(id, restBody);
 

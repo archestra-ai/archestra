@@ -20,6 +20,11 @@ import { cn } from "@/lib/utils";
 
 export type RightPanelTab = "artifact" | "browser" | "canvas";
 
+/** Smallest the panel itself may shrink to. */
+const MIN_PANEL_WIDTH = 300;
+/** Width the conversation column must always keep so it never squashes. */
+const MIN_CHAT_WIDTH = 400;
+
 interface RightSidePanelProps {
   isOpen: boolean;
   activeTab: RightPanelTab;
@@ -71,6 +76,19 @@ export function RightSidePanel({
   const [isResizing, setIsResizing] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
 
+  // Largest the panel may grow to: the width of the chat layout row (chat
+  // column + this panel) minus the minimum chat column width. The panel's
+  // direct parent is a tight flex wrapper whose width equals the panel, so we
+  // measure its parent — the row — which spans the whole chat area (everything
+  // right of the left nav). Falls back to the viewport before layout exists.
+  const getMaxWidth = useCallback(() => {
+    const row = panelRef.current?.parentElement?.parentElement;
+    const available =
+      row?.getBoundingClientRect().width ??
+      (typeof window !== "undefined" ? window.innerWidth : 0);
+    return Math.max(MIN_PANEL_WIDTH, available - MIN_CHAT_WIDTH);
+  }, []);
+
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     setIsResizing(true);
@@ -79,8 +97,7 @@ export function RightSidePanel({
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
       const step = e.shiftKey ? 50 : 10; // Larger step with shift key
-      const minWidth = 300;
-      const maxWidth = window.innerWidth * 0.7;
+      const maxWidth = getMaxWidth();
 
       if (e.key === "ArrowLeft") {
         e.preventDefault();
@@ -92,7 +109,7 @@ export function RightSidePanel({
         );
       } else if (e.key === "ArrowRight") {
         e.preventDefault();
-        const newWidth = Math.max(minWidth, width - step);
+        const newWidth = Math.max(MIN_PANEL_WIDTH, width - step);
         setWidth(newWidth);
         localStorage.setItem(
           "archestra-right-panel-width",
@@ -100,7 +117,7 @@ export function RightSidePanel({
         );
       }
     },
-    [width],
+    [width, getMaxWidth],
   );
 
   useEffect(() => {
@@ -108,10 +125,10 @@ export function RightSidePanel({
       if (!isResizing) return;
 
       const newWidth = window.innerWidth - e.clientX;
-      const minWidth = 300;
-      const maxWidth = window.innerWidth * 0.7;
-
-      const clampedWidth = Math.max(minWidth, Math.min(maxWidth, newWidth));
+      const clampedWidth = Math.max(
+        MIN_PANEL_WIDTH,
+        Math.min(getMaxWidth(), newWidth),
+      );
       setWidth(clampedWidth);
       localStorage.setItem(
         "archestra-right-panel-width",
@@ -136,7 +153,20 @@ export function RightSidePanel({
       document.body.style.cursor = "";
       document.body.style.userSelect = "";
     };
-  }, [isResizing]);
+  }, [isResizing, getMaxWidth]);
+
+  // Keep the panel within bounds when the window resizes (or on first mount),
+  // so a previously-saved width never squashes the chat column.
+  useEffect(() => {
+    const clamp = () => {
+      setWidth((prev) =>
+        Math.max(MIN_PANEL_WIDTH, Math.min(getMaxWidth(), prev)),
+      );
+    };
+    clamp();
+    window.addEventListener("resize", clamp);
+    return () => window.removeEventListener("resize", clamp);
+  }, [getMaxWidth]);
 
   const {
     canvases,
@@ -182,10 +212,8 @@ export function RightSidePanel({
         aria-orientation="vertical"
         aria-label="Resize panel. Use arrow keys to resize, hold shift for larger steps."
         aria-valuenow={width}
-        aria-valuemin={300}
-        aria-valuemax={
-          typeof window !== "undefined" ? window.innerWidth * 0.7 : 1000
-        }
+        aria-valuemin={MIN_PANEL_WIDTH}
+        aria-valuemax={getMaxWidth()}
         tabIndex={0}
       >
         <div className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-1/2 opacity-0 hover:opacity-100 transition-opacity">

@@ -195690,10 +195690,12 @@
                 "properties": {
                   "name": {
                     "type": "string",
-                    "minLength": 1
+                    "minLength": 1,
+                    "maxLength": 256
                   },
                   "description": {
-                    "type": "string"
+                    "type": "string",
+                    "maxLength": 500
                   }
                 },
                 "required": [
@@ -196382,10 +196384,12 @@
                 "properties": {
                   "name": {
                     "type": "string",
-                    "minLength": 1
+                    "minLength": 1,
+                    "maxLength": 256
                   },
                   "description": {
-                    "type": "string"
+                    "type": "string",
+                    "maxLength": 500
                   },
                   "convertToolResultsToToon": {
                     "type": "boolean"
@@ -197326,11 +197330,15 @@
                 "type": "object",
                 "properties": {
                   "userId": {
-                    "type": "string"
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
                   },
                   "role": {
                     "default": "member",
-                    "type": "string"
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
                   }
                 },
                 "required": [
@@ -198214,7 +198222,8 @@
                 "properties": {
                   "groupIdentifier": {
                     "type": "string",
-                    "minLength": 1
+                    "minLength": 1,
+                    "maxLength": 256
                   }
                 },
                 "required": [
@@ -210520,7 +210529,8 @@
                 "properties": {
                   "vaultPath": {
                     "type": "string",
-                    "minLength": 1
+                    "minLength": 1,
+                    "maxLength": 1024
                   }
                 },
                 "required": [

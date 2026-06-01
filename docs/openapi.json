@@ -35730,6 +35730,9 @@
                                     }
                                   ]
                                 },
+                                "clonedPendingDiscovery": {
+                                  "type": "boolean"
+                                },
                                 "policiesAutoConfiguredAt": {
                                   "nullable": true,
                                   "type": "string",
@@ -35765,6 +35768,7 @@
                                 "name",
                                 "description",
                                 "meta",
+                                "clonedPendingDiscovery",
                                 "policiesAutoConfiguredAt",
                                 "policiesAutoConfiguringStartedAt",
                                 "policiesAutoConfiguredReasoning",
@@ -36785,6 +36789,9 @@
                               }
                             ]
                           },
+                          "clonedPendingDiscovery": {
+                            "type": "boolean"
+                          },
                           "policiesAutoConfiguredAt": {
                             "nullable": true,
                             "type": "string",
@@ -36820,6 +36827,7 @@
                           "name",
                           "description",
                           "meta",
+                          "clonedPendingDiscovery",
                           "policiesAutoConfiguredAt",
                           "policiesAutoConfiguringStartedAt",
                           "policiesAutoConfiguredReasoning",
@@ -37598,6 +37606,9 @@
                                 }
                               ]
                             },
+                            "clonedPendingDiscovery": {
+                              "type": "boolean"
+                            },
                             "policiesAutoConfiguredAt": {
                               "nullable": true,
                               "type": "string",
@@ -37633,6 +37644,7 @@
                             "name",
                             "description",
                             "meta",
+                            "clonedPendingDiscovery",
                             "policiesAutoConfiguredAt",
                             "policiesAutoConfiguringStartedAt",
                             "policiesAutoConfiguredReasoning",
@@ -38329,6 +38341,9 @@
                               }
                             ]
                           },
+                          "clonedPendingDiscovery": {
+                            "type": "boolean"
+                          },
                           "policiesAutoConfiguredAt": {
                             "nullable": true,
                             "type": "string",
@@ -38364,6 +38379,7 @@
                           "name",
                           "description",
                           "meta",
+                          "clonedPendingDiscovery",
                           "policiesAutoConfiguredAt",
                           "policiesAutoConfiguringStartedAt",
                           "policiesAutoConfiguredReasoning",
@@ -39060,6 +39076,9 @@
                               }
                             ]
                           },
+                          "clonedPendingDiscovery": {
+                            "type": "boolean"
+                          },
                           "policiesAutoConfiguredAt": {
                             "nullable": true,
                             "type": "string",
@@ -39095,6 +39114,7 @@
                           "name",
                           "description",
                           "meta",
+                          "clonedPendingDiscovery",
                           "policiesAutoConfiguredAt",
                           "policiesAutoConfiguringStartedAt",
                           "policiesAutoConfiguredReasoning",
@@ -40133,6 +40153,9 @@
                                   }
                                 ]
                               },
+                              "clonedPendingDiscovery": {
+                                "type": "boolean"
+                              },
                               "policiesAutoConfiguredAt": {
                                 "nullable": true,
                                 "type": "string",
@@ -40168,6 +40191,7 @@
                               "name",
                               "description",
                               "meta",
+                              "clonedPendingDiscovery",
                               "policiesAutoConfiguredAt",
                               "policiesAutoConfiguringStartedAt",
                               "policiesAutoConfiguredReasoning",
@@ -40911,6 +40935,9 @@
                               }
                             ]
                           },
+                          "clonedPendingDiscovery": {
+                            "type": "boolean"
+                          },
                           "policiesAutoConfiguredAt": {
                             "nullable": true,
                             "type": "string",
@@ -40946,6 +40973,7 @@
                           "name",
                           "description",
                           "meta",
+                          "clonedPendingDiscovery",
                           "policiesAutoConfiguredAt",
                           "policiesAutoConfiguringStartedAt",
                           "policiesAutoConfiguredReasoning",
@@ -41923,6 +41951,9 @@
                               }
                             ]
                           },
+                          "clonedPendingDiscovery": {
+                            "type": "boolean"
+                          },
                           "policiesAutoConfiguredAt": {
                             "nullable": true,
                             "type": "string",
@@ -41958,6 +41989,7 @@
                           "name",
                           "description",
                           "meta",
+                          "clonedPendingDiscovery",
                           "policiesAutoConfiguredAt",
                           "policiesAutoConfiguringStartedAt",
                           "policiesAutoConfiguredReasoning",
@@ -42938,6 +42970,9 @@
                               }
                             ]
                           },
+                          "clonedPendingDiscovery": {
+                            "type": "boolean"
+                          },
                           "policiesAutoConfiguredAt": {
                             "nullable": true,
                             "type": "string",
@@ -42973,6 +43008,7 @@
                           "name",
                           "description",
                           "meta",
+                          "clonedPendingDiscovery",
                           "policiesAutoConfiguredAt",
                           "policiesAutoConfiguringStartedAt",
                           "policiesAutoConfiguredReasoning",
@@ -44278,6 +44314,9 @@
                               }
                             ]
                           },
+                          "clonedPendingDiscovery": {
+                            "type": "boolean"
+                          },
                           "policiesAutoConfiguredAt": {
                             "nullable": true,
                             "type": "string",
@@ -44313,6 +44352,7 @@
                           "name",
                           "description",
                           "meta",
+                          "clonedPendingDiscovery",
                           "policiesAutoConfiguredAt",
                           "policiesAutoConfiguringStartedAt",
                           "policiesAutoConfiguredReasoning",
@@ -47992,6 +48032,9 @@
                           }
                         ]
                       },
+                      "clonedPendingDiscovery": {
+                        "type": "boolean"
+                      },
                       "policiesAutoConfiguredAt": {
                         "nullable": true,
                         "type": "string",
@@ -48041,6 +48084,7 @@
                       "name",
                       "description",
                       "meta",
+                      "clonedPendingDiscovery",
                       "policiesAutoConfiguredAt",
                       "policiesAutoConfiguringStartedAt",
                       "policiesAutoConfiguredReasoning",
@@ -199872,6 +199916,9 @@
                           }
                         ]
                       },
+                      "clonedPendingDiscovery": {
+                        "type": "boolean"
+                      },
                       "policiesAutoConfiguredAt": {
                         "nullable": true,
                         "type": "string",
@@ -199940,6 +199987,7 @@
                       "name",
                       "description",
                       "meta",
+                      "clonedPendingDiscovery",
                       "policiesAutoConfiguredAt",
                       "policiesAutoConfiguringStartedAt",
                       "policiesAutoConfiguredReasoning",

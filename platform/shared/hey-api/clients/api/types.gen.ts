@@ -10911,6 +10911,7 @@ export type GetAgentsResponses = {
                 meta: string | number | boolean | null | {
                     [key: string]: unknown;
                 } | Array<unknown> | null;
+                clonedPendingDiscovery: boolean;
                 policiesAutoConfiguredAt: string | null;
                 policiesAutoConfiguringStartedAt: string | null;
                 policiesAutoConfiguredReasoning: string | null;
@@ -11139,6 +11140,7 @@ export type CreateAgentResponses = {
             meta: string | number | boolean | null | {
                 [key: string]: unknown;
             } | Array<unknown> | null;
+            clonedPendingDiscovery: boolean;
             policiesAutoConfiguredAt: string | null;
             policiesAutoConfiguringStartedAt: string | null;
             policiesAutoConfiguredReasoning: string | null;
@@ -11336,6 +11338,7 @@ export type GetAllAgentsResponses = {
             meta: string | number | boolean | null | {
                 [key: string]: unknown;
             } | Array<unknown> | null;
+            clonedPendingDiscovery: boolean;
             policiesAutoConfiguredAt: string | null;
             policiesAutoConfiguringStartedAt: string | null;
             policiesAutoConfiguredReasoning: string | null;
@@ -11508,6 +11511,7 @@ export type GetDefaultMcpGatewayResponses = {
             meta: string | number | boolean | null | {
                 [key: string]: unknown;
             } | Array<unknown> | null;
+            clonedPendingDiscovery: boolean;
             policiesAutoConfiguredAt: string | null;
             policiesAutoConfiguringStartedAt: string | null;
             policiesAutoConfiguredReasoning: string | null;
@@ -11680,6 +11684,7 @@ export type GetDefaultLlmProxyResponses = {
             meta: string | number | boolean | null | {
                 [key: string]: unknown;
             } | Array<unknown> | null;
+            clonedPendingDiscovery: boolean;
             policiesAutoConfiguredAt: string | null;
             policiesAutoConfiguringStartedAt: string | null;
             policiesAutoConfiguredReasoning: string | null;
@@ -11931,6 +11936,7 @@ export type ImportAgentResponses = {
                 meta: string | number | boolean | null | {
                     [key: string]: unknown;
                 } | Array<unknown> | null;
+                clonedPendingDiscovery: boolean;
                 policiesAutoConfiguredAt: string | null;
                 policiesAutoConfiguringStartedAt: string | null;
                 policiesAutoConfiguredReasoning: string | null;
@@ -12196,6 +12202,7 @@ export type GetAgentResponses = {
             meta: string | number | boolean | null | {
                 [key: string]: unknown;
             } | Array<unknown> | null;
+            clonedPendingDiscovery: boolean;
             policiesAutoConfiguredAt: string | null;
             policiesAutoConfiguringStartedAt: string | null;
             policiesAutoConfiguredReasoning: string | null;
@@ -12417,6 +12424,7 @@ export type UpdateAgentResponses = {
             meta: string | number | boolean | null | {
                 [key: string]: unknown;
             } | Array<unknown> | null;
+            clonedPendingDiscovery: boolean;
             policiesAutoConfiguredAt: string | null;
             policiesAutoConfiguringStartedAt: string | null;
             policiesAutoConfiguredReasoning: string | null;
@@ -12591,6 +12599,7 @@ export type CloneAgentResponses = {
             meta: string | number | boolean | null | {
                 [key: string]: unknown;
             } | Array<unknown> | null;
+            clonedPendingDiscovery: boolean;
             policiesAutoConfiguredAt: string | null;
             policiesAutoConfiguringStartedAt: string | null;
             policiesAutoConfiguredReasoning: string | null;
@@ -12926,6 +12935,7 @@ export type RestoreAgentResponses = {
             meta: string | number | boolean | null | {
                 [key: string]: unknown;
             } | Array<unknown> | null;
+            clonedPendingDiscovery: boolean;
             policiesAutoConfiguredAt: string | null;
             policiesAutoConfiguringStartedAt: string | null;
             policiesAutoConfiguredReasoning: string | null;
@@ -13998,6 +14008,7 @@ export type GetAgentToolsResponses = {
         meta: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown> | null;
+        clonedPendingDiscovery: boolean;
         policiesAutoConfiguredAt: string | null;
         policiesAutoConfiguringStartedAt: string | null;
         policiesAutoConfiguredReasoning: string | null;
@@ -52893,6 +52904,7 @@ export type GetToolsResponses = {
         meta: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown> | null;
+        clonedPendingDiscovery: boolean;
         policiesAutoConfiguredAt: string | null;
         policiesAutoConfiguringStartedAt: string | null;
         policiesAutoConfiguredReasoning: string | null;

@@ -742,49 +742,72 @@ class ToolModel {
       .where(eq(schema.toolsTable.catalogId, sourceCatalogId));
     if (sourceTools.length === 0) return;
 
-    for (const sourceTool of sourceTools) {
-      const rawName = ToolModel.unslugifyName(sourceTool.name);
-      const [clonedTool] = await db
-        .insert(schema.toolsTable)
-        .values({
+    // Bulk-insert the cloned tools in one statement. The target name is
+    // deterministic and unique per source tool (the source's tool names are
+    // unique within its catalog, and re-slugifying the un-prefixed name is
+    // idempotent), so we use it to map each source tool to its clone.
+    const clonedNameBySourceId = new Map(
+      sourceTools.map((t) => [
+        t.id,
+        ToolModel.slugifyName(
+          targetCatalogName,
+          ToolModel.unslugifyName(t.name),
+        ),
+      ]),
+    );
+    const clonedTools = await db
+      .insert(schema.toolsTable)
+      .values(
+        sourceTools.map((t) => ({
           catalogId: targetCatalogId,
-          name: ToolModel.slugifyName(targetCatalogName, rawName),
-          parameters: sourceTool.parameters,
-          description: sourceTool.description,
-          meta: sourceTool.meta,
+          name: clonedNameBySourceId.get(t.id) as string,
+          parameters: t.parameters,
+          description: t.description,
+          meta: t.meta,
           clonedPendingDiscovery: true,
-        })
-        .returning();
+        })),
+      )
+      .returning();
+    const clonedIdByName = new Map(clonedTools.map((t) => [t.name, t.id]));
+    const clonedIdBySourceId = new Map(
+      sourceTools.map((t) => [
+        t.id,
+        clonedIdByName.get(clonedNameBySourceId.get(t.id) as string) as string,
+      ]),
+    );
 
-      const invocationPolicies = await db
-        .select()
-        .from(schema.toolInvocationPoliciesTable)
-        .where(eq(schema.toolInvocationPoliciesTable.toolId, sourceTool.id));
-      if (invocationPolicies.length > 0) {
-        await db.insert(schema.toolInvocationPoliciesTable).values(
-          invocationPolicies.map((p) => ({
-            toolId: clonedTool.id,
-            conditions: p.conditions,
-            action: p.action,
-            reason: p.reason,
-          })),
-        );
-      }
+    const sourceToolIds = sourceTools.map((t) => t.id);
 
-      const trustedPolicies = await db
-        .select()
-        .from(schema.trustedDataPoliciesTable)
-        .where(eq(schema.trustedDataPoliciesTable.toolId, sourceTool.id));
-      if (trustedPolicies.length > 0) {
-        await db.insert(schema.trustedDataPoliciesTable).values(
-          trustedPolicies.map((p) => ({
-            toolId: clonedTool.id,
-            conditions: p.conditions,
-            action: p.action,
-            description: p.description,
-          })),
-        );
-      }
+    // Copy both policy types with one bulk read + one bulk write each,
+    // remapping every policy's toolId from the source tool to its clone.
+    const invocationPolicies = await db
+      .select()
+      .from(schema.toolInvocationPoliciesTable)
+      .where(inArray(schema.toolInvocationPoliciesTable.toolId, sourceToolIds));
+    if (invocationPolicies.length > 0) {
+      await db.insert(schema.toolInvocationPoliciesTable).values(
+        invocationPolicies.map((p) => ({
+          toolId: clonedIdBySourceId.get(p.toolId) as string,
+          conditions: p.conditions,
+          action: p.action,
+          reason: p.reason,
+        })),
+      );
+    }
+
+    const trustedPolicies = await db
+      .select()
+      .from(schema.trustedDataPoliciesTable)
+      .where(inArray(schema.trustedDataPoliciesTable.toolId, sourceToolIds));
+    if (trustedPolicies.length > 0) {
+      await db.insert(schema.trustedDataPoliciesTable).values(
+        trustedPolicies.map((p) => ({
+          toolId: clonedIdBySourceId.get(p.toolId) as string,
+          conditions: p.conditions,
+          action: p.action,
+          description: p.description,
+        })),
+      );
     }
   }
 

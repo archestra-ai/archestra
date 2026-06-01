@@ -1,9 +1,10 @@
 "use client";
 
 import type { archestraApiTypes } from "@shared";
-import { ArrowLeft, Search } from "lucide-react";
-import { useState } from "react";
+import { ArrowLeft, Copy, Search } from "lucide-react";
+import { useEffect, useState } from "react";
 import { FormDialog } from "@/components/form-dialog";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { DialogBody, DialogStickyFooter } from "@/components/ui/dialog";
 import {
@@ -22,6 +23,8 @@ interface CreateCatalogDialogProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess?: (createdItem: CatalogItem) => void;
+  /** When set, seeds the form for a "clone" of an existing catalog item. */
+  cloneValues?: McpCatalogFormValues;
 }
 
 type WizardStep = "form" | "catalog-browse";
@@ -30,6 +33,7 @@ export function CreateCatalogDialog({
   isOpen,
   onClose,
   onSuccess,
+  cloneValues,
 }: CreateCatalogDialogProps) {
   const [step, setStep] = useState<WizardStep>("form");
   const [prefilledValues, setPrefilledValues] = useState<
@@ -37,6 +41,16 @@ export function CreateCatalogDialog({
   >(undefined);
   const createMutation = useCreateInternalMcpCatalogItem();
   const { data: catalogItems } = useInternalMcpCatalog();
+
+  // Seed the form when opened for a clone. cloneValues is a new object per
+  // clone action; the parent clears it on close so reopening via "Add Server"
+  // starts blank.
+  useEffect(() => {
+    if (isOpen && cloneValues) {
+      setPrefilledValues(cloneValues);
+      setStep("form");
+    }
+  }, [isOpen, cloneValues]);
 
   const handleClose = () => {
     setStep("form");
@@ -114,6 +128,18 @@ export function CreateCatalogDialog({
           onSubmit={onSubmit}
           footer={footer}
           catalogButton={catalogButton}
+          notice={
+            cloneValues ? (
+              <Alert>
+                <Copy className="h-4 w-4" />
+                <AlertDescription>
+                  Cloning an existing server — its configuration (including
+                  secrets) is pre-filled here. Adjust anything you like, then
+                  save to create a new registry entry.
+                </AlertDescription>
+              </Alert>
+            ) : undefined
+          }
           formValues={prefilledValues}
         />
       )}

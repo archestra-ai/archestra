@@ -24,8 +24,15 @@ export const environmentKeys = {
   list: () => [...environmentKeys.all, "list"] as const,
 };
 
+export type EnvironmentList =
+  archestraApiTypes.ListEnvironmentsResponses["200"];
 export type EnvironmentWithAssignedCount =
-  archestraApiTypes.ListEnvironmentsResponses["200"][number];
+  EnvironmentList["environments"][number];
+
+const EMPTY_ENVIRONMENT_LIST: EnvironmentList = {
+  environments: [],
+  defaultAssignedCatalogCount: 0,
+};
 
 export function useEnvironments(enabled = true) {
   return useQuery({
@@ -34,9 +41,9 @@ export function useEnvironments(enabled = true) {
       const { data, error } = await archestraApiSdk.listEnvironments();
       if (error) {
         handleApiError(error);
-        return [] as EnvironmentWithAssignedCount[];
+        return EMPTY_ENVIRONMENT_LIST;
       }
-      return data ?? [];
+      return data ?? EMPTY_ENVIRONMENT_LIST;
     },
     enabled,
     staleTime: 5 * 60 * 1000,

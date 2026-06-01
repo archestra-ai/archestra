@@ -17,6 +17,15 @@ export const EnvironmentWithAssignedCountSchema =
     assignedCatalogCount: z.number().int().nonnegative(),
   });
 
+/**
+ * Full listing payload: the org's environments plus the count of catalog items
+ * with no environment (which implicitly belong to the default environment).
+ */
+export const EnvironmentListSchema = z.object({
+  environments: z.array(EnvironmentWithAssignedCountSchema),
+  defaultAssignedCatalogCount: z.number().int().nonnegative(),
+});
+
 const KubernetesNamespaceSchema = z
   .string()
   .trim()
@@ -49,5 +58,6 @@ export type Environment = z.infer<typeof SelectEnvironmentSchema>;
 export type EnvironmentWithAssignedCount = z.infer<
   typeof EnvironmentWithAssignedCountSchema
 >;
+export type EnvironmentList = z.infer<typeof EnvironmentListSchema>;
 export type CreateEnvironment = z.infer<typeof CreateEnvironmentSchema>;
 export type UpdateEnvironment = z.infer<typeof UpdateEnvironmentSchema>;

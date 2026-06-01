@@ -23417,18 +23417,21 @@ export type ListEnvironmentsResponses = {
     /**
      * Default Response
      */
-    200: Array<{
-        id: string;
-        organizationId: string;
-        name: string;
-        description: string | null;
-        namespace: string | null;
-        restricted: boolean;
-        sortOrder: number;
-        createdAt: string;
-        updatedAt: string;
-        assignedCatalogCount: number;
-    }>;
+    200: {
+        environments: Array<{
+            id: string;
+            organizationId: string;
+            name: string;
+            description: string | null;
+            namespace: string | null;
+            restricted: boolean;
+            sortOrder: number;
+            createdAt: string;
+            updatedAt: string;
+            assignedCatalogCount: number;
+        }>;
+        defaultAssignedCatalogCount: number;
+    };
 };
 
 export type ListEnvironmentsResponse = ListEnvironmentsResponses[keyof ListEnvironmentsResponses];

@@ -50,7 +50,10 @@ import {
 } from "@/lib/organization.query";
 
 export function EnvironmentsSection({ canEdit }: { canEdit: boolean }) {
-  const { data: environments = [], isLoading } = useEnvironments();
+  const { data: environmentList, isLoading } = useEnvironments();
+  const environments = environmentList?.environments ?? [];
+  const defaultAssignedCatalogCount =
+    environmentList?.defaultAssignedCatalogCount ?? 0;
   const defaultEnvironment = useDefaultEnvironment();
   const [createOpen, setCreateOpen] = useState(false);
   const [editDefaultOpen, setEditDefaultOpen] = useState(false);
@@ -102,7 +105,9 @@ export function EnvironmentsSection({ canEdit }: { canEdit: boolean }) {
               <TableCell>
                 <NamespaceCell namespace={defaultEnvironment.namespace} />
               </TableCell>
-              <TableCell className="text-muted-foreground">—</TableCell>
+              <TableCell className="text-muted-foreground">
+                {defaultAssignedCatalogCount}
+              </TableCell>
               <TableCell>
                 {defaultEnvironment.restricted ? (
                   <Badge variant="secondary">Restricted</Badge>

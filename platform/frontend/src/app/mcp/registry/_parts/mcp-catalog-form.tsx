@@ -524,7 +524,8 @@ export function McpCatalogForm({
     mcpServerInstallation: ["admin"],
   });
   const { data: teams } = useTeams();
-  const { data: environments } = useEnvironments();
+  const { data: environmentList } = useEnvironments();
+  const environments = environmentList?.environments;
   const { data: canDeployRestricted } = useHasPermissions({
     environment: ["admin"],
   });

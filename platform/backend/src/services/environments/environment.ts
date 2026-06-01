@@ -3,7 +3,7 @@ import {
   ApiError,
   type CreateEnvironment,
   type Environment,
-  type EnvironmentWithAssignedCount,
+  type EnvironmentList,
   type UpdateEnvironment,
 } from "@/types";
 
@@ -11,8 +11,12 @@ import {
 
 export async function listEnvironments(
   organizationId: string,
-): Promise<EnvironmentWithAssignedCount[]> {
-  return EnvironmentModel.listForOrganization(organizationId);
+): Promise<EnvironmentList> {
+  const [environments, defaultAssignedCatalogCount] = await Promise.all([
+    EnvironmentModel.listForOrganization(organizationId),
+    EnvironmentModel.countDefaultAssigned(organizationId),
+  ]);
+  return { environments, defaultAssignedCatalogCount };
 }
 
 export async function createEnvironment(params: {

@@ -1775,7 +1775,7 @@ export const deepseekChatCompletionsWithAgent = <ThrowOnError extends boolean = 
 });
 
 /**
- * List org-level deployment environments. Includes assignedCatalogCount for delete-confirmation UI.
+ * List org-level deployment environments with their assigned catalog counts, plus the count of catalog items with no environment (the default environment).
  *
  * Authentication:
  *

@@ -19,7 +19,7 @@ import {
   CreateEnvironmentSchema,
   constructResponseSchema,
   DeleteObjectResponseSchema,
-  EnvironmentWithAssignedCountSchema,
+  EnvironmentListSchema,
   SelectEnvironmentSchema,
   UpdateEnvironmentSchema,
   UuidIdSchema,
@@ -34,11 +34,9 @@ const environmentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.ListEnvironments,
         description:
-          "List org-level deployment environments. Includes assignedCatalogCount for delete-confirmation UI.",
+          "List org-level deployment environments with their assigned catalog counts, plus the count of catalog items with no environment (the default environment).",
         tags: ["Organization"],
-        response: constructResponseSchema(
-          z.array(EnvironmentWithAssignedCountSchema),
-        ),
+        response: constructResponseSchema(EnvironmentListSchema),
       },
     },
     async ({ organizationId }, reply) => {

@@ -16,6 +16,21 @@ vi.mock("@/auth", () => ({
   hasPermission: vi.fn(),
 }));
 
+// Keep the K8s runtime ENABLED but stub the actual cluster calls, so the route
+// exercises its real namespace-validation branch without depending on whether
+// the machine running the test has a reachable kubeconfig (it does locally, not
+// in CI). validateNamespace resolves → the namespace is treated as valid.
+vi.mock("@/k8s/mcp-server-runtime/manager", () => ({
+  default: {
+    isEnabled: true,
+    validateNamespace: vi.fn().mockResolvedValue(undefined),
+    testNamespaceAccess: vi.fn().mockResolvedValue({ accessible: true }),
+    getOrLoadDeployment: vi.fn().mockResolvedValue(undefined),
+    restartServer: vi.fn().mockResolvedValue(undefined),
+    reinstallSharedDeployment: vi.fn().mockResolvedValue(undefined),
+  },
+}));
+
 import { hasPermission } from "@/auth";
 
 const mockHasPermission = hasPermission as Mock;
@@ -81,8 +96,9 @@ describe("environment routes", () => {
       url: "/api/organization/environments",
     });
     expect(list.statusCode).toBe(200);
-    expect(list.json()).toHaveLength(1);
-    expect(list.json()[0].assignedCatalogCount).toBe(0);
+    expect(list.json().environments).toHaveLength(1);
+    expect(list.json().environments[0].assignedCatalogCount).toBe(0);
+    expect(list.json().defaultAssignedCatalogCount).toBe(0);
 
     const updated = await app.inject({
       method: "PATCH",

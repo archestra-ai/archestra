@@ -1,4 +1,4 @@
-import { and, asc, count, eq, sql } from "drizzle-orm";
+import { and, asc, count, eq, isNull, ne, or, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 
 // === Public API ===
@@ -135,6 +135,32 @@ class EnvironmentModel {
       .select({ count: count(schema.internalMcpCatalogTable.id) })
       .from(schema.internalMcpCatalogTable)
       .where(eq(schema.internalMcpCatalogTable.environmentId, environmentId));
+    return row?.count ?? 0;
+  }
+
+  /**
+   * Count top-level catalog items with no environment assigned — these
+   * implicitly belong to the org's default environment. Mirrors what's counted
+   * per real environment: built-in catalogs (e.g. the Archestra tools) and
+   * preset children are excluded. Catalog items can carry a null
+   * organization_id (they're org-scoped via team membership), so we include
+   * those alongside the org's own items.
+   */
+  static async countDefaultAssigned(organizationId: string): Promise<number> {
+    const [row] = await db
+      .select({ count: count(schema.internalMcpCatalogTable.id) })
+      .from(schema.internalMcpCatalogTable)
+      .where(
+        and(
+          isNull(schema.internalMcpCatalogTable.environmentId),
+          isNull(schema.internalMcpCatalogTable.parentCatalogItemId),
+          ne(schema.internalMcpCatalogTable.serverType, "builtin"),
+          or(
+            eq(schema.internalMcpCatalogTable.organizationId, organizationId),
+            isNull(schema.internalMcpCatalogTable.organizationId),
+          ),
+        ),
+      );
     return row?.count ?? 0;
   }
 

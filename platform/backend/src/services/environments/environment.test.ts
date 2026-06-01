@@ -22,6 +22,41 @@ describe("EnvironmentService", () => {
     ).rejects.toMatchObject({ statusCode: 409 });
   });
 
+  test("listEnvironments reports the default (no-environment) assigned count, excluding built-ins and env-assigned items", async ({
+    makeOrganization,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const createItem = (
+      name: string,
+      environmentId: string | null,
+      serverType: "remote" | "builtin" = "remote",
+    ) =>
+      InternalMcpCatalogModel.create(
+        {
+          name,
+          serverType,
+          serverUrl: "https://api.example.com/mcp/",
+          scope: "org",
+          environmentId,
+        },
+        { organizationId: org.id, authorId: user.id },
+      );
+
+    await createItem("no-env-1", null);
+    await createItem("no-env-2", null);
+    await createItem("builtin-no-env", null, "builtin"); // excluded
+    const env = await createEnvironment({
+      organizationId: org.id,
+      data: { name: "Prod" },
+    });
+    await createItem("in-env", env.id); // excluded — assigned to an environment
+
+    const listed = await listEnvironments(org.id);
+    expect(listed.defaultAssignedCatalogCount).toBe(2);
+  });
+
   test("updateEnvironment throws 404 for unknown id", async ({
     makeOrganization,
   }) => {
@@ -71,7 +106,7 @@ describe("EnvironmentService", () => {
 
     // Still present after the blocked delete.
     const listed = await listEnvironments(org.id);
-    expect(listed.some((e) => e.id === env.id)).toBe(true);
+    expect(listed.environments.some((e) => e.id === env.id)).toBe(true);
   });
 
   test("deleteEnvironment succeeds when no catalog items are assigned", async ({
@@ -86,7 +121,7 @@ describe("EnvironmentService", () => {
       deleteEnvironment({ id: env.id, organizationId: org.id }),
     ).resolves.toBeUndefined();
     const listed = await listEnvironments(org.id);
-    expect(listed.some((e) => e.id === env.id)).toBe(false);
+    expect(listed.environments.some((e) => e.id === env.id)).toBe(false);
   });
 
   test("createEnvironment persists restricted=true and lists it back", async ({
@@ -100,7 +135,7 @@ describe("EnvironmentService", () => {
     expect(created.restricted).toBe(true);
 
     const listed = await listEnvironments(org.id);
-    const prod = listed.find((e) => e.id === created.id);
+    const prod = listed.environments.find((e) => e.id === created.id);
     expect(prod?.restricted).toBe(true);
   });
 

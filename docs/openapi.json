@@ -81284,9 +81284,6 @@
                         "nullable": true,
                         "type": "string"
                       },
-                      "slug": {
-                        "type": "string"
-                      },
                       "namespace": {
                         "nullable": true,
                         "type": "string"
@@ -81318,7 +81315,6 @@
                       "organizationId",
                       "name",
                       "description",
-                      "slug",
                       "namespace",
                       "restricted",
                       "sortOrder",
@@ -81573,7 +81569,7 @@
         "tags": [
           "Organization"
         ],
-        "description": "Create an org-level deployment environment. Name and derived slug are immutable after creation.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`environment:create`: Create deployment environments",
+        "description": "Create an org-level deployment environment.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`environment:create`: Create deployment environments",
         "requestBody": {
           "required": true,
           "content": {
@@ -81594,7 +81590,9 @@
                   "namespace": {
                     "nullable": true,
                     "type": "string",
-                    "maxLength": 253
+                    "minLength": 1,
+                    "maxLength": 63,
+                    "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?$"
                   },
                   "restricted": {
                     "type": "boolean"
@@ -81630,9 +81628,6 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "slug": {
-                      "type": "string"
-                    },
                     "namespace": {
                       "nullable": true,
                       "type": "string"
@@ -81659,7 +81654,6 @@
                     "organizationId",
                     "name",
                     "description",
-                    "slug",
                     "namespace",
                     "restricted",
                     "sortOrder",
@@ -81914,7 +81908,7 @@
         "tags": [
           "Organization"
         ],
-        "description": "Update an environment's description and namespace. Name and slug are immutable.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`environment:update`: Modify deployment environment namespace",
+        "description": "Update an environment's name, description, namespace, and restricted flag. When the namespace changes and the runtime is enabled, all MCP servers assigned to this environment are restarted in the new namespace.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`environment:update`: Modify deployment environment namespace",
         "requestBody": {
           "required": true,
           "content": {
@@ -81922,6 +81916,11 @@
               "schema": {
                 "type": "object",
                 "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 50
+                  },
                   "description": {
                     "nullable": true,
                     "type": "string",
@@ -81930,7 +81929,9 @@
                   "namespace": {
                     "nullable": true,
                     "type": "string",
-                    "maxLength": 253
+                    "minLength": 1,
+                    "maxLength": 63,
+                    "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?$"
                   },
                   "restricted": {
                     "type": "boolean"
@@ -81975,9 +81976,6 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "slug": {
-                      "type": "string"
-                    },
                     "namespace": {
                       "nullable": true,
                       "type": "string"
@@ -82004,7 +82002,6 @@
                     "organizationId",
                     "name",
                     "description",
-                    "slug",
                     "namespace",
                     "restricted",
                     "sortOrder",
@@ -82257,7 +82254,7 @@
         "tags": [
           "Organization"
         ],
-        "description": "Delete an org-level environment. Catalog items assigned to it fall back to the virtual Default environment.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`environment:delete`: Delete deployment environments",
+        "description": "Delete an org-level environment. Fails with 409 if any catalog items are still assigned to it.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`environment:delete`: Delete deployment environments",
         "parameters": [
           {
             "schema": {
@@ -82523,6 +82520,307 @@
           "kind": "static",
           "permissions": [
             "environment:delete"
+          ]
+        }
+      }
+    },
+    "/api/organization/environments/validate-namespace": {
+      "get": {
+        "operationId": "validateEnvironmentNamespace",
+        "tags": [
+          "Organization"
+        ],
+        "description": "Probe whether a Kubernetes namespace exists and is reachable. Returns accessible:true when the runtime is disabled (namespace will be stored but not verified).\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`environment:read`: View deployment environments",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "query",
+            "name": "namespace",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "accessible": {
+                          "type": "boolean",
+                          "enum": [
+                            true
+                          ]
+                        }
+                      },
+                      "required": [
+                        "accessible"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "accessible": {
+                          "type": "boolean",
+                          "enum": [
+                            false
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "accessible",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "environment:read"
           ]
         }
       }
@@ -166266,6 +166564,9 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "defaultEnvironmentRestricted": {
+                      "type": "boolean"
+                    },
                     "skillToolsEnabled": {
                       "type": "boolean"
                     },
@@ -166331,6 +166632,7 @@
                     "defaultEnvironmentName",
                     "defaultEnvironmentNamespace",
                     "defaultEnvironmentDescription",
+                    "defaultEnvironmentRestricted",
                     "skillToolsEnabled",
                     "skillSlashCommandsEnabled",
                     "presetEntityDefaultValidationRegex"
@@ -167138,6 +167440,9 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "defaultEnvironmentRestricted": {
+                      "type": "boolean"
+                    },
                     "skillToolsEnabled": {
                       "type": "boolean"
                     },
@@ -167203,6 +167508,7 @@
                     "defaultEnvironmentName",
                     "defaultEnvironmentNamespace",
                     "defaultEnvironmentDescription",
+                    "defaultEnvironmentRestricted",
                     "skillToolsEnabled",
                     "skillSlashCommandsEnabled",
                     "presetEntityDefaultValidationRegex"
@@ -168282,6 +168588,9 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "defaultEnvironmentRestricted": {
+                      "type": "boolean"
+                    },
                     "skillToolsEnabled": {
                       "type": "boolean"
                     },
@@ -168347,6 +168656,7 @@
                     "defaultEnvironmentName",
                     "defaultEnvironmentNamespace",
                     "defaultEnvironmentDescription",
+                    "defaultEnvironmentRestricted",
                     "skillToolsEnabled",
                     "skillSlashCommandsEnabled",
                     "presetEntityDefaultValidationRegex"
@@ -169036,6 +169346,9 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "defaultEnvironmentRestricted": {
+                      "type": "boolean"
+                    },
                     "skillToolsEnabled": {
                       "type": "boolean"
                     },
@@ -169101,6 +169414,7 @@
                     "defaultEnvironmentName",
                     "defaultEnvironmentNamespace",
                     "defaultEnvironmentDescription",
+                    "defaultEnvironmentRestricted",
                     "skillToolsEnabled",
                     "skillSlashCommandsEnabled",
                     "presetEntityDefaultValidationRegex"
@@ -169777,6 +170091,9 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "defaultEnvironmentRestricted": {
+                      "type": "boolean"
+                    },
                     "skillToolsEnabled": {
                       "type": "boolean"
                     },
@@ -169842,6 +170159,7 @@
                     "defaultEnvironmentName",
                     "defaultEnvironmentNamespace",
                     "defaultEnvironmentDescription",
+                    "defaultEnvironmentRestricted",
                     "skillToolsEnabled",
                     "skillSlashCommandsEnabled",
                     "presetEntityDefaultValidationRegex"
@@ -170580,6 +170898,9 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "defaultEnvironmentRestricted": {
+                      "type": "boolean"
+                    },
                     "skillToolsEnabled": {
                       "type": "boolean"
                     },
@@ -170645,6 +170966,7 @@
                     "defaultEnvironmentName",
                     "defaultEnvironmentNamespace",
                     "defaultEnvironmentDescription",
+                    "defaultEnvironmentRestricted",
                     "skillToolsEnabled",
                     "skillSlashCommandsEnabled",
                     "presetEntityDefaultValidationRegex"
@@ -171316,6 +171638,9 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "defaultEnvironmentRestricted": {
+                      "type": "boolean"
+                    },
                     "skillToolsEnabled": {
                       "type": "boolean"
                     },
@@ -171381,6 +171706,7 @@
                     "defaultEnvironmentName",
                     "defaultEnvironmentNamespace",
                     "defaultEnvironmentDescription",
+                    "defaultEnvironmentRestricted",
                     "skillToolsEnabled",
                     "skillSlashCommandsEnabled",
                     "presetEntityDefaultValidationRegex"
@@ -172045,6 +172371,9 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "defaultEnvironmentRestricted": {
+                      "type": "boolean"
+                    },
                     "skillToolsEnabled": {
                       "type": "boolean"
                     },
@@ -172110,6 +172439,7 @@
                     "defaultEnvironmentName",
                     "defaultEnvironmentNamespace",
                     "defaultEnvironmentDescription",
+                    "defaultEnvironmentRestricted",
                     "skillToolsEnabled",
                     "skillSlashCommandsEnabled",
                     "presetEntityDefaultValidationRegex"
@@ -172773,6 +173103,9 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "defaultEnvironmentRestricted": {
+                      "type": "boolean"
+                    },
                     "skillToolsEnabled": {
                       "type": "boolean"
                     },
@@ -172838,6 +173171,7 @@
                     "defaultEnvironmentName",
                     "defaultEnvironmentNamespace",
                     "defaultEnvironmentDescription",
+                    "defaultEnvironmentRestricted",
                     "skillToolsEnabled",
                     "skillSlashCommandsEnabled",
                     "presetEntityDefaultValidationRegex"
@@ -173113,6 +173447,9 @@
                     "nullable": true,
                     "type": "string",
                     "maxLength": 253
+                  },
+                  "restricted": {
+                    "type": "boolean"
                   }
                 }
               }
@@ -173509,6 +173846,9 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "defaultEnvironmentRestricted": {
+                      "type": "boolean"
+                    },
                     "skillToolsEnabled": {
                       "type": "boolean"
                     },
@@ -173574,6 +173914,7 @@
                     "defaultEnvironmentName",
                     "defaultEnvironmentNamespace",
                     "defaultEnvironmentDescription",
+                    "defaultEnvironmentRestricted",
                     "skillToolsEnabled",
                     "skillSlashCommandsEnabled",
                     "presetEntityDefaultValidationRegex"
@@ -174237,6 +174578,9 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "defaultEnvironmentRestricted": {
+                      "type": "boolean"
+                    },
                     "skillToolsEnabled": {
                       "type": "boolean"
                     },
@@ -174302,6 +174646,7 @@
                     "defaultEnvironmentName",
                     "defaultEnvironmentNamespace",
                     "defaultEnvironmentDescription",
+                    "defaultEnvironmentRestricted",
                     "skillToolsEnabled",
                     "skillSlashCommandsEnabled",
                     "presetEntityDefaultValidationRegex"
@@ -174978,6 +175323,9 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "defaultEnvironmentRestricted": {
+                      "type": "boolean"
+                    },
                     "skillToolsEnabled": {
                       "type": "boolean"
                     },
@@ -175043,6 +175391,7 @@
                     "defaultEnvironmentName",
                     "defaultEnvironmentNamespace",
                     "defaultEnvironmentDescription",
+                    "defaultEnvironmentRestricted",
                     "skillToolsEnabled",
                     "skillSlashCommandsEnabled",
                     "presetEntityDefaultValidationRegex"
@@ -175686,6 +176035,9 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "defaultEnvironmentRestricted": {
+                      "type": "boolean"
+                    },
                     "skillToolsEnabled": {
                       "type": "boolean"
                     },
@@ -175751,6 +176103,7 @@
                     "defaultEnvironmentName",
                     "defaultEnvironmentNamespace",
                     "defaultEnvironmentDescription",
+                    "defaultEnvironmentRestricted",
                     "skillToolsEnabled",
                     "skillSlashCommandsEnabled",
                     "presetEntityDefaultValidationRegex"
@@ -176707,6 +177060,9 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "defaultEnvironmentRestricted": {
+                      "type": "boolean"
+                    },
                     "skillToolsEnabled": {
                       "type": "boolean"
                     },
@@ -176772,6 +177128,7 @@
                     "defaultEnvironmentName",
                     "defaultEnvironmentNamespace",
                     "defaultEnvironmentDescription",
+                    "defaultEnvironmentRestricted",
                     "skillToolsEnabled",
                     "skillSlashCommandsEnabled",
                     "presetEntityDefaultValidationRegex"

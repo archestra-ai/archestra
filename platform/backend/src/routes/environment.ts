@@ -204,6 +204,50 @@ const environmentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       return reply.send({ success: true });
     },
   );
+
+  fastify.get(
+    "/api/organization/environments/validate-namespace",
+    {
+      schema: {
+        operationId: RouteId.ValidateEnvironmentNamespace,
+        description:
+          "Probe whether a Kubernetes namespace exists and is reachable. Returns accessible:true when the runtime is disabled (namespace will be stored but not verified).",
+        tags: ["Organization"],
+        querystring: z.object({ namespace: z.string().min(1) }),
+        response: constructResponseSchema(
+          z.discriminatedUnion("accessible", [
+            z.object({ accessible: z.literal(true) }),
+            z.object({
+              accessible: z.literal(false),
+              message: z.string(),
+            }),
+          ]),
+        ),
+      },
+    },
+    async ({ query }, reply) => {
+      if (!mcpServerRuntimeManager.isEnabled) {
+        return reply.send({ accessible: true });
+      }
+
+      const result = await mcpServerRuntimeManager.testNamespaceAccess(
+        query.namespace,
+      );
+
+      if (result.accessible) {
+        return reply.send({ accessible: true });
+      }
+
+      const message =
+        result.reason === "not_found"
+          ? `Namespace "${query.namespace}" not found`
+          : result.reason === "forbidden"
+            ? `Access denied — the service account cannot read namespace "${query.namespace}"`
+            : "Could not reach the Kubernetes cluster";
+
+      return reply.send({ accessible: false, message });
+    },
+  );
 };
 
 export default environmentRoutes;

@@ -1,6 +1,13 @@
 "use client";
 
-import { Pencil, Plus, Trash2 } from "lucide-react";
+import {
+  CheckCircle2,
+  Loader2,
+  Pencil,
+  Plus,
+  Trash2,
+  XCircle,
+} from "lucide-react";
 import { useEffect, useState } from "react";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { ReinstallConfirmBar } from "@/components/reinstall-confirm-bar";
@@ -29,6 +36,8 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import {
   type EnvironmentWithAssignedCount,
+  type NamespaceTestResult,
+  testNamespaceAccess,
   useCreateEnvironment,
   useDeleteEnvironment,
   useEnvironments,
@@ -257,6 +266,9 @@ function EnvironmentEditorDialog({
   const [description, setDescription] = useState("");
   const [restricted, setRestricted] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
+  const [nsTest, setNsTest] = useState<
+    "idle" | "pending" | NamespaceTestResult
+  >("idle");
 
   const nameEditable = mode !== "edit";
 
@@ -264,6 +276,7 @@ function EnvironmentEditorDialog({
   useEffect(() => {
     if (open) {
       setShowConfirm(false);
+      setNsTest("idle");
       if (mode === "default") {
         setName(defaultEnvironment?.name ?? "");
         setNamespace(defaultEnvironment?.namespace ?? "");
@@ -390,19 +403,56 @@ function EnvironmentEditorDialog({
           </div>
           <div className="space-y-2">
             <Label htmlFor="environment-namespace">Kubernetes namespace</Label>
-            <Input
-              id="environment-namespace"
-              value={namespace}
-              onChange={(e) => {
-                setNamespace(e.target.value);
-                setShowConfirm(false);
-              }}
-              placeholder="e.g. prod-eu"
-              maxLength={63}
-              disabled={isPending}
-            />
+            <div className="flex gap-2">
+              <Input
+                id="environment-namespace"
+                value={namespace}
+                onChange={(e) => {
+                  setNamespace(e.target.value);
+                  setShowConfirm(false);
+                  setNsTest("idle");
+                }}
+                placeholder="e.g. prod-eu"
+                maxLength={63}
+                disabled={isPending}
+                className="flex-1"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={
+                  !trimmedNamespace ||
+                  !!namespaceError ||
+                  nsTest === "pending" ||
+                  isPending
+                }
+                onClick={async () => {
+                  setNsTest("pending");
+                  setNsTest(await testNamespaceAccess(trimmedNamespace));
+                }}
+              >
+                {nsTest === "pending" ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  "Test"
+                )}
+              </Button>
+            </div>
             {namespaceError && (
               <p className="text-xs text-destructive">{namespaceError}</p>
+            )}
+            {nsTest !== "idle" && nsTest !== "pending" && (
+              <p
+                className={`flex items-center gap-1 text-xs ${nsTest.accessible ? "text-green-600 dark:text-green-400" : "text-destructive"}`}
+              >
+                {nsTest.accessible ? (
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                ) : (
+                  <XCircle className="h-3.5 w-3.5" />
+                )}
+                {nsTest.accessible ? "Namespace is accessible" : nsTest.message}
+              </p>
             )}
           </div>
           <div className="flex items-start justify-between gap-4">

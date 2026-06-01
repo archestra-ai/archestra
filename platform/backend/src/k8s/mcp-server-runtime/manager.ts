@@ -1,6 +1,7 @@
 import type * as k8s from "@kubernetes/client-node";
 import {
   createK8sClients,
+  isK8sNotFoundError,
   loadKubeConfig,
   sanitizeLabelValue,
   validateNamespaceExists,
@@ -84,6 +85,38 @@ export class McpServerRuntimeManager {
       throw new Error("Kubernetes API client not initialized");
     }
     await validateNamespaceExists(namespaceName, this.k8sApi);
+  }
+
+  async testNamespaceAccess(
+    namespaceName: string,
+  ): Promise<
+    | { accessible: true }
+    | { accessible: false; reason: "not_found" | "forbidden" | "unavailable" }
+  > {
+    if (!this.k8sApi) {
+      return { accessible: false, reason: "unavailable" };
+    }
+    try {
+      await this.k8sApi.readNamespace({ name: namespaceName });
+      return { accessible: true };
+    } catch (error: unknown) {
+      if (isK8sNotFoundError(error)) {
+        return { accessible: false, reason: "not_found" };
+      }
+      const statusCode =
+        error &&
+        typeof error === "object" &&
+        ("statusCode" in error
+          ? (error as { statusCode: number }).statusCode
+          : "response" in error
+            ? (error as { response: { statusCode: number } }).response
+                ?.statusCode
+            : undefined);
+      if (statusCode === 403) {
+        return { accessible: false, reason: "forbidden" };
+      }
+      return { accessible: false, reason: "unavailable" };
+    }
   }
 
   /**

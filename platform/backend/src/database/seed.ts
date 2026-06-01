@@ -189,7 +189,10 @@ export async function syncBuiltInAgents(): Promise<void> {
  * Tools are NOT automatically assigned to agents - users must assign them manually.
  */
 async function seedArchestraCatalogAndTools(): Promise<void> {
-  await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+  const newlyCreatedToolNames = await ToolModel.seedArchestraTools(
+    ARCHESTRA_MCP_CATALOG_ID,
+  );
+  await ToolModel.backfillNewSkillToolsToEnabledOrgs(newlyCreatedToolNames);
   logger.info("Seeded Archestra catalog and tools");
 }
 

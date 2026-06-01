@@ -18,6 +18,8 @@ const SKILL_RUNTIME_TOOL_SHORT_NAMES: ReadonlySet<string> = new Set(
  * (rather than the full `Agent`) documents the transform's true inputs and keeps
  * its unit tests honest — a full `Agent` is structurally assignable to it. Array
  * fields are `readonly` so wider element types (e.g. `Tool[]`) assign cleanly.
+ *
+ * @public — exported for testability (callers pass agents structurally)
  */
 export interface MigratableAgent {
   id: string;
@@ -51,7 +53,11 @@ export interface MigratableAgent {
  * @see https://agentskills.io/specification
  */
 
-/** Marks a skill's `metadata.origin` as produced by agent→skill migration. */
+/**
+ * Marks a skill's `metadata.origin` as produced by agent→skill migration.
+ *
+ * @public — exported for testability
+ */
 export const SKILL_ORIGIN_AGENT = "agent";
 
 /**
@@ -66,7 +72,7 @@ export const SCOPE_FIELD = "scope";
  * the markdown body, without the organization/author/source columns the caller
  * fills in from its request context.
  */
-export interface SkillDraft {
+interface SkillDraft {
   name: string;
   description: string;
   /** The SKILL.md markdown body, frontmatter stripped. */
@@ -78,7 +84,7 @@ export interface SkillDraft {
 }
 
 /** One mapped agent field and how it crossed the agent→skill gap. */
-export interface MigrationField {
+interface MigrationField {
   field: string;
   detail: string;
 }
@@ -88,19 +94,19 @@ export interface MigrationField {
  * silently lost: a field is either `carried` to a native skill field or
  * `annotated` into the SKILL.md body / metadata.
  */
-export interface MigrationReport {
+interface MigrationReport {
   carried: MigrationField[];
   annotated: MigrationField[];
 }
 
-export interface AgentSkillMigration {
+interface AgentSkillMigration {
   draft: SkillDraft;
   /** Teams to carry over, populated only when the skill is team-scoped. */
   teamIds: string[];
   report: MigrationReport;
 }
 
-export interface AgentToSkillOptions {
+interface AgentToSkillOptions {
   /**
    * Description to use instead of the agent's own. The UI requires the user to
    * supply one when the agent has no description (a synthesized "migrated from"

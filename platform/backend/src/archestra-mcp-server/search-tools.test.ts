@@ -140,9 +140,14 @@ describe("search_tools", () => {
       userId: user.id,
     };
 
+    // "trusted policy" matches only policy tools (trusted-data / tool-invocation /
+    // autonomy), all of which require permissions this agent:read role lacks, so
+    // RBAC filters them all out. The query deliberately avoids "data" — an agent:read
+    // tool (draft_skill_from_agent) describes its manifest "as data" and would
+    // otherwise survive the filter and defeat the point of the test.
     const result = await executeArchestraTool(
       TOOL_SEARCH_TOOLS_FULL_NAME,
-      { query: "trusted data policy", limit: 10 },
+      { query: "trusted policy", limit: 10 },
       context,
     );
 

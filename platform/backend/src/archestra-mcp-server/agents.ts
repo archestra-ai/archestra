@@ -297,6 +297,14 @@ const registry = defineArchestraTools([
           `No agent "${args.id}" exists, or you do not have access to it.`,
         );
       }
+      // findById with isAdmin returns other users' personal agents, but MCP must
+      // never expose them — converting would leak another user's system prompt
+      // into the model context. Mirror handleGetResource's owner guard.
+      if (agent.scope === "personal" && agent.authorId !== context.userId) {
+        return errorResult(
+          `No agent "${args.id}" exists, or you do not have access to it.`,
+        );
+      }
       if (agent.agentType !== "agent" || agent.builtInAgentConfig) {
         return errorResult("Only internal agents can be converted to skills.");
       }

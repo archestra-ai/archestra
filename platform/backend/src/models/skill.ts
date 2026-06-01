@@ -9,7 +9,7 @@ import {
   like,
   or,
 } from "drizzle-orm";
-import db, { schema, withDbTransaction } from "@/database";
+import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import type { InsertSkill, InsertSkillFile, Skill, UpdateSkill } from "@/types";
 import type { ResourceVisibilityScope } from "@/types/visibility";
 
@@ -188,12 +188,15 @@ class SkillModel {
    * When `teamIds` is supplied the team rows are inserted in the same
    * transaction, so a failed assignment cannot leave a scoped skill orphaned.
    */
-  static async createWithFiles(params: {
-    skill: InsertSkill;
-    files: Omit<InsertSkillFile, "skillId">[];
-    teamIds?: string[];
-  }): Promise<Skill | null> {
-    return await withDbTransaction(async (tx) => {
+  static async createWithFiles(
+    params: {
+      skill: InsertSkill;
+      files: Omit<InsertSkillFile, "skillId">[];
+      teamIds?: string[];
+    },
+    tx?: Transaction,
+  ): Promise<Skill | null> {
+    const run = async (tx: Transaction) => {
       const [skill] = await tx
         .insert(schema.skillsTable)
         .values(params.skill)
@@ -217,7 +220,11 @@ class SkillModel {
       }
 
       return skill;
-    });
+    };
+
+    // join a caller-supplied transaction so the create can be made atomic with
+    // other writes (e.g. agent→skill conversion deleting the source agent).
+    return tx ? await run(tx) : await withDbTransaction(run);
   }
 
   /**

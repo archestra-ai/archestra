@@ -250,6 +250,59 @@ describe("POST /api/agents/:id/convert-to-skill", () => {
     expect(response.statusCode).toBe(409);
   });
 
+  test("keeps the source agent on a name conflict so deleteAgent stays retry-safe", async ({
+    makeInternalAgent,
+  }) => {
+    const conflicting = await SkillModel.createWithFiles({
+      skill: {
+        organizationId,
+        authorId: user.id,
+        name: "retry-agent",
+        description: "existing",
+        content: "# existing",
+        metadata: {},
+        sourceType: "manual",
+        scope: "personal",
+      },
+      files: [],
+    });
+    if (!conflicting) throw new Error("setup: expected conflicting skill");
+
+    const agent = await makeInternalAgent({
+      organizationId,
+      name: "Retry Agent",
+      scope: "personal",
+      systemPrompt: "x",
+      teams: [],
+      labels: [],
+      knowledgeBaseIds: [],
+      connectorIds: [],
+    });
+
+    // conversion fails on the name conflict; because create+delete share one
+    // transaction, the source agent must NOT have been deleted.
+    const failed = await app.inject({
+      method: "POST",
+      url: `/api/agents/${agent.id}/convert-to-skill`,
+      payload: { deleteAgent: true },
+    });
+    expect(failed.statusCode).toBe(409);
+    expect(await AgentModel.findById(agent.id, user.id, true)).not.toBeNull();
+
+    // clear the conflict and retry — the agent still exists, so it converts
+    // and deletes cleanly with no leftover partial state.
+    await SkillModel.delete(conflicting.id);
+
+    const retried = await app.inject({
+      method: "POST",
+      url: `/api/agents/${agent.id}/convert-to-skill`,
+      payload: { deleteAgent: true },
+    });
+    expect(retried.statusCode).toBe(200);
+    expect((retried.json() as ConvertResponse).deletedAgent).toBe(true);
+    expect(await AgentModel.findById(agent.id, user.id, true)).toBeNull();
+  });
+
   test("rejects an agent whose converted content exceeds the skill size limit", async ({
     makeInternalAgent,
   }) => {

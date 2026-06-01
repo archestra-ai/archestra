@@ -17,6 +17,7 @@ import {
   requireSkillModifyPermission,
   type SkillPermissionChecker,
 } from "@/auth/skill-permissions";
+import { withDbTransaction } from "@/database";
 import logger from "@/logging";
 import {
   AgentModel,
@@ -396,38 +397,48 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       });
       await assertSkillTeams({ scope: draft.scope, teamIds, organizationId });
 
+      // Create the skill and (optionally) delete the source agent in one
+      // transaction so convert+delete is all-or-nothing: a failed delete rolls
+      // back the skill insert, so a retry never collides with a half-created
+      // skill and the user is never left with duplicated state.
+      let deletedAgent = false;
       const skill = await withTeamFkErrorMapped(() =>
-        SkillModel.createWithFiles({
-          skill: {
-            organizationId,
-            authorId: user.id,
-            name: draft.name,
-            description: draft.description,
-            content: draft.content,
-            license: draft.license,
-            compatibility: draft.compatibility,
-            metadata: draft.metadata,
-            sourceType: "manual",
-            scope: draft.scope,
-          },
-          files: [],
-          teamIds,
+        withDbTransaction(async (tx) => {
+          const created = await SkillModel.createWithFiles(
+            {
+              skill: {
+                organizationId,
+                authorId: user.id,
+                name: draft.name,
+                description: draft.description,
+                content: draft.content,
+                license: draft.license,
+                compatibility: draft.compatibility,
+                metadata: draft.metadata,
+                sourceType: "manual",
+                scope: draft.scope,
+              },
+              files: [],
+              teamIds,
+            },
+            tx,
+          );
+          if (!created) {
+            // name already taken in this visibility scope — nothing was
+            // inserted, so rolling back here leaves no orphan.
+            throw skillNameConflict(draft.name);
+          }
+          // Eligibility was checked above; delete inside the same transaction.
+          if (body.deleteAgent) {
+            deletedAgent = await AgentModel.delete(agent.id, tx);
+          }
+          return created;
         }),
       );
-      if (!skill) {
-        throw skillNameConflict(draft.name);
-      }
 
       // this surface persists the agent's scope (and teams) verbatim, so report
       // it carried. The MCP draft path can't and reports it annotated instead.
       report.carried.push({ field: SCOPE_FIELD, detail: draft.scope });
-
-      // Eligibility was checked above; delete now that the skill is safely
-      // persisted. A failed delete leaves both the skill and the agent — better
-      // than silently dropping the new skill.
-      const deletedAgent = body.deleteAgent
-        ? await AgentModel.delete(agent.id)
-        : false;
 
       logger.info(
         { agentId: agent.id, skillId: skill.id, organizationId, deletedAgent },

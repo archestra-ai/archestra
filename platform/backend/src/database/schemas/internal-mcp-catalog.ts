@@ -96,6 +96,15 @@ const internalMcpCatalogTable = pgTable(
      */
     childName: text("child_name"),
     /**
+     * Self-FK lineage pointer: the catalog item this one was cloned from.
+     * NULL for non-clones. ON DELETE SET NULL so deleting the source leaves
+     * the clone intact (just untracked), unlike the cascade on parent presets.
+     */
+    clonedFrom: uuid("cloned_from").references(
+      (): AnyPgColumn => internalMcpCatalogTable.id,
+      { onDelete: "set null" },
+    ),
+    /**
      * For child catalog items only: FK to the org-level preset entry this
      * child configures (e.g. "Production", "Staging"). Cascade-deleted when
      * the entry is removed at /mcp/registry/org-structure. NULL for root rows.
@@ -153,6 +162,9 @@ const internalMcpCatalogTable = pgTable(
     scopeIdx: index("internal_mcp_catalog_scope_idx").on(table.scope),
     parentIdIdx: index("internal_mcp_catalog_parent_id_idx").on(
       table.parentCatalogItemId,
+    ),
+    clonedFromIdx: index("internal_mcp_catalog_cloned_from_idx").on(
+      table.clonedFrom,
     ),
     parentNameUnique: unique("internal_mcp_catalog_parent_name_unique").on(
       table.parentCatalogItemId,

@@ -1,4 +1,5 @@
 import {
+  boolean,
   index,
   jsonb,
   pgTable,
@@ -40,6 +41,16 @@ const toolsTable = pgTable(
       .default({}),
     description: text("description"),
     meta: jsonb("meta").$type<Record<string, unknown>>(),
+    /**
+     * True for tools copied from a clone source at clone-create time that have
+     * not yet been confirmed by the clone's first install. Provisional tools
+     * are excluded from agent-assignment listings/validation and have no
+     * agent_tools rows, so they are never exposed at runtime. Cleared (or the
+     * row deleted) during first-install reconciliation.
+     */
+    clonedPendingDiscovery: boolean("cloned_pending_discovery")
+      .notNull()
+      .default(false),
     policiesAutoConfiguredAt: timestamp("policies_auto_configured_at", {
       mode: "date",
     }),
@@ -70,6 +81,9 @@ const toolsTable = pgTable(
     ),
     // Index for delegation tool lookups
     index("tools_delegate_to_agent_id_idx").on(table.delegateToAgentId),
+    index("tools_cloned_pending_discovery_idx").on(
+      table.clonedPendingDiscovery,
+    ),
   ],
 );
 

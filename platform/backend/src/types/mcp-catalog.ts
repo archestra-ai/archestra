@@ -133,6 +133,7 @@ export const SelectInternalMcpCatalogSchema = createSelectSchema(
   enterpriseManagedConfig: EnterpriseManagedCredentialConfigSchema.nullable(),
   localConfig: LocalConfigSelectSchema.nullable(),
   parentCatalogItemId: z.string().uuid().nullable(),
+  clonedFrom: z.string().uuid().nullable(),
   presetFieldValues: PresetFieldValuesSchema.default({}),
   // Labels are loaded from the junction table, not from the DB row
   labels: z.array(CatalogLabelSchema).default([]),
@@ -165,6 +166,7 @@ const InsertInternalMcpCatalogSchemaBase = createInsertSchema(
     localConfig: LocalConfigSchema.nullable().optional(),
     presetFieldValues: PresetFieldValuesSchema.optional(),
     parentCatalogItemId: z.string().uuid().nullable().optional(),
+    clonedFrom: z.string().uuid().nullable().optional(),
     // Labels are synced separately via McpCatalogLabelModel
     labels: z.array(CatalogLabelSchema).optional(),
     // Team IDs for team scope (synced separately)
@@ -211,6 +213,8 @@ const UpdateInternalMcpCatalogSchemaBase = createUpdateSchema(
     multitenant: true,
     // Parent link is locked after creation
     parentCatalogItemId: true,
+    // Clone lineage is locked after creation
+    clonedFrom: true,
   });
 
 export const UpdateInternalMcpCatalogSchema =

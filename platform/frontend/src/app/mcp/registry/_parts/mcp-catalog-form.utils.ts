@@ -241,6 +241,17 @@ export function transformFormToApiData(
   return data;
 }
 
+// Build create-form values from an existing catalog item for cloning. A clone
+// is a full copy of the source's configuration (secrets included); only the
+// name is suffixed with "-copy" so the create form is valid out of the box and
+// catalog name-uniqueness validation handles collisions on submit.
+export function buildCloneFormValues(
+  item: archestraApiTypes.GetInternalMcpCatalogResponses["200"][number],
+): McpCatalogFormValues {
+  const values = transformCatalogItemToFormValues(item);
+  return { ...values, name: `${values.name}-copy` };
+}
+
 // Transform catalog item to form values
 export function transformCatalogItemToFormValues(
   item: archestraApiTypes.GetInternalMcpCatalogResponses["200"][number],

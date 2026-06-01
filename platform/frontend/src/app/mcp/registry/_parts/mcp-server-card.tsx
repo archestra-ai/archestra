@@ -105,6 +105,8 @@ export type McpServerCardProps = {
   onDetails: () => void;
   onEdit: () => void;
   onDelete: () => void;
+  /** Clone this catalog item into the create form. Omit to hide the button. */
+  onClone?: () => void;
   onCancelInstallation?: (serverId: string) => void;
   /**
    * Called when user wants to add a personal connection from manage dialog.
@@ -139,6 +141,7 @@ export function McpServerCard({
   onDetails: _onDetails,
   onEdit: _onEdit,
   onDelete,
+  onClone,
   onCancelInstallation,
   onAddPersonalConnection,
   onAddSharedConnection,
@@ -161,6 +164,12 @@ export function McpServerCard({
   const currentUserId = session?.user?.id;
   const { data: userIsMcpServerAdmin } = useHasPermissions({
     mcpServerInstallation: ["admin"],
+  });
+  // Cloning creates a new registry entry, so it's gated on the same permission
+  // the create-catalog endpoint requires (mcpRegistry:create), not the broader
+  // mcpServerInstallation:admin.
+  const { data: userCanCreateCatalogItem } = useHasPermissions({
+    mcpRegistry: ["create"],
   });
   const isLocalMcpEnabled = useFeature("orchestratorK8sRuntime");
 
@@ -966,6 +975,9 @@ export function McpServerCard({
           !!needsReinstall && !isInstalling && isCurrentUserAuthenticated
         }
         onDelete={!isPlaywrightVariant ? onDelete : undefined}
+        onClone={
+          userCanCreateCatalogItem && !isPlaywrightVariant ? onClone : undefined
+        }
       />
 
       <UninstallServerDialog

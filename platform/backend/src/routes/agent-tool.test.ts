@@ -27,6 +27,7 @@ function fakeTool(overrides: { id: string; catalogId?: string | null }): Tool {
     agentId: null,
     delegateToAgentId: null,
     meta: null,
+    clonedPendingDiscovery: false,
     policiesAutoConfiguredAt: null,
     policiesAutoConfiguringStartedAt: null,
     policiesAutoConfiguredReasoning: null,

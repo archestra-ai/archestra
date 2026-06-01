@@ -1,5 +1,6 @@
 import type { McpCatalogFormValues } from "./mcp-catalog-form.types";
 import {
+  buildCloneFormValues,
   transformCatalogItemToFormValues,
   transformExternalCatalogToFormValues,
   transformFormToApiData,
@@ -1001,5 +1002,54 @@ describe("transformFormToApiData - secret env var preservation", () => {
     expect(env[0]).toMatchObject({ key: "EDITED", value: "fresh" });
     expect(env[1]?.key).toBe("UNTOUCHED");
     expect(env[1]?.value ?? "").toBe("");
+  });
+});
+
+describe("buildCloneFormValues", () => {
+  it("suffixes the name with -copy", () => {
+    const values = buildCloneFormValues({
+      id: "catalog-1",
+      name: "my-server",
+      description: "desc",
+      icon: null,
+      serverType: "remote",
+      serverUrl: "https://mcp.example.com",
+      oauthConfig: null,
+      enterpriseManagedConfig: null,
+      localConfig: null,
+      deploymentSpecYaml: null,
+      userConfig: {},
+      scope: "personal",
+      teams: [],
+      labels: [],
+    } as never);
+
+    expect(values.name).toBe("my-server-copy");
+  });
+
+  it("keeps secret values (clone is a full copy)", () => {
+    const values = buildCloneFormValues({
+      id: "catalog-1",
+      name: "oauth-server",
+      description: "",
+      icon: null,
+      serverType: "remote",
+      serverUrl: "https://mcp.example.com",
+      oauthConfig: {
+        client_id: "client-id",
+        client_secret: "keep-me",
+        grant_type: "authorization_code",
+        name: "oauth-server",
+      },
+      enterpriseManagedConfig: null,
+      localConfig: null,
+      deploymentSpecYaml: null,
+      userConfig: {},
+      scope: "personal",
+      teams: [],
+      labels: [],
+    } as never);
+
+    expect(values.oauthConfig?.client_secret).toBe("keep-me");
   });
 });

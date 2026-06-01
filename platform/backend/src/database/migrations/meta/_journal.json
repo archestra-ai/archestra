@@ -1818,36 +1818,8 @@
     {
       "idx": 259,
       "version": "7",
-      "when": 1780053516080,
-      "tag": "0259_fresh_malcolm_colcord",
-      "breakpoints": true
-    },
-    {
-      "idx": 260,
-      "version": "7",
-      "when": 1780057243448,
-      "tag": "0260_fluffy_johnny_storm",
-      "breakpoints": true
-    },
-    {
-      "idx": 261,
-      "version": "7",
-      "when": 1780060503425,
-      "tag": "0261_robust_ben_urich",
-      "breakpoints": true
-    },
-    {
-      "idx": 262,
-      "version": "7",
-      "when": 1780072311037,
-      "tag": "0262_slippery_justin_hammer",
-      "breakpoints": true
-    },
-    {
-      "idx": 263,
-      "version": "7",
-      "when": 1780300917038,
-      "tag": "0263_colossal_aaron_stack",
+      "when": 1780304037074,
+      "tag": "0259_curious_marrow",
       "breakpoints": true
     }
   ]

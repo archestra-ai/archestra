@@ -23197,7 +23197,6 @@ export type ListEnvironmentsResponses = {
         organizationId: string;
         name: string;
         description: string | null;
-        slug: string;
         namespace: string | null;
         restricted: boolean;
         sortOrder: number;
@@ -23295,7 +23294,6 @@ export type CreateEnvironmentResponses = {
         organizationId: string;
         name: string;
         description: string | null;
-        slug: string;
         namespace: string | null;
         restricted: boolean;
         sortOrder: number;
@@ -23393,6 +23391,7 @@ export type DeleteEnvironmentResponse = DeleteEnvironmentResponses[keyof DeleteE
 
 export type UpdateEnvironmentData = {
     body: {
+        name?: string;
         description?: string | null;
         namespace?: string | null;
         restricted?: boolean;
@@ -23478,7 +23477,6 @@ export type UpdateEnvironmentResponses = {
         organizationId: string;
         name: string;
         description: string | null;
-        slug: string;
         namespace: string | null;
         restricted: boolean;
         sortOrder: number;

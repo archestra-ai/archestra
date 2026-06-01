@@ -3,9 +3,7 @@ import { EnvironmentModel, InternalMcpCatalogModel } from "@/models";
 import { test } from "@/test";
 
 describe("EnvironmentModel", () => {
-  test("create derives a slug and persists fields", async ({
-    makeOrganization,
-  }) => {
+  test("create persists fields", async ({ makeOrganization }) => {
     const org = await makeOrganization();
     const env = await EnvironmentModel.create({
       organizationId: org.id,
@@ -16,24 +14,7 @@ describe("EnvironmentModel", () => {
 
     expect(env.name).toBe("Production EU");
     expect(env.description).toBe("Primary EU deployment target");
-    expect(env.slug).toBe("production-eu");
     expect(env.namespace).toBe("prod-eu");
-  });
-
-  test("create de-duplicates slugs within an org", async ({
-    makeOrganization,
-  }) => {
-    const org = await makeOrganization();
-    const a = await EnvironmentModel.create({
-      organizationId: org.id,
-      name: "Staging",
-    });
-    const b = await EnvironmentModel.create({
-      organizationId: org.id,
-      name: "staging",
-    });
-    expect(a.slug).toBe("staging");
-    expect(b.slug).toBe("staging-2");
   });
 
   test("listForOrganization returns assignedCatalogCount", async ({
@@ -102,7 +83,7 @@ describe("EnvironmentModel", () => {
     expect(byId.get(envB.id)?.assignedCatalogCount).toBe(1);
   });
 
-  test("update changes namespace but not name/slug", async ({
+  test("update changes the name and namespace", async ({
     makeOrganization,
   }) => {
     const org = await makeOrganization();
@@ -113,11 +94,11 @@ describe("EnvironmentModel", () => {
     const updated = await EnvironmentModel.update({
       id: env.id,
       organizationId: org.id,
+      name: "Staging EU",
       namespace: "stg",
     });
     expect(updated?.namespace).toBe("stg");
-    expect(updated?.name).toBe("Staging");
-    expect(updated?.slug).toBe("staging");
+    expect(updated?.name).toBe("Staging EU");
   });
 
   test("update changes the description", async ({ makeOrganization }) => {

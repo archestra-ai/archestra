@@ -1,5 +1,5 @@
 import { describe, expect } from "vitest";
-import { OrganizationModel } from "@/models";
+import { InternalMcpCatalogModel, OrganizationModel } from "@/models";
 import {
   assertCanAssignEnvironment,
   createEnvironment,
@@ -42,6 +42,51 @@ describe("EnvironmentService", () => {
     await expect(
       deleteEnvironment({ id: MISSING_ID, organizationId: org.id }),
     ).rejects.toMatchObject({ statusCode: 404 });
+  });
+
+  test("deleteEnvironment rejects with 409 when catalog items are still assigned", async ({
+    makeOrganization,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const env = await createEnvironment({
+      organizationId: org.id,
+      data: { name: "Prod" },
+    });
+    await InternalMcpCatalogModel.create(
+      {
+        name: "assigned-item",
+        serverType: "remote",
+        serverUrl: "https://api.example.com/mcp/",
+        scope: "org",
+        environmentId: env.id,
+      },
+      { organizationId: org.id, authorId: user.id },
+    );
+
+    await expect(
+      deleteEnvironment({ id: env.id, organizationId: org.id }),
+    ).rejects.toMatchObject({ statusCode: 409 });
+
+    // Still present after the blocked delete.
+    const listed = await listEnvironments(org.id);
+    expect(listed.some((e) => e.id === env.id)).toBe(true);
+  });
+
+  test("deleteEnvironment succeeds when no catalog items are assigned", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const env = await createEnvironment({
+      organizationId: org.id,
+      data: { name: "Sandbox" },
+    });
+    await expect(
+      deleteEnvironment({ id: env.id, organizationId: org.id }),
+    ).resolves.toBeUndefined();
+    const listed = await listEnvironments(org.id);
+    expect(listed.some((e) => e.id === env.id)).toBe(false);
   });
 
   test("createEnvironment persists restricted=true and lists it back", async ({

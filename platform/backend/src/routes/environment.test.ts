@@ -73,7 +73,7 @@ describe("environment routes", () => {
     });
     expect(created.statusCode).toBe(200);
     const env = created.json();
-    expect(env.slug).toBe("production");
+    expect(env.name).toBe("Production");
     expect(env.namespace).toBe("prod");
 
     const list = await app.inject({
@@ -87,12 +87,11 @@ describe("environment routes", () => {
     const updated = await app.inject({
       method: "PATCH",
       url: `/api/organization/environments/${env.id}`,
-      payload: { namespace: "prod-eu" },
+      payload: { name: "Production EU", namespace: "prod-eu" },
     });
     expect(updated.statusCode).toBe(200);
     expect(updated.json().namespace).toBe("prod-eu");
-    expect(updated.json().name).toBe("Production");
-    expect(updated.json().slug).toBe("production");
+    expect(updated.json().name).toBe("Production EU");
 
     const deleted = await app.inject({
       method: "DELETE",

@@ -893,44 +893,81 @@ export function McpCatalogForm({
               <FormField
                 control={form.control}
                 name="environmentId"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormControl>
-                      <VisibilitySelector
-                        label="Environment"
-                        readOnly={mode === "edit"}
-                        value={field.value ?? ENVIRONMENT_DEFAULT_VALUE}
-                        options={[
-                          {
-                            value: ENVIRONMENT_DEFAULT_VALUE,
-                            label: defaultEnvironment.name,
-                            description: defaultEnvironment.description ?? "",
-                          },
-                          ...(environments?.map((environment) => {
-                            const locked =
-                              environment.restricted && !canDeployRestricted;
-                            return {
-                              value: environment.id,
-                              label: environment.name,
-                              description: environment.description ?? "",
-                              disabled: locked,
-                              disabledLabel: locked ? "Restricted" : undefined,
-                              disabledReason: locked
-                                ? "Requires the “Assign catalog items to restricted environments” permission."
-                                : undefined,
-                            };
-                          }) ?? []),
-                        ]}
-                        onValueChange={(value) =>
-                          field.onChange(
-                            value === ENVIRONMENT_DEFAULT_VALUE ? null : value,
-                          )
-                        }
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
+                render={({ field }) => {
+                  const environmentOptions = [
+                    {
+                      value: ENVIRONMENT_DEFAULT_VALUE,
+                      label: defaultEnvironment.name,
+                      description: defaultEnvironment.description ?? "",
+                      disabled: false,
+                      disabledLabel: undefined as string | undefined,
+                    },
+                    ...(environments?.map((environment) => {
+                      const locked =
+                        environment.restricted && !canDeployRestricted;
+                      return {
+                        value: environment.id,
+                        label: environment.name,
+                        description: environment.description ?? "",
+                        disabled: locked,
+                        disabledLabel: locked
+                          ? ("Restricted" as string | undefined)
+                          : undefined,
+                      };
+                    }) ?? []),
+                  ];
+                  const selectedValue =
+                    field.value ?? ENVIRONMENT_DEFAULT_VALUE;
+                  const selectedDescription = environmentOptions.find(
+                    (option) => option.value === selectedValue,
+                  )?.description;
+
+                  return (
+                    <FormItem className="space-y-2">
+                      <Label>Environment</Label>
+                      <FormControl>
+                        <Select
+                          value={selectedValue}
+                          onValueChange={(value) =>
+                            field.onChange(
+                              value === ENVIRONMENT_DEFAULT_VALUE
+                                ? null
+                                : value,
+                            )
+                          }
+                          disabled={mode === "edit"}
+                        >
+                          <SelectTrigger className="w-full">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent position="popper">
+                            {environmentOptions.map((option) => (
+                              <SelectItem
+                                key={option.value}
+                                value={option.value}
+                                disabled={option.disabled}
+                                description={option.description || undefined}
+                              >
+                                {option.label}
+                                {option.disabledLabel ? (
+                                  <span className="ml-2 text-xs text-muted-foreground">
+                                    {option.disabledLabel}
+                                  </span>
+                                ) : null}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </FormControl>
+                      {selectedDescription ? (
+                        <p className="text-xs text-muted-foreground">
+                          {selectedDescription}
+                        </p>
+                      ) : null}
+                      <FormMessage />
+                    </FormItem>
+                  );
+                }}
               />
 
               {mode === "create" && (

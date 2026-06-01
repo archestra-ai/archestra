@@ -43,8 +43,7 @@ const environmentRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.CreateEnvironment,
-        description:
-          "Create an org-level deployment environment. Name and derived slug are immutable after creation.",
+        description: "Create an org-level deployment environment.",
         tags: ["Organization"],
         body: CreateEnvironmentSchema,
         response: constructResponseSchema(SelectEnvironmentSchema),
@@ -63,7 +62,7 @@ const environmentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.UpdateEnvironment,
         description:
-          "Update an environment's description and namespace. Name and slug are immutable.",
+          "Update an environment's name, description, namespace, and restricted flag.",
         tags: ["Organization"],
         params: z.object({ id: UuidIdSchema }),
         body: UpdateEnvironmentSchema,
@@ -83,7 +82,7 @@ const environmentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.DeleteEnvironment,
         description:
-          "Delete an org-level environment. Catalog items assigned to it fall back to the virtual Default environment.",
+          "Delete an org-level environment. Fails with 409 if any catalog items are still assigned to it.",
         tags: ["Organization"],
         params: z.object({ id: UuidIdSchema }),
         response: constructResponseSchema(DeleteObjectResponseSchema),

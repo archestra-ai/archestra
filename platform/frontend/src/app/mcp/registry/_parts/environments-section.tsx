@@ -75,16 +75,17 @@ export function EnvironmentsSection({ canEdit }: { canEdit: boolean }) {
           </TableHeader>
           <TableBody>
             {/* The Default environment is a real, configurable target (stored
-                on the organization). It always renders first, cannot be
-                deleted, and — unlike real environments — has a freely editable
-                name (it has no slug). */}
+                on the organization). It always renders first and cannot be
+                deleted. */}
             <TableRow>
               <TableCell className="font-medium">
                 <span className="flex items-center gap-2">
                   {defaultEnvironment.name}
-                  <Badge variant="outline" className="text-muted-foreground">
-                    Default
-                  </Badge>
+                  {defaultEnvironment.name !== "Default" && (
+                    <Badge variant="outline" className="text-muted-foreground">
+                      Default
+                    </Badge>
+                  )}
                 </span>
               </TableCell>
               <TableCell className="font-mono text-xs text-muted-foreground">
@@ -95,7 +96,9 @@ export function EnvironmentsSection({ canEdit }: { canEdit: boolean }) {
                 {defaultEnvironment.restricted ? (
                   <Badge variant="secondary">Restricted</Badge>
                 ) : (
-                  <span className="text-muted-foreground">Open</span>
+                  <Badge variant="outline" className="text-muted-foreground">
+                    Open
+                  </Badge>
                 )}
               </TableCell>
               <TableCell className="text-right">
@@ -136,7 +139,12 @@ export function EnvironmentsSection({ canEdit }: { canEdit: boolean }) {
                     {environment.restricted ? (
                       <Badge variant="secondary">Restricted</Badge>
                     ) : (
-                      <span className="text-muted-foreground">Open</span>
+                      <Badge
+                        variant="outline"
+                        className="text-muted-foreground"
+                      >
+                        Open
+                      </Badge>
                     )}
                   </TableCell>
                   <TableCell className="text-right">
@@ -154,7 +162,14 @@ export function EnvironmentsSection({ canEdit }: { canEdit: boolean }) {
                       variant="ghost"
                       size="icon"
                       className="h-8 w-8 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                      disabled={!canEdit}
+                      disabled={
+                        !canEdit || environment.assignedCatalogCount > 0
+                      }
+                      title={
+                        environment.assignedCatalogCount > 0
+                          ? "Reassign or remove the catalog items in this environment before deleting it."
+                          : undefined
+                      }
                       onClick={() => setDeleteTarget(environment)}
                       aria-label={`Delete ${environment.name}`}
                     >
@@ -205,9 +220,9 @@ function EnvironmentEditorDialog({
   environment,
   defaultEnvironment,
 }: {
-  // "default" edits the org-level default environment (name + namespace both
-  // editable); "create"/"edit" manage real environments (name immutable after
-  // create, since the slug is derived from it).
+  // "default" edits the org-level default environment; "create"/"edit" manage
+  // real environments. Name, description, namespace, and restricted are all
+  // editable in every mode.
   mode: "create" | "edit" | "default";
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -230,9 +245,6 @@ function EnvironmentEditorDialog({
   const [namespace, setNamespace] = useState("");
   const [description, setDescription] = useState("");
   const [restricted, setRestricted] = useState(false);
-
-  // The default's name is freely editable; real environments lock it on edit.
-  const nameEditable = mode !== "edit";
 
   // Sync drafts whenever the dialog (re)opens for a target.
   useEffect(() => {
@@ -258,7 +270,7 @@ function EnvironmentEditorDialog({
   const trimmedName = name.trim();
   const trimmedNamespace = namespace.trim();
   const trimmedDescription = description.trim();
-  const canSave = mode === "edit" ? true : trimmedName.length > 0;
+  const canSave = trimmedName.length > 0;
 
   const handleSave = () => {
     const namespaceValue = trimmedNamespace === "" ? null : trimmedNamespace;
@@ -290,6 +302,7 @@ function EnvironmentEditorDialog({
         {
           id: environment.id,
           body: {
+            name: trimmedName,
             namespace: namespaceValue,
             description: descriptionValue,
             restricted,
@@ -315,8 +328,8 @@ function EnvironmentEditorDialog({
             {mode === "create"
               ? "Create an org-level deployment environment."
               : mode === "default"
-                ? "Update the name and Kubernetes namespace for the default environment."
-                : "Update the Kubernetes namespace for this environment."}
+                ? "Update the default environment."
+                : "Update this environment."}
           </DialogDescription>
         </DialogHeader>
         <DialogBody className="space-y-4">
@@ -330,15 +343,8 @@ function EnvironmentEditorDialog({
               onChange={(e) => setName(e.target.value)}
               placeholder="e.g. Production"
               maxLength={50}
-              disabled={!nameEditable || isPending}
-              readOnly={!nameEditable}
+              disabled={isPending}
             />
-            {mode === "edit" && (
-              <p className="text-xs text-muted-foreground">
-                The name cannot be changed after creation, since the slug is
-                derived from it.
-              </p>
-            )}
           </div>
           <div className="space-y-2">
             <Label htmlFor="environment-description">Description</Label>
@@ -367,8 +373,11 @@ function EnvironmentEditorDialog({
             <div className="space-y-1">
               <Label htmlFor="environment-restricted">Restricted</Label>
               <p className="text-xs text-muted-foreground">
-                Only members with the “Assign catalog items to restricted
-                environments” permission can assign catalog items here.
+                Only users who hold the{" "}
+                <code className="rounded bg-muted px-1 py-0.5 font-mono">
+                  environment:admin
+                </code>{" "}
+                permission are allowed to deploy in this environment.
               </p>
             </div>
             <Switch
@@ -414,16 +423,10 @@ function DeleteEnvironmentDialog({
       title={`Delete ${target.name}?`}
       description={
         <div className="space-y-2 text-sm">
-          <p>Deleting this environment will:</p>
-          <ul className="list-disc space-y-1 pl-5">
-            <li>
-              Unassign the {target.assignedCatalogCount} catalog item
-              {target.assignedCatalogCount === 1 ? "" : "s"} currently assigned
-              to <span className="font-medium">{target.name}</span>. They fall
-              back to the default environment.
-            </li>
-          </ul>
-          <p>This cannot be undone.</p>
+          <p>
+            This removes the <span className="font-medium">{target.name}</span>{" "}
+            environment. This cannot be undone.
+          </p>
         </div>
       }
       isPending={deleteMutation.isPending}

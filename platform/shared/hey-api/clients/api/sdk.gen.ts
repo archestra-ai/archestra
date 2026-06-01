@@ -1775,7 +1775,7 @@ export const deepseekChatCompletionsWithAgent = <ThrowOnError extends boolean = 
 export const listEnvironments = <ThrowOnError extends boolean = false>(options?: Options<ListEnvironmentsData, ThrowOnError>) => (options?.client ?? client).get<ListEnvironmentsResponses, ListEnvironmentsErrors, ThrowOnError>({ url: '/api/organization/environments', ...options });
 
 /**
- * Create an org-level deployment environment. Name and derived slug are immutable after creation.
+ * Create an org-level deployment environment.
  *
  * Authentication:
  *
@@ -1808,7 +1808,7 @@ export const createEnvironment = <ThrowOnError extends boolean = false>(options:
 export const deleteEnvironment = <ThrowOnError extends boolean = false>(options: Options<DeleteEnvironmentData, ThrowOnError>) => (options.client ?? client).delete<DeleteEnvironmentResponses, DeleteEnvironmentErrors, ThrowOnError>({ url: '/api/organization/environments/{id}', ...options });
 
 /**
- * Update an environment's description and namespace. Name and slug are immutable.
+ * Update an environment's name, description, namespace, and restricted flag.
  *
  * Authentication:
  *

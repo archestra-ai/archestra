@@ -1,5 +1,5 @@
 {
-  "id": "17bfc428-7faf-4edf-a0d1-2705e46ccfd0",
+  "id": "2d877095-cf9f-47d1-a9c6-c406e100443f",
   "prevId": "be4f48fa-2baf-47c3-86c1-95d1abc7bb5c",
   "version": "7",
   "dialect": "postgresql",
@@ -3584,17 +3584,24 @@
           "primaryKey": false,
           "notNull": true
         },
-        "slug": {
-          "name": "slug",
+        "description": {
+          "name": "description",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "namespace": {
           "name": "namespace",
           "type": "text",
           "primaryKey": false,
           "notNull": false
+        },
+        "restricted": {
+          "name": "restricted",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
         },
         "sort_order": {
           "name": "sort_order",
@@ -3658,14 +3665,6 @@
           "columns": [
             "organization_id",
             "name"
-          ]
-        },
-        "environment_org_slug_unique": {
-          "name": "environment_org_slug_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "organization_id",
-            "slug"
           ]
         }
       },
@@ -8533,6 +8532,31 @@
           "type": "text",
           "primaryKey": false,
           "notNull": false
+        },
+        "default_environment_name": {
+          "name": "default_environment_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "default_environment_namespace": {
+          "name": "default_environment_namespace",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "default_environment_description": {
+          "name": "default_environment_description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "default_environment_restricted": {
+          "name": "default_environment_restricted",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
         },
         "skill_tools_enabled": {
           "name": "skill_tools_enabled",

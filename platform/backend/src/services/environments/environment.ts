@@ -39,9 +39,18 @@ export async function updateEnvironment(params: {
   data: UpdateEnvironment;
 }): Promise<Environment> {
   const { id, organizationId, data } = params;
+
+  if (data.name !== undefined) {
+    const existing = await EnvironmentModel.listForOrganization(organizationId);
+    if (existing.some((e) => e.id !== id && e.name === data.name)) {
+      throw new ApiError(409, "An environment with this name already exists.");
+    }
+  }
+
   const updated = await EnvironmentModel.update({
     id,
     organizationId,
+    name: data.name,
     description: data.description,
     namespace: data.namespace,
     restricted: data.restricted,
@@ -98,10 +107,27 @@ export async function deleteEnvironment(params: {
   id: string;
   organizationId: string;
 }): Promise<void> {
-  const deleted = await EnvironmentModel.delete(
-    params.id,
-    params.organizationId,
+  const { id, organizationId } = params;
+
+  const environment = await EnvironmentModel.findByIdForOrganization(
+    id,
+    organizationId,
   );
+  if (!environment) {
+    throw new ApiError(404, "Environment not found");
+  }
+
+  const assignedCount = await EnvironmentModel.countAssignedCatalogItems(id);
+  if (assignedCount > 0) {
+    throw new ApiError(
+      409,
+      `This environment still has ${assignedCount} catalog item${
+        assignedCount === 1 ? "" : "s"
+      } assigned. Reassign or remove them before deleting it.`,
+    );
+  }
+
+  const deleted = await EnvironmentModel.delete(id, organizationId);
   if (!deleted) {
     throw new ApiError(404, "Environment not found");
   }

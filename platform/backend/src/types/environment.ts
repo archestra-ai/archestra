@@ -25,10 +25,11 @@ export const CreateEnvironmentSchema = z.object({
 });
 
 /**
- * `name` and `slug` are immutable after creation (slug is a reserved permission
- * key). The namespace and description can change. Send `null` to clear them.
+ * All editable fields. Send `null` to clear the nullable ones (namespace,
+ * description).
  */
 export const UpdateEnvironmentSchema = z.object({
+  name: z.string().trim().min(1).max(50).optional(),
   description: z.string().trim().max(500).nullable().optional(),
   namespace: z.string().trim().max(253).nullable().optional(),
   restricted: z.boolean().optional(),

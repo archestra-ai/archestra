@@ -1,1 +1,0 @@
-ALTER TABLE "environment" ADD COLUMN "restricted" boolean DEFAULT false NOT NULL;

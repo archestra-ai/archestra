@@ -8,7 +8,6 @@ interface EnvironmentWithAssignedCount {
   organizationId: string;
   name: string;
   description: string | null;
-  slug: string;
   namespace: string | null;
   restricted: boolean;
   sortOrder: number;
@@ -27,7 +26,6 @@ class EnvironmentModel {
         organizationId: schema.environmentsTable.organizationId,
         name: schema.environmentsTable.name,
         description: schema.environmentsTable.description,
-        slug: schema.environmentsTable.slug,
         namespace: schema.environmentsTable.namespace,
         restricted: schema.environmentsTable.restricted,
         sortOrder: schema.environmentsTable.sortOrder,
@@ -82,7 +80,6 @@ class EnvironmentModel {
         organizationId,
         name,
         description: description ?? null,
-        slug: await EnvironmentModel.uniqueSlug(organizationId, name),
         namespace: namespace ?? null,
         restricted: restricted ?? false,
         sortOrder: await EnvironmentModel.nextSortOrder(organizationId),
@@ -94,12 +91,15 @@ class EnvironmentModel {
   static async update(params: {
     id: string;
     organizationId: string;
+    name?: string;
     description?: string | null;
     namespace?: string | null;
     restricted?: boolean;
   }): Promise<typeof schema.environmentsTable.$inferSelect | null> {
-    const { id, organizationId, description, namespace, restricted } = params;
+    const { id, organizationId, name, description, namespace, restricted } =
+      params;
     const patch: Record<string, unknown> = {};
+    if (name !== undefined) patch.name = name;
     if (description !== undefined) patch.description = description;
     if (namespace !== undefined) patch.namespace = namespace;
     if (restricted !== undefined) patch.restricted = restricted;
@@ -117,9 +117,19 @@ class EnvironmentModel {
     return row ?? null;
   }
 
+  static async countAssignedCatalogItems(
+    environmentId: string,
+  ): Promise<number> {
+    const [row] = await db
+      .select({ count: count(schema.internalMcpCatalogTable.id) })
+      .from(schema.internalMcpCatalogTable)
+      .where(eq(schema.internalMcpCatalogTable.environmentId, environmentId));
+    return row?.count ?? 0;
+  }
+
   static async delete(id: string, organizationId: string): Promise<boolean> {
-    // Catalog items reference us with ON DELETE SET NULL, so they survive and
-    // simply fall back to the virtual "Default" environment.
+    // The FK is ON DELETE SET NULL as a safety net, but the service blocks
+    // deletion while catalog items are still assigned (see deleteEnvironment).
     const deleted = await db
       .delete(schema.environmentsTable)
       .where(
@@ -133,30 +143,6 @@ class EnvironmentModel {
   }
 
   // === Internal helpers ===
-
-  private static slugify(name: string): string {
-    return name
-      .toLowerCase()
-      .trim()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-+|-+$/g, "");
-  }
-
-  private static async uniqueSlug(
-    organizationId: string,
-    name: string,
-  ): Promise<string> {
-    const base = EnvironmentModel.slugify(name) || "environment";
-    const existing = await db
-      .select({ slug: schema.environmentsTable.slug })
-      .from(schema.environmentsTable)
-      .where(eq(schema.environmentsTable.organizationId, organizationId));
-    const taken = new Set(existing.map((r) => r.slug));
-    if (!taken.has(base)) return base;
-    let n = 2;
-    while (taken.has(`${base}-${n}`)) n++;
-    return `${base}-${n}`;
-  }
 
   private static async nextSortOrder(organizationId: string): Promise<number> {
     const [row] = await db

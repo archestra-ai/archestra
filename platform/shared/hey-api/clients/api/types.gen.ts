@@ -10911,6 +10911,7 @@ export type GetAgentsResponses = {
                 meta: string | number | boolean | null | {
                     [key: string]: unknown;
                 } | Array<unknown> | null;
+                clonedPendingDiscovery: boolean;
                 policiesAutoConfiguredAt: string | null;
                 policiesAutoConfiguringStartedAt: string | null;
                 policiesAutoConfiguredReasoning: string | null;
@@ -11139,6 +11140,7 @@ export type CreateAgentResponses = {
             meta: string | number | boolean | null | {
                 [key: string]: unknown;
             } | Array<unknown> | null;
+            clonedPendingDiscovery: boolean;
             policiesAutoConfiguredAt: string | null;
             policiesAutoConfiguringStartedAt: string | null;
             policiesAutoConfiguredReasoning: string | null;
@@ -11336,6 +11338,7 @@ export type GetAllAgentsResponses = {
             meta: string | number | boolean | null | {
                 [key: string]: unknown;
             } | Array<unknown> | null;
+            clonedPendingDiscovery: boolean;
             policiesAutoConfiguredAt: string | null;
             policiesAutoConfiguringStartedAt: string | null;
             policiesAutoConfiguredReasoning: string | null;
@@ -11508,6 +11511,7 @@ export type GetDefaultMcpGatewayResponses = {
             meta: string | number | boolean | null | {
                 [key: string]: unknown;
             } | Array<unknown> | null;
+            clonedPendingDiscovery: boolean;
             policiesAutoConfiguredAt: string | null;
             policiesAutoConfiguringStartedAt: string | null;
             policiesAutoConfiguredReasoning: string | null;
@@ -11680,6 +11684,7 @@ export type GetDefaultLlmProxyResponses = {
             meta: string | number | boolean | null | {
                 [key: string]: unknown;
             } | Array<unknown> | null;
+            clonedPendingDiscovery: boolean;
             policiesAutoConfiguredAt: string | null;
             policiesAutoConfiguringStartedAt: string | null;
             policiesAutoConfiguredReasoning: string | null;
@@ -11931,6 +11936,7 @@ export type ImportAgentResponses = {
                 meta: string | number | boolean | null | {
                     [key: string]: unknown;
                 } | Array<unknown> | null;
+                clonedPendingDiscovery: boolean;
                 policiesAutoConfiguredAt: string | null;
                 policiesAutoConfiguringStartedAt: string | null;
                 policiesAutoConfiguredReasoning: string | null;
@@ -12196,6 +12202,7 @@ export type GetAgentResponses = {
             meta: string | number | boolean | null | {
                 [key: string]: unknown;
             } | Array<unknown> | null;
+            clonedPendingDiscovery: boolean;
             policiesAutoConfiguredAt: string | null;
             policiesAutoConfiguringStartedAt: string | null;
             policiesAutoConfiguredReasoning: string | null;
@@ -12417,6 +12424,7 @@ export type UpdateAgentResponses = {
             meta: string | number | boolean | null | {
                 [key: string]: unknown;
             } | Array<unknown> | null;
+            clonedPendingDiscovery: boolean;
             policiesAutoConfiguredAt: string | null;
             policiesAutoConfiguringStartedAt: string | null;
             policiesAutoConfiguredReasoning: string | null;
@@ -12591,6 +12599,7 @@ export type CloneAgentResponses = {
             meta: string | number | boolean | null | {
                 [key: string]: unknown;
             } | Array<unknown> | null;
+            clonedPendingDiscovery: boolean;
             policiesAutoConfiguredAt: string | null;
             policiesAutoConfiguringStartedAt: string | null;
             policiesAutoConfiguredReasoning: string | null;
@@ -12926,6 +12935,7 @@ export type RestoreAgentResponses = {
             meta: string | number | boolean | null | {
                 [key: string]: unknown;
             } | Array<unknown> | null;
+            clonedPendingDiscovery: boolean;
             policiesAutoConfiguredAt: string | null;
             policiesAutoConfiguringStartedAt: string | null;
             policiesAutoConfiguredReasoning: string | null;
@@ -13998,6 +14008,7 @@ export type GetAgentToolsResponses = {
         meta: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown> | null;
+        clonedPendingDiscovery: boolean;
         policiesAutoConfiguredAt: string | null;
         policiesAutoConfiguringStartedAt: string | null;
         policiesAutoConfiguredReasoning: string | null;
@@ -29201,6 +29212,7 @@ export type GetInternalMcpCatalogResponses = {
         scope: 'personal' | 'team' | 'org';
         parentCatalogItemId: string | null;
         childName: string | null;
+        clonedFrom: string | null;
         presetEntryId: string | null;
         presetFieldValues: {
             [key: string]: UserConfigFieldDefault;
@@ -29336,6 +29348,7 @@ export type CreateInternalMcpCatalogItemData = {
         scope?: 'personal' | 'team' | 'org';
         parentCatalogItemId?: string | null;
         childName?: string | null;
+        clonedFrom?: string | null;
         presetEntryId?: string | null;
         presetFieldValues?: {
             [key: string]: UserConfigFieldDefaultInput;
@@ -29539,6 +29552,7 @@ export type CreateInternalMcpCatalogItemResponses = {
         scope: 'personal' | 'team' | 'org';
         parentCatalogItemId: string | null;
         childName: string | null;
+        clonedFrom: string | null;
         presetEntryId: string | null;
         presetFieldValues: {
             [key: string]: UserConfigFieldDefault;
@@ -29837,6 +29851,7 @@ export type GetInternalMcpCatalogItemResponses = {
         scope: 'personal' | 'team' | 'org';
         parentCatalogItemId: string | null;
         childName: string | null;
+        clonedFrom: string | null;
         presetEntryId: string | null;
         presetFieldValues: {
             [key: string]: UserConfigFieldDefault;
@@ -30173,6 +30188,7 @@ export type UpdateInternalMcpCatalogItemResponses = {
         scope: 'personal' | 'team' | 'org';
         parentCatalogItemId: string | null;
         childName: string | null;
+        clonedFrom: string | null;
         presetEntryId: string | null;
         presetFieldValues: {
             [key: string]: UserConfigFieldDefault;
@@ -31073,6 +31089,7 @@ export type GetCatalogChildrenResponses = {
         scope: 'personal' | 'team' | 'org';
         parentCatalogItemId: string | null;
         childName: string | null;
+        clonedFrom: string | null;
         presetEntryId: string | null;
         presetFieldValues: {
             [key: string]: UserConfigFieldDefault;
@@ -31291,6 +31308,7 @@ export type CreateCatalogChildResponses = {
         scope: 'personal' | 'team' | 'org';
         parentCatalogItemId: string | null;
         childName: string | null;
+        clonedFrom: string | null;
         presetEntryId: string | null;
         presetFieldValues: {
             [key: string]: UserConfigFieldDefault;
@@ -31509,6 +31527,7 @@ export type UpdateCatalogChildResponses = {
         scope: 'personal' | 'team' | 'org';
         parentCatalogItemId: string | null;
         childName: string | null;
+        clonedFrom: string | null;
         presetEntryId: string | null;
         presetFieldValues: {
             [key: string]: UserConfigFieldDefault;
@@ -52885,6 +52904,7 @@ export type GetToolsResponses = {
         meta: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown> | null;
+        clonedPendingDiscovery: boolean;
         policiesAutoConfiguredAt: string | null;
         policiesAutoConfiguringStartedAt: string | null;
         policiesAutoConfiguredReasoning: string | null;

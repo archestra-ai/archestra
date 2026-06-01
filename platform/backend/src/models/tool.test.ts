@@ -14,6 +14,7 @@ import {
   TOOL_TODO_WRITE_SHORT_NAME,
 } from "@shared";
 import { and, eq } from "drizzle-orm";
+import { vi } from "vitest";
 import { archestraMcpBranding } from "@/archestra-mcp-server";
 import { getArchestraMcpCatalogMetadata } from "@/archestra-mcp-server/metadata";
 import db, { schema } from "@/database";
@@ -22,6 +23,8 @@ import AgentToolModel from "./agent-tool";
 import OrganizationModel from "./organization";
 import TeamModel from "./team";
 import ToolModel, { parseArchestraBuiltInName } from "./tool";
+import ToolInvocationPolicyModel from "./tool-invocation-policy";
+import TrustedDataPolicyModel from "./trusted-data-policy";
 
 describe("ToolModel", () => {
   describe("slugifyName", () => {
@@ -2967,5 +2970,251 @@ describe("ToolModel", () => {
         ),
       ).toBe(false);
     });
+  });
+});
+
+describe("ToolModel.cloneToolsAndPoliciesFromCatalog", () => {
+  test("copies tools and both policy types as provisional", async ({
+    makeOrganization,
+    makeInternalMcpCatalog,
+  }) => {
+    const org = await makeOrganization();
+    const source = await makeInternalMcpCatalog({ organizationId: org.id });
+    const clone = await makeInternalMcpCatalog({
+      organizationId: org.id,
+      clonedFrom: source.id,
+    });
+
+    const sourceTool = await ToolModel.create({
+      catalogId: source.id,
+      name: ToolModel.slugifyName(source.name, "search"),
+      parameters: { type: "object" },
+      description: "search desc",
+    });
+    await ToolInvocationPolicyModel.create({
+      toolId: sourceTool.id,
+      conditions: [],
+      action: "block_always",
+      reason: "custom",
+    });
+    await TrustedDataPolicyModel.create({
+      toolId: sourceTool.id,
+      conditions: [],
+      action: "mark_as_trusted",
+      description: "custom",
+    });
+
+    await ToolModel.cloneToolsAndPoliciesFromCatalog({
+      sourceCatalogId: source.id,
+      targetCatalogId: clone.id,
+      targetCatalogName: clone.name,
+    });
+
+    const cloned = await db
+      .select()
+      .from(schema.toolsTable)
+      .where(eq(schema.toolsTable.catalogId, clone.id));
+    expect(cloned).toHaveLength(1);
+    expect(cloned[0].clonedPendingDiscovery).toBe(true);
+    expect(cloned[0].name).toBe(ToolModel.slugifyName(clone.name, "search"));
+    expect(cloned[0].description).toBe("search desc");
+
+    const inv = await db
+      .select()
+      .from(schema.toolInvocationPoliciesTable)
+      .where(eq(schema.toolInvocationPoliciesTable.toolId, cloned[0].id));
+    expect(inv).toHaveLength(1);
+    expect(inv[0].action).toBe("block_always");
+
+    const trusted = await db
+      .select()
+      .from(schema.trustedDataPoliciesTable)
+      .where(eq(schema.trustedDataPoliciesTable.toolId, cloned[0].id));
+    expect(trusted).toHaveLength(1);
+    expect(trusted[0].action).toBe("mark_as_trusted");
+
+    const assignments = await db
+      .select()
+      .from(schema.agentToolsTable)
+      .where(eq(schema.agentToolsTable.toolId, cloned[0].id));
+    expect(assignments).toHaveLength(0);
+  });
+});
+
+describe("ToolModel.reconcileClonedCatalogTools", () => {
+  test("confirms matches, deletes unmatched provisional, keeps policies", async ({
+    makeOrganization,
+    makeInternalMcpCatalog,
+  }) => {
+    const org = await makeOrganization();
+    const cat = await makeInternalMcpCatalog({ organizationId: org.id });
+
+    const kept = await ToolModel.create({
+      catalogId: cat.id,
+      name: ToolModel.slugifyName(cat.name, "kept"),
+      parameters: {},
+      description: "old",
+      clonedPendingDiscovery: true,
+    });
+    await ToolInvocationPolicyModel.create({
+      toolId: kept.id,
+      conditions: [],
+      action: "block_always",
+      reason: "keep-me",
+    });
+    const dropped = await ToolModel.create({
+      catalogId: cat.id,
+      name: ToolModel.slugifyName(cat.name, "dropped"),
+      parameters: {},
+      description: null,
+      clonedPendingDiscovery: true,
+    });
+
+    expect(await ToolModel.countProvisionalForCatalog(cat.id)).toBe(2);
+
+    await ToolModel.reconcileClonedCatalogTools({
+      catalogId: cat.id,
+      discoveredToolNames: new Set([ToolModel.slugifyName(cat.name, "kept")]),
+    });
+
+    const keptRow = await ToolModel.findById(kept.id);
+    expect(keptRow?.clonedPendingDiscovery).toBe(false);
+    const inv = await db
+      .select()
+      .from(schema.toolInvocationPoliciesTable)
+      .where(eq(schema.toolInvocationPoliciesTable.toolId, kept.id));
+    expect(inv[0]?.action).toBe("block_always");
+
+    const droppedRow = await ToolModel.findById(dropped.id);
+    expect(droppedRow).toBeNull();
+
+    expect(await ToolModel.countProvisionalForCatalog(cat.id)).toBe(0);
+  });
+
+  test("matches discovered tools by slug, not lossy raw name (spaces/case)", async ({
+    makeOrganization,
+    makeInternalMcpCatalog,
+  }) => {
+    const org = await makeOrganization();
+    const cat = await makeInternalMcpCatalog({ organizationId: org.id });
+
+    // Provisional tool whose raw name has a space + uppercase, e.g. "Create Issue".
+    const provisionalName = ToolModel.slugifyName(cat.name, "Create Issue");
+    const kept = await ToolModel.create({
+      catalogId: cat.id,
+      name: provisionalName,
+      parameters: {},
+      description: null,
+      clonedPendingDiscovery: true,
+    });
+
+    // Discovery slugifies the same raw name with the same catalog name.
+    const discoveredToolNames = new Set([
+      ToolModel.slugifyName(cat.name, "Create Issue"),
+    ]);
+
+    const { confirmedToolIds } = await ToolModel.reconcileClonedCatalogTools({
+      catalogId: cat.id,
+      discoveredToolNames,
+    });
+
+    expect(confirmedToolIds).toContain(kept.id);
+    const keptRow = await ToolModel.findById(kept.id);
+    expect(keptRow?.clonedPendingDiscovery).toBe(false);
+  });
+});
+
+describe("provisional tools are gated from assignment", () => {
+  test("findByCatalogId excludes provisional tools", async ({
+    makeOrganization,
+    makeInternalMcpCatalog,
+  }) => {
+    const org = await makeOrganization();
+    const cat = await makeInternalMcpCatalog({ organizationId: org.id });
+    await ToolModel.create({
+      catalogId: cat.id,
+      name: ToolModel.slugifyName(cat.name, "real"),
+      parameters: {},
+      description: null,
+    });
+    await ToolModel.create({
+      catalogId: cat.id,
+      name: ToolModel.slugifyName(cat.name, "provisional"),
+      parameters: {},
+      description: null,
+      clonedPendingDiscovery: true,
+    });
+
+    const tools = await ToolModel.findByCatalogId(cat.id);
+    const names = tools.map((t) => t.name);
+    expect(names).toContain(ToolModel.slugifyName(cat.name, "real"));
+    expect(names).not.toContain(ToolModel.slugifyName(cat.name, "provisional"));
+  });
+
+  test("findAllWithAssignments INCLUDES provisional tools (guardrails management view)", async ({
+    makeOrganization,
+    makeInternalMcpCatalog,
+  }) => {
+    const org = await makeOrganization();
+    const cat = await makeInternalMcpCatalog({ organizationId: org.id });
+    const provisional = await ToolModel.create({
+      catalogId: cat.id,
+      name: ToolModel.slugifyName(cat.name, "provisional"),
+      parameters: {},
+      description: null,
+      clonedPendingDiscovery: true,
+    });
+
+    const result = await ToolModel.findAllWithAssignments({
+      pagination: { limit: 50, offset: 0 },
+      filters: { origin: cat.id },
+      isAgentAdmin: true,
+    });
+
+    const ids = result.data.map((t) => t.id);
+    expect(ids).toContain(provisional.id);
+  });
+});
+
+describe("policy configurator and cloned tools", () => {
+  test("clone copy and reconcile do not trigger the configurator", async ({
+    makeOrganization,
+    makeInternalMcpCatalog,
+  }) => {
+    // triggerAutoConfigureIfEnabled is private; cast to access it for spying.
+    const spy = vi
+      // biome-ignore lint/suspicious/noExplicitAny: spy on private static method
+      .spyOn(ToolModel as any, "triggerAutoConfigureIfEnabled")
+      .mockResolvedValue(undefined);
+    try {
+      const org = await makeOrganization();
+      const source = await makeInternalMcpCatalog({ organizationId: org.id });
+      await ToolModel.create({
+        catalogId: source.id,
+        name: ToolModel.slugifyName(source.name, "search"),
+        parameters: {},
+        description: null,
+      });
+      const clone = await makeInternalMcpCatalog({
+        organizationId: org.id,
+        clonedFrom: source.id,
+      });
+
+      await ToolModel.cloneToolsAndPoliciesFromCatalog({
+        sourceCatalogId: source.id,
+        targetCatalogId: clone.id,
+        targetCatalogName: clone.name,
+      });
+      await ToolModel.reconcileClonedCatalogTools({
+        catalogId: clone.id,
+        discoveredToolNames: new Set([
+          ToolModel.slugifyName(clone.name, "search"),
+        ]),
+      });
+
+      expect(spy).not.toHaveBeenCalled();
+    } finally {
+      spy.mockRestore();
+    }
   });
 });

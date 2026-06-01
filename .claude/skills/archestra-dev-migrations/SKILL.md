@@ -1,13 +1,19 @@
 ---
 name: archestra-dev-migrations
-description: Use when changing Drizzle schemas, generating migrations, editing migration SQL, creating data-only migrations, or diagnosing drizzle-kit check failures that are not merge/rebase conflicts.
+description: Use when changing Drizzle schemas, generating migrations, editing migration SQL, creating data-only migrations, diagnosing drizzle-kit check failures, or resolving migration/generated-client conflicts.
 ---
 
 # Archestra Database Migrations
 
-Use this skill for normal migration work. Use `archestra-dev-resolve-conflicts` instead when git reports merge/rebase conflicts in Drizzle migration metadata or generated clients.
+Use this skill for migration work.
 
 Run commands from `platform/` unless specifically instructed otherwise.
+
+## Merge/rebase conflicts
+
+When git reports merge/rebase conflicts in Drizzle migration metadata or generated clients, follow `resolve-conflicts.md` instead of the normal migration flow.
+
+That subpage overrides the default working directory rule and runs its procedure from the repo root where needed.
 
 ## Common commands
 

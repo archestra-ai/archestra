@@ -28,11 +28,10 @@ Check ./docs/docs_writer_prompt.md before changing docs files.
 Load these project skills when the task matches their domain:
 
 - `archestra-dev-frontend` - use for frontend Next.js/React work, UI components, forms, TanStack Query hooks, generated API clients, white-label copy, and docs links.
-- `archestra-dev-migrations` - use for Drizzle schema changes, generated migrations, data migrations, custom migrations, or `drizzle-kit check` failures not caused by merge conflicts.
+- `archestra-dev-migrations` - use for Drizzle schema changes, generated migrations, data migrations, custom migrations, `drizzle-kit check` failures, or migration conflict resolution via its `resolve-conflicts.md` subpage.
 - `archestra-dev-e2e` - use for Playwright e2e tests, API/UI fixtures, WireMock setup, local/CI e2e behavior, and locator guidance.
 - `archestra-dev-observability` - use for tracing, metrics, OpenTelemetry, Tempo, Grafana, Prometheus, LLM/MCP spans, or observability label changes.
 - `archestra-dev-rust-napi` - use for Rust core code, NAPI bindings, generated TypeScript bindings, Rust telemetry, and Rust checks.
-- `archestra-dev-resolve-conflicts` - use specifically for merge/rebase conflicts in Drizzle migrations or generated API clients.
 
 ## Key URLs
 

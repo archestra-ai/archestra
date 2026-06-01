@@ -397,6 +397,17 @@ class InternalMcpCatalogModel {
     return { ...dbItem, labels, teams };
   }
 
+  static async findByNameForAudit(
+    name: string,
+    organizationId: string,
+  ): Promise<Record<string, unknown> | null> {
+    const item = await InternalMcpCatalogModel.findByName(name, {
+      organizationId,
+    });
+    if (!item) return null;
+    return InternalMcpCatalogModel.findByIdForAudit(item.id, organizationId);
+  }
+
   static async update(
     id: string,
     catalogItem: Partial<UpdateInternalMcpCatalog>,
@@ -925,6 +936,73 @@ class InternalMcpCatalogModel {
         ? (nameMap.get(item.authorId) ?? null)
         : null;
     }
+  }
+
+  // Org-or-global scoped audit snapshot. Returns data only for catalog rows
+  // that belong to the requesting organization OR are global entries
+  // (organizationId IS NULL, e.g. the seeded Archestra catalog). Returns null
+  // for rows owned by a different org, preventing the snapshot-before-authz
+  // cross-tenant leak: this fetcher runs in the audit preHandler before the
+  // route handler has a chance to reject the request.
+  static async findByIdForAudit(
+    id: string,
+    organizationId: string,
+  ): Promise<Record<string, unknown> | null> {
+    const [row] = await db
+      .select()
+      .from(schema.internalMcpCatalogTable)
+      .where(
+        and(
+          eq(schema.internalMcpCatalogTable.id, id),
+          or(
+            eq(schema.internalMcpCatalogTable.organizationId, organizationId),
+            isNull(schema.internalMcpCatalogTable.organizationId),
+          ),
+        ),
+      )
+      .limit(1);
+
+    if (!row) return null;
+
+    const toolCount =
+      (await InternalMcpCatalogModel.getToolCounts([id])).get(id) ?? 0;
+
+    const transportType = row.localConfig?.transportType ?? "stdio";
+    const envKeys = Array.isArray(row.localConfig?.environment)
+      ? row.localConfig.environment.map((e) => e.key).sort()
+      : [];
+    const userConfigKeys = row.userConfig
+      ? Object.keys(row.userConfig).sort()
+      : [];
+    const authFieldKeys = Array.isArray(row.authFields)
+      ? row.authFields.map((f) => f.name).sort()
+      : [];
+
+    return {
+      id: row.id,
+      name: row.name,
+      version: row.version ?? null,
+      description: row.description ?? null,
+      serverType: row.serverType,
+      scope: row.scope,
+      organizationId: row.organizationId ?? null,
+      authorId: row.authorId,
+      multitenant: row.multitenant,
+      serverUrl: row.serverUrl ?? null,
+      docsUrl: row.docsUrl ?? null,
+      requiresAuth: row.requiresAuth,
+      transportType,
+      envKeys,
+      userConfigKeys,
+      authFieldKeys,
+      hasOauthConfig: row.oauthConfig !== null,
+      hasClientSecret: Boolean(row.clientSecretId),
+      hasLocalConfigSecret: Boolean(row.localConfigSecretId),
+      hasDeploymentSpecYaml: Boolean(row.deploymentSpecYaml),
+      hasEnterpriseManagedConfig: row.enterpriseManagedConfig !== null,
+      toolCount,
+      createdAt: row.createdAt.toISOString(),
+    };
   }
 }
 

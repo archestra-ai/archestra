@@ -3,7 +3,7 @@ title: "Access Control"
 category: Administration
 description: "Role-based access control (RBAC) system for managing user permissions in Archestra"
 order: 1
-lastUpdated: 2026-05-25
+lastUpdated: 2026-05-31
 ---
 <!--
 Check ../docs_writer_prompt.md before changing this file.
@@ -37,7 +37,7 @@ Full access to core resources and settings, but cannot manage users, roles, or i
 | Resource | Actions |
 |----------|--------|
 | Agents | `read`, `create`, `update`, `delete`, `team-admin` |
-| Skills | `read`, `create`, `update`, `delete`, `team-admin` |
+| Skills | `read`, `create`, `update`, `delete`, `team-admin`, `execute` |
 | Agent Triggers | `read`, `create`, `update`, `delete` |
 | Scheduled Tasks | `read`, `create`, `update`, `delete` |
 | LLM Proxies | `read`, `create`, `update`, `delete`, `team-admin` |
@@ -53,6 +53,7 @@ Full access to core resources and settings, but cannot manage users, roles, or i
 | MCP Registry | `read`, `create`, `update`, `delete` |
 | MCP Server Installations | `read`, `create`, `update`, `delete` |
 | MCP Server Installation Requests | `read`, `create`, `update`, `delete` |
+| Knowledge Files | `read`, `create`, `update`, `delete` |
 | Knowledge Sources | `read`, `create`, `update`, `delete`, `query` |
 | Chats | `read`, `create`, `update`, `delete` |
 | Logs | `read` |
@@ -78,7 +79,7 @@ Can manage agents, tools, and chat, with read-only access to most other resource
 | Resource | Actions |
 |----------|--------|
 | Agents | `read`, `create`, `update`, `delete` |
-| Skills | `read`, `create`, `update`, `delete` |
+| Skills | `read`, `create`, `update`, `delete`, `execute` |
 | Scheduled Tasks | `read`, `create`, `update`, `delete` |
 | LLM Proxies | `read`, `create`, `update`, `delete` |
 | LLM Provider API Keys | `read` |
@@ -90,6 +91,7 @@ Can manage agents, tools, and chat, with read-only access to most other resource
 | MCP Registry | `read` |
 | MCP Server Installations | `read`, `create`, `delete` |
 | MCP Server Installation Requests | `read`, `create`, `update` |
+| Knowledge Files | `read` |
 | Knowledge Sources | `read`, `query` |
 | Chats | `read`, `create`, `update`, `delete` |
 | API Keys | `read`, `create`, `delete` |
@@ -130,6 +132,7 @@ The following table lists all available permissions that can be assigned to cust
 | `apiKey:read` | View API keys |
 | `apiKey:create` | Create API keys |
 | `apiKey:delete` | Delete API keys |
+| `auditLog:read` | View the organization-wide audit log of administrative actions |
 | `chat:read` | View and access chat conversations |
 | `chat:create` | Start new chat conversations |
 | `chat:update` | Edit chat messages and conversation settings |
@@ -143,6 +146,11 @@ The following table lists all available permissions that can be assigned to cust
 | `identityProvider:delete` | Remove identity providers |
 | `invitation:create` | Send invitations to new users |
 | `invitation:cancel` | Cancel pending invitations |
+| `knowledgeFile:read` | View uploaded Knowledge Files |
+| `knowledgeFile:create` | Upload Knowledge Files |
+| `knowledgeFile:update` | Modify Knowledge File visibility and agent access |
+| `knowledgeFile:delete` | Delete Knowledge Files |
+| `knowledgeFile:admin` | View all Knowledge Files, bypassing visibility restrictions |
 | `knowledgeSettings:read` | View knowledge settings (embedding and reranking models) |
 | `knowledgeSettings:update` | Modify knowledge settings (embedding and reranking models) |
 | `knowledgeSource:read` | View Knowledge Bases and Connectors |
@@ -219,6 +227,10 @@ The following table lists all available permissions that can be assigned to cust
 | `scheduledTask:admin` | View and manage all scheduled tasks, not just your own |
 | `secret:read` | View secrets manager configuration |
 | `secret:update` | Modify secrets manager settings and test connectivity |
+| `serviceAccount:read` | View service accounts |
+| `serviceAccount:create` | Create service accounts |
+| `serviceAccount:update` | Modify service accounts |
+| `serviceAccount:delete` | Delete service accounts |
 | `simpleView:enable` | Sidebar is collapsed by default on page load |
 | `siteNotification:read` | View site-wide notifications |
 | `siteNotification:create` | Create new site notifications |
@@ -230,6 +242,7 @@ The following table lists all available permissions that can be assigned to cust
 | `skill:delete` | Delete agent skills |
 | `skill:team-admin` | Manage team assignments for agent skills |
 | `skill:admin` | Full administrative control over all agent skills, bypassing team restrictions |
+| `skill:execute` | Execute skill scripts |
 | `team:read` | View teams and their members |
 | `team:create` | Create new teams |
 | `team:update` | Modify team settings |

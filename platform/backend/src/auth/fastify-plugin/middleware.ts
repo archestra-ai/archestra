@@ -5,7 +5,7 @@ import type { FastifyReply, FastifyRequest } from "fastify";
 import { betterAuth, hasPermission } from "@/auth";
 import config from "@/config";
 import logger from "@/logging";
-import { UserModel } from "@/models";
+import { ServiceAccountModel, UserModel } from "@/models";
 import { MODEL_ROUTER_PREFIX } from "@/routes/proxy/common";
 import {
   ARCHESTRA_CATALOG_PROXY_PREFIX,
@@ -15,6 +15,7 @@ import {
   ORGANIZATION_APPEARANCE_SETTINGS_PATH,
   PUBLIC_CONFIG_PATH,
   READY_PATH,
+  SKILL_MARKETPLACE_PREFIX,
   WELL_KNOWN_ACME_PREFIX,
   WELL_KNOWN_OAUTH_PREFIX,
 } from "@/routes/route-paths";
@@ -94,8 +95,12 @@ export class Authnz {
   }: FastifyRequest): Promise<boolean> => {
     // Skip CORS preflight and HEAD requests globally
     if (method === "OPTIONS" || method === "HEAD") {
+      // marketplace URLs embed a raw share token — omit from trace to avoid leaking it
+      const safeUrl = url.startsWith(`${SKILL_MARKETPLACE_PREFIX}/`)
+        ? undefined
+        : url;
       logger.trace(
-        { url, method },
+        { url: safeUrl, method },
         "[Authnz] Skipping auth for preflight/HEAD request",
       );
       return true;
@@ -119,6 +124,9 @@ export class Authnz {
       url === METRICS_PATH ||
       url === "/test" ||
       url.startsWith(config.mcpGateway.endpoint) ||
+      // Public skill marketplace git endpoint: token in URL, no session
+      url === config.skillMarketplace.endpoint ||
+      url.startsWith(`${config.skillMarketplace.endpoint}/`) ||
       // A2A routes use token auth handled in route, similar to MCP Gateway
       url.startsWith(config.a2aGateway.endpoint) ||
       url.startsWith(config.a2aV2Gateway.endpoint) ||
@@ -171,28 +179,36 @@ export class Authnz {
       }
       logger.trace("[Authnz] No session found");
     } catch (error) {
-      /**
-       * If getSession fails (e.g., "No active organization"), try API key verification
-       */
       logger.trace(
         { error: error instanceof Error ? error.message : "unknown" },
         "[Authnz] Session authentication failed, trying API key",
       );
-      const authHeader = headers.get("authorization");
-      if (authHeader) {
-        try {
-          logger.trace("[Authnz] Attempting API key authentication");
-          const { valid } = await betterAuth.api.verifyApiKey({
-            body: { key: authHeader },
-          });
+    }
 
+    const authHeader = headers.get("authorization");
+    if (authHeader) {
+      try {
+        logger.trace("[Authnz] Attempting API key authentication");
+        const { valid } = await betterAuth.api.verifyApiKey({
+          body: { key: authHeader },
+        });
+
+        if (valid) {
           logger.trace({ valid }, "[Authnz] API key verification result");
-          return valid;
-        } catch (_apiKeyError) {
-          // API key verification failed, return unauthenticated
-          logger.trace("[Authnz] API key verification failed");
-          return false;
+          return true;
         }
+      } catch (_apiKeyError) {
+        logger.trace(
+          "[Authnz] API key verification failed, trying service account token",
+        );
+      }
+
+      const serviceAccountResult =
+        await ServiceAccountModel.verifyToken(authHeader);
+      if (serviceAccountResult) {
+        request.serviceAccountAuthResult = serviceAccountResult;
+        logger.trace("[Authnz] Service account token verification succeeded");
+        return true;
       }
     }
 
@@ -207,23 +223,23 @@ export class Authnz {
       | RouteId
       | undefined;
 
-    logger.info({ routeId }, "[Authnz] Checking authorization for route");
+    logger.trace({ routeId }, "[Authnz] Checking authorization for route");
 
     const requiredPermissions = routeId
       ? requiredEndpointPermissionsMap[routeId]
       : undefined;
 
-    logger.info(
+    logger.trace(
       {
         routeId,
         requiredPermissions,
         hasPermissions: requiredPermissions !== undefined,
       },
-      "[Authnz] DEBUG: permissions lookup result",
+      "[Authnz] Permissions lookup result",
     );
 
     if (requiredPermissions === undefined) {
-      logger.info(
+      logger.trace(
         { routeId },
         "[Authnz] Route not configured in permissions map, denying by default",
       );
@@ -237,14 +253,14 @@ export class Authnz {
 
     // If no specific permissions are required (empty object), allow any authenticated user
     if (Object.keys(requiredPermissions).length === 0) {
-      logger.info(
+      logger.trace(
         { routeId },
         "[Authnz] No specific permissions required, allowing access",
       );
       return { success: true, error: null };
     }
 
-    logger.info(
+    logger.trace(
       {
         routeId,
         requiredPermissions,
@@ -252,8 +268,12 @@ export class Authnz {
       },
       "[Authnz] Checking required permissions",
     );
-    const result = await hasPermission(requiredPermissions, request.headers);
-    logger.info({ routeId, result }, "[Authnz] DEBUG: hasPermission result");
+    const result = await hasPermission(
+      requiredPermissions,
+      request.headers,
+      request.serviceAccount,
+    );
+    logger.trace({ routeId, result }, "[Authnz] hasPermission result");
     return result;
   };
 
@@ -282,6 +302,7 @@ export class Authnz {
           // Populate the request decorators
           request.user = user;
           request.organizationId = organizationId;
+          request.authMethod = "session";
           logger.trace(
             { userId: user.id, organizationId },
             "[Authnz] populateUserInfo: populated from session",
@@ -320,6 +341,7 @@ export class Authnz {
             // Populate the request decorators
             request.user = user;
             request.organizationId = organizationId;
+            request.authMethod = "api_key";
             logger.trace(
               { userId: user.id, organizationId },
               "[Authnz] populateUserInfo: populated from API key",
@@ -327,10 +349,18 @@ export class Authnz {
             return;
           }
         } catch (_apiKeyError) {
-          // API key verification failed
           logger.trace(
-            "[Authnz] populateUserInfo: API key verification failed",
+            "[Authnz] populateUserInfo: API key verification failed, trying service account token",
           );
+        }
+
+        const serviceAccountResult =
+          request.serviceAccountAuthResult ??
+          (await ServiceAccountModel.verifyToken(authHeader));
+        if (serviceAccountResult) {
+          request.serviceAccountAuthResult = serviceAccountResult;
+          this.populateServiceAccountUserInfo(request, serviceAccountResult);
+          return;
         }
       }
     } catch (error) {
@@ -367,5 +397,38 @@ export class Authnz {
       // Silently fail if Sentry is not configured or there's an error
       // We don't want authentication to fail due to Sentry issues
     }
+  };
+
+  private populateServiceAccountUserInfo = (
+    request: FastifyRequest,
+    serviceAccountResult: NonNullable<
+      FastifyRequest["serviceAccountAuthResult"]
+    >,
+  ): void => {
+    const serviceAccount = serviceAccountResult.serviceAccount;
+    request.user = {
+      id: `service-account:${serviceAccount.id}`,
+      name: serviceAccount.name,
+      email: `${serviceAccount.id}@service-account.local`,
+      emailVerified: true,
+      image: null,
+      createdAt: serviceAccount.createdAt,
+      updatedAt: serviceAccount.updatedAt,
+      role: null,
+      banned: false,
+      banReason: null,
+      banExpires: null,
+      twoFactorEnabled: false,
+    };
+    request.organizationId = serviceAccount.organizationId;
+    request.serviceAccount = serviceAccount;
+    request.authMethod = "service_account";
+    logger.trace(
+      {
+        serviceAccountId: serviceAccount.id,
+        organizationId: serviceAccount.organizationId,
+      },
+      "[Authnz] populateUserInfo: populated from service account token",
+    );
   };
 }

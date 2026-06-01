@@ -51,6 +51,8 @@ type OpenAiResponse = OpenAi.Types.ChatCompletionsResponse;
 type OpenAiMessages = OpenAi.Types.ChatCompletionsRequest["messages"];
 type OpenAiHeaders = OpenAi.Types.ChatCompletionsHeaders;
 type OpenAiStreamChunk = OpenAi.Types.ChatCompletionChunk;
+type OpenAiEmbeddingRequest = OpenAi.Types.EmbeddingRequest;
+type OpenAiEmbeddingResponse = OpenAi.Types.EmbeddingResponse;
 
 type OpenAiToolResultImageBlock = {
   type: "image_url";
@@ -70,6 +72,196 @@ type OpenAiToolResultContentBlock =
   | OpenAiToolResultTextBlock;
 
 type OpenAiToolResultContent = string | OpenAiToolResultContentBlock[];
+
+// =============================================================================
+// EMBEDDING REQUEST ADAPTER
+// =============================================================================
+
+export class OpenAIEmbeddingRequestAdapter
+  implements LLMRequestAdapter<OpenAiEmbeddingRequest, OpenAiMessages>
+{
+  readonly provider = "openai" as const;
+  private request: OpenAiEmbeddingRequest;
+  private modifiedModel: string | null = null;
+
+  constructor(request: OpenAiEmbeddingRequest) {
+    this.request = request;
+  }
+
+  getModel(): string {
+    return this.modifiedModel ?? this.request.model;
+  }
+
+  isStreaming(): boolean {
+    return false;
+  }
+
+  getMessages(): CommonMessage[] {
+    return this.getInputStrings().map((content) => ({
+      role: "user",
+      content,
+    }));
+  }
+
+  getToolResults(): CommonToolResult[] {
+    return [];
+  }
+
+  getTools(): CommonMcpToolDefinition[] {
+    return [];
+  }
+
+  hasTools(): boolean {
+    return false;
+  }
+
+  getProviderMessages(): OpenAiMessages {
+    return this.getInputStrings().map((content) => ({
+      role: "user",
+      content,
+    }));
+  }
+
+  getOriginalRequest(): OpenAiEmbeddingRequest {
+    return this.request;
+  }
+
+  setModel(model: string): void {
+    this.modifiedModel = model;
+  }
+
+  updateToolResult(): void {}
+
+  applyToolResultUpdates(): void {}
+
+  async applyToonCompression(): Promise<ToolCompressionStats> {
+    return {
+      tokensBefore: 0,
+      tokensAfter: 0,
+      costSavings: 0,
+      wasEffective: false,
+      hadToolResults: false,
+    };
+  }
+
+  convertToolResultContent(messages: OpenAiMessages): OpenAiMessages {
+    return messages;
+  }
+
+  toProviderRequest(): OpenAiEmbeddingRequest {
+    return {
+      ...this.request,
+      model: this.getModel(),
+    };
+  }
+
+  private getInputStrings(): string[] {
+    return Array.isArray(this.request.input)
+      ? this.request.input
+      : [this.request.input];
+  }
+}
+
+// =============================================================================
+// EMBEDDING RESPONSE ADAPTER
+// =============================================================================
+
+export class OpenAIEmbeddingResponseAdapter
+  implements LLMResponseAdapter<OpenAiEmbeddingResponse>
+{
+  readonly provider = "openai" as const;
+  private response: OpenAiEmbeddingResponse;
+
+  constructor(response: OpenAiEmbeddingResponse) {
+    this.response = response;
+  }
+
+  getId(): string {
+    return "";
+  }
+
+  getModel(): string {
+    return this.response.model;
+  }
+
+  getText(): string {
+    return "";
+  }
+
+  getToolCalls(): CommonToolCall[] {
+    return [];
+  }
+
+  hasToolCalls(): boolean {
+    return false;
+  }
+
+  getUsage(): UsageView {
+    return {
+      inputTokens: this.response.usage.prompt_tokens,
+      outputTokens: 0,
+    };
+  }
+
+  getOriginalResponse(): OpenAiEmbeddingResponse {
+    return this.response;
+  }
+
+  getFinishReasons(): string[] {
+    return [];
+  }
+
+  toRefusalResponse(): OpenAiEmbeddingResponse {
+    return this.response;
+  }
+}
+
+export class OpenAIEmbeddingStreamAdapter
+  implements LLMStreamAdapter<never, OpenAiEmbeddingResponse>
+{
+  readonly provider = "openai" as const;
+  readonly state: StreamAccumulatorState = {
+    responseId: "",
+    model: "",
+    text: "",
+    toolCalls: [],
+    rawToolCallEvents: [],
+    usage: null,
+    stopReason: null,
+    timing: {
+      startTime: Date.now(),
+      firstChunkTime: null,
+    },
+  };
+
+  processChunk(): ChunkProcessingResult {
+    throw new Error("OpenAI embeddings do not support streaming.");
+  }
+
+  getSSEHeaders(): Record<string, string> {
+    throw new Error("OpenAI embeddings do not support streaming.");
+  }
+
+  formatTextDeltaSSE(): string {
+    throw new Error("OpenAI embeddings do not support streaming.");
+  }
+
+  getRawToolCallEvents(): string[] {
+    return [];
+  }
+
+  formatCompleteTextSSE(): string[] {
+    throw new Error("OpenAI embeddings do not support streaming.");
+  }
+
+  formatEndSSE(): string {
+    throw new Error("OpenAI embeddings do not support streaming.");
+  }
+
+  toProviderResponse(): OpenAiEmbeddingResponse {
+    throw new Error("OpenAI embeddings do not support streaming.");
+  }
+}
 
 // =============================================================================
 // REQUEST ADAPTER
@@ -1303,5 +1495,71 @@ export const openaiAdapterFactory: LLMProvider<
     }
 
     return "Internal server error";
+  },
+};
+
+export const openAiEmbeddingsAdapterFactory: LLMProvider<
+  OpenAiEmbeddingRequest,
+  OpenAiEmbeddingResponse,
+  OpenAiMessages,
+  never,
+  OpenAiHeaders
+> = {
+  provider: "openai",
+  interactionType: "openai:embeddings",
+
+  createRequestAdapter(
+    request: OpenAiEmbeddingRequest,
+  ): LLMRequestAdapter<OpenAiEmbeddingRequest, OpenAiMessages> {
+    return new OpenAIEmbeddingRequestAdapter(request);
+  },
+
+  createResponseAdapter(
+    response: OpenAiEmbeddingResponse,
+  ): LLMResponseAdapter<OpenAiEmbeddingResponse> {
+    return new OpenAIEmbeddingResponseAdapter(response);
+  },
+
+  createStreamAdapter(): LLMStreamAdapter<never, OpenAiEmbeddingResponse> {
+    return new OpenAIEmbeddingStreamAdapter();
+  },
+
+  extractApiKey(headers: OpenAiHeaders): string | undefined {
+    return headers.authorization;
+  },
+
+  getBaseUrl(): string | undefined {
+    return config.llm.openai.baseUrl;
+  },
+
+  spanName: "embedding",
+
+  createClient(
+    apiKey: string | undefined,
+    options: CreateClientOptions,
+  ): OpenAIProvider {
+    return openaiAdapterFactory.createClient(apiKey, options) as OpenAIProvider;
+  },
+
+  async execute(
+    client: unknown,
+    request: OpenAiEmbeddingRequest,
+  ): Promise<OpenAiEmbeddingResponse> {
+    const openaiClient = client as OpenAIProvider;
+    return openaiClient.embeddings.create(
+      request as Parameters<typeof openaiClient.embeddings.create>[0],
+    ) as Promise<OpenAiEmbeddingResponse>;
+  },
+
+  async executeStream(): Promise<AsyncIterable<never>> {
+    throw new Error("OpenAI embeddings do not support streaming.");
+  },
+
+  extractInternalCode(error: unknown): ArchestraInternalErrorCode | undefined {
+    return openaiAdapterFactory.extractInternalCode(error);
+  },
+
+  extractErrorMessage(error: unknown): string {
+    return openaiAdapterFactory.extractErrorMessage(error);
   },
 };

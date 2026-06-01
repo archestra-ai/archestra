@@ -9,7 +9,7 @@ import { OptimizationRuleForm } from "@/app/llm/(costs)/optimization-rules/_part
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { FormDialog } from "@/components/form-dialog";
 import { LlmModelSearchableSelect } from "@/components/llm-model-select";
-import { LlmProviderOptionLabel } from "@/components/llm-provider-options";
+import { LlmProviderOptionLabel } from "@/components/llm-provider-select-items";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Badge } from "@/components/ui/badge";

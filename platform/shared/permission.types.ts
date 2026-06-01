@@ -19,6 +19,7 @@ export const actions = [
   "cancel",
   "enable",
   "query",
+  "execute",
 ] as const;
 
 export const resources = [
@@ -31,6 +32,7 @@ export const resources = [
   "identityProvider",
   "mcpRegistry",
   "mcpServerInstallation",
+  "knowledgeFile",
   "knowledgeSource",
   "knowledgeSettings",
   "mcpServerInstallationRequest",
@@ -68,6 +70,8 @@ export const resources = [
   "invitation",
   "team",
   "apiKey",
+  "serviceAccount",
+  "auditLog",
   "simpleView",
   "chatAgentPicker",
   "chatProviderSettings",
@@ -88,6 +92,7 @@ export const resourceLabels: Record<Resource, string> = {
   invitation: "Invitations",
   mcpRegistry: "MCP Registry",
   mcpServerInstallation: "MCP Server Installations",
+  knowledgeFile: "Knowledge Files",
   knowledgeSource: "Knowledge Sources",
   knowledgeSettings: "Knowledge Settings",
   mcpServerInstallationRequest: "MCP Server Installation Requests",
@@ -103,6 +108,8 @@ export const resourceLabels: Record<Resource, string> = {
   llmModel: "LLM Models",
   secret: "Secrets",
   apiKey: "API Keys",
+  serviceAccount: "Service Accounts",
+  auditLog: "Audit Log",
   organizationSettings: "Organization Settings",
   llmSettings: "LLM Settings",
   agentSettings: "Agent Settings",
@@ -136,6 +143,7 @@ export const resourceDescriptions: Record<Resource, string> = {
   llmCost: "LLM usage and cost analytics",
   mcpRegistry: "MCP server registry management",
   mcpServerInstallation: "Installed MCP servers and their runtime",
+  knowledgeFile: "Uploaded files available for knowledge retrieval",
   mcpServerInstallationRequest: "Requests for new MCP server installations",
   optimizationRule: "LLM optimization rules for routing to cheaper models",
   member: "Users and role assignments",
@@ -145,6 +153,9 @@ export const resourceDescriptions: Record<Resource, string> = {
   identityProvider: "Identity providers for authentication",
   secret: "Secrets manager configuration and connectivity",
   apiKey: "User API keys for programmatic access",
+  serviceAccount: "Service accounts and tokens for programmatic access",
+  auditLog:
+    "Organization-wide audit trail of administrative actions and auth events",
   organizationSettings:
     "Organization settings (appearance, authentication, etc)",
   knowledgeSource:
@@ -191,7 +202,7 @@ export const resourceCategories: Record<string, Resource[]> = {
     "llmSettings",
     "llmCost",
   ],
-  Knowledge: ["knowledgeSource", "knowledgeSettings"],
+  Knowledge: ["knowledgeFile", "knowledgeSource", "knowledgeSettings"],
   Other: [
     "chat",
     "log",
@@ -208,6 +219,8 @@ export const resourceCategories: Record<string, Resource[]> = {
     "identityProvider",
     "secret",
     "apiKey",
+    "serviceAccount",
+    "auditLog",
     "organizationSettings",
     "siteNotification",
   ],

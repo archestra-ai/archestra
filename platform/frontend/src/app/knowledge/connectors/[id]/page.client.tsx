@@ -18,7 +18,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useCallback, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
-import { ConnectorFilesSection } from "@/app/knowledge/connectors/_parts/connector-files-section";
+import { ConnectorDocumentsTable } from "@/app/knowledge/connectors/_parts/connector-documents-table";
 import { ConnectorRunDetailsDialog } from "@/app/knowledge/connectors/_parts/connector-run-details-dialog";
 import { ConnectorStatusDot } from "@/app/knowledge/knowledge-bases/_parts/connector-enabled-dot";
 import { ConnectorTypeIcon } from "@/app/knowledge/knowledge-bases/_parts/connector-icons";
@@ -102,6 +102,15 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
     from === "knowledge-bases"
       ? "Back to Knowledge Bases"
       : "Back to Connectors";
+  const currentTab =
+    searchParams.get("tab") === "documents" ? "documents" : "runs";
+  const tabs = [
+    { label: "Sync Runs", href: `/knowledge/connectors/${connectorId}` },
+    {
+      label: "Documents",
+      href: `/knowledge/connectors/${connectorId}?tab=documents`,
+    },
+  ];
 
   const { data: connector, isPending } = useConnector(connectorId);
   const syncConnector = useSyncConnector();
@@ -256,6 +265,7 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
         </div>
       }
       description=""
+      tabs={tabs}
       actionButton={
         <div className="flex flex-wrap items-center gap-2">
           <Tooltip>
@@ -373,36 +383,33 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
             <KnowledgeBasesMetadataItem connectorId={connectorId} />
           </div>
         </div>
-        {connector.connectorType === "file_upload" ? (
-          <ConnectorFilesSection connectorId={connectorId} />
-        ) : (
-          <>
-            <h2 className="text-lg font-semibold">Sync Runs</h2>
 
-            <LoadingWrapper
-              isPending={isRunsPending}
-              loadingFallback={<LoadingSpinner />}
-            >
-              {(runsData?.data ?? []).length === 0 ? (
-                <div className="text-muted-foreground">
-                  No sync runs yet. Trigger a manual sync or wait for the
-                  scheduled sync.
-                </div>
-              ) : (
-                <DataTable
-                  columns={columns}
-                  data={runsData?.data ?? []}
-                  manualPagination={true}
-                  pagination={{
-                    pageIndex,
-                    pageSize,
-                    total: runsData?.pagination?.total ?? 0,
-                  }}
-                  onPaginationChange={handlePaginationChange}
-                />
-              )}
-            </LoadingWrapper>
-          </>
+        {currentTab === "documents" ? (
+          <ConnectorDocumentsTable connectorId={connectorId} />
+        ) : (
+          <LoadingWrapper
+            isPending={isRunsPending}
+            loadingFallback={<LoadingSpinner />}
+          >
+            {(runsData?.data ?? []).length === 0 ? (
+              <div className="text-muted-foreground">
+                No sync runs yet. Trigger a manual sync or wait for the
+                scheduled sync.
+              </div>
+            ) : (
+              <DataTable
+                columns={columns}
+                data={runsData?.data ?? []}
+                manualPagination={true}
+                pagination={{
+                  pageIndex,
+                  pageSize,
+                  total: runsData?.pagination?.total ?? 0,
+                }}
+                onPaginationChange={handlePaginationChange}
+              />
+            )}
+          </LoadingWrapper>
         )}
 
         <ConnectorRunDetailsDialog

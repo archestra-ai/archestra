@@ -1,6 +1,6 @@
 import type { UIMessageChunk } from "ai";
 import { and, asc, desc, eq, gt, lt, sql } from "drizzle-orm";
-import db, { schema } from "@/database";
+import db, { schema, withDbTransaction } from "@/database";
 import type {
   ChatActiveRun,
   ChatActiveRunEvent,
@@ -29,18 +29,27 @@ class ActiveChatRunModel {
     runId: string;
     seq: number;
     payloads: UIMessageChunk[];
+    touchRun?: boolean;
   }): Promise<void> {
     if (params.payloads.length === 0) {
       return;
     }
 
-    await db.transaction(async (tx) => {
+    if (!params.touchRun) {
+      await db.insert(schema.chatActiveRunEventsTable).values({
+        runId: params.runId,
+        seq: params.seq,
+        payloads: params.payloads,
+      });
+      return;
+    }
+
+    await withDbTransaction(async (tx) => {
       await tx.insert(schema.chatActiveRunEventsTable).values({
         runId: params.runId,
         seq: params.seq,
         payloads: params.payloads,
       });
-
       await tx
         .update(schema.chatActiveRunsTable)
         .set({ updatedAt: new Date() })

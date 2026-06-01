@@ -14,7 +14,7 @@ import { getByosVaultKvVersion, isByosEnabled } from "@/secrets-manager";
 import { EmailProviderTypeSchema, type GlobalToolPolicy } from "@/types";
 import { PUBLIC_CONFIG_PATH } from "./route-paths";
 
-const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
+export const publicConfigRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(
     PUBLIC_CONFIG_PATH,
     {
@@ -23,30 +23,18 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description: "Get public config",
         tags: ["Config"],
         response: {
-          200: z.strictObject({
-            disableBasicAuth: z.boolean(),
-            disableInvitations: z.boolean(),
-            maintenanceMode: z.string().nullable(),
-            analytics: z.strictObject({
-              enabled: z.boolean(),
-              posthog: z.strictObject({
-                key: z.string(),
-                host: z.string(),
-              }),
-            }),
-          }),
+          200: PublicConfigResponseSchema,
         },
       },
     },
     async (_request, reply) => {
-      return reply.send({
-        disableBasicAuth: config.auth.disableBasicAuth,
-        disableInvitations: config.auth.disableInvitations,
-        maintenanceMode: config.maintenanceMode,
-        analytics: config.analytics,
-      });
+      return reply.send(getPublicConfigResponse());
     },
   );
+};
+
+const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
+  await fastify.register(publicConfigRoutes);
 
   fastify.get(
     "/api/config",
@@ -156,6 +144,28 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
 };
 
 export default configRoutes;
+
+const PublicConfigResponseSchema = z.strictObject({
+  disableBasicAuth: z.boolean(),
+  disableInvitations: z.boolean(),
+  maintenanceMode: z.string().nullable(),
+  analytics: z.strictObject({
+    enabled: z.boolean(),
+    posthog: z.strictObject({
+      key: z.string(),
+      host: z.string(),
+    }),
+  }),
+});
+
+function getPublicConfigResponse(): z.infer<typeof PublicConfigResponseSchema> {
+  return {
+    disableBasicAuth: config.auth.disableBasicAuth,
+    disableInvitations: config.auth.disableInvitations,
+    maintenanceMode: config.maintenanceMode,
+    analytics: config.analytics,
+  };
+}
 
 /**
  * Get the ngrok domain from env var or from the file written by the

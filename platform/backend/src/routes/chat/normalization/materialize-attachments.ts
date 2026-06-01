@@ -1,5 +1,5 @@
 import logger from "@/logging";
-import ChatAttachmentModel from "@/models/chat-attachment";
+import ConversationAttachmentModel from "@/models/conversation-attachment";
 import type { ChatMessage, ChatMessagePart } from "@/types";
 import {
   isAttachmentRefUrl,
@@ -33,7 +33,7 @@ export async function materializeAttachments(
   const attachments =
     refIds.length === 0
       ? []
-      : await ChatAttachmentModel.findByIdsWithData(refIds);
+      : await ConversationAttachmentModel.findByIdsWithData(refIds);
   // Filter to attachments owned by the current conversation. Anything
   // referencing an id outside this conversation is silently dropped from
   // the rehydration map — those parts stay with their ref URL, which
@@ -73,7 +73,9 @@ function materializePart(
   part: ChatMessagePart,
   byId: Map<
     string,
-    Awaited<ReturnType<typeof ChatAttachmentModel.findByIdsWithData>>[number]
+    Awaited<
+      ReturnType<typeof ConversationAttachmentModel.findByIdsWithData>
+    >[number]
   >,
 ): ChatMessagePart {
   if (part.type !== "file" || typeof part.url !== "string") {

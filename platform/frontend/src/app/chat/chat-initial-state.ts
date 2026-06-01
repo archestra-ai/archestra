@@ -44,6 +44,7 @@ export type CreateConversationInput = {
   agentId: string;
   modelId?: string;
   chatApiKeyId?: string | null;
+  title?: string;
 };
 
 export function resolveInitialAgentSelection<TAgent extends AgentInfo>(params: {
@@ -189,6 +190,7 @@ export function buildCreateConversationInput(params: {
   agentId: string | null;
   modelId: string;
   chatApiKeyId: string | null;
+  title?: string;
 }): CreateConversationInput | null {
   if (!params.agentId) {
     return null;
@@ -198,6 +200,7 @@ export function buildCreateConversationInput(params: {
     agentId: params.agentId,
     modelId: params.modelId || undefined,
     chatApiKeyId: params.chatApiKeyId ?? undefined,
+    title: params.title,
   };
 }
 

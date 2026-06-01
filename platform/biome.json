@@ -18,7 +18,8 @@
       "!**/dist",
       "!build",
       "!helm/**/*",
-      "!**/*.gen.ts"
+      "!**/*.gen.ts",
+      "!**/sandbox-rs/index.d.ts"
     ]
   },
   "formatter": {

@@ -3,6 +3,7 @@ import {
   ARCHESTRA_MCP_CATALOG_ID,
   BUILT_IN_AGENT_IDS,
   BUILT_IN_AGENT_NAMES,
+  CHAT_TITLE_GENERATION_SYSTEM_PROMPT,
   CONTEXT_COMPACTION_SYSTEM_PROMPT,
   DUAL_LLM_MAIN_SYSTEM_PROMPT,
   DUAL_LLM_QUARANTINE_SYSTEM_PROMPT,
@@ -16,7 +17,7 @@ import {
 } from "@shared";
 import { and, eq, inArray, isNull } from "drizzle-orm";
 import config, { getProviderEnvApiKey } from "@/config";
-import db, { schema } from "@/database";
+import db, { schema, withDbTransaction } from "@/database";
 import logger from "@/logging";
 import {
   AgentModel,
@@ -109,6 +110,16 @@ export async function syncBuiltInAgents(): Promise<void> {
       systemPrompt: CONTEXT_COMPACTION_SYSTEM_PROMPT,
       builtInAgentConfig: {
         name: BUILT_IN_AGENT_IDS.CONTEXT_COMPACTION,
+      } as const,
+    },
+    {
+      builtInAgentId: BUILT_IN_AGENT_IDS.CHAT_TITLE_GENERATION,
+      name: BUILT_IN_AGENT_NAMES.CHAT_TITLE_GENERATION,
+      description:
+        "Generates concise titles for chat conversations using the configured title generation model",
+      systemPrompt: CHAT_TITLE_GENERATION_SYSTEM_PROMPT,
+      builtInAgentConfig: {
+        name: BUILT_IN_AGENT_IDS.CHAT_TITLE_GENERATION,
       } as const,
     },
   ];
@@ -504,7 +515,7 @@ async function migratePlaywrightToolsToDynamicCredential(): Promise<void> {
 }
 
 async function migrateSecretsToEncrypted(): Promise<void> {
-  await db.transaction(async (tx) => {
+  await withDbTransaction(async (tx) => {
     const rows = await tx.select().from(schema.secretsTable);
     let migrated = 0;
 

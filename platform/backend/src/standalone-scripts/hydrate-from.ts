@@ -28,6 +28,7 @@
 import { and, eq, inArray, not, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import pg from "pg";
+import { withTransactionRetry } from "@/database/retry";
 import * as schema from "@/database/schemas";
 import logger from "@/logging";
 
@@ -159,140 +160,144 @@ try {
   let copiedKeys = 0;
   let copiedKeyModels = 0;
 
-  await target.transaction(async (tx) => {
-    if (secrets.length) {
-      // Re-hydrate after the source admin rotated a secret would otherwise
-      // skip the row (same PK) and leave target with the stale/revoked
-      // payload. Upsert the payload so rotations propagate.
-      const result = await tx
-        .insert(schema.secretsTable)
-        .values(secrets)
-        .onConflictDoUpdate({
-          target: schema.secretsTable.id,
-          set: {
-            secret: sql`excluded.secret`,
-            isVault: sql`excluded.is_vault`,
-            isByosVault: sql`excluded.is_byos_vault`,
-          },
-        })
-        .returning({ id: schema.secretsTable.id });
-      copiedSecrets = result.length;
-    }
-    if (models.length) {
-      // Models hit `models_provider_model_unique` when target already has the
-      // same (provider, modelId) under a different UUID. ON CONFLICT DO
-      // NOTHING would preserve target's row — including target's DEFAULT
-      // values for fields the source admin actually edited (custom prices,
-      // ignored flag). Upsert just those admin-editable columns from source
-      // so hydrating carries the admin's intent across. Catalog columns
-      // (externalId, contextLength, modalities, pricing-from-models.dev) are
-      // left as-is because target's models.dev sync may be fresher.
-      const result = await tx
-        .insert(schema.modelsTable)
-        .values(models)
-        .onConflictDoUpdate({
-          target: [schema.modelsTable.provider, schema.modelsTable.modelId],
-          set: {
-            customPricePerMillionInput: sql`excluded.custom_price_per_million_input`,
-            customPricePerMillionOutput: sql`excluded.custom_price_per_million_output`,
-            ignored: sql`excluded.ignored`,
-          },
-        })
-        .returning({ id: schema.modelsTable.id });
-      copiedModels = result.length;
-    }
-    if (rewrittenKeys.length) {
-      // Re-hydrate after the source admin renamed a key, swapped its
-      // secret, or tweaked the base URLs / extra headers would otherwise
-      // skip the row (same PK) and leave the stale config. Upsert the
-      // source-owned columns on PK conflict. Target-created keys (dev
-      // added by hand) have target-side UUIDs and never match this
-      // conflict target, so they're untouched. Ownership columns
-      // (organization_id / user_id / team_id / scope) and isSystem aren't
-      // re-set because they're always our chosen values. isPrimary uses
-      // `excluded.is_primary` so the demotion logic above applies on
-      // re-hydrate too.
-      const result = await tx
-        .insert(schema.llmProviderApiKeysTable)
-        .values(rewrittenKeys)
-        .onConflictDoUpdate({
-          target: schema.llmProviderApiKeysTable.id,
-          set: {
-            name: sql`excluded.name`,
-            secretId: sql`excluded.secret_id`,
-            baseUrl: sql`excluded.base_url`,
-            inferenceBaseUrl: sql`excluded.inference_base_url`,
-            extraHeaders: sql`excluded.extra_headers`,
-            isPrimary: sql`excluded.is_primary`,
-          },
-        })
-        .returning({ id: schema.llmProviderApiKeysTable.id });
-      copiedKeys = result.length;
-    }
-    if (apiKeyModels.length) {
-      // For keys we filter by what landed in target (a source key whose
-      // insert was skipped by a unique-index conflict has no target row to
-      // FK to). For models we have to REMAP — `models_provider_model_unique`
-      // means target may already have a logically-equivalent row under a
-      // different UUID, in which case the source row was skipped but the
-      // link should still resolve to target's existing UUID instead of
-      // being dropped.
-      const sourceProviders = Array.from(
-        new Set(models.map((m) => m.provider)),
-      );
-      const sourceModelIds = Array.from(new Set(models.map((m) => m.modelId)));
-      const [presentKeys, targetMatchingModels] = await Promise.all([
-        sourceKeyIds.length
-          ? tx
-              .select({ id: schema.llmProviderApiKeysTable.id })
-              .from(schema.llmProviderApiKeysTable)
-              .where(inArray(schema.llmProviderApiKeysTable.id, sourceKeyIds))
-          : Promise.resolve([] as { id: string }[]),
-        sourceProviders.length && sourceModelIds.length
-          ? tx
-              .select({
-                id: schema.modelsTable.id,
-                provider: schema.modelsTable.provider,
-                modelId: schema.modelsTable.modelId,
-              })
-              .from(schema.modelsTable)
-              .where(
-                and(
-                  inArray(schema.modelsTable.provider, sourceProviders),
-                  inArray(schema.modelsTable.modelId, sourceModelIds),
-                ),
-              )
-          : Promise.resolve(
-              [] as { id: string; provider: string; modelId: string }[],
-            ),
-      ]);
-      const presentKeyIds = new Set(presentKeys.map((r) => r.id));
-      const targetModelByCompound = new Map(
-        targetMatchingModels.map((t) => [`${t.provider}:${t.modelId}`, t.id]),
-      );
-      const sourceToTargetModelId = new Map<string, string>();
-      for (const sm of models) {
-        const tid = targetModelByCompound.get(`${sm.provider}:${sm.modelId}`);
-        if (tid) sourceToTargetModelId.set(sm.id, tid);
-      }
-      const linkable = apiKeyModels.flatMap((l) => {
-        if (!presentKeyIds.has(l.apiKeyId)) return [];
-        const remappedModelId = sourceToTargetModelId.get(l.modelId);
-        if (!remappedModelId) return [];
-        return [{ ...l, modelId: remappedModelId }];
-      });
-      if (linkable.length) {
+  await withTransactionRetry(() =>
+    target.transaction(async (tx) => {
+      if (secrets.length) {
+        // Re-hydrate after the source admin rotated a secret would otherwise
+        // skip the row (same PK) and leave target with the stale/revoked
+        // payload. Upsert the payload so rotations propagate.
         const result = await tx
-          .insert(schema.llmProviderApiKeyModelsTable)
-          .values(linkable)
-          .onConflictDoNothing()
-          .returning({
-            apiKeyId: schema.llmProviderApiKeyModelsTable.apiKeyId,
-          });
-        copiedKeyModels = result.length;
+          .insert(schema.secretsTable)
+          .values(secrets)
+          .onConflictDoUpdate({
+            target: schema.secretsTable.id,
+            set: {
+              secret: sql`excluded.secret`,
+              isVault: sql`excluded.is_vault`,
+              isByosVault: sql`excluded.is_byos_vault`,
+            },
+          })
+          .returning({ id: schema.secretsTable.id });
+        copiedSecrets = result.length;
       }
-    }
-  });
+      if (models.length) {
+        // Models hit `models_provider_model_unique` when target already has the
+        // same (provider, modelId) under a different UUID. ON CONFLICT DO
+        // NOTHING would preserve target's row — including target's DEFAULT
+        // values for fields the source admin actually edited (custom prices,
+        // ignored flag). Upsert just those admin-editable columns from source
+        // so hydrating carries the admin's intent across. Catalog columns
+        // (externalId, contextLength, modalities, pricing-from-models.dev) are
+        // left as-is because target's models.dev sync may be fresher.
+        const result = await tx
+          .insert(schema.modelsTable)
+          .values(models)
+          .onConflictDoUpdate({
+            target: [schema.modelsTable.provider, schema.modelsTable.modelId],
+            set: {
+              customPricePerMillionInput: sql`excluded.custom_price_per_million_input`,
+              customPricePerMillionOutput: sql`excluded.custom_price_per_million_output`,
+              ignored: sql`excluded.ignored`,
+            },
+          })
+          .returning({ id: schema.modelsTable.id });
+        copiedModels = result.length;
+      }
+      if (rewrittenKeys.length) {
+        // Re-hydrate after the source admin renamed a key, swapped its
+        // secret, or tweaked the base URLs / extra headers would otherwise
+        // skip the row (same PK) and leave the stale config. Upsert the
+        // source-owned columns on PK conflict. Target-created keys (dev
+        // added by hand) have target-side UUIDs and never match this
+        // conflict target, so they're untouched. Ownership columns
+        // (organization_id / user_id / team_id / scope) and isSystem aren't
+        // re-set because they're always our chosen values. isPrimary uses
+        // `excluded.is_primary` so the demotion logic above applies on
+        // re-hydrate too.
+        const result = await tx
+          .insert(schema.llmProviderApiKeysTable)
+          .values(rewrittenKeys)
+          .onConflictDoUpdate({
+            target: schema.llmProviderApiKeysTable.id,
+            set: {
+              name: sql`excluded.name`,
+              secretId: sql`excluded.secret_id`,
+              baseUrl: sql`excluded.base_url`,
+              inferenceBaseUrl: sql`excluded.inference_base_url`,
+              extraHeaders: sql`excluded.extra_headers`,
+              isPrimary: sql`excluded.is_primary`,
+            },
+          })
+          .returning({ id: schema.llmProviderApiKeysTable.id });
+        copiedKeys = result.length;
+      }
+      if (apiKeyModels.length) {
+        // For keys we filter by what landed in target (a source key whose
+        // insert was skipped by a unique-index conflict has no target row to
+        // FK to). For models we have to REMAP — `models_provider_model_unique`
+        // means target may already have a logically-equivalent row under a
+        // different UUID, in which case the source row was skipped but the
+        // link should still resolve to target's existing UUID instead of
+        // being dropped.
+        const sourceProviders = Array.from(
+          new Set(models.map((m) => m.provider)),
+        );
+        const sourceModelIds = Array.from(
+          new Set(models.map((m) => m.modelId)),
+        );
+        const [presentKeys, targetMatchingModels] = await Promise.all([
+          sourceKeyIds.length
+            ? tx
+                .select({ id: schema.llmProviderApiKeysTable.id })
+                .from(schema.llmProviderApiKeysTable)
+                .where(inArray(schema.llmProviderApiKeysTable.id, sourceKeyIds))
+            : Promise.resolve([] as { id: string }[]),
+          sourceProviders.length && sourceModelIds.length
+            ? tx
+                .select({
+                  id: schema.modelsTable.id,
+                  provider: schema.modelsTable.provider,
+                  modelId: schema.modelsTable.modelId,
+                })
+                .from(schema.modelsTable)
+                .where(
+                  and(
+                    inArray(schema.modelsTable.provider, sourceProviders),
+                    inArray(schema.modelsTable.modelId, sourceModelIds),
+                  ),
+                )
+            : Promise.resolve(
+                [] as { id: string; provider: string; modelId: string }[],
+              ),
+        ]);
+        const presentKeyIds = new Set(presentKeys.map((r) => r.id));
+        const targetModelByCompound = new Map(
+          targetMatchingModels.map((t) => [`${t.provider}:${t.modelId}`, t.id]),
+        );
+        const sourceToTargetModelId = new Map<string, string>();
+        for (const sm of models) {
+          const tid = targetModelByCompound.get(`${sm.provider}:${sm.modelId}`);
+          if (tid) sourceToTargetModelId.set(sm.id, tid);
+        }
+        const linkable = apiKeyModels.flatMap((l) => {
+          if (!presentKeyIds.has(l.apiKeyId)) return [];
+          const remappedModelId = sourceToTargetModelId.get(l.modelId);
+          if (!remappedModelId) return [];
+          return [{ ...l, modelId: remappedModelId }];
+        });
+        if (linkable.length) {
+          const result = await tx
+            .insert(schema.llmProviderApiKeyModelsTable)
+            .values(linkable)
+            .onConflictDoNothing()
+            .returning({
+              apiKeyId: schema.llmProviderApiKeyModelsTable.apiKeyId,
+            });
+          copiedKeyModels = result.length;
+        }
+      }
+    }),
+  );
 
   logger.info(
     `✅ Copied: ${copiedSecrets}/${secrets.length} secrets, ` +

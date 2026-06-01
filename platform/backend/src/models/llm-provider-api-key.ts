@@ -708,6 +708,36 @@ class LlmProviderApiKeyModel {
    * Used to determine which providers are "configured" for model filtering,
    * independent of whether model sync has linked models to those keys.
    */
+  static async findByIdForAudit(
+    id: string,
+    organizationId: string,
+  ): Promise<Record<string, unknown> | null> {
+    const [row] = await db
+      .select()
+      .from(schema.llmProviderApiKeysTable)
+      .where(
+        and(
+          eq(schema.llmProviderApiKeysTable.id, id),
+          eq(schema.llmProviderApiKeysTable.organizationId, organizationId),
+        ),
+      )
+      .limit(1);
+
+    if (!row) return null;
+
+    // REDACTED: secretId and any resolved key material are never included.
+    return {
+      id: row.id,
+      name: row.name,
+      provider: row.provider,
+      organizationId: row.organizationId,
+      scope: row.scope,
+      baseUrl: row.baseUrl ?? null,
+      createdAt: row.createdAt.toISOString(),
+      updatedAt: row.updatedAt.toISOString(),
+    };
+  }
+
   static async getConfiguredProviders(): Promise<Set<string>> {
     const rows = await db
       .selectDistinct({ provider: schema.llmProviderApiKeysTable.provider })

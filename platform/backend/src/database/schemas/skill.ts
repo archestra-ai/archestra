@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import {
   index,
   jsonb,
@@ -73,7 +74,16 @@ const skillsTable = pgTable(
   (table) => [
     index("skills_organization_id_idx").on(table.organizationId),
     index("skills_scope_idx").on(table.scope),
-    uniqueIndex("skills_org_name_idx").on(table.organizationId, table.name),
+    // Name uniqueness mirrors visibility: a name only needs to be unique among
+    // those who can see the skill. Personal skills are visible to their author
+    // alone, so they are unique per (org, author); team/org skills are shared,
+    // so they are unique per org to keep activation by name unambiguous.
+    uniqueIndex("skills_org_personal_name_idx")
+      .on(table.organizationId, table.authorId, table.name)
+      .where(sql`${table.scope} = 'personal'`),
+    uniqueIndex("skills_org_shared_name_idx")
+      .on(table.organizationId, table.name)
+      .where(sql`${table.scope} in ('team', 'org')`),
   ],
 );
 

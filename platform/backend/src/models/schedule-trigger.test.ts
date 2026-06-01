@@ -1,4 +1,5 @@
 import { describe, expect, test } from "@/test";
+import AgentModel from "./agent";
 import ScheduleTriggerModel from "./schedule-trigger";
 
 describe("ScheduleTriggerModel.findDueTriggers", () => {
@@ -63,6 +64,48 @@ describe("ScheduleTriggerModel.findDueTriggers", () => {
     const due = await ScheduleTriggerModel.findDueTriggers(new Date());
 
     expect(due.map((t) => t.id)).not.toContain(trigger.id);
+  });
+
+  test("does not return triggers whose agent was soft-deleted", async ({
+    makeScheduleTrigger,
+  }) => {
+    const trigger = await makeScheduleTrigger({
+      cronExpression: "* * * * *",
+      enabled: true,
+    });
+    await ScheduleTriggerModel.markExecuted(
+      trigger.id,
+      new Date(Date.now() - 120_000),
+    );
+    await AgentModel.delete(trigger.agentId);
+
+    const due = await ScheduleTriggerModel.findDueTriggers(new Date());
+
+    expect(due.map((t) => t.id)).not.toContain(trigger.id);
+  });
+
+  test("list and count exclude triggers whose agent was soft-deleted", async ({
+    makeScheduleTrigger,
+  }) => {
+    const activeTrigger = await makeScheduleTrigger({ enabled: true });
+    const deletedAgentTrigger = await makeScheduleTrigger({
+      organizationId: activeTrigger.organizationId,
+      enabled: true,
+    });
+    await AgentModel.delete(deletedAgentTrigger.agentId);
+
+    const [list, count] = await Promise.all([
+      ScheduleTriggerModel.listByOrganization({
+        organizationId: activeTrigger.organizationId,
+      }),
+      ScheduleTriggerModel.countByOrganization({
+        organizationId: activeTrigger.organizationId,
+      }),
+    ]);
+
+    expect(list.map((t) => t.id)).toContain(activeTrigger.id);
+    expect(list.map((t) => t.id)).not.toContain(deletedAgentTrigger.id);
+    expect(count).toBe(list.length);
   });
 
   test("skips triggers with invalid cron expressions without crashing", async ({

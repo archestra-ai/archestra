@@ -8,6 +8,7 @@ export interface VectorSearchResult {
   content: string;
   chunkIndex: number;
   documentId: string;
+  sourceId?: string | null;
   title: string;
   sourceUrl: string | null;
   metadata: Record<string, unknown> | null;
@@ -105,7 +106,7 @@ class KbChunkModel {
     const rows = await db.execute(sql`
       SELECT
         c.id, c.content, c.chunk_index AS "chunkIndex", c.document_id AS "documentId",
-        d.title, d.source_url AS "sourceUrl", d.metadata,
+        d.source_id AS "sourceId", d.title, d.source_url AS "sourceUrl", d.metadata,
         kbc.connector_type AS "connectorType",
         1 - (c.${col} <=> ${embeddingStr}${vectorCast}) AS score
       FROM kb_chunks c
@@ -153,7 +154,7 @@ class KbChunkModel {
     const rows = await db.execute(sql`
       SELECT
         c.id, c.content, c.chunk_index AS "chunkIndex", c.document_id AS "documentId",
-        d.title, d.source_url AS "sourceUrl", d.metadata,
+        d.source_id AS "sourceId", d.title, d.source_url AS "sourceUrl", d.metadata,
         kbc.connector_type AS "connectorType",
         ts_rank(c.search_vector, websearch_to_tsquery('english', ${orQuery})) AS score
       FROM kb_chunks c

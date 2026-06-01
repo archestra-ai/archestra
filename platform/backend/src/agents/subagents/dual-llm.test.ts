@@ -3,7 +3,7 @@ import { generateObject, generateText } from "ai";
 import { vi } from "vitest";
 import AgentModel from "@/models/agent";
 import { beforeEach, describe, expect, test } from "@/test";
-import type { Agent } from "@/types";
+import type { InsertAgent } from "@/types";
 import { resolveBestAvailableLlm } from "@/utils/llm-resolution";
 import { DualLlmSubagent } from "./dual-llm";
 
@@ -35,35 +35,16 @@ const MOCK_RESOLVED_LLM = {
   baseUrl: null,
 };
 
-function makeBuiltInAgent(params: {
+function buildBuiltInAgentOverrides(params: {
   name: (typeof BUILT_IN_AGENT_IDS)[keyof typeof BUILT_IN_AGENT_IDS];
   systemPrompt: string;
   maxRounds?: number;
-}): Agent {
+}): Partial<InsertAgent> {
   return {
-    id: `${params.name}-id`,
-    organizationId: "org-1",
-    authorId: null,
     scope: "org",
     name: params.name,
-    slug: null,
-    isDefault: false,
-    isPersonalGateway: false,
-    considerContextUntrusted: false,
     agentType: "agent",
-    toolExposureMode: "full",
     systemPrompt: params.systemPrompt,
-    description: null,
-    icon: null,
-    incomingEmailEnabled: false,
-    incomingEmailSecurityMode: "private",
-    incomingEmailAllowedDomain: null,
-    llmApiKeyId: null,
-    llmModel: null,
-    modelId: null,
-    passthroughHeaders: null,
-    toolAssignmentMode: "manual",
-    identityProviderId: null,
     builtInAgentConfig:
       params.name === BUILT_IN_AGENT_IDS.DUAL_LLM_MAIN
         ? {
@@ -78,16 +59,6 @@ function makeBuiltInAgent(params: {
               name: BUILT_IN_AGENT_IDS.POLICY_CONFIG,
               autoConfigureOnToolDiscovery: false,
             },
-    builtIn: true,
-    createdAt: new Date(),
-    updatedAt: new Date(),
-    teams: [],
-    tools: [],
-    labels: [],
-    knowledgeBaseIds: [],
-    connectorIds: [],
-    suggestedPrompts: [],
-    authorName: null,
   };
 }
 
@@ -113,16 +84,22 @@ describe("DualLlmSubagent", () => {
     ).rejects.toThrow("Dual LLM built-in agents are not seeded");
   });
 
-  test("uses built-in agents to run the question/answer/summary flow", async () => {
-    const mainAgent = makeBuiltInAgent({
-      name: BUILT_IN_AGENT_IDS.DUAL_LLM_MAIN,
-      systemPrompt: "main prompt",
-      maxRounds: 2,
-    });
-    const quarantineAgent = makeBuiltInAgent({
-      name: BUILT_IN_AGENT_IDS.DUAL_LLM_QUARANTINE,
-      systemPrompt: "quarantine prompt",
-    });
+  test("uses built-in agents to run the question/answer/summary flow", async ({
+    makeAgent,
+  }) => {
+    const mainAgent = await makeAgent(
+      buildBuiltInAgentOverrides({
+        name: BUILT_IN_AGENT_IDS.DUAL_LLM_MAIN,
+        systemPrompt: "main prompt",
+        maxRounds: 2,
+      }),
+    );
+    const quarantineAgent = await makeAgent(
+      buildBuiltInAgentOverrides({
+        name: BUILT_IN_AGENT_IDS.DUAL_LLM_QUARANTINE,
+        systemPrompt: "quarantine prompt",
+      }),
+    );
 
     vi.spyOn(AgentModel, "getBuiltInAgent").mockImplementation(async (name) => {
       if (name === BUILT_IN_AGENT_IDS.DUAL_LLM_MAIN) {
@@ -186,16 +163,22 @@ describe("DualLlmSubagent", () => {
     });
   });
 
-  test("does not treat incidental DONE text as a terminal signal", async () => {
-    const mainAgent = makeBuiltInAgent({
-      name: BUILT_IN_AGENT_IDS.DUAL_LLM_MAIN,
-      systemPrompt: "main prompt",
-      maxRounds: 2,
-    });
-    const quarantineAgent = makeBuiltInAgent({
-      name: BUILT_IN_AGENT_IDS.DUAL_LLM_QUARANTINE,
-      systemPrompt: "quarantine prompt",
-    });
+  test("does not treat incidental DONE text as a terminal signal", async ({
+    makeAgent,
+  }) => {
+    const mainAgent = await makeAgent(
+      buildBuiltInAgentOverrides({
+        name: BUILT_IN_AGENT_IDS.DUAL_LLM_MAIN,
+        systemPrompt: "main prompt",
+        maxRounds: 2,
+      }),
+    );
+    const quarantineAgent = await makeAgent(
+      buildBuiltInAgentOverrides({
+        name: BUILT_IN_AGENT_IDS.DUAL_LLM_QUARANTINE,
+        systemPrompt: "quarantine prompt",
+      }),
+    );
 
     vi.spyOn(AgentModel, "getBuiltInAgent").mockImplementation(async (name) => {
       if (name === BUILT_IN_AGENT_IDS.DUAL_LLM_MAIN) {

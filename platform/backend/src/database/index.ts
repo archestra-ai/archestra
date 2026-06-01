@@ -3,7 +3,11 @@ import { drizzle } from "drizzle-orm/node-postgres";
 import pg from "pg";
 import config from "@/config";
 import logger from "@/logging";
-import { installDbErrorSafetyNet, wrapPoolWithRetry } from "./retry";
+import {
+  installDbErrorSafetyNet,
+  withTransactionRetry,
+  wrapPoolWithRetry,
+} from "./retry";
 import * as schema from "./schemas";
 import {
   DATABASE_URL_VAULT_REF_ENV,
@@ -82,6 +86,19 @@ export function getDb() {
     );
   }
   return db;
+}
+
+/**
+ * Run a database transaction with retry around the whole transaction.
+ *
+ * Pool-level retry only applies to standalone `pool.query()` calls. Drizzle
+ * transactions use a checked-out client, so transient connection failures must
+ * retry the entire transaction callback.
+ */
+export async function withDbTransaction<T>(
+  callback: (tx: Transaction) => Promise<T>,
+): Promise<T> {
+  return withTransactionRetry(() => getDb().transaction(callback));
 }
 
 /**

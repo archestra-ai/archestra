@@ -1,6 +1,5 @@
 "use client";
 
-import { AuthView } from "@daveyplate/better-auth-ui";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { E2eTestId, GITHUB_REPO_NEW_ISSUE_URL } from "@shared";
 import {
@@ -11,6 +10,7 @@ import {
   ShieldAlert,
   XCircle,
 } from "lucide-react";
+import dynamic from "next/dynamic";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
@@ -39,6 +39,7 @@ import {
   useSignInWithEmailMutation,
 } from "@/lib/auth/account.query";
 import { clearDefaultPasswordChangePending } from "@/lib/auth/default-password-change";
+import { usePublicIdentityProviders } from "@/lib/auth/identity-provider-read.query";
 import {
   clearSsoSignInAttempt,
   hasSsoSignInAttempt,
@@ -48,24 +49,18 @@ import { usePublicConfig } from "@/lib/config/config.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { SignOutWithIdpLogout } from "./sign-out-with-idp-logout";
 
-const { IdentityProviderSelector } = config.enterpriseFeatures.core
-  ? // biome-ignore lint/style/noRestrictedImports: conditional EE component with IdP selector
-    await import("@/components/identity-provider-selector.ee")
-  : {
-      IdentityProviderSelector: () => null,
-    };
+const IdentityProviderSelector = dynamic(async () => {
+  if (!config.enterpriseFeatures.core) return () => null;
 
-const { usePublicIdentityProviders } = config.enterpriseFeatures.core
-  ? // biome-ignore lint/style/noRestrictedImports: Conditional EE query import
-    await import("@/lib/auth/identity-provider.query.ee")
-  : {
-      usePublicIdentityProviders: () => ({
-        data: [],
-        isLoading: false,
-        isError: false,
-        error: null,
-      }),
-    };
+  // biome-ignore lint/style/noRestrictedImports: conditional EE component with IdP selector
+  const module = await import("@/components/identity-provider-selector.ee");
+  return module.IdentityProviderSelector;
+});
+
+const BetterAuthView = dynamic(async () => {
+  const module = await import("@daveyplate/better-auth-ui");
+  return module.AuthView;
+});
 
 /**
  * Map of SSO error codes to user-friendly messages.
@@ -490,7 +485,7 @@ export function AuthViewWithErrorHandling({
           <SignInView callbackURL={callbackURL} />
         ) : (
           alwaysShowAuthView && (
-            <AuthView
+            <BetterAuthView
               path={path}
               callbackURL={callbackURL}
               classNames={{
@@ -502,7 +497,7 @@ export function AuthViewWithErrorHandling({
           )
         )}
         {!isSignInPage && !alwaysShowAuthView && !isBasicAuthDisabled && (
-          <AuthView
+          <BetterAuthView
             path={path}
             callbackURL={callbackURL}
             classNames={{

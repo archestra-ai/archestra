@@ -197,6 +197,8 @@ class MemberModel {
         id: schema.usersTable.id,
         name: schema.usersTable.name,
         email: schema.usersTable.email,
+        role: schema.membersTable.role,
+        systemRole: schema.usersTable.role,
       })
       .from(schema.membersTable)
       .innerJoin(
@@ -210,39 +212,6 @@ class MemberModel {
       "MemberModel.findAllByOrganization: completed",
     );
     return results;
-  }
-
-  /**
-   * List org members eligible to be impersonated by an admin: excludes a
-   * given user (typically the caller) and excludes anyone whose system-level
-   * `user.role` is "admin" (better-auth's adminRoles guard would reject
-   * those at impersonation time anyway).
-   */
-  static async findImpersonationCandidates(params: {
-    organizationId: string;
-    excludeUserId: string;
-  }) {
-    const rows = await db
-      .select({
-        id: schema.usersTable.id,
-        name: schema.usersTable.name,
-        email: schema.usersTable.email,
-        role: schema.membersTable.role,
-        systemRole: schema.usersTable.role,
-      })
-      .from(schema.membersTable)
-      .innerJoin(
-        schema.usersTable,
-        eq(schema.membersTable.userId, schema.usersTable.id),
-      )
-      .where(eq(schema.membersTable.organizationId, params.organizationId))
-      .orderBy(schema.usersTable.name);
-
-    return rows
-      .filter(
-        (row) => row.id !== params.excludeUserId && row.systemRole !== "admin",
-      )
-      .map(({ systemRole: _systemRole, ...rest }) => rest);
   }
 
   static async findUserIdsInOrganization(params: {
@@ -491,6 +460,59 @@ class MemberModel {
   /**
    * Check if any member references the given agent as their default
    */
+  static async findByIdForAudit(
+    id: string,
+    organizationId: string,
+  ): Promise<Record<string, unknown> | null> {
+    const [row] = await db
+      .select()
+      .from(schema.membersTable)
+      .where(
+        and(
+          eq(schema.membersTable.id, id),
+          eq(schema.membersTable.organizationId, organizationId),
+        ),
+      )
+      .limit(1);
+
+    if (!row) return null;
+
+    return {
+      id: row.id,
+      organizationId: row.organizationId,
+      userId: row.userId,
+      role: row.role,
+      createdAt: row.createdAt.toISOString(),
+    };
+  }
+
+  static async findByUserIdForAudit(
+    userId: string,
+    organizationId: string,
+  ): Promise<Record<string, unknown> | null> {
+    const [row] = await db
+      .select()
+      .from(schema.membersTable)
+      .where(
+        and(
+          eq(schema.membersTable.userId, userId),
+          eq(schema.membersTable.organizationId, organizationId),
+        ),
+      )
+      .limit(1);
+
+    if (!row) return null;
+
+    return {
+      id: row.id,
+      organizationId: row.organizationId,
+      userId: row.userId,
+      role: row.role,
+      defaultAgentId: row.defaultAgentId ?? null,
+      createdAt: row.createdAt.toISOString(),
+    };
+  }
+
   static async isAgentDefault(agentId: string): Promise<boolean> {
     const [result] = await db
       .select({ count: count() })

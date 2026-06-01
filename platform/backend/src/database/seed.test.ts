@@ -1,6 +1,7 @@
 import {
   BUILT_IN_AGENT_IDS,
   BUILT_IN_AGENT_NAMES,
+  CHAT_TITLE_GENERATION_SYSTEM_PROMPT,
   CONTEXT_COMPACTION_SYSTEM_PROMPT,
   POLICY_CONFIG_SYSTEM_PROMPT,
 } from "@shared";
@@ -36,6 +37,12 @@ describe("syncBuiltInAgents", () => {
     expect(contextCompactionAgent?.systemPrompt).toBe(
       CONTEXT_COMPACTION_SYSTEM_PROMPT,
     );
+
+    const titleAgent = await AgentModel.getBuiltInAgent(
+      BUILT_IN_AGENT_IDS.CHAT_TITLE_GENERATION,
+      firstOrg.id,
+    );
+    expect(titleAgent?.systemPrompt).toBe(CHAT_TITLE_GENERATION_SYSTEM_PROMPT);
   });
 
   test("updates legacy policy configuration system prompts", async ({

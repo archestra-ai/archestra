@@ -7,6 +7,7 @@ import {
   MessageSquare,
   Pencil,
   Plug,
+  RotateCcw,
   Trash2,
 } from "lucide-react";
 import {
@@ -26,6 +27,7 @@ type AgentActionsProps = {
   onEdit: (agent: Agent) => void;
   onView: (agent: Agent) => void;
   onDelete: (agentId: string) => void;
+  onRestore: (agentId: string) => void;
   onClone: (agentId: string) => void;
   onExport: (agent: Agent) => void;
 };
@@ -37,10 +39,28 @@ export function AgentActions({
   onEdit,
   onView,
   onDelete,
+  onRestore,
   onClone,
   onExport,
 }: AgentActionsProps) {
   const isBuiltIn = Boolean(agent.builtIn);
+  const isDeleted = Boolean(agent.deletedAt);
+
+  if (isDeleted) {
+    return (
+      <TableRowActions
+        actions={[
+          {
+            icon: <RotateCcw className="h-4 w-4" />,
+            label: "Restore",
+            permissions: { agent: ["delete"] },
+            disabled: !canModify,
+            onClick: () => onRestore(agent.id),
+          },
+        ]}
+      />
+    );
+  }
 
   const editOrViewAction: TableRowAction =
     canModify || isBuiltIn

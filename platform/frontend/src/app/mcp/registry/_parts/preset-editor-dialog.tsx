@@ -28,7 +28,7 @@ import {
   listCatalogFields,
   validateFieldAgainstRegex,
 } from "./preset-helpers";
-import { ReinstallConfirmBar } from "./reinstall-confirm-bar";
+import { ReinstallConfirmBar } from "@/components/reinstall-confirm-bar";
 
 type FieldValue = string | number | boolean | string[];
 type Preset = archestraApiTypes.GetCatalogChildrenResponses["200"][number];

@@ -49,6 +49,17 @@ class EnvironmentModel {
       );
   }
 
+  static async findById(
+    id: string,
+  ): Promise<typeof schema.environmentsTable.$inferSelect | null> {
+    const [row] = await db
+      .select()
+      .from(schema.environmentsTable)
+      .where(eq(schema.environmentsTable.id, id))
+      .limit(1);
+    return row ?? null;
+  }
+
   static async findByIdForOrganization(
     id: string,
     organizationId: string,

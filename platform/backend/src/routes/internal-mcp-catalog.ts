@@ -17,6 +17,7 @@ import {
 import mcpServerRuntimeManager from "@/k8s/mcp-server-runtime/manager";
 import logger from "@/logging";
 import {
+  EnvironmentModel,
   InternalMcpCatalogModel,
   McpCatalogLabelModel,
   McpPresetEntryModel,
@@ -395,6 +396,16 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         restBody.presetFieldValues = nonSecretFieldValues;
         if (presetSecretId) {
           (restBody as Record<string, unknown>).presetSecretId = presetSecretId;
+        }
+      }
+
+      if (restBody.environmentId != null) {
+        const targetEnv = await EnvironmentModel.findByIdForOrganization(
+          restBody.environmentId,
+          request.organizationId,
+        );
+        if (!targetEnv) {
+          throw new ApiError(400, "Environment not found");
         }
       }
 
@@ -945,11 +956,95 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         if (repartitioned.bagValuesRotated) parentPresetBagRotated = true;
       }
 
+      // Validate that the target environment belongs to this org — prevents
+      // cross-tenant assignment where a cross-org environmentId would be
+      // persisted and later cause pods to deploy into another org's namespace.
+      if (restBody.environmentId != null) {
+        const targetEnv = await EnvironmentModel.findByIdForOrganization(
+          restBody.environmentId,
+          request.organizationId,
+        );
+        if (!targetEnv) {
+          throw new ApiError(400, "Environment not found");
+        }
+      }
+
+      // When the environment assignment changes and the new namespace differs
+      // from the old one, pre-load the existing deployment objects while the
+      // OLD namespace is still in the DB — same pattern as the environment
+      // PATCH route. After the update the runtime resolves namespace from the
+      // DB, so teardown must happen before we write the new environmentId.
+      const environmentChanging =
+        restBody.environmentId !== undefined &&
+        restBody.environmentId !== originalCatalogItem.environmentId;
+      let serversToMoveNamespace: Awaited<
+        ReturnType<typeof McpServerModel.findByCatalogId>
+      > = [];
+      if (
+        environmentChanging &&
+        mcpServerRuntimeManager.isEnabled &&
+        originalCatalogItem.serverType === "local"
+      ) {
+        const [oldEnv, newEnv] = await Promise.all([
+          originalCatalogItem.environmentId
+            ? EnvironmentModel.findByIdForOrganization(
+                originalCatalogItem.environmentId,
+                request.organizationId,
+              )
+            : null,
+          restBody.environmentId
+            ? EnvironmentModel.findByIdForOrganization(
+                restBody.environmentId,
+                request.organizationId,
+              )
+            : null,
+        ]);
+        const oldNs =
+          oldEnv?.namespace ?? mcpServerRuntimeManager.platformNamespace;
+        const newNs =
+          newEnv?.namespace ?? mcpServerRuntimeManager.platformNamespace;
+        if (oldNs !== newNs) {
+          serversToMoveNamespace = await McpServerModel.findByCatalogId(id);
+          await Promise.all(
+            serversToMoveNamespace.map((s) =>
+              mcpServerRuntimeManager.getOrLoadDeployment(s.id),
+            ),
+          );
+        }
+      }
+
       // Update the catalog item
       const catalogItem = await InternalMcpCatalogModel.update(id, restBody);
 
       if (!catalogItem) {
         throw new ApiError(404, "Catalog item not found");
+      }
+
+      // Restart servers that need to move to the new namespace.
+      if (serversToMoveNamespace.length > 0) {
+        if (originalCatalogItem.multitenant) {
+          try {
+            await mcpServerRuntimeManager.reinstallSharedDeployment(id);
+          } catch (err) {
+            logger.warn(
+              { catalogId: id, err },
+              "Failed to reinstall shared deployment after environment assignment change",
+            );
+          }
+        } else {
+          await Promise.allSettled(
+            serversToMoveNamespace.map(async (s) => {
+              try {
+                await mcpServerRuntimeManager.restartServer(s.id);
+              } catch (err) {
+                logger.warn(
+                  { mcpServerId: s.id, err },
+                  "Failed to restart server after environment assignment change",
+                );
+              }
+            }),
+          );
+        }
       }
 
       // Cascade reinstall for the parent's own installs. Use the

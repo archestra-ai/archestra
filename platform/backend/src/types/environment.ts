@@ -17,10 +17,20 @@ export const EnvironmentWithAssignedCountSchema =
     assignedCatalogCount: z.number().int().nonnegative(),
   });
 
+const KubernetesNamespaceSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(63)
+  .regex(
+    /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/,
+    "Must be a valid Kubernetes namespace name (lowercase letters, numbers, and hyphens only)",
+  );
+
 export const CreateEnvironmentSchema = z.object({
   name: z.string().trim().min(1).max(50),
   description: z.string().trim().max(500).nullable().optional(),
-  namespace: z.string().trim().max(253).nullable().optional(),
+  namespace: KubernetesNamespaceSchema.nullable().optional(),
   restricted: z.boolean().optional(),
 });
 
@@ -29,11 +39,12 @@ export const CreateEnvironmentSchema = z.object({
  * description).
  */
 export const UpdateEnvironmentSchema = z.object({
+<<<<<<< HEAD
   name: z.string().trim().min(1).max(50).optional(),
   description: z.string().trim().max(500).nullable().optional(),
-  namespace: z.string().trim().max(253).nullable().optional(),
+  namespace: KubernetesNamespaceSchema.nullable().optional(),
   restricted: z.boolean().optional(),
-});
+})
 
 export type Environment = z.infer<typeof SelectEnvironmentSchema>;
 export type EnvironmentWithAssignedCount = z.infer<

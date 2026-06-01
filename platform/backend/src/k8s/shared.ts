@@ -197,6 +197,26 @@ export function sanitizeLabelValue(value: string): string {
 }
 
 /**
+ * Verifies a Kubernetes namespace exists and is reachable by the current
+ * service account. Throws with a descriptive message on 404 or any other
+ * failure (including 403 — both mean the deployment would fail at runtime).
+ */
+export async function validateNamespaceExists(
+  namespaceName: string,
+  coreApi: k8s.CoreV1Api,
+): Promise<void> {
+  try {
+    await coreApi.readNamespace({ name: namespaceName });
+  } catch (error: unknown) {
+    const message =
+      error instanceof Error ? error.message : "unknown error";
+    throw new Error(
+      `Kubernetes namespace '${namespaceName}' could not be verified: ${message}`,
+    );
+  }
+}
+
+/**
  * Sanitizes metadata labels to ensure all keys and values are RFC 1123 compliant.
  * Also ensures values are no longer than 63 characters as per Kubernetes label requirements.
  */

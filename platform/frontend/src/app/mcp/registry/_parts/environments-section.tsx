@@ -3,6 +3,7 @@
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { ReinstallConfirmBar } from "@/components/reinstall-confirm-bar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -213,6 +214,16 @@ export function EnvironmentsSection({ canEdit }: { canEdit: boolean }) {
   );
 }
 
+const K8S_NAMESPACE_RE = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/;
+
+function validateNamespace(value: string): string | null {
+  if (value === "") return null;
+  if (value.length > 63) return "Must be 63 characters or fewer";
+  if (!K8S_NAMESPACE_RE.test(value))
+    return "Lowercase letters, numbers, and hyphens only; no leading or trailing hyphens";
+  return null;
+}
+
 function EnvironmentEditorDialog({
   mode,
   open,
@@ -245,10 +256,14 @@ function EnvironmentEditorDialog({
   const [namespace, setNamespace] = useState("");
   const [description, setDescription] = useState("");
   const [restricted, setRestricted] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
+
+  const nameEditable = mode !== "edit";
 
   // Sync drafts whenever the dialog (re)opens for a target.
   useEffect(() => {
     if (open) {
+      setShowConfirm(false);
       if (mode === "default") {
         setName(defaultEnvironment?.name ?? "");
         setNamespace(defaultEnvironment?.namespace ?? "");
@@ -270,13 +285,20 @@ function EnvironmentEditorDialog({
   const trimmedName = name.trim();
   const trimmedNamespace = namespace.trim();
   const trimmedDescription = description.trim();
-  const canSave = trimmedName.length > 0;
+  const namespaceError = validateNamespace(trimmedNamespace);
+  const canSave =
+    !namespaceError && (mode === "edit" ? true : trimmedName.length > 0);
 
-  const handleSave = () => {
+  const willRestart =
+    mode === "edit" &&
+    environment !== null &&
+    environment.assignedCatalogCount > 0 &&
+    trimmedNamespace !== (environment.namespace ?? "");
+
+  const doSave = () => {
     const namespaceValue = trimmedNamespace === "" ? null : trimmedNamespace;
     const descriptionValue =
       trimmedDescription === "" ? null : trimmedDescription;
-
     if (mode === "create") {
       createMutation.mutate(
         {
@@ -310,6 +332,14 @@ function EnvironmentEditorDialog({
         },
         { onSuccess: (updated) => updated && onOpenChange(false) },
       );
+    }
+  };
+
+  const handleSave = () => {
+    if (willRestart) {
+      setShowConfirm(true);
+    } else {
+      doSave();
     }
   };
 
@@ -363,11 +393,17 @@ function EnvironmentEditorDialog({
             <Input
               id="environment-namespace"
               value={namespace}
-              onChange={(e) => setNamespace(e.target.value)}
+              onChange={(e) => {
+                setNamespace(e.target.value);
+                setShowConfirm(false);
+              }}
               placeholder="e.g. prod-eu"
-              maxLength={253}
+              maxLength={63}
               disabled={isPending}
             />
+            {namespaceError && (
+              <p className="text-xs text-destructive">{namespaceError}</p>
+            )}
           </div>
           <div className="flex items-start justify-between gap-4">
             <div className="space-y-1">
@@ -388,18 +424,28 @@ function EnvironmentEditorDialog({
             />
           </div>
         </DialogBody>
-        <DialogFooter>
-          <Button
-            variant="outline"
-            onClick={() => onOpenChange(false)}
-            disabled={isPending}
-          >
-            Cancel
-          </Button>
-          <Button onClick={handleSave} disabled={!canSave || isPending}>
-            {isPending ? "Saving…" : "Save"}
-          </Button>
-        </DialogFooter>
+        {showConfirm ? (
+          <ReinstallConfirmBar
+            mode="auto"
+            affectedServerCount={environment?.assignedCatalogCount ?? 0}
+            isSubmitting={isPending}
+            onCancel={() => setShowConfirm(false)}
+            onConfirm={doSave}
+          />
+        ) : (
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+              disabled={isPending}
+            >
+              Cancel
+            </Button>
+            <Button onClick={handleSave} disabled={!canSave || isPending}>
+              {isPending ? "Saving…" : "Save"}
+            </Button>
+          </DialogFooter>
+        )}
       </DialogContent>
     </Dialog>
   );

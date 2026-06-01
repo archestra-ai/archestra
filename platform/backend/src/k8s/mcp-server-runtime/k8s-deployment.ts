@@ -327,9 +327,23 @@ export default class K8sDeployment {
       return null;
     }
 
-    this.catalogItem = await InternalMcpCatalogModel.findById(
+    const item = await InternalMcpCatalogModel.findById(
       this.mcpServer.catalogId,
     );
+
+    // Child catalog items (presets) don't carry their own localConfig — they
+    // inherit it from the parent. Fall back to the parent so the deployment
+    // builder can read command, args, image, environment schema, etc.
+    if (item && !item.localConfig && item.parentCatalogItemId) {
+      const parent = await InternalMcpCatalogModel.findById(
+        item.parentCatalogItemId,
+      );
+      if (parent?.localConfig) {
+        item.localConfig = parent.localConfig;
+      }
+    }
+
+    this.catalogItem = item;
     return this.catalogItem;
   }
 

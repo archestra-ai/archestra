@@ -3,9 +3,11 @@ import {
   createK8sClients,
   loadKubeConfig,
   sanitizeLabelValue,
+  validateNamespaceExists,
 } from "@/k8s/shared";
 import logger from "@/logging";
 import {
+  EnvironmentModel,
   InternalMcpCatalogModel,
   McpHttpSessionModel,
   McpServerModel,
@@ -71,6 +73,17 @@ export class McpServerRuntimeManager {
    */
   get isEnabled(): boolean {
     return this.status !== "error" && this.status !== "stopped";
+  }
+
+  get platformNamespace(): string {
+    return this.namespace;
+  }
+
+  async validateNamespace(namespaceName: string): Promise<void> {
+    if (!this.k8sApi) {
+      throw new Error("Kubernetes API client not initialized");
+    }
+    await validateNamespaceExists(namespaceName, this.k8sApi);
   }
 
   /**
@@ -162,6 +175,17 @@ export class McpServerRuntimeManager {
     }
   }
 
+  private async resolveNamespaceForCatalog(
+    catalogItem:
+      | Awaited<ReturnType<typeof InternalMcpCatalogModel.findById>>
+      | null
+      | undefined,
+  ): Promise<string> {
+    if (!catalogItem?.environmentId) return this.namespace;
+    const env = await EnvironmentModel.findById(catalogItem.environmentId);
+    return env?.namespace ?? this.namespace;
+  }
+
   /**
    * Verify that we can connect to Kubernetes
    */
@@ -200,12 +224,27 @@ export class McpServerRuntimeManager {
     logger.info(`Starting MCP server deployment: id="${id}", name="${name}"`);
 
     try {
-      // Fetch catalog item (needed for conditional env var logic)
+      // Fetch catalog item (needed for conditional env var logic).
+      // Child catalog items (preset rows) carry no localConfig of their own —
+      // they inherit it from the parent. Resolve the parent here so the
+      // K8sDeployment constructor receives a fully-populated catalogItem.
       let catalogItem = null;
       if (mcpServer.catalogId) {
         catalogItem = await InternalMcpCatalogModel.findById(
           mcpServer.catalogId,
         );
+        if (
+          catalogItem &&
+          !catalogItem.localConfig &&
+          catalogItem.parentCatalogItemId
+        ) {
+          const parent = await InternalMcpCatalogModel.findById(
+            catalogItem.parentCatalogItemId,
+          );
+          if (parent?.localConfig) {
+            catalogItem = { ...catalogItem, localConfig: parent.localConfig };
+          }
+        }
       }
 
       if (!this.k8sAttach || !this.k8sLog || !this.k8sExec) {
@@ -332,7 +371,7 @@ export class McpServerRuntimeManager {
         k8sAppsApi: this.k8sAppsApi,
         k8sAttach: this.k8sAttach,
         k8sLog: this.k8sLog,
-        namespace: this.namespace,
+        namespace: await this.resolveNamespaceForCatalog(catalogItem),
         catalogItem,
         userConfigValues,
         environmentValues: effectiveEnvironmentValues,
@@ -516,7 +555,7 @@ export class McpServerRuntimeManager {
         k8sAppsApi: this.k8sAppsApi,
         k8sAttach: this.k8sAttach,
         k8sLog: this.k8sLog,
-        namespace: this.namespace,
+        namespace: await this.resolveNamespaceForCatalog(catalogItem),
         catalogItem,
         k8sExec: this.k8sExec,
       });
@@ -775,8 +814,8 @@ export class McpServerRuntimeManager {
       // Construct the kubectl command for the user to manually get the logs if they'd like.
       // Use the catalog-stable deployment name as a label so multi-tenant aliasing works
       // (per-row mcp-server-id label only matches the first caller's pod).
-      command: `kubectl logs -n ${this.namespace} deployment/${k8sDeployment.k8sDeploymentName} --tail=${lines}`,
-      namespace: this.namespace,
+      command: `kubectl logs -n ${k8sDeployment.k8sNamespace} deployment/${k8sDeployment.k8sDeploymentName} --tail=${lines}`,
+      namespace: k8sDeployment.k8sNamespace,
     };
   }
 
@@ -812,11 +851,12 @@ export class McpServerRuntimeManager {
   ): Promise<string> {
     const k8sDeployment = await this.getOrLoadDeployment(mcpServerId);
     const deploymentName = k8sDeployment?.k8sDeploymentName;
+    const ns = k8sDeployment?.k8sNamespace ?? this.namespace;
     if (deploymentName) {
-      return `kubectl logs -n ${this.namespace} deployment/${deploymentName} --tail=${lines} -f`;
+      return `kubectl logs -n ${ns} deployment/${deploymentName} --tail=${lines} -f`;
     }
     const sanitizedId = sanitizeLabelValue(mcpServerId);
-    return `kubectl logs -n ${this.namespace} -l mcp-server-id=${sanitizedId} --tail=${lines} -f`;
+    return `kubectl logs -n ${ns} -l mcp-server-id=${sanitizedId} --tail=${lines} -f`;
   }
 
   /**
@@ -825,11 +865,12 @@ export class McpServerRuntimeManager {
   async getMcpServerDescribeCommand(mcpServerId: string): Promise<string> {
     const k8sDeployment = await this.getOrLoadDeployment(mcpServerId);
     const deploymentName = k8sDeployment?.k8sDeploymentName;
+    const ns = k8sDeployment?.k8sNamespace ?? this.namespace;
     if (deploymentName) {
-      return `kubectl describe deployment -n ${this.namespace} ${deploymentName}`;
+      return `kubectl describe deployment -n ${ns} ${deploymentName}`;
     }
     const sanitizedId = sanitizeLabelValue(mcpServerId);
-    return `kubectl describe pods -n ${this.namespace} -l mcp-server-id=${sanitizedId}`;
+    return `kubectl describe pods -n ${ns} -l mcp-server-id=${sanitizedId}`;
   }
 
   /**
@@ -880,8 +921,11 @@ export class McpServerRuntimeManager {
    * Get the kubectl exec command for an MCP server
    */
   getExecCommand(mcpServerId: string): string {
+    const ns =
+      this.mcpServerIdToDeploymentMap.get(mcpServerId)?.k8sNamespace ??
+      this.namespace;
     const sanitizedId = sanitizeLabelValue(mcpServerId);
-    return `kubectl exec -it -n ${this.namespace} $(kubectl get pods -n ${this.namespace} -l mcp-server-id=${sanitizedId} -o jsonpath='{.items[0].metadata.name}') -c mcp-server -- /bin/sh`;
+    return `kubectl exec -it -n ${ns} $(kubectl get pods -n ${ns} -l mcp-server-id=${sanitizedId} -o jsonpath='{.items[0].metadata.name}') -c mcp-server -- /bin/sh`;
   }
 
   /**

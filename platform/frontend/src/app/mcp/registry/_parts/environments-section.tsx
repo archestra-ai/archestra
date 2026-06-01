@@ -34,6 +34,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
+import { useFeature } from "@/lib/config/config.query";
 import {
   type EnvironmentWithAssignedCount,
   type NamespaceTestResult,
@@ -77,7 +78,7 @@ export function EnvironmentsSection({ canEdit }: { canEdit: boolean }) {
           <TableHeader>
             <TableRow>
               <TableHead>Name</TableHead>
-              <TableHead>Kubernetes namespace</TableHead>
+              <TableHead>Namespace</TableHead>
               <TableHead>Assigned MCPs</TableHead>
               <TableHead>Access</TableHead>
               <TableHead className="text-right">Actions</TableHead>
@@ -98,8 +99,8 @@ export function EnvironmentsSection({ canEdit }: { canEdit: boolean }) {
                   )}
                 </span>
               </TableCell>
-              <TableCell className="font-mono text-xs text-muted-foreground">
-                {defaultEnvironment.namespace ?? "—"}
+              <TableCell>
+                <NamespaceCell namespace={defaultEnvironment.namespace} />
               </TableCell>
               <TableCell className="text-muted-foreground">—</TableCell>
               <TableCell>
@@ -139,8 +140,8 @@ export function EnvironmentsSection({ canEdit }: { canEdit: boolean }) {
                   <TableCell className="font-medium">
                     {environment.name}
                   </TableCell>
-                  <TableCell className="font-mono text-xs text-muted-foreground">
-                    {environment.namespace ?? "—"}
+                  <TableCell>
+                    <NamespaceCell namespace={environment.namespace} />
                   </TableCell>
                   <TableCell className="text-muted-foreground">
                     {environment.assignedCatalogCount}
@@ -223,6 +224,37 @@ export function EnvironmentsSection({ canEdit }: { canEdit: boolean }) {
   );
 }
 
+/**
+ * Renders an environment's namespace. When none is set, pods fall back to the
+ * orchestrator's default namespace, so we surface that as a muted hint (only
+ * when the K8s runtime is enabled — otherwise namespaces aren't applied).
+ */
+function NamespaceCell({ namespace }: { namespace: string | null }) {
+  const runtimeEnabled = useFeature("orchestratorK8sRuntime");
+  const orchestratorNamespace = useFeature("orchestratorK8sNamespace");
+
+  if (namespace) {
+    return (
+      <span className="font-mono text-xs text-muted-foreground">
+        {namespace}
+      </span>
+    );
+  }
+
+  if (runtimeEnabled && orchestratorNamespace) {
+    return (
+      <span
+        className="font-mono text-xs text-muted-foreground/70 italic"
+        title="Orchestrator default namespace (no namespace set on this environment)"
+      >
+        {orchestratorNamespace}
+      </span>
+    );
+  }
+
+  return <span className="text-muted-foreground">—</span>;
+}
+
 const K8S_NAMESPACE_RE = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/;
 
 function validateNamespace(value: string): string | null {
@@ -260,6 +292,8 @@ function EnvironmentEditorDialog({
     "Default environment updated",
     "Failed to update default environment",
   );
+  const runtimeEnabled = useFeature("orchestratorK8sRuntime");
+  const orchestratorNamespace = useFeature("orchestratorK8sNamespace");
 
   const [name, setName] = useState("");
   const [namespace, setNamespace] = useState("");
@@ -395,14 +429,13 @@ function EnvironmentEditorDialog({
               id="environment-description"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="e.g. Production workloads in the EU region"
               maxLength={500}
               className="min-h-20"
               disabled={isPending}
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="environment-namespace">Kubernetes namespace</Label>
+            <Label htmlFor="environment-namespace">Namespace</Label>
             <div className="flex gap-2">
               <Input
                 id="environment-namespace"
@@ -412,7 +445,11 @@ function EnvironmentEditorDialog({
                   setShowConfirm(false);
                   setNsTest("idle");
                 }}
-                placeholder="e.g. prod-eu"
+                placeholder={
+                  runtimeEnabled && orchestratorNamespace
+                    ? orchestratorNamespace
+                    : "e.g. prod-eu"
+                }
                 maxLength={63}
                 disabled={isPending}
                 className="flex-1"

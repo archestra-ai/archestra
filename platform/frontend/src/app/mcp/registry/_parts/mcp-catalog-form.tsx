@@ -34,6 +34,7 @@ import { EnvironmentVariablesFormField } from "@/components/environment-variable
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { HeaderDialog, type HeaderDraft } from "@/components/header-dialog";
 import { HeadersReadOnlyTable } from "@/components/headers-read-only-table";
+import { ReinstallConfirmBar } from "@/components/reinstall-confirm-bar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -96,7 +97,6 @@ import {
   transformCatalogItemToFormValues,
   transformFormToApiData,
 } from "./mcp-catalog-form.utils";
-import { ReinstallConfirmBar } from "@/components/reinstall-confirm-bar";
 
 const { useIdentityProviders } = config.enterpriseFeatures.core
   ? // biome-ignore lint/style/noRestrictedImports: conditional EE query import for IdP selector
@@ -543,6 +543,14 @@ export function McpCatalogForm({
     environment: ["admin"],
   });
   const defaultEnvironment = useDefaultEnvironment();
+  // Environments the user can deploy to. Restricted environments the user lacks
+  // environment:admin for are hidden entirely. The default is always available,
+  // so with no accessible custom environments there's only one option and the
+  // selector is hidden.
+  const accessibleEnvironments = (environments ?? []).filter(
+    (e) => !e.restricted || canDeployRestricted,
+  );
+  const showEnvironmentSelector = accessibleEnvironments.length > 0;
   const currentScope = form.watch("scope");
   const enterpriseAuthDisabledReason: ReactNode | null =
     !isEnterpriseCoreEnabled
@@ -890,85 +898,71 @@ export function McpCatalogForm({
                 )}
               />
 
-              <FormField
-                control={form.control}
-                name="environmentId"
-                render={({ field }) => {
-                  const environmentOptions = [
-                    {
-                      value: ENVIRONMENT_DEFAULT_VALUE,
-                      label: defaultEnvironment.name,
-                      description: defaultEnvironment.description ?? "",
-                      disabled: false,
-                      disabledLabel: undefined as string | undefined,
-                    },
-                    ...(environments?.map((environment) => {
-                      const locked =
-                        environment.restricted && !canDeployRestricted;
-                      return {
+              {showEnvironmentSelector && (
+                <FormField
+                  control={form.control}
+                  name="environmentId"
+                  render={({ field }) => {
+                    const environmentOptions = [
+                      {
+                        value: ENVIRONMENT_DEFAULT_VALUE,
+                        label: defaultEnvironment.name,
+                        description: defaultEnvironment.description ?? "",
+                      },
+                      ...accessibleEnvironments.map((environment) => ({
                         value: environment.id,
                         label: environment.name,
                         description: environment.description ?? "",
-                        disabled: locked,
-                        disabledLabel: locked
-                          ? ("Restricted" as string | undefined)
-                          : undefined,
-                      };
-                    }) ?? []),
-                  ];
-                  const selectedValue =
-                    field.value ?? ENVIRONMENT_DEFAULT_VALUE;
-                  const selectedDescription = environmentOptions.find(
-                    (option) => option.value === selectedValue,
-                  )?.description;
+                      })),
+                    ];
+                    const selectedValue =
+                      field.value ?? ENVIRONMENT_DEFAULT_VALUE;
+                    const selectedDescription = environmentOptions.find(
+                      (option) => option.value === selectedValue,
+                    )?.description;
 
-                  return (
-                    <FormItem className="space-y-2">
-                      <Label>Environment</Label>
-                      <FormControl>
-                        <Select
-                          value={selectedValue}
-                          onValueChange={(value) =>
-                            field.onChange(
-                              value === ENVIRONMENT_DEFAULT_VALUE
-                                ? null
-                                : value,
-                            )
-                          }
-                          disabled={mode === "edit"}
-                        >
-                          <SelectTrigger className="w-full">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent position="popper">
-                            {environmentOptions.map((option) => (
-                              <SelectItem
-                                key={option.value}
-                                value={option.value}
-                                disabled={option.disabled}
-                                description={option.description || undefined}
-                              >
-                                {option.label}
-                                {option.disabledLabel ? (
-                                  <span className="ml-2 text-xs text-muted-foreground">
-                                    {option.disabledLabel}
-                                  </span>
-                                ) : null}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </FormControl>
-                      {selectedDescription ? (
-                        <p className="text-xs text-muted-foreground">
-                          {selectedDescription}
-                        </p>
-                      ) : null}
-                      <FormMessage />
-                    </FormItem>
-                  );
-                }}
-              />
+                    return (
+                      <FormItem className="space-y-2">
+                        <Label>Environment</Label>
+                        <FormControl>
+                          <Select
+                            value={selectedValue}
+                            onValueChange={(value) =>
+                              field.onChange(
+                                value === ENVIRONMENT_DEFAULT_VALUE
+                                  ? null
+                                  : value,
+                              )
+                            }
+                            disabled={mode === "edit"}
+                          >
+                            <SelectTrigger className="w-full">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent position="popper">
+                              {environmentOptions.map((option) => (
+                                <SelectItem
+                                  key={option.value}
+                                  value={option.value}
+                                  description={option.description || undefined}
+                                >
+                                  {option.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </FormControl>
+                        {selectedDescription ? (
+                          <p className="text-xs text-muted-foreground">
+                            {selectedDescription}
+                          </p>
+                        ) : null}
+                        <FormMessage />
+                      </FormItem>
+                    );
+                  }}
+                />
+              )}
 
               {mode === "create" && (
                 <div className="space-y-2">

@@ -78,7 +78,7 @@ export function EnvironmentsSection({ canEdit }: { canEdit: boolean }) {
             <TableRow>
               <TableHead>Name</TableHead>
               <TableHead>Kubernetes namespace</TableHead>
-              <TableHead>Assigned items</TableHead>
+              <TableHead>Assigned MCPs</TableHead>
               <TableHead>Access</TableHead>
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>

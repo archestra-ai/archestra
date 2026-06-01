@@ -469,10 +469,10 @@ archestra:
         # binding to an externally-managed Role), this creates the Role too.
         #
         # Example:
-        #   environmentNamespace:
+        #   environmentNamespaces:
         #     - staging
         #     - prod-eu
-        environmentNamespace: []
+        environmentNamespaces: []
 
       # NetworkPolicy configuration for MCP server pods (SSRF protection)
       # When enabled, creates a Kubernetes NetworkPolicy that prevents MCP server pods from

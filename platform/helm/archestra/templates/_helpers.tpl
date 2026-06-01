@@ -281,7 +281,7 @@ ServiceAccount name for the Archestra Platform
 {{/*
 RBAC rules granting the platform ServiceAccount the permissions it needs to
 manage MCP server workloads in a namespace. Shared by the release-namespace Role
-and the per-namespace Roles generated from rbac.environmentNamespace, so both
+and the per-namespace Roles generated from rbac.environmentNamespaces, so both
 grant exactly the same access (no drift).
 */}}
 {{- define "archestra-platform.mcpManagerRules" -}}

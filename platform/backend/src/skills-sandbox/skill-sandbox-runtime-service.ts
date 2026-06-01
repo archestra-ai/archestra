@@ -435,13 +435,6 @@ function validateCommand(command: string): void {
 }
 
 /**
- * Synthesise one `uv pip install -r requirements.txt` per mounted skill that
- * ships a top-level requirements.txt. Primary skill first so its deps take
- * precedence on version conflicts; rest in deterministic alphabetical order.
- * Returns [] for skills without a requirements.txt — skill authors aren't
- * required to declare one.
- */
-/**
  * Order skill names primary-first, then the rest alphabetically — so the
  * primary skill's modules and requirements take precedence over same-named
  * ones in secondary skills.

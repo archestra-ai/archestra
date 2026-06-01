@@ -2,7 +2,6 @@ export const CODE_RUNTIME_LIMITS = {
   maxCpuSeconds: 30,
   maxCodeBytes: 64 * 1024,
   maxMemoryBytes: 1024 * 1024 * 1024,
-  maxQueueLength: 50,
   maxRequirements: 20,
   maxRequirementBytes: 200,
 } as const;

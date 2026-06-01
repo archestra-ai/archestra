@@ -409,7 +409,9 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
       availableTools: ["known_tool"],
     });
     const payload1 = capturedInnerOnError?.(unavailableToolError);
-    const payload2 = capturedInnerOnError?.(unavailableToolError);
+    // the AI SDK re-invokes onError downstream with `new Error(errorText)`,
+    // wrapping the first return value — that duplicate must replay the payload.
+    const payload2 = capturedInnerOnError?.(new Error(payload1));
 
     expect(payload1).toBe(payload2);
     expect(payload1).toContain(
@@ -424,6 +426,54 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
     const persistedErrors =
       await ConversationChatErrorModel.findByConversation(conversationId);
     expect(persistedErrors).toHaveLength(0);
+  });
+
+  test("formats each distinct unavailable tool error independently within one stream", async ({
+    expect,
+  }) => {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/chat",
+      payload: {
+        id: conversationId,
+        messages: [
+          {
+            id: "msg-1",
+            role: "user",
+            parts: [{ type: "text", text: "hello" }],
+          },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+    expect(capturedInnerOnError).toBeDefined();
+
+    const firstToolError = new NoSuchToolError({
+      toolName: "first_missing_tool",
+      availableTools: ["known_tool"],
+    });
+    const secondToolError = new NoSuchToolError({
+      toolName: "second_missing_tool",
+      availableTools: ["known_tool"],
+    });
+
+    const firstPayload = capturedInnerOnError?.(firstToolError);
+    const secondPayload = capturedInnerOnError?.(secondToolError);
+
+    expect(firstPayload).toContain('"requestedToolName": "first_missing_tool"');
+    expect(secondPayload).toContain(
+      '"requestedToolName": "second_missing_tool"',
+    );
+    expect(secondPayload).not.toBe(firstPayload);
+
+    // each payload is replayed (not reprocessed) on the downstream
+    // re-invocation the AI SDK fires as `new Error(errorText)`.
+    expect(capturedInnerOnError?.(new Error(firstPayload))).toBe(firstPayload);
+    expect(capturedInnerOnError?.(new Error(secondPayload))).toBe(
+      secondPayload,
+    );
   });
 
   test("persists user message with new DB id on provider error and allows subsequent PATCH", async ({

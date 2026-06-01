@@ -27,7 +27,7 @@
   "license": "ISC",
   "dependencies": {
     "ai": "catalog:",
-    "better-auth": "1.5.5",
+    "better-auth": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {

@@ -1,16 +1,11 @@
 import type { SandboxId } from "@/types";
 
 /**
- * Limits enforced by the skill sandbox runtime. These mirror the env-driven
- * defaults in `config.skillsSandbox` but are exposed as a frozen object so
- * tool-layer schemas can reference them.
+ * Fixed limits exposed to tool-layer schemas and per-sandbox queueing.
+ * Runtime resource limits are env-driven through `config.skillsSandbox`.
  */
 export const SKILL_SANDBOX_LIMITS = {
-  maxCpuSeconds: 30,
-  maxMemoryBytes: 1024 * 1024 * 1024,
-  maxQueueLength: 50,
   maxSandboxQueueLength: 10,
-  maxArtifactBytes: 16 * 1024 * 1024,
   maxCommandBytes: 16 * 1024,
 } as const;
 

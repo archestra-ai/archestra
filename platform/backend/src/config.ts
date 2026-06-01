@@ -1074,11 +1074,6 @@ const config = {
    */
   codeRuntime: {
     enabled: codeRuntimeEnabled,
-    /** runner host for the Dagger Engine (sets _EXPERIMENTAL_DAGGER_RUNNER_HOST). */
-    daggerRunnerHost: codeRuntimeDaggerRunnerHost,
-    /** path to a baked-in dagger CLI (sets _EXPERIMENTAL_DAGGER_CLI_BIN). */
-    daggerCliBin:
-      process.env.ARCHESTRA_CODE_RUNTIME_DAGGER_CLI_BIN || undefined,
     /** hard wall-clock cap per run, and the default when the caller omits one. */
     timeoutSeconds: parsePositiveInt(
       process.env.ARCHESTRA_CODE_RUNTIME_TIMEOUT_SECONDS,
@@ -1100,11 +1095,6 @@ const config = {
    */
   skillsSandbox: {
     enabled: skillsSandboxEnabled,
-    daggerRunnerHost: skillsSandboxDaggerRunnerHost,
-    daggerCliBin:
-      process.env.ARCHESTRA_SKILLS_SANDBOX_DAGGER_CLI_BIN ||
-      process.env.ARCHESTRA_CODE_RUNTIME_DAGGER_CLI_BIN ||
-      undefined,
     cpuLimit: parsePositiveInt(
       process.env.ARCHESTRA_SKILLS_SANDBOX_CPU_LIMIT_SECONDS,
       30,

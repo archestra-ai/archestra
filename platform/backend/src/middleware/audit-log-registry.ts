@@ -18,6 +18,7 @@ import OptimizationRuleModel from "@/models/optimization-rule";
 import OrganizationModel from "@/models/organization";
 import OrganizationRoleModel from "@/models/organization-role";
 import ScheduleTriggerModel from "@/models/schedule-trigger";
+import ServiceAccountModel from "@/models/service-account";
 import SkillModel from "@/models/skill";
 import TeamModel from "@/models/team";
 import TeamTokenModel from "@/models/team-token";
@@ -200,6 +201,26 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
   "/api/api-keys/:id": {
     resourceType: "apiKey",
     fetchById: (id, orgId) => ApiKeyModel.findByIdForAudit(id, orgId),
+  },
+
+  // Service Accounts
+  "/api/service-accounts": {
+    resourceType: "serviceAccount",
+    fetchById: (id, orgId) => ServiceAccountModel.findByIdForAudit(id, orgId),
+  },
+  "/api/service-accounts/:id": {
+    resourceType: "serviceAccount",
+    fetchById: (id, orgId) => ServiceAccountModel.findByIdForAudit(id, orgId),
+  },
+  "/api/service-accounts/:id/tokens": {
+    resourceType: "serviceAccount",
+    resourceIdParam: "id",
+    fetchById: (id, orgId) => ServiceAccountModel.findByIdForAudit(id, orgId),
+  },
+  "/api/service-accounts/:id/tokens/:tokenId": {
+    resourceType: "serviceAccount",
+    resourceIdParam: "id",
+    fetchById: (id, orgId) => ServiceAccountModel.findByIdForAudit(id, orgId),
   },
 
   // LLM Provider API Keys (REDACTED — secretId and key material excluded)

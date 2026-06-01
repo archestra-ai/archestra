@@ -1,5 +1,5 @@
 import * as Sentry from "@sentry/nextjs";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import { usePathname, useRouter } from "next/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
@@ -358,7 +358,7 @@ describe("WithAuthCheck", () => {
   });
 
   describe("Sentry user context", () => {
-    it("should set Sentry user context when user is authenticated", () => {
+    it("should set Sentry user context when user is authenticated", async () => {
       const mockUser = {
         id: "user123",
         email: "test@example.com",
@@ -381,14 +381,16 @@ describe("WithAuthCheck", () => {
         </WithAuthCheck>,
       );
 
-      expect(Sentry.setUser).toHaveBeenCalledWith({
-        id: "user123",
-        email: "test@example.com",
-        username: "Test User",
+      await waitFor(() => {
+        expect(Sentry.setUser).toHaveBeenCalledWith({
+          id: "user123",
+          email: "test@example.com",
+          username: "Test User",
+        });
       });
     });
 
-    it("should use email as username when name is not available", () => {
+    it("should use email as username when name is not available", async () => {
       const mockUser = {
         id: "user456",
         email: "another@example.com",
@@ -410,14 +412,16 @@ describe("WithAuthCheck", () => {
         </WithAuthCheck>,
       );
 
-      expect(Sentry.setUser).toHaveBeenCalledWith({
-        id: "user456",
-        email: "another@example.com",
-        username: "another@example.com",
+      await waitFor(() => {
+        expect(Sentry.setUser).toHaveBeenCalledWith({
+          id: "user456",
+          email: "another@example.com",
+          username: "another@example.com",
+        });
       });
     });
 
-    it("should clear Sentry user context when user is not authenticated", () => {
+    it("should clear Sentry user context when user is not authenticated", async () => {
       vi.mocked(useSession).mockReturnValue({
         data: null,
         isPending: false,
@@ -431,7 +435,9 @@ describe("WithAuthCheck", () => {
         </WithAuthCheck>,
       );
 
-      expect(Sentry.setUser).toHaveBeenCalledWith(null);
+      await waitFor(() => {
+        expect(Sentry.setUser).toHaveBeenCalledWith(null);
+      });
     });
 
     it("should handle Sentry errors silently", () => {

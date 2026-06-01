@@ -73,6 +73,9 @@ export const AuditEventNameSchema = z.enum([
   "scheduleTrigger.created",
   "scheduleTrigger.updated",
   "scheduleTrigger.deleted",
+  "serviceAccount.created",
+  "serviceAccount.updated",
+  "serviceAccount.deleted",
   "skill.created",
   "skill.updated",
   "skill.deleted",
@@ -109,6 +112,7 @@ export type AuditEventName = z.infer<typeof AuditEventNameSchema>;
 export const AuditActorTypeSchema = z.enum([
   "user",
   "api_key",
+  "service_account",
   "system",
   "sso",
 ]);

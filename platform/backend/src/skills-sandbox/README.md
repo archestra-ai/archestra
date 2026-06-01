@@ -41,14 +41,17 @@ would diverge. Live processes are not durable.
 
 ## Limits
 
-Defaults live in `types.ts` (`SKILL_SANDBOX_LIMITS`) and are surfaced through
-`config.skillsSandbox` so admins can tune them via env vars:
+Runtime resource defaults are surfaced through `config.skillsSandbox` so admins
+can tune them via env vars:
 
-- `maxCpuSeconds` — wall-clock cap per command (clamped against caller request)
-- `maxMemoryBytes` — container memory cap
-- `maxQueueLength` — concurrent runs queued behind the semaphore
-- `maxArtifactBytes` — cap on exported file size
-- `maxCommandBytes` — cap on stdout/stderr captured into the command log
+- `cpuLimit` — CPU cap per command
+- `memoryLimit` — container memory cap
+- `wallClockSeconds` — wall-clock cap per command (clamped against caller request)
+- `artifactBytesLimit` — cap on exported file size
+- `outputBytesLimit` — cap on stdout/stderr captured into the command log
+
+Fixed API limits live in `types.ts` (`SKILL_SANDBOX_LIMITS`), including command
+input length and the per-sandbox pending queue length.
 
 The sandbox always runs as the non-root user from `runtime-image.ts`, with no
 host mounts and no backend env exposed inside the container. Network access is

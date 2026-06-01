@@ -71,7 +71,7 @@ import {
 } from "@/components/visibility-selector";
 import { LOCAL_MCP_DISABLED_MESSAGE } from "@/consts";
 import { useHasPermissions } from "@/lib/auth/auth.query";
-import config from "@/lib/config/config";
+import { useIdentityProviders } from "@/lib/auth/identity-provider-read.query";
 import { useEnterpriseFeature, useFeature } from "@/lib/config/config.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useAppName } from "@/lib/hooks/use-app-name";
@@ -95,20 +95,6 @@ import {
   transformFormToApiData,
 } from "./mcp-catalog-form.utils";
 import { ReinstallConfirmBar } from "./reinstall-confirm-bar";
-
-const { useIdentityProviders } = config.enterpriseFeatures.core
-  ? // biome-ignore lint/style/noRestrictedImports: conditional EE query import for IdP selector
-    await import("@/lib/auth/identity-provider.query.ee")
-  : {
-      useIdentityProviders: (_params?: { enabled?: boolean }) => ({
-        data: [] as Array<{
-          id: string;
-          providerId: string;
-          issuer: string;
-          oidcConfig?: Record<string, unknown> | null;
-        }>,
-      }),
-    };
 
 const ExternalSecretSelector = lazy(
   () =>

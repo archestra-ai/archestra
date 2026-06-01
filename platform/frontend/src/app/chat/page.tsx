@@ -38,6 +38,7 @@ import { ButtonWithTooltip } from "@/components/button-with-tooltip";
 import { BrowserPanel } from "@/components/chat/browser-panel";
 import { ChatLinkButton } from "@/components/chat/chat-help-link";
 import { ChatMessages } from "@/components/chat/chat-messages";
+import { deriveCanvasesFromMessages } from "@/components/chat/chat-messages.utils";
 import { ConversationArtifactPanel } from "@/components/chat/conversation-artifact";
 import { InitialAgentSelector } from "@/components/chat/initial-agent-selector";
 import { OnboardingWizardButton } from "@/components/chat/onboarding-wizard-button";
@@ -902,6 +903,18 @@ export function ChatPageContent({
           })
         : persistedConversationMessages,
     [chatSession?.messages, persistedConversationMessages],
+  );
+  // Derive the MCP App canvas list from the conversation itself so the sidebar
+  // selector is deterministic and survives transient section unmounts (the
+  // previous mount-effect registry could empty when a single canvas's section
+  // briefly unmounted).
+  const mcpCanvases = useMemo(
+    () =>
+      deriveCanvasesFromMessages(
+        messages,
+        chatSession?.earlyToolUiStarts ?? {},
+      ),
+    [messages, chatSession?.earlyToolUiStarts],
   );
   const sendMessage = chatSession?.sendMessage;
   const status = chatSession?.status ?? "ready";
@@ -1881,11 +1894,12 @@ export function ChatPageContent({
   return (
     <PinnedCanvasProvider
       conversationId={conversationId}
+      canvases={mcpCanvases}
       onShowInSidebar={() => openRightPanelTab("canvas" as RightPanelTab)}
     >
       <div className="flex h-full w-full min-h-0">
-        <div className="flex-1 flex flex-col min-w-0">
-          <div className="flex flex-col h-full">
+        <div className="flex-1 flex flex-col min-w-0 min-h-0">
+          <div className="flex flex-col h-full min-h-0">
             <StreamTimeoutWarning status={status} messages={messages} />
 
             <div
@@ -2356,7 +2370,7 @@ export function ChatPageContent({
         </div>
 
         {/* Right-side panel - desktop only */}
-        <div className="hidden md:flex">
+        <div className="hidden md:flex h-full min-h-0">
           <RightSidePanel
             isOpen={isRightPanelOpen}
             activeTab={activeRightTab}

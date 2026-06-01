@@ -18,6 +18,7 @@ import OptimizationRuleModel from "@/models/optimization-rule";
 import OrganizationModel from "@/models/organization";
 import OrganizationRoleModel from "@/models/organization-role";
 import ScheduleTriggerModel from "@/models/schedule-trigger";
+import ServiceAccountModel from "@/models/service-account";
 import SkillModel from "@/models/skill";
 import TeamModel from "@/models/team";
 import TeamTokenModel from "@/models/team-token";
@@ -439,6 +440,14 @@ export const AUDIT_DECISIONS = {
   usersTable: {
     audited: false,
     reason: "user lifecycle audited via auth events + member.*",
+  },
+  serviceAccountsTable: {
+    audited: true,
+    model: ServiceAccountModel,
+  },
+  serviceAccountTokensTable: {
+    audited: false,
+    reason: "credential material; audited through service account token count",
   },
 
   // =========================================================================

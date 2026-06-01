@@ -1,12 +1,11 @@
 import { type Action, getResourceForAgentType, type Resource } from "@shared";
-import { UserModel } from "@/models";
 import {
   type AgentScope,
   type AgentType,
   AgentTypeSchema,
   ApiError,
 } from "@/types";
-import { userHasPermission } from "./utils";
+import { getPermissionsForUserContext, userHasPermission } from "./utils";
 
 /** @public — re-exported for testability */
 export { getResourceForAgentType };
@@ -82,10 +81,7 @@ export async function getAgentTypePermissionChecker(params: {
   userId: string;
   organizationId: string;
 }): Promise<AgentTypePermissionChecker> {
-  const permissions = await UserModel.getUserPermissions(
-    params.userId,
-    params.organizationId,
-  );
+  const permissions = await getPermissionsForUserContext(params);
   return {
     require(agentType: AgentType, action: Action): void {
       const resource = getResourceForAgentType(agentType);
@@ -250,10 +246,7 @@ async function hasAnyAgentTypePermission(params: {
   organizationId: string;
   action: Action;
 }): Promise<boolean> {
-  const permissions = await UserModel.getUserPermissions(
-    params.userId,
-    params.organizationId,
-  );
+  const permissions = await getPermissionsForUserContext(params);
   return AGENT_TYPE_RESOURCES.some(
     (r) => permissions[r]?.includes(params.action) ?? false,
   );

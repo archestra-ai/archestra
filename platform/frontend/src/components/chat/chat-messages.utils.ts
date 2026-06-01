@@ -1,11 +1,12 @@
 import type { UIMessage } from "@ai-sdk/react";
-import type { ArchestraToolShortName } from "@shared";
+import { type ArchestraToolShortName, parseFullToolName } from "@shared";
 import type { DynamicToolUIPart, ToolUIPart } from "ai";
 import {
   getToolErrorText,
   isCompactEligible,
 } from "@/lib/chat/chat-tools-display.utils";
 import type { FileAttachment } from "./editable-user-message";
+import type { CanvasInfo } from "./pinned-canvas-context";
 
 export type OptimisticToolCall = {
   toolCallId: string;
@@ -53,6 +54,70 @@ export function extractFileAttachments(
  */
 export function hasTextPart(parts: UIMessage["parts"] | undefined): boolean {
   return parts?.some((p) => p.type === "text") ?? false;
+}
+
+/**
+ * Derive the list of MCP App canvases for a conversation directly from its
+ * messages (plus any early UI-start data from the active stream).
+ *
+ * A tool call is a canvas when its output carries `_meta.ui.resourceUri`, or
+ * when the backend announced it via a `data-tool-ui-start` event (tracked in
+ * `earlyToolUiStarts`) before the result arrived. Deriving the registry from
+ * the conversation — rather than from `McpAppSection` mount/unmount effects —
+ * makes the sidebar selector deterministic: it matches what a page refresh
+ * reconstructs and never empties because a single section briefly unmounts.
+ */
+export function deriveCanvasesFromMessages(
+  messages: UIMessage[],
+  earlyToolUiStarts: Record<
+    string,
+    { uiResourceUri?: string; toolName?: string }
+  >,
+): CanvasInfo[] {
+  const canvases: CanvasInfo[] = [];
+  const seen = new Set<string>();
+
+  for (const message of messages) {
+    const createdAt = getMessageCreatedAt(message);
+    for (const part of message.parts ?? []) {
+      if (!isToolPart(part)) continue;
+      const toolCallId = part.toolCallId;
+      if (!toolCallId || seen.has(toolCallId)) continue;
+
+      const early = earlyToolUiStarts[toolCallId];
+      const hasUiResource =
+        // biome-ignore lint/suspicious/noExplicitAny: checking nested _meta shape on unknown output
+        Boolean((part.output as any)?._meta?.ui?.resourceUri) ||
+        Boolean(early?.uiResourceUri);
+      if (!hasUiResource) continue;
+
+      seen.add(toolCallId);
+      const fullToolName = getToolName(part) ?? early?.toolName ?? "";
+      const parsed = parseFullToolName(fullToolName);
+      canvases.push({
+        toolCallId,
+        label: parsed.toolName || fullToolName,
+        serverName: parsed.serverName,
+        createdAt: createdAt ?? 0,
+      });
+    }
+  }
+
+  return canvases;
+}
+
+function getMessageCreatedAt(message: UIMessage): number | null {
+  const metadata = message.metadata;
+  if (
+    typeof metadata === "object" &&
+    metadata !== null &&
+    "createdAt" in metadata &&
+    typeof metadata.createdAt === "string"
+  ) {
+    const createdAt = Date.parse(metadata.createdAt);
+    return Number.isNaN(createdAt) ? null : createdAt;
+  }
+  return null;
 }
 
 export function filterOptimisticToolCalls(

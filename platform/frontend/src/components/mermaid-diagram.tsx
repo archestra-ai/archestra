@@ -1,6 +1,5 @@
 "use client";
 
-import mermaid from "mermaid";
 import { useTheme } from "next-themes";
 import { useEffect, useRef, useState } from "react";
 
@@ -18,47 +17,53 @@ export function MermaidDiagram({
   const [isLoaded, setIsLoaded] = useState(false);
 
   useEffect(() => {
+    let isCancelled = false;
     setIsLoaded(false);
     const isDark = theme === "dark";
-
-    mermaid.initialize({
-      startOnLoad: false,
-      theme: isDark ? "dark" : "neutral",
-      themeVariables: isDark
-        ? {
-            // Dark mode colors
-            primaryColor: "#374151",
-            primaryBorderColor: "#4b5563",
-            primaryTextColor: "#f3f4f6",
-            lineColor: "#9ca3af",
-            background: "#1f2937",
-            mainBkg: "#374151",
-            secondBkg: "#4b5563",
-            tertiaryColor: "#6b7280",
-            fontFamily: "ui-sans-serif, system-ui, -apple-system, sans-serif",
-          }
-        : {
-            // Light mode colors
-            primaryColor: "#f3f4f6",
-            primaryBorderColor: "#9ca3af",
-            primaryTextColor: "#000",
-            lineColor: "#5e5e5e",
-            background: "#f9fafb",
-            mainBkg: "#f3f4f6",
-            secondBkg: "#e5e7eb",
-            tertiaryColor: "#d1d5db",
-            fontFamily: "ui-sans-serif, system-ui, -apple-system, sans-serif",
-          },
-    });
 
     const renderDiagram = async () => {
       if (ref.current) {
         ref.current.replaceChildren();
         try {
+          const { default: mermaid } = await import("mermaid");
+          if (isCancelled) return;
+
+          mermaid.initialize({
+            startOnLoad: false,
+            theme: isDark ? "dark" : "neutral",
+            themeVariables: isDark
+              ? {
+                  // Dark mode colors
+                  primaryColor: "#374151",
+                  primaryBorderColor: "#4b5563",
+                  primaryTextColor: "#f3f4f6",
+                  lineColor: "#9ca3af",
+                  background: "#1f2937",
+                  mainBkg: "#374151",
+                  secondBkg: "#4b5563",
+                  tertiaryColor: "#6b7280",
+                  fontFamily:
+                    "ui-sans-serif, system-ui, -apple-system, sans-serif",
+                }
+              : {
+                  // Light mode colors
+                  primaryColor: "#f3f4f6",
+                  primaryBorderColor: "#9ca3af",
+                  primaryTextColor: "#000",
+                  lineColor: "#5e5e5e",
+                  background: "#f9fafb",
+                  mainBkg: "#f3f4f6",
+                  secondBkg: "#e5e7eb",
+                  tertiaryColor: "#d1d5db",
+                  fontFamily:
+                    "ui-sans-serif, system-ui, -apple-system, sans-serif",
+                },
+          });
+
           // Generate a unique ID to avoid conflicts
           const uniqueId = `${id}-${Date.now()}`;
           const { svg } = await mermaid.render(uniqueId, chart);
-          if (ref.current) {
+          if (ref.current && !isCancelled) {
             // Parse SVG string via DOMParser to avoid innerHTML
             const doc = new DOMParser().parseFromString(svg, "image/svg+xml");
             const svgElement = doc.documentElement;
@@ -78,6 +83,10 @@ export function MermaidDiagram({
     };
 
     renderDiagram();
+
+    return () => {
+      isCancelled = true;
+    };
   }, [chart, id, theme]);
 
   return (

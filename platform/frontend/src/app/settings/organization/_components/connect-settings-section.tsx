@@ -34,7 +34,7 @@ import {
   useOrganization,
   useUpdateConnectionSettings,
 } from "@/lib/organization.query";
-import { ComboboxPicker } from "./combobox-picker";
+import { ComboboxPicker } from "./connect-combobox-picker";
 import {
   applyDefaultBaseUrl,
   applyVisibility,
@@ -50,7 +50,7 @@ const ALL_CLIENT_IDS = FILTERABLE_CLIENTS.map((c) => c.id);
 const ALL_PROVIDER_IDS = [...SupportedProviders] as SupportedProvider[];
 const NO_DEFAULT_URL = "__none__";
 
-export default function ConnectionSettingsPage() {
+export function ConnectSettingsSection() {
   const { data: organization } = useOrganization();
   const { data: mcpGateways } = useProfiles({
     filters: { agentTypes: ["profile", "mcp_gateway"] },

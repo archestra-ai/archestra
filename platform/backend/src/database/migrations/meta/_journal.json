@@ -1870,13 +1870,6 @@
       "when": 1780325182438,
       "tag": "0266_curious_marrow",
       "breakpoints": true
-    },
-    {
-      "idx": 267,
-      "version": "7",
-      "when": 1780326167234,
-      "tag": "0267_network_policies",
-      "breakpoints": true
     }
   ]
 }

@@ -2,7 +2,6 @@
 
 import type { archestraApiTypes } from "@shared";
 import { useEffect, useMemo, useState } from "react";
-import { ReinstallConfirmBar } from "@/components/reinstall-confirm-bar";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -29,6 +28,7 @@ import {
   listCatalogFields,
   validateFieldAgainstRegex,
 } from "./preset-helpers";
+import { ReinstallConfirmBar } from "@/components/reinstall-confirm-bar";
 
 type FieldValue = string | number | boolean | string[];
 type Preset = archestraApiTypes.GetCatalogChildrenResponses["200"][number];

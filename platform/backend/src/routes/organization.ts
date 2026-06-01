@@ -27,7 +27,6 @@ import {
   UserModel,
   UserTokenModel,
 } from "@/models";
-import { assertNetworkPolicyBelongsToOrganization } from "@/services/environments/network-policy";
 import {
   ApiError,
   AppearanceSettingsSchema,
@@ -396,7 +395,6 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         defaultEnvironmentName: string | null;
         defaultEnvironmentDescription: string | null;
         defaultEnvironmentNamespace: string | null;
-        defaultNetworkPolicyId: string | null;
         defaultEnvironmentRestricted: boolean;
       }> = {};
       if ("name" in body) {
@@ -407,13 +405,6 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
       if ("namespace" in body) {
         data.defaultEnvironmentNamespace = body.namespace ?? null;
-      }
-      if ("networkPolicyId" in body) {
-        await assertNetworkPolicyBelongsToOrganization({
-          networkPolicyId: body.networkPolicyId,
-          organizationId,
-        });
-        data.defaultNetworkPolicyId = body.networkPolicyId ?? null;
       }
       if ("restricted" in body) {
         data.defaultEnvironmentRestricted = body.restricted ?? false;

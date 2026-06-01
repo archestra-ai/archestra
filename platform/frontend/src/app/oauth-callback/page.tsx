@@ -22,7 +22,6 @@ import {
   getOAuthEnvironmentValues,
   getOAuthIsFirstInstallation,
   getOAuthMcpServerId,
-  getOAuthNetworkPolicyId,
   getOAuthReturnUrl,
   getOAuthScope,
   getOAuthServerType,
@@ -116,7 +115,6 @@ function OAuthCallbackContent() {
           const serverType = getOAuthServerType();
           const environmentValues = getOAuthEnvironmentValues();
           const userConfigValues = getOAuthUserConfigValues();
-          const networkPolicyId = getOAuthNetworkPolicyId();
 
           // Install the MCP server with the secret reference
           await installMutation.mutateAsync({
@@ -130,7 +128,6 @@ function OAuthCallbackContent() {
               environmentValues && { environmentValues }),
             ...(serverType === "local" &&
               userConfigValues && { userConfigValues }),
-            ...(networkPolicyId ? { networkPolicyId } : {}),
           });
 
           const isFirstInstallation = getOAuthIsFirstInstallation();

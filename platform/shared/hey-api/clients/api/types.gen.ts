@@ -23424,7 +23424,6 @@ export type ListEnvironmentsResponses = {
             name: string;
             description: string | null;
             namespace: string | null;
-            networkPolicyId: string | null;
             restricted: boolean;
             sortOrder: number;
             createdAt: string;
@@ -23442,7 +23441,6 @@ export type CreateEnvironmentData = {
         name: string;
         description?: string | null;
         namespace?: string | null;
-        networkPolicyId?: string | null;
         restricted?: boolean;
     };
     path?: never;
@@ -23525,7 +23523,6 @@ export type CreateEnvironmentResponses = {
         name: string;
         description: string | null;
         namespace: string | null;
-        networkPolicyId: string | null;
         restricted: boolean;
         sortOrder: number;
         createdAt: string;
@@ -23625,7 +23622,6 @@ export type UpdateEnvironmentData = {
         name?: string;
         description?: string | null;
         namespace?: string | null;
-        networkPolicyId?: string | null;
         restricted?: boolean;
     };
     path: {
@@ -23710,7 +23706,6 @@ export type UpdateEnvironmentResponses = {
         name: string;
         description: string | null;
         namespace: string | null;
-        networkPolicyId: string | null;
         restricted: boolean;
         sortOrder: number;
         createdAt: string;
@@ -23719,389 +23714,6 @@ export type UpdateEnvironmentResponses = {
 };
 
 export type UpdateEnvironmentResponse = UpdateEnvironmentResponses[keyof UpdateEnvironmentResponses];
-
-export type ListNetworkPoliciesData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/network-policies';
-};
-
-export type ListNetworkPoliciesErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type ListNetworkPoliciesError = ListNetworkPoliciesErrors[keyof ListNetworkPoliciesErrors];
-
-export type ListNetworkPoliciesResponses = {
-    /**
-     * Default Response
-     */
-    200: Array<{
-        id: string;
-        organizationId: string;
-        name: string;
-        description: string | null;
-        egressMode: 'off' | 'restricted' | 'unrestricted';
-        domainPreset: 'none' | 'common_dependencies' | 'package_managers';
-        allowedDomains: Array<string>;
-        allowedHttpMethods: 'all' | 'read_only';
-        createdAt: string;
-        updatedAt: string;
-        references: {
-            environments: number;
-            defaultEnvironments: number;
-            catalogItems: number;
-            mcpServerInstallations: number;
-        };
-    }>;
-};
-
-export type ListNetworkPoliciesResponse = ListNetworkPoliciesResponses[keyof ListNetworkPoliciesResponses];
-
-export type CreateNetworkPolicyData = {
-    body: {
-        name: string;
-        description?: string | null;
-        egressMode?: 'off' | 'restricted' | 'unrestricted';
-        domainPreset?: 'none' | 'common_dependencies' | 'package_managers';
-        allowedDomains?: Array<string>;
-        allowedHttpMethods?: 'all' | 'read_only';
-    };
-    path?: never;
-    query?: never;
-    url: '/api/network-policies';
-};
-
-export type CreateNetworkPolicyErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type CreateNetworkPolicyError = CreateNetworkPolicyErrors[keyof CreateNetworkPolicyErrors];
-
-export type CreateNetworkPolicyResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        organizationId: string;
-        name: string;
-        description: string | null;
-        egressMode: 'off' | 'restricted' | 'unrestricted';
-        domainPreset: 'none' | 'common_dependencies' | 'package_managers';
-        allowedDomains: Array<string>;
-        allowedHttpMethods: 'all' | 'read_only';
-        createdAt: string;
-        updatedAt: string;
-    };
-};
-
-export type CreateNetworkPolicyResponse = CreateNetworkPolicyResponses[keyof CreateNetworkPolicyResponses];
-
-export type DeleteNetworkPolicyData = {
-    body?: never;
-    path: {
-        id: string;
-    };
-    query?: never;
-    url: '/api/network-policies/{id}';
-};
-
-export type DeleteNetworkPolicyErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type DeleteNetworkPolicyError = DeleteNetworkPolicyErrors[keyof DeleteNetworkPolicyErrors];
-
-export type DeleteNetworkPolicyResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        success: boolean;
-    };
-};
-
-export type DeleteNetworkPolicyResponse = DeleteNetworkPolicyResponses[keyof DeleteNetworkPolicyResponses];
-
-export type UpdateNetworkPolicyData = {
-    body: {
-        name?: string;
-        description?: string | null;
-        egressMode?: 'off' | 'restricted' | 'unrestricted';
-        domainPreset?: 'none' | 'common_dependencies' | 'package_managers';
-        allowedDomains?: Array<string>;
-        allowedHttpMethods?: 'all' | 'read_only';
-    };
-    path: {
-        id: string;
-    };
-    query?: never;
-    url: '/api/network-policies/{id}';
-};
-
-export type UpdateNetworkPolicyErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type UpdateNetworkPolicyError = UpdateNetworkPolicyErrors[keyof UpdateNetworkPolicyErrors];
-
-export type UpdateNetworkPolicyResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        organizationId: string;
-        name: string;
-        description: string | null;
-        egressMode: 'off' | 'restricted' | 'unrestricted';
-        domainPreset: 'none' | 'common_dependencies' | 'package_managers';
-        allowedDomains: Array<string>;
-        allowedHttpMethods: 'all' | 'read_only';
-        createdAt: string;
-        updatedAt: string;
-    };
-};
-
-export type UpdateNetworkPolicyResponse = UpdateNetworkPolicyResponses[keyof UpdateNetworkPolicyResponses];
 
 export type ValidateEnvironmentNamespaceData = {
     body?: never;
@@ -30057,7 +29669,6 @@ export type GetInternalMcpCatalogResponses = {
         };
         presetSecretId: string | null;
         environmentId: string | null;
-        networkPolicyId: string | null;
         catalogReinstallRequired: boolean;
         createdAt: string;
         updatedAt: string;
@@ -30194,7 +29805,6 @@ export type CreateInternalMcpCatalogItemData = {
         };
         presetSecretId?: string | null;
         environmentId?: string | null;
-        networkPolicyId?: string | null;
         catalogReinstallRequired?: boolean;
         labels?: Array<{
             key: string;
@@ -30399,7 +30009,6 @@ export type CreateInternalMcpCatalogItemResponses = {
         };
         presetSecretId: string | null;
         environmentId: string | null;
-        networkPolicyId: string | null;
         catalogReinstallRequired: boolean;
         createdAt: string;
         updatedAt: string;
@@ -30699,7 +30308,6 @@ export type GetInternalMcpCatalogItemResponses = {
         };
         presetSecretId: string | null;
         environmentId: string | null;
-        networkPolicyId: string | null;
         catalogReinstallRequired: boolean;
         createdAt: string;
         updatedAt: string;
@@ -30832,7 +30440,6 @@ export type UpdateInternalMcpCatalogItemData = {
         };
         presetSecretId?: string | null;
         environmentId?: string | null;
-        networkPolicyId?: string | null;
         catalogReinstallRequired?: boolean;
         labels?: Array<{
             key: string;
@@ -31039,7 +30646,6 @@ export type UpdateInternalMcpCatalogItemResponses = {
         };
         presetSecretId: string | null;
         environmentId: string | null;
-        networkPolicyId: string | null;
         catalogReinstallRequired: boolean;
         createdAt: string;
         updatedAt: string;
@@ -31941,7 +31547,6 @@ export type GetCatalogChildrenResponses = {
         };
         presetSecretId: string | null;
         environmentId: string | null;
-        networkPolicyId: string | null;
         catalogReinstallRequired: boolean;
         createdAt: string;
         updatedAt: string;
@@ -32161,7 +31766,6 @@ export type CreateCatalogChildResponses = {
         };
         presetSecretId: string | null;
         environmentId: string | null;
-        networkPolicyId: string | null;
         catalogReinstallRequired: boolean;
         createdAt: string;
         updatedAt: string;
@@ -32381,7 +31985,6 @@ export type UpdateCatalogChildResponses = {
         };
         presetSecretId: string | null;
         environmentId: string | null;
-        networkPolicyId: string | null;
         catalogReinstallRequired: boolean;
         createdAt: string;
         updatedAt: string;
@@ -40189,7 +39792,6 @@ export type GetMcpServersResponses = {
         environmentValues: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown>;
-        networkPolicyId: string | null;
         ownerId: string | null;
         teamId: string | null;
         scope: 'personal' | 'team' | 'org';
@@ -40227,7 +39829,6 @@ export type InstallMcpServerData = {
         environmentValues?: {
             [key: string]: string;
         };
-        networkPolicyId?: string | null;
         ownerId?: string | null;
         teamId?: string | null;
         scope?: 'personal' | 'team' | 'org';
@@ -40328,7 +39929,6 @@ export type InstallMcpServerResponses = {
         environmentValues: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown>;
-        networkPolicyId: string | null;
         ownerId: string | null;
         teamId: string | null;
         scope: 'personal' | 'team' | 'org';
@@ -40530,7 +40130,6 @@ export type GetMcpServerResponses = {
         environmentValues: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown>;
-        networkPolicyId: string | null;
         ownerId: string | null;
         teamId: string | null;
         scope: 'personal' | 'team' | 'org';
@@ -40657,7 +40256,6 @@ export type ReauthenticateMcpServerResponses = {
         environmentValues: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown>;
-        networkPolicyId: string | null;
         ownerId: string | null;
         teamId: string | null;
         scope: 'personal' | 'team' | 'org';
@@ -41056,7 +40654,6 @@ export type ReinstallMcpServerResponses = {
         environmentValues: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown>;
-        networkPolicyId: string | null;
         ownerId: string | null;
         teamId: string | null;
         scope: 'personal' | 'team' | 'org';
@@ -45184,7 +44781,6 @@ export type GetOrganizationResponses = {
         defaultEnvironmentName: string | null;
         defaultEnvironmentNamespace: string | null;
         defaultEnvironmentDescription: string | null;
-        defaultNetworkPolicyId: string | null;
         defaultEnvironmentRestricted: boolean;
         skillToolsEnabled: boolean;
         skillSlashCommandsEnabled: boolean;
@@ -45470,7 +45066,6 @@ export type UpdateAppearanceSettingsResponses = {
         defaultEnvironmentName: string | null;
         defaultEnvironmentNamespace: string | null;
         defaultEnvironmentDescription: string | null;
-        defaultNetworkPolicyId: string | null;
         defaultEnvironmentRestricted: boolean;
         skillToolsEnabled: boolean;
         skillSlashCommandsEnabled: boolean;
@@ -45627,7 +45222,6 @@ export type UpdateSecuritySettingsResponses = {
         defaultEnvironmentName: string | null;
         defaultEnvironmentNamespace: string | null;
         defaultEnvironmentDescription: string | null;
-        defaultNetworkPolicyId: string | null;
         defaultEnvironmentRestricted: boolean;
         skillToolsEnabled: boolean;
         skillSlashCommandsEnabled: boolean;
@@ -45787,7 +45381,6 @@ export type UpdateLlmSettingsResponses = {
         defaultEnvironmentName: string | null;
         defaultEnvironmentNamespace: string | null;
         defaultEnvironmentDescription: string | null;
-        defaultNetworkPolicyId: string | null;
         defaultEnvironmentRestricted: boolean;
         skillToolsEnabled: boolean;
         skillSlashCommandsEnabled: boolean;
@@ -45946,7 +45539,6 @@ export type UpdateAgentSettingsResponses = {
         defaultEnvironmentName: string | null;
         defaultEnvironmentNamespace: string | null;
         defaultEnvironmentDescription: string | null;
-        defaultNetworkPolicyId: string | null;
         defaultEnvironmentRestricted: boolean;
         skillToolsEnabled: boolean;
         skillSlashCommandsEnabled: boolean;
@@ -46112,7 +45704,6 @@ export type UpdateConnectionSettingsResponses = {
         defaultEnvironmentName: string | null;
         defaultEnvironmentNamespace: string | null;
         defaultEnvironmentDescription: string | null;
-        defaultNetworkPolicyId: string | null;
         defaultEnvironmentRestricted: boolean;
         skillToolsEnabled: boolean;
         skillSlashCommandsEnabled: boolean;
@@ -46269,7 +45860,6 @@ export type UpdatePresetEntityNameResponses = {
         defaultEnvironmentName: string | null;
         defaultEnvironmentNamespace: string | null;
         defaultEnvironmentDescription: string | null;
-        defaultNetworkPolicyId: string | null;
         defaultEnvironmentRestricted: boolean;
         skillToolsEnabled: boolean;
         skillSlashCommandsEnabled: boolean;
@@ -46425,7 +46015,6 @@ export type UpdatePresetEntityDefaultLabelResponses = {
         defaultEnvironmentName: string | null;
         defaultEnvironmentNamespace: string | null;
         defaultEnvironmentDescription: string | null;
-        defaultNetworkPolicyId: string | null;
         defaultEnvironmentRestricted: boolean;
         skillToolsEnabled: boolean;
         skillSlashCommandsEnabled: boolean;
@@ -46581,7 +46170,6 @@ export type UpdatePresetEntityDefaultValidationRegexResponses = {
         defaultEnvironmentName: string | null;
         defaultEnvironmentNamespace: string | null;
         defaultEnvironmentDescription: string | null;
-        defaultNetworkPolicyId: string | null;
         defaultEnvironmentRestricted: boolean;
         skillToolsEnabled: boolean;
         skillSlashCommandsEnabled: boolean;
@@ -46596,7 +46184,6 @@ export type UpdateDefaultEnvironmentData = {
         name?: string | null;
         description?: string | null;
         namespace?: string | null;
-        networkPolicyId?: string | null;
         restricted?: boolean;
     };
     path?: never;
@@ -46741,7 +46328,6 @@ export type UpdateDefaultEnvironmentResponses = {
         defaultEnvironmentName: string | null;
         defaultEnvironmentNamespace: string | null;
         defaultEnvironmentDescription: string | null;
-        defaultNetworkPolicyId: string | null;
         defaultEnvironmentRestricted: boolean;
         skillToolsEnabled: boolean;
         skillSlashCommandsEnabled: boolean;
@@ -46898,7 +46484,6 @@ export type UpdateAuthSettingsResponses = {
         defaultEnvironmentName: string | null;
         defaultEnvironmentNamespace: string | null;
         defaultEnvironmentDescription: string | null;
-        defaultNetworkPolicyId: string | null;
         defaultEnvironmentRestricted: boolean;
         skillToolsEnabled: boolean;
         skillSlashCommandsEnabled: boolean;
@@ -47057,7 +46642,6 @@ export type UpdateKnowledgeSettingsResponses = {
         defaultEnvironmentName: string | null;
         defaultEnvironmentNamespace: string | null;
         defaultEnvironmentDescription: string | null;
-        defaultNetworkPolicyId: string | null;
         defaultEnvironmentRestricted: boolean;
         skillToolsEnabled: boolean;
         skillSlashCommandsEnabled: boolean;
@@ -47211,7 +46795,6 @@ export type DropEmbeddingConfigResponses = {
         defaultEnvironmentName: string | null;
         defaultEnvironmentNamespace: string | null;
         defaultEnvironmentDescription: string | null;
-        defaultNetworkPolicyId: string | null;
         defaultEnvironmentRestricted: boolean;
         skillToolsEnabled: boolean;
         skillSlashCommandsEnabled: boolean;
@@ -47454,7 +47037,6 @@ export type CompleteOnboardingResponses = {
         defaultEnvironmentName: string | null;
         defaultEnvironmentNamespace: string | null;
         defaultEnvironmentDescription: string | null;
-        defaultNetworkPolicyId: string | null;
         defaultEnvironmentRestricted: boolean;
         skillToolsEnabled: boolean;
         skillSlashCommandsEnabled: boolean;

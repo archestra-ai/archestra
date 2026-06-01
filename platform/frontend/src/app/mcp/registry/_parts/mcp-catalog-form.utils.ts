@@ -240,8 +240,6 @@ export function transformFormToApiData(
 
   // Deployment environment assignment (null = the default environment)
   data.environmentId = values.environmentId ?? null;
-  // Network policy override (null = inherit from the selected environment)
-  data.networkPolicyId = values.networkPolicyId ?? null;
 
   return data;
 }
@@ -486,8 +484,6 @@ export function transformCatalogItemToFormValues(
     teams: item.teams?.map((t) => t.id) ?? [],
     // Deployment environment (null = the default environment)
     environmentId: item.environmentId ?? null,
-    // Network policy override (null = inherit from environment/default)
-    networkPolicyId: item.networkPolicyId ?? null,
   } as McpCatalogFormValues;
 }
 

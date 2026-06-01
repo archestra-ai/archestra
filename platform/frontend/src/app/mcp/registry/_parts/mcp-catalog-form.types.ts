@@ -237,8 +237,6 @@ export const formSchema = z
     teams: z.array(z.string()).optional(),
     // Deployment environment assignment (null = the default environment)
     environmentId: z.string().uuid().nullable().optional(),
-    // Network policy override (null = inherit from the selected environment)
-    networkPolicyId: z.string().uuid().nullable().optional(),
   })
   .superRefine((data, ctx) => {
     const normalizedHeaders = new Set<string>();

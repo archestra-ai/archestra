@@ -22,7 +22,6 @@ import {
 } from "@/models";
 import { isByosEnabled, secretManager } from "@/secrets-manager";
 import { filterMcpServersAssignableToTarget } from "@/services/agent-tool-assignment";
-import { assertNetworkPolicyBelongsToOrganization } from "@/services/environments/network-policy";
 import { refreshLinkedIdentityProviderAccessToken } from "@/services/identity-providers/access-token-refresh";
 import { exchangeIdJagAtProtectedResource } from "@/services/identity-providers/enterprise-managed/broker";
 import { exchangeEnterpriseManagedCredential } from "@/services/identity-providers/enterprise-managed/exchange";
@@ -172,10 +171,6 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ...restDataFromRequestBody,
         serverType: "local",
       };
-      await assertNetworkPolicyBelongsToOrganization({
-        networkPolicyId: serverData.networkPolicyId,
-        organizationId,
-      });
 
       // Set owner_id and userId to current user
       serverData.ownerId = user.id;

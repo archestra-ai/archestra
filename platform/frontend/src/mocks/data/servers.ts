@@ -13,7 +13,6 @@ export function makeInstalledServer(
     serverType: "local",
     secretId: null,
     environmentValues: null,
-    networkPolicyId: null,
     ownerId: "test-user-admin",
     teamId: null,
     scope: "personal",

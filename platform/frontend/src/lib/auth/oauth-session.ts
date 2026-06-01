@@ -24,7 +24,6 @@ const OAUTH_INSTALLATION_COMPLETE_CATALOG_ID =
 const OAUTH_SERVER_TYPE = "oauth_server_type";
 const OAUTH_ENVIRONMENT_VALUES = "oauth_environment_values";
 const OAUTH_USER_CONFIG_VALUES = "oauth_user_config_values";
-const OAUTH_NETWORK_POLICY_ID = "oauth_network_policy_id";
 const OAUTH_PENDING_AFTER_ENV_VARS = "oauth_pending_after_env_vars";
 const OAUTH_RETURN_URL = "oauth_return_url";
 const OAUTH_REAUTH_CHAT_RESUME = "oauth_reauth_chat_resume";
@@ -61,15 +60,6 @@ export function setOAuthScope(scope: OAuthScope | null) {
     sessionStorage.setItem(OAUTH_SCOPE, scope);
   } else {
     sessionStorage.removeItem(OAUTH_SCOPE);
-  }
-}
-
-/** Store the optional network policy override selected before OAuth redirect. */
-export function setOAuthNetworkPolicyId(networkPolicyId: string | null) {
-  if (networkPolicyId) {
-    sessionStorage.setItem(OAUTH_NETWORK_POLICY_ID, networkPolicyId);
-  } else {
-    sessionStorage.removeItem(OAUTH_NETWORK_POLICY_ID);
   }
 }
 
@@ -219,10 +209,6 @@ export function getOAuthUserConfigValues(): Record<string, string> | null {
   }
 }
 
-export function getOAuthNetworkPolicyId(): string | null {
-  return sessionStorage.getItem(OAUTH_NETWORK_POLICY_ID);
-}
-
 export function getOAuthIsFirstInstallation(): boolean {
   return sessionStorage.getItem(OAUTH_IS_FIRST_INSTALLATION) === "true";
 }
@@ -318,7 +304,6 @@ export function clearInstallContext() {
   sessionStorage.removeItem(OAUTH_SERVER_TYPE);
   sessionStorage.removeItem(OAUTH_ENVIRONMENT_VALUES);
   sessionStorage.removeItem(OAUTH_USER_CONFIG_VALUES);
-  sessionStorage.removeItem(OAUTH_NETWORK_POLICY_ID);
 }
 
 /** Remove the assignments-dialog flag. */

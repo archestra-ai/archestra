@@ -26,7 +26,6 @@ import { useCatalogPresets } from "@/lib/mcp/internal-mcp-catalog.query";
 import { useMcpPresetEntries } from "@/lib/mcp/mcp-preset-entry.query";
 import { usePresetEntityName } from "@/lib/organization.query";
 import { useTeamsWithVaultFolders } from "@/lib/teams/team.query";
-import { InstallNetworkPolicySelect } from "./install-network-policy-select";
 import { InstallPresetPicker } from "./install-preset-picker";
 import { FillPresetFieldsStep } from "./preset-fallback-fields";
 import {
@@ -71,8 +70,6 @@ export interface RemoteServerInstallResult {
   scope: McpServerInstallScope;
   /** Team ID to assign the MCP server to (only when scope is "team") */
   teamId?: string | null;
-  /** Optional per-install network policy override */
-  networkPolicyId?: string | null;
   /** Whether metadata contains BYOS vault references in path#key format */
   isByosVault?: boolean;
 }
@@ -137,7 +134,6 @@ export function RemoteServerInstallDialog({
   const [selectedCatalogId, setSelectedCatalogId] = useState<string>(
     preselectedCatalogId ?? catalogItem?.id ?? "",
   );
-  const [networkPolicyId, setNetworkPolicyId] = useState<string | null>(null);
   const { data: presets = [] } = useCatalogPresets(catalogItem?.id ?? null);
   const { data: presetEntries = [] } = useMcpPresetEntries();
   const { singular, defaultValidationRegex } = usePresetEntityName();
@@ -287,7 +283,6 @@ export function RemoteServerInstallDialog({
         scope,
         teamId: selectedTeamId,
         isByosVault: useVaultSecrets,
-        networkPolicyId,
       });
       resetForm();
       onClose();
@@ -302,7 +297,6 @@ export function RemoteServerInstallDialog({
     setScope(orgOnly ? "org" : "personal");
     setVaultTeamId(null);
     setVaultSecrets({});
-    setNetworkPolicyId(null);
   };
 
   const handleClose = () => {
@@ -512,13 +506,6 @@ export function RemoteServerInstallDialog({
           ) : null
         }
       />
-
-      {!isReauth && !isReinstall ? (
-        <InstallNetworkPolicySelect
-          value={networkPolicyId}
-          onChange={setNetworkPolicyId}
-        />
-      ) : null}
 
       {useVaultSecrets && scope !== "team" && (
         <div className="space-y-2">

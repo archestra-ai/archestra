@@ -225,7 +225,7 @@ Chart-managed diagnostics PVCs are validated conservatively. If more than one di
 - `archestra.orchestrator.kubernetes.serviceAccount.annotations` - Annotations for cloud integrations (e.g., [GKE Workload Identity](/docs/platform-supported-llm-providers#gke-with-workload-identity-recommended), AWS IRSA)
 - `archestra.orchestrator.kubernetes.serviceAccount.name` - Name of the service account (auto-generated if not set)
 - `archestra.orchestrator.kubernetes.serviceAccount.imagePullSecrets` - Image pull secrets for the service account
-- `archestra.orchestrator.kubernetes.rbac.create` - Create RBAC resources for MCP workload management, including pods, services, secrets, deployments, and generated `NetworkPolicy` objects (default: true)
+- `archestra.orchestrator.kubernetes.rbac.create` - Create RBAC resources (default: true)
 - `archestra.orchestrator.kubernetes.networkPolicy.create` - Create a `NetworkPolicy` for SSRF protection on MCP server pods (default: false). Blocks egress to private/internal IP ranges (RFC 1918, link-local, loopback) while allowing DNS and public internet access. Requires a CNI plugin that supports `NetworkPolicies` (e.g., Calico, Cilium). See [SSRF Protection](#ssrf-protection-for-mcp-server-pods) for details.
 - `archestra.orchestrator.kubernetes.networkPolicy.additionalDeniedCidrs` - Additional CIDR ranges to block beyond the defaults
 - `archestra.orchestrator.kubernetes.networkPolicy.additionalEgressRules` - Additional egress rules to allow MCP server pods to reach specific internal services that would otherwise be blocked

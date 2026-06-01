@@ -8,7 +8,6 @@ import {
   unique,
   uuid,
 } from "drizzle-orm/pg-core";
-import networkPoliciesTable from "./network-policy";
 import organizationsTable from "./organization";
 
 /**
@@ -33,10 +32,6 @@ const environmentsTable = pgTable(
      * not yet applied at deployment time. NULL means "unset".
      */
     namespace: text("namespace"),
-    networkPolicyId: uuid("network_policy_id").references(
-      () => networkPoliciesTable.id,
-      { onDelete: "set null" },
-    ),
     /**
      * When true, assigning a catalog item to this environment requires the
      * `environment:admin` permission. Unrestricted environments (and the
@@ -54,7 +49,6 @@ const environmentsTable = pgTable(
   (table) => [
     unique("environment_org_name_unique").on(table.organizationId, table.name),
     index("environment_org_idx").on(table.organizationId),
-    index("environment_network_policy_id_idx").on(table.networkPolicyId),
   ],
 );
 

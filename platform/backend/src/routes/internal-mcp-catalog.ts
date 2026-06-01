@@ -28,7 +28,6 @@ import {
 } from "@/models";
 import { isByosEnabled, secretManager } from "@/secrets-manager";
 import { assertCanAssignEnvironment } from "@/services/environments/environment";
-import { assertNetworkPolicyBelongsToOrganization } from "@/services/environments/network-policy";
 import {
   autoReinstallServer,
   localExecutionConfigChanged,
@@ -409,10 +408,6 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
           throw new ApiError(400, "Environment not found");
         }
       }
-      await assertNetworkPolicyBelongsToOrganization({
-        networkPolicyId: restBody.networkPolicyId,
-        organizationId: request.organizationId,
-      });
 
       const catalogItem = await InternalMcpCatalogModel.create(restBody, {
         organizationId: request.organizationId,
@@ -603,12 +598,6 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       if (restBody.scope && restBody.scope !== "team") {
         delete restBody.teams;
-      }
-      if ("networkPolicyId" in restBody) {
-        await assertNetworkPolicyBelongsToOrganization({
-          networkPolicyId: restBody.networkPolicyId,
-          organizationId: request.organizationId,
-        });
       }
 
       let clientSecretId = originalCatalogItem.clientSecretId;

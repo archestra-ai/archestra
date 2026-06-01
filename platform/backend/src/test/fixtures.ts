@@ -482,10 +482,7 @@ async function makeMember(
  */
 async function makeMcpServer(
   overrides: Partial<
-    Pick<
-      InsertMcpServer,
-      "name" | "catalogId" | "ownerId" | "teamId" | "scope" | "networkPolicyId"
-    >
+    Pick<InsertMcpServer, "name" | "catalogId" | "ownerId" | "teamId" | "scope">
   > = {},
 ) {
   // Create a catalog if catalogId is not provided
@@ -538,7 +535,6 @@ async function makeInternalMcpCatalog(
       | "oauthConfig"
       | "enterpriseManagedConfig"
       | "scope"
-      | "networkPolicyId"
       | "teams"
     >
   > & {

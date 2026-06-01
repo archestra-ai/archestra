@@ -206,10 +206,6 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "deployment environment definitions; static config, ungated",
   },
-  networkPoliciesTable: {
-    audited: false,
-    reason: "deployment network policy definitions; static config",
-  },
 
   // =========================================================================
   // A2A protocol runtime

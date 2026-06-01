@@ -97,6 +97,7 @@ describe("EmbeddingService", () => {
 
     const updated = await KbDocumentModel.findById(doc.id);
     expect(updated?.embeddingStatus).toBe("completed");
+    expect(updated?.embeddingError).toBeNull();
     expect(updated?.chunkCount).toBe(2);
 
     const chunks = await KbChunkModel.findByDocument(doc.id);
@@ -145,6 +146,44 @@ describe("EmbeddingService", () => {
 
     const updated = await KbDocumentModel.findById(doc.id);
     expect(updated?.embeddingStatus).toBe("failed");
+    expect(updated?.embeddingError).toBe("rate_limit");
+  });
+
+  test("dimension mismatch marks document with embedding error", async ({
+    makeOrganization,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+  }) => {
+    const org = await makeOrganization();
+    const kb = await makeKnowledgeBase(org.id);
+    const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+
+    const doc = await KbDocumentModel.create({
+      connectorId: connector.id,
+      organizationId: org.id,
+      title: "Dimension Mismatch Doc",
+      content: "Content",
+      contentHash: "hash-dimensions",
+      embeddingStatus: "pending",
+    });
+
+    await KbChunkModel.insertMany([
+      {
+        documentId: doc.id,
+        content: "Some chunk",
+        chunkIndex: 0,
+      },
+    ]);
+
+    mockEmbeddingsCreate.mockRejectedValueOnce(
+      new Error("expected 1536 dimensions, not 3072"),
+    );
+
+    await embeddingService.processDocument(doc.id, makeEmbeddingContext());
+
+    const updated = await KbDocumentModel.findById(doc.id);
+    expect(updated?.embeddingStatus).toBe("failed");
+    expect(updated?.embeddingError).toBe("dimensions_mismatch");
   });
 
   test("no chunks marks document as completed with chunkCount 0", async ({
@@ -169,6 +208,7 @@ describe("EmbeddingService", () => {
 
     const updated = await KbDocumentModel.findById(doc.id);
     expect(updated?.embeddingStatus).toBe("completed");
+    expect(updated?.embeddingError).toBeNull();
     expect(updated?.chunkCount).toBe(0);
     expect(mockEmbeddingsCreate).not.toHaveBeenCalled();
   });
@@ -247,6 +287,7 @@ describe("EmbeddingService", () => {
 
     const updated = await KbDocumentModel.findById(doc.id);
     expect(updated?.embeddingStatus).toBe("completed");
+    expect(updated?.embeddingError).toBeNull();
     expect(mockEmbeddingsCreate).toHaveBeenCalledTimes(2);
   });
 
@@ -293,6 +334,7 @@ describe("EmbeddingService", () => {
 
     const updated = await KbDocumentModel.findById(doc.id);
     expect(updated?.embeddingStatus).toBe("failed");
+    expect(updated?.embeddingError).toBe("server_error");
     expect(mockEmbeddingsCreate).toHaveBeenCalledTimes(3);
   });
 
@@ -362,10 +404,12 @@ describe("EmbeddingService", () => {
 
     const updated1 = await KbDocumentModel.findById(doc1.id);
     expect(updated1?.embeddingStatus).toBe("completed");
+    expect(updated1?.embeddingError).toBeNull();
     expect(updated1?.chunkCount).toBe(2);
 
     const updated2 = await KbDocumentModel.findById(doc2.id);
     expect(updated2?.embeddingStatus).toBe("completed");
+    expect(updated2?.embeddingError).toBeNull();
     expect(updated2?.chunkCount).toBe(1);
 
     const chunks1 = await KbChunkModel.findByDocument(doc1.id);
@@ -406,6 +450,7 @@ describe("EmbeddingService", () => {
     // Document should be reset to pending (not failed, not completed)
     const updated = await KbDocumentModel.findById(doc.id);
     expect(updated?.embeddingStatus).toBe("pending");
+    expect(updated?.embeddingError).toBeNull();
 
     // No OpenAI API call should have been made
     expect(mockEmbeddingsCreate).not.toHaveBeenCalled();
@@ -454,10 +499,12 @@ describe("EmbeddingService", () => {
 
     const updated1 = await KbDocumentModel.findById(doc1.id);
     expect(updated1?.embeddingStatus).toBe("failed");
+    expect(updated1?.embeddingError).toBe("unknown");
 
     // doc2 had no chunks, so it completes regardless
     const updated2 = await KbDocumentModel.findById(doc2.id);
     expect(updated2?.embeddingStatus).toBe("completed");
+    expect(updated2?.embeddingError).toBeNull();
     expect(updated2?.chunkCount).toBe(0);
   });
 });

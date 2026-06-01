@@ -6,6 +6,7 @@ import { formatDistanceToNow } from "date-fns";
 import { Clock, ExternalLink, Eye, FileText, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
+import { EmbeddingStatusBadge } from "@/app/knowledge/_parts/embedding-status-badge";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { SearchInput } from "@/components/search-input";
 import { StandardDialog } from "@/components/standard-dialog";
@@ -120,6 +121,17 @@ export function ConnectorDocumentsTable({
           ) : (
             <span className="text-sm text-muted-foreground">-</span>
           ),
+      },
+      {
+        id: "embeddingStatus",
+        accessorKey: "embeddingStatus",
+        header: "Status",
+        cell: ({ row }) => (
+          <EmbeddingStatusBadge
+            status={row.original.embeddingStatus}
+            error={row.original.embeddingError}
+          />
+        ),
       },
       {
         id: "updatedAt",

@@ -1,6 +1,7 @@
 import { addNomicTaskPrefix, EMBEDDING_BATCH_SIZE } from "@shared";
 import logger from "@/logging";
 import { KbChunkModel, KbDocumentModel } from "@/models";
+import type { EmbeddingError } from "@/types";
 import {
   callEmbedding,
   type EmbeddingApiResponse,
@@ -40,7 +41,10 @@ class EmbeddingService {
       return;
     }
 
-    await KbDocumentModel.update(documentId, { embeddingStatus: "processing" });
+    await KbDocumentModel.update(documentId, {
+      embeddingStatus: "processing",
+      embeddingError: null,
+    });
 
     try {
       const chunks = await KbChunkModel.findByDocument(documentId);
@@ -48,6 +52,7 @@ class EmbeddingService {
       if (chunks.length === 0) {
         await KbDocumentModel.update(documentId, {
           embeddingStatus: "completed",
+          embeddingError: null,
           chunkCount: 0,
         });
         return;
@@ -81,6 +86,7 @@ class EmbeddingService {
 
       await KbDocumentModel.update(documentId, {
         embeddingStatus: "completed",
+        embeddingError: null,
         chunkCount: chunks.length,
       });
 
@@ -91,6 +97,7 @@ class EmbeddingService {
     } catch (error) {
       await KbDocumentModel.update(documentId, {
         embeddingStatus: "failed",
+        embeddingError: categorizeEmbeddingError(error),
       });
       logger.error(
         {
@@ -151,6 +158,7 @@ class EmbeddingService {
 
       await KbDocumentModel.update(documentId, {
         embeddingStatus: "processing",
+        embeddingError: null,
       });
 
       const chunks = await KbChunkModel.findByDocument(documentId);
@@ -158,6 +166,7 @@ class EmbeddingService {
       if (chunks.length === 0) {
         await KbDocumentModel.update(documentId, {
           embeddingStatus: "completed",
+          embeddingError: null,
           chunkCount: 0,
         });
         continue;
@@ -187,6 +196,7 @@ class EmbeddingService {
       for (const { documentId } of docChunkMap) {
         await KbDocumentModel.update(documentId, {
           embeddingStatus: "pending",
+          embeddingError: null,
         });
       }
       return;
@@ -194,7 +204,7 @@ class EmbeddingService {
 
     const ctx = orgConfig.config;
     const embeddingResults = new Map<string, number[]>();
-    const failedChunkIds = new Set<string>();
+    const failedChunkErrors = new Map<string, EmbeddingError>();
 
     for (let i = 0; i < allChunks.length; i += EMBEDDING_BATCH_SIZE) {
       const batch = allChunks.slice(i, i + EMBEDDING_BATCH_SIZE);
@@ -212,6 +222,7 @@ class EmbeddingService {
           embeddingResults.set(batch[j].chunkId, response.data[j].embedding);
         }
       } catch (error) {
+        const embeddingError = categorizeEmbeddingError(error);
         logger.error(
           {
             runId: connectorRunId,
@@ -222,7 +233,7 @@ class EmbeddingService {
           "[Embedder] Batch embedding API call failed",
         );
         for (const chunk of batch) {
-          failedChunkIds.add(chunk.chunkId);
+          failedChunkErrors.set(chunk.chunkId, embeddingError);
         }
       }
     }
@@ -232,14 +243,34 @@ class EmbeddingService {
       ([chunkId, embedding]) => ({ chunkId, embedding }),
     );
     if (successfulUpdates.length > 0) {
-      await KbChunkModel.updateEmbeddings(successfulUpdates, ctx.dimensions);
+      try {
+        await KbChunkModel.updateEmbeddings(successfulUpdates, ctx.dimensions);
+      } catch (error) {
+        const embeddingError = categorizeEmbeddingError(error);
+        logger.error(
+          {
+            runId: connectorRunId,
+            error: error instanceof Error ? error.message : String(error),
+          },
+          "[Embedder] Failed to write embeddings",
+        );
+        for (const { chunkId } of successfulUpdates) {
+          failedChunkErrors.set(chunkId, embeddingError);
+        }
+      }
     }
 
     for (const { documentId, chunkIds, chunkCount } of docChunkMap) {
-      const anyFailed = chunkIds.some((id) => failedChunkIds.has(id));
+      const anyFailed = chunkIds.some((id) => failedChunkErrors.has(id));
       if (anyFailed) {
+        const embeddingError =
+          chunkIds
+            .map((id) => failedChunkErrors.get(id))
+            .find((error): error is EmbeddingError => Boolean(error)) ??
+          "unknown";
         await KbDocumentModel.update(documentId, {
           embeddingStatus: "failed",
+          embeddingError,
         });
         logger.error(
           { documentId, runId: connectorRunId },
@@ -248,6 +279,7 @@ class EmbeddingService {
       } else {
         await KbDocumentModel.update(documentId, {
           embeddingStatus: "completed",
+          embeddingError: null,
           chunkCount,
         });
         logger.info(
@@ -344,4 +376,85 @@ function chunkToEmbeddingInput(
     content + (metadataSuffix ?? ""),
     "search_document",
   );
+}
+
+function categorizeEmbeddingError(error: unknown): EmbeddingError {
+  const status = getErrorStatus(error);
+  const message = getErrorMessage(error).toLowerCase();
+
+  if (
+    status === 429 ||
+    includesAny(message, ["rate limit", "too many requests", "quota"])
+  ) {
+    return "rate_limit";
+  }
+
+  if (
+    status === 401 ||
+    status === 403 ||
+    includesAny(message, [
+      "api key",
+      "authentication",
+      "unauthorized",
+      "forbidden",
+      "invalid key",
+    ])
+  ) {
+    return "auth_error";
+  }
+
+  if (
+    status === 404 ||
+    includesAny(message, [
+      "model not found",
+      "model does not exist",
+      "unknown model",
+      "does not exist",
+    ])
+  ) {
+    return "model_not_found";
+  }
+
+  if (
+    includesAny(message, [
+      "dimension",
+      "dimensions",
+      "dimensionality",
+      "vector length",
+      "expected",
+    ])
+  ) {
+    return "dimensions_mismatch";
+  }
+
+  if (status !== undefined && status >= 500) {
+    return "server_error";
+  }
+
+  return "unknown";
+}
+
+function getErrorStatus(error: unknown): number | undefined {
+  if (!isRecord(error)) return undefined;
+  if (typeof error.status === "number") return error.status;
+  if (isRecord(error.response) && typeof error.response.status === "number") {
+    return error.response.status;
+  }
+  return undefined;
+}
+
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (isRecord(error) && typeof error.message === "string") {
+    return error.message;
+  }
+  return String(error);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function includesAny(value: string, needles: string[]): boolean {
+  return needles.some((needle) => value.includes(needle));
 }

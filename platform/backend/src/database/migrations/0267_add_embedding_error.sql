@@ -1,0 +1,2 @@
+CREATE TYPE "public"."kb_document_embedding_error" AS ENUM('rate_limit', 'auth_error', 'model_not_found', 'server_error', 'dimensions_mismatch', 'unknown');--> statement-breakpoint
+ALTER TABLE "kb_documents" ADD COLUMN "embedding_error" "kb_document_embedding_error";--> statement-breakpoint

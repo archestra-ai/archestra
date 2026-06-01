@@ -1,6 +1,59 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeAll, describe, expect, it, vi } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+
+const knowledgeFilesQuery = vi.hoisted(() => {
+  const baseFile = {
+    id: "file-1",
+    connectorId: "connector-1",
+    originalName: "runbook.md",
+    mimeType: "text/markdown",
+    fileSize: 42,
+    contentHash: "hash",
+    createdAt: new Date("2026-01-01T00:00:00Z").toISOString(),
+    processingStatus: "completed",
+    processingError: null,
+    embeddingStatus: "completed",
+    embeddingError: null,
+    visibility: "personal",
+    teamIds: [],
+    assignedAgents: [
+      { id: "agent-1", name: "Support", agentType: "agent" },
+      {
+        id: "gateway-1",
+        name: "My Gateway",
+        agentType: "mcp_gateway",
+      },
+      {
+        id: "agent-2",
+        name: "Hidden Assistant",
+        agentType: "agent",
+      },
+      {
+        id: "gateway-2",
+        name: "Hidden Gateway",
+        agentType: "mcp_gateway",
+      },
+    ],
+  };
+
+  const makeResponse = (fileOverrides = {}) => ({
+    data: [{ ...baseFile, ...fileOverrides }],
+    pagination: {
+      currentPage: 1,
+      limit: 20,
+      total: 1,
+      totalPages: 1,
+      hasNext: false,
+      hasPrev: false,
+    },
+  });
+
+  return {
+    makeResponse,
+    response: makeResponse(),
+  };
+});
 
 beforeAll(() => {
   globalThis.ResizeObserver = class ResizeObserver {
@@ -39,50 +92,7 @@ vi.mock("@/lib/knowledge/knowledge-files.query", () => ({
   formatFileSize: (bytes: number) => `${bytes} B`,
   useDeleteKnowledgeFile: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useKnowledgeFilesPaginated: () => ({
-    data: {
-      data: [
-        {
-          id: "file-1",
-          connectorId: "connector-1",
-          originalName: "runbook.md",
-          mimeType: "text/markdown",
-          fileSize: 42,
-          contentHash: "hash",
-          createdAt: new Date("2026-01-01T00:00:00Z").toISOString(),
-          processingStatus: "completed",
-          processingError: null,
-          embeddingStatus: "completed",
-          visibility: "personal",
-          teamIds: [],
-          assignedAgents: [
-            { id: "agent-1", name: "Support", agentType: "agent" },
-            {
-              id: "gateway-1",
-              name: "My Gateway",
-              agentType: "mcp_gateway",
-            },
-            {
-              id: "agent-2",
-              name: "Hidden Assistant",
-              agentType: "agent",
-            },
-            {
-              id: "gateway-2",
-              name: "Hidden Gateway",
-              agentType: "mcp_gateway",
-            },
-          ],
-        },
-      ],
-      pagination: {
-        currentPage: 1,
-        limit: 20,
-        total: 1,
-        totalPages: 1,
-        hasNext: false,
-        hasPrev: false,
-      },
-    },
+    data: knowledgeFilesQuery.response,
     isPending: false,
     isFetching: false,
   }),
@@ -109,6 +119,10 @@ vi.mock("@/lib/auth/auth.query", () => ({
 import KnowledgeFilesPage from "./page.client";
 
 describe("KnowledgeFilesPage", () => {
+  beforeEach(() => {
+    knowledgeFilesQuery.response = knowledgeFilesQuery.makeResponse();
+  });
+
   it("renders uploaded files with their assigned agents", () => {
     render(<KnowledgeFilesPage />);
 
@@ -132,6 +146,26 @@ describe("KnowledgeFilesPage", () => {
     expect(screen.getByRole("button", { name: "View" })).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Download" }),
+    ).toBeInTheDocument();
+  });
+
+  it("shows a tooltip message for failed embeddings", () => {
+    knowledgeFilesQuery.response = knowledgeFilesQuery.makeResponse({
+      id: "file-failed",
+      originalName: "failed.pdf",
+      embeddingStatus: "failed",
+      embeddingError: "dimensions_mismatch",
+      assignedAgents: [],
+    });
+
+    render(<KnowledgeFilesPage />);
+
+    expect(screen.getByText("failed.pdf")).toBeInTheDocument();
+    expect(screen.getByText("Failed")).toBeInTheDocument();
+    expect(
+      screen.getByTitle(
+        "The embedding dimensions do not match the database index. Check the embedding model dimensions.",
+      ),
     ).toBeInTheDocument();
   });
 

@@ -1870,6 +1870,13 @@
       "when": 1780326644899,
       "tag": "0266_silky_slapstick",
       "breakpoints": true
+    },
+    {
+      "idx": 267,
+      "version": "7",
+      "when": 1780329000000,
+      "tag": "0267_add_embedding_error",
+      "breakpoints": true
     }
   ]
 }

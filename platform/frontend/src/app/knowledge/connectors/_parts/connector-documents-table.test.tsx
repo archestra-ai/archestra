@@ -26,6 +26,7 @@ const mockDocument = {
   acl: ["org:*"],
   metadata: {},
   embeddingStatus: "completed",
+  embeddingError: null,
   chunkCount: 2,
   createdAt: new Date("2026-04-01T00:00:00.000Z").toISOString(),
   updatedAt: new Date("2026-04-02T00:00:00.000Z").toISOString(),
@@ -35,6 +36,8 @@ const mockLongContentDocument = {
   ...mockDocument,
   id: "doc-2",
   title: "Long Doc",
+  embeddingStatus: "failed",
+  embeddingError: "rate_limit",
 };
 
 vi.mock("@/lib/hooks/use-data-table-query-params", () => ({
@@ -92,6 +95,17 @@ describe("ConnectorDocumentsTable", () => {
     expect(screen.getByText("Quarterly Plan")).toBeInTheDocument();
     expect(screen.queryByText("jira")).not.toBeInTheDocument();
     expect(screen.getByText("Long Doc")).toBeInTheDocument();
+  });
+
+  it("shows a tooltip message for failed connector document embeddings", () => {
+    render(<ConnectorDocumentsTable connectorId="connector-1" />);
+
+    expect(screen.getByText("Failed")).toBeInTheDocument();
+    expect(
+      screen.getByTitle(
+        "The embedding provider is rate limited. Retry after limits reset or switch providers.",
+      ),
+    ).toBeInTheDocument();
   });
 
   it("opens preview dialog from row action", async () => {

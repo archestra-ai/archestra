@@ -20,8 +20,15 @@ import {
   Users,
   X,
 } from "lucide-react";
-import { useCallback, useRef, useState } from "react";
+import {
+  type ComponentProps,
+  type ReactNode,
+  useCallback,
+  useRef,
+  useState,
+} from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
+import { EmbeddingStatusBadge } from "@/app/knowledge/_parts/embedding-status-badge";
 import { KnowledgePageLayout } from "@/app/knowledge/_parts/knowledge-page-layout";
 import {
   downloadKnowledgeFile,
@@ -38,6 +45,11 @@ import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { TruncatedTooltip } from "@/components/ui/truncated-tooltip";
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
 import {
@@ -491,30 +503,57 @@ function FileStatusBadge({ file }: { file: KnowledgeFile }) {
           ? "Failed"
           : "Queued";
     return (
-      <Badge
+      <StatusBadge
         variant={
           file.processingStatus === "failed" ? "destructive" : "secondary"
         }
-        className="text-xs"
+        tooltip={
+          file.processingStatus === "failed" ? file.processingError : null
+        }
       >
         {file.processingStatus === "processing" && (
           <Loader2 className="h-3 w-3 animate-spin" />
         )}
         {label}
-      </Badge>
+      </StatusBadge>
     );
   }
 
   return (
+    <EmbeddingStatusBadge
+      status={file.embeddingStatus}
+      error={file.embeddingError}
+    />
+  );
+}
+
+function StatusBadge({
+  children,
+  tooltip,
+  variant,
+}: {
+  children: ReactNode;
+  tooltip?: string | null;
+  variant: ComponentProps<typeof Badge>["variant"];
+}) {
+  const badge = (
     <Badge
-      variant={file.embeddingStatus === "failed" ? "destructive" : "secondary"}
+      variant={variant}
       className="text-xs"
+      title={tooltip ?? undefined}
+      tabIndex={tooltip ? 0 : undefined}
     >
-      {file.embeddingStatus === "processing" && (
-        <Loader2 className="h-3 w-3 animate-spin" />
-      )}
-      {file.embeddingStatus === "completed" ? "Indexed" : file.embeddingStatus}
+      {children}
     </Badge>
+  );
+
+  if (!tooltip) return badge;
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>{badge}</TooltipTrigger>
+      <TooltipContent className="max-w-72">{tooltip}</TooltipContent>
+    </Tooltip>
   );
 }
 

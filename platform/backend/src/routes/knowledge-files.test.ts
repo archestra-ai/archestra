@@ -277,6 +277,51 @@ describe("knowledge file routes", () => {
     ]);
   });
 
+  test("lists embedding failure reason for uploaded files", async () => {
+    const upload = await app.inject({
+      method: "POST",
+      url: "/api/knowledge-files",
+      payload: buildUploadPayload({
+        files: [
+          {
+            name: "bad-embedding.txt",
+            content: Buffer.from("Embedding content"),
+            mimeType: "text/plain",
+          },
+        ],
+      }),
+    });
+    expect(upload.statusCode).toBe(200);
+    const fileId = upload.json().results[0].fileId as string;
+    const file = await KbUploadedFileModel.findById(fileId);
+    if (!file) throw new Error("Expected uploaded file to exist");
+
+    await KbDocumentModel.create({
+      organizationId,
+      connectorId: file.connectorId,
+      sourceId: fileId,
+      title: file.originalName,
+      content: "Embedding content",
+      contentHash: "embedding-error-hash",
+      embeddingStatus: "failed",
+      embeddingError: "dimensions_mismatch",
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/knowledge-files?limit=20&offset=0",
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().data).toEqual([
+      expect.objectContaining({
+        originalName: "bad-embedding.txt",
+        embeddingStatus: "failed",
+        embeddingError: "dimensions_mismatch",
+      }),
+    ]);
+  });
+
   test("treats LIKE wildcard characters in file search as literals", async () => {
     const upload = await app.inject({
       method: "POST",

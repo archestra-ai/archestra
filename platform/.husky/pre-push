@@ -1,0 +1,18 @@
+cd platform
+if ! pnpm codegen; then
+  echo ""
+  echo "❌ pre-push: 'pnpm codegen' failed. Fix the errors above before pushing."
+  echo ""
+  exit 1
+fi
+
+if ! git diff --quiet HEAD; then
+  echo ""
+  echo "❌ pre-push: generated code is out of date. 'pnpm codegen' produced changes:"
+  echo ""
+  git diff --stat HEAD
+  echo ""
+  echo "💡 Commit the regenerated files, then push again."
+  echo ""
+  exit 1
+fi

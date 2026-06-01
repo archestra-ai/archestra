@@ -211,8 +211,6 @@ const UpdateInternalMcpCatalogSchemaBase = createUpdateSchema(
     multitenant: true,
     // Parent link is locked after creation
     parentCatalogItemId: true,
-    // Environment is locked after creation
-    environmentId: true,
   });
 
 export const UpdateInternalMcpCatalogSchema =

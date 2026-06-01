@@ -37,6 +37,7 @@ import { useCatalogPresets } from "@/lib/mcp/internal-mcp-catalog.query";
 import { useMcpPresetEntries } from "@/lib/mcp/mcp-preset-entry.query";
 import { usePresetEntityName } from "@/lib/organization.query";
 import { useTeamsWithVaultFolders } from "@/lib/teams/team.query";
+import { InstallNetworkPolicySelect } from "./install-network-policy-select";
 import { InstallPresetPicker } from "./install-preset-picker";
 import { FillPresetFieldsStep } from "./preset-fallback-fields";
 import {
@@ -96,6 +97,8 @@ export interface LocalServerInstallResult {
   isByosVault?: boolean;
   /** Kubernetes service account for the MCP server pod */
   serviceAccount?: string;
+  /** Optional per-install network policy override */
+  networkPolicyId?: string | null;
 }
 
 interface LocalServerInstallDialogProps {
@@ -155,6 +158,7 @@ export function LocalServerInstallDialog({
   const [serviceAccount, setServiceAccount] = useState<string | undefined>(
     catalogItem?.localConfig?.serviceAccount,
   );
+  const [networkPolicyId, setNetworkPolicyId] = useState<string | null>(null);
   const [selectedCatalogId, setSelectedCatalogId] = useState<string>(
     preselectedCatalogId ?? catalogItem?.id ?? "",
   );
@@ -410,6 +414,7 @@ export function LocalServerInstallDialog({
           secretFileVars.length > 0 ||
           hasPromptedSensitiveUserConfig),
       serviceAccount: serviceAccount || undefined,
+      networkPolicyId,
     });
 
     // Reset form
@@ -452,6 +457,7 @@ export function LocalServerInstallDialog({
     setVaultSecrets({});
     setUserConfigVaultSecrets({});
     setServiceAccount(catalogItem?.localConfig?.serviceAccount);
+    setNetworkPolicyId(null);
   };
 
   const handleClose = () => {
@@ -673,6 +679,13 @@ export function LocalServerInstallDialog({
           ) : null
         }
       />
+
+      {!isReinstall && !isReauth && !catalogItem?.oauthConfig ? (
+        <InstallNetworkPolicySelect
+          value={networkPolicyId}
+          onChange={setNetworkPolicyId}
+        />
+      ) : null}
 
       {useVaultSecrets && scope !== "team" && (
         <div className="space-y-2">

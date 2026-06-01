@@ -21,6 +21,7 @@ import type {
 } from "@/types";
 import environmentsTable from "./environment";
 import mcpPresetEntriesTable from "./mcp-preset-entry";
+import networkPoliciesTable from "./network-policy";
 import secretTable from "./secret";
 import usersTable from "./user";
 
@@ -135,6 +136,10 @@ const internalMcpCatalogTable = pgTable(
       () => environmentsTable.id,
       { onDelete: "set null" },
     ),
+    networkPolicyId: uuid("network_policy_id").references(
+      () => networkPoliciesTable.id,
+      { onDelete: "set null" },
+    ),
     /**
      * To re-install multi-tenant self-hosted MCPs.
      *
@@ -171,6 +176,9 @@ const internalMcpCatalogTable = pgTable(
     ),
     environmentIdIdx: index("internal_mcp_catalog_environment_id_idx").on(
       table.environmentId,
+    ),
+    networkPolicyIdIdx: index("internal_mcp_catalog_network_policy_id_idx").on(
+      table.networkPolicyId,
     ),
   }),
 );

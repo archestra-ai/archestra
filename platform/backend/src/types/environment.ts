@@ -40,6 +40,7 @@ export const CreateEnvironmentSchema = z.object({
   name: z.string().trim().min(1).max(50),
   description: z.string().trim().max(500).nullable().optional(),
   namespace: KubernetesNamespaceSchema.nullable().optional(),
+  networkPolicyId: z.string().uuid().nullable().optional(),
   restricted: z.boolean().optional(),
 });
 
@@ -51,6 +52,7 @@ export const UpdateEnvironmentSchema = z.object({
   name: z.string().trim().min(1).max(50).optional(),
   description: z.string().trim().max(500).nullable().optional(),
   namespace: KubernetesNamespaceSchema.nullable().optional(),
+  networkPolicyId: z.string().uuid().nullable().optional(),
   restricted: z.boolean().optional(),
 });
 

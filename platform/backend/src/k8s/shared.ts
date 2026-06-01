@@ -208,8 +208,7 @@ export async function validateNamespaceExists(
   try {
     await coreApi.readNamespace({ name: namespaceName });
   } catch (error: unknown) {
-    const message =
-      error instanceof Error ? error.message : "unknown error";
+    const message = error instanceof Error ? error.message : "unknown error";
     throw new Error(
       `Kubernetes namespace '${namespaceName}' could not be verified: ${message}`,
     );

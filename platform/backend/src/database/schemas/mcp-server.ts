@@ -14,6 +14,7 @@ import type {
   ResourceVisibilityScope,
 } from "@/types";
 import mcpCatalogTable from "./internal-mcp-catalog";
+import networkPoliciesTable from "./network-policy";
 import secretTable from "./secret";
 import { team } from "./team";
 import usersTable from "./user";
@@ -56,6 +57,10 @@ const mcpServerTable = pgTable(
       .$type<Record<string, string>>()
       .notNull()
       .default({}),
+    networkPolicyId: uuid("network_policy_id").references(
+      () => networkPoliciesTable.id,
+      { onDelete: "set null" },
+    ),
     ownerId: text("owner_id").references(() => usersTable.id, {
       onDelete: "set null",
     }),
@@ -82,7 +87,10 @@ const mcpServerTable = pgTable(
       .defaultNow()
       .$onUpdate(() => new Date()),
   },
-  (table) => [index("mcp_server_scope_idx").on(table.scope)],
+  (table) => [
+    index("mcp_server_scope_idx").on(table.scope),
+    index("mcp_server_network_policy_id_idx").on(table.networkPolicyId),
+  ],
 );
 
 export default mcpServerTable;

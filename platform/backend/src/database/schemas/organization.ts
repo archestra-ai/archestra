@@ -250,6 +250,13 @@ const organizationsTable = pgTable("organization", {
   defaultEnvironmentDescription: text("default_environment_description"),
 
   /**
+   * Optional default network policy for the implicit "default" environment.
+   * Stored without an FK to avoid a circular schema dependency; service logic
+   * validates the ID belongs to this organization.
+   */
+  defaultNetworkPolicyId: uuid("default_network_policy_id"),
+
+  /**
    * When true, assigning a catalog item to the implicit "default" environment
    * (environment_id = null) requires the `environment:admin` permission — i.e.
    * creating a catalog item without choosing an environment is admin-gated.

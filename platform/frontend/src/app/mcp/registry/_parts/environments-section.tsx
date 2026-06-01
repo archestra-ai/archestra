@@ -1,5 +1,6 @@
 "use client";
 
+import type { ColumnDef } from "@tanstack/react-table";
 import {
   CheckCircle2,
   Loader2,
@@ -8,11 +9,13 @@ import {
   Trash2,
   XCircle,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { ReinstallConfirmBar } from "@/components/reinstall-confirm-bar";
+import { TableRowActions } from "@/components/table-row-actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { DataTable } from "@/components/ui/data-table";
 import {
   Dialog,
   DialogBody,
@@ -24,15 +27,14 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { useFeature } from "@/lib/config/config.query";
 import {
@@ -44,16 +46,35 @@ import {
   useEnvironments,
   useUpdateEnvironment,
 } from "@/lib/organization/environment.query";
+import { useNetworkPolicies } from "@/lib/organization/network-policy.query";
 import {
   useDefaultEnvironment,
   useUpdateDefaultEnvironment,
 } from "@/lib/organization.query";
+import { useSetMcpRegistryAction } from "../layout";
+
+const NETWORK_POLICY_DEFAULT_VALUE = "__default_network_policy__";
+
+type EnvironmentTableRow =
+  | {
+      kind: "default";
+      id: "default";
+      name: string;
+      namespace: string | null;
+      description: string | null;
+      networkPolicyId: string | null;
+      restricted: boolean;
+      assignedCatalogCount: number;
+    }
+  | (EnvironmentWithAssignedCount & { kind: "environment" });
 
 export function EnvironmentsSection({ canEdit }: { canEdit: boolean }) {
+  const setActionButton = useSetMcpRegistryAction();
   const { data: environmentList, isLoading } = useEnvironments();
   const environments = environmentList?.environments ?? [];
   const defaultAssignedCatalogCount =
     environmentList?.defaultAssignedCatalogCount ?? 0;
+  const { data: networkPolicies = [] } = useNetworkPolicies();
   const defaultEnvironment = useDefaultEnvironment();
   const [createOpen, setCreateOpen] = useState(false);
   const [editDefaultOpen, setEditDefaultOpen] = useState(false);
@@ -62,148 +83,157 @@ export function EnvironmentsSection({ canEdit }: { canEdit: boolean }) {
   const [deleteTarget, setDeleteTarget] =
     useState<EnvironmentWithAssignedCount | null>(null);
 
+  useEffect(() => {
+    setActionButton(
+      <Button
+        className="h-9 shrink-0 px-3 text-sm"
+        disabled={!canEdit}
+        onClick={() => setCreateOpen(true)}
+      >
+        <Plus className="h-4 w-4" />
+        Add Environment
+      </Button>,
+    );
+
+    return () => setActionButton(null);
+  }, [canEdit, setActionButton]);
+
+  const rows: EnvironmentTableRow[] = useMemo(
+    () => [
+      {
+        kind: "default",
+        id: "default",
+        name: defaultEnvironment.name,
+        namespace: defaultEnvironment.namespace,
+        description: defaultEnvironment.description,
+        networkPolicyId: defaultEnvironment.networkPolicyId,
+        restricted: defaultEnvironment.restricted,
+        assignedCatalogCount: defaultAssignedCatalogCount,
+      },
+      ...environments.map((environment) => ({
+        ...environment,
+        kind: "environment" as const,
+      })),
+    ],
+    [defaultAssignedCatalogCount, defaultEnvironment, environments],
+  );
+
+  const columns: ColumnDef<EnvironmentTableRow>[] = useMemo(
+    () => [
+      {
+        accessorKey: "name",
+        header: "Name",
+        cell: ({ row }) => (
+          <span className="flex items-center gap-2 font-medium">
+            {row.original.name}
+            {row.original.kind === "default" &&
+              row.original.name !== "Default" && (
+                <Badge variant="outline" className="text-muted-foreground">
+                  Default
+                </Badge>
+              )}
+          </span>
+        ),
+      },
+      {
+        accessorKey: "namespace",
+        header: "Namespace",
+        cell: ({ row }) => <NamespaceCell namespace={row.original.namespace} />,
+      },
+      {
+        accessorKey: "networkPolicyId",
+        header: "Network Policy",
+        cell: ({ row }) => (
+          <NetworkPolicyCell
+            policyId={row.original.networkPolicyId}
+            policies={networkPolicies}
+            emptyLabel={
+              row.original.kind === "default" ? "None" : "Use default"
+            }
+          />
+        ),
+      },
+      {
+        accessorKey: "assignedCatalogCount",
+        header: "Assigned MCPs",
+        cell: ({ row }) => (
+          <span className="text-muted-foreground">
+            {row.original.assignedCatalogCount}
+          </span>
+        ),
+      },
+      {
+        accessorKey: "restricted",
+        header: "Access",
+        cell: ({ row }) =>
+          row.original.restricted ? (
+            <Badge variant="secondary">Restricted</Badge>
+          ) : (
+            <Badge variant="outline" className="text-muted-foreground">
+              Open
+            </Badge>
+          ),
+      },
+      {
+        id: "actions",
+        header: "Actions",
+        cell: ({ row }) => {
+          const item = row.original;
+          return (
+            <TableRowActions
+              actions={[
+                {
+                  icon: <Pencil className="h-4 w-4" />,
+                  label: `Edit ${item.name}`,
+                  disabled: !canEdit,
+                  onClick: () => {
+                    if (item.kind === "default") {
+                      setEditDefaultOpen(true);
+                    } else {
+                      setEditTarget(item);
+                    }
+                  },
+                },
+                ...(item.kind === "environment"
+                  ? [
+                      {
+                        icon: <Trash2 className="h-4 w-4" />,
+                        label: `Delete ${item.name}`,
+                        variant: "destructive" as const,
+                        disabled: !canEdit || item.assignedCatalogCount > 0,
+                        disabledTooltip:
+                          item.assignedCatalogCount > 0
+                            ? "Reassign or remove the catalog items in this environment before deleting it."
+                            : undefined,
+                        onClick: () => setDeleteTarget(item),
+                      },
+                    ]
+                  : []),
+              ]}
+            />
+          );
+        },
+      },
+    ],
+    [canEdit, networkPolicies],
+  );
+
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-end gap-4">
-        <Button
-          size="sm"
-          className="h-9 shrink-0 px-3 text-sm"
-          disabled={!canEdit}
-          onClick={() => setCreateOpen(true)}
-        >
-          <Plus className="h-4 w-4" />
-          Add Environment
-        </Button>
-      </div>
-
-      <div className="rounded-md border">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Name</TableHead>
-              <TableHead>Namespace</TableHead>
-              <TableHead>Assigned MCPs</TableHead>
-              <TableHead>Access</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {/* The Default environment is a real, configurable target (stored
-                on the organization). It always renders first and cannot be
-                deleted. */}
-            <TableRow>
-              <TableCell className="font-medium">
-                <span className="flex items-center gap-2">
-                  {defaultEnvironment.name}
-                  {defaultEnvironment.name !== "Default" && (
-                    <Badge variant="outline" className="text-muted-foreground">
-                      Default
-                    </Badge>
-                  )}
-                </span>
-              </TableCell>
-              <TableCell>
-                <NamespaceCell namespace={defaultEnvironment.namespace} />
-              </TableCell>
-              <TableCell className="text-muted-foreground">
-                {defaultAssignedCatalogCount}
-              </TableCell>
-              <TableCell>
-                {defaultEnvironment.restricted ? (
-                  <Badge variant="secondary">Restricted</Badge>
-                ) : (
-                  <Badge variant="outline" className="text-muted-foreground">
-                    Open
-                  </Badge>
-                )}
-              </TableCell>
-              <TableCell className="text-right">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                  disabled={!canEdit}
-                  onClick={() => setEditDefaultOpen(true)}
-                  aria-label={`Edit ${defaultEnvironment.name}`}
-                >
-                  <Pencil className="h-4 w-4" />
-                </Button>
-              </TableCell>
-            </TableRow>
-            {isLoading ? (
-              <TableRow>
-                <TableCell
-                  colSpan={5}
-                  className="text-center text-sm text-muted-foreground"
-                >
-                  Loading…
-                </TableCell>
-              </TableRow>
-            ) : (
-              environments.map((environment) => (
-                <TableRow key={environment.id}>
-                  <TableCell className="font-medium">
-                    {environment.name}
-                  </TableCell>
-                  <TableCell>
-                    <NamespaceCell namespace={environment.namespace} />
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {environment.assignedCatalogCount}
-                  </TableCell>
-                  <TableCell>
-                    {environment.restricted ? (
-                      <Badge variant="secondary">Restricted</Badge>
-                    ) : (
-                      <Badge
-                        variant="outline"
-                        className="text-muted-foreground"
-                      >
-                        Open
-                      </Badge>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                      disabled={!canEdit}
-                      onClick={() => setEditTarget(environment)}
-                      aria-label={`Edit ${environment.name}`}
-                    >
-                      <Pencil className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                      disabled={
-                        !canEdit || environment.assignedCatalogCount > 0
-                      }
-                      title={
-                        environment.assignedCatalogCount > 0
-                          ? "Reassign or remove the catalog items in this environment before deleting it."
-                          : undefined
-                      }
-                      onClick={() => setDeleteTarget(environment)}
-                      aria-label={`Delete ${environment.name}`}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </div>
+      <DataTable
+        columns={columns}
+        data={rows}
+        getRowId={(row) => row.id}
+        isLoading={isLoading}
+        emptyMessage="No environments"
+      />
 
       <EnvironmentEditorDialog
         mode="create"
         open={createOpen}
         onOpenChange={setCreateOpen}
         environment={null}
+        networkPolicies={networkPolicies}
       />
 
       <EnvironmentEditorDialog
@@ -211,6 +241,7 @@ export function EnvironmentsSection({ canEdit }: { canEdit: boolean }) {
         open={editTarget !== null}
         onOpenChange={(v) => !v && setEditTarget(null)}
         environment={editTarget}
+        networkPolicies={networkPolicies}
       />
 
       <EnvironmentEditorDialog
@@ -219,6 +250,7 @@ export function EnvironmentsSection({ canEdit }: { canEdit: boolean }) {
         onOpenChange={setEditDefaultOpen}
         environment={null}
         defaultEnvironment={defaultEnvironment}
+        networkPolicies={networkPolicies}
       />
 
       <DeleteEnvironmentDialog
@@ -260,6 +292,23 @@ function NamespaceCell({ namespace }: { namespace: string | null }) {
   return <span className="text-muted-foreground">—</span>;
 }
 
+function NetworkPolicyCell({
+  policyId,
+  policies,
+  emptyLabel,
+}: {
+  policyId: string | null;
+  policies: Array<{ id: string; name: string }>;
+  emptyLabel: string;
+}) {
+  if (!policyId) {
+    return <span className="text-muted-foreground">{emptyLabel}</span>;
+  }
+
+  const policy = policies.find((p) => p.id === policyId);
+  return <span className="text-sm">{policy?.name ?? "Unknown policy"}</span>;
+}
+
 const K8S_NAMESPACE_RE = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/;
 
 function validateNamespace(value: string): string | null {
@@ -276,6 +325,7 @@ function EnvironmentEditorDialog({
   onOpenChange,
   environment,
   defaultEnvironment,
+  networkPolicies,
 }: {
   // "default" edits the org-level default environment; "create"/"edit" manage
   // real environments. Name, description, namespace, and restricted are all
@@ -288,8 +338,14 @@ function EnvironmentEditorDialog({
     name: string;
     namespace: string | null;
     description: string | null;
+    networkPolicyId: string | null;
     restricted: boolean;
   };
+  networkPolicies: Array<{
+    id: string;
+    name: string;
+    description: string | null;
+  }>;
 }) {
   const createMutation = useCreateEnvironment();
   const updateMutation = useUpdateEnvironment();
@@ -303,14 +359,12 @@ function EnvironmentEditorDialog({
   const [name, setName] = useState("");
   const [namespace, setNamespace] = useState("");
   const [description, setDescription] = useState("");
+  const [networkPolicyId, setNetworkPolicyId] = useState<string | null>(null);
   const [restricted, setRestricted] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [nsTest, setNsTest] = useState<
     "idle" | "pending" | NamespaceTestResult
   >("idle");
-
-  const nameEditable = mode !== "edit";
-
   // Sync drafts whenever the dialog (re)opens for a target.
   useEffect(() => {
     if (open) {
@@ -320,11 +374,13 @@ function EnvironmentEditorDialog({
         setName(defaultEnvironment?.name ?? "");
         setNamespace(defaultEnvironment?.namespace ?? "");
         setDescription(defaultEnvironment?.description ?? "");
+        setNetworkPolicyId(defaultEnvironment?.networkPolicyId ?? null);
         setRestricted(defaultEnvironment?.restricted ?? false);
       } else {
         setName(environment?.name ?? "");
         setNamespace(environment?.namespace ?? "");
         setDescription(environment?.description ?? "");
+        setNetworkPolicyId(environment?.networkPolicyId ?? null);
         setRestricted(environment?.restricted ?? false);
       }
     }
@@ -357,6 +413,7 @@ function EnvironmentEditorDialog({
           name: trimmedName,
           namespace: namespaceValue,
           description: descriptionValue,
+          networkPolicyId,
           restricted,
         },
         { onSuccess: (created) => created && onOpenChange(false) },
@@ -367,6 +424,7 @@ function EnvironmentEditorDialog({
           name: trimmedName,
           namespace: namespaceValue,
           description: descriptionValue,
+          networkPolicyId,
           restricted,
         },
         { onSuccess: (updated) => updated && onOpenChange(false) },
@@ -379,6 +437,7 @@ function EnvironmentEditorDialog({
             name: trimmedName,
             namespace: namespaceValue,
             description: descriptionValue,
+            networkPolicyId,
             restricted,
           },
         },
@@ -496,6 +555,36 @@ function EnvironmentEditorDialog({
                 {nsTest.accessible ? "Namespace is accessible" : nsTest.message}
               </p>
             )}
+          </div>
+          <div className="space-y-2">
+            <Label>Network Policy</Label>
+            <Select
+              value={networkPolicyId ?? NETWORK_POLICY_DEFAULT_VALUE}
+              onValueChange={(value) =>
+                setNetworkPolicyId(
+                  value === NETWORK_POLICY_DEFAULT_VALUE ? null : value,
+                )
+              }
+              disabled={isPending}
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={NETWORK_POLICY_DEFAULT_VALUE}>
+                  {mode === "default" ? "None" : "Use default policy"}
+                </SelectItem>
+                {networkPolicies.map((policy) => (
+                  <SelectItem
+                    key={policy.id}
+                    value={policy.id}
+                    description={policy.description ?? undefined}
+                  >
+                    {policy.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
           <div className="flex items-start justify-between gap-4">
             <div className="space-y-1">

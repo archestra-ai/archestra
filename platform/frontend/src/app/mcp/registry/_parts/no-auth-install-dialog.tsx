@@ -6,6 +6,7 @@ import { useCallback, useEffect, useState } from "react";
 import { StandardFormDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
 import { useCatalogPresets } from "@/lib/mcp/internal-mcp-catalog.query";
+import { InstallNetworkPolicySelect } from "./install-network-policy-select";
 import { InstallPresetPicker } from "./install-preset-picker";
 import {
   type McpServerInstallScope,
@@ -22,6 +23,8 @@ export interface NoAuthInstallResult {
   scope: McpServerInstallScope;
   /** Team ID to assign the MCP server to (only when scope is "team") */
   teamId?: string | null;
+  /** Optional per-install network policy override */
+  networkPolicyId?: string | null;
 }
 
 interface NoAuthInstallDialogProps {
@@ -64,6 +67,7 @@ export function NoAuthInstallDialog({
   const [selectedCatalogId, setSelectedCatalogId] = useState<string>(
     preselectedCatalogId ?? catalogItem?.id ?? "",
   );
+  const [networkPolicyId, setNetworkPolicyId] = useState<string | null>(null);
   const { data: presets = [] } = useCatalogPresets(catalogItem?.id ?? null);
   const hasPresets = presets.length > 0;
 
@@ -79,12 +83,14 @@ export function NoAuthInstallDialog({
       catalogId: selectedCatalogId,
       scope,
       teamId: selectedTeamId,
+      networkPolicyId,
     });
-  }, [onInstall, scope, selectedTeamId, selectedCatalogId]);
+  }, [onInstall, scope, selectedTeamId, selectedCatalogId, networkPolicyId]);
 
   const handleClose = useCallback(() => {
     setSelectedTeamId(null);
     setScope("personal");
+    setNetworkPolicyId(null);
     onClose();
   }, [onClose]);
 
@@ -142,6 +148,10 @@ export function NoAuthInstallDialog({
             />
           ) : undefined
         }
+      />
+      <InstallNetworkPolicySelect
+        value={networkPolicyId}
+        onChange={setNetworkPolicyId}
       />
     </StandardFormDialog>
   );

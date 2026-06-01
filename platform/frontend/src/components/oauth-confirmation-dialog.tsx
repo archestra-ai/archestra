@@ -2,6 +2,7 @@
 
 import { AlertCircle, ShieldCheck, User } from "lucide-react";
 import { useState } from "react";
+import { InstallNetworkPolicySelect } from "@/app/mcp/registry/_parts/install-network-policy-select";
 import {
   type McpServerInstallScope,
   SelectMcpServerCredentialTypeAndTeams,
@@ -17,6 +18,8 @@ export interface OAuthInstallResult {
   scope: McpServerInstallScope;
   /** Team ID to assign the MCP server to (only when scope is "team") */
   teamId?: string | null;
+  /** Optional per-install network policy override */
+  networkPolicyId?: string | null;
 }
 
 interface OAuthConfirmationDialogProps {
@@ -52,17 +55,19 @@ export function OAuthConfirmationDialog({
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(
     preselectedTeamId ?? null,
   );
+  const [networkPolicyId, setNetworkPolicyId] = useState<string | null>(null);
   const [canInstall, setCanInstall] = useState(true);
   const byosEnabled = useFeature("byosEnabled");
 
   const handleConfirm = () => {
-    onConfirm({ scope, teamId: selectedTeamId });
+    onConfirm({ scope, teamId: selectedTeamId, networkPolicyId });
     onOpenChange(false);
   };
 
   const handleCancel = () => {
     setSelectedTeamId(null);
     setScope("personal");
+    setNetworkPolicyId(null);
     onCancel();
     onOpenChange(false);
   };
@@ -127,6 +132,10 @@ export function OAuthConfirmationDialog({
         preselectedTeamId={preselectedTeamId}
         personalOnly={personalOnly}
         orgOnly={orgOnly}
+      />
+      <InstallNetworkPolicySelect
+        value={networkPolicyId}
+        onChange={setNetworkPolicyId}
       />
     </StandardFormDialog>
   );

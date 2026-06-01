@@ -990,6 +990,18 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.ValidateEnvironmentNamespace]: {
     environment: ["read"],
   },
+  [RouteId.ListNetworkPolicies]: {
+    environment: ["read"],
+  },
+  [RouteId.CreateNetworkPolicy]: {
+    environment: ["create"],
+  },
+  [RouteId.UpdateNetworkPolicy]: {
+    environment: ["update"],
+  },
+  [RouteId.DeleteNetworkPolicy]: {
+    environment: ["delete"],
+  },
   [RouteId.UpdateKnowledgeSettings]: {
     knowledgeSettings: ["update"],
   },

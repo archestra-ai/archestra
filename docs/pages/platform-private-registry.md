@@ -3,7 +3,7 @@ title: Private MCP Registry
 category: MCP
 order: 2
 description: Managing your organization's MCP servers in a private registry
-lastUpdated: 2026-04-27
+lastUpdated: 2026-06-01
 ---
 
 <!--
@@ -80,13 +80,15 @@ For example, every catalog entry tagged `department: finance` is automatically w
 
 ## Environments
 
-An environment is an organization-level deployment target — for example `sandbox`, `staging`, or `production`. Admins manage the list of environments, and each carries a name and an optional Kubernetes namespace. The registry form lets you assign a catalog entry to one environment.
+An environment is an organization-level deployment target — for example `sandbox`, `staging`, or `production`. Admins manage the list of environments, and each carries a name, an optional Kubernetes namespace, and an optional default network policy. The registry form lets you assign a catalog entry to one environment.
 
 An environment can be marked **restricted**. Only members with the `environment:admin` permission can assign catalog entries to a restricted environment; in the registry form it appears disabled for everyone else. Unrestricted environments and Default stay open to anyone who can create catalog entries.
 
 Every entry starts on the virtual **Default** environment, which is not a stored row — it simply means "no environment assigned". Selecting Default in the registry form clears the assignment. Deleting an environment moves its entries back to Default rather than removing them.
 
-The Kubernetes namespace is recorded on the environment but is not yet applied when servers deploy.
+Network policies are reusable egress profiles. They can disable internet egress, allow all egress, or allow only selected domain presets plus custom domains. The effective policy is resolved in this order: installation override, catalog override, environment default, then platform default.
+
+Create and edit network policies from the organization-level network policy page. The registry and installation forms only select an existing policy.
 
 ## From Registry To Gateway
 

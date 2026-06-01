@@ -634,6 +634,7 @@ export function useDefaultEnvironment() {
     name: organization?.defaultEnvironmentName ?? "Default",
     namespace: organization?.defaultEnvironmentNamespace ?? null,
     description: organization?.defaultEnvironmentDescription ?? null,
+    networkPolicyId: organization?.defaultNetworkPolicyId ?? null,
     restricted: organization?.defaultEnvironmentRestricted ?? false,
   };
 }

@@ -36,6 +36,7 @@ import {
   setOAuthEnvironmentValues,
   setOAuthIsFirstInstallation,
   setOAuthMcpServerId,
+  setOAuthNetworkPolicyId,
   setOAuthPendingAfterEnvVars,
   setOAuthReturnUrl,
   setOAuthScope,
@@ -655,6 +656,7 @@ export function InternalMCPCatalog({
       scope: result.scope,
       teamId:
         result.scope === "team" ? (result.teamId ?? undefined) : undefined,
+      networkPolicyId: result.networkPolicyId,
     });
     closeDialog("no-auth");
     setNoAuthCatalogItem(null);
@@ -809,6 +811,7 @@ export function InternalMCPCatalog({
           ? (installResult.teamId ?? undefined)
           : undefined,
       serviceAccount: installResult.serviceAccount,
+      networkPolicyId: installResult.networkPolicyId,
       dontShowToast: true,
     });
 
@@ -888,6 +891,7 @@ export function InternalMCPCatalog({
       scope: result.scope,
       teamId:
         result.scope === "team" ? (result.teamId ?? undefined) : undefined,
+      networkPolicyId: result.networkPolicyId,
     });
     setInstallingItemId(null);
   };
@@ -907,6 +911,7 @@ export function InternalMCPCatalog({
       setOAuthCatalogId(selectedCatalogItem.id);
       setOAuthTeamId(result.scope === "team" ? (result.teamId ?? null) : null);
       setOAuthScope(result.scope);
+      setOAuthNetworkPolicyId(result.networkPolicyId ?? null);
 
       // If re-authenticating via OAuth, store reauth context
       if (reauthServerId) {

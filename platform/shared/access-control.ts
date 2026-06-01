@@ -26,7 +26,15 @@ export const allAvailableActions: Record<Resource, Action[]> = {
 
   // Agents
   agent: ["read", "create", "update", "delete", "team-admin", "admin"],
-  skill: ["read", "create", "update", "delete", "team-admin", "admin"],
+  skill: [
+    "read",
+    "create",
+    "update",
+    "delete",
+    "team-admin",
+    "admin",
+    "execute",
+  ],
   agentTrigger: ["read", "create", "update", "delete"],
   scheduledTask: ["read", "create", "update", "delete", "admin"],
 
@@ -58,6 +66,7 @@ export const allAvailableActions: Record<Resource, Action[]> = {
 
   // Administration (overrides better-auth defaults to add "read" where needed)
   apiKey: ["read", "create", "delete"],
+  serviceAccount: ["read", "create", "update", "delete"],
   auditLog: ["read"],
   agentSettings: ["read", "update"],
   llmSettings: ["read", "update"],
@@ -86,7 +95,7 @@ export const allAvailableActions: Record<Resource, Action[]> = {
 export const editorPermissions: Record<Resource, Action[]> = {
   // Agents
   agent: ["read", "create", "update", "delete", "team-admin"],
-  skill: ["read", "create", "update", "delete", "team-admin"],
+  skill: ["read", "create", "update", "delete", "team-admin", "execute"],
   agentTrigger: ["read", "create", "update", "delete"],
   scheduledTask: ["read", "create", "update", "delete"],
 
@@ -118,6 +127,7 @@ export const editorPermissions: Record<Resource, Action[]> = {
 
   // Administration (overrides better-auth defaults to add "read" where needed)
   apiKey: ["read", "create", "delete"],
+  serviceAccount: [],
   auditLog: [],
   agentSettings: [],
   llmSettings: ["read", "update"],
@@ -146,7 +156,7 @@ export const editorPermissions: Record<Resource, Action[]> = {
 export const memberPermissions: Record<Resource, Action[]> = {
   // Agents
   agent: ["read", "create", "update", "delete"],
-  skill: ["read", "create", "update", "delete"],
+  skill: ["read", "create", "update", "delete", "execute"],
   agentTrigger: [],
   scheduledTask: ["read", "create", "update", "delete"],
 
@@ -178,6 +188,7 @@ export const memberPermissions: Record<Resource, Action[]> = {
 
   // Administration (overrides better-auth defaults to add "read" where needed)
   apiKey: ["read", "create", "delete"],
+  serviceAccount: [],
   auditLog: [],
   agentSettings: [],
   llmSettings: [],
@@ -239,6 +250,7 @@ export const permissionDescriptions: Record<string, string> = {
   "skill:team-admin": "Manage team assignments for agent skills",
   "skill:admin":
     "Full administrative control over all agent skills, bypassing team restrictions",
+  "skill:execute": "Execute skill scripts",
   "agentTrigger:read":
     "View agent trigger configurations (Slack, MS Teams, email)",
   "agentTrigger:create": "Set up new agent triggers",
@@ -363,6 +375,10 @@ export const permissionDescriptions: Record<string, string> = {
   "apiKey:read": "View API keys",
   "apiKey:create": "Create API keys",
   "apiKey:delete": "Delete API keys",
+  "serviceAccount:read": "View service accounts",
+  "serviceAccount:create": "Create service accounts",
+  "serviceAccount:update": "Modify service accounts",
+  "serviceAccount:delete": "Delete service accounts",
   "auditLog:read":
     "View the organization-wide audit log of administrative actions",
   "organizationSettings:read":
@@ -426,6 +442,7 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.CloneAgent]: {},
   [RouteId.UpdateAgent]: {},
   [RouteId.DeleteAgent]: {},
+  [RouteId.RestoreAgent]: {},
   // Export/Import: agent-type permission checked dynamically in handler
   [RouteId.ExportAgent]: {},
   [RouteId.ImportAgent]: {},
@@ -824,6 +841,30 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.DeleteApiKey]: {
     apiKey: ["delete"],
   },
+  [RouteId.GetServiceAccounts]: {
+    serviceAccount: ["read"],
+  },
+  [RouteId.GetServiceAccount]: {
+    serviceAccount: ["read"],
+  },
+  [RouteId.CreateServiceAccount]: {
+    serviceAccount: ["create"],
+  },
+  [RouteId.UpdateServiceAccount]: {
+    serviceAccount: ["update"],
+  },
+  [RouteId.DeleteServiceAccount]: {
+    serviceAccount: ["delete"],
+  },
+  [RouteId.CreateServiceAccountToken]: {
+    serviceAccount: ["update"],
+  },
+  [RouteId.UpdateServiceAccountToken]: {
+    serviceAccount: ["update"],
+  },
+  [RouteId.DeleteServiceAccountToken]: {
+    serviceAccount: ["update"],
+  },
   [RouteId.GetAllVirtualApiKeys]: {
     llmVirtualKey: ["read"],
   },
@@ -1175,6 +1216,7 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.ImportGithubSkills]: { skill: ["create"] },
   [RouteId.GetSkillSourceRepos]: { skill: ["read"] },
   [RouteId.EnableSkillToolDefaults]: { skill: ["admin"] },
+  [RouteId.GetSkillSandboxArtifact]: { skill: ["execute"] },
 
   // Audit Log Routes
   [RouteId.GetAuditLogs]: {
@@ -1258,6 +1300,7 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   // Settings
   "/settings/account": {},
   "/settings/api-keys": { apiKey: ["read"] },
+  "/settings/service-accounts": { serviceAccount: ["read"] },
   "/settings/llm": { llmSettings: ["read"] },
   "/settings/agents": { agentSettings: ["read"] },
   "/settings/knowledge": { knowledgeSettings: ["read"] },
@@ -1267,5 +1310,4 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/settings/identity-providers": { identityProvider: ["read"] },
   "/settings/secrets": { secret: ["read"] },
   "/settings/organization": { organizationSettings: ["read"] },
-  "/settings/connection": { organizationSettings: ["read"] },
 };

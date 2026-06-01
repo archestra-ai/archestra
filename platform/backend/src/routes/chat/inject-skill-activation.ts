@@ -7,6 +7,7 @@ import { getSkillPermissionChecker } from "@/auth/skill-permissions";
 import logger from "@/logging";
 import { SkillFileModel, SkillModel, SkillTeamModel } from "@/models";
 import { formatSkillActivation } from "@/skills/skill-activation";
+import { isSkillSandboxAvailableForAgent } from "@/skills/skill-sandbox-availability";
 
 /**
  * When the last user message was sent via a skill slash command, prepend the
@@ -23,10 +24,13 @@ export async function injectSkillActivation({
   messages,
   organizationId,
   userId,
+  agentId,
 }: {
   messages: ChatMessage[];
   organizationId: string;
   userId: string;
+  /** The conversation's agent — gates the sandbox hint on tool assignment. */
+  agentId: string | undefined;
 }): Promise<ChatMessage[]> {
   const lastUserIndex = messages.findLastIndex(
     (message) => message.role === "user",
@@ -86,7 +90,14 @@ export async function injectSkillActivation({
   const next = [...messages];
   next[lastUserIndex] = prependText(
     userMessage,
-    formatSkillActivation({ skill, files }),
+    formatSkillActivation({
+      skill,
+      files,
+      canRunSandbox: await isSkillSandboxAvailableForAgent({
+        checker,
+        agentId,
+      }),
+    }),
   );
   return next;
 }

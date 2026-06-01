@@ -70,7 +70,9 @@ class JwksValidator {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       // Expected validation failures (expired, bad signature) log at debug;
-      // unexpected errors (network, malformed key) log at warn.
+      // unexpected errors (network, malformed key) log at warn. Include jwksUrl
+      // so a real auth failure shows which endpoint was used, not just the
+      // issuer.
       const isExpected =
         message.includes("expired") ||
         message.includes("signature") ||
@@ -78,7 +80,7 @@ class JwksValidator {
         message.includes("JWT");
       const level = isExpected ? "debug" : "warn";
       logger[level](
-        { issuerUrl, error: message },
+        { issuerUrl, jwksUrl, error: message },
         "JWKS JWT validation failed",
       );
       return null;

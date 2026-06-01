@@ -27,12 +27,11 @@ import {
 import Image from "next/image";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
+import { LlmProviderApiKeyDropdown } from "@/components/llm-provider-api-key-dropdown";
 import { PROVIDER_CONFIG } from "@/components/llm-provider-api-key-form";
-import { LlmProviderApiKeyFilterSelect } from "@/components/llm-provider-options";
 import {
   BestModelBadge,
   EmbeddingModelBadge,
-  FastestModelBadge,
   FreeModelBadge,
   LatestModelBadge,
   UnknownCapabilitiesBadge,
@@ -64,6 +63,12 @@ import {
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import {
   type ModelWithApiKeys,
@@ -78,6 +83,8 @@ import {
   canFilterFreeModelsForApiKey,
   filterModelsForPage,
   type ModelsPageModelTypeFilter,
+  OBSERVED_MODEL_SOURCE_DESCRIPTION,
+  OBSERVED_MODEL_SOURCE_LABEL,
 } from "./models-page-utils";
 
 export default function ModelsPage() {
@@ -88,6 +95,7 @@ export default function ModelsPage() {
   const [isRefreshingModels, setIsRefreshingModels] = useState(false);
   const [search, setSearch] = useState("");
   const [apiKeyFilter, setApiKeyFilter] = useState<string>("all");
+  const [apiKeyFilterOpen, setApiKeyFilterOpen] = useState(false);
   const [modelTypeFilter, setModelTypeFilter] =
     useState<ModelsPageModelTypeFilter>("all");
   const [freeOnly, setFreeOnly] = useState(false);
@@ -157,7 +165,12 @@ export default function ModelsPage() {
   const setModelProvidersAction = useSetModelProvidersAction();
   useEffect(() => {
     setModelProvidersAction(
-      <Button onClick={handleRefresh} disabled={isRefreshingModels}>
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={handleRefresh}
+        disabled={isRefreshingModels}
+      >
         <RefreshCw
           className={`h-4 w-4 ${isRefreshingModels ? "animate-spin" : ""}`}
         />
@@ -202,7 +215,6 @@ export default function ModelsPage() {
               <div className="mt-0.5 flex flex-wrap items-center gap-2">
                 {isFree && <FreeModelBadge />}
                 {isLatestAlias && <LatestModelBadge />}
-                {row.original.isFastest && <FastestModelBadge />}
                 {row.original.isBest && <BestModelBadge />}
                 {row.original.embeddingDimensions !== null && (
                   <EmbeddingModelBadge />
@@ -220,10 +232,19 @@ export default function ModelsPage() {
           if (apiKeys.length === 0) {
             if (row.original.discoveredViaLlmProxy) {
               return (
-                <Badge variant="secondary" className="text-xs gap-1">
-                  <ArrowLeftRight className="h-3 w-3 shrink-0" />
-                  <span>LLM Proxy</span>
-                </Badge>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Badge variant="secondary" className="text-xs gap-1">
+                        <ArrowLeftRight className="h-3 w-3 shrink-0" />
+                        <span>{OBSERVED_MODEL_SOURCE_LABEL}</span>
+                      </Badge>
+                    </TooltipTrigger>
+                    <TooltipContent className="max-w-xs">
+                      <p>{OBSERVED_MODEL_SOURCE_DESCRIPTION}</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
               );
             }
             return <span className="text-sm text-muted-foreground">-</span>;
@@ -332,23 +353,36 @@ export default function ModelsPage() {
               onSearchChange={setSearch}
               syncQueryParams={false}
             />
-            <LlmProviderApiKeyFilterSelect
-              value={apiKeyFilter}
-              onValueChange={setApiKeyFilter}
-              allLabel="All provider API keys"
-              className="w-full sm:w-[280px]"
-              options={availableApiKeys.flatMap(([id, { name, provider }]) => {
-                const config = PROVIDER_CONFIG[provider];
-                if (!config) return [];
-                return [
-                  {
-                    value: id,
-                    icon: config.icon,
-                    providerName: config.name,
-                    keyName: name,
-                  },
-                ];
-              })}
+            <LlmProviderApiKeyDropdown
+              availableKeys={availableApiKeys.flatMap(
+                ([id, { name, provider }]) => {
+                  const config = PROVIDER_CONFIG[provider];
+                  if (!config) return [];
+                  return [
+                    {
+                      id,
+                      name,
+                      provider,
+                    },
+                  ];
+                },
+              )}
+              selectedApiKeyId={apiKeyFilter === "all" ? null : apiKeyFilter}
+              open={apiKeyFilterOpen}
+              onOpenChange={setApiKeyFilterOpen}
+              onSelectKey={(value) => {
+                setApiKeyFilter(value);
+                setApiKeyFilterOpen(false);
+              }}
+              triggerVariant="select"
+              triggerClassName="w-full sm:w-[280px] h-9 text-sm"
+              popoverClassName="w-[var(--radix-popover-trigger-width)]"
+              allOptionLabel="All provider API keys"
+              allOptionSelected={apiKeyFilter === "all"}
+              onSelectAllOption={() => {
+                setApiKeyFilter("all");
+                setApiKeyFilterOpen(false);
+              }}
             />
             <SearchableSelect
               value={modelTypeFilter}

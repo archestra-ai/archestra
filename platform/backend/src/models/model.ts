@@ -181,6 +181,27 @@ class ModelModel {
   }
 
   /**
+   * Find embedding models by exact model ID across providers.
+   */
+  static async findEmbeddingModelsByModelId(params: {
+    modelId: string;
+    provider?: SupportedProvider;
+  }): Promise<Model[]> {
+    const conditions = [eq(schema.modelsTable.modelId, params.modelId)];
+
+    if (params.provider) {
+      conditions.push(eq(schema.modelsTable.provider, params.provider));
+    }
+
+    const results = await db
+      .select()
+      .from(schema.modelsTable)
+      .where(and(...conditions));
+
+    return results.filter((model) => ModelModel.supportsEmbeddings(model));
+  }
+
+  /**
    * Create new model
    */
   static async create(data: CreateModel): Promise<Model> {
@@ -459,9 +480,9 @@ class ModelModel {
 
   /**
    * Ensure a model entry exists for the given modelId and provider.
-   * Marks the model as discovered via LLM Proxy so it's preserved even
-   * without API key links (users can set custom pricing for metrics).
-   * Used by LLM proxy to ensure models are tracked even before models.dev sync.
+   * Newly inserted rows are marked as discovered via LLM Proxy so custom
+   * models can be priced for metrics. Existing synced provider models keep
+   * their source classification so deleting the provider key can clean them up.
    */
   static async ensureModelExists(
     modelId: string,
@@ -476,12 +497,7 @@ class ModelModel {
         discoveredViaLlmProxy: true,
         lastSyncedAt: new Date(),
       })
-      .onConflictDoUpdate({
-        target: [schema.modelsTable.provider, schema.modelsTable.modelId],
-        set: {
-          discoveredViaLlmProxy: true,
-        },
-      });
+      .onConflictDoNothing();
   }
 
   /**
@@ -637,6 +653,14 @@ class ModelModel {
     }
 
     return true;
+  }
+
+  static supportsEmbeddings(model: Model): boolean {
+    if (model.ignored) {
+      return false;
+    }
+
+    return model.embeddingDimensions !== null;
   }
 
   static async countAll(): Promise<number> {

@@ -91,6 +91,7 @@ describe("useSettingsTabs", () => {
       ac: ["read"],
       organizationSettings: ["read"],
       apiKey: ["read"],
+      serviceAccount: ["read"],
       llmSettings: ["read"],
       agentSettings: ["read"],
     };
@@ -102,6 +103,7 @@ describe("useSettingsTabs", () => {
     await waitFor(() => {
       const labels = getTabLabels(result.current);
       expect(labels).toContain("API Keys");
+      expect(labels).toContain("Service Accounts");
       expect(labels).toContain("Agents");
       expect(labels).toContain("LLM");
       expect(labels).toContain("Users");
@@ -123,6 +125,21 @@ describe("useSettingsTabs", () => {
     await waitFor(() => {
       const labels = getTabLabels(result.current);
       expect(labels).toContain("LLM");
+    });
+  });
+
+  it("shows Service Accounts tab when user has serviceAccount:read permission", async () => {
+    mockPermissions = {
+      serviceAccount: ["read"],
+    };
+
+    const { result } = renderHook(() => useSettingsTabs(), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => {
+      const labels = getTabLabels(result.current);
+      expect(labels).toContain("Service Accounts");
     });
   });
 
@@ -250,6 +267,7 @@ describe("useSettingsTabs", () => {
       secret: ["read"],
       organizationSettings: ["read"],
       apiKey: ["read"],
+      serviceAccount: ["read"],
       llmSettings: ["read"],
       agentSettings: ["read"],
     };
@@ -263,9 +281,9 @@ describe("useSettingsTabs", () => {
       expect(labels).toEqual([
         "Your Account",
         "API Keys",
+        "Service Accounts",
         "Agents",
         "LLM",
-        "Connect page",
         "Users",
         "Teams",
         "Roles",

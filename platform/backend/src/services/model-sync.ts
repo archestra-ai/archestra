@@ -109,7 +109,7 @@ class ModelSyncService {
         "Upserted models to database",
       );
 
-      // 4. Link models to the API key with fastest/best detection
+      // 4. Link models to the API key with best-model detection
       const modelsWithIds = upsertedModels.map((m) => ({
         id: m.id,
         modelId: m.modelId,

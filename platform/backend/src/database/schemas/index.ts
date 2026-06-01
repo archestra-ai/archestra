@@ -114,10 +114,17 @@ export { default as processedEmailsTable } from "./processed-email";
 export { default as scheduleTriggersTable } from "./schedule-trigger";
 export { default as scheduleTriggerRunsTable } from "./schedule-trigger-run";
 export { default as secretsTable } from "./secret";
+export { default as serviceAccountsTable } from "./service-account";
+export { default as serviceAccountTokensTable } from "./service-account-token";
 export { default as sessionsTable } from "./session";
 export { default as siteNotificationsTable } from "./site-notification";
 export { default as skillsTable } from "./skill";
 export { default as skillFilesTable } from "./skill-file";
+export { default as skillSandboxesTable } from "./skill-sandbox";
+export { default as skillSandboxArtifactsTable } from "./skill-sandbox-artifact";
+export { default as skillSandboxCommandsTable } from "./skill-sandbox-command";
+export { default as skillSandboxFileSnapshotsTable } from "./skill-sandbox-file-snapshot";
+export { default as skillSandboxSkillsTable } from "./skill-sandbox-skill";
 export {
   default as skillShareLinksTable,
   skillShareLinkSkillsTable,

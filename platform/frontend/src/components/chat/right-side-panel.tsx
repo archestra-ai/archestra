@@ -3,6 +3,7 @@
 import { format } from "date-fns";
 import { FileText, Globe, GripVertical, Pin, PinOff, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { BrowserPanel } from "@/components/chat/browser-panel";
 import { ConversationArtifactPanel } from "@/components/chat/conversation-artifact";
 import { usePinnedCanvas } from "@/components/chat/pinned-canvas-context";
@@ -18,6 +19,11 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 
 export type RightPanelTab = "artifact" | "browser" | "canvas";
+
+/** Smallest the panel itself may shrink to. */
+const MIN_PANEL_WIDTH = 300;
+/** Width the conversation column must always keep so it never squashes. */
+const MIN_CHAT_WIDTH = 400;
 
 interface RightSidePanelProps {
   isOpen: boolean;
@@ -70,6 +76,19 @@ export function RightSidePanel({
   const [isResizing, setIsResizing] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
 
+  // Largest the panel may grow to: the width of the chat layout row (chat
+  // column + this panel) minus the minimum chat column width. The panel's
+  // direct parent is a tight flex wrapper whose width equals the panel, so we
+  // measure its parent — the row — which spans the whole chat area (everything
+  // right of the left nav). Falls back to the viewport before layout exists.
+  const getMaxWidth = useCallback(() => {
+    const row = panelRef.current?.parentElement?.parentElement;
+    const available =
+      row?.getBoundingClientRect().width ??
+      (typeof window !== "undefined" ? window.innerWidth : 0);
+    return Math.max(MIN_PANEL_WIDTH, available - MIN_CHAT_WIDTH);
+  }, []);
+
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     setIsResizing(true);
@@ -78,8 +97,7 @@ export function RightSidePanel({
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
       const step = e.shiftKey ? 50 : 10; // Larger step with shift key
-      const minWidth = 300;
-      const maxWidth = window.innerWidth * 0.7;
+      const maxWidth = getMaxWidth();
 
       if (e.key === "ArrowLeft") {
         e.preventDefault();
@@ -91,7 +109,7 @@ export function RightSidePanel({
         );
       } else if (e.key === "ArrowRight") {
         e.preventDefault();
-        const newWidth = Math.max(minWidth, width - step);
+        const newWidth = Math.max(MIN_PANEL_WIDTH, width - step);
         setWidth(newWidth);
         localStorage.setItem(
           "archestra-right-panel-width",
@@ -99,7 +117,7 @@ export function RightSidePanel({
         );
       }
     },
-    [width],
+    [width, getMaxWidth],
   );
 
   useEffect(() => {
@@ -107,10 +125,10 @@ export function RightSidePanel({
       if (!isResizing) return;
 
       const newWidth = window.innerWidth - e.clientX;
-      const minWidth = 300;
-      const maxWidth = window.innerWidth * 0.7;
-
-      const clampedWidth = Math.max(minWidth, Math.min(maxWidth, newWidth));
+      const clampedWidth = Math.max(
+        MIN_PANEL_WIDTH,
+        Math.min(getMaxWidth(), newWidth),
+      );
       setWidth(clampedWidth);
       localStorage.setItem(
         "archestra-right-panel-width",
@@ -135,7 +153,20 @@ export function RightSidePanel({
       document.body.style.cursor = "";
       document.body.style.userSelect = "";
     };
-  }, [isResizing]);
+  }, [isResizing, getMaxWidth]);
+
+  // Keep the panel within bounds when the window resizes (or on first mount),
+  // so a previously-saved width never squashes the chat column.
+  useEffect(() => {
+    const clamp = () => {
+      setWidth((prev) =>
+        Math.max(MIN_PANEL_WIDTH, Math.min(getMaxWidth(), prev)),
+      );
+    };
+    clamp();
+    window.addEventListener("resize", clamp);
+    return () => window.removeEventListener("resize", clamp);
+  }, [getMaxWidth]);
 
   const {
     canvases,
@@ -181,10 +212,8 @@ export function RightSidePanel({
         aria-orientation="vertical"
         aria-label="Resize panel. Use arrow keys to resize, hold shift for larger steps."
         aria-valuenow={width}
-        aria-valuemin={300}
-        aria-valuemax={
-          typeof window !== "undefined" ? window.innerWidth * 0.7 : 1000
-        }
+        aria-valuemin={MIN_PANEL_WIDTH}
+        aria-valuemax={getMaxWidth()}
         tabIndex={0}
       >
         <div className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-1/2 opacity-0 hover:opacity-100 transition-opacity">
@@ -192,28 +221,47 @@ export function RightSidePanel({
         </div>
       </div>
 
+      {/* While dragging, a transparent full-viewport overlay sits above any
+          iframes (MCP App / Browser tabs) so they don't swallow the mouse
+          events that drive the resize — without it, the resize freezes the
+          moment the cursor crosses an iframe. */}
+      {isResizing &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <div
+            className="fixed inset-0 z-[9999] cursor-col-resize"
+            aria-hidden
+          />,
+          document.body,
+        )}
+
       <Tabs
         value={resolvedTab}
         onValueChange={(value) => onTabChange(value as RightPanelTab)}
         className="flex-1 min-h-0 flex flex-col gap-0"
       >
-        <div className="flex items-center justify-between gap-2 border-b px-2 py-2">
-          <TabsList className="h-8">
-            <TabsTrigger value="artifact" className="text-xs px-3">
-              <FileText className="h-3 w-3" />
-              Artifact
-            </TabsTrigger>
-            {canShowBrowser && (
-              <TabsTrigger value="browser" className="text-xs px-3">
-                <Globe className="h-3 w-3" />
-                Browser
+        <div className="flex items-center gap-2 border-b px-2 py-2">
+          {/* Tabs take the remaining space and scroll horizontally when the
+              panel is too narrow, so the action buttons on the right are never
+              clipped. */}
+          <div className="min-w-0 flex-1 overflow-x-auto">
+            <TabsList className="h-8 w-max">
+              <TabsTrigger value="artifact" className="text-xs px-3">
+                <FileText className="h-3 w-3" />
+                Artifact
               </TabsTrigger>
-            )}
-            <TabsTrigger value="canvas" className="text-xs px-3">
-              MCP App
-            </TabsTrigger>
-          </TabsList>
-          <div className="flex items-center gap-1">
+              {canShowBrowser && (
+                <TabsTrigger value="browser" className="text-xs px-3">
+                  <Globe className="h-3 w-3" />
+                  Browser
+                </TabsTrigger>
+              )}
+              <TabsTrigger value="canvas" className="text-xs px-3">
+                MCP App
+              </TabsTrigger>
+            </TabsList>
+          </div>
+          <div className="flex items-center gap-1 shrink-0">
             {headerActions}
             <Button
               variant="ghost"

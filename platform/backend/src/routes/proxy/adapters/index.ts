@@ -10,7 +10,7 @@ export { groqAdapterFactory } from "./groq";
 export { minimaxAdapterFactory } from "./minimax";
 export { mistralAdapterFactory } from "./mistral";
 export { ollamaAdapterFactory } from "./ollama";
-export { openaiAdapterFactory } from "./openai";
+export { openAiEmbeddingsAdapterFactory, openaiAdapterFactory } from "./openai";
 export { openAiResponsesAdapterFactory } from "./openai-responses";
 export { openrouterAdapterFactory } from "./openrouter";
 export { perplexityAdapterFactory } from "./perplexity";

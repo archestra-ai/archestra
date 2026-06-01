@@ -218,7 +218,7 @@ export function ConnectorDocumentsTable({
       >
         {selectedPreviewDoc ? (
           <div className="space-y-2">
-            {previewDocDetail?.content.length ? (
+            {previewDocDetail?.content?.length ? (
               previewDocDetail.content.length > MAX_PREVIEW_CHARS ? (
                 <div className="text-xs text-muted-foreground">
                   Preview truncated to {MAX_PREVIEW_CHARS.toLocaleString()}{" "}

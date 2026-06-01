@@ -65,6 +65,7 @@ import OrganizationModel from "@/models/organization";
 import { initializeObservabilityMetrics } from "@/observability";
 import { enrichOpenApiWithRbac } from "@/openapi/enrich-openapi-with-rbac";
 import { systemKeyManager } from "@/services/system-key-manager";
+import { skillSandboxRuntimeService } from "@/skills-sandbox/skill-sandbox-runtime-service";
 import { taskQueueService } from "@/task-queue";
 import { registerTaskHandlers } from "@/task-queue/handlers";
 import {
@@ -904,6 +905,12 @@ const startWebServer = async () => {
     codeRuntimeService.init().catch((error) => {
       logger.error({ err: error }, "Failed to initialize code runtime");
     });
+    skillSandboxRuntimeService.init().catch((error) => {
+      logger.error(
+        { err: error },
+        "Failed to initialize skill sandbox runtime",
+      );
+    });
 
     // Initialize incoming email provider (if configured)
     // This handles auto-setup of webhook subscription if ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_WEBHOOK_URL is set
@@ -1064,7 +1071,10 @@ function registerWebServerShutdown(
       }
 
       cacheManager.shutdown();
+
+      // Stop accepting new code-runtime / skill-sandbox runs
       await codeRuntimeService.shutdown();
+      await skillSandboxRuntimeService.shutdown();
 
       if (shouldRunWorker) {
         await taskQueueService.stopWorker();
@@ -1151,6 +1161,12 @@ const startWorker = async () => {
     codeRuntimeService.init().catch((error) => {
       logger.error({ err: error }, "Failed to initialize code runtime");
     });
+    skillSandboxRuntimeService.init().catch((error) => {
+      logger.error(
+        { err: error },
+        "Failed to initialize skill sandbox runtime",
+      );
+    });
 
     // Worker server for Kubernetes probes, Prometheus scraping,
     // and LLM Proxy / MCP Gateway routes for A2A and scheduled task execution.
@@ -1203,6 +1219,7 @@ const startWorker = async () => {
         await healthServer.close();
         cacheManager.shutdown();
         await codeRuntimeService.shutdown();
+        await skillSandboxRuntimeService.shutdown();
         await taskQueueService.stopWorker();
         clearTimeout(forceExitTimeout);
         process.exit(0);
@@ -1220,6 +1237,13 @@ const startWorker = async () => {
     process.exit(1);
   }
 };
+
+// Dagger SDK v0.20.8 has a bug in bin.js:198-201 where it throws inside a
+// .catch() callback, creating an unhandled rejection that is never awaited.
+// This handler logs those leaks and keeps the server alive.
+process.on("unhandledRejection", (reason) => {
+  logger.error({ err: reason }, "Unhandled promise rejection");
+});
 
 /**
  * Only start the server if this file is being run directly (not imported)

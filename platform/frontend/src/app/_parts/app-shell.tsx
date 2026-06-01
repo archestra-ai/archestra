@@ -18,6 +18,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { Version } from "@/components/version";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useActiveSiteNotification } from "@/lib/site-notification.query";
+import { cn } from "@/lib/utils";
 import { MaintenanceModeOverlay } from "./maintenance-mode-overlay";
 import { AppSidebar } from "./sidebar";
 import { SiteNotificationBar } from "./site-notification-bar";
@@ -38,6 +39,12 @@ export function AppShell({ children }: AppShellProps) {
   const pathname = usePathname();
   const isBrowserPreview = pathname.startsWith("/chat/browser-preview/");
   const isAuthPage = pathname.startsWith("/auth/");
+  // The chat page is a viewport-locked, two-pane layout (conversation + right
+  // sidebar) that scrolls each pane independently. It needs its children slot
+  // bounded to the viewport (min-h-0) so its internal overflow containers take
+  // over. Other pages rely on natural body scroll, so we only bound the chain
+  // for chat to avoid clipping their content.
+  const isChat = pathname === "/chat" || pathname.startsWith("/chat/");
   const { data: shouldCollapse, isSuccess: permissionLoaded } =
     useHasPermissions(SIDEBAR_COLLAPSED_PERMISSION);
   const { data: canReadSiteNotification } = useHasPermissions(
@@ -109,7 +116,9 @@ export function AppShell({ children }: AppShellProps) {
             />
           </header>
           <div className="flex-1 min-h-0 min-w-0 flex flex-col">
-            <div className="flex-1 flex flex-col">{children}</div>
+            <div className={cn("flex-1 flex flex-col", isChat && "min-h-0")}>
+              {children}
+            </div>
             <Version />
           </div>
         </main>

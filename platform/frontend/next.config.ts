@@ -31,6 +31,10 @@ const nextConfig: NextConfig = {
   // Disable dev indicators so they don't show up in docs automated screenshots
   devIndicators: false,
   turbopack: {
+    // pin the workspace root (where pnpm-lock.yaml lives) so Next.js 16 doesn't
+    // misinfer it in this monorepo and panic with "Next.js package not found"
+    // when following pnpm's hoisted next symlink.
+    root: resolve(import.meta.dirname, ".."),
     resolveAlias: {
       "@shared/access-control": "../shared/access-control.ts",
     },
@@ -117,7 +121,7 @@ function getAllowedDevOrigins(): string[] {
     });
 }
 
-export default withSentryConfig(nextConfig, {
+const sentryWebpackOptions = {
   // For all available options, see:
   // https://www.npmjs.com/package/@sentry/webpack-plugin#options
 
@@ -151,4 +155,8 @@ export default withSentryConfig(nextConfig, {
   // https://docs.sentry.io/product/crons/
   // https://vercel.com/docs/cron-jobs
   automaticVercelMonitors: true,
-});
+};
+
+export default process.env.NODE_ENV === "development"
+  ? nextConfig
+  : withSentryConfig(nextConfig, sentryWebpackOptions);

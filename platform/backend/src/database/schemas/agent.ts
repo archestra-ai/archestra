@@ -4,7 +4,6 @@ import {
   boolean,
   index,
   jsonb,
-  pgTable,
   text,
   timestamp,
   uniqueIndex,
@@ -20,6 +19,7 @@ import type {
 import identityProvidersTable from "./identity-provider";
 import llmProviderApiKeysTable from "./llm-provider-api-key";
 import modelsTable from "./model";
+import { softDeletablePgTable } from "./soft-deletable-table";
 import usersTable from "./user";
 
 /**
@@ -41,7 +41,7 @@ import usersTable from "./user";
  *   - Can delegate to other internal agents via delegation tools
  *   - Can be triggered by ChatOps providers
  */
-const agentsTable = pgTable(
+const agentsTable = softDeletablePgTable(
   "agents",
   {
     id: uuid("id").primaryKey().defaultRandom(),
@@ -138,7 +138,7 @@ const agentsTable = pgTable(
   (table) => [
     uniqueIndex("agents_slug_idx")
       .on(table.slug)
-      .where(sql`${table.slug} IS NOT NULL`),
+      .where(sql`${table.slug} IS NOT NULL AND ${table.deletedAt} IS NULL`),
     index("agents_organization_id_idx").on(table.organizationId),
     index("agents_agent_type_idx").on(table.agentType),
     index("agents_identity_provider_id_idx").on(table.identityProviderId),
@@ -147,7 +147,7 @@ const agentsTable = pgTable(
     uniqueIndex("agents_personal_gateway_per_member_idx")
       .on(table.organizationId, table.authorId)
       .where(
-        sql`${table.agentType} = 'mcp_gateway' AND ${table.isPersonalGateway} = true`,
+        sql`${table.agentType} = 'mcp_gateway' AND ${table.isPersonalGateway} = true AND ${table.deletedAt} IS NULL`,
       ),
   ],
 );

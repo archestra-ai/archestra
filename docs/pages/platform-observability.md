@@ -166,6 +166,7 @@ Archestra automatically traces:
 - **LLM API calls** - Calls to LLM providers with dedicated spans showing model, tokens, and response time
 - **Knowledge Base operations** - Embedding and reranking LLM calls made by the Knowledge Base system, with cost and token tracking
 - **MCP tool calls** - Tool executions through the MCP Gateway with tool name, server, and duration
+- **Skill sandbox execution** - The native Rust runtime behind Agent Skill execution exports its own spans (`service.name=archestra-sandbox-rs`) — command runs, artifact reads, and container materialization — nested under the originating tool-call trace, with `exit_code`, `duration_ms`, and output size recorded as span fields
 - **HTTP requests** (verbose mode only) - All API requests with method, route, and status code
 
 Trace attributes follow the [OTEL GenAI Semantic Conventions](https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-agent-spans/) where applicable.

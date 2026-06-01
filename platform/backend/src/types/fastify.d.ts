@@ -1,11 +1,20 @@
 import type { User } from "./user";
+import type {
+  SelectServiceAccount,
+  SelectServiceAccountToken,
+} from "./service-account";
 
 declare module "fastify" {
   interface FastifyRequest {
     user: User;
     organizationId: string;
     /** Auth method used for this request; set by Authnz.populateUserInfo. */
-    authMethod?: "session" | "api_key";
+    authMethod?: "session" | "api_key" | "service_account";
+    serviceAccount?: SelectServiceAccount;
+    serviceAccountAuthResult?: {
+      serviceAccount: SelectServiceAccount;
+      token: SelectServiceAccountToken;
+    };
     /** Snapshot of the resource before the mutation; set by the audit preHandler hook. */
     auditBefore?: Record<string, unknown> | null;
     /**

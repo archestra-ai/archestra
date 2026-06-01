@@ -35,7 +35,11 @@ export { default as KnowledgeBaseConnectorModel } from "./knowledge-base-connect
 export { default as LimitModel, LimitValidationService } from "./limit";
 export { default as LlmOauthClientModel } from "./llm-oauth-client";
 export { default as LlmProviderApiKeyModel } from "./llm-provider-api-key";
-export { default as LlmProviderApiKeyModelLinkModel } from "./llm-provider-api-key-model";
+export type { ModelSyncState } from "./llm-provider-api-key-model";
+export {
+  default as LlmProviderApiKeyModelLinkModel,
+  selectionKey,
+} from "./llm-provider-api-key-model";
 export { default as McpCatalogLabelModel } from "./mcp-catalog-label";
 export { default as McpHttpSessionModel } from "./mcp-http-session";
 export { default as McpPresetEntryModel } from "./mcp-preset-entry";
@@ -54,10 +58,18 @@ export { default as ScheduleTriggerModel } from "./schedule-trigger";
 export { default as ScheduleTriggerRunModel } from "./schedule-trigger-run";
 /** @public — re-exported for testability (consumed by src/test/fixtures.ts) */
 export { default as SecretModel } from "./secret";
+export { default as ServiceAccountModel } from "./service-account";
 /** @public — re-exported for testability (consumed by src/test/fixtures.ts) */
 export { default as SessionModel } from "./session";
 export { default as SkillModel } from "./skill";
 export { default as SkillFileModel } from "./skill-file";
+export {
+  default as SkillSandboxModel,
+  SkillInvalidFilePathError,
+} from "./skill-sandbox";
+export { default as SkillSandboxArtifactModel } from "./skill-sandbox-artifact";
+export { default as SkillSandboxCommandModel } from "./skill-sandbox-command";
+export { default as SkillSandboxFileSnapshotModel } from "./skill-sandbox-file-snapshot";
 export { default as SkillShareLinkModel } from "./skill-share-link";
 export { default as SkillShareLinkRevisionModel } from "./skill-share-link-revision";
 export { default as SkillTeamModel } from "./skill-team";

@@ -37,6 +37,7 @@ import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { getArchestraMcpCatalogMetadata } from "@/archestra-mcp-server/metadata";
 import config from "@/config";
 import db, { schema } from "@/database";
+import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import {
   createPaginatedResult,
   type PaginatedResult,
@@ -55,6 +56,7 @@ import type {
   ToolWithAssignments,
   UpdateTool,
 } from "@/types";
+import AgentModel from "./agent";
 import AgentConnectorAssignmentModel from "./agent-connector-assignment";
 import AgentTeamModel from "./agent-team";
 import AgentToolModel from "./agent-tool";
@@ -331,6 +333,7 @@ class ToolModel {
         and(
           eq(schema.toolsTable.id, id),
           eq(schema.agentsTable.organizationId, organizationId),
+          notDeleted(schema.agentsTable),
         ),
       )
       .limit(1);
@@ -384,7 +387,10 @@ class ToolModel {
       .from(schema.toolsTable)
       .leftJoin(
         schema.agentsTable,
-        eq(schema.toolsTable.agentId, schema.agentsTable.id),
+        and(
+          eq(schema.toolsTable.agentId, schema.agentsTable.id),
+          notDeleted(schema.agentsTable),
+        ),
       )
       .leftJoin(
         schema.internalMcpCatalogTable,
@@ -884,20 +890,17 @@ class ToolModel {
     const toolIds = await ToolModel.getSkillToolIdsForOrg(organizationId);
     if (toolIds.length === 0) return 0;
 
-    const agents = await db
-      .select({ id: schema.agentsTable.id })
-      .from(schema.agentsTable)
-      .where(eq(schema.agentsTable.organizationId, organizationId));
+    const agentIds = await AgentModel.findIdsByOrganizationId(organizationId);
 
-    for (const agent of agents) {
-      await AgentToolModel.createManyIfNotExists(agent.id, toolIds);
+    for (const agentId of agentIds) {
+      await AgentToolModel.createManyIfNotExists(agentId, toolIds);
     }
 
     logger.info(
-      { organizationId, agentCount: agents.length },
+      { organizationId, agentCount: agentIds.length },
       "Backfilled Agent Skill tools to org agents",
     );
-    return agents.length;
+    return agentIds.length;
   }
 
   /**
@@ -1200,7 +1203,12 @@ class ToolModel {
         schema.agentsTable,
         eq(schema.agentToolsTable.agentId, schema.agentsTable.id),
       )
-      .where(inArray(schema.agentToolsTable.toolId, toolIds));
+      .where(
+        and(
+          inArray(schema.agentToolsTable.toolId, toolIds),
+          notDeleted(schema.agentsTable),
+        ),
+      );
 
     // Group assignments by tool ID
     const assignmentsByTool = new Map<
@@ -1752,12 +1760,7 @@ class ToolModel {
       return existingTool;
     }
 
-    // Get target agent for naming
-    const [targetAgent] = await db
-      .select({ id: schema.agentsTable.id, name: schema.agentsTable.name })
-      .from(schema.agentsTable)
-      .where(eq(schema.agentsTable.id, targetAgentId))
-      .limit(1);
+    const targetAgent = await AgentModel.findDelegationTarget(targetAgentId);
 
     if (!targetAgent) {
       throw new Error(`Target agent not found: ${targetAgentId}`);
@@ -1882,6 +1885,7 @@ class ToolModel {
         and(
           eq(schema.agentToolsTable.agentId, agentId),
           isNotNull(schema.toolsTable.delegateToAgentId),
+          notDeleted(schema.agentsTable),
         ),
       );
 
@@ -2101,6 +2105,7 @@ class ToolModel {
     const toolIds = toolsWithCount.map((t) => t.id as string);
     const assignmentWhereConditions = [
       inArray(schema.agentToolsTable.toolId, toolIds),
+      notDeleted(schema.agentsTable),
     ];
 
     // Apply access control to assignments

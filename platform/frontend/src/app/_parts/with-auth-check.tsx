@@ -1,6 +1,5 @@
 "use client";
 
-import * as Sentry from "@sentry/nextjs";
 import { usePathname, useRouter } from "next/navigation";
 import type React from "react";
 import { useEffect, useState } from "react";
@@ -8,14 +7,16 @@ import { useSession } from "@/lib/auth/auth.query";
 import { isDefaultPasswordChangePending } from "@/lib/auth/default-password-change";
 import { getValidatedRedirectPath } from "@/lib/utils/redirect-validation";
 
-type SentryUser = Parameters<typeof Sentry.setUser>[0];
+type ErrorReportingUser = Parameters<
+  typeof import("@sentry/nextjs").setUser
+>[0];
 
-const safeSetSentryUser = (user: SentryUser) => {
-  try {
-    Sentry.setUser(user);
-  } catch {
-    // Silently fail if Sentry is not configured
-  }
+const safeSetErrorReportingUser = (user: ErrorReportingUser) => {
+  void import("@sentry/nextjs")
+    .then(({ setUser }) => {
+      setUser(user);
+    })
+    .catch(() => undefined);
 };
 
 const pathCorrespondsToAnAuthPage = (pathname: string) => {
@@ -85,14 +86,14 @@ export const WithAuthCheck: React.FC<React.PropsWithChildren> = ({
   // Set Sentry user context when user is authenticated
   useEffect(() => {
     if (session?.user) {
-      safeSetSentryUser({
+      safeSetErrorReportingUser({
         id: session.user.id,
         email: session.user.email,
         username: session.user.name || session.user.email,
       });
     } else {
       // Clear user context when not authenticated
-      safeSetSentryUser(null);
+      safeSetErrorReportingUser(null);
     }
   }, [session?.user]);
 

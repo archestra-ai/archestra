@@ -8,8 +8,10 @@ import {
   inArray,
   ne,
   type SQL,
+  sql,
 } from "drizzle-orm";
 import db, { schema } from "@/database";
+import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import type {
   InsertScheduleTrigger,
   ScheduleTrigger,
@@ -75,9 +77,12 @@ class ScheduleTriggerModel {
         schema.usersTable,
         eq(schema.scheduleTriggersTable.actorUserId, schema.usersTable.id),
       )
-      .leftJoin(
+      .innerJoin(
         schema.agentsTable,
-        eq(schema.scheduleTriggersTable.agentId, schema.agentsTable.id),
+        and(
+          eq(schema.scheduleTriggersTable.agentId, schema.agentsTable.id),
+          notDeleted(schema.agentsTable),
+        ),
       )
       .where(and(...filters))
       .orderBy(desc(schema.scheduleTriggersTable.createdAt))
@@ -106,9 +111,12 @@ class ScheduleTriggerModel {
         schema.usersTable,
         eq(schema.scheduleTriggersTable.actorUserId, schema.usersTable.id),
       )
-      .leftJoin(
+      .innerJoin(
         schema.agentsTable,
-        eq(schema.scheduleTriggersTable.agentId, schema.agentsTable.id),
+        and(
+          eq(schema.scheduleTriggersTable.agentId, schema.agentsTable.id),
+          notDeleted(schema.agentsTable),
+        ),
       )
       .where(eq(schema.scheduleTriggersTable.id, id));
 
@@ -174,9 +182,12 @@ class ScheduleTriggerModel {
         schema.usersTable,
         eq(schema.scheduleTriggersTable.actorUserId, schema.usersTable.id),
       )
-      .leftJoin(
+      .innerJoin(
         schema.agentsTable,
-        eq(schema.scheduleTriggersTable.agentId, schema.agentsTable.id),
+        and(
+          eq(schema.scheduleTriggersTable.agentId, schema.agentsTable.id),
+          notDeleted(schema.agentsTable),
+        ),
       )
       .where(eq(schema.scheduleTriggersTable.enabled, true));
 
@@ -254,6 +265,11 @@ function buildListFilters(
 
   const filters: SQL[] = [
     eq(schema.scheduleTriggersTable.organizationId, params.organizationId),
+    sql`EXISTS (
+      SELECT 1 FROM ${schema.agentsTable}
+      WHERE ${schema.agentsTable.id} = ${schema.scheduleTriggersTable.agentId}
+        AND ${schema.agentsTable.deletedAt} IS NULL
+    )`,
   ];
 
   if (params.enabled !== undefined) {

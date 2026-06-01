@@ -18,6 +18,7 @@ import OptimizationRuleModel from "@/models/optimization-rule";
 import OrganizationModel from "@/models/organization";
 import OrganizationRoleModel from "@/models/organization-role";
 import ScheduleTriggerModel from "@/models/schedule-trigger";
+import ServiceAccountModel from "@/models/service-account";
 import SkillModel from "@/models/skill";
 import TeamModel from "@/models/team";
 import TeamTokenModel from "@/models/team-token";
@@ -349,6 +350,27 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "child of skillShareLinks; revision history",
   },
+  skillSandboxesTable: {
+    audited: false,
+    reason:
+      "ephemeral execution sandbox state; runtime artifact, no admin signal",
+  },
+  skillSandboxSkillsTable: {
+    audited: false,
+    reason: "join: sandbox × skill; parent (sandbox) is ephemeral",
+  },
+  skillSandboxFileSnapshotsTable: {
+    audited: false,
+    reason: "child of sandbox; per-sandbox file snapshot",
+  },
+  skillSandboxCommandsTable: {
+    audited: false,
+    reason: "child of sandbox; append-only command replay log",
+  },
+  skillSandboxArtifactsTable: {
+    audited: false,
+    reason: "child of sandbox; exported file bytes",
+  },
   kbChunksTable: {
     audited: false,
     reason: "child of knowledge base; parent audited",
@@ -422,6 +444,14 @@ export const AUDIT_DECISIONS = {
   usersTable: {
     audited: false,
     reason: "user lifecycle audited via auth events + member.*",
+  },
+  serviceAccountsTable: {
+    audited: true,
+    model: ServiceAccountModel,
+  },
+  serviceAccountTokensTable: {
+    audited: false,
+    reason: "credential material; audited through service account token count",
   },
 
   // =========================================================================

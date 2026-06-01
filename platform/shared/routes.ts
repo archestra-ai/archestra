@@ -9,6 +9,7 @@ export const RouteId = {
   GetDefaultLlmProxy: "getDefaultLlmProxy",
   UpdateAgent: "updateAgent",
   DeleteAgent: "deleteAgent",
+  RestoreAgent: "restoreAgent",
   ExportAgent: "exportAgent",
   ImportAgent: "importAgent",
   GetLabelKeys: "getLabelKeys",
@@ -171,6 +172,8 @@ export const RouteId = {
   OpenAiChatCompletionsWithAgent: "openAiChatCompletionsWithAgent",
   OpenAiResponsesWithDefaultAgent: "openAiResponsesWithDefaultAgent",
   OpenAiResponsesWithAgent: "openAiResponsesWithAgent",
+  OpenAiEmbeddingsWithDefaultAgent: "openAiEmbeddingsWithDefaultAgent",
+  OpenAiEmbeddingsWithAgent: "openAiEmbeddingsWithAgent",
 
   // Proxy Routes - OpenAI-compatible model router
   ModelRouterChatCompletionsWithDefaultAgent:
@@ -181,6 +184,9 @@ export const RouteId = {
   ModelRouterListModelsWithAgent: "modelRouterListModelsWithAgent",
   ModelRouterResponsesWithDefaultAgent: "modelRouterResponsesWithDefaultAgent",
   ModelRouterResponsesWithAgent: "modelRouterResponsesWithAgent",
+  ModelRouterEmbeddingsWithDefaultAgent:
+    "modelRouterEmbeddingsWithDefaultAgent",
+  ModelRouterEmbeddingsWithAgent: "modelRouterEmbeddingsWithAgent",
 
   // Proxy Routes - Anthropic
   AnthropicMessagesWithDefaultAgent: "anthropicMessagesWithDefaultAgent",
@@ -306,6 +312,16 @@ export const RouteId = {
   GetApiKey: "getApiKey",
   CreateApiKey: "createApiKey",
   DeleteApiKey: "deleteApiKey",
+
+  // Service Account Routes
+  GetServiceAccounts: "getServiceAccounts",
+  GetServiceAccount: "getServiceAccount",
+  CreateServiceAccount: "createServiceAccount",
+  UpdateServiceAccount: "updateServiceAccount",
+  DeleteServiceAccount: "deleteServiceAccount",
+  CreateServiceAccountToken: "createServiceAccountToken",
+  UpdateServiceAccountToken: "updateServiceAccountToken",
+  DeleteServiceAccountToken: "deleteServiceAccountToken",
 
   // Virtual API Key Routes
   GetAllVirtualApiKeys: "getAllVirtualApiKeys",
@@ -511,6 +527,7 @@ export const RouteId = {
   ImportGithubSkills: "importGithubSkills",
   GetSkillSourceRepos: "getSkillSourceRepos",
   EnableSkillToolDefaults: "enableSkillToolDefaults",
+  GetSkillSandboxArtifact: "getSkillSandboxArtifact",
 
   // Audit Log Routes
   GetAuditLogs: "getAuditLogs",

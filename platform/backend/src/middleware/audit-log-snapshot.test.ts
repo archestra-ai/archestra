@@ -473,6 +473,25 @@ describe("audit snapshot shape — non-redacted models", () => {
     expect(typeof snapshot?.createdAt).toBe("string");
   });
 
+  test("TrustedDataPolicyModel.findByIdForAudit ignores soft-deleted agent assignments", async ({
+    makeOrganization,
+    makeTool,
+    makeTrustedDataPolicy,
+    makeAgent,
+    makeAgentTool,
+  }) => {
+    const org = await makeOrganization();
+    const tool = await makeTool();
+    const agent = await makeAgent({ organizationId: org.id });
+    await makeAgentTool(agent.id, tool.id);
+    const policy = await makeTrustedDataPolicy(tool.id, {});
+    await AgentModel.delete(agent.id);
+
+    await expect(
+      TrustedDataPolicyModel.findByIdForAudit(policy.id, org.id),
+    ).resolves.toBeNull();
+  });
+
   test("findByIdForAudit returns null for non-existent id", async ({
     makeOrganization,
   }) => {

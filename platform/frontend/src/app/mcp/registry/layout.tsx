@@ -6,7 +6,6 @@ import { createContext, useContext, useMemo, useState } from "react";
 import { PageLayout } from "@/components/page-layout";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { useHasPermissions } from "@/lib/auth/auth.query";
-import { usePresetEntityName } from "@/lib/organization.query";
 
 type McpRegistryLayoutContextType = {
   setActionButton: (button: React.ReactNode) => void;
@@ -28,24 +27,12 @@ export default function McpCatalogLayout({
   const pathname = usePathname();
   const isRegistryPage = pathname === "/mcp/registry";
   const [pageActionButton, setActionButton] = useState<React.ReactNode>(null);
-  const { configured, plural } = usePresetEntityName();
-  const { data: canManageOrgStructure } = useHasPermissions({
-    mcpServerInstallation: ["admin"],
-  });
   const { data: canManageEnvironments } = useHasPermissions({
     environment: ["create", "update", "delete"],
   });
 
   const tabs = [
     { label: "Catalog", href: "/mcp/registry" },
-    ...(canManageOrgStructure
-      ? [
-          {
-            label: configured ? plural : "Organization Structure",
-            href: "/mcp/registry/org-structure",
-          },
-        ]
-      : []),
     ...(canManageEnvironments
       ? [
           { label: "Environments", href: "/mcp/registry/environments" },

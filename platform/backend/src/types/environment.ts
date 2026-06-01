@@ -39,12 +39,11 @@ export const CreateEnvironmentSchema = z.object({
  * description).
  */
 export const UpdateEnvironmentSchema = z.object({
-<<<<<<< HEAD
   name: z.string().trim().min(1).max(50).optional(),
   description: z.string().trim().max(500).nullable().optional(),
   namespace: KubernetesNamespaceSchema.nullable().optional(),
   restricted: z.boolean().optional(),
-})
+});
 
 export type Environment = z.infer<typeof SelectEnvironmentSchema>;
 export type EnvironmentWithAssignedCount = z.infer<

@@ -321,6 +321,9 @@ export async function waitForMcpGatewayJwtReady(params: {
   token: string;
   expectedToolName?: string;
   requireToolsListed?: boolean;
+  /** IdP the profile was bound to; lets the give-up probe report whether that
+   *  provider row still exists (404 = deleted, which FK-nulls the binding). */
+  identityProviderId?: string;
 }): Promise<McpTool[]> {
   const requireToolsListed = params.requireToolsListed !== false;
   const delaysMs = [
@@ -390,6 +393,7 @@ export async function waitForMcpGatewayJwtReady(params: {
   const serverState = await probeIdpServerState(
     params.request,
     params.profileId,
+    params.identityProviderId,
   );
 
   const lastMsg = lastError instanceof Error ? lastError.message : "";
@@ -401,6 +405,7 @@ export async function waitForMcpGatewayJwtReady(params: {
 async function probeIdpServerState(
   request: APIRequestContext,
   profileId: string,
+  expectedIdpId?: string,
 ): Promise<string> {
   try {
     const agentResp = await makeApiRequest({
@@ -415,17 +420,24 @@ async function probeIdpServerState(
     };
     const idpId = agent.identityProviderId;
     let state = `[agent GET=${agentResp.status()} identityProviderId=${idpId ? "set" : "MISSING"} agentType=${agent.agentType ?? "?"}`;
-    if (idpId) {
+    // Resolve which provider to probe: the one still on the agent, or — if the
+    // binding is gone — the one the profile was created with. A 404 on the
+    // latter proves the provider row was deleted (FK ON DELETE SET NULL nulled
+    // the binding); a 200 means the binding vanished without the row being
+    // deleted.
+    const probeIdpId = idpId ?? expectedIdpId;
+    if (probeIdpId) {
       const idpResp = await makeApiRequest({
         request,
         method: "get",
-        urlSuffix: `/api/identity-providers/${idpId}`,
+        urlSuffix: `/api/identity-providers/${probeIdpId}`,
         ignoreStatusCheck: true,
       });
       const idp = (await idpResp.json().catch(() => ({}))) as {
         oidcConfig?: { clientId?: string; jwksEndpoint?: string } | null;
       };
-      state += `; idp GET=${idpResp.status()} hasOidcConfig=${!!idp.oidcConfig} hasJwksEndpoint=${!!idp.oidcConfig?.jwksEndpoint} hasClientId=${!!idp.oidcConfig?.clientId}]`;
+      const which = idpId ? "idp" : "expectedIdp";
+      state += `; ${which} GET=${idpResp.status()} hasOidcConfig=${!!idp.oidcConfig} hasJwksEndpoint=${!!idp.oidcConfig?.jwksEndpoint} hasClientId=${!!idp.oidcConfig?.clientId}]`;
     } else {
       state += "]";
     }

@@ -28,6 +28,7 @@ import {
   SkillParseError,
 } from "@/skills/parser";
 import {
+  buildSkillActivationPromptContext,
   escapeXmlAttr,
   escapeXmlText,
   formatSkillActivation,
@@ -110,8 +111,10 @@ const manifestContentSchema = z
   .max(MAX_SKILL_FILE_BYTES)
   .describe(
     "A complete SKILL.md manifest: a YAML frontmatter block with `name` and " +
-      "`description` (and optional `license`, `compatibility`, `metadata`), " +
-      "followed by the Markdown instruction body.",
+      "`description` (and optional `license`, `compatibility`, `templated`, " +
+      "`metadata`), followed by the Markdown instruction body. Set " +
+      "`templated: true` to render the body through Handlebars (e.g. " +
+      "`{{user.name}}`) at activation.",
   );
 
 const CreateSkillSchema = z
@@ -215,6 +218,9 @@ const registry = defineArchestraTools([
           skill,
           files,
           canRunSandbox: await canRunSkillSandbox(ctx, context.agent.id),
+          promptContext: skill.templated
+            ? await buildSkillActivationPromptContext(ctx.userId)
+            : null,
         }),
       );
     },
@@ -296,6 +302,7 @@ const registry = defineArchestraTools([
           content: parsed.content,
           license: parsed.license,
           compatibility: parsed.compatibility,
+          templated: parsed.templated,
           metadata: parsed.metadata,
           sourceType: "manual",
           scope: "personal",
@@ -357,6 +364,7 @@ const registry = defineArchestraTools([
             content: parsed.content,
             license: parsed.license,
             compatibility: parsed.compatibility,
+            templated: parsed.templated,
             metadata: parsed.metadata,
             scope: skill.scope,
           },

@@ -3,6 +3,7 @@ import {
   TOOL_ACTIVATE_SKILL_FULL_NAME,
   TOOL_READ_SKILL_FILE_FULL_NAME,
 } from "@shared";
+import { Loader2, Sparkles } from "lucide-react";
 import { useEffect } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { Button } from "@/components/ui/button";
@@ -13,12 +14,16 @@ import {
   DialogContent,
   DialogDescription,
   DialogFooter,
+  DialogForm,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { useConvertAgentToSkill } from "@/lib/agent.query";
+import {
+  useConvertAgentToSkill,
+  useSuggestSkillDescription,
+} from "@/lib/agent.query";
 
 type Agent = archestraApiTypes.GetAgentsResponses["200"]["data"][number];
 
@@ -50,16 +55,26 @@ export function ConvertToSkillDialog({
   onOpenChange,
 }: ConvertToSkillDialogProps) {
   const convertToSkill = useConvertAgentToSkill();
+  const suggestDescription = useSuggestSkillDescription();
 
   const {
     register,
     handleSubmit,
     control,
     reset,
+    setValue,
     formState: { errors },
   } = useForm<FormValues>({
     defaultValues: { description: "", deleteAgent: false },
   });
+
+  const onSuggestDescription = async () => {
+    if (!agent) return;
+    const description = await suggestDescription.mutateAsync(agent.id);
+    if (description) {
+      setValue("description", description, { shouldValidate: true });
+    }
+  };
 
   // Prefill from the agent each time the dialog opens for a new one.
   useEffect(() => {
@@ -97,7 +112,7 @@ export function ConvertToSkillDialog({
 
   return (
     <Dialog open={agent !== null} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent className="overflow-hidden">
         <DialogHeader>
           <DialogTitle>Convert to skill</DialogTitle>
           <DialogDescription>
@@ -108,10 +123,30 @@ export function ConvertToSkillDialog({
         </DialogHeader>
 
         {agent ? (
-          <form onSubmit={onSubmit}>
+          <DialogForm
+            onSubmit={onSubmit}
+            className="flex min-h-0 flex-1 flex-col"
+          >
             <DialogBody className="space-y-4">
               <div className="space-y-1.5">
-                <Label htmlFor="skill-description">Description</Label>
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="skill-description">Description</Label>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 px-2 text-xs"
+                    onClick={onSuggestDescription}
+                    disabled={suggestDescription.isPending}
+                  >
+                    {suggestDescription.isPending ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Sparkles className="h-3.5 w-3.5" />
+                    )}
+                    Generate
+                  </Button>
+                </div>
                 <Textarea
                   id="skill-description"
                   placeholder="What this skill does and when to use it"
@@ -195,7 +230,7 @@ export function ConvertToSkillDialog({
                   : "Convert to skill"}
               </Button>
             </DialogFooter>
-          </form>
+          </DialogForm>
         ) : null}
       </DialogContent>
     </Dialog>

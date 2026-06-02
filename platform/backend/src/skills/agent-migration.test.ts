@@ -52,6 +52,26 @@ describe("agentToSkill", () => {
     expect(report.annotated.map((field) => field.field)).not.toContain("scope");
   });
 
+  it("leaves a plain prompt non-templated", () => {
+    const { draft, report } = agentToSkill(makeMigratableAgent());
+
+    expect(draft.templated).toBe(false);
+    expect(report.carried.map((field) => field.field)).not.toContain(
+      "templated",
+    );
+  });
+
+  it("flags a Handlebars prompt as templated and reports it carried", () => {
+    const { draft, report } = agentToSkill(
+      makeMigratableAgent({
+        systemPrompt: "You help {{user.name}} with support.",
+      }),
+    );
+
+    expect(draft.templated).toBe(true);
+    expect(report.carried.map((field) => field.field)).toContain("templated");
+  });
+
   it("records provenance in metadata", () => {
     const { draft } = agentToSkill(makeMigratableAgent({ id: "abc-123" }));
 

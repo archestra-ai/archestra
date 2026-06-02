@@ -14,6 +14,8 @@ export interface ParsedSkill {
   content: string;
   license: string | null;
   compatibility: string | null;
+  /** When true, the body is rendered through Handlebars at activation. */
+  templated: boolean;
   metadata: Record<string, string>;
 }
 
@@ -74,6 +76,7 @@ export function parseSkillManifest(raw: string): ParsedSkill {
     content: raw.slice(match[0].length).trim(),
     license: readString(fields.license) || null,
     compatibility: readString(fields.compatibility) || null,
+    templated: readBoolean(fields.templated),
     metadata: readStringMap(fields.metadata),
   };
 }
@@ -94,6 +97,13 @@ export function deriveSkillFileKind(path: string): SkillFileKind {
 
 function readString(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
+}
+
+/** Coerce a YAML scalar into a boolean, accepting `true` or the string "true". */
+function readBoolean(value: unknown): boolean {
+  return (
+    value === true || (typeof value === "string" && value.trim() === "true")
+  );
 }
 
 /** Coerce a YAML mapping into a flat `Record<string, string>`. */

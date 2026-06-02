@@ -58,6 +58,18 @@ describe("parseSkillManifest", () => {
     expect(parseSkillManifest(raw).compatibility).toBe("requires python3");
   });
 
+  test("reads the templated flag from frontmatter, defaulting to false", () => {
+    const base = ["name: greeter", "description: Greets the user."];
+    const make = (extra: string[]) =>
+      ["---", ...base, ...extra, "---", "Hello {{user.name}}."].join("\n");
+
+    expect(parseSkillManifest(make([])).templated).toBe(false);
+    expect(parseSkillManifest(make(["templated: true"])).templated).toBe(true);
+    expect(parseSkillManifest(make(["templated: false"])).templated).toBe(
+      false,
+    );
+  });
+
   test("throws when frontmatter is missing", () => {
     expect(() => parseSkillManifest("# Just markdown")).toThrow(
       SkillParseError,

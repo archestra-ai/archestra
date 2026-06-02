@@ -32,6 +32,7 @@ export interface MaterializeSkillInput {
   content: string;
   license: string | null;
   compatibility: string | null;
+  templated: boolean;
   metadata: Record<string, string>;
   version?: string | null;
   updatedAt: Date;
@@ -187,6 +188,7 @@ function buildSkillMarkdown(skill: MaterializeSkillInput): string {
   };
   if (skill.license) frontmatter.license = skill.license;
   if (skill.compatibility) frontmatter.compatibility = skill.compatibility;
+  if (skill.templated) frontmatter.templated = true;
   if (skill.metadata && Object.keys(skill.metadata).length > 0) {
     frontmatter.metadata = skill.metadata;
   }

@@ -87244,6 +87244,7 @@
                                   "chat",
                                   "chat:compaction",
                                   "chat:title_generation",
+                                  "skill:description_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
                                   "email",
@@ -87655,6 +87656,7 @@
                                   "chat",
                                   "chat:compaction",
                                   "chat:title_generation",
+                                  "skill:description_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
                                   "email",
@@ -88489,6 +88491,7 @@
                                   "chat",
                                   "chat:compaction",
                                   "chat:title_generation",
+                                  "skill:description_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
                                   "email",
@@ -89014,6 +89017,7 @@
                                   "chat",
                                   "chat:compaction",
                                   "chat:title_generation",
+                                  "skill:description_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
                                   "email",
@@ -89425,6 +89429,7 @@
                                   "chat",
                                   "chat:compaction",
                                   "chat:title_generation",
+                                  "skill:description_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
                                   "email",
@@ -89836,6 +89841,7 @@
                                   "chat",
                                   "chat:compaction",
                                   "chat:title_generation",
+                                  "skill:description_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
                                   "email",
@@ -91959,6 +91965,7 @@
                                   "chat",
                                   "chat:compaction",
                                   "chat:title_generation",
+                                  "skill:description_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
                                   "email",
@@ -92370,6 +92377,7 @@
                                   "chat",
                                   "chat:compaction",
                                   "chat:title_generation",
+                                  "skill:description_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
                                   "email",
@@ -92781,6 +92789,7 @@
                                   "chat",
                                   "chat:compaction",
                                   "chat:title_generation",
+                                  "skill:description_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
                                   "email",
@@ -93192,6 +93201,7 @@
                                   "chat",
                                   "chat:compaction",
                                   "chat:title_generation",
+                                  "skill:description_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
                                   "email",
@@ -93603,6 +93613,7 @@
                                   "chat",
                                   "chat:compaction",
                                   "chat:title_generation",
+                                  "skill:description_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
                                   "email",
@@ -94014,6 +94025,7 @@
                                   "chat",
                                   "chat:compaction",
                                   "chat:title_generation",
+                                  "skill:description_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
                                   "email",
@@ -94425,6 +94437,7 @@
                                   "chat",
                                   "chat:compaction",
                                   "chat:title_generation",
+                                  "skill:description_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
                                   "email",
@@ -94825,6 +94838,7 @@
                                   "chat",
                                   "chat:compaction",
                                   "chat:title_generation",
+                                  "skill:description_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
                                   "email",
@@ -95225,6 +95239,7 @@
                                   "chat",
                                   "chat:compaction",
                                   "chat:title_generation",
+                                  "skill:description_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
                                   "email",
@@ -95636,6 +95651,7 @@
                                   "chat",
                                   "chat:compaction",
                                   "chat:title_generation",
+                                  "skill:description_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
                                   "email",
@@ -96047,6 +96063,7 @@
                                   "chat",
                                   "chat:compaction",
                                   "chat:title_generation",
+                                  "skill:description_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
                                   "email",
@@ -96458,6 +96475,7 @@
                                   "chat",
                                   "chat:compaction",
                                   "chat:title_generation",
+                                  "skill:description_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
                                   "email",
@@ -96869,6 +96887,7 @@
                                   "chat",
                                   "chat:compaction",
                                   "chat:title_generation",
+                                  "skill:description_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
                                   "email",
@@ -97506,6 +97525,7 @@
                                   "chat",
                                   "chat:compaction",
                                   "chat:title_generation",
+                                  "skill:description_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
                                   "email",
@@ -98618,6 +98638,7 @@
                 "chat",
                 "chat:compaction",
                 "chat:title_generation",
+                "skill:description_generation",
                 "chatops:slack",
                 "chatops:ms-teams",
                 "email",
@@ -98725,6 +98746,7 @@
                               "chat",
                               "chat:compaction",
                               "chat:title_generation",
+                              "skill:description_generation",
                               "chatops:slack",
                               "chatops:ms-teams",
                               "email",
@@ -98744,6 +98766,7 @@
                                 "chat",
                                 "chat:compaction",
                                 "chat:title_generation",
+                                "skill:description_generation",
                                 "chatops:slack",
                                 "chatops:ms-teams",
                                 "email",
@@ -99816,6 +99839,7 @@
                             "chat",
                             "chat:compaction",
                             "chat:title_generation",
+                            "skill:description_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
                             "email",
@@ -100227,6 +100251,7 @@
                             "chat",
                             "chat:compaction",
                             "chat:title_generation",
+                            "skill:description_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
                             "email",
@@ -101061,6 +101086,7 @@
                             "chat",
                             "chat:compaction",
                             "chat:title_generation",
+                            "skill:description_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
                             "email",
@@ -101586,6 +101612,7 @@
                             "chat",
                             "chat:compaction",
                             "chat:title_generation",
+                            "skill:description_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
                             "email",
@@ -101997,6 +102024,7 @@
                             "chat",
                             "chat:compaction",
                             "chat:title_generation",
+                            "skill:description_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
                             "email",
@@ -102408,6 +102436,7 @@
                             "chat",
                             "chat:compaction",
                             "chat:title_generation",
+                            "skill:description_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
                             "email",
@@ -104531,6 +104560,7 @@
                             "chat",
                             "chat:compaction",
                             "chat:title_generation",
+                            "skill:description_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
                             "email",
@@ -104942,6 +104972,7 @@
                             "chat",
                             "chat:compaction",
                             "chat:title_generation",
+                            "skill:description_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
                             "email",
@@ -105353,6 +105384,7 @@
                             "chat",
                             "chat:compaction",
                             "chat:title_generation",
+                            "skill:description_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
                             "email",
@@ -105764,6 +105796,7 @@
                             "chat",
                             "chat:compaction",
                             "chat:title_generation",
+                            "skill:description_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
                             "email",
@@ -106175,6 +106208,7 @@
                             "chat",
                             "chat:compaction",
                             "chat:title_generation",
+                            "skill:description_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
                             "email",
@@ -106586,6 +106620,7 @@
                             "chat",
                             "chat:compaction",
                             "chat:title_generation",
+                            "skill:description_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
                             "email",
@@ -106997,6 +107032,7 @@
                             "chat",
                             "chat:compaction",
                             "chat:title_generation",
+                            "skill:description_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
                             "email",
@@ -107397,6 +107433,7 @@
                             "chat",
                             "chat:compaction",
                             "chat:title_generation",
+                            "skill:description_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
                             "email",
@@ -107797,6 +107834,7 @@
                             "chat",
                             "chat:compaction",
                             "chat:title_generation",
+                            "skill:description_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
                             "email",
@@ -108208,6 +108246,7 @@
                             "chat",
                             "chat:compaction",
                             "chat:title_generation",
+                            "skill:description_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
                             "email",
@@ -108619,6 +108658,7 @@
                             "chat",
                             "chat:compaction",
                             "chat:title_generation",
+                            "skill:description_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
                             "email",
@@ -109030,6 +109070,7 @@
                             "chat",
                             "chat:compaction",
                             "chat:title_generation",
+                            "skill:description_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
                             "email",
@@ -109441,6 +109482,7 @@
                             "chat",
                             "chat:compaction",
                             "chat:title_generation",
+                            "skill:description_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
                             "email",
@@ -110078,6 +110120,7 @@
                             "chat",
                             "chat:compaction",
                             "chat:title_generation",
+                            "skill:description_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
                             "email",
@@ -193107,6 +193150,9 @@
                             "nullable": true,
                             "type": "string"
                           },
+                          "templated": {
+                            "type": "boolean"
+                          },
                           "metadata": {
                             "type": "object",
                             "additionalProperties": {
@@ -193174,6 +193220,7 @@
                           "content",
                           "license",
                           "compatibility",
+                          "templated",
                           "metadata",
                           "sourceType",
                           "sourceRef",
@@ -193586,6 +193633,9 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "templated": {
+                      "type": "boolean"
+                    },
                     "metadata": {
                       "type": "object",
                       "additionalProperties": {
@@ -193699,6 +193749,7 @@
                     "content",
                     "license",
                     "compatibility",
+                    "templated",
                     "metadata",
                     "sourceType",
                     "sourceRef",
@@ -193950,6 +194001,47 @@
         }
       }
     },
+    "/api/agents/{id}/suggest-skill-description": {
+      "post": {
+        "operationId": "suggestSkillDescription",
+        "tags": [
+          "Skills"
+        ],
+        "description": "Suggest a skill description for an agent using an LLM, for the convert-to-skill flow. Does not modify the agent or create a skill.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:read`: View and list agents\n`skill:create`: Create new agent skills",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "description": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "description"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/agents/{id}/convert-to-skill": {
       "post": {
         "operationId": "convertAgentToSkill",
@@ -194036,6 +194128,9 @@
                         "compatibility": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "templated": {
+                          "type": "boolean"
                         },
                         "metadata": {
                           "type": "object",
@@ -194150,6 +194245,7 @@
                         "content",
                         "license",
                         "compatibility",
+                        "templated",
                         "metadata",
                         "sourceType",
                         "sourceRef",
@@ -194523,6 +194619,9 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "templated": {
+                      "type": "boolean"
+                    },
                     "metadata": {
                       "type": "object",
                       "additionalProperties": {
@@ -194636,6 +194735,7 @@
                     "content",
                     "license",
                     "compatibility",
+                    "templated",
                     "metadata",
                     "sourceType",
                     "sourceRef",
@@ -195009,6 +195109,9 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "templated": {
+                      "type": "boolean"
+                    },
                     "metadata": {
                       "type": "object",
                       "additionalProperties": {
@@ -195122,6 +195225,7 @@
                     "content",
                     "license",
                     "compatibility",
+                    "templated",
                     "metadata",
                     "sourceType",
                     "sourceRef",
@@ -195974,6 +196078,9 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "templated": {
+                      "type": "boolean"
+                    },
                     "metadata": {
                       "type": "object",
                       "additionalProperties": {
@@ -196087,6 +196194,7 @@
                     "content",
                     "license",
                     "compatibility",
+                    "templated",
                     "metadata",
                     "sourceType",
                     "sourceRef",
@@ -196673,6 +196781,9 @@
                             "nullable": true,
                             "type": "string"
                           },
+                          "templated": {
+                            "type": "boolean"
+                          },
                           "fileCount": {
                             "type": "number"
                           },
@@ -196685,6 +196796,7 @@
                           "name",
                           "description",
                           "compatibility",
+                          "templated",
                           "fileCount",
                           "exists"
                         ],
@@ -197000,6 +197112,9 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "templated": {
+                      "type": "boolean"
+                    },
                     "metadata": {
                       "type": "object",
                       "additionalProperties": {
@@ -197055,6 +197170,7 @@
                     "content",
                     "license",
                     "compatibility",
+                    "templated",
                     "metadata",
                     "files",
                     "sourceRef",
@@ -197406,6 +197522,9 @@
                             "nullable": true,
                             "type": "string"
                           },
+                          "templated": {
+                            "type": "boolean"
+                          },
                           "metadata": {
                             "type": "object",
                             "additionalProperties": {
@@ -197447,6 +197566,7 @@
                           "content",
                           "license",
                           "compatibility",
+                          "templated",
                           "metadata",
                           "sourceType",
                           "sourceRef",

@@ -1,4 +1,5 @@
 import { parseFullToolName, SKILL_ARCHESTRA_TOOL_SHORT_NAMES } from "@shared";
+import { promptNeedsRendering } from "@/templating";
 import type { ResourceVisibilityScope } from "@/types/visibility";
 
 /**
@@ -78,6 +79,8 @@ interface SkillDraft {
   content: string;
   license: string | null;
   compatibility: string | null;
+  /** True when the prompt used Handlebars, so the body renders at activation. */
+  templated: boolean;
   metadata: Record<string, string>;
   scope: ResourceVisibilityScope;
 }
@@ -145,6 +148,17 @@ export function agentToSkill(
     carried,
     annotated,
   });
+  // A Handlebars-using prompt keeps its dynamic behavior only if the skill body
+  // is rendered at activation; flag it so it is, and report it so the carry is
+  // explicit rather than silent.
+  const templated = promptNeedsRendering(agent.systemPrompt);
+  if (templated) {
+    carried.push({
+      field: "templated",
+      detail: "prompt uses Handlebars; body is rendered at activation",
+    });
+  }
+
   const teamIds =
     agent.scope === "team" ? agent.teams.map((team) => team.id) : [];
 
@@ -161,6 +175,7 @@ export function agentToSkill(
       content,
       license: null,
       compatibility: null,
+      templated,
       metadata,
       scope: agent.scope,
     },

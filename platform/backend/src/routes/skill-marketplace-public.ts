@@ -232,6 +232,7 @@ async function loadSkillsForLink(
       content: skill.content,
       license: skill.license ?? null,
       compatibility: skill.compatibility ?? null,
+      templated: skill.templated ?? false,
       metadata: (skill.metadata ?? {}) as Record<string, string>,
       updatedAt: skill.updatedAt,
       files: filesBySkill.get(id) ?? [],

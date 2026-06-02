@@ -1,0 +1,1 @@
+ALTER TABLE "skills" ADD COLUMN "templated" boolean DEFAULT false NOT NULL;

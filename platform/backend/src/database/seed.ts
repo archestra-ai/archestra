@@ -220,7 +220,7 @@ export async function syncBuiltInSkills(): Promise<void> {
       });
 
       if (!existing) {
-        await SkillModel.createWithFiles({
+        const created = await SkillModel.createWithFiles({
           skill: {
             organizationId: organization.id,
             scope: "org",
@@ -233,6 +233,21 @@ export async function syncBuiltInSkills(): Promise<void> {
           },
           files,
         });
+        // createWithFiles is ON CONFLICT DO NOTHING on the per-org shared-name
+        // index, so a null means a pre-existing non-built-in skill already
+        // holds this name. Surface it instead of reporting a phantom seed — that
+        // org has no built-in copy and thus no reset path until the clash clears.
+        if (!created) {
+          logger.warn(
+            {
+              builtInSkillId: builtInSkill.builtInSkillId,
+              organizationId: organization.id,
+              name: builtInSkill.name,
+            },
+            "Skipped seeding built-in skill: a skill with this name already exists",
+          );
+          continue;
+        }
         logger.info(
           {
             builtInSkillId: builtInSkill.builtInSkillId,

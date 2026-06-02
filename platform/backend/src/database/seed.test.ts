@@ -192,6 +192,35 @@ describe("syncBuiltInSkills", () => {
     expect(await countBuiltInSkills(org.id)).toBe(BUILT_IN_SKILLS.length);
   });
 
+  test("does not seed a phantom copy when the name is already taken", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+
+    // a pre-existing shared skill squats on the built-in's display name.
+    await SkillModel.createWithFiles({
+      skill: {
+        organizationId: org.id,
+        scope: "org",
+        name: BASE_SKILL.name,
+        description: "user's own skill",
+        content: "# not the built-in",
+        sourceType: "manual",
+      },
+      files: [],
+    });
+
+    await syncBuiltInSkills();
+
+    // no built-in row was created, and the squatting skill is untouched.
+    expect(await countBuiltInSkills(org.id)).toBe(0);
+    const built = await SkillModel.findBuiltIn({
+      organizationId: org.id,
+      sourceRef: builtInSkillSourceRef(BASE_SKILL.builtInSkillId),
+    });
+    expect(built).toBeNull();
+  });
+
   test("auto-upgrades a pristine copy when the shipped revision changes", async ({
     makeOrganization,
   }) => {

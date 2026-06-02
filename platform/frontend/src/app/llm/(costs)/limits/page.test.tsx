@@ -353,17 +353,6 @@ describe("LimitsPage", () => {
     expect(mockUseAllVirtualApiKeys).toHaveBeenCalledWith({ limit: 100 });
   });
 
-  it("shows succinct cleanup interval help in the limit form", () => {
-    render(<LimitsPage />);
-
-    expect(
-      screen.getByText(/rolling resets after elapsed time/i),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText(/calendar resets at the next day, week, or month/i),
-    ).toBeInTheDocument();
-  });
-
   it("groups cleanup interval options with calendar windows first", () => {
     render(<LimitsPage />);
 

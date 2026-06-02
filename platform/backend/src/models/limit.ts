@@ -223,22 +223,27 @@ class LimitModel {
       patchData.model = null;
     }
 
-    const existingLimit = await LimitModel.findById(id);
-    if (!existingLimit) {
-      return null;
-    }
-
-    const shouldResetUsage =
-      patchData.cleanupInterval !== undefined &&
-      patchData.cleanupInterval !== existingLimit.cleanupInterval;
-    if (shouldResetUsage) {
-      patchData.lastCleanup = new Date();
-    }
-
     const [limit] = await db.transaction(async (tx) => {
+      const [existingLimit] = await tx
+        .select()
+        .from(schema.limitsTable)
+        .where(eq(schema.limitsTable.id, id))
+        .limit(1);
+
+      if (!existingLimit) {
+        return [];
+      }
+
+      const shouldResetUsage =
+        patchData.cleanupInterval !== undefined &&
+        patchData.cleanupInterval !== existingLimit.cleanupInterval;
+      const limitPatchData = shouldResetUsage
+        ? { ...patchData, lastCleanup: new Date() }
+        : patchData;
+
       const updatedLimits = await tx
         .update(schema.limitsTable)
-        .set(patchData)
+        .set(limitPatchData)
         .where(eq(schema.limitsTable.id, id))
         .returning();
 
@@ -1052,6 +1057,8 @@ const calendarCleanupIntervals = [
   "calendar_month",
 ] as const satisfies readonly LimitCleanupInterval[];
 
+type CalendarLimitCleanupInterval = (typeof calendarCleanupIntervals)[number];
+
 function buildOrganizationLimitScopeCondition(organizationId: string): SQL {
   return or(
     and(
@@ -1133,10 +1140,16 @@ function buildUsagePeriodStartCondition(
     return sql`${schema.interactionsTable.createdAt} >= now() - ${rollingInterval}::interval`;
   }
 
-  return sql`${schema.interactionsTable.createdAt} >= ${getCalendarPeriodStartSql(cleanupInterval)}`;
+  if (isCalendarCleanupInterval(cleanupInterval)) {
+    return sql`${schema.interactionsTable.createdAt} >= ${getCalendarPeriodStartSql(cleanupInterval)}`;
+  }
+
+  throw new Error(`Unsupported cleanup interval: ${cleanupInterval}`);
 }
 
-function getCalendarPeriodStartSql(cleanupInterval: LimitCleanupInterval): SQL {
+function getCalendarPeriodStartSql(
+  cleanupInterval: CalendarLimitCleanupInterval,
+): SQL {
   switch (cleanupInterval) {
     case "calendar_day":
       return sql`date_trunc('day', now())`;
@@ -1146,11 +1159,15 @@ function getCalendarPeriodStartSql(cleanupInterval: LimitCleanupInterval): SQL {
       return sql`date_trunc('week', now())`;
     case "calendar_month":
       return sql`date_trunc('month', now())`;
-    default:
-      throw new Error(
-        `Unsupported calendar cleanup interval: ${cleanupInterval}`,
-      );
   }
+}
+
+function isCalendarCleanupInterval(
+  cleanupInterval: LimitCleanupInterval,
+): cleanupInterval is CalendarLimitCleanupInterval {
+  return calendarCleanupIntervals.includes(
+    cleanupInterval as CalendarLimitCleanupInterval,
+  );
 }
 
 async function calculateModelUsageCosts(modelUsages: LimitModelUsageRecord[]) {

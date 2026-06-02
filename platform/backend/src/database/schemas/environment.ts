@@ -18,7 +18,7 @@ import organizationsTable from "./organization";
  * `restricted` environment is gated by the `environment:admin` permission.
  */
 const environmentsTable = pgTable(
-  "environment",
+  "environments",
   {
     id: uuid("id").primaryKey().defaultRandom(),
     organizationId: text("organization_id")
@@ -47,8 +47,8 @@ const environmentsTable = pgTable(
       .$onUpdate(() => new Date()),
   },
   (table) => [
-    unique("environment_org_name_unique").on(table.organizationId, table.name),
-    index("environment_org_idx").on(table.organizationId),
+    unique("environments_org_name_unique").on(table.organizationId, table.name),
+    index("environments_org_idx").on(table.organizationId),
   ],
 );
 

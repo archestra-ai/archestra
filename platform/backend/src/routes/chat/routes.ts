@@ -118,10 +118,7 @@ import { injectSkillActivation } from "./inject-skill-activation";
 import { cloneAttachmentsForFork } from "./normalization/clone-attachments-for-fork";
 import { extractInlineAttachments } from "./normalization/extract-inline-attachments";
 import { materializeAttachments } from "./normalization/materialize-attachments";
-import {
-  dropEmptyAssistantMessages,
-  normalizeChatMessages,
-} from "./normalization/normalize-chat-messages";
+import { normalizeChatMessages } from "./normalization/normalize-chat-messages";
 
 const PromoteChatAttachmentResultSchema = z.object({
   filename: z.string(),
@@ -2595,13 +2592,10 @@ async function persistNewMessages(
       }
 
       if (messagesToSave.length > 0) {
-        // Strip base64 images and large browser tool results, then drop any
-        // assistant message left non-renderable — normalization can empty a turn
-        // whose only parts were dangling tool calls, and persisting that yields a
-        // stuck-looking empty assistant bubble on reload.
-        const messagesToStore = dropEmptyAssistantMessages(
-          normalizeChatMessages(messagesToSave),
-        );
+        // Strip base64 images / large tool results and drop assistant turns left
+        // non-renderable (e.g. only a dangling tool call) — persisting one of
+        // those yields a stuck-looking empty bubble on reload.
+        const messagesToStore = normalizeChatMessages(messagesToSave);
 
         if (context === "onFinish") {
           // Log size reduction only for onFinish (where we have complete messages)

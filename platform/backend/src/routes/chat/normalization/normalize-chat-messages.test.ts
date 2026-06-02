@@ -1,8 +1,5 @@
 import { describe, expect, test } from "vitest";
-import {
-  dropEmptyAssistantMessages,
-  normalizeChatMessages,
-} from "./normalize-chat-messages";
+import { normalizeChatMessages } from "./normalize-chat-messages";
 
 describe("normalizeChatMessages", () => {
   test("dedupes duplicate tool parts with the same toolCallId", () => {
@@ -104,7 +101,7 @@ describe("normalizeChatMessages", () => {
   });
 });
 
-describe("dropEmptyAssistantMessages", () => {
+describe("normalizeChatMessages empty-assistant dropping", () => {
   test("drops an assistant turn left empty after a dangling tool call is stripped", () => {
     // a stopped/interrupted turn whose only part is an unresolved tool call
     const messages = [
@@ -127,8 +124,7 @@ describe("dropEmptyAssistantMessages", () => {
       },
     ];
 
-    const normalized = normalizeChatMessages(messages);
-    const result = dropEmptyAssistantMessages(normalized);
+    const result = normalizeChatMessages(messages);
 
     expect(result.map((m) => m.id)).toEqual(["user1"]);
   });
@@ -154,7 +150,7 @@ describe("dropEmptyAssistantMessages", () => {
       },
     ];
 
-    const result = dropEmptyAssistantMessages(messages);
+    const result = normalizeChatMessages(messages);
 
     expect(result.map((m) => m.id)).toEqual(["with-text", "with-result"]);
   });
@@ -165,6 +161,6 @@ describe("dropEmptyAssistantMessages", () => {
       { id: "s", role: "system" as const, parts: [] },
     ];
 
-    expect(dropEmptyAssistantMessages(messages)).toEqual(messages);
+    expect(normalizeChatMessages(messages)).toEqual(messages);
   });
 });

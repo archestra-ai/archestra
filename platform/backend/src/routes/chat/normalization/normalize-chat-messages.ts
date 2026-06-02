@@ -4,24 +4,10 @@ import type { ChatMessage, ChatMessagePart } from "@/types";
 import { stripImagesFromMessages } from "./strip-images-from-messages";
 
 export function normalizeChatMessages(messages: ChatMessage[]): ChatMessage[] {
-  return stripImagesFromMessages(
-    stripDanglingToolCallsFromMessages(dedupeToolPartsFromMessages(messages)),
-  );
-}
-
-/**
- * Drops assistant messages that normalization emptied of renderable content —
- * e.g. a turn whose only parts were dangling tool calls that `stripDanglingTool-
- * Calls` removed. Run after `normalizeChatMessages` and before persisting so the
- * DB never holds a stuck-looking empty assistant row. Non-assistant messages are
- * left untouched.
- */
-export function dropEmptyAssistantMessages(
-  messages: ChatMessage[],
-): ChatMessage[] {
-  return messages.filter(
-    (message) =>
-      message.role !== "assistant" || hasRenderableAssistantContent(message),
+  return dropEmptyAssistantMessages(
+    stripImagesFromMessages(
+      stripDanglingToolCallsFromMessages(dedupeToolPartsFromMessages(messages)),
+    ),
   );
 }
 
@@ -99,6 +85,17 @@ function stripDanglingToolCallsFromMessages(messages: ChatMessage[]) {
 
     return message;
   });
+}
+
+// drops assistant turns left with no renderable content — e.g. a turn whose only
+// parts were dangling tool calls that stripDanglingToolCalls removed. An empty
+// assistant response is never valid, so neither the model nor the DB should see
+// one. Non-assistant messages are left untouched.
+function dropEmptyAssistantMessages(messages: ChatMessage[]): ChatMessage[] {
+  return messages.filter(
+    (message) =>
+      message.role !== "assistant" || hasRenderableAssistantContent(message),
+  );
 }
 
 function getToolPartSignature(part: NonNullable<ChatMessage["parts"]>[number]) {

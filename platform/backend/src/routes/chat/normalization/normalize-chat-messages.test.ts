@@ -204,6 +204,40 @@ describe("normalizeChatMessages empty-assistant dropping", () => {
     ]);
   });
 
+  test("keeps an MCP-app turn whose tool call completed as a dynamic-tool", () => {
+    // MCP tools deserialize to `dynamic-tool`, not `tool-<name>`; the marker must
+    // still count as live so it survives persistence and renders as an MCP app.
+    const messages = [
+      {
+        id: "assistant1",
+        role: "assistant" as const,
+        parts: [
+          { type: "step-start" },
+          {
+            type: "data-tool-ui-start",
+            data: { toolCallId: "call_ok", toolName: "render_chart" },
+          },
+          {
+            type: "dynamic-tool",
+            toolName: "render_chart",
+            toolCallId: "call_ok",
+            state: "output-available",
+            output: "rendered",
+          },
+        ],
+      },
+    ];
+
+    const result = normalizeChatMessages(messages);
+
+    expect(result.map((m) => m.id)).toEqual(["assistant1"]);
+    expect(result[0].parts?.map((p) => p.type)).toEqual([
+      "step-start",
+      "data-tool-ui-start",
+      "dynamic-tool",
+    ]);
+  });
+
   test("drops a stopped MCP-app turn left with an orphaned tool-ui-start", () => {
     // abort after the MCP app started but before its tool call resolved:
     // stripDanglingToolCalls removes the input-streaming tool, leaving the

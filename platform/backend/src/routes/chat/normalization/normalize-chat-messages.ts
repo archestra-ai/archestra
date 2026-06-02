@@ -150,8 +150,12 @@ function dropEmptyAssistantMessages(messages: ChatMessage[]): ChatMessage[] {
   );
 }
 
+// matches both statically-typed `tool-<name>` parts and the `dynamic-tool`
+// shape MCP tools deserialize to — the frontend renderer and shared dangling-call
+// normalization both treat `dynamic-tool` as a real tool part, so a `data-tool-ui-start`
+// can legitimately pair with one and its toolCallId must count as live.
 function isToolPart(part: ChatMessagePart): boolean {
-  return part.type.startsWith("tool-");
+  return part.type.startsWith("tool-") || part.type === "dynamic-tool";
 }
 
 function isToolUiStartPart(part: ChatMessagePart): boolean {

@@ -9,6 +9,7 @@ import { isVertexAiEnabled } from "@/clients/gemini-client";
 import { codeRuntimeService } from "@/code-runtime/code-runtime-service";
 import config from "@/config";
 import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
+import logger from "@/logging";
 import { OrganizationModel } from "@/models";
 import { getByosVaultKvVersion, isByosEnabled } from "@/secrets-manager";
 import { EmailProviderTypeSchema, type GlobalToolPolicy } from "@/types";
@@ -162,6 +163,10 @@ const PublicConfigResponseSchema = z.strictObject({
   }),
 });
 
+let cachedAnalyticsInstanceId: string | null = null;
+let pendingAnalyticsInstanceId: Promise<string | null> | null = null;
+let hasLoggedAnalyticsInstanceIdError = false;
+
 async function getPublicConfigResponse(): Promise<
   z.infer<typeof PublicConfigResponseSchema>
 > {
@@ -179,7 +184,33 @@ async function getPublicConfigResponse(): Promise<
 
 async function getAnalyticsInstanceId(): Promise<string | null> {
   if (config.maintenanceMode) return null;
-  return (await OrganizationModel.getAnalyticsState()).analyticsInstanceId;
+  if (cachedAnalyticsInstanceId) return cachedAnalyticsInstanceId;
+
+  pendingAnalyticsInstanceId ??= loadAnalyticsInstanceId();
+  try {
+    return await pendingAnalyticsInstanceId;
+  } finally {
+    pendingAnalyticsInstanceId = null;
+  }
+}
+
+async function loadAnalyticsInstanceId(): Promise<string | null> {
+  try {
+    const instanceId = (await OrganizationModel.getAnalyticsState())
+      .analyticsInstanceId;
+    cachedAnalyticsInstanceId = instanceId;
+    hasLoggedAnalyticsInstanceIdError = false;
+    return instanceId;
+  } catch (error) {
+    if (!hasLoggedAnalyticsInstanceIdError) {
+      logger.warn(
+        { err: error },
+        "Failed to load analytics instance ID for public config",
+      );
+      hasLoggedAnalyticsInstanceIdError = true;
+    }
+    return null;
+  }
 }
 
 /**

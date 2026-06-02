@@ -527,3 +527,4 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @omar391
 - @AVtheking
 - @yashlohade21
+- @Waryjustice

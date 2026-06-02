@@ -89,6 +89,19 @@ export const handlers: HttpHandler[] = [
   ...getJson("/api/mcp_server", installedServersSeed),
   ...getJson("/api/secrets/type", { type: "DB", meta: {} }),
   ...getJson("/api/k8s/image-pull-secrets", []),
+  ...getJson("/api/k8s/capabilities", {
+    networkPolicy: {
+      kubernetesNetworkPolicy: true,
+      ciliumNetworkPolicy: false,
+      gkeFqdnNetworkPolicy: false,
+      awsApplicationNetworkPolicy: false,
+      provider: "kubernetes",
+      supportsFqdn: false,
+      supportsHttpMethods: false,
+      message: null,
+    },
+  }),
+  ...getJson("/api/network-policies", []),
 
   // Agents
   ...getJson("/api/agents", agentsSeed),

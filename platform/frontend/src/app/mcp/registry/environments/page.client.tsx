@@ -7,10 +7,16 @@ export default function EnvironmentsPageClient() {
   const { data: canEdit } = useHasPermissions({
     environment: ["create", "update", "delete"],
   });
+  const { data: canReadNetworkPolicies } = useHasPermissions({
+    networkPolicy: ["read"],
+  });
 
   return (
     <div className="space-y-4">
-      <EnvironmentsSection canEdit={canEdit ?? false} />
+      <EnvironmentsSection
+        canEdit={canEdit ?? false}
+        canReadNetworkPolicies={canReadNetworkPolicies ?? false}
+      />
     </div>
   );
 }

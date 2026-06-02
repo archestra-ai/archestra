@@ -310,6 +310,22 @@ grant exactly the same access (no drift).
 - apiGroups: ["apps"]
   resources: ["deployments"]
   verbs: ["get", "list", "create", "update", "patch", "delete", "watch"]
+# Standard Kubernetes NetworkPolicy for IP/CIDR egress rules.
+- apiGroups: ["networking.k8s.io"]
+  resources: ["networkpolicies"]
+  verbs: ["get", "list", "create", "update", "patch", "delete", "watch"]
+# CiliumNetworkPolicy for DNS/FQDN egress rules on Cilium-enabled clusters.
+- apiGroups: ["cilium.io"]
+  resources: ["ciliumnetworkpolicies"]
+  verbs: ["get", "list", "create", "update", "patch", "delete", "watch"]
+# GKE FQDNNetworkPolicy for DNS/FQDN egress rules on supported GKE clusters.
+- apiGroups: ["networking.gke.io"]
+  resources: ["fqdnnetworkpolicies"]
+  verbs: ["get", "list", "create", "update", "patch", "delete", "watch"]
+# EKS Auto Mode ApplicationNetworkPolicy for DNS/FQDN egress rules.
+- apiGroups: ["networking.k8s.aws"]
+  resources: ["applicationnetworkpolicies"]
+  verbs: ["get", "list", "create", "update", "patch", "delete", "watch"]
 {{- end }}
 
 {{/*

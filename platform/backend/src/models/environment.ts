@@ -9,6 +9,7 @@ interface EnvironmentWithAssignedCount {
   name: string;
   description: string | null;
   namespace: string | null;
+  networkPolicyId: string | null;
   restricted: boolean;
   sortOrder: number;
   createdAt: Date;
@@ -27,6 +28,7 @@ class EnvironmentModel {
         name: schema.environmentsTable.name,
         description: schema.environmentsTable.description,
         namespace: schema.environmentsTable.namespace,
+        networkPolicyId: schema.environmentsTable.networkPolicyId,
         restricted: schema.environmentsTable.restricted,
         sortOrder: schema.environmentsTable.sortOrder,
         createdAt: schema.environmentsTable.createdAt,
@@ -77,14 +79,29 @@ class EnvironmentModel {
     return row ?? null;
   }
 
+  static async findByIdForAudit(
+    id: string,
+    organizationId: string,
+  ): Promise<Record<string, unknown> | null> {
+    return EnvironmentModel.findByIdForOrganization(id, organizationId);
+  }
+
   static async create(params: {
     organizationId: string;
     name: string;
     description?: string | null;
     namespace?: string | null;
+    networkPolicyId?: string | null;
     restricted?: boolean;
   }): Promise<typeof schema.environmentsTable.$inferSelect> {
-    const { organizationId, name, description, namespace, restricted } = params;
+    const {
+      organizationId,
+      name,
+      description,
+      namespace,
+      networkPolicyId,
+      restricted,
+    } = params;
     const [row] = await db
       .insert(schema.environmentsTable)
       .values({
@@ -92,6 +109,7 @@ class EnvironmentModel {
         name,
         description: description ?? null,
         namespace: namespace ?? null,
+        networkPolicyId: networkPolicyId ?? null,
         restricted: restricted ?? false,
         sortOrder: await EnvironmentModel.nextSortOrder(organizationId),
       })
@@ -105,14 +123,23 @@ class EnvironmentModel {
     name?: string;
     description?: string | null;
     namespace?: string | null;
+    networkPolicyId?: string | null;
     restricted?: boolean;
   }): Promise<typeof schema.environmentsTable.$inferSelect | null> {
-    const { id, organizationId, name, description, namespace, restricted } =
-      params;
+    const {
+      id,
+      organizationId,
+      name,
+      description,
+      namespace,
+      networkPolicyId,
+      restricted,
+    } = params;
     const patch: Record<string, unknown> = {};
     if (name !== undefined) patch.name = name;
     if (description !== undefined) patch.description = description;
     if (namespace !== undefined) patch.namespace = namespace;
+    if (networkPolicyId !== undefined) patch.networkPolicyId = networkPolicyId;
     if (restricted !== undefined) patch.restricted = restricted;
 
     const [row] = await db

@@ -3,7 +3,7 @@ title: Private MCP Registry
 category: MCP
 order: 2
 description: Managing your organization's MCP servers in a private registry
-lastUpdated: 2026-04-27
+lastUpdated: 2026-06-01
 ---
 
 <!--
@@ -80,13 +80,112 @@ For example, every catalog entry tagged `department: finance` is automatically w
 
 ## Environments
 
-An environment is an organization-level deployment target — for example `sandbox`, `staging`, or `production`. Admins manage the list of environments, and each carries a name and an optional Kubernetes namespace. The registry form lets you assign a catalog entry to one environment.
+An environment is an organization-level deployment target — for example `sandbox`, `staging`, or `production`. Admins manage the list of environments, and each carries a name, an optional Kubernetes namespace, and an optional default network policy.
 
-An environment can be marked **restricted**. Only members with the `environment:admin` permission can assign catalog entries to a restricted environment; in the registry form it appears disabled for everyone else. Unrestricted environments and Default stay open to anyone who can create catalog entries.
+An environment can be marked **restricted**. Only members with the `environment:admin` permission can assign catalog entries to a restricted environment. Unrestricted environments and Default stay open to anyone who can create MCP registry catalog entries.
 
-Every entry starts on the virtual **Default** environment, which is not a stored row — it simply means "no environment assigned". Selecting Default in the registry form clears the assignment. Deleting an environment moves its entries back to Default rather than removing them.
+### Network Policies
 
-The Kubernetes namespace is recorded on the environment but is not yet applied when servers deploy.
+Network policies are reusable egress profiles. They can disable internet egress, allow all egress, or restrict egress to selected IP/CIDR ranges. Domain presets and custom domains require a supported FQDN policy provider; Kubernetes `NetworkPolicy` alone only enforces IP/CIDR rules.
+
+When an MCP server runs in an environment, Archestra uses the environment's network policy, then the organization default network policy, then the built-in unrestricted policy.
+
+| Cluster provider        | IP/CIDR rules                                                         | Domain rules                                                                               |
+| ----------------------- | --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| EKS Auto Mode           | Kubernetes `NetworkPolicy` when network policy enforcement is enabled | AWS `ApplicationNetworkPolicy` when the EKS Auto Mode Network Policy Controller is enabled |
+| EKS with AWS VPC CNI    | Kubernetes `NetworkPolicy` when network policy enforcement is enabled | Not supported outside EKS Auto Mode DNS-based policies                                     |
+| AKS                     | Kubernetes `NetworkPolicy` when network policy enforcement is enabled | Cilium `CiliumNetworkPolicy` when the cluster exposes the Cilium CRD                       |
+| GKE                     | Kubernetes `NetworkPolicy` when network policy enforcement is enabled | GKE `FQDNNetworkPolicy` when GKE Dataplane V2 and FQDN network policy are enabled          |
+| Cilium-enabled clusters | Kubernetes `NetworkPolicy` or Cilium policy                           | Cilium `CiliumNetworkPolicy`                                                               |
+
+See Kubernetes [NetworkPolicy](https://kubernetes.io/docs/concepts/services-networking/network-policies/), Cilium [DNS policy](https://docs.cilium.io/en/latest/security/dns/), GKE [FQDN network policy](https://cloud.google.com/kubernetes-engine/docs/how-to/fqdn-network-policies), and EKS Auto Mode [network policy](https://docs.aws.amazon.com/eks/latest/userguide/auto-net-pol.html) docs for provider details. AWS DNS-based rules apply only to workloads running on EKS Auto Mode-launched EC2 instances.
+
+#### Domain Presets
+
+##### Common Dependencies
+
+```text
+alpinelinux.org
+archlinux.org
+bitbucket.org
+centos.org
+crates.io
+debian.org
+docker.com
+docker.io
+*.docker.io
+fedoraproject.org
+files.pythonhosted.org
+gcr.io
+ghcr.io
+github.com
+*.github.com
+githubusercontent.com
+*.githubusercontent.com
+gitlab.com
+golang.org
+goproxy.io
+gradle.org
+hex.pm
+maven.org
+mcr.microsoft.com
+nodejs.org
+npmjs.com
+npmjs.org
+nuget.org
+packagecloud.io
+packages.microsoft.com
+packagist.org
+pkg.go.dev
+production.cloudflare.docker.com
+pub.dev
+pypa.io
+pypi.org
+pypi.python.org
+raw.githubusercontent.com
+objects.githubusercontent.com
+quay.io
+registry-1.docker.io
+registry.npmjs.org
+ruby-lang.org
+rubygems.org
+rustup.rs
+ubuntu.com
+yarnpkg.com
+```
+
+##### Package Managers
+
+```text
+crates.io
+files.pythonhosted.org
+gcr.io
+ghcr.io
+golang.org
+goproxy.io
+gradle.org
+hex.pm
+maven.org
+mcr.microsoft.com
+npmjs.com
+npmjs.org
+nuget.org
+packagist.org
+pkg.go.dev
+registry-1.docker.io
+registry.npmjs.org
+rubygems.org
+rustup.rs
+pub.dev
+pypi.org
+pypi.python.org
+pythonhosted.org
+quay.io
+docker.io
+*.docker.io
+production.cloudflare.docker.com
+yarnpkg.com
+```
 
 ## From Registry To Gateway
 

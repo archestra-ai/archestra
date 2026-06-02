@@ -27,14 +27,25 @@ export default function McpCatalogLayout({
   const pathname = usePathname();
   const isRegistryPage = pathname === "/mcp/registry";
   const [pageActionButton, setActionButton] = useState<React.ReactNode>(null);
-  const { data: canManageEnvironments } = useHasPermissions({
-    environment: ["create", "update", "delete"],
+  const { data: canReadEnvironments } = useHasPermissions({
+    environment: ["read"],
+  });
+  const { data: canReadNetworkPolicies } = useHasPermissions({
+    networkPolicy: ["read"],
   });
 
   const tabs = [
     { label: "Catalog", href: "/mcp/registry" },
-    ...(canManageEnvironments
+    ...(canReadEnvironments
       ? [{ label: "Environments", href: "/mcp/registry/environments" }]
+      : []),
+    ...(canReadNetworkPolicies
+      ? [
+          {
+            label: "Network Policies",
+            href: "/mcp/registry/network-policies",
+          },
+        ]
       : []),
   ];
   const contextValue = useMemo(() => ({ setActionButton }), []);

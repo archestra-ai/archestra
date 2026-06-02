@@ -41,6 +41,10 @@ export const ACTION_LABEL: Record<AuditEventName, string> = {
   "connector.created": "Connector created",
   "connector.updated": "Connector updated",
   "connector.deleted": "Connector deleted",
+  // Environment
+  "environment.created": "Environment created",
+  "environment.updated": "Environment updated",
+  "environment.deleted": "Environment deleted",
   // Identity provider
   "identityProvider.created": "Identity provider created",
   "identityProvider.updated": "Identity provider updated",
@@ -82,6 +86,10 @@ export const ACTION_LABEL: Record<AuditEventName, string> = {
   "member.created": "Member added",
   "member.role_updated": "Member role changed",
   "member.deleted": "Member removed",
+  // Network policy
+  "networkPolicy.created": "Network policy created",
+  "networkPolicy.updated": "Network policy updated",
+  "networkPolicy.deleted": "Network policy deleted",
   // Optimization rule
   "optimizationRule.created": "Optimization rule created",
   "optimizationRule.updated": "Optimization rule updated",
@@ -230,6 +238,7 @@ export const KNOWN_RESOURCE_TYPES: readonly string[] = [
   "chatOpsBinding",
   "chatOpsConfig",
   "connector",
+  "environment",
   "identityProvider",
   "internalMcpCatalog",
   "invitation",
@@ -241,6 +250,7 @@ export const KNOWN_RESOURCE_TYPES: readonly string[] = [
   "mcpServer",
   "mcpServerInstallationRequest",
   "member",
+  "networkPolicy",
   "optimizationRule",
   "organization",
   "role",

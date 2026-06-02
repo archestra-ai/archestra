@@ -1884,6 +1884,13 @@
       "when": 1780394552365,
       "tag": "0268_rename_environment_to_environments",
       "breakpoints": true
+    },
+    {
+      "idx": 269,
+      "version": "7",
+      "when": 1780397149205,
+      "tag": "0269_typical_bill_hollister",
+      "breakpoints": true
     }
   ]
 }

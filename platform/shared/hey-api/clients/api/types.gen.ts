@@ -15072,7 +15072,7 @@ export type GetAuditLogsData = {
         /**
          * Filter by action type (dotted name, e.g. agent.created)
          */
-        action?: 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'apiKey.created' | 'apiKey.deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'limit.created' | 'limit.updated' | 'limit.deleted' | 'llmModel.updated' | 'llmModel.synced' | 'llmOauthClient.created' | 'llmOauthClient.updated' | 'llmOauthClient.deleted' | 'llmProviderApiKey.created' | 'llmProviderApiKey.deleted' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.reinstalled' | 'mcpServerInstallationRequest.created' | 'mcpServerInstallationRequest.updated' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'optimizationRule.created' | 'optimizationRule.updated' | 'optimizationRule.deleted' | 'organization.updated' | 'role.created' | 'role.updated' | 'role.deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'skill.created' | 'skill.updated' | 'skill.deleted' | 'skill.imported' | 'team.created' | 'team.updated' | 'team.deleted' | 'teamToken.rotated' | 'tool.deleted' | 'toolInvocationPolicy.created' | 'toolInvocationPolicy.updated' | 'toolInvocationPolicy.deleted' | 'toolInvocationPolicy.bulk_defaulted' | 'toolInvocationPolicy.auto_configured' | 'trustedDataPolicy.created' | 'trustedDataPolicy.updated' | 'trustedDataPolicy.deleted' | 'trustedDataPolicy.bulk_defaulted' | 'userToken.rotated' | 'virtualApiKey.created' | 'virtualApiKey.deleted' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted';
+        action?: 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'apiKey.created' | 'apiKey.deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'limit.created' | 'limit.updated' | 'limit.deleted' | 'llmModel.updated' | 'llmModel.synced' | 'llmOauthClient.created' | 'llmOauthClient.updated' | 'llmOauthClient.deleted' | 'llmProviderApiKey.created' | 'llmProviderApiKey.deleted' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.reinstalled' | 'mcpServerInstallationRequest.created' | 'mcpServerInstallationRequest.updated' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'networkPolicy.created' | 'networkPolicy.updated' | 'networkPolicy.deleted' | 'optimizationRule.created' | 'optimizationRule.updated' | 'optimizationRule.deleted' | 'organization.updated' | 'role.created' | 'role.updated' | 'role.deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'skill.created' | 'skill.updated' | 'skill.deleted' | 'skill.imported' | 'team.created' | 'team.updated' | 'team.deleted' | 'teamToken.rotated' | 'tool.deleted' | 'toolInvocationPolicy.created' | 'toolInvocationPolicy.updated' | 'toolInvocationPolicy.deleted' | 'toolInvocationPolicy.bulk_defaulted' | 'toolInvocationPolicy.auto_configured' | 'trustedDataPolicy.created' | 'trustedDataPolicy.updated' | 'trustedDataPolicy.deleted' | 'trustedDataPolicy.bulk_defaulted' | 'userToken.rotated' | 'virtualApiKey.created' | 'virtualApiKey.deleted' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted';
         /**
          * Filter by outcome (success, failure, or denied)
          */
@@ -15176,7 +15176,7 @@ export type GetAuditLogsResponses = {
             actorType: 'user' | 'api_key' | 'service_account' | 'system' | 'sso';
             actorName: string | null;
             actorEmail: string | null;
-            action: 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'apiKey.created' | 'apiKey.deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'limit.created' | 'limit.updated' | 'limit.deleted' | 'llmModel.updated' | 'llmModel.synced' | 'llmOauthClient.created' | 'llmOauthClient.updated' | 'llmOauthClient.deleted' | 'llmProviderApiKey.created' | 'llmProviderApiKey.deleted' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.reinstalled' | 'mcpServerInstallationRequest.created' | 'mcpServerInstallationRequest.updated' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'optimizationRule.created' | 'optimizationRule.updated' | 'optimizationRule.deleted' | 'organization.updated' | 'role.created' | 'role.updated' | 'role.deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'skill.created' | 'skill.updated' | 'skill.deleted' | 'skill.imported' | 'team.created' | 'team.updated' | 'team.deleted' | 'teamToken.rotated' | 'tool.deleted' | 'toolInvocationPolicy.created' | 'toolInvocationPolicy.updated' | 'toolInvocationPolicy.deleted' | 'toolInvocationPolicy.bulk_defaulted' | 'toolInvocationPolicy.auto_configured' | 'trustedDataPolicy.created' | 'trustedDataPolicy.updated' | 'trustedDataPolicy.deleted' | 'trustedDataPolicy.bulk_defaulted' | 'userToken.rotated' | 'virtualApiKey.created' | 'virtualApiKey.deleted' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted';
+            action: 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'apiKey.created' | 'apiKey.deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'limit.created' | 'limit.updated' | 'limit.deleted' | 'llmModel.updated' | 'llmModel.synced' | 'llmOauthClient.created' | 'llmOauthClient.updated' | 'llmOauthClient.deleted' | 'llmProviderApiKey.created' | 'llmProviderApiKey.deleted' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.reinstalled' | 'mcpServerInstallationRequest.created' | 'mcpServerInstallationRequest.updated' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'networkPolicy.created' | 'networkPolicy.updated' | 'networkPolicy.deleted' | 'optimizationRule.created' | 'optimizationRule.updated' | 'optimizationRule.deleted' | 'organization.updated' | 'role.created' | 'role.updated' | 'role.deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'skill.created' | 'skill.updated' | 'skill.deleted' | 'skill.imported' | 'team.created' | 'team.updated' | 'team.deleted' | 'teamToken.rotated' | 'tool.deleted' | 'toolInvocationPolicy.created' | 'toolInvocationPolicy.updated' | 'toolInvocationPolicy.deleted' | 'toolInvocationPolicy.bulk_defaulted' | 'toolInvocationPolicy.auto_configured' | 'trustedDataPolicy.created' | 'trustedDataPolicy.updated' | 'trustedDataPolicy.deleted' | 'trustedDataPolicy.bulk_defaulted' | 'userToken.rotated' | 'virtualApiKey.created' | 'virtualApiKey.deleted' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted';
             outcome: 'success' | 'failure' | 'denied';
             resourceType: string | null;
             resourceId: string | null;
@@ -23436,6 +23436,7 @@ export type ListEnvironmentsResponses = {
             name: string;
             description: string | null;
             namespace: string | null;
+            networkPolicyId: string | null;
             restricted: boolean;
             sortOrder: number;
             createdAt: string;
@@ -23453,6 +23454,7 @@ export type CreateEnvironmentData = {
         name: string;
         description?: string | null;
         namespace?: string | null;
+        networkPolicyId?: string | null;
         restricted?: boolean;
     };
     path?: never;
@@ -23535,6 +23537,7 @@ export type CreateEnvironmentResponses = {
         name: string;
         description: string | null;
         namespace: string | null;
+        networkPolicyId: string | null;
         restricted: boolean;
         sortOrder: number;
         createdAt: string;
@@ -23634,6 +23637,7 @@ export type UpdateEnvironmentData = {
         name?: string;
         description?: string | null;
         namespace?: string | null;
+        networkPolicyId?: string | null;
         restricted?: boolean;
     };
     path: {
@@ -23718,6 +23722,7 @@ export type UpdateEnvironmentResponses = {
         name: string;
         description: string | null;
         namespace: string | null;
+        networkPolicyId: string | null;
         restricted: boolean;
         sortOrder: number;
         createdAt: string;
@@ -32111,6 +32116,98 @@ export type CheckInvitationResponses = {
 };
 
 export type CheckInvitationResponse = CheckInvitationResponses[keyof CheckInvitationResponses];
+
+export type GetK8sCapabilitiesData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/k8s/capabilities';
+};
+
+export type GetK8sCapabilitiesErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetK8sCapabilitiesError = GetK8sCapabilitiesErrors[keyof GetK8sCapabilitiesErrors];
+
+export type GetK8sCapabilitiesResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        networkPolicy: {
+            kubernetesNetworkPolicy: boolean;
+            ciliumNetworkPolicy: boolean;
+            gkeFqdnNetworkPolicy: boolean;
+            awsApplicationNetworkPolicy: boolean;
+            provider: 'cilium' | 'gke-fqdn' | 'aws-application-network-policy' | 'kubernetes' | 'none';
+            supportsFqdn: boolean;
+            supportsHttpMethods: boolean;
+            message: string | null;
+        };
+    };
+};
+
+export type GetK8sCapabilitiesResponse = GetK8sCapabilitiesResponses[keyof GetK8sCapabilitiesResponses];
 
 export type GetKnowledgeBasesData = {
     body?: never;
@@ -42236,6 +42333,387 @@ export type ModelRouterChatCompletionsWithAgentResponses = {
 
 export type ModelRouterChatCompletionsWithAgentResponse = ModelRouterChatCompletionsWithAgentResponses[keyof ModelRouterChatCompletionsWithAgentResponses];
 
+export type ListNetworkPoliciesData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/network-policies';
+};
+
+export type ListNetworkPoliciesErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ListNetworkPoliciesError = ListNetworkPoliciesErrors[keyof ListNetworkPoliciesErrors];
+
+export type ListNetworkPoliciesResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        organizationId: string;
+        name: string;
+        description: string | null;
+        egressMode: 'off' | 'restricted' | 'unrestricted';
+        domainPreset: 'none' | 'common_dependencies' | 'package_managers';
+        allowedDomains: Array<string>;
+        allowedCidrs: Array<string>;
+        createdAt: string;
+        updatedAt: string;
+        references: {
+            environments: number;
+            defaultEnvironments: number;
+        };
+    }>;
+};
+
+export type ListNetworkPoliciesResponse = ListNetworkPoliciesResponses[keyof ListNetworkPoliciesResponses];
+
+export type CreateNetworkPolicyData = {
+    body: {
+        name: string;
+        description?: string | null;
+        egressMode?: 'off' | 'restricted' | 'unrestricted';
+        domainPreset?: 'none' | 'common_dependencies' | 'package_managers';
+        allowedDomains?: Array<string>;
+        allowedCidrs?: Array<string>;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/network-policies';
+};
+
+export type CreateNetworkPolicyErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type CreateNetworkPolicyError = CreateNetworkPolicyErrors[keyof CreateNetworkPolicyErrors];
+
+export type CreateNetworkPolicyResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        name: string;
+        description: string | null;
+        egressMode: 'off' | 'restricted' | 'unrestricted';
+        domainPreset: 'none' | 'common_dependencies' | 'package_managers';
+        allowedDomains: Array<string>;
+        allowedCidrs: Array<string>;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type CreateNetworkPolicyResponse = CreateNetworkPolicyResponses[keyof CreateNetworkPolicyResponses];
+
+export type DeleteNetworkPolicyData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/network-policies/{id}';
+};
+
+export type DeleteNetworkPolicyErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type DeleteNetworkPolicyError = DeleteNetworkPolicyErrors[keyof DeleteNetworkPolicyErrors];
+
+export type DeleteNetworkPolicyResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type DeleteNetworkPolicyResponse = DeleteNetworkPolicyResponses[keyof DeleteNetworkPolicyResponses];
+
+export type UpdateNetworkPolicyData = {
+    body: {
+        name?: string;
+        description?: string | null;
+        egressMode?: 'off' | 'restricted' | 'unrestricted';
+        domainPreset?: 'none' | 'common_dependencies' | 'package_managers';
+        allowedDomains?: Array<string>;
+        allowedCidrs?: Array<string>;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/network-policies/{id}';
+};
+
+export type UpdateNetworkPolicyErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type UpdateNetworkPolicyError = UpdateNetworkPolicyErrors[keyof UpdateNetworkPolicyErrors];
+
+export type UpdateNetworkPolicyResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        name: string;
+        description: string | null;
+        egressMode: 'off' | 'restricted' | 'unrestricted';
+        domainPreset: 'none' | 'common_dependencies' | 'package_managers';
+        allowedDomains: Array<string>;
+        allowedCidrs: Array<string>;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type UpdateNetworkPolicyResponse = UpdateNetworkPolicyResponses[keyof UpdateNetworkPolicyResponses];
+
 export type InitiateOAuthData = {
     body: {
         catalogId: string;
@@ -44713,6 +45191,7 @@ export type GetOrganizationResponses = {
         defaultEnvironmentName: string | null;
         defaultEnvironmentNamespace: string | null;
         defaultEnvironmentDescription: string | null;
+        defaultNetworkPolicyId: string | null;
         defaultEnvironmentRestricted: boolean;
         skillToolsEnabled: boolean;
         skillSlashCommandsEnabled: boolean;
@@ -44998,6 +45477,7 @@ export type UpdateAppearanceSettingsResponses = {
         defaultEnvironmentName: string | null;
         defaultEnvironmentNamespace: string | null;
         defaultEnvironmentDescription: string | null;
+        defaultNetworkPolicyId: string | null;
         defaultEnvironmentRestricted: boolean;
         skillToolsEnabled: boolean;
         skillSlashCommandsEnabled: boolean;
@@ -45154,6 +45634,7 @@ export type UpdateSecuritySettingsResponses = {
         defaultEnvironmentName: string | null;
         defaultEnvironmentNamespace: string | null;
         defaultEnvironmentDescription: string | null;
+        defaultNetworkPolicyId: string | null;
         defaultEnvironmentRestricted: boolean;
         skillToolsEnabled: boolean;
         skillSlashCommandsEnabled: boolean;
@@ -45313,6 +45794,7 @@ export type UpdateLlmSettingsResponses = {
         defaultEnvironmentName: string | null;
         defaultEnvironmentNamespace: string | null;
         defaultEnvironmentDescription: string | null;
+        defaultNetworkPolicyId: string | null;
         defaultEnvironmentRestricted: boolean;
         skillToolsEnabled: boolean;
         skillSlashCommandsEnabled: boolean;
@@ -45471,6 +45953,7 @@ export type UpdateAgentSettingsResponses = {
         defaultEnvironmentName: string | null;
         defaultEnvironmentNamespace: string | null;
         defaultEnvironmentDescription: string | null;
+        defaultNetworkPolicyId: string | null;
         defaultEnvironmentRestricted: boolean;
         skillToolsEnabled: boolean;
         skillSlashCommandsEnabled: boolean;
@@ -45636,6 +46119,7 @@ export type UpdateConnectionSettingsResponses = {
         defaultEnvironmentName: string | null;
         defaultEnvironmentNamespace: string | null;
         defaultEnvironmentDescription: string | null;
+        defaultNetworkPolicyId: string | null;
         defaultEnvironmentRestricted: boolean;
         skillToolsEnabled: boolean;
         skillSlashCommandsEnabled: boolean;
@@ -45792,6 +46276,7 @@ export type UpdatePresetEntityNameResponses = {
         defaultEnvironmentName: string | null;
         defaultEnvironmentNamespace: string | null;
         defaultEnvironmentDescription: string | null;
+        defaultNetworkPolicyId: string | null;
         defaultEnvironmentRestricted: boolean;
         skillToolsEnabled: boolean;
         skillSlashCommandsEnabled: boolean;
@@ -45947,6 +46432,7 @@ export type UpdatePresetEntityDefaultLabelResponses = {
         defaultEnvironmentName: string | null;
         defaultEnvironmentNamespace: string | null;
         defaultEnvironmentDescription: string | null;
+        defaultNetworkPolicyId: string | null;
         defaultEnvironmentRestricted: boolean;
         skillToolsEnabled: boolean;
         skillSlashCommandsEnabled: boolean;
@@ -46102,6 +46588,7 @@ export type UpdatePresetEntityDefaultValidationRegexResponses = {
         defaultEnvironmentName: string | null;
         defaultEnvironmentNamespace: string | null;
         defaultEnvironmentDescription: string | null;
+        defaultNetworkPolicyId: string | null;
         defaultEnvironmentRestricted: boolean;
         skillToolsEnabled: boolean;
         skillSlashCommandsEnabled: boolean;
@@ -46116,6 +46603,7 @@ export type UpdateDefaultEnvironmentData = {
         name?: string | null;
         description?: string | null;
         namespace?: string | null;
+        networkPolicyId?: string | null;
         restricted?: boolean;
     };
     path?: never;
@@ -46260,6 +46748,7 @@ export type UpdateDefaultEnvironmentResponses = {
         defaultEnvironmentName: string | null;
         defaultEnvironmentNamespace: string | null;
         defaultEnvironmentDescription: string | null;
+        defaultNetworkPolicyId: string | null;
         defaultEnvironmentRestricted: boolean;
         skillToolsEnabled: boolean;
         skillSlashCommandsEnabled: boolean;
@@ -46416,6 +46905,7 @@ export type UpdateAuthSettingsResponses = {
         defaultEnvironmentName: string | null;
         defaultEnvironmentNamespace: string | null;
         defaultEnvironmentDescription: string | null;
+        defaultNetworkPolicyId: string | null;
         defaultEnvironmentRestricted: boolean;
         skillToolsEnabled: boolean;
         skillSlashCommandsEnabled: boolean;
@@ -46574,6 +47064,7 @@ export type UpdateKnowledgeSettingsResponses = {
         defaultEnvironmentName: string | null;
         defaultEnvironmentNamespace: string | null;
         defaultEnvironmentDescription: string | null;
+        defaultNetworkPolicyId: string | null;
         defaultEnvironmentRestricted: boolean;
         skillToolsEnabled: boolean;
         skillSlashCommandsEnabled: boolean;
@@ -46727,6 +47218,7 @@ export type DropEmbeddingConfigResponses = {
         defaultEnvironmentName: string | null;
         defaultEnvironmentNamespace: string | null;
         defaultEnvironmentDescription: string | null;
+        defaultNetworkPolicyId: string | null;
         defaultEnvironmentRestricted: boolean;
         skillToolsEnabled: boolean;
         skillSlashCommandsEnabled: boolean;
@@ -46969,6 +47461,7 @@ export type CompleteOnboardingResponses = {
         defaultEnvironmentName: string | null;
         defaultEnvironmentNamespace: string | null;
         defaultEnvironmentDescription: string | null;
+        defaultNetworkPolicyId: string | null;
         defaultEnvironmentRestricted: boolean;
         skillToolsEnabled: boolean;
         skillSlashCommandsEnabled: boolean;

@@ -41,32 +41,29 @@ Network policies define:
 
 - **egress mode**:
   - `off`: no internet egress except cluster-internal traffic needed by the runtime.
-  - `restricted`: allow only the selected domain preset plus explicitly allowed domains.
+  - `restricted`: allow selected CIDRs, and when an FQDN provider is available, selected domain rules.
   - `unrestricted`: allow all egress.
+- **allowed CIDRs**: IPv4/IPv6 CIDR ranges enforced with vanilla Kubernetes `NetworkPolicy`.
 - **domain preset** for restricted mode:
   - `none`: start from an empty allowlist.
   - `common_dependencies`: allow common package/source-control domains, then add custom domains.
   - `package_managers`: allow common package manager domains, then add custom domains.
 - **additional allowed domains**: exact domains and wildcard subdomains such as
-  `api.example.com` and `*.example.com`.
-- **allowed HTTP methods**:
-  - `all`
-  - `read_only`: `GET`, `HEAD`, and `OPTIONS`.
+  `api.example.com` and `*.example.com`; requires Cilium `CiliumNetworkPolicy`,
+  GKE `FQDNNetworkPolicy`, or EKS Auto Mode `ApplicationNetworkPolicy`.
 
 Policy resolution:
 
 1. An environment can reference one default network policy.
-2. An MCP server catalog item can optionally reference a network policy override.
-3. An MCP server installation can optionally reference a network policy override.
-4. Effective policy order is: installation override -> catalog override -> environment default
-   -> built-in platform default.
+2. MCP server catalog items select an environment; they do not carry their own network policy.
+3. MCP server installations inherit the policy from the catalog item's environment.
+4. Effective policy order is: environment default -> built-in platform default.
 
 UX:
 
 - Network policy CRUD belongs on a dedicated page.
 - Environment create/edit selects a default network policy.
-- MCP catalog/install forms expose only an optional network policy dropdown and link to the
-  network policy page.
+- MCP catalog/install forms do not expose network policy controls.
 
 Runtime mapping:
 
@@ -74,8 +71,15 @@ Runtime mapping:
 - Policies select only Archestra-managed workload pods for the specific installation/runtime.
 - Kubernetes network policies are additive, so Archestra must generate a complete managed policy
   set for each selected workload and avoid relying on policy ordering.
+- Kubernetes `NetworkPolicy` is L3/L4 only. The managed object enforces `off`, DNS, and CIDR
+  egress rules.
+- When the cluster exposes Cilium `CiliumNetworkPolicy`, GKE `FQDNNetworkPolicy`, or EKS
+  Auto Mode `ApplicationNetworkPolicy`, Archestra uses it for policies with domain presets
+  or custom domains. Without an FQDN provider, the UI explains that domain rules are unavailable.
+- EKS Auto Mode DNS rules only apply to workloads running on Auto Mode-launched EC2 nodes.
 - Enforcement requires a Kubernetes network plugin that supports `NetworkPolicy`.
-- The Helm chart service account needs RBAC for CRUD on `networkpolicies.networking.k8s.io`.
+- The Helm chart service account needs RBAC for CRUD on `networkpolicies.networking.k8s.io`
+  plus any detected FQDN object type.
 
 This feature is built **in parallel** with the existing "presets" feature. Presets are hidden
 behind a feature flag and removed later. **There is no migration and no backward compatibility

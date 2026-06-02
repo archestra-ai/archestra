@@ -1,4 +1,5 @@
 import type * as k8s from "@kubernetes/client-node";
+import { getK8sCapabilitiesFromApi } from "@/k8s/capabilities";
 import {
   checkNamespaceDeployAccess,
   createK8sClients,
@@ -12,9 +13,16 @@ import {
   InternalMcpCatalogModel,
   McpHttpSessionModel,
   McpServerModel,
+  NetworkPolicyModel,
+  OrganizationModel,
 } from "@/models";
 import { secretManager } from "@/secrets-manager";
-import type { McpServer } from "@/types";
+import { resolveEffectiveNetworkPolicy } from "@/services/environments/network-policy";
+import type {
+  EffectiveNetworkPolicy,
+  K8sNetworkPolicyCapabilities,
+  McpServer,
+} from "@/types";
 import K8sDeployment, {
   fetchPlatformPodNodeSelector,
   fetchPlatformPodTolerations,
@@ -26,6 +34,17 @@ import type {
   McpServerContainerLogs,
 } from "./schemas";
 
+type CatalogItem = Awaited<ReturnType<typeof InternalMcpCatalogModel.findById>>;
+type EnvironmentRow = Awaited<ReturnType<typeof EnvironmentModel.findById>>;
+type NetworkPolicyResolutionCache = {
+  environmentsById: Map<string, EnvironmentRow>;
+  defaultNetworkPolicyIdByOrgId: Map<string, string | null>;
+  networkPoliciesById: Map<
+    string,
+    NonNullable<EffectiveNetworkPolicy["policy"]>
+  >;
+};
+
 /**
  * McpServerRuntimeManager manages MCP servers running in Kubernetes.
  * @public — exported for testability
@@ -34,6 +53,8 @@ export class McpServerRuntimeManager {
   private k8sApi?: k8s.CoreV1Api;
   private k8sAppsApi?: k8s.AppsV1Api;
   private k8sAuthApi?: k8s.AuthorizationV1Api;
+  private k8sNetworkingApi?: k8s.NetworkingV1Api;
+  private k8sCustomObjectsApi?: k8s.CustomObjectsApi;
   private k8sAttach?: k8s.Attach;
   private k8sLog?: k8s.Log;
   private k8sExec?: k8s.Exec;
@@ -53,6 +74,8 @@ export class McpServerRuntimeManager {
       this.k8sApi = clients.coreApi;
       this.k8sAppsApi = clients.appsApi;
       this.k8sAuthApi = clients.authApi;
+      this.k8sNetworkingApi = clients.networkingApi;
+      this.k8sCustomObjectsApi = clients.customObjectsApi;
       this.k8sAttach = clients.attach;
       this.k8sExec = clients.exec;
       this.k8sLog = clients.log;
@@ -63,6 +86,8 @@ export class McpServerRuntimeManager {
       this.k8sApi = undefined;
       this.k8sAppsApi = undefined;
       this.k8sAuthApi = undefined;
+      this.k8sNetworkingApi = undefined;
+      this.k8sCustomObjectsApi = undefined;
       this.k8sAttach = undefined;
       this.k8sLog = undefined;
       this.namespace = "";
@@ -100,7 +125,12 @@ export class McpServerRuntimeManager {
    * Initialize the runtime and start all installed MCP servers
    */
   async start(): Promise<void> {
-    if (!this.k8sApi || !this.k8sAppsApi) {
+    if (
+      !this.k8sApi ||
+      !this.k8sAppsApi ||
+      !this.k8sNetworkingApi ||
+      !this.k8sCustomObjectsApi
+    ) {
       throw new Error("Kubernetes API client not initialized");
     }
 
@@ -123,6 +153,7 @@ export class McpServerRuntimeManager {
 
       // Filter for local servers only (remote servers don't need deployments)
       const localServers: McpServer[] = [];
+      const localCatalogItems: CatalogItem[] = [];
       for (const server of installedServers) {
         if (server.catalogId) {
           const catalogItem = await InternalMcpCatalogModel.findById(
@@ -130,15 +161,25 @@ export class McpServerRuntimeManager {
           );
           if (catalogItem?.serverType === "local") {
             localServers.push(server);
+            localCatalogItems.push(catalogItem);
           }
         }
       }
 
       logger.info(`Found ${localServers.length} local MCP servers to start`);
 
+      const networkPolicyCapabilities = (
+        await getK8sCapabilitiesFromApi(this.k8sCustomObjectsApi)
+      ).networkPolicy;
+      const networkPolicyResolutionCache =
+        await this.buildNetworkPolicyResolutionCache(localCatalogItems);
+
       // Start all local servers in parallel
       const startPromises = localServers.map(async (mcpServer) => {
-        await this.startServer(mcpServer);
+        await this.startServer(mcpServer, undefined, undefined, {
+          networkPolicyCapabilities,
+          networkPolicyResolutionCache,
+        });
       });
 
       const results = await Promise.allSettled(startPromises);
@@ -190,10 +231,106 @@ export class McpServerRuntimeManager {
       | Awaited<ReturnType<typeof InternalMcpCatalogModel.findById>>
       | null
       | undefined,
+    cache?: NetworkPolicyResolutionCache,
   ): Promise<string> {
     if (!catalogItem?.environmentId) return this.namespace;
-    const env = await EnvironmentModel.findById(catalogItem.environmentId);
+    const env =
+      cache?.environmentsById.get(catalogItem.environmentId) ??
+      (await EnvironmentModel.findById(catalogItem.environmentId));
     return env?.namespace ?? this.namespace;
+  }
+
+  private async resolveNetworkPolicyForDeployment(params: {
+    mcpServer: McpServer;
+    catalogItem:
+      | Awaited<ReturnType<typeof InternalMcpCatalogModel.findById>>
+      | null
+      | undefined;
+    cache?: NetworkPolicyResolutionCache;
+  }): Promise<EffectiveNetworkPolicy> {
+    const environment =
+      params.catalogItem?.environmentId && params.cache
+        ? params.cache.environmentsById.get(params.catalogItem.environmentId)
+        : params.catalogItem?.environmentId
+          ? await EnvironmentModel.findById(params.catalogItem.environmentId)
+          : null;
+    const organizationId =
+      params.catalogItem?.organizationId ?? environment?.organizationId ?? null;
+
+    if (!organizationId) {
+      return { source: "built_in", policy: null };
+    }
+
+    const defaultNetworkPolicyId = params.cache
+      ? params.cache.defaultNetworkPolicyIdByOrgId.get(organizationId)
+      : (await OrganizationModel.getById(organizationId))
+          ?.defaultNetworkPolicyId;
+
+    return resolveEffectiveNetworkPolicy({
+      organizationId,
+      environmentId: params.catalogItem?.environmentId,
+      environmentNetworkPolicyId: environment?.networkPolicyId,
+      defaultNetworkPolicyId,
+      networkPoliciesById: params.cache?.networkPoliciesById,
+    });
+  }
+
+  private async buildNetworkPolicyResolutionCache(
+    catalogItems: CatalogItem[],
+  ): Promise<NetworkPolicyResolutionCache> {
+    const environmentIds = uniqueStrings(
+      catalogItems
+        .map((catalogItem) => catalogItem?.environmentId)
+        .filter((id): id is string => Boolean(id)),
+    );
+    const environments = await Promise.all(
+      environmentIds.map((id) => EnvironmentModel.findById(id)),
+    );
+    const environmentsById = new Map<string, EnvironmentRow>();
+    for (const environment of environments) {
+      if (environment) environmentsById.set(environment.id, environment);
+    }
+
+    const organizationIds = uniqueStrings([
+      ...catalogItems
+        .map((catalogItem) => catalogItem?.organizationId)
+        .filter((id): id is string => Boolean(id)),
+      ...environments
+        .map((environment) => environment?.organizationId)
+        .filter((id): id is string => Boolean(id)),
+    ]);
+    const organizations = await Promise.all(
+      organizationIds.map((id) => OrganizationModel.getById(id)),
+    );
+    const defaultNetworkPolicyIdByOrgId = new Map<string, string | null>();
+    for (const organization of organizations) {
+      if (!organization) continue;
+      defaultNetworkPolicyIdByOrgId.set(
+        organization.id,
+        organization.defaultNetworkPolicyId,
+      );
+    }
+
+    const networkPolicyIds = uniqueStrings([
+      ...environments
+        .map((environment) => environment?.networkPolicyId)
+        .filter((id): id is string => Boolean(id)),
+      ...organizations
+        .map((organization) => organization?.defaultNetworkPolicyId)
+        .filter((id): id is string => Boolean(id)),
+    ]);
+    const policies = await NetworkPolicyModel.listByIdsForOrganizations({
+      ids: networkPolicyIds,
+      organizationIds,
+    });
+
+    return {
+      environmentsById,
+      defaultNetworkPolicyIdByOrgId,
+      networkPoliciesById: new Map(
+        policies.map((policy) => [policy.id, policy]),
+      ),
+    };
   }
 
   /**
@@ -225,8 +362,17 @@ export class McpServerRuntimeManager {
     mcpServer: McpServer,
     userConfigValues?: Record<string, string>,
     environmentValues?: Record<string, string>,
+    options?: {
+      networkPolicyCapabilities?: K8sNetworkPolicyCapabilities;
+      networkPolicyResolutionCache?: NetworkPolicyResolutionCache;
+    },
   ): Promise<void> {
-    if (!this.k8sApi || !this.k8sAppsApi) {
+    if (
+      !this.k8sApi ||
+      !this.k8sAppsApi ||
+      !this.k8sNetworkingApi ||
+      !this.k8sCustomObjectsApi
+    ) {
       throw new Error("Kubernetes API client not initialized");
     }
 
@@ -379,12 +525,26 @@ export class McpServerRuntimeManager {
         mcpServer,
         k8sApi: this.k8sApi,
         k8sAppsApi: this.k8sAppsApi,
+        k8sNetworkingApi: this.k8sNetworkingApi,
+        k8sCustomObjectsApi: this.k8sCustomObjectsApi,
         k8sAttach: this.k8sAttach,
         k8sLog: this.k8sLog,
-        namespace: await this.resolveNamespaceForCatalog(catalogItem),
+        namespace: await this.resolveNamespaceForCatalog(
+          catalogItem,
+          options?.networkPolicyResolutionCache,
+        ),
         catalogItem,
         userConfigValues,
         environmentValues: effectiveEnvironmentValues,
+        effectiveNetworkPolicy: await this.resolveNetworkPolicyForDeployment({
+          mcpServer,
+          catalogItem,
+          cache: options?.networkPolicyResolutionCache,
+        }),
+        networkPolicyCapabilities:
+          options?.networkPolicyCapabilities ??
+          (await getK8sCapabilitiesFromApi(this.k8sCustomObjectsApi))
+            .networkPolicy,
         k8sExec: this.k8sExec,
       });
 
@@ -474,6 +634,9 @@ export class McpServerRuntimeManager {
 
         // Delete docker-registry secrets (if any were created for imagePullSecrets)
         await k8sDeployment.deleteDockerRegistrySecrets();
+
+        // Delete K8s NetworkPolicy (if it exists)
+        await k8sDeployment.deleteK8sNetworkPolicy();
       } else {
         logger.info(
           { mcpServerId },
@@ -523,6 +686,8 @@ export class McpServerRuntimeManager {
     if (
       !this.k8sApi ||
       !this.k8sAppsApi ||
+      !this.k8sNetworkingApi ||
+      !this.k8sCustomObjectsApi ||
       !this.k8sAttach ||
       !this.k8sLog ||
       !this.k8sExec
@@ -563,10 +728,19 @@ export class McpServerRuntimeManager {
         mcpServer,
         k8sApi: this.k8sApi,
         k8sAppsApi: this.k8sAppsApi,
+        k8sNetworkingApi: this.k8sNetworkingApi,
+        k8sCustomObjectsApi: this.k8sCustomObjectsApi,
         k8sAttach: this.k8sAttach,
         k8sLog: this.k8sLog,
         namespace: await this.resolveNamespaceForCatalog(catalogItem),
         catalogItem,
+        effectiveNetworkPolicy: await this.resolveNetworkPolicyForDeployment({
+          mcpServer,
+          catalogItem,
+        }),
+        networkPolicyCapabilities: (
+          await getK8sCapabilitiesFromApi(this.k8sCustomObjectsApi)
+        ).networkPolicy,
         k8sExec: this.k8sExec,
       });
 
@@ -674,6 +848,7 @@ export class McpServerRuntimeManager {
       await k8sDeployment.deleteK8sService();
       await k8sDeployment.deleteK8sSecret();
       await k8sDeployment.deleteDockerRegistrySecrets();
+      await k8sDeployment.deleteK8sNetworkPolicy();
     }
 
     // Clear every sibling's in-memory entry — the K8s objects are gone.
@@ -1228,6 +1403,10 @@ export class McpServerRuntimeManager {
     responseStream.write(message);
     responseStream.end();
   }
+}
+
+function uniqueStrings(values: string[]): string[] {
+  return Array.from(new Set(values));
 }
 
 export default new McpServerRuntimeManager();

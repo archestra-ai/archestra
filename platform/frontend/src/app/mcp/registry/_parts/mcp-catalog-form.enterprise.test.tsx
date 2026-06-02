@@ -35,6 +35,7 @@ vi.mock("@/lib/organization.query", () => ({
     name: "Default",
     namespace: null,
     description: null,
+    networkPolicyId: null,
     restricted: false,
   })),
 }));

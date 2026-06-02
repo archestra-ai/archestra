@@ -24,6 +24,10 @@ import type {
 } from "@/types";
 import modelsTable from "./model";
 
+const networkPoliciesReferenceTable = pgTable("network_policies", {
+  id: uuid("id").primaryKey(),
+});
+
 const organizationsTable = pgTable("organization", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
@@ -248,6 +252,16 @@ const organizationsTable = pgTable("organization", {
    * shown in the environment selector. NULL = unset.
    */
   defaultEnvironmentDescription: text("default_environment_description"),
+
+  /**
+   * Optional default network policy for the implicit "default" environment.
+   * Uses a local reference table object to avoid a runtime import cycle with
+   * network_policies, whose organization_id points back here.
+   */
+  defaultNetworkPolicyId: uuid("default_network_policy_id").references(
+    () => networkPoliciesReferenceTable.id,
+    { onDelete: "set null" },
+  ),
 
   /**
    * When true, assigning a catalog item to the implicit "default" environment

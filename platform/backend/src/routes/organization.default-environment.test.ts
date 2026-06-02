@@ -4,6 +4,7 @@ import { type Mock, vi } from "vitest";
 import OrganizationModel from "@/models/organization";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
+import { createNetworkPolicy } from "@/services/environments/network-policy";
 import { afterEach, describe, expect, test } from "@/test";
 import { ApiError, type User } from "@/types";
 
@@ -243,6 +244,63 @@ describe("PATCH /api/organization/default-environment", () => {
     });
     expect(clearRestricted.statusCode).toBe(200);
     expect(clearRestricted.json().defaultEnvironmentRestricted).toBe(false);
+  });
+
+  test("can set and clear the default environment network policy", async ({
+    makeUser,
+    makeOrganization,
+  }) => {
+    vi.clearAllMocks();
+    mockHasPermission.mockResolvedValue({ success: true, error: null });
+    const user = await makeUser();
+    const organization = await makeOrganization();
+    organizationId = organization.id;
+    app = await buildApp(user, organizationId);
+    const policy = await createNetworkPolicy({
+      organizationId,
+      data: { name: "Default egress" },
+    });
+
+    const setPolicy = await app.inject({
+      method: "PATCH",
+      url: "/api/organization/default-environment",
+      payload: { networkPolicyId: policy.id },
+    });
+    expect(setPolicy.statusCode).toBe(200);
+    expect(setPolicy.json().defaultNetworkPolicyId).toBe(policy.id);
+
+    const clearPolicy = await app.inject({
+      method: "PATCH",
+      url: "/api/organization/default-environment",
+      payload: { networkPolicyId: null },
+    });
+    expect(clearPolicy.statusCode).toBe(200);
+    expect(clearPolicy.json().defaultNetworkPolicyId).toBeNull();
+  });
+
+  test("rejects default environment network policy from another organization", async ({
+    makeUser,
+    makeOrganization,
+  }) => {
+    vi.clearAllMocks();
+    mockHasPermission.mockResolvedValue({ success: true, error: null });
+    const user = await makeUser();
+    const organization = await makeOrganization();
+    const otherOrganization = await makeOrganization();
+    organizationId = organization.id;
+    app = await buildApp(user, organizationId);
+    const otherPolicy = await createNetworkPolicy({
+      organizationId: otherOrganization.id,
+      data: { name: "Other org default egress" },
+    });
+
+    const response = await app.inject({
+      method: "PATCH",
+      url: "/api/organization/default-environment",
+      payload: { networkPolicyId: otherPolicy.id },
+    });
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.message).toBe("Network policy not found");
   });
 
   test("member without environment:update is forbidden", async ({

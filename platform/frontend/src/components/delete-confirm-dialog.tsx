@@ -1,10 +1,6 @@
 import { FormDialog } from "@/components/form-dialog";
 import { Button } from "@/components/ui/button";
-import {
-  DialogBody,
-  DialogForm,
-  DialogStickyFooter,
-} from "@/components/ui/dialog";
+import { DialogForm, DialogStickyFooter } from "@/components/ui/dialog";
 
 type DeleteConfirmDialogProps = {
   open: boolean;
@@ -34,6 +30,7 @@ export function DeleteConfirmDialog({
       open={open}
       onOpenChange={onOpenChange}
       title={title}
+      description={description}
       size="small"
     >
       <DialogForm
@@ -56,7 +53,6 @@ export function DeleteConfirmDialog({
           onConfirm();
         }}
       >
-        <DialogBody>{description}</DialogBody>
         <DialogStickyFooter className="mt-0 border-t-0 shadow-none">
           <Button
             type="button"

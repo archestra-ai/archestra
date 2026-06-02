@@ -225,10 +225,13 @@ Chart-managed diagnostics PVCs are validated conservatively. If more than one di
 - `archestra.orchestrator.kubernetes.serviceAccount.annotations` - Annotations for cloud integrations (e.g., [GKE Workload Identity](/docs/platform-supported-llm-providers#gke-with-workload-identity-recommended), AWS IRSA)
 - `archestra.orchestrator.kubernetes.serviceAccount.name` - Name of the service account (auto-generated if not set)
 - `archestra.orchestrator.kubernetes.serviceAccount.imagePullSecrets` - Image pull secrets for the service account
-- `archestra.orchestrator.kubernetes.rbac.create` - Create RBAC resources (default: true)
+- `archestra.orchestrator.kubernetes.rbac.create` - Create RBAC resources for MCP workload management, including pods, services, secrets, deployments, and generated `NetworkPolicy` objects (default: true)
 - `archestra.orchestrator.kubernetes.networkPolicy.create` - Create a `NetworkPolicy` for SSRF protection on MCP server pods (default: false). Blocks egress to private/internal IP ranges (RFC 1918, link-local, loopback) while allowing DNS and public internet access. Requires a CNI plugin that supports `NetworkPolicies` (e.g., Calico, Cilium). See [SSRF Protection](#ssrf-protection-for-mcp-server-pods) for details.
 - `archestra.orchestrator.kubernetes.networkPolicy.additionalDeniedCidrs` - Additional CIDR ranges to block beyond the defaults
 - `archestra.orchestrator.kubernetes.networkPolicy.additionalEgressRules` - Additional egress rules to allow MCP server pods to reach specific internal services that would otherwise be blocked
+
+Environment network policies require the chart's default MCP manager RBAC so Archestra can create Kubernetes `NetworkPolicy` objects and any detected FQDN policy objects. See [Network Policies](/docs/platform-private-registry#network-policies).
+
 - `archestra.orchestrator.kubernetes.mcpServerRbac.create` - Create MCP server RBAC resources (ServiceAccount, Role, RoleBinding) for Kubernetes MCP server (default: true)
 - `archestra.orchestrator.kubernetes.mcpServerRbac.additionalClusterRoleBindings` - Additional ClusterRoleBindings to attach to the MCP K8s operator service account for cluster-wide permissions
 - `archestra.orchestrator.kubernetes.mcpServerRbac.additionalRoleBindings` - Additional RoleBindings to attach to the MCP K8s operator service account for namespace-scoped permissions
@@ -1062,11 +1065,11 @@ MCP Apps run inside sandboxed iframes with cross-origin isolation, CSP enforceme
 
 #### How It Works by Environment
 
-| Environment | Isolation method | Config needed | MCP App capabilities |
-|---|---|---|---|
-| **Local dev / Quickstart** (`localhost`) | `localhost` ↔ `127.0.0.1` origin swap (same port, different origin) | None | Full (localStorage, CORS, etc.) |
-| **Production with sandbox domain** | Dedicated subdomain per MCP server | `ARCHESTRA_MCP_SANDBOX_DOMAIN` + wildcard DNS/TLS | Full |
-| **Production without sandbox domain** | Opaque origin (iframe `sandbox` attribute) | None | Limited (no localStorage, no origin-restricted CORS) |
+| Environment                              | Isolation method                                                    | Config needed                                     | MCP App capabilities                                 |
+| ---------------------------------------- | ------------------------------------------------------------------- | ------------------------------------------------- | ---------------------------------------------------- |
+| **Local dev / Quickstart** (`localhost`) | `localhost` ↔ `127.0.0.1` origin swap (same port, different origin) | None                                              | Full (localStorage, CORS, etc.)                      |
+| **Production with sandbox domain**       | Dedicated subdomain per MCP server                                  | `ARCHESTRA_MCP_SANDBOX_DOMAIN` + wildcard DNS/TLS | Full                                                 |
+| **Production without sandbox domain**    | Opaque origin (iframe `sandbox` attribute)                          | None                                              | Limited (no localStorage, no origin-restricted CORS) |
 
 **Local development and Quickstart** work out of the box with no configuration. The platform automatically swaps `localhost` to `127.0.0.1` (or vice versa) to create a different origin on the same port. This gives MCP Apps full browser API access while maintaining security isolation.
 
@@ -1079,6 +1082,7 @@ Set `ARCHESTRA_MCP_SANDBOX_DOMAIN` when MCP Apps need persistent state or origin
 1. Choose a subdomain for the sandbox (e.g., `mcp.example.com`)
 
 2. Create a **wildcard DNS record**:
+
    ```
    *.mcp.example.com → <backend IP or load balancer>
    ```

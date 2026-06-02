@@ -55,6 +55,7 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   mcpServerInstallation: ["read", "create", "update", "delete", "admin"],
   mcpServerInstallationRequest: ["read", "create", "update", "delete", "admin"],
   environment: ["read", "create", "update", "delete", "admin"],
+  networkPolicy: ["read", "create", "update", "delete"],
 
   // Knowledge
   knowledgeFile: ["read", "create", "update", "delete", "admin"],
@@ -116,6 +117,7 @@ export const editorPermissions: Record<Resource, Action[]> = {
   mcpServerInstallation: ["read", "create", "update", "delete"],
   mcpServerInstallationRequest: ["read", "create", "update", "delete"],
   environment: ["read", "create", "update", "delete"],
+  networkPolicy: ["read", "create", "update", "delete"],
 
   // Knowledge
   knowledgeFile: ["read", "create", "update", "delete"],
@@ -177,6 +179,7 @@ export const memberPermissions: Record<Resource, Action[]> = {
   mcpServerInstallation: ["read", "create", "delete"],
   mcpServerInstallationRequest: ["read", "create", "update"],
   environment: ["read"],
+  networkPolicy: ["read"],
 
   // Knowledge
   knowledgeFile: ["read"],
@@ -296,9 +299,13 @@ export const permissionDescriptions: Record<string, string> = {
     "Approve or decline installation requests",
   "environment:read": "View deployment environments",
   "environment:create": "Create deployment environments",
-  "environment:update": "Modify deployment environment namespace",
+  "environment:update": "Modify deployment environment settings",
   "environment:delete": "Delete deployment environments",
   "environment:admin": "Assign catalog items to restricted environments",
+  "networkPolicy:read": "View network policies",
+  "networkPolicy:create": "Create network policies",
+  "networkPolicy:update": "Modify network policies",
+  "networkPolicy:delete": "Delete network policies",
 
   // LLM
   "llmProxy:read": "View and list LLM proxies",
@@ -986,6 +993,24 @@ export const requiredEndpointPermissionsMap: Partial<
   },
   [RouteId.UpdateDefaultEnvironment]: {
     environment: ["update"],
+  },
+  [RouteId.ValidateEnvironmentNamespace]: {
+    environment: ["read"],
+  },
+  [RouteId.GetK8sCapabilities]: {
+    networkPolicy: ["read"],
+  },
+  [RouteId.ListNetworkPolicies]: {
+    networkPolicy: ["read"],
+  },
+  [RouteId.CreateNetworkPolicy]: {
+    networkPolicy: ["create"],
+  },
+  [RouteId.UpdateNetworkPolicy]: {
+    networkPolicy: ["update"],
+  },
+  [RouteId.DeleteNetworkPolicy]: {
+    networkPolicy: ["delete"],
   },
   [RouteId.UpdateKnowledgeSettings]: {
     knowledgeSettings: ["update"],

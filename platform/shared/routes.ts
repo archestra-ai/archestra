@@ -393,6 +393,12 @@ export const RouteId = {
   UpdateEnvironment: "updateEnvironment",
   DeleteEnvironment: "deleteEnvironment",
   UpdateDefaultEnvironment: "updateDefaultEnvironment",
+  ValidateEnvironmentNamespace: "validateEnvironmentNamespace",
+  GetK8sCapabilities: "getK8sCapabilities",
+  ListNetworkPolicies: "listNetworkPolicies",
+  CreateNetworkPolicy: "createNetworkPolicy",
+  UpdateNetworkPolicy: "updateNetworkPolicy",
+  DeleteNetworkPolicy: "deleteNetworkPolicy",
 
   // Knowledge Settings Routes (organization-level)
   UpdateKnowledgeSettings: "updateKnowledgeSettings",

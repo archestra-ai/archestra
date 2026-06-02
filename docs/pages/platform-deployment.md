@@ -812,6 +812,7 @@ The following environment variables can be used to configure Archestra Platform.
 - **`ARCHESTRA_ANALYTICS`** - Controls PostHog analytics for product improvements.
   - Default: `enabled`
   - Set to `disabled` to opt-out of analytics
+  - When enabled, the backend sends `instance_started` once per installation and `instance_heartbeat` at most once every 24 hours per installation.
 
 - **`ARCHESTRA_ANALYTICS_POSTHOG_KEY`** - PostHog project key used when analytics is enabled.
   - Default: Archestra's hosted PostHog project key
@@ -820,6 +821,10 @@ The following environment variables can be used to configure Archestra Platform.
 - **`ARCHESTRA_ANALYTICS_POSTHOG_HOST`** - PostHog API host used when analytics is enabled.
   - Default: `https://eu.i.posthog.com`
   - Example: `https://posthog.example.com`
+
+- **`ARCHESTRA_ANALYTICS_STATE_DIR`** - Persistent directory for installation-level analytics state.
+  - Default: `/app/data/analytics` in production, `~/.archestra/analytics` in development
+  - Mount this on persistent storage in multi-restart deployments so installation events are not emitted again after a fresh container filesystem.
 
 - **`ARCHESTRA_LOGGING_LEVEL`** - Log level for Archestra
   - Default: `info`

@@ -67,6 +67,7 @@ describe("getAnalyticsConfig", () => {
         key: expect.stringMatching(/^phc_/),
         host: "https://eu.i.posthog.com",
       },
+      stateDir: expect.any(String),
     });
   });
 
@@ -75,6 +76,7 @@ describe("getAnalyticsConfig", () => {
     process.env.ARCHESTRA_ANALYTICS_POSTHOG_KEY = " ph_custom ";
     process.env.ARCHESTRA_ANALYTICS_POSTHOG_HOST =
       " https://posthog.example.com ";
+    process.env.ARCHESTRA_ANALYTICS_STATE_DIR = " /tmp/archestra-analytics ";
 
     expect(getAnalyticsConfig()).toEqual({
       enabled: false,
@@ -82,6 +84,7 @@ describe("getAnalyticsConfig", () => {
         key: "ph_custom",
         host: "https://posthog.example.com",
       },
+      stateDir: "/tmp/archestra-analytics",
     });
   });
 });

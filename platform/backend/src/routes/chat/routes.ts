@@ -123,6 +123,7 @@ import {
   isRetryableEmptyFinishReason,
   probeFirstRenderableEvent,
 } from "./stream-probe";
+import { createToolUiStartTransform } from "./tool-ui-stream";
 
 const PromoteChatAttachmentResultSchema = z.object({
   filename: z.string(),
@@ -611,12 +612,13 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   }
                 }, 5000);
 
-                // Prefetch all UI resources eagerly before streaming starts
-                // so onChunk can write data-tool-ui-start synchronously.
-                // Even with LRU caching, .then() on a resolved promise runs
-                // as a microtask — the stream processes more chunks before
-                // the microtask fires, causing data-tool-ui-start to arrive
-                // after all tool deltas instead of right after tool-input-start.
+                // Prefetch all UI resources eagerly before streaming starts so
+                // the merge transform below can emit data-tool-ui-start
+                // synchronously right after each tool-input-start chunk. A
+                // .then() on a resolved promise runs as a microtask — the stream
+                // would process more chunks before it fires, landing
+                // data-tool-ui-start after all tool deltas instead of right
+                // after tool-input-start.
                 const MAX_SSE_HTML_BYTES = 1024 * 1024;
                 const prefetchedUiResources = new Map<
                   string,
@@ -662,31 +664,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                     ),
                   );
                 }
-
-                // Emit data-tool-ui-start synchronously in onChunk so it
-                // arrives right after tool-input-start, before any deltas.
-                const streamTextOnChunk: NonNullable<
-                  Parameters<typeof streamText>[0]["onChunk"]
-                > = ({ chunk }) => {
-                  if (chunk.type === "tool-input-start" && chunk.toolName) {
-                    const prefetched = prefetchedUiResources.get(
-                      chunk.toolName,
-                    );
-                    if (prefetched) {
-                      writer.write({
-                        type: "data-tool-ui-start",
-                        data: {
-                          toolCallId: chunk.id,
-                          toolName: chunk.toolName,
-                          uiResourceUri: toolUiResourceUris[chunk.toolName],
-                          html: prefetched.html,
-                          csp: prefetched.csp,
-                          permissions: prefetched.permissions,
-                        },
-                      });
-                    }
-                  }
-                };
 
                 let compactionStarted = false;
                 const compactionResult = await compactMessagesForChat({
@@ -745,7 +722,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   ...(supportsToolCalling && { tools: mcpTools }),
                   stopWhen: buildChatStopConditions(),
                   abortSignal: chatAbortController.signal,
-                  onChunk: streamTextOnChunk,
                   // Emit per-step usage so the context indicator tracks the
                   // prompt growing across tool round-trips, instead of jumping
                   // only once when the whole turn finishes.
@@ -910,161 +886,169 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 // (e.g. two unavailable tools in one step) independently.
                 const returnedChatErrorPayloads = new Set<string>();
 
-                writer.merge(
-                  result.toUIMessageStream({
-                    originalMessages: messages as UIMessage[],
-                    // Give the streamed assistant message a stable id. Without
-                    // generateMessageId the AI SDK leaves the response message
-                    // id empty, so the persisted assistant row can't be matched
-                    // when the approval resume re-sends the turn — the resolved
-                    // turn is appended as new rows while the original
-                    // approval-requested row is orphaned and re-renders a stale
-                    // prompt on reload (#4030).
-                    generateMessageId: generateId,
-                    onError: (error) => {
-                      const incomingErrorMessage =
-                        error instanceof Error ? error.message : String(error);
-                      if (returnedChatErrorPayloads.has(incomingErrorMessage)) {
-                        return incomingErrorMessage;
-                      }
+                const modelUiStream = result.toUIMessageStream({
+                  originalMessages: messages as UIMessage[],
+                  // Give the streamed assistant message a stable id. Without
+                  // generateMessageId the AI SDK leaves the response message
+                  // id empty, so the persisted assistant row can't be matched
+                  // when the approval resume re-sends the turn — the resolved
+                  // turn is appended as new rows while the original
+                  // approval-requested row is orphaned and re-renders a stale
+                  // prompt on reload (#4030).
+                  generateMessageId: generateId,
+                  onError: (error) => {
+                    const incomingErrorMessage =
+                      error instanceof Error ? error.message : String(error);
+                    if (returnedChatErrorPayloads.has(incomingErrorMessage)) {
+                      return incomingErrorMessage;
+                    }
 
-                      const unavailableToolError =
-                        getUnavailableToolErrorDetails(error);
-                      if (unavailableToolError) {
-                        const serializedToolError =
-                          formatUnavailableToolErrorDetails(
-                            unavailableToolError,
-                          );
-                        returnedChatErrorPayloads.add(serializedToolError);
-                        logger.info(
-                          {
-                            conversationId,
-                            unavailableToolError,
-                          },
-                          "Returning unavailable tool error as tool-level error",
-                        );
-                        return serializedToolError;
-                      }
-
-                      const traceContext = getActiveTraceContext();
-                      const correlationLogFields =
-                        getCorrelationLogFields(traceContext);
-
-                      // Use pre-built error from subagent if available (preserves correct provider),
-                      // otherwise map the error with the current provider
-                      const mappedError: ChatErrorResponse =
-                        error instanceof ProviderError
-                          ? error.chatErrorResponse
-                          : mapProviderError(error, provider);
-                      const fullError = { ...mappedError, ...traceContext };
-                      const errorForFrontend = slimChatErrorUi
-                        ? sanitizeChatErrorForFrontend(fullError)
-                        : fullError;
-
-                      // mapProviderError safely serializes raw errors, but add defensive try-catch
-                      let serializedChatError: string;
-                      try {
-                        serializedChatError = JSON.stringify(errorForFrontend);
-                      } catch (stringifyError) {
-                        logger.error(
-                          {
-                            stringifyError,
-                            errorCode: mappedError.code,
-                            ...correlationLogFields,
-                          },
-                          "Failed to stringify mapped error, returning minimal error",
-                        );
-                        serializedChatError = JSON.stringify(
-                          getMinimalFrontendError(errorForFrontend),
-                        );
-                      }
-                      returnedChatErrorPayloads.add(serializedChatError);
-
-                      activeRunError =
-                        error instanceof Error ? error.message : String(error);
-                      // Claim persistence before the async work below starts,
-                      // otherwise onFinish can race and also persist (duplicates).
-                      const shouldPersist =
-                        !messagesPersisted && !!conversationId;
-                      if (shouldPersist) {
-                        messagesPersisted = true;
-                      }
-
-                      (async () => {
-                        logger.error(
-                          {
-                            error,
-                            conversationId,
-                            agentId,
-                            ...correlationLogFields,
-                          },
-                          "Chat stream error occurred",
-                        );
-
-                        // Persist messages despite error so they have a valid ID for editing
-                        if (shouldPersist) {
-                          try {
-                            await persistNewMessages(
-                              conversationId,
-                              messages,
-                              "onError",
-                            );
-                          } catch (persistError) {
-                            // Log persistence error but don't prevent the error response
-                            logger.error(
-                              { persistError, conversationId },
-                              "Failed to persist messages during error handling",
-                            );
-                          }
-                        }
-                      })().catch((err) => {
-                        // Log any errors from the async IIFE but don't crash
-                        logger.error(
-                          { err },
-                          "Unexpected error in onError async handler",
-                        );
-                      });
-
-                      persistConversationChatError({
-                        conversationId,
-                        error: errorForFrontend,
-                      });
-
+                    const unavailableToolError =
+                      getUnavailableToolErrorDetails(error);
+                    if (unavailableToolError) {
+                      const serializedToolError =
+                        formatUnavailableToolErrorDetails(unavailableToolError);
+                      returnedChatErrorPayloads.add(serializedToolError);
                       logger.info(
                         {
-                          mappedError: fullError,
-                          originalErrorType:
-                            error instanceof Error ? error.name : typeof error,
-                          willBeSentToFrontend: true,
+                          conversationId,
+                          unavailableToolError,
+                        },
+                        "Returning unavailable tool error as tool-level error",
+                      );
+                      return serializedToolError;
+                    }
+
+                    const traceContext = getActiveTraceContext();
+                    const correlationLogFields =
+                      getCorrelationLogFields(traceContext);
+
+                    // Use pre-built error from subagent if available (preserves correct provider),
+                    // otherwise map the error with the current provider
+                    const mappedError: ChatErrorResponse =
+                      error instanceof ProviderError
+                        ? error.chatErrorResponse
+                        : mapProviderError(error, provider);
+                    const fullError = { ...mappedError, ...traceContext };
+                    const errorForFrontend = slimChatErrorUi
+                      ? sanitizeChatErrorForFrontend(fullError)
+                      : fullError;
+
+                    // mapProviderError safely serializes raw errors, but add defensive try-catch
+                    let serializedChatError: string;
+                    try {
+                      serializedChatError = JSON.stringify(errorForFrontend);
+                    } catch (stringifyError) {
+                      logger.error(
+                        {
+                          stringifyError,
+                          errorCode: mappedError.code,
                           ...correlationLogFields,
                         },
-                        "Returning mapped error to frontend via stream",
+                        "Failed to stringify mapped error, returning minimal error",
+                      );
+                      serializedChatError = JSON.stringify(
+                        getMinimalFrontendError(errorForFrontend),
+                      );
+                    }
+                    returnedChatErrorPayloads.add(serializedChatError);
+
+                    activeRunError =
+                      error instanceof Error ? error.message : String(error);
+                    // Claim persistence before the async work below starts,
+                    // otherwise onFinish can race and also persist (duplicates).
+                    const shouldPersist =
+                      !messagesPersisted && !!conversationId;
+                    if (shouldPersist) {
+                      messagesPersisted = true;
+                    }
+
+                    (async () => {
+                      logger.error(
+                        {
+                          error,
+                          conversationId,
+                          agentId,
+                          ...correlationLogFields,
+                        },
+                        "Chat stream error occurred",
                       );
 
-                      return serializedChatError;
-                    },
-                    onFinish: async ({ messages: finalMessages }) => {
-                      removeAbortListeners();
-                      stopActiveRunPolling();
-
-                      // Only persist if not already persisted by onError
-                      if (!messagesPersisted && conversationId) {
+                      // Persist messages despite error so they have a valid ID for editing
+                      if (shouldPersist) {
                         try {
                           await persistNewMessages(
                             conversationId,
-                            finalMessages,
-                            "onFinish",
+                            messages,
+                            "onError",
                           );
-                          messagesPersisted = true;
-                        } catch (error) {
+                        } catch (persistError) {
+                          // Log persistence error but don't prevent the error response
                           logger.error(
-                            { error, conversationId },
-                            "Failed to persist messages during onFinish",
+                            { persistError, conversationId },
+                            "Failed to persist messages during error handling",
                           );
                         }
                       }
-                    },
-                  }),
+                    })().catch((err) => {
+                      // Log any errors from the async IIFE but don't crash
+                      logger.error(
+                        { err },
+                        "Unexpected error in onError async handler",
+                      );
+                    });
+
+                    persistConversationChatError({
+                      conversationId,
+                      error: errorForFrontend,
+                    });
+
+                    logger.info(
+                      {
+                        mappedError: fullError,
+                        originalErrorType:
+                          error instanceof Error ? error.name : typeof error,
+                        willBeSentToFrontend: true,
+                        ...correlationLogFields,
+                      },
+                      "Returning mapped error to frontend via stream",
+                    );
+
+                    return serializedChatError;
+                  },
+                  onFinish: async ({ messages: finalMessages }) => {
+                    removeAbortListeners();
+                    stopActiveRunPolling();
+
+                    // Only persist if not already persisted by onError
+                    if (!messagesPersisted && conversationId) {
+                      try {
+                        await persistNewMessages(
+                          conversationId,
+                          finalMessages,
+                          "onFinish",
+                        );
+                        messagesPersisted = true;
+                      } catch (error) {
+                        logger.error(
+                          { error, conversationId },
+                          "Failed to persist messages during onFinish",
+                        );
+                      }
+                    }
+                  },
+                });
+
+                // Inject data-tool-ui-start right after each tool-input-start
+                // chunk (see createToolUiStartTransform — kept out of onChunk so
+                // the empty-response probe can't emit it before its own tool).
+                writer.merge(
+                  modelUiStream.pipeThrough(
+                    createToolUiStartTransform({
+                      prefetchedUiResources,
+                      toolUiResourceUris,
+                    }),
+                  ),
                 );
 
                 // Wait for the stream to complete and get usage data.

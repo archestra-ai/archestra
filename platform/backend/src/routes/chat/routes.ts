@@ -806,7 +806,11 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 const MAX_CONTEXT_TRIM_ATTEMPTS = 1;
                 let emptyResponseAttempts = 0;
                 let contextTrimAttempts = 0;
-                let result = streamText(streamTextConfig);
+                // the config the loop retries from; trim replaces its messages so
+                // a later empty-response retry reuses the trimmed payload instead
+                // of resending the original (too-large) one.
+                let currentConfig = streamTextConfig;
+                let result = streamText(currentConfig);
 
                 while (true) {
                   const probe = await probeFirstRenderableEvent(
@@ -838,10 +842,11 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                         },
                         "[ContextTrimming] retrying with trimmed messages",
                       );
-                      result = streamText({
-                        ...streamTextConfig,
+                      currentConfig = {
+                        ...currentConfig,
                         messages: trimmed,
-                      });
+                      };
+                      result = streamText(currentConfig);
                       continue;
                     }
                     // Non-context error, or context-trim retries exhausted: fall
@@ -865,7 +870,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                       },
                       "[EmptyResponse] model produced no content, retrying",
                     );
-                    result = streamText(streamTextConfig);
+                    result = streamText(currentConfig);
                     continue;
                   }
 

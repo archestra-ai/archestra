@@ -1040,6 +1040,43 @@ describe("POST /api/chat empty-response retry", () => {
     expect(payload.code).toBe("empty_response");
   });
 
+  test("reuses the trimmed payload when a trimmed attempt then returns empty", async ({
+    expect,
+  }) => {
+    // messages large enough that trimMessagesToTokenLimit (400-char budget for the
+    // mocked 100-token limit) actually drops content, so the trimmed payload is
+    // observably different from the original.
+    const longContent = "x".repeat(300);
+    mockCompactMessagesForChat.mockImplementation(async () => ({
+      messages: [
+        { role: "user", content: longContent },
+        { role: "assistant", content: longContent },
+        { role: "user", content: longContent },
+      ],
+      status: "skipped",
+      compaction: null,
+      reason: "below_threshold",
+    }));
+    mockStreamText
+      .mockImplementationOnce(() => fakeContextLengthErrorResult())
+      .mockImplementationOnce(() => fakeStreamResult(EMPTY_STREAM_EVENTS))
+      .mockImplementationOnce(() => fakeStreamResult(RENDERABLE_STREAM_EVENTS));
+
+    const response = await postMessage();
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+
+    expect(mockStreamText).toHaveBeenCalledTimes(3);
+    const originalMessages = mockStreamText.mock.calls[0][0].messages;
+    const trimmedMessages = mockStreamText.mock.calls[1][0].messages;
+    const emptyRetryMessages = mockStreamText.mock.calls[2][0].messages;
+    // the trim must have actually changed the payload, otherwise this test proves
+    // nothing about which payload the empty-retry resends.
+    expect(trimmedMessages).not.toEqual(originalMessages);
+    // the empty-response retry resends the trimmed payload, not the original.
+    expect(emptyRetryMessages).toEqual(trimmedMessages);
+  });
+
   test("bounds context-trim retries instead of looping on a repeated context-length error", async ({
     expect,
   }) => {

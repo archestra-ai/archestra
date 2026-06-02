@@ -55,6 +55,31 @@ describe("probeFirstRenderableEvent", () => {
     });
   });
 
+  test("treats a resume turn opening with tool-output-denied as renderable", async () => {
+    const events: StreamProbeEvent[] = [
+      { type: "start" },
+      { type: "start-step" },
+      { type: "tool-output-denied" },
+      { type: "finish", finishReason: "stop" },
+    ];
+
+    expect(await probeFirstRenderableEvent(iteratorOf(events))).toEqual({
+      kind: "renderable",
+    });
+  });
+
+  test("treats a tool-error opening as renderable", async () => {
+    const events: StreamProbeEvent[] = [
+      { type: "start" },
+      { type: "tool-error" },
+      { type: "finish", finishReason: "stop" },
+    ];
+
+    expect(await probeFirstRenderableEvent(iteratorOf(events))).toEqual({
+      kind: "renderable",
+    });
+  });
+
   test("treats a reasoning-only opening as renderable", async () => {
     const events: StreamProbeEvent[] = [
       { type: "start" },

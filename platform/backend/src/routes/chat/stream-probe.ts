@@ -27,8 +27,16 @@ const RENDERABLE_EVENT_TYPES: ReadonlySet<string> = new Set([
   "reasoning-start",
   "reasoning-delta",
   "tool-input-start",
+  "tool-input-delta",
+  "tool-input-end",
   "tool-call",
   "tool-result",
+  // tool failure, denial, and approval-request parts are all UI-rendered turn
+  // state. A resume turn (input arrived in a prior turn) can open with one of
+  // these and no preceding tool-input-start, so they must count as renderable.
+  "tool-error",
+  "tool-output-denied",
+  "tool-approval-request",
   "source",
   "file",
 ]);

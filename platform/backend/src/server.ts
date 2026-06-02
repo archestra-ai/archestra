@@ -64,6 +64,7 @@ import { initAuditRegistry } from "@/middleware/audit-log-registry";
 import OrganizationModel from "@/models/organization";
 import { initializeObservabilityMetrics } from "@/observability";
 import { enrichOpenApiWithRbac } from "@/openapi/enrich-openapi-with-rbac";
+import { instanceAnalyticsService } from "@/services/instance-analytics";
 import { systemKeyManager } from "@/services/system-key-manager";
 import { skillSandboxRuntimeService } from "@/skills-sandbox/skill-sandbox-runtime-service";
 import { taskQueueService } from "@/task-queue";
@@ -898,6 +899,10 @@ const startWebServer = async () => {
     logger.info(
       `Observability initialized with ${labelKeys.length} agent label keys`,
     );
+
+    instanceAnalyticsService.trackStartup().catch((error) => {
+      logger.warn({ err: error }, "Failed to track instance analytics");
+    });
 
     startMcpServerRuntime(fastify);
 

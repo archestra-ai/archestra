@@ -50,6 +50,42 @@ export type ChatMessage = {
   metadata?: unknown;
 };
 
+// Control/telemetry parts the chat UI skips and providers never see. An
+// assistant turn left with only these (e.g. a `step-start` after a dangling
+// tool call is stripped) renders nothing, so it must not count as content.
+// `data-tool-ui-start` is deliberately absent — the UI renders it as an MCP app.
+const NON_RENDERABLE_ASSISTANT_PART_TYPES: ReadonlySet<string> = new Set([
+  "step-start",
+  "data-token-usage",
+  "data-heartbeat",
+  "data-context-window-estimate",
+  "data-context-compaction-start",
+  "data-context-compaction-finish",
+]);
+
+/**
+ * True when an assistant message still carries something the chat UI can
+ * render: a non-empty text part, or any non-text part that is not a known
+ * non-renderable control/telemetry marker (so completed tool results,
+ * reasoning, files, MCP-app parts all count). An assistant turn left with no
+ * parts — or only empty text / control parts — after normalization is not
+ * renderable and must not be persisted or shown. Fails safe toward keeping:
+ * an unrecognized part type counts as content. Structurally typed so both
+ * backend `ChatMessagePart`s and the frontend's AI SDK `UIMessage` parts
+ * satisfy it.
+ */
+export function hasRenderableAssistantContent(message: {
+  parts?: ReadonlyArray<{ type: string; text?: unknown }>;
+}): boolean {
+  return (message.parts ?? []).some((part) => {
+    if (part.type === "text") {
+      return Boolean(part.text);
+    }
+
+    return !NON_RENDERABLE_ASSISTANT_PART_TYPES.has(part.type);
+  });
+}
+
 /**
  * The skill a user explicitly invoked via slash command, carried on the user
  * message's metadata. The backend uses it to inject the skill's activation

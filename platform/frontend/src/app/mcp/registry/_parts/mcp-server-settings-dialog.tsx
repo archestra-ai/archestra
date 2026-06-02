@@ -1,7 +1,7 @@
 "use client";
 
 import { E2eTestId, type McpDeploymentStatusEntry } from "@shared";
-import { AlertCircle, Copy, PlugZap, RefreshCw, XIcon } from "lucide-react";
+import { AlertCircle, PlugZap, RefreshCw, XIcon } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { Button } from "@/components/ui/button";
@@ -365,7 +365,7 @@ export function McpServerSettingsDialog({
             <div className="px-2 pb-3 flex flex-col gap-1.5">
               {!hasPersonalConnection && onConnect && (
                 <Button
-                  variant="outline"
+                  variant="ghost"
                   size="sm"
                   className="w-full justify-start"
                   onClick={() =>
@@ -392,13 +392,12 @@ export function McpServerSettingsDialog({
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="w-full justify-start gap-2"
+                  className="w-full justify-start"
                   onClick={() => {
                     handleClose();
                     onClone();
                   }}
                 >
-                  <Copy className="h-4 w-4" />
                   Clone
                 </Button>
               )}

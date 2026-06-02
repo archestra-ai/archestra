@@ -19603,12 +19603,14 @@ export type GetChatConversationsResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                usageLimitExceeded?: boolean;
+                usageLimitEntityType?: string;
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -19752,12 +19754,14 @@ export type CreateChatConversationResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                usageLimitExceeded?: boolean;
+                usageLimitEntityType?: string;
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -19983,12 +19987,14 @@ export type GetChatConversationResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                usageLimitExceeded?: boolean;
+                usageLimitEntityType?: string;
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -20136,12 +20142,14 @@ export type UpdateChatConversationResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                usageLimitExceeded?: boolean;
+                usageLimitEntityType?: string;
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -20449,12 +20457,14 @@ export type ForkChatConversationResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                usageLimitExceeded?: boolean;
+                usageLimitEntityType?: string;
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -20699,12 +20709,14 @@ export type CompactChatConversationResponses = {
                 id: string;
                 conversationId: string;
                 error: {
-                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'unknown';
+                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'unknown';
                     message: string;
                     isRetryable: boolean;
                     sessionId?: string;
                     traceId?: string;
                     spanId?: string;
+                    usageLimitExceeded?: boolean;
+                    usageLimitEntityType?: string;
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                         status?: number;
@@ -21119,12 +21131,14 @@ export type GetSharedConversationResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                usageLimitExceeded?: boolean;
+                usageLimitEntityType?: string;
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -21268,12 +21282,14 @@ export type ForkSharedConversationResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                usageLimitExceeded?: boolean;
+                usageLimitEntityType?: string;
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -21419,12 +21435,14 @@ export type GenerateChatConversationTitleResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                usageLimitExceeded?: boolean;
+                usageLimitEntityType?: string;
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -21569,12 +21587,14 @@ export type UpdateChatMessageResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                usageLimitExceeded?: boolean;
+                usageLimitEntityType?: string;
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -24973,12 +24993,14 @@ export type GetInteractionsResponses = {
                 id: string;
                 conversationId: string;
                 error: {
-                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'unknown';
+                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'unknown';
                     message: string;
                     isRetryable: boolean;
                     sessionId?: string;
                     traceId?: string;
                     spanId?: string;
+                    usageLimitExceeded?: boolean;
+                    usageLimitEntityType?: string;
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                         status?: number;
@@ -25156,12 +25178,14 @@ export type GetInteractionsResponses = {
                 id: string;
                 conversationId: string;
                 error: {
-                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'unknown';
+                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'unknown';
                     message: string;
                     isRetryable: boolean;
                     sessionId?: string;
                     traceId?: string;
                     spanId?: string;
+                    usageLimitExceeded?: boolean;
+                    usageLimitEntityType?: string;
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                         status?: number;
@@ -25245,12 +25269,14 @@ export type GetInteractionsResponses = {
                 id: string;
                 conversationId: string;
                 error: {
-                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'unknown';
+                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'unknown';
                     message: string;
                     isRetryable: boolean;
                     sessionId?: string;
                     traceId?: string;
                     spanId?: string;
+                    usageLimitExceeded?: boolean;
+                    usageLimitEntityType?: string;
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                         status?: number;
@@ -25310,12 +25336,14 @@ export type GetInteractionsResponses = {
                 id: string;
                 conversationId: string;
                 error: {
-                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'unknown';
+                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'unknown';
                     message: string;
                     isRetryable: boolean;
                     sessionId?: string;
                     traceId?: string;
                     spanId?: string;
+                    usageLimitExceeded?: boolean;
+                    usageLimitEntityType?: string;
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                         status?: number;
@@ -25377,12 +25405,14 @@ export type GetInteractionsResponses = {
                 id: string;
                 conversationId: string;
                 error: {
-                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'unknown';
+                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'unknown';
                     message: string;
                     isRetryable: boolean;
                     sessionId?: string;
                     traceId?: string;
                     spanId?: string;
+                    usageLimitExceeded?: boolean;
+                    usageLimitEntityType?: string;
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                         status?: number;
@@ -25818,12 +25848,14 @@ export type GetInteractionsResponses = {
                 id: string;
                 conversationId: string;
                 error: {
-                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'unknown';
+                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'unknown';
                     message: string;
                     isRetryable: boolean;
                     sessionId?: string;
                     traceId?: string;
                     spanId?: string;
+                    usageLimitExceeded?: boolean;
+                    usageLimitEntityType?: string;
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                         status?: number;
@@ -25885,12 +25917,14 @@ export type GetInteractionsResponses = {
                 id: string;
                 conversationId: string;
                 error: {
-                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'unknown';
+                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'unknown';
                     message: string;
                     isRetryable: boolean;
                     sessionId?: string;
                     traceId?: string;
                     spanId?: string;
+                    usageLimitExceeded?: boolean;
+                    usageLimitEntityType?: string;
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                         status?: number;
@@ -25952,12 +25986,14 @@ export type GetInteractionsResponses = {
                 id: string;
                 conversationId: string;
                 error: {
-                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'unknown';
+                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'unknown';
                     message: string;
                     isRetryable: boolean;
                     sessionId?: string;
                     traceId?: string;
                     spanId?: string;
+                    usageLimitExceeded?: boolean;
+                    usageLimitEntityType?: string;
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                         status?: number;
@@ -26019,12 +26055,14 @@ export type GetInteractionsResponses = {
                 id: string;
                 conversationId: string;
                 error: {
-                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'unknown';
+                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'unknown';
                     message: string;
                     isRetryable: boolean;
                     sessionId?: string;
                     traceId?: string;
                     spanId?: string;
+                    usageLimitExceeded?: boolean;
+                    usageLimitEntityType?: string;
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                         status?: number;
@@ -26086,12 +26124,14 @@ export type GetInteractionsResponses = {
                 id: string;
                 conversationId: string;
                 error: {
-                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'unknown';
+                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'unknown';
                     message: string;
                     isRetryable: boolean;
                     sessionId?: string;
                     traceId?: string;
                     spanId?: string;
+                    usageLimitExceeded?: boolean;
+                    usageLimitEntityType?: string;
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                         status?: number;
@@ -26153,12 +26193,14 @@ export type GetInteractionsResponses = {
                 id: string;
                 conversationId: string;
                 error: {
-                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'unknown';
+                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'unknown';
                     message: string;
                     isRetryable: boolean;
                     sessionId?: string;
                     traceId?: string;
                     spanId?: string;
+                    usageLimitExceeded?: boolean;
+                    usageLimitEntityType?: string;
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                         status?: number;
@@ -26220,12 +26262,14 @@ export type GetInteractionsResponses = {
                 id: string;
                 conversationId: string;
                 error: {
-                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'unknown';
+                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'unknown';
                     message: string;
                     isRetryable: boolean;
                     sessionId?: string;
                     traceId?: string;
                     spanId?: string;
+                    usageLimitExceeded?: boolean;
+                    usageLimitEntityType?: string;
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                         status?: number;
@@ -26287,12 +26331,14 @@ export type GetInteractionsResponses = {
                 id: string;
                 conversationId: string;
                 error: {
-                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'unknown';
+                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'unknown';
                     message: string;
                     isRetryable: boolean;
                     sessionId?: string;
                     traceId?: string;
                     spanId?: string;
+                    usageLimitExceeded?: boolean;
+                    usageLimitEntityType?: string;
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                         status?: number;
@@ -26352,12 +26398,14 @@ export type GetInteractionsResponses = {
                 id: string;
                 conversationId: string;
                 error: {
-                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'unknown';
+                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'unknown';
                     message: string;
                     isRetryable: boolean;
                     sessionId?: string;
                     traceId?: string;
                     spanId?: string;
+                    usageLimitExceeded?: boolean;
+                    usageLimitEntityType?: string;
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                         status?: number;
@@ -26417,12 +26465,14 @@ export type GetInteractionsResponses = {
                 id: string;
                 conversationId: string;
                 error: {
-                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'unknown';
+                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'unknown';
                     message: string;
                     isRetryable: boolean;
                     sessionId?: string;
                     traceId?: string;
                     spanId?: string;
+                    usageLimitExceeded?: boolean;
+                    usageLimitEntityType?: string;
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                         status?: number;
@@ -26484,12 +26534,14 @@ export type GetInteractionsResponses = {
                 id: string;
                 conversationId: string;
                 error: {
-                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'unknown';
+                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'unknown';
                     message: string;
                     isRetryable: boolean;
                     sessionId?: string;
                     traceId?: string;
                     spanId?: string;
+                    usageLimitExceeded?: boolean;
+                    usageLimitEntityType?: string;
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                         status?: number;
@@ -26551,12 +26603,14 @@ export type GetInteractionsResponses = {
                 id: string;
                 conversationId: string;
                 error: {
-                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'unknown';
+                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'unknown';
                     message: string;
                     isRetryable: boolean;
                     sessionId?: string;
                     traceId?: string;
                     spanId?: string;
+                    usageLimitExceeded?: boolean;
+                    usageLimitEntityType?: string;
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                         status?: number;
@@ -26618,12 +26672,14 @@ export type GetInteractionsResponses = {
                 id: string;
                 conversationId: string;
                 error: {
-                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'unknown';
+                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'unknown';
                     message: string;
                     isRetryable: boolean;
                     sessionId?: string;
                     traceId?: string;
                     spanId?: string;
+                    usageLimitExceeded?: boolean;
+                    usageLimitEntityType?: string;
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                         status?: number;
@@ -26752,12 +26808,14 @@ export type GetInteractionsResponses = {
                 id: string;
                 conversationId: string;
                 error: {
-                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'unknown';
+                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'unknown';
                     message: string;
                     isRetryable: boolean;
                     sessionId?: string;
                     traceId?: string;
                     spanId?: string;
+                    usageLimitExceeded?: boolean;
+                    usageLimitEntityType?: string;
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                         status?: number;
@@ -26935,12 +26993,14 @@ export type GetInteractionsResponses = {
                 id: string;
                 conversationId: string;
                 error: {
-                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'unknown';
+                    code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'unknown';
                     message: string;
                     isRetryable: boolean;
                     sessionId?: string;
                     traceId?: string;
                     spanId?: string;
+                    usageLimitExceeded?: boolean;
+                    usageLimitEntityType?: string;
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                         status?: number;
@@ -27416,12 +27476,14 @@ export type GetInteractionResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                usageLimitExceeded?: boolean;
+                usageLimitEntityType?: string;
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -27599,12 +27661,14 @@ export type GetInteractionResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                usageLimitExceeded?: boolean;
+                usageLimitEntityType?: string;
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -27688,12 +27752,14 @@ export type GetInteractionResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                usageLimitExceeded?: boolean;
+                usageLimitEntityType?: string;
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -27753,12 +27819,14 @@ export type GetInteractionResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                usageLimitExceeded?: boolean;
+                usageLimitEntityType?: string;
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -27820,12 +27888,14 @@ export type GetInteractionResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                usageLimitExceeded?: boolean;
+                usageLimitEntityType?: string;
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -28261,12 +28331,14 @@ export type GetInteractionResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                usageLimitExceeded?: boolean;
+                usageLimitEntityType?: string;
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -28328,12 +28400,14 @@ export type GetInteractionResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                usageLimitExceeded?: boolean;
+                usageLimitEntityType?: string;
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -28395,12 +28469,14 @@ export type GetInteractionResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                usageLimitExceeded?: boolean;
+                usageLimitEntityType?: string;
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -28462,12 +28538,14 @@ export type GetInteractionResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                usageLimitExceeded?: boolean;
+                usageLimitEntityType?: string;
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -28529,12 +28607,14 @@ export type GetInteractionResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                usageLimitExceeded?: boolean;
+                usageLimitEntityType?: string;
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -28596,12 +28676,14 @@ export type GetInteractionResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                usageLimitExceeded?: boolean;
+                usageLimitEntityType?: string;
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -28663,12 +28745,14 @@ export type GetInteractionResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                usageLimitExceeded?: boolean;
+                usageLimitEntityType?: string;
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -28730,12 +28814,14 @@ export type GetInteractionResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                usageLimitExceeded?: boolean;
+                usageLimitEntityType?: string;
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -28795,12 +28881,14 @@ export type GetInteractionResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                usageLimitExceeded?: boolean;
+                usageLimitEntityType?: string;
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -28860,12 +28948,14 @@ export type GetInteractionResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                usageLimitExceeded?: boolean;
+                usageLimitEntityType?: string;
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -28927,12 +29017,14 @@ export type GetInteractionResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                usageLimitExceeded?: boolean;
+                usageLimitEntityType?: string;
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -28994,12 +29086,14 @@ export type GetInteractionResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                usageLimitExceeded?: boolean;
+                usageLimitEntityType?: string;
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -29061,12 +29155,14 @@ export type GetInteractionResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                usageLimitExceeded?: boolean;
+                usageLimitEntityType?: string;
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -29195,12 +29291,14 @@ export type GetInteractionResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                usageLimitExceeded?: boolean;
+                usageLimitEntityType?: string;
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -29378,12 +29476,14 @@ export type GetInteractionResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                usageLimitExceeded?: boolean;
+                usageLimitEntityType?: string;
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -35824,7 +35924,7 @@ export type GetLimitsResponses = {
         mcpServerName: string | null;
         toolName: string | null;
         model?: Array<string> | null;
-        cleanupInterval?: '1h' | '12h' | '24h' | '1w' | '1m';
+        cleanupInterval?: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
         lastCleanup: string | null;
         createdAt: string;
         updatedAt: string;
@@ -35848,7 +35948,7 @@ export type CreateLimitData = {
         mcpServerName?: string | null;
         toolName?: string | null;
         model?: Array<string> | null;
-        cleanupInterval?: '1h' | '12h' | '24h' | '1w' | '1m';
+        cleanupInterval?: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
         lastCleanup?: unknown;
     };
     path?: never;
@@ -35934,7 +36034,7 @@ export type CreateLimitResponses = {
         mcpServerName: string | null;
         toolName: string | null;
         model?: Array<string> | null;
-        cleanupInterval?: '1h' | '12h' | '24h' | '1w' | '1m';
+        cleanupInterval?: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
         lastCleanup: string | null;
         createdAt: string;
         updatedAt: string;
@@ -36115,7 +36215,7 @@ export type GetLimitResponses = {
         mcpServerName: string | null;
         toolName: string | null;
         model?: Array<string> | null;
-        cleanupInterval?: '1h' | '12h' | '24h' | '1w' | '1m';
+        cleanupInterval?: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
         lastCleanup: string | null;
         createdAt: string;
         updatedAt: string;
@@ -36133,7 +36233,7 @@ export type UpdateLimitData = {
         mcpServerName?: string | null;
         toolName?: string | null;
         model?: Array<string> | null;
-        cleanupInterval?: '1h' | '12h' | '24h' | '1w' | '1m';
+        cleanupInterval?: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
         lastCleanup?: unknown;
     };
     path: {
@@ -36221,7 +36321,7 @@ export type UpdateLimitResponses = {
         mcpServerName: string | null;
         toolName: string | null;
         model?: Array<string> | null;
-        cleanupInterval?: '1h' | '12h' | '24h' | '1w' | '1m';
+        cleanupInterval?: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
         lastCleanup: string | null;
         createdAt: string;
         updatedAt: string;
@@ -45154,7 +45254,7 @@ export type GetOrganizationResponses = {
         defaultLlmApiKeyId: string | null;
         defaultUserLimitValue: number | null;
         defaultUserLimitModel: Array<string> | null;
-        defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m';
+        defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
         defaultAgentId: string | null;
         favicon: string | null;
         appName: string | null;
@@ -45440,7 +45540,7 @@ export type UpdateAppearanceSettingsResponses = {
         defaultLlmApiKeyId: string | null;
         defaultUserLimitValue: number | null;
         defaultUserLimitModel: Array<string> | null;
-        defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m';
+        defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
         defaultAgentId: string | null;
         favicon: string | null;
         appName: string | null;
@@ -45597,7 +45697,7 @@ export type UpdateSecuritySettingsResponses = {
         defaultLlmApiKeyId: string | null;
         defaultUserLimitValue: number | null;
         defaultUserLimitModel: Array<string> | null;
-        defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m';
+        defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
         defaultAgentId: string | null;
         favicon: string | null;
         appName: string | null;
@@ -45655,7 +45755,7 @@ export type UpdateLlmSettingsData = {
         compressionScope?: 'organization' | 'team';
         defaultUserLimitValue?: number | null;
         defaultUserLimitModel?: Array<string> | null;
-        defaultUserLimitCleanupInterval?: '1h' | '12h' | '24h' | '1w' | '1m';
+        defaultUserLimitCleanupInterval?: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
     };
     path?: never;
     query?: never;
@@ -45757,7 +45857,7 @@ export type UpdateLlmSettingsResponses = {
         defaultLlmApiKeyId: string | null;
         defaultUserLimitValue: number | null;
         defaultUserLimitModel: Array<string> | null;
-        defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m';
+        defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
         defaultAgentId: string | null;
         favicon: string | null;
         appName: string | null;
@@ -45916,7 +46016,7 @@ export type UpdateAgentSettingsResponses = {
         defaultLlmApiKeyId: string | null;
         defaultUserLimitValue: number | null;
         defaultUserLimitModel: Array<string> | null;
-        defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m';
+        defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
         defaultAgentId: string | null;
         favicon: string | null;
         appName: string | null;
@@ -46082,7 +46182,7 @@ export type UpdateConnectionSettingsResponses = {
         defaultLlmApiKeyId: string | null;
         defaultUserLimitValue: number | null;
         defaultUserLimitModel: Array<string> | null;
-        defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m';
+        defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
         defaultAgentId: string | null;
         favicon: string | null;
         appName: string | null;
@@ -46239,7 +46339,7 @@ export type UpdatePresetEntityNameResponses = {
         defaultLlmApiKeyId: string | null;
         defaultUserLimitValue: number | null;
         defaultUserLimitModel: Array<string> | null;
-        defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m';
+        defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
         defaultAgentId: string | null;
         favicon: string | null;
         appName: string | null;
@@ -46395,7 +46495,7 @@ export type UpdatePresetEntityDefaultLabelResponses = {
         defaultLlmApiKeyId: string | null;
         defaultUserLimitValue: number | null;
         defaultUserLimitModel: Array<string> | null;
-        defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m';
+        defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
         defaultAgentId: string | null;
         favicon: string | null;
         appName: string | null;
@@ -46551,7 +46651,7 @@ export type UpdatePresetEntityDefaultValidationRegexResponses = {
         defaultLlmApiKeyId: string | null;
         defaultUserLimitValue: number | null;
         defaultUserLimitModel: Array<string> | null;
-        defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m';
+        defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
         defaultAgentId: string | null;
         favicon: string | null;
         appName: string | null;
@@ -46711,7 +46811,7 @@ export type UpdateDefaultEnvironmentResponses = {
         defaultLlmApiKeyId: string | null;
         defaultUserLimitValue: number | null;
         defaultUserLimitModel: Array<string> | null;
-        defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m';
+        defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
         defaultAgentId: string | null;
         favicon: string | null;
         appName: string | null;
@@ -46868,7 +46968,7 @@ export type UpdateAuthSettingsResponses = {
         defaultLlmApiKeyId: string | null;
         defaultUserLimitValue: number | null;
         defaultUserLimitModel: Array<string> | null;
-        defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m';
+        defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
         defaultAgentId: string | null;
         favicon: string | null;
         appName: string | null;
@@ -47027,7 +47127,7 @@ export type UpdateKnowledgeSettingsResponses = {
         defaultLlmApiKeyId: string | null;
         defaultUserLimitValue: number | null;
         defaultUserLimitModel: Array<string> | null;
-        defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m';
+        defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
         defaultAgentId: string | null;
         favicon: string | null;
         appName: string | null;
@@ -47181,7 +47281,7 @@ export type DropEmbeddingConfigResponses = {
         defaultLlmApiKeyId: string | null;
         defaultUserLimitValue: number | null;
         defaultUserLimitModel: Array<string> | null;
-        defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m';
+        defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
         defaultAgentId: string | null;
         favicon: string | null;
         appName: string | null;
@@ -47424,7 +47524,7 @@ export type CompleteOnboardingResponses = {
         defaultLlmApiKeyId: string | null;
         defaultUserLimitValue: number | null;
         defaultUserLimitModel: Array<string> | null;
-        defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m';
+        defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
         defaultAgentId: string | null;
         favicon: string | null;
         appName: string | null;
@@ -49256,12 +49356,14 @@ export type CreateScheduleTriggerRunConversationResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'unknown';
+                code: 'rate_limit' | 'authentication' | 'permission_denied' | 'invalid_request' | 'not_found' | 'context_too_long' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                usageLimitExceeded?: boolean;
+                usageLimitEntityType?: string;
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;

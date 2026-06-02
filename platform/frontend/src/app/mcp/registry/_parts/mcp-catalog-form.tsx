@@ -118,6 +118,8 @@ interface McpCatalogFormProps {
     | ((opts: { isDirty: boolean; onReset: () => void }) => React.ReactNode);
   nameDisabled?: boolean;
   catalogButton?: React.ReactNode;
+  /** Optional banner/notice rendered at the very top of the form body. */
+  notice?: React.ReactNode;
   formValues?: McpCatalogFormValues;
   /** Called when form dirty state changes */
   onDirtyChange?: (isDirty: boolean) => void;
@@ -139,6 +141,7 @@ export function McpCatalogForm({
   nameDisabled,
   footer,
   catalogButton,
+  notice,
   formValues,
   onDirtyChange,
   submitRef,
@@ -768,6 +771,7 @@ export function McpCatalogForm({
           <div
             className={`min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-6 ${embedded ? "space-y-6 pt-6 pb-0" : "space-y-6 py-6"}`}
           >
+            {notice}
             {catalogButton}
 
             <div className="space-y-4">

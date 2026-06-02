@@ -91,6 +91,18 @@ class OrganizationModel {
   }
 
   /**
+   * List ids of organizations that have opted into the Agent Skill tools
+   * (`skillToolsEnabled`). Used to backfill newly introduced skill tools.
+   */
+  static async findIdsWithSkillToolsEnabled(): Promise<string[]> {
+    const rows = await db
+      .select({ id: schema.organizationsTable.id })
+      .from(schema.organizationsTable)
+      .where(eq(schema.organizationsTable.skillToolsEnabled, true));
+    return rows.map((row) => row.id);
+  }
+
+  /**
    * Get an organization by ID
    */
   static async getById(id: string): Promise<Organization | null> {

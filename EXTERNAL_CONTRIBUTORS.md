@@ -515,3 +515,13 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @Pomidorry
 - @sureshchouksey8
 - @Ishant5436
+- @vansh-09
+- @Anmol202005
+- @muhammad-saadd
+- @ashu75575
+- @crowndlt
+- @chiraggowdam
+- @fennhelloworld
+- @theoCrepinDev
+- @nicky-ru
+- @omar391

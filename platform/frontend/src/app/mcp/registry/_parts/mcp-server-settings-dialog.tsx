@@ -1,7 +1,7 @@
 "use client";
 
 import { E2eTestId, type McpDeploymentStatusEntry } from "@shared";
-import { AlertCircle, PlugZap, RefreshCw, XIcon } from "lucide-react";
+import { AlertCircle, Copy, PlugZap, RefreshCw, XIcon } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { Button } from "@/components/ui/button";
@@ -90,6 +90,8 @@ interface McpServerSettingsDialogProps {
   needsReinstall?: boolean;
   // Delete
   onDelete?: () => void;
+  // Clone
+  onClone?: () => void;
 }
 
 export type { SettingsPage };
@@ -143,6 +145,7 @@ export function McpServerSettingsDialog({
   onConnect,
   needsReinstall,
   onDelete,
+  onClone,
 }: McpServerSettingsDialogProps) {
   const isBuiltin = variant === "builtin";
   const presetEntityName = usePresetEntityName();
@@ -383,6 +386,20 @@ export function McpServerSettingsDialog({
                 >
                   <RefreshCw className="h-4 w-4" />
                   Reinstall
+                </Button>
+              )}
+              {onClone && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="w-full justify-start gap-2"
+                  onClick={() => {
+                    handleClose();
+                    onClone();
+                  }}
+                >
+                  <Copy className="h-4 w-4" />
+                  Clone
                 </Button>
               )}
               {onDelete && (

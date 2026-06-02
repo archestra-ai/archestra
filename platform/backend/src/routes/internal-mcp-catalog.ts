@@ -408,6 +408,23 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
           throw new ApiError(400, "Environment not found");
         }
       }
+      // Clone source must resolve within the caller's org — `create` copies
+      // the source's tools + guardrail policies, so an unscoped `clonedFrom`
+      // would let a caller pull another org's catalog config into their own.
+      if (restBody.clonedFrom) {
+        const cloneSource = await InternalMcpCatalogModel.findById(
+          restBody.clonedFrom,
+          {
+            expandSecrets: false,
+            userId: request.user.id,
+            isAdmin: true,
+            organizationId: request.organizationId,
+          },
+        );
+        if (!cloneSource) {
+          throw new ApiError(400, "Clone source catalog item not found");
+        }
+      }
 
       const catalogItem = await InternalMcpCatalogModel.create(restBody, {
         organizationId: request.organizationId,

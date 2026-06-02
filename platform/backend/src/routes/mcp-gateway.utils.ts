@@ -286,15 +286,15 @@ export async function createAgentServer(
   // SEP-1865: resources/list, resources/templates/list, prompts/list
   // Proxy to all upstream MCP servers connected to this agent and aggregate results.
   server.setRequestHandler(ListResourcesRequestSchema, async () => {
-    return mcpClient.listResources(agentId);
+    return mcpClient.listResources(agentId, tokenAuth);
   });
 
   server.setRequestHandler(ListResourceTemplatesRequestSchema, async () => {
-    return mcpClient.listResourceTemplates(agentId);
+    return mcpClient.listResourceTemplates(agentId, tokenAuth);
   });
 
   server.setRequestHandler(ListPromptsRequestSchema, async () => {
-    return mcpClient.listPrompts(agentId);
+    return mcpClient.listPrompts(agentId, tokenAuth);
   });
 
   server.setRequestHandler(

@@ -10911,6 +10911,7 @@ export type GetAgentsResponses = {
                 meta: string | number | boolean | null | {
                     [key: string]: unknown;
                 } | Array<unknown> | null;
+                clonedPendingDiscovery: boolean;
                 policiesAutoConfiguredAt: string | null;
                 policiesAutoConfiguringStartedAt: string | null;
                 policiesAutoConfiguredReasoning: string | null;
@@ -11139,6 +11140,7 @@ export type CreateAgentResponses = {
             meta: string | number | boolean | null | {
                 [key: string]: unknown;
             } | Array<unknown> | null;
+            clonedPendingDiscovery: boolean;
             policiesAutoConfiguredAt: string | null;
             policiesAutoConfiguringStartedAt: string | null;
             policiesAutoConfiguredReasoning: string | null;
@@ -11336,6 +11338,7 @@ export type GetAllAgentsResponses = {
             meta: string | number | boolean | null | {
                 [key: string]: unknown;
             } | Array<unknown> | null;
+            clonedPendingDiscovery: boolean;
             policiesAutoConfiguredAt: string | null;
             policiesAutoConfiguringStartedAt: string | null;
             policiesAutoConfiguredReasoning: string | null;
@@ -11508,6 +11511,7 @@ export type GetDefaultMcpGatewayResponses = {
             meta: string | number | boolean | null | {
                 [key: string]: unknown;
             } | Array<unknown> | null;
+            clonedPendingDiscovery: boolean;
             policiesAutoConfiguredAt: string | null;
             policiesAutoConfiguringStartedAt: string | null;
             policiesAutoConfiguredReasoning: string | null;
@@ -11680,6 +11684,7 @@ export type GetDefaultLlmProxyResponses = {
             meta: string | number | boolean | null | {
                 [key: string]: unknown;
             } | Array<unknown> | null;
+            clonedPendingDiscovery: boolean;
             policiesAutoConfiguredAt: string | null;
             policiesAutoConfiguringStartedAt: string | null;
             policiesAutoConfiguredReasoning: string | null;
@@ -11931,6 +11936,7 @@ export type ImportAgentResponses = {
                 meta: string | number | boolean | null | {
                     [key: string]: unknown;
                 } | Array<unknown> | null;
+                clonedPendingDiscovery: boolean;
                 policiesAutoConfiguredAt: string | null;
                 policiesAutoConfiguringStartedAt: string | null;
                 policiesAutoConfiguredReasoning: string | null;
@@ -12196,6 +12202,7 @@ export type GetAgentResponses = {
             meta: string | number | boolean | null | {
                 [key: string]: unknown;
             } | Array<unknown> | null;
+            clonedPendingDiscovery: boolean;
             policiesAutoConfiguredAt: string | null;
             policiesAutoConfiguringStartedAt: string | null;
             policiesAutoConfiguredReasoning: string | null;
@@ -12417,6 +12424,7 @@ export type UpdateAgentResponses = {
             meta: string | number | boolean | null | {
                 [key: string]: unknown;
             } | Array<unknown> | null;
+            clonedPendingDiscovery: boolean;
             policiesAutoConfiguredAt: string | null;
             policiesAutoConfiguringStartedAt: string | null;
             policiesAutoConfiguredReasoning: string | null;
@@ -12591,6 +12599,7 @@ export type CloneAgentResponses = {
             meta: string | number | boolean | null | {
                 [key: string]: unknown;
             } | Array<unknown> | null;
+            clonedPendingDiscovery: boolean;
             policiesAutoConfiguredAt: string | null;
             policiesAutoConfiguringStartedAt: string | null;
             policiesAutoConfiguredReasoning: string | null;
@@ -12926,6 +12935,7 @@ export type RestoreAgentResponses = {
             meta: string | number | boolean | null | {
                 [key: string]: unknown;
             } | Array<unknown> | null;
+            clonedPendingDiscovery: boolean;
             policiesAutoConfiguredAt: string | null;
             policiesAutoConfiguringStartedAt: string | null;
             policiesAutoConfiguredReasoning: string | null;
@@ -13998,6 +14008,7 @@ export type GetAgentToolsResponses = {
         meta: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown> | null;
+        clonedPendingDiscovery: boolean;
         policiesAutoConfiguredAt: string | null;
         policiesAutoConfiguringStartedAt: string | null;
         policiesAutoConfiguredReasoning: string | null;
@@ -29576,6 +29587,7 @@ export type GetInternalMcpCatalogResponses = {
         scope: 'personal' | 'team' | 'org';
         parentCatalogItemId: string | null;
         childName: string | null;
+        clonedFrom: string | null;
         presetEntryId: string | null;
         presetFieldValues: {
             [key: string]: UserConfigFieldDefault;
@@ -29712,6 +29724,7 @@ export type CreateInternalMcpCatalogItemData = {
         scope?: 'personal' | 'team' | 'org';
         parentCatalogItemId?: string | null;
         childName?: string | null;
+        clonedFrom?: string | null;
         presetEntryId?: string | null;
         presetFieldValues?: {
             [key: string]: UserConfigFieldDefaultInput;
@@ -29916,6 +29929,7 @@ export type CreateInternalMcpCatalogItemResponses = {
         scope: 'personal' | 'team' | 'org';
         parentCatalogItemId: string | null;
         childName: string | null;
+        clonedFrom: string | null;
         presetEntryId: string | null;
         presetFieldValues: {
             [key: string]: UserConfigFieldDefault;
@@ -30215,6 +30229,7 @@ export type GetInternalMcpCatalogItemResponses = {
         scope: 'personal' | 'team' | 'org';
         parentCatalogItemId: string | null;
         childName: string | null;
+        clonedFrom: string | null;
         presetEntryId: string | null;
         presetFieldValues: {
             [key: string]: UserConfigFieldDefault;
@@ -30553,6 +30568,7 @@ export type UpdateInternalMcpCatalogItemResponses = {
         scope: 'personal' | 'team' | 'org';
         parentCatalogItemId: string | null;
         childName: string | null;
+        clonedFrom: string | null;
         presetEntryId: string | null;
         presetFieldValues: {
             [key: string]: UserConfigFieldDefault;
@@ -31454,6 +31470,7 @@ export type GetCatalogChildrenResponses = {
         scope: 'personal' | 'team' | 'org';
         parentCatalogItemId: string | null;
         childName: string | null;
+        clonedFrom: string | null;
         presetEntryId: string | null;
         presetFieldValues: {
             [key: string]: UserConfigFieldDefault;
@@ -31673,6 +31690,7 @@ export type CreateCatalogChildResponses = {
         scope: 'personal' | 'team' | 'org';
         parentCatalogItemId: string | null;
         childName: string | null;
+        clonedFrom: string | null;
         presetEntryId: string | null;
         presetFieldValues: {
             [key: string]: UserConfigFieldDefault;
@@ -31892,6 +31910,7 @@ export type UpdateCatalogChildResponses = {
         scope: 'personal' | 'team' | 'org';
         parentCatalogItemId: string | null;
         childName: string | null;
+        clonedFrom: string | null;
         presetEntryId: string | null;
         presetFieldValues: {
             [key: string]: UserConfigFieldDefault;
@@ -50477,6 +50496,136 @@ export type CreateSkillResponses = {
 
 export type CreateSkillResponse = CreateSkillResponses[keyof CreateSkillResponses];
 
+export type ConvertAgentToSkillData = {
+    body: {
+        description?: string;
+        deleteAgent?: boolean;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/agents/{id}/convert-to-skill';
+};
+
+export type ConvertAgentToSkillErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ConvertAgentToSkillError = ConvertAgentToSkillErrors[keyof ConvertAgentToSkillErrors];
+
+export type ConvertAgentToSkillResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        skill: {
+            id: string;
+            organizationId: string;
+            authorId: string | null;
+            scope: 'personal' | 'team' | 'org';
+            name: string;
+            description: string;
+            content: string;
+            license: string | null;
+            compatibility: string | null;
+            metadata: {
+                [key: string]: string;
+            };
+            sourceType: 'manual' | 'github';
+            sourceRef: string | null;
+            sourceCommit: string | null;
+            createdAt: string;
+            updatedAt: string;
+            files: Array<{
+                id: string;
+                skillId: string;
+                path: string;
+                content: string;
+                encoding: 'utf8' | 'base64';
+                kind: 'reference' | 'script' | 'asset';
+                createdAt: string;
+            }>;
+            teams: Array<{
+                id: string;
+                name: string;
+            }>;
+        };
+        report: {
+            carried: Array<{
+                field: string;
+                detail: string;
+            }>;
+            annotated: Array<{
+                field: string;
+                detail: string;
+            }>;
+        };
+        deletedAgent: boolean;
+    };
+};
+
+export type ConvertAgentToSkillResponse = ConvertAgentToSkillResponses[keyof ConvertAgentToSkillResponses];
+
 export type DeleteSkillData = {
     body?: never;
     path: {
@@ -53479,6 +53628,7 @@ export type GetToolsResponses = {
         meta: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown> | null;
+        clonedPendingDiscovery: boolean;
         policiesAutoConfiguredAt: string | null;
         policiesAutoConfiguringStartedAt: string | null;
         policiesAutoConfiguredReasoning: string | null;

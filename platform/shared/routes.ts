@@ -518,6 +518,7 @@ export const RouteId = {
   // Agent Skill Routes
   GetSkills: "getSkills",
   CreateSkill: "createSkill",
+  ConvertAgentToSkill: "convertAgentToSkill",
   GetSkill: "getSkill",
   UpdateSkill: "updateSkill",
   DeleteSkill: "deleteSkill",

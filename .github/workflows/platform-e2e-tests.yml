@@ -250,6 +250,18 @@ jobs:
           echo "=== Archestra Platform Logs (main container) ==="
           kubectl logs -l app.kubernetes.io/name=archestra-platform -c archestra-platform --tail=200 2>/dev/null || true
 
+          # The external-IdP validation logs (validateExternalIdpToken /
+          # "JWKS JWT validation failed") fire mid-run, well before this dump,
+          # so the --tail=200 above misses them. Grep the full backend log so a
+          # flaky JWKS-gateway 401 can be traced to the branch that rejected
+          # the token. --tail=-1 is required: with a label selector, kubectl
+          # logs otherwise caps output at the last 10 lines.
+          echo "=== External IdP validation (full-log grep) ==="
+          kubectl logs -l app.kubernetes.io/name=archestra-platform \
+            -c archestra-platform --tail=-1 2>/dev/null \
+            | grep -iE 'validateExternalIdpToken|JWKS JWT validation failed|Invalid token for this profile' \
+            || echo "(no external-IdP validation log found)"
+
           echo "=== Platform Init Container: vault-secrets ==="
           kubectl logs -l app.kubernetes.io/name=archestra-platform -c vault-secrets --tail=200 2>/dev/null || true
 
@@ -385,6 +397,18 @@ jobs:
 
           echo "=== Archestra Platform Logs (main container) ==="
           kubectl logs -l app.kubernetes.io/name=archestra-platform -c archestra-platform --tail=200 2>/dev/null || true
+
+          # The external-IdP validation logs (validateExternalIdpToken /
+          # "JWKS JWT validation failed") fire mid-run, well before this dump,
+          # so the --tail=200 above misses them. Grep the full backend log so a
+          # flaky JWKS-gateway 401 can be traced to the branch that rejected
+          # the token. --tail=-1 is required: with a label selector, kubectl
+          # logs otherwise caps output at the last 10 lines.
+          echo "=== External IdP validation (full-log grep) ==="
+          kubectl logs -l app.kubernetes.io/name=archestra-platform \
+            -c archestra-platform --tail=-1 2>/dev/null \
+            | grep -iE 'validateExternalIdpToken|JWKS JWT validation failed|Invalid token for this profile' \
+            || echo "(no external-IdP validation log found)"
 
           echo "=== Platform Init Container: vault-secrets ==="
           kubectl logs -l app.kubernetes.io/name=archestra-platform -c vault-secrets --tail=200 2>/dev/null || true

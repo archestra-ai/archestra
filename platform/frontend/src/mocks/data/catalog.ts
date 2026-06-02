@@ -35,6 +35,7 @@ export function makeCatalogItem(
     scope: "org",
     environmentId: null,
     parentCatalogItemId: null,
+    clonedFrom: null,
     childName: null,
     presetEntryId: null,
     presetFieldValues: {},

@@ -166,7 +166,10 @@ function getPublicConfigResponse(): z.infer<typeof PublicConfigResponseSchema> {
     disableBasicAuth: config.auth.disableBasicAuth,
     disableInvitations: config.auth.disableInvitations,
     maintenanceMode: config.maintenanceMode,
-    analytics: config.analytics,
+    analytics: {
+      enabled: config.analytics.enabled,
+      posthog: config.analytics.posthog,
+    },
   };
 }
 

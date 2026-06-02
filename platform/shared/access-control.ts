@@ -1185,6 +1185,7 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetSkill]: { skill: ["read"] },
   [RouteId.UpdateSkill]: { skill: ["update"] },
   [RouteId.DeleteSkill]: { skill: ["delete"] },
+  [RouteId.ResetSkill]: { skill: ["update"] },
   [RouteId.DiscoverGithubSkills]: { skill: ["read"] },
   [RouteId.PreviewGithubSkill]: { skill: ["read"] },
   [RouteId.ImportGithubSkills]: { skill: ["create"] },

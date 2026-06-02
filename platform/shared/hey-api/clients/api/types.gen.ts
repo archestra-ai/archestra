@@ -49756,7 +49756,7 @@ export type GetSkillsResponses = {
             metadata: {
                 [key: string]: string;
             };
-            sourceType: 'manual' | 'github';
+            sourceType: 'manual' | 'github' | 'built_in';
             sourceRef: string | null;
             sourceCommit: string | null;
             createdAt: string;
@@ -49879,7 +49879,7 @@ export type CreateSkillResponses = {
         metadata: {
             [key: string]: string;
         };
-        sourceType: 'manual' | 'github';
+        sourceType: 'manual' | 'github' | 'built_in';
         sourceRef: string | null;
         sourceCommit: string | null;
         createdAt: string;
@@ -50078,7 +50078,7 @@ export type GetSkillResponses = {
         metadata: {
             [key: string]: string;
         };
-        sourceType: 'manual' | 'github';
+        sourceType: 'manual' | 'github' | 'built_in';
         sourceRef: string | null;
         sourceCommit: string | null;
         createdAt: string;
@@ -50201,7 +50201,7 @@ export type UpdateSkillResponses = {
         metadata: {
             [key: string]: string;
         };
-        sourceType: 'manual' | 'github';
+        sourceType: 'manual' | 'github' | 'built_in';
         sourceRef: string | null;
         sourceCommit: string | null;
         createdAt: string;
@@ -50306,6 +50306,120 @@ export type GetSkillSourceReposResponses = {
 };
 
 export type GetSkillSourceReposResponse = GetSkillSourceReposResponses[keyof GetSkillSourceReposResponses];
+
+export type ResetSkillData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/skills/{id}/reset';
+};
+
+export type ResetSkillErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ResetSkillError = ResetSkillErrors[keyof ResetSkillErrors];
+
+export type ResetSkillResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        authorId: string | null;
+        scope: 'personal' | 'team' | 'org';
+        name: string;
+        description: string;
+        content: string;
+        license: string | null;
+        compatibility: string | null;
+        metadata: {
+            [key: string]: string;
+        };
+        sourceType: 'manual' | 'github' | 'built_in';
+        sourceRef: string | null;
+        sourceCommit: string | null;
+        createdAt: string;
+        updatedAt: string;
+        files: Array<{
+            id: string;
+            skillId: string;
+            path: string;
+            content: string;
+            encoding: 'utf8' | 'base64';
+            kind: 'reference' | 'script' | 'asset';
+            createdAt: string;
+        }>;
+        teams: Array<{
+            id: string;
+            name: string;
+        }>;
+    };
+};
+
+export type ResetSkillResponse = ResetSkillResponses[keyof ResetSkillResponses];
 
 export type EnableSkillToolDefaultsData = {
     body?: never;
@@ -50687,7 +50801,7 @@ export type ImportGithubSkillsResponses = {
             metadata: {
                 [key: string]: string;
             };
-            sourceType: 'manual' | 'github';
+            sourceType: 'manual' | 'github' | 'built_in';
             sourceRef: string | null;
             sourceCommit: string | null;
             createdAt: string;

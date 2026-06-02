@@ -101,6 +101,25 @@ class SkillModel {
       .where(inArray(schema.skillsTable.id, ids));
   }
 
+  /** Locate a shipped built-in skill by its stable `source_ref` within an org. */
+  static async findBuiltIn(params: {
+    organizationId: string;
+    sourceRef: string;
+  }): Promise<Skill | null> {
+    const [result] = await db
+      .select()
+      .from(schema.skillsTable)
+      .where(
+        and(
+          eq(schema.skillsTable.organizationId, params.organizationId),
+          eq(schema.skillsTable.sourceType, "built_in"),
+          eq(schema.skillsTable.sourceRef, params.sourceRef),
+        ),
+      );
+
+    return result ?? null;
+  }
+
   static async findByName(
     organizationId: string,
     name: string,

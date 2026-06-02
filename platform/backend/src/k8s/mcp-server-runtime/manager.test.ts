@@ -46,6 +46,7 @@ vi.mock("@kubernetes/client-node", () => {
     CoreV1Api: vi.fn(),
     AppsV1Api: vi.fn(),
     BatchV1Api: vi.fn(),
+    AuthorizationV1Api: vi.fn(),
     Attach: vi.fn(),
     Log: vi.fn(),
     Exec: vi.fn(),

@@ -155,6 +155,46 @@ describe("normalizeChatMessages empty-assistant dropping", () => {
     expect(result.map((m) => m.id)).toEqual(["with-text", "with-result"]);
   });
 
+  test("drops an assistant turn left with only a step-start after a dangling tool call is stripped", () => {
+    // AI SDK assistant messages open with step-start; an aborted turn that
+    // emitted only a tool call leaves [step-start] once the call is stripped.
+    const messages = [
+      {
+        id: "assistant1",
+        role: "assistant" as const,
+        parts: [
+          { type: "step-start" },
+          { type: "data-token-usage", data: { totalTokens: 10 } },
+          {
+            type: "tool-archestra__create_agent",
+            toolCallId: "call_interrupted",
+            state: "input-available",
+            input: {},
+          },
+        ],
+      },
+    ];
+
+    expect(normalizeChatMessages(messages)).toEqual([]);
+  });
+
+  test("keeps an assistant turn whose only non-text part renders an MCP app", () => {
+    const messages = [
+      {
+        id: "assistant1",
+        role: "assistant" as const,
+        parts: [
+          { type: "step-start" },
+          { type: "data-tool-ui-start", data: { toolCallId: "call_ok" } },
+        ],
+      },
+    ];
+
+    expect(normalizeChatMessages(messages).map((m) => m.id)).toEqual([
+      "assistant1",
+    ]);
+  });
+
   test("leaves non-assistant messages untouched even when empty", () => {
     const messages = [
       { id: "u", role: "user" as const, parts: [] },

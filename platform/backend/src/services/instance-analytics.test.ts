@@ -2,7 +2,6 @@ import { mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, test, vi } from "@/test";
-import { InstanceAnalyticsService } from "./instance-analytics";
 
 const analyticsConfig = {
   enabled: true,
@@ -12,34 +11,32 @@ const analyticsConfig = {
   },
 };
 
-describe("InstanceAnalyticsService", () => {
+describe("instanceAnalyticsService", () => {
   let stateDir: string;
   let fetchMock: ReturnType<typeof vi.fn<typeof fetch>>;
 
   beforeEach(async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-02T12:00:00.000Z"));
+
     stateDir = await mkdtemp(path.join(tmpdir(), "archestra-analytics-"));
     fetchMock = vi.fn<typeof fetch>().mockResolvedValue({
       ok: true,
       status: 200,
       statusText: "OK",
     } as Response);
+    vi.stubGlobal("fetch", fetchMock);
   });
 
   afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+    vi.resetModules();
     vi.restoreAllMocks();
   });
 
   test("captures started and heartbeat once for a new installation", async () => {
-    const service = new InstanceAnalyticsService({
-      analyticsConfig: {
-        ...analyticsConfig,
-        stateDir,
-      },
-      appVersion: "1.2.3",
-      createInstanceId: () => "instance-1",
-      fetch: fetchMock,
-      now: () => new Date("2026-06-02T12:00:00.000Z"),
-    });
+    const service = await loadService();
 
     await service.trackStartup();
 
@@ -48,10 +45,12 @@ describe("InstanceAnalyticsService", () => {
       "instance_started",
       "instance_heartbeat",
     ]);
+
+    const state = await readState();
     expect(capturedBodies()).toEqual([
       expect.objectContaining({
         api_key: "ph_test",
-        distinct_id: "instance-1",
+        distinct_id: state.instanceId,
         event: "instance_started",
         properties: {
           app_version: "1.2.3",
@@ -60,7 +59,7 @@ describe("InstanceAnalyticsService", () => {
       }),
       expect.objectContaining({
         api_key: "ph_test",
-        distinct_id: "instance-1",
+        distinct_id: state.instanceId,
         event: "instance_heartbeat",
         properties: {
           app_version: "1.2.3",
@@ -68,82 +67,63 @@ describe("InstanceAnalyticsService", () => {
         },
       }),
     ]);
-
-    const state = await readState();
     expect(state).toEqual({
-      instanceId: "instance-1",
+      instanceId: expect.any(String),
       startedAt: "2026-06-02T12:00:00.000Z",
       lastHeartbeatAt: "2026-06-02T12:00:00.000Z",
     });
   });
 
   test("does not recapture before the heartbeat window elapses", async () => {
-    const firstRun = new InstanceAnalyticsService({
-      analyticsConfig: {
-        ...analyticsConfig,
-        stateDir,
-      },
-      createInstanceId: () => "instance-1",
-      fetch: fetchMock,
-      now: () => new Date("2026-06-02T12:00:00.000Z"),
-    });
-    await firstRun.trackStartup();
+    const service = await loadService();
+
+    await service.trackStartup();
     fetchMock.mockClear();
 
-    const secondRun = new InstanceAnalyticsService({
-      analyticsConfig: {
-        ...analyticsConfig,
-        stateDir,
-      },
-      fetch: fetchMock,
-      now: () => new Date("2026-06-03T11:59:59.000Z"),
-    });
-    await secondRun.trackStartup();
+    vi.setSystemTime(new Date("2026-06-03T11:59:59.000Z"));
+    await service.trackStartup();
 
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
   test("captures heartbeat after 24 hours without recapturing started", async () => {
-    const firstRun = new InstanceAnalyticsService({
-      analyticsConfig: {
-        ...analyticsConfig,
-        stateDir,
-      },
-      createInstanceId: () => "instance-1",
-      fetch: fetchMock,
-      now: () => new Date("2026-06-02T12:00:00.000Z"),
-    });
-    await firstRun.trackStartup();
+    const service = await loadService();
+
+    await service.trackStartup();
     fetchMock.mockClear();
 
-    const secondRun = new InstanceAnalyticsService({
-      analyticsConfig: {
-        ...analyticsConfig,
-        stateDir,
-      },
-      fetch: fetchMock,
-      now: () => new Date("2026-06-03T12:00:00.000Z"),
-    });
-    await secondRun.trackStartup();
+    vi.setSystemTime(new Date("2026-06-03T12:00:00.000Z"));
+    await service.trackStartup();
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(capturedEventNames()).toEqual(["instance_heartbeat"]);
   });
 
   test("does nothing when analytics is disabled", async () => {
-    const service = new InstanceAnalyticsService({
-      analyticsConfig: {
-        ...analyticsConfig,
-        enabled: false,
-        stateDir,
-      },
-      fetch: fetchMock,
-    });
+    const service = await loadService({ enabled: false });
 
     await service.trackStartup();
 
     expect(fetchMock).not.toHaveBeenCalled();
   });
+
+  async function loadService(overrides: { enabled?: boolean } = {}) {
+    vi.doMock("@/config", () => ({
+      default: {
+        analytics: {
+          ...analyticsConfig,
+          ...overrides,
+          stateDir,
+        },
+        api: {
+          version: "1.2.3",
+        },
+      },
+    }));
+
+    const { instanceAnalyticsService } = await import("./instance-analytics");
+    return instanceAnalyticsService;
+  }
 
   function capturedEventNames(): string[] {
     return capturedBodies().map((body) => String(body.event));

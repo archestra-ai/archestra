@@ -26,7 +26,7 @@ type InstanceAnalyticsConfig = {
   stateDir: string;
 };
 
-export class InstanceAnalyticsService {
+class InstanceAnalyticsService {
   constructor(
     private readonly options: {
       analyticsConfig?: InstanceAnalyticsConfig;

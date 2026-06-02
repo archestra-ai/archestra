@@ -148,9 +148,16 @@ vi.mock("@/components/ui/select", () => ({
   SelectContent: ({ children }: { children: React.ReactNode }) => (
     <div>{children}</div>
   ),
+  SelectGroup: ({ children }: { children: React.ReactNode }) => (
+    <div>{children}</div>
+  ),
   SelectItem: ({ children }: { children: React.ReactNode }) => (
     <div>{children}</div>
   ),
+  SelectLabel: ({ children }: { children: React.ReactNode }) => (
+    <div>{children}</div>
+  ),
+  SelectSeparator: () => <hr />,
 }));
 
 vi.mock("@/components/ui/searchable-select", () => ({
@@ -355,6 +362,15 @@ describe("LimitsPage", () => {
     expect(
       screen.getByText(/calendar resets at the next day, week, or month/i),
     ).toBeInTheDocument();
+  });
+
+  it("groups cleanup interval options with calendar windows first", () => {
+    render(<LimitsPage />);
+
+    const text = document.body.textContent ?? "";
+    expect(text.indexOf("Calendar month")).toBeLessThan(
+      text.indexOf("Rolling hour"),
+    );
   });
 
   it("shows 'All models' badge for limits with null model", () => {

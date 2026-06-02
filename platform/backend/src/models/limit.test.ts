@@ -477,6 +477,68 @@ describe("LimitModel", () => {
       expect(updated).toBeDefined();
       expect(updated?.model).toEqual(["gpt-4o"]);
     });
+
+    test("resets token usage when cleanup interval changes", async ({
+      makeAgent,
+    }) => {
+      const agent = await makeAgent({ name: "Interval Reset Agent" });
+      const limit = await LimitModel.create({
+        entityType: "agent",
+        entityId: agent.id,
+        limitType: "token_cost",
+        limitValue: 1000000,
+        model: ["gpt-4o"],
+        cleanupInterval: "1w",
+      });
+      await LimitModel.updateTokenLimitUsage(
+        "agent",
+        agent.id,
+        "gpt-4o",
+        500,
+        700,
+      );
+
+      const updated = await LimitModel.patch(limit.id, {
+        cleanupInterval: "calendar_month",
+      });
+
+      const usage = await LimitModel.getRawModelUsage(limit.id);
+      expect(updated?.cleanupInterval).toBe("calendar_month");
+      expect(updated?.lastCleanup).toBeInstanceOf(Date);
+      expect(usage[0].currentUsageTokensIn).toBe(0);
+      expect(usage[0].currentUsageTokensOut).toBe(0);
+    });
+
+    test("does not reset token usage when cleanup interval is unchanged", async ({
+      makeAgent,
+    }) => {
+      const agent = await makeAgent({ name: "Value Update Agent" });
+      const limit = await LimitModel.create({
+        entityType: "agent",
+        entityId: agent.id,
+        limitType: "token_cost",
+        limitValue: 1000000,
+        model: ["gpt-4o"],
+        cleanupInterval: "1w",
+      });
+      await LimitModel.updateTokenLimitUsage(
+        "agent",
+        agent.id,
+        "gpt-4o",
+        500,
+        700,
+      );
+
+      const updated = await LimitModel.patch(limit.id, {
+        limitValue: 2000000,
+        cleanupInterval: "1w",
+      });
+
+      const usage = await LimitModel.getRawModelUsage(limit.id);
+      expect(updated?.limitValue).toBe(2000000);
+      expect(usage[0].currentUsageTokensIn).toBe(500);
+      expect(usage[0].currentUsageTokensOut).toBe(700);
+    });
   });
 
   describe("delete", () => {

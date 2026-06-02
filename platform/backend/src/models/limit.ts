@@ -49,6 +49,8 @@ type LimitViolationResponse = [
   },
 ];
 
+const DEFAULT_LIMIT_CLEANUP_INTERVAL: LimitCleanupInterval = "calendar_month";
+
 class LimitModel {
   // rollingCleanupIntervalSqlLiterals exists to compile-time check rolling literals.
   static readonly rollingCleanupIntervalSqlLiterals: Record<
@@ -67,7 +69,10 @@ class LimitModel {
   static async create(data: CreateLimit): Promise<Limit> {
     const [limit] = await db
       .insert(schema.limitsTable)
-      .values(data)
+      .values({
+        ...data,
+        cleanupInterval: data.cleanupInterval ?? DEFAULT_LIMIT_CLEANUP_INTERVAL,
+      })
       .returning();
 
     // For token_cost limits, initialize model usage records
@@ -218,11 +223,37 @@ class LimitModel {
       patchData.model = null;
     }
 
-    const [limit] = await db
-      .update(schema.limitsTable)
-      .set(patchData)
-      .where(eq(schema.limitsTable.id, id))
-      .returning();
+    const existingLimit = await LimitModel.findById(id);
+    if (!existingLimit) {
+      return null;
+    }
+
+    const shouldResetUsage =
+      patchData.cleanupInterval !== undefined &&
+      patchData.cleanupInterval !== existingLimit.cleanupInterval;
+    if (shouldResetUsage) {
+      patchData.lastCleanup = new Date();
+    }
+
+    const [limit] = await db.transaction(async (tx) => {
+      const updatedLimits = await tx
+        .update(schema.limitsTable)
+        .set(patchData)
+        .where(eq(schema.limitsTable.id, id))
+        .returning();
+
+      if (shouldResetUsage) {
+        await tx
+          .update(schema.limitModelUsageTable)
+          .set({
+            currentUsageTokensIn: 0,
+            currentUsageTokensOut: 0,
+          })
+          .where(eq(schema.limitModelUsageTable.limitId, id));
+      }
+
+      return updatedLimits;
+    });
 
     return limit || null;
   }
@@ -986,7 +1017,9 @@ ${contentMessage}`;
         organizationId: params.organizationId,
         userId: params.userId,
         models: normalizeLimitModels(organization.defaultUserLimitModel),
-        cleanupInterval: organization.defaultUserLimitCleanupInterval ?? "1w",
+        cleanupInterval:
+          organization.defaultUserLimitCleanupInterval ??
+          DEFAULT_LIMIT_CLEANUP_INTERVAL,
       });
 
       if (usage.cost < organization.defaultUserLimitValue) {

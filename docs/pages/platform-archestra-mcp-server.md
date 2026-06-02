@@ -641,7 +641,7 @@ Required RBAC permission: `llmLimit:create`
 | `limit_type` | `"token_cost" \| "mcp_server_calls" \| "tool_calls"` | Yes | The type of limit to apply. |
 | `limit_value` | `number` | Yes | The limit value (tokens or count depending on limit type). |
 | `model` | `string[] \| null` | No | Array of model names. Omit for all models. |
-| `cleanup_interval` | `"1h" \| "12h" \| "24h" \| "1w" \| "1m" \| "calendar_day" \| "calendar_week_sunday" \| "calendar_week_monday" \| "calendar_month"` | No | Optional cleanup interval for this limit. Omit to use the weekly default. |
+| `cleanup_interval` | `"1h" \| "12h" \| "24h" \| "1w" \| "1m" \| "calendar_day" \| "calendar_week_sunday" \| "calendar_week_monday" \| "calendar_month"` | No | Optional cleanup interval for this limit. Omit to use the calendar-month default. |
 | `mcp_server_name` | `string` | No | MCP server name. Required for mcp_server_calls and tool_calls limits. |
 | `tool_name` | `string` | No | Tool name. Required for tool_calls limits. |
 

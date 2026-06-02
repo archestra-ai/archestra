@@ -997,6 +997,24 @@ describe("mcp-reinstall", () => {
         ),
       ).toBe(true);
     });
+
+    test("environment reassignment (environmentId change) returns false (pod must relocate)", () => {
+      // The environment determines the deployment namespace, so a change
+      // must route through the auto path and recreate the pod in the new
+      // namespace. Regression: environmentId was missing from the
+      // projection, so single-tenant reassignments were silently skipped
+      // and the pod kept running in the old namespace.
+      const oldConfig = {
+        ...baseLocal([]),
+        environmentId: "env-a",
+      } as InternalMcpCatalog;
+      const newConfig = {
+        ...baseLocal([]),
+        environmentId: "env-b",
+      } as InternalMcpCatalog;
+
+      expect(onlyForwardCompatibleEnvDiff(oldConfig, newConfig)).toBe(false);
+    });
   });
 
   describe("autoReinstallServer", () => {

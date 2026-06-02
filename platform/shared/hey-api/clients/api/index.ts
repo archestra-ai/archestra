@@ -2048,6 +2048,8 @@ export type {
   SubmitOAuthConsentResponse,
   SubmitOAuthConsentResponses,
   SuggestSkillDescriptionData,
+  SuggestSkillDescriptionError,
+  SuggestSkillDescriptionErrors,
   SuggestSkillDescriptionResponse,
   SuggestSkillDescriptionResponses,
   SyncAgentDelegationsData,

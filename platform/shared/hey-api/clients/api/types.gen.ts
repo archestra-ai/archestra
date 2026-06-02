@@ -50993,26 +50993,6 @@ export type CreateSkillResponses = {
 
 export type CreateSkillResponse = CreateSkillResponses[keyof CreateSkillResponses];
 
-export type SuggestSkillDescriptionData = {
-    body?: never;
-    path: {
-        id: string;
-    };
-    query?: never;
-    url: '/api/agents/{id}/suggest-skill-description';
-};
-
-export type SuggestSkillDescriptionResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        description: string;
-    };
-};
-
-export type SuggestSkillDescriptionResponse = SuggestSkillDescriptionResponses[keyof SuggestSkillDescriptionResponses];
-
 export type ConvertAgentToSkillData = {
     body: {
         description?: string;
@@ -51144,6 +51124,91 @@ export type ConvertAgentToSkillResponses = {
 };
 
 export type ConvertAgentToSkillResponse = ConvertAgentToSkillResponses[keyof ConvertAgentToSkillResponses];
+
+export type SuggestSkillDescriptionData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/agents/{id}/suggest-skill-description';
+};
+
+export type SuggestSkillDescriptionErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type SuggestSkillDescriptionError = SuggestSkillDescriptionErrors[keyof SuggestSkillDescriptionErrors];
+
+export type SuggestSkillDescriptionResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        description: string;
+    };
+};
+
+export type SuggestSkillDescriptionResponse = SuggestSkillDescriptionResponses[keyof SuggestSkillDescriptionResponses];
 
 export type DeleteSkillData = {
     body?: never;

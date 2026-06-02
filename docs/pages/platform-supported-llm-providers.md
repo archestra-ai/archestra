@@ -3,7 +3,7 @@ title: Supported LLM Providers
 category: LLM Proxy
 order: 2
 description: LLM providers supported by Archestra Platform
-lastUpdated: 2026-02-22
+lastUpdated: 2026-05-31
 ---
 
 <!--
@@ -22,9 +22,12 @@ The model router exposes one OpenAI-compatible interface for models across confi
 
 ### Supported Model Router APIs
 
-- **Responses API** (`/responses`) - ✅ Supported for text requests across model-router-compatible providers
-- **Chat Completions API** (`/chat/completions`) - ✅ Supported for text chat requests across model-router-compatible providers
-- **Models API** (`/models`) - ✅ Returns provider-qualified model IDs
+- **Responses API** (`/responses`) for text requests across model-router-compatible providers
+- **Chat Completions API** (`/chat/completions`) for text chat requests across model-router-compatible providers
+- **Models API** (`/models`) for provider-qualified chat and embedding model IDs
+- **Embeddings API** (`/embeddings`) for OpenAI embedding models only
+
+> ⚠️ Embeddings support for other providers is tracked in [GitHub Issue #5174](https://github.com/archestra-ai/archestra/issues/5174).
 
 ### Model Router Connection Details
 
@@ -33,7 +36,7 @@ The model router exposes one OpenAI-compatible interface for models across confi
 
 ### List Models
 
-Call `GET /v1/model-router/{llm-proxy-id}/models` to list OpenAI-compatible model objects. Model IDs are returned as `<provider>:<model-id>` and only include providers mapped to the virtual key or LLM OAuth client used for the request. See [Authentication](/docs/platform-llm-proxy-authentication) for configuration details.
+Call `GET /v1/model-router/{llm-proxy-id}/models` to list OpenAI-compatible model objects. Model IDs are returned as `<provider>:<model-id>` and only include providers mapped to the virtual key or LLM OAuth client used for the request. The list includes chat models and embedding models. See [Authentication](/docs/platform-llm-proxy-authentication) for configuration details.
 
 ### Model Resolution
 
@@ -49,8 +52,9 @@ Model Router translation is text-first. Anthropic, Gemini, and Cohere routes cur
 
 ### Supported OpenAI APIs
 
-- **Chat Completions API** (`/chat/completions`) - ✅ Fully supported
-- **Responses API** (`/responses`) - ✅ Fully supported
+- **Chat Completions API** (`/chat/completions`)
+- **Responses API** (`/responses`)
+- **Embeddings API** (`/embeddings`)
 
 ### OpenAI Connection Details
 
@@ -66,7 +70,7 @@ Model Router translation is text-first. Anthropic, Gemini, and Cohere routes cur
 
 ### Supported Anthropic APIs
 
-- **Messages API** (`/messages`) - ✅ Fully supported
+- **Messages API** (`/messages`)
 
 ### Anthropic Connection Details
 
@@ -111,8 +115,8 @@ Archestra supports both the [Google AI Studio](https://ai.google.dev/) (Gemini D
 
 ### Supported Gemini APIs
 
-- **Generate Content API** (`:generateContent`) - ✅ Fully supported
-- **Stream Generate Content API** (`:streamGenerateContent`) - ✅ Fully supported
+- **Generate Content API** (`:generateContent`)
+- **Stream Generate Content API** (`:streamGenerateContent`)
 
 ### Gemini Connection Details
 
@@ -194,16 +198,12 @@ See the [Vertex AI authentication guide](https://cloud.google.com/vertex-ai/docs
 
 ### Supported Cerebras APIs
 
-- **Chat Completions API** (`/chat/completions`) - ✅ Fully supported
+- **Chat Completions API** (`/chat/completions`)
 
 ### Cerebras Connection Details
 
 - **Base URL**: `http://localhost:9000/v1/cerebras/{agent-id}`
 - **Authentication**: Pass your Cerebras API key in the `Authorization` header as `Bearer <your-api-key>`
-
-### Important Notes
-
-- Usage of the llama models in the chat ⚠️ Not yet supported ([GitHub Issue #2058](https://github.com/archestra-ai/archestra/issues/2058)) 
 
 ## Cohere
 
@@ -211,8 +211,8 @@ See the [Vertex AI authentication guide](https://cloud.google.com/vertex-ai/docs
 
 ### Supported Cohere APIs
 
-- **Chat API** (`/chat`) - ✅ Fully supported
-- **Streaming**: ✅ Fully supported
+- **Chat API** (`/chat`)
+- **Streaming**
 
 ### Cohere Connection Details
 
@@ -236,7 +236,7 @@ See the [Vertex AI authentication guide](https://cloud.google.com/vertex-ai/docs
 
 ### Supported Groq APIs
 
-- **Chat Completions API** (`/chat/completions`) - ✅ Fully supported (OpenAI-compatible)
+- **Chat Completions API** (`/chat/completions`) - OpenAI-compatible
 
 ### Groq Connection Details
 
@@ -271,8 +271,8 @@ You can generate an API key from the [Groq Console](https://console.groq.com/key
 
 ### Supported OpenRouter APIs
 
-- **Chat Completions API** (`/chat/completions`) - ✅ Fully supported (OpenAI-compatible)
-- **Embeddings API** (`/embeddings`) - ✅ Supported for Knowledge Base embeddings
+- **Chat Completions API** (`/chat/completions`) - OpenAI-compatible
+- **Embeddings API** (`/embeddings`) for Knowledge Base embeddings
 
 ### OpenRouter Connection Details
 
@@ -315,7 +315,7 @@ Dynamic-pricing routers (`openrouter/auto`) report no fixed per-token price, so 
 
 ### Supported Mistral APIs
 
-- **Chat Completions API** (`/chat/completions`) - ✅ Fully supported
+- **Chat Completions API** (`/chat/completions`)
 
 ### Mistral Connection Details
 
@@ -332,7 +332,7 @@ You can get an API key from the [Mistral AI Console](https://console.mistral.ai/
 
 ### Supported Perplexity APIs
 
-- **Chat Completions API** (`/chat/completions`) - ✅ Fully supported
+- **Chat Completions API** (`/chat/completions`)
 
 ### Perplexity Connection Details
 
@@ -362,7 +362,7 @@ You can get an API key from the [Perplexity Settings](https://www.perplexity.ai/
 
 ### Supported vLLM APIs
 
-- **Chat Completions API** (`/chat/completions`) - ✅ Fully supported (OpenAI-compatible)
+- **Chat Completions API** (`/chat/completions`) - OpenAI-compatible
 
 ### vLLM Connection Details
 
@@ -395,7 +395,7 @@ The base URL can also be set globally via the `ARCHESTRA_VLLM_BASE_URL` environm
 
 ### Supported Ollama APIs
 
-- **Chat Completions API** (`/chat/completions`) - ✅ Fully supported (OpenAI-compatible)
+- **Chat Completions API** (`/chat/completions`) - OpenAI-compatible
 
 ### Ollama Connection Details
 
@@ -429,7 +429,7 @@ The default base URL is `http://localhost:11434/v1`. Override it per-key in the 
 
 ### Supported Zhipu AI APIs
 
-- **Chat Completions API** (`/chat/completions`) - ✅ Fully supported (OpenAI-compatible)
+- **Chat Completions API** (`/chat/completions`) - OpenAI-compatible
 
 ### Zhipu AI Connection Details
 
@@ -464,7 +464,7 @@ The default base URL is `http://localhost:11434/v1`. Override it per-key in the 
 
 ### Supported xAI APIs
 
-- **Chat Completions API** (`/chat/completions`) - ✅ Fully supported (OpenAI-compatible)
+- **Chat Completions API** (`/chat/completions`) - OpenAI-compatible
 
 ### xAI Connection Details
 
@@ -501,7 +501,7 @@ You can generate an API key from the [xAI Console](https://console.x.ai/).
 
 ### Supported MiniMax APIs
 
-- **Chat Completions API** (`/chat/completions`) - ✅ Fully supported (OpenAI-compatible)
+- **Chat Completions API** (`/chat/completions`) - OpenAI-compatible
 
 ### MiniMax Connection Details
 
@@ -535,10 +535,10 @@ You can generate an API key from the [xAI Console](https://console.x.ai/).
 
 ### Supported Bedrock APIs
 
-- **Converse API** (`/converse`) - ✅ Fully supported ([AWS Docs](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_Converse.html))
-- **Converse Stream API** (`/converse-stream`) - ✅ Fully supported ([AWS Docs](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_ConverseStream.html))
-- **InvokeModel API** (`/invoke`) -  ⚠️ Not yet supported  ([AWS Docs](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_InvokeModel.html))
-- **OpenAI-compatible API (Mantle)** -  ⚠️ Not yet supported ([AWS Docs](https://docs.aws.amazon.com/bedrock/latest/userguide/bedrock-mantle.html))
+- **Converse API** (`/converse`) ([AWS Docs](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_Converse.html))
+- **Converse Stream API** (`/converse-stream`) ([AWS Docs](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_ConverseStream.html))
+- **InvokeModel API** (`/invoke`) - ⚠️ Not yet supported ([AWS Docs](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_InvokeModel.html))
+- **OpenAI-compatible API (Mantle)** - ⚠️ Not yet supported ([AWS Docs](https://docs.aws.amazon.com/bedrock/latest/userguide/bedrock-mantle.html))
 
 ### Bedrock Connection Details
 

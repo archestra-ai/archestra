@@ -16,7 +16,7 @@ class MessageModel {
   ): Promise<void> {
     await db
       .update(schema.conversationsTable)
-      .set({ updatedAt: new Date() })
+      .set({ updatedAt: new Date(), lastMessageAt: new Date() })
       .where(eq(schema.conversationsTable.id, conversationId));
   }
 

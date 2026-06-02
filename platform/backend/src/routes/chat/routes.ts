@@ -846,11 +846,16 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 }
 
                 // toUIMessageStream invokes onError twice for the same upstream
-                // error (once when formatting the error chunk's errorText, once
-                // as a notification when the chunk is walked downstream). Guard
-                // so we don't persist or log the same error twice.
-                let chatErrorHandled = false;
-                let serializedChatError = "";
+                // error: first with the real error to build the chunk's
+                // errorText, then again as the chunk is walked downstream — but
+                // that second call wraps the previous return value in a fresh
+                // `new Error(errorText)` (process-ui-message-stream.ts), so the
+                // two share no object identity. We dedupe by signature instead:
+                // track every payload we've returned and replay it when an
+                // incoming error's message matches one. This collapses the
+                // duplicate notification while still handling distinct errors
+                // (e.g. two unavailable tools in one step) independently.
+                const returnedChatErrorPayloads = new Set<string>();
 
                 writer.merge(
                   result.toUIMessageStream({
@@ -864,9 +869,20 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                     // prompt on reload (#4030).
                     generateMessageId: generateId,
                     onError: (error) => {
+                      const incomingErrorMessage =
+                        error instanceof Error ? error.message : String(error);
+                      if (returnedChatErrorPayloads.has(incomingErrorMessage)) {
+                        return incomingErrorMessage;
+                      }
+
                       const unavailableToolError =
                         getUnavailableToolErrorDetails(error);
                       if (unavailableToolError) {
+                        const serializedToolError =
+                          formatUnavailableToolErrorDetails(
+                            unavailableToolError,
+                          );
+                        returnedChatErrorPayloads.add(serializedToolError);
                         logger.info(
                           {
                             conversationId,
@@ -874,15 +890,8 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                           },
                           "Returning unavailable tool error as tool-level error",
                         );
-                        return formatUnavailableToolErrorDetails(
-                          unavailableToolError,
-                        );
+                        return serializedToolError;
                       }
-
-                      if (chatErrorHandled) {
-                        return serializedChatError;
-                      }
-                      chatErrorHandled = true;
 
                       const traceContext = getActiveTraceContext();
                       const correlationLogFields =
@@ -900,6 +909,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                         : fullError;
 
                       // mapProviderError safely serializes raw errors, but add defensive try-catch
+                      let serializedChatError: string;
                       try {
                         serializedChatError = JSON.stringify(errorForFrontend);
                       } catch (stringifyError) {
@@ -915,6 +925,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                           getMinimalFrontendError(errorForFrontend),
                         );
                       }
+                      returnedChatErrorPayloads.add(serializedChatError);
 
                       activeRunError =
                         error instanceof Error ? error.message : String(error);

@@ -4,7 +4,10 @@ import {
   DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
 } from "@shared";
+import { and, eq } from "drizzle-orm";
 import { vi } from "vitest";
+import db, { schema } from "@/database";
+import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import { AgentToolModel, ToolModel } from "@/models";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
@@ -46,6 +49,7 @@ describe("agent routes", () => {
         }
       ).organizationId = organizationId;
     });
+    registerAuditLogHook(app);
 
     const { default: agentRoutes } = await import("./agent");
     await app.register(agentRoutes);
@@ -55,6 +59,70 @@ describe("agent routes", () => {
     vi.restoreAllMocks();
     await app.close();
   });
+
+  async function expectAgentTypeSoftDelete(
+    agentType: "mcp_gateway" | "llm_proxy",
+    makeAgent: (overrides: {
+      name: string;
+      agentType: "mcp_gateway" | "llm_proxy";
+      organizationId: string;
+      scope: "org";
+      authorId: string;
+      isPersonalGateway: boolean;
+    }) => Promise<{ id: string }>,
+  ) {
+    const suffix = crypto.randomUUID().slice(0, 8);
+    const created = await makeAgent({
+      name: `${agentType} Delete ${suffix}`,
+      agentType,
+      organizationId,
+      scope: "org",
+      authorId: user.id,
+      isPersonalGateway: false,
+    });
+
+    const deleteResponse = await app.inject({
+      method: "DELETE",
+      url: `/api/agents/${created.id}`,
+    });
+
+    expect(deleteResponse.statusCode).toBe(200);
+    expect(deleteResponse.json()).toEqual({ success: true });
+
+    const getResponse = await app.inject({
+      method: "GET",
+      url: `/api/agents/${created.id}`,
+    });
+    expect(getResponse.statusCode).toBe(404);
+
+    const [row] = await db
+      .select({ deletedAt: schema.agentsTable.deletedAt })
+      .from(schema.agentsTable)
+      .where(eq(schema.agentsTable.id, created.id));
+    expect(row.deletedAt).toBeInstanceOf(Date);
+
+    const paginatedResponse = await app.inject({
+      method: "GET",
+      url: `/api/agents?limit=10&offset=0&agentType=${agentType}&name=${suffix}`,
+    });
+    expect(paginatedResponse.statusCode).toBe(200);
+    expect(
+      paginatedResponse
+        .json()
+        .data.some((agent: { id: string }) => agent.id === created.id),
+    ).toBe(false);
+
+    const allResponse = await app.inject({
+      method: "GET",
+      url: `/api/agents/all?agentType=${agentType}`,
+    });
+    expect(allResponse.statusCode).toBe(200);
+    expect(
+      allResponse
+        .json()
+        .some((agent: { id: string }) => agent.id === created.id),
+    ).toBe(false);
+  }
 
   describe("POST /api/agents", () => {
     test("should create a new agent", async () => {
@@ -412,8 +480,9 @@ describe("agent routes", () => {
 
   describe("DELETE /api/agents/:id", () => {
     test("should delete an agent", async ({ makeAgent }) => {
+      const suffix = crypto.randomUUID().slice(0, 8);
       const created = await makeAgent({
-        name: `Agent for Delete ${crypto.randomUUID().slice(0, 8)}`,
+        name: `Agent for Delete ${suffix}`,
         organizationId,
         scope: "personal",
         authorId: user.id,
@@ -438,6 +507,46 @@ describe("agent routes", () => {
       });
 
       expect(getResponse.statusCode).toBe(404);
+
+      const [row] = await db
+        .select({ deletedAt: schema.agentsTable.deletedAt })
+        .from(schema.agentsTable)
+        .where(eq(schema.agentsTable.id, created.id));
+      expect(row.deletedAt).toBeInstanceOf(Date);
+
+      const paginatedResponse = await app.inject({
+        method: "GET",
+        url: `/api/agents?limit=10&offset=0&name=${suffix}`,
+      });
+      expect(paginatedResponse.statusCode).toBe(200);
+      expect(
+        paginatedResponse
+          .json()
+          .data.some((agent: { id: string }) => agent.id === created.id),
+      ).toBe(false);
+
+      const allResponse = await app.inject({
+        method: "GET",
+        url: "/api/agents/all",
+      });
+      expect(allResponse.statusCode).toBe(200);
+      expect(
+        allResponse
+          .json()
+          .some((agent: { id: string }) => agent.id === created.id),
+      ).toBe(false);
+    });
+
+    test("soft-deletes mcp_gateway rows and hides them from type-filtered routes", async ({
+      makeAgent,
+    }) => {
+      await expectAgentTypeSoftDelete("mcp_gateway", makeAgent);
+    });
+
+    test("soft-deletes llm_proxy rows and hides them from type-filtered routes", async ({
+      makeAgent,
+    }) => {
+      await expectAgentTypeSoftDelete("llm_proxy", makeAgent);
     });
 
     test("returns 403 when deleting a personal MCP gateway and the row remains", async () => {
@@ -505,6 +614,234 @@ describe("agent routes", () => {
       expect(response.statusCode).toBe(200);
       const created = response.json();
       expect(created.isPersonalGateway).toBe(false);
+    });
+  });
+
+  describe("POST /api/agents/:id/restore", () => {
+    test("restores a deleted internal agent and moves it back to active lists", async ({
+      makeAgent,
+    }) => {
+      const suffix = crypto.randomUUID().slice(0, 8);
+      const created = await makeAgent({
+        name: `Restore Agent ${suffix}`,
+        agentType: "agent",
+        organizationId,
+        scope: "personal",
+        authorId: user.id,
+      });
+
+      const deleteResponse = await app.inject({
+        method: "DELETE",
+        url: `/api/agents/${created.id}`,
+      });
+      expect(deleteResponse.statusCode).toBe(200);
+
+      const deletedListResponse = await app.inject({
+        method: "GET",
+        url: `/api/agents?status=deleted&agentType=agent&name=${suffix}`,
+      });
+      expect(deletedListResponse.statusCode).toBe(200);
+      expect(
+        deletedListResponse
+          .json()
+          .data.some((agent: { id: string }) => agent.id === created.id),
+      ).toBe(true);
+
+      const restoreResponse = await app.inject({
+        method: "POST",
+        url: `/api/agents/${created.id}/restore`,
+      });
+      expect(restoreResponse.statusCode).toBe(200);
+      expect(restoreResponse.json().id).toBe(created.id);
+
+      const activeListResponse = await app.inject({
+        method: "GET",
+        url: `/api/agents?agentType=agent&name=${suffix}`,
+      });
+      expect(activeListResponse.statusCode).toBe(200);
+      expect(
+        activeListResponse
+          .json()
+          .data.some((agent: { id: string }) => agent.id === created.id),
+      ).toBe(true);
+
+      const auditRows = await db
+        .select({
+          action: schema.auditLogsTable.action,
+          resourceType: schema.auditLogsTable.resourceType,
+          resourceId: schema.auditLogsTable.resourceId,
+          before: schema.auditLogsTable.before,
+          after: schema.auditLogsTable.after,
+        })
+        .from(schema.auditLogsTable)
+        .where(
+          and(
+            eq(schema.auditLogsTable.action, "agent.restored"),
+            eq(schema.auditLogsTable.resourceId, created.id),
+          ),
+        );
+      expect(auditRows).toHaveLength(1);
+      expect(auditRows[0]).toMatchObject({
+        action: "agent.restored",
+        resourceType: "agent",
+        resourceId: created.id,
+      });
+      expect(auditRows[0].before).toMatchObject({
+        deletedAt: expect.any(String),
+      });
+      expect(auditRows[0].after).toMatchObject({ deletedAt: null });
+    });
+
+    test("restores MCP gateway rows through the shared agent restore route", async ({
+      makeAgent,
+    }) => {
+      const suffix = crypto.randomUUID().slice(0, 8);
+      const created = await makeAgent({
+        name: `Restore Gateway ${suffix}`,
+        agentType: "mcp_gateway",
+        organizationId,
+        scope: "org",
+      });
+
+      expect(
+        (
+          await app.inject({
+            method: "DELETE",
+            url: `/api/agents/${created.id}`,
+          })
+        ).statusCode,
+      ).toBe(200);
+
+      const restoreResponse = await app.inject({
+        method: "POST",
+        url: `/api/agents/${created.id}/restore`,
+      });
+      expect(restoreResponse.statusCode).toBe(200);
+      expect(restoreResponse.json().agentType).toBe("mcp_gateway");
+    });
+
+    test("restores LLM proxy rows through the shared agent restore route", async ({
+      makeAgent,
+    }) => {
+      const suffix = crypto.randomUUID().slice(0, 8);
+      const created = await makeAgent({
+        name: `Restore Proxy ${suffix}`,
+        agentType: "llm_proxy",
+        organizationId,
+        scope: "org",
+      });
+
+      expect(
+        (
+          await app.inject({
+            method: "DELETE",
+            url: `/api/agents/${created.id}`,
+          })
+        ).statusCode,
+      ).toBe(200);
+
+      const restoreResponse = await app.inject({
+        method: "POST",
+        url: `/api/agents/${created.id}/restore`,
+      });
+      expect(restoreResponse.statusCode).toBe(200);
+      expect(restoreResponse.json().agentType).toBe("llm_proxy");
+    });
+
+    test("returns 409 when restoring would create a duplicate active name", async () => {
+      const { default: AgentModel } = await import("@/models/agent");
+      const suffix = crypto.randomUUID().slice(0, 8);
+      const deleted = await AgentModel.create({
+        name: `Deleted Slug ${suffix}`,
+        agentType: "mcp_gateway",
+        organizationId,
+        scope: "org",
+        teams: [],
+        labels: [],
+      });
+      await AgentModel.delete(deleted.id);
+      await AgentModel.create({
+        name: `Deleted Slug ${suffix}`,
+        agentType: "mcp_gateway",
+        organizationId,
+        scope: "org",
+        teams: [],
+        labels: [],
+      });
+
+      const restoreResponse = await app.inject({
+        method: "POST",
+        url: `/api/agents/${deleted.id}/restore`,
+      });
+
+      expect(restoreResponse.statusCode).toBe(409);
+      expect(restoreResponse.json().error.message).toContain(
+        "another active MCP gateway is already using this name",
+      );
+    });
+
+    test("returns 409 when restoring an old default LLM proxy would create two defaults", async () => {
+      const { default: AgentModel } = await import("@/models/agent");
+      const original =
+        await AgentModel.getLLMProxyOrCreateDefault(organizationId);
+      await AgentModel.delete(original.id);
+
+      const replacementResponse = await app.inject({
+        method: "GET",
+        url: "/api/llm-proxy/default",
+      });
+      expect(replacementResponse.statusCode).toBe(200);
+      expect(replacementResponse.json().id).not.toBe(original.id);
+
+      const restoreResponse = await app.inject({
+        method: "POST",
+        url: `/api/agents/${original.id}/restore`,
+      });
+
+      expect(restoreResponse.statusCode).toBe(409);
+      expect(restoreResponse.json().error.message).toContain(
+        "another active default LLM proxy",
+      );
+    });
+
+    test("requires delete permission to list and restore deleted agents", async ({
+      makeAgent,
+      makeCustomRole,
+      makeMember,
+      makeUser,
+    }) => {
+      const { default: AgentModel } = await import("@/models/agent");
+      const suffix = crypto.randomUUID().slice(0, 8);
+      const deleted = await makeAgent({
+        name: `Permission Restore ${suffix}`,
+        agentType: "agent",
+        organizationId,
+        scope: "org",
+        authorId: user.id,
+      });
+      await AgentModel.delete(deleted.id);
+
+      const reader = await makeUser();
+      await makeCustomRole(organizationId, {
+        role: `agent_reader_${suffix}`,
+        permission: { agent: ["read"] },
+      });
+      await makeMember(reader.id, organizationId, {
+        role: `agent_reader_${suffix}`,
+      });
+      user = reader;
+
+      const deletedListResponse = await app.inject({
+        method: "GET",
+        url: `/api/agents?status=deleted&agentType=agent&name=${suffix}`,
+      });
+      expect(deletedListResponse.statusCode).toBe(403);
+
+      const restoreResponse = await app.inject({
+        method: "POST",
+        url: `/api/agents/${deleted.id}/restore`,
+      });
+      expect(restoreResponse.statusCode).toBe(404);
     });
   });
 
@@ -793,6 +1130,46 @@ describe("agent routes", () => {
       );
       expect(after).not.toBeNull();
       expect(response.json().id).toBe(after?.id);
+    });
+
+    test("creates a new personal gateway when the previous default is soft-deleted", async () => {
+      const { default: AgentModel } = await import("@/models/agent");
+      const original = await AgentModel.ensurePersonalMcpGateway({
+        userId: user.id,
+        organizationId,
+      });
+      await AgentModel.delete(original.id);
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/api/mcp-gateways/default",
+      });
+
+      expect(response.statusCode).toBe(200);
+      const replacement = response.json();
+      expect(replacement.agentType).toBe("mcp_gateway");
+      expect(replacement.isPersonalGateway).toBe(true);
+      expect(replacement.id).not.toBe(original.id);
+    });
+  });
+
+  describe("GET /api/llm-proxy/default", () => {
+    test("creates a new default LLM proxy when the previous default is soft-deleted", async () => {
+      const { default: AgentModel } = await import("@/models/agent");
+      const original =
+        await AgentModel.getLLMProxyOrCreateDefault(organizationId);
+      await AgentModel.delete(original.id);
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/api/llm-proxy/default",
+      });
+
+      expect(response.statusCode).toBe(200);
+      const replacement = response.json();
+      expect(replacement.agentType).toBe("llm_proxy");
+      expect(replacement.isDefault).toBe(true);
+      expect(replacement.id).not.toBe(original.id);
     });
   });
 

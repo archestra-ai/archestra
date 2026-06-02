@@ -71,7 +71,7 @@ import {
 } from "@/components/visibility-selector";
 import { LOCAL_MCP_DISABLED_MESSAGE } from "@/consts";
 import { useHasPermissions } from "@/lib/auth/auth.query";
-import config from "@/lib/config/config";
+import { useIdentityProviders } from "@/lib/auth/identity-provider-read.query";
 import { useEnterpriseFeature, useFeature } from "@/lib/config/config.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useAppName } from "@/lib/hooks/use-app-name";
@@ -96,20 +96,6 @@ import {
 } from "./mcp-catalog-form.utils";
 import { ReinstallConfirmBar } from "./reinstall-confirm-bar";
 
-const { useIdentityProviders } = config.enterpriseFeatures.core
-  ? // biome-ignore lint/style/noRestrictedImports: conditional EE query import for IdP selector
-    await import("@/lib/auth/identity-provider.query.ee")
-  : {
-      useIdentityProviders: (_params?: { enabled?: boolean }) => ({
-        data: [] as Array<{
-          id: string;
-          providerId: string;
-          issuer: string;
-          oidcConfig?: Record<string, unknown> | null;
-        }>,
-      }),
-    };
-
 const ExternalSecretSelector = lazy(
   () =>
     // biome-ignore lint/style/noRestrictedImports: lazy loading
@@ -125,6 +111,8 @@ interface McpCatalogFormProps {
     | ((opts: { isDirty: boolean; onReset: () => void }) => React.ReactNode);
   nameDisabled?: boolean;
   catalogButton?: React.ReactNode;
+  /** Optional banner/notice rendered at the very top of the form body. */
+  notice?: React.ReactNode;
   formValues?: McpCatalogFormValues;
   /** Called when form dirty state changes */
   onDirtyChange?: (isDirty: boolean) => void;
@@ -146,6 +134,7 @@ export function McpCatalogForm({
   nameDisabled,
   footer,
   catalogButton,
+  notice,
   formValues,
   onDirtyChange,
   submitRef,
@@ -760,6 +749,7 @@ export function McpCatalogForm({
           <div
             className={`min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-6 ${embedded ? "space-y-6 pt-6 pb-0" : "space-y-6 py-6"}`}
           >
+            {notice}
             {catalogButton}
 
             <div className="space-y-4">

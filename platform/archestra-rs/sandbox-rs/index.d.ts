@@ -73,6 +73,14 @@ export interface SnapshotFile {
 }
 export declare function checkSession(input?: CheckSessionInput | undefined | null): Promise<void>
 
+/**
+ * force-flush pending OTLP traces/logs. the backend calls this on graceful
+ * shutdown so the final batch isn't lost. intentionally sync: the blocking
+ * flush runs on the JS thread while the batch-export tasks drain on the tokio
+ * runtime — calling it from inside the runtime (an async fn) would deadlock.
+ */
+export declare function flushTelemetry(): void
+
 export declare function readArtifact(input: ReadArtifactInput): Promise<ArtifactBytes>
 
 export declare function runSandbox(input: RunSandboxInput): Promise<CommandExecution>

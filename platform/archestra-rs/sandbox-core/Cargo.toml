@@ -7,6 +7,15 @@ publish = false
 [features]
 default = []
 napi = ["dep:napi", "dep:napi-derive"]
+# the OTLP export pipeline (traces + logs). off by default so `cargo test` of
+# the pure logic stays light; the napi binding turns it on.
+telemetry = [
+    "dep:opentelemetry-otlp",
+    "dep:opentelemetry-appender-tracing",
+    "dep:tracing-subscriber",
+    "opentelemetry_sdk/rt-tokio",
+    "opentelemetry_sdk/logs",
+]
 
 [dependencies]
 base64 = "0.22"
@@ -16,8 +25,24 @@ napi = { version = "3", optional = true }
 napi-derive = { version = "3", optional = true }
 opentelemetry = "0.27"
 opentelemetry_sdk = "0.27"
+# http/protobuf OTLP over rustls (musl-friendly, no system openssl), aimed at
+# the same collector the node SDK uses (port 4318).
+opentelemetry-otlp = { version = "0.27", default-features = false, features = [
+    "trace",
+    "logs",
+    "http-proto",
+    "reqwest-client",
+    "reqwest-rustls-webpki-roots",
+], optional = true }
+opentelemetry-appender-tracing = { version = "0.27", optional = true }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tokio = { version = "1", features = ["sync", "rt", "macros", "time"] }
 tracing = "0.1"
 tracing-opentelemetry = "0.28"
+tracing-subscriber = { version = "0.3", default-features = false, features = [
+    "std",
+    "fmt",
+    "env-filter",
+    "registry",
+], optional = true }

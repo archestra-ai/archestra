@@ -37,7 +37,7 @@ import {
   PROVIDER_CONFIG,
   serializeExtraHeaders,
 } from "@/components/llm-provider-api-key-form";
-import { LlmProviderSelectItems } from "@/components/llm-provider-options";
+import { LlmProviderSelectItems } from "@/components/llm-provider-select-items";
 import { SearchInput } from "@/components/search-input";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";

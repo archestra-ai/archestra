@@ -38,6 +38,7 @@ import { ButtonWithTooltip } from "@/components/button-with-tooltip";
 import { BrowserPanel } from "@/components/chat/browser-panel";
 import { ChatLinkButton } from "@/components/chat/chat-help-link";
 import { ChatMessages } from "@/components/chat/chat-messages";
+import { deriveCanvasesFromMessages } from "@/components/chat/chat-messages.utils";
 import { ConversationArtifactPanel } from "@/components/chat/conversation-artifact";
 import { InitialAgentSelector } from "@/components/chat/initial-agent-selector";
 import { OnboardingWizardButton } from "@/components/chat/onboarding-wizard-button";
@@ -94,7 +95,6 @@ import {
   clearSsoSignInRedirectPath,
   getSsoSignInRedirectPath,
 } from "@/lib/auth/sso-sign-in-attempt";
-import { useRecentlyGeneratedTitles } from "@/lib/chat/chat.hook";
 import {
   fetchConversationEnabledTools,
   useCompactConversation,
@@ -120,7 +120,7 @@ import {
   mergePersistedMessageMetadata,
 } from "@/lib/chat/chat-utils";
 import { downloadConversationMarkdown } from "@/lib/chat/export-markdown";
-import { useChatSession } from "@/lib/chat/global-chat.context";
+import { useChatSession, useGlobalChat } from "@/lib/chat/global-chat.context";
 import {
   applyPendingActions,
   clearPendingActions,
@@ -629,14 +629,8 @@ export function ChatPageContent({
     setForkAgentId(accessibleSharedAgentId);
   }, [accessibleSharedAgentId, isForkDialogOpen]);
 
-  // Track title generation for typing animation in the header
-  const conversationForTitleTracking = useMemo(
-    () =>
-      conversation ? [{ id: conversation.id, title: conversation.title }] : [],
-    [conversation],
-  );
-  const { recentlyGeneratedTitles: headerAnimatingTitles } =
-    useRecentlyGeneratedTitles(conversationForTitleTracking);
+  // Conversations whose title should play the typing animation (shared via chat context)
+  const { animatingTitleIds: headerAnimatingTitles } = useGlobalChat();
 
   // Initialize artifact panel state when conversation loads or changes
   useEffect(() => {
@@ -909,6 +903,18 @@ export function ChatPageContent({
           })
         : persistedConversationMessages,
     [chatSession?.messages, persistedConversationMessages],
+  );
+  // Derive the MCP App canvas list from the conversation itself so the sidebar
+  // selector is deterministic and survives transient section unmounts (the
+  // previous mount-effect registry could empty when a single canvas's section
+  // briefly unmounted).
+  const mcpCanvases = useMemo(
+    () =>
+      deriveCanvasesFromMessages(
+        messages,
+        chatSession?.earlyToolUiStarts ?? {},
+      ),
+    [messages, chatSession?.earlyToolUiStarts],
   );
   const sendMessage = chatSession?.sendMessage;
   const status = chatSession?.status ?? "ready";
@@ -1484,7 +1490,10 @@ export function ChatPageContent({
 
   // Handle creating conversation from browser URL input (when no conversation exists)
   const createInitialConversation = useCallback(
-    (onSuccess?: (newConversation: { id: string }) => void | Promise<void>) => {
+    (
+      onSuccess?: (newConversation: { id: string }) => void | Promise<void>,
+      title?: string,
+    ) => {
       if (createConversationMutation.isPending) {
         return false;
       }
@@ -1493,6 +1502,7 @@ export function ChatPageContent({
         agentId: initialAgentId,
         modelId: initialModel,
         chatApiKeyId: initialApiKeyId,
+        title,
       });
       if (!input) {
         return false;
@@ -1658,7 +1668,7 @@ export function ChatPageContent({
         }
 
         selectConversation(newConversation.id);
-      });
+      }, message.text?.trim());
     },
     [
       isPlaywrightSetupVisible,
@@ -1884,11 +1894,12 @@ export function ChatPageContent({
   return (
     <PinnedCanvasProvider
       conversationId={conversationId}
+      canvases={mcpCanvases}
       onShowInSidebar={() => openRightPanelTab("canvas" as RightPanelTab)}
     >
       <div className="flex h-full w-full min-h-0">
-        <div className="flex-1 flex flex-col min-w-0">
-          <div className="flex flex-col h-full">
+        <div className="flex-1 flex flex-col min-w-0 min-h-0">
+          <div className="flex flex-col h-full min-h-0">
             <StreamTimeoutWarning status={status} messages={messages} />
 
             <div
@@ -2359,7 +2370,7 @@ export function ChatPageContent({
         </div>
 
         {/* Right-side panel - desktop only */}
-        <div className="hidden md:flex">
+        <div className="hidden md:flex h-full min-h-0">
           <RightSidePanel
             isOpen={isRightPanelOpen}
             activeTab={activeRightTab}

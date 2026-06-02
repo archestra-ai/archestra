@@ -19,7 +19,7 @@ import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useFeature, useProviderBaseUrls } from "@/lib/config/config.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useTeams } from "@/lib/teams/team.query";
-import { LlmProviderSelectItems } from "./llm-provider-options";
+import { LlmProviderSelectItems } from "./llm-provider-select-items";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";

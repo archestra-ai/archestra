@@ -1,6 +1,7 @@
 import type { UIMessage } from "@ai-sdk/react";
 import { describe, expect, it } from "vitest";
 import {
+  deriveCanvasesFromMessages,
   extractFileAttachments,
   filterOptimisticToolCalls,
   hasTextPart,
@@ -183,6 +184,103 @@ describe("filterOptimisticToolCalls", () => {
     expect(filterOptimisticToolCalls(messages, optimisticToolCalls)).toEqual([
       optimisticToolCalls[1],
     ]);
+  });
+});
+
+describe("deriveCanvasesFromMessages", () => {
+  it("returns a canvas for a tool call whose output carries _meta.ui.resourceUri", () => {
+    const messages = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        metadata: { createdAt: "2026-05-29T18:13:52.000Z" },
+        parts: [
+          {
+            type: "dynamic-tool",
+            toolName: "pm__show_board",
+            toolCallId: "call_1",
+            state: "output-available",
+            output: { _meta: { ui: { resourceUri: "ui://pm/board" } } },
+          },
+        ],
+      },
+    ] as never;
+
+    expect(deriveCanvasesFromMessages(messages, {})).toEqual([
+      {
+        toolCallId: "call_1",
+        label: "show_board",
+        serverName: "pm",
+        createdAt: Date.parse("2026-05-29T18:13:52.000Z"),
+      },
+    ]);
+  });
+
+  it("returns a canvas from early UI-start data before the result arrives", () => {
+    const messages = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          {
+            type: "dynamic-tool",
+            toolName: "pm__show_board",
+            toolCallId: "call_1",
+            state: "input-available",
+            input: {},
+          },
+        ],
+      },
+    ] as never;
+
+    expect(
+      deriveCanvasesFromMessages(messages, {
+        call_1: { uiResourceUri: "ui://pm/board", toolName: "pm__show_board" },
+      }),
+    ).toEqual([
+      {
+        toolCallId: "call_1",
+        label: "show_board",
+        serverName: "pm",
+        createdAt: 0,
+      },
+    ]);
+  });
+
+  it("ignores tool calls without a UI resource and de-dupes by toolCallId", () => {
+    const messages = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-google__search",
+            toolCallId: "call_plain",
+            state: "output-available",
+            output: { content: "no ui here" },
+          },
+          {
+            type: "tool-pm__show_board",
+            toolCallId: "call_1",
+            state: "input-available",
+            input: {},
+          },
+          {
+            type: "tool-pm__show_board",
+            toolCallId: "call_1",
+            state: "output-available",
+            output: { _meta: { ui: { resourceUri: "ui://pm/board" } } },
+          },
+        ],
+      },
+    ] as never;
+
+    const canvases = deriveCanvasesFromMessages(messages, {});
+    expect(canvases).toHaveLength(1);
+    expect(canvases[0]).toMatchObject({
+      toolCallId: "call_1",
+      label: "show_board",
+    });
   });
 });
 

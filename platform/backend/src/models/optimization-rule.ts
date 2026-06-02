@@ -1,12 +1,14 @@
 import type { SupportedProvider } from "@shared";
 import { and, asc, eq, getTableColumns, or, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
+import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import logger from "@/logging";
 import type {
   InsertOptimizationRule,
   OptimizationRule,
   UpdateOptimizationRule,
 } from "@/types";
+import AgentModel from "./agent";
 
 class OptimizationRuleModel {
   /**
@@ -76,6 +78,7 @@ class OptimizationRuleModel {
           and(
             eq(schema.optimizationRulesTable.entityType, "agent"),
             eq(schema.agentsTable.organizationId, organizationId),
+            notDeleted(schema.agentsTable),
           ),
         ),
       )
@@ -132,6 +135,7 @@ class OptimizationRuleModel {
             and(
               eq(schema.optimizationRulesTable.entityType, "agent"),
               eq(schema.agentsTable.organizationId, organizationId),
+              notDeleted(schema.agentsTable),
             ),
           ),
         ),
@@ -172,18 +176,7 @@ class OptimizationRuleModel {
       return !!team;
     }
 
-    const [agent] = await db
-      .select({ id: schema.agentsTable.id })
-      .from(schema.agentsTable)
-      .where(
-        and(
-          eq(schema.agentsTable.id, entityId),
-          eq(schema.agentsTable.organizationId, organizationId),
-        ),
-      )
-      .limit(1);
-
-    return !!agent;
+    return AgentModel.existsInOrganization({ id: entityId, organizationId });
   }
 
   /**

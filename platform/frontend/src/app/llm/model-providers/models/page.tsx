@@ -27,8 +27,8 @@ import {
 import Image from "next/image";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
+import { LlmProviderApiKeyDropdown } from "@/components/llm-provider-api-key-dropdown";
 import { PROVIDER_CONFIG } from "@/components/llm-provider-api-key-form";
-import { LlmProviderApiKeyFilterSelect } from "@/components/llm-provider-options";
 import {
   BestModelBadge,
   EmbeddingModelBadge,
@@ -95,6 +95,7 @@ export default function ModelsPage() {
   const [isRefreshingModels, setIsRefreshingModels] = useState(false);
   const [search, setSearch] = useState("");
   const [apiKeyFilter, setApiKeyFilter] = useState<string>("all");
+  const [apiKeyFilterOpen, setApiKeyFilterOpen] = useState(false);
   const [modelTypeFilter, setModelTypeFilter] =
     useState<ModelsPageModelTypeFilter>("all");
   const [freeOnly, setFreeOnly] = useState(false);
@@ -352,23 +353,36 @@ export default function ModelsPage() {
               onSearchChange={setSearch}
               syncQueryParams={false}
             />
-            <LlmProviderApiKeyFilterSelect
-              value={apiKeyFilter}
-              onValueChange={setApiKeyFilter}
-              allLabel="All provider API keys"
-              className="w-full sm:w-[280px]"
-              options={availableApiKeys.flatMap(([id, { name, provider }]) => {
-                const config = PROVIDER_CONFIG[provider];
-                if (!config) return [];
-                return [
-                  {
-                    value: id,
-                    icon: config.icon,
-                    providerName: config.name,
-                    keyName: name,
-                  },
-                ];
-              })}
+            <LlmProviderApiKeyDropdown
+              availableKeys={availableApiKeys.flatMap(
+                ([id, { name, provider }]) => {
+                  const config = PROVIDER_CONFIG[provider];
+                  if (!config) return [];
+                  return [
+                    {
+                      id,
+                      name,
+                      provider,
+                    },
+                  ];
+                },
+              )}
+              selectedApiKeyId={apiKeyFilter === "all" ? null : apiKeyFilter}
+              open={apiKeyFilterOpen}
+              onOpenChange={setApiKeyFilterOpen}
+              onSelectKey={(value) => {
+                setApiKeyFilter(value);
+                setApiKeyFilterOpen(false);
+              }}
+              triggerVariant="select"
+              triggerClassName="w-full sm:w-[280px] h-9 text-sm"
+              popoverClassName="w-[var(--radix-popover-trigger-width)]"
+              allOptionLabel="All provider API keys"
+              allOptionSelected={apiKeyFilter === "all"}
+              onSelectAllOption={() => {
+                setApiKeyFilter("all");
+                setApiKeyFilterOpen(false);
+              }}
             />
             <SearchableSelect
               value={modelTypeFilter}

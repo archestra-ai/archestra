@@ -145,4 +145,43 @@ describe("serializeAgentForExport", () => {
     expect(serialized.connectors[0].name).toBe("Confluence");
     expect(serialized.connectors[0].connectorType).toBe("confluence");
   });
+
+  test("does not serialize delegations to soft-deleted target agents", async ({
+    makeAgent,
+    makeUser,
+    makeOrganization,
+  }) => {
+    const user = await makeUser();
+    const org = await makeOrganization();
+    const targetAgent = await makeAgent({
+      name: "Deleted Delegate",
+      organizationId: org.id,
+      authorId: user.id,
+    });
+    const sourceAgent = await makeAgent({
+      name: "Source Agent",
+      organizationId: org.id,
+      authorId: user.id,
+    });
+    const [delegationTool] = await db
+      .insert(schema.toolsTable)
+      .values({
+        name: "ask_deleted_delegate",
+        delegateToAgentId: targetAgent.id,
+      })
+      .returning();
+    await db.insert(schema.agentToolsTable).values({
+      agentId: sourceAgent.id,
+      toolId: delegationTool.id,
+    });
+
+    await AgentModel.delete(targetAgent.id);
+    const fullAgent = await AgentModel.findById(sourceAgent.id, user.id, true);
+    expect(fullAgent).not.toBeNull();
+    if (!fullAgent) throw new Error("fullAgent should not be null");
+
+    const serialized = await serializeAgentForExport(fullAgent);
+
+    expect(serialized.delegations).toEqual([]);
+  });
 });

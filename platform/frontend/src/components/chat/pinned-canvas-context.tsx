@@ -32,10 +32,6 @@ interface PinnedCanvasContextValue {
   setPinned: (toolCallId: string | null) => void;
   /** Update which canvas the sidebar displays. */
   select: (toolCallId: string) => void;
-  /** Register a canvas when its McpAppSection mounts. */
-  register: (info: CanvasInfo) => void;
-  /** Unregister a canvas when its McpAppSection unmounts. */
-  unregister: (toolCallId: string) => void;
   /** DOM node where the selected canvas should portal its content; null when sidebar is not on the MCP App tab. */
   portalTarget: HTMLElement | null;
   setPortalTarget: (el: HTMLElement | null) => void;
@@ -53,8 +49,6 @@ const NOOP_VALUE: PinnedCanvasContextValue = {
   selectedCanvasId: null,
   setPinned: () => {},
   select: () => {},
-  register: () => {},
-  unregister: () => {},
   portalTarget: null,
   setPortalTarget: () => {},
   showInSidebar: () => {},
@@ -62,24 +56,23 @@ const NOOP_VALUE: PinnedCanvasContextValue = {
 
 export function PinnedCanvasProvider({
   conversationId,
+  canvases,
   onShowInSidebar,
   children,
 }: {
   conversationId: string | undefined;
+  /** Canvases for this conversation, derived from its messages by the caller. */
+  canvases: CanvasInfo[];
   /** Called when a canvas requests to be shown in the sidebar — wire this to open the panel and switch to the canvas tab. */
   onShowInSidebar?: (toolCallId: string) => void;
   children: ReactNode;
 }) {
-  const [canvases, setCanvases] = useState<CanvasInfo[]>([]);
   const [pinnedCanvasId, setPinnedCanvasId] = useState<string | null>(null);
   const [selectedCanvasId, setSelectedCanvasId] = useState<string | null>(null);
   const [portalTarget, setPortalTarget] = useState<HTMLElement | null>(null);
 
   // Hydrate the pinned canvas id from localStorage when the conversation
-  // changes. Don't wipe `canvases` here — child McpAppSections unmount/remount
-  // with the conversation switch and manage the registry themselves. (Wiping
-  // here in a parent effect would race with child mount effects and overwrite
-  // freshly-registered canvases.)
+  // changes.
   useEffect(() => {
     if (!conversationId || typeof window === "undefined") {
       setPinnedCanvasId(null);
@@ -135,31 +128,6 @@ export function PinnedCanvasProvider({
     [onShowInSidebar],
   );
 
-  const register = useCallback((info: CanvasInfo) => {
-    setCanvases((prev) => {
-      const existing = prev.findIndex((c) => c.toolCallId === info.toolCallId);
-      if (existing !== -1) {
-        const current = prev[existing];
-        // Preserve the original createdAt across remounts.
-        const merged: CanvasInfo = { ...info, createdAt: current.createdAt };
-        if (
-          current.label === merged.label &&
-          current.serverName === merged.serverName
-        ) {
-          return prev;
-        }
-        const next = [...prev];
-        next[existing] = merged;
-        return next;
-      }
-      return [...prev, info];
-    });
-  }, []);
-
-  const unregister = useCallback((toolCallId: string) => {
-    setCanvases((prev) => prev.filter((c) => c.toolCallId !== toolCallId));
-  }, []);
-
   const value = useMemo<PinnedCanvasContextValue>(
     () => ({
       canvases,
@@ -167,8 +135,6 @@ export function PinnedCanvasProvider({
       selectedCanvasId,
       setPinned,
       select,
-      register,
-      unregister,
       portalTarget,
       setPortalTarget,
       showInSidebar,
@@ -179,8 +145,6 @@ export function PinnedCanvasProvider({
       selectedCanvasId,
       setPinned,
       select,
-      register,
-      unregister,
       portalTarget,
       showInSidebar,
     ],

@@ -56,7 +56,9 @@ export async function generateTaggedText(params: {
 
 /**
  * Extract the content inside the first `<tag>…</tag>` pair. Returns `null` when
- * the tag is absent or wraps only whitespace. Pure and exported for testing.
+ * the tag is absent or wraps only whitespace. Pure.
+ *
+ * @public — exported for testability
  */
 export function extractTaggedText(text: string, tag: string): string | null {
   const open = `<${tag}>`;
@@ -69,8 +71,6 @@ export function extractTaggedText(text: string, tag: string): string | null {
   const inner = text.slice(contentStart, end).trim();
   return inner.length > 0 ? inner : null;
 }
-
-// ===== Internal =====
 
 function outputContract(tag: string): string {
   return `Output contract: reply with EXACTLY ONE <${tag}>...</${tag}> block — your answer inside the tags, no text outside them.`;

@@ -17,7 +17,11 @@ import { resolveAgentLlmOrDefault } from "@/utils/llm-resolution";
  * @see {@link agentToSkill}
  */
 
-/** The subset of an agent this reads. A full agent assigns to it. */
+/**
+ * The subset of an agent this reads. A full agent assigns to it.
+ *
+ * @public — exported for testability
+ */
 export interface DescribableAgent {
   id: string;
   name: string;
@@ -69,7 +73,9 @@ export async function suggestSkillDescription(params: {
 /**
  * Normalize a generated description into a single clean line: collapse
  * whitespace, drop wrapping quotes/backticks a model may add, and cap length so
- * a runaway response can't overflow the description field. Exported for testing.
+ * a runaway response can't overflow the description field.
+ *
+ * @public — exported for testability
  */
 export function sanitizeDescription(raw: string): string {
   const oneLine = raw.replace(/\s+/g, " ").trim();
@@ -78,8 +84,10 @@ export function sanitizeDescription(raw: string): string {
 }
 
 /**
- * Render the agent into the user-message half of the description prompt. Pure
- * and exported so the prompt's shape is unit-tested directly without an LLM.
+ * Render the agent into the user-message half of the description prompt. Pure,
+ * so the prompt's shape is unit-tested directly without an LLM.
+ *
+ * @public — exported for testability
  */
 export function buildSkillDescriptionPrompt(agent: DescribableAgent): string {
   const sections: string[] = [`Agent name: ${agent.name}`];

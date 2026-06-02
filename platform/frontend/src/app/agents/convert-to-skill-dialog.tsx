@@ -4,7 +4,7 @@ import {
   TOOL_READ_SKILL_FILE_FULL_NAME,
 } from "@shared";
 import { Loader2, Sparkles } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -63,21 +63,34 @@ export function ConvertToSkillDialog({
     control,
     reset,
     setValue,
+    getValues,
     formState: { errors },
   } = useForm<FormValues>({
     defaultValues: { description: "", deleteAgent: false },
   });
 
+  // monotonic token; bumped whenever the dialog switches agent or closes, so an
+  // in-flight suggestion that resolves late can detect it is now stale.
+  const suggestionToken = useRef(0);
+
   const onSuggestDescription = async () => {
     if (!agent) return;
+    suggestionToken.current += 1;
+    const token = suggestionToken.current;
+    const descriptionAtRequest = getValues("description");
     const description = await suggestDescription.mutateAsync(agent.id);
+    // drop the result if the dialog moved on or the user edited meanwhile.
+    if (token !== suggestionToken.current) return;
+    if (getValues("description") !== descriptionAtRequest) return;
     if (description) {
       setValue("description", description, { shouldValidate: true });
     }
   };
 
-  // Prefill from the agent each time the dialog opens for a new one.
+  // Prefill from the agent each time the dialog opens for a new one, and
+  // invalidate any suggestion still in flight for the previous agent.
   useEffect(() => {
+    suggestionToken.current += 1;
     if (agent) {
       reset({ description: agent.description ?? "", deleteAgent: false });
     }

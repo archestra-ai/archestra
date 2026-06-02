@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { UnauthorizedError } from "@modelcontextprotocol/sdk/client/auth.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import {
@@ -201,6 +202,7 @@ type CachedResource = {
 
 type CachedServerState = {
   secretId: string | null;
+  credentialFingerprint: string | null;
 };
 
 class McpClient {
@@ -225,6 +227,7 @@ class McpClient {
       this.activeConnectionServerState.delete(key);
       this.toolNameCache.delete(key);
       this.pendingHttpSessionMetadata.delete(key);
+      this.pendingTransportCredentialFingerprints.delete(key);
       this.activeConnectionLastValidatedAt.delete(key);
     },
   });
@@ -255,6 +258,7 @@ class McpClient {
     string,
     { sessionEndpointUrl: string | null; sessionEndpointPodName: string | null }
   >();
+  private pendingTransportCredentialFingerprints = new Map<string, string>();
   // Cache for resource reads: key is `${agentId}:${uri}`, value is cached result with TTL.
   // Bounded to RESOURCE_CACHE_MAX_SIZE entries (LRU eviction) to prevent unbounded growth
   // in multi-tenant environments with many agents and resources.
@@ -453,6 +457,7 @@ class McpClient {
             catalogItem,
             targetMcpServerId,
             tokenAuth,
+            enterpriseTransportCredential,
             toolCatalogId: tool.catalogId,
             toolCatalogName: tool.catalogName,
             executeRetry: (nextGetTransport, secrets) =>
@@ -554,6 +559,7 @@ class McpClient {
             catalogItem,
             targetMcpServerId,
             tokenAuth,
+            enterpriseTransportCredential,
             toolCatalogId: tool.catalogId,
             toolCatalogName: tool.catalogName,
             executeRetry: (nextGetTransport, secrets) =>
@@ -718,6 +724,7 @@ class McpClient {
             catalogItem,
             targetMcpServerId,
             tokenAuth,
+            enterpriseTransportCredential,
             toolCatalogId: tool.catalogId,
             toolCatalogName: tool.catalogName,
             executeRetry: (getTransport, secrets) =>
@@ -888,6 +895,11 @@ class McpClient {
     targetMcpServerId: string,
     currentServerState: CachedServerState,
   ): Promise<Client> {
+    const effectiveServerState = this.withPendingCredentialFingerprint(
+      connectionKey,
+      currentServerState,
+    );
+
     // Check if we already have an active connection
     const existingClient = this.activeConnections.get(connectionKey);
     if (existingClient) {
@@ -895,16 +907,16 @@ class McpClient {
         this.activeConnectionServerState.get(connectionKey);
       if (
         !cachedServerState ||
-        !this.hasMatchingServerState(cachedServerState, currentServerState)
+        !this.hasMatchingServerState(cachedServerState, effectiveServerState)
       ) {
         logger.info(
           {
             connectionKey,
             targetMcpServerId,
             cachedSecretId: cachedServerState?.secretId ?? null,
-            currentSecretId: currentServerState.secretId,
+            currentSecretId: effectiveServerState.secretId,
           },
-          "Discarding cached MCP client after MCP server secret changed",
+          "Discarding cached MCP client after MCP server credentials changed",
         );
         try {
           await existingClient.close();
@@ -929,7 +941,10 @@ class McpClient {
         }
         logger.debug({ connectionKey }, "Reusing cached MCP client");
         this.activeConnections.set(connectionKey, reusableClient);
-        this.activeConnectionServerState.set(connectionKey, currentServerState);
+        this.activeConnectionServerState.set(
+          connectionKey,
+          effectiveServerState,
+        );
         return reusableClient;
       } catch (error) {
         // Connection is dead, invalidate cache and create fresh client
@@ -1018,7 +1033,7 @@ class McpClient {
     // This prevents a race where a second request creates a duplicate connection
     // while the upsert is in flight.
     this.activeConnections.set(connectionKey, client);
-    this.activeConnectionServerState.set(connectionKey, currentServerState);
+    this.activeConnectionServerState.set(connectionKey, effectiveServerState);
     this.activeConnectionLastValidatedAt.set(connectionKey, Date.now());
 
     // Persist the MCP session ID so other backend pods can reuse it.
@@ -1065,6 +1080,7 @@ class McpClient {
     this.activeConnectionServerState.delete(connectionKey);
     this.toolNameCache.delete(connectionKey);
     this.pendingHttpSessionMetadata.delete(connectionKey);
+    this.pendingTransportCredentialFingerprints.delete(connectionKey);
     this.activeConnectionLastValidatedAt.delete(connectionKey);
   }
 
@@ -1073,6 +1089,7 @@ class McpClient {
     this.activeConnectionServerState.clear();
     this.toolNameCache.clear();
     this.pendingHttpSessionMetadata.clear();
+    this.pendingTransportCredentialFingerprints.clear();
     this.activeConnectionLastValidatedAt.clear();
   }
 
@@ -1604,6 +1621,7 @@ class McpClient {
         }
 
         mergePassthroughHeaders(localHeaders, tokenAuth?.passthroughHeaders);
+        this.trackTransportCredentialFingerprint(connectionKey, localHeaders);
 
         return new StreamableHTTPClientTransport(new URL(endpointUrl), {
           sessionId,
@@ -1635,6 +1653,7 @@ class McpClient {
         }
 
         mergePassthroughHeaders(headers, tokenAuth?.passthroughHeaders);
+        this.trackTransportCredentialFingerprint(connectionKey, headers);
 
         return new StreamableHTTPClientTransport(
           new URL(catalogItem.serverUrl),
@@ -2017,6 +2036,7 @@ class McpClient {
     catalogItem: InternalMcpCatalog;
     targetMcpServerId: string;
     tokenAuth?: TokenAuthContext;
+    enterpriseTransportCredential?: ResolvedEnterpriseTransportCredential | null;
     toolCatalogId: string | null;
     toolCatalogName: string | null;
     executeRetry: (
@@ -2034,6 +2054,7 @@ class McpClient {
       catalogItem,
       targetMcpServerId,
       tokenAuth,
+      enterpriseTransportCredential,
       toolCatalogId,
       toolCatalogName,
       executeRetry,
@@ -2097,6 +2118,9 @@ class McpClient {
           targetMcpServerId,
           updatedSecret,
           secretId,
+          connectionKey,
+          tokenAuth,
+          enterpriseTransportCredential ?? undefined,
         );
 
       return await executeRetry(getUpdatedTransport, updatedSecret);
@@ -2929,45 +2953,81 @@ class McpClient {
    * Get connected MCP SDK clients for all upstream servers of an agent.
    * Returns one client per distinct catalog item (MCP server installation).
    */
-  private async getClientsForAgent(agentId: string): Promise<Client[]> {
+  private async getClientsForAgent(
+    agentId: string,
+    tokenAuth?: TokenAuthContext,
+  ): Promise<Client[]> {
     const tools = await ToolModel.getMcpToolsByAgent(agentId);
-
-    // Collect distinct catalog IDs (skip Archestra built-in tools which have no upstream server)
-    const catalogIds = [
-      ...new Set(
-        tools.map((t) => t.catalogId).filter((id): id is string => !!id),
-      ),
-    ];
+    const assignedTools = await ToolModel.getMcpToolsAssignedToAgent(
+      tools.map((tool) => tool.name),
+      agentId,
+    );
+    const toolsByCatalogId = new Map<string, McpToolAssignment>();
+    for (const tool of assignedTools) {
+      if (tool.catalogId && !toolsByCatalogId.has(tool.catalogId)) {
+        toolsByCatalogId.set(tool.catalogId, tool);
+      }
+    }
 
     const clients: Client[] = [];
 
-    for (const catalogId of catalogIds) {
+    for (const [catalogId, tool] of toolsByCatalogId) {
       try {
         const catalogItem = await InternalMcpCatalogModel.findById(catalogId);
         if (!catalogItem) continue;
 
-        const servers = await McpServerModel.findByCatalogId(catalogId);
-        const server = servers[0];
-        if (!server) continue;
+        const targetResult =
+          await this.determineTargetMcpServerIdForCatalogItem({
+            tool,
+            tokenAuth,
+            toolCall: {
+              id: "list-op",
+              name: tool.toolName,
+              arguments: {},
+            },
+            agentId,
+            catalogItem,
+          });
+        if ("error" in targetResult) continue;
+
+        const { targetMcpServerId } = targetResult;
+        const enterpriseTransportCredential =
+          tool.credentialResolutionMode === "enterprise_managed"
+            ? await this.resolveCachedEnterpriseTransportCredential({
+                agentId,
+                tokenAuth,
+                enterpriseManagedConfig:
+                  catalogItem.enterpriseManagedConfig ?? null,
+              })
+            : null;
+        if (
+          tool.credentialResolutionMode === "enterprise_managed" &&
+          !enterpriseTransportCredential
+        ) {
+          continue;
+        }
 
         const secretResult = await this.getSecretsForMcpServer({
-          targetMcpServerId: server.id,
-          toolCall: { id: "list-op", name: "list", arguments: {} },
+          targetMcpServerId,
+          toolCall: { id: "list-op", name: tool.toolName, arguments: {} },
           agentId,
         });
         if ("error" in secretResult) continue;
 
         const transport = await this.getTransport(
           catalogItem,
-          server.id,
+          targetMcpServerId,
           secretResult.secrets,
           secretResult.secretId,
+          `${catalogItem.id}:${targetMcpServerId}`,
+          tokenAuth,
+          enterpriseTransportCredential ?? undefined,
         );
-        const connectionKey = `${catalogItem.id}:${server.id}`;
+        const connectionKey = `${catalogItem.id}:${targetMcpServerId}`;
         const client = await this.getOrCreateClient(
           connectionKey,
           transport,
-          server.id,
+          targetMcpServerId,
           secretResult.serverState,
         );
         clients.push(client);
@@ -2987,8 +3047,9 @@ class McpClient {
    */
   async listResources(
     agentId: string,
+    tokenAuth?: TokenAuthContext,
   ): Promise<{ resources: Array<Record<string, unknown>> }> {
-    const clients = await this.getClientsForAgent(agentId);
+    const clients = await this.getClientsForAgent(agentId, tokenAuth);
     const allResources: Array<Record<string, unknown>> = [];
 
     await Promise.all(
@@ -3015,8 +3076,9 @@ class McpClient {
    */
   async listResourceTemplates(
     agentId: string,
+    tokenAuth?: TokenAuthContext,
   ): Promise<{ resourceTemplates: Array<Record<string, unknown>> }> {
-    const clients = await this.getClientsForAgent(agentId);
+    const clients = await this.getClientsForAgent(agentId, tokenAuth);
     const allTemplates: Array<Record<string, unknown>> = [];
 
     await Promise.all(
@@ -3045,8 +3107,9 @@ class McpClient {
    */
   async listPrompts(
     agentId: string,
+    tokenAuth?: TokenAuthContext,
   ): Promise<{ prompts: Array<Record<string, unknown>> }> {
-    const clients = await this.getClientsForAgent(agentId);
+    const clients = await this.getClientsForAgent(agentId, tokenAuth);
     const allPrompts: Array<Record<string, unknown>> = [];
 
     await Promise.all(
@@ -3137,7 +3200,10 @@ class McpClient {
     left: CachedServerState,
     right: CachedServerState,
   ): boolean {
-    return left.secretId === right.secretId;
+    return (
+      left.secretId === right.secretId &&
+      left.credentialFingerprint === right.credentialFingerprint
+    );
   }
 
   private toCachedServerState(
@@ -3145,6 +3211,32 @@ class McpClient {
   ): CachedServerState {
     return {
       secretId: mcpServer.secretId ?? null,
+      credentialFingerprint: null,
+    };
+  }
+
+  private trackTransportCredentialFingerprint(
+    connectionKey: string | undefined,
+    headers: Record<string, string>,
+  ): void {
+    if (!connectionKey) {
+      return;
+    }
+
+    this.pendingTransportCredentialFingerprints.set(
+      connectionKey,
+      fingerprintHeaders(headers),
+    );
+  }
+
+  private withPendingCredentialFingerprint(
+    connectionKey: string,
+    serverState: CachedServerState,
+  ): CachedServerState {
+    return {
+      ...serverState,
+      credentialFingerprint:
+        this.pendingTransportCredentialFingerprints.get(connectionKey) ?? null,
     };
   }
 }
@@ -3566,4 +3658,14 @@ function buildDefaultAuthorizationHeaders(
   }
 
   return headers;
+}
+
+function fingerprintHeaders(headers: Record<string, string>): string {
+  const canonicalHeaders = Object.entries(headers)
+    .map(([name, value]) => [name.toLowerCase(), value] as const)
+    .sort(([left], [right]) => left.localeCompare(right));
+
+  return createHash("sha256")
+    .update(JSON.stringify(canonicalHeaders))
+    .digest("base64url");
 }

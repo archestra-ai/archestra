@@ -383,10 +383,56 @@ export async function waitForMcpGatewayJwtReady(params: {
     ? `Tool ${params.expectedToolName} was not available via JWT auth`
     : "MCP Gateway did not become ready for external JWT auth";
 
+  // The 401 collapses many silent validateExternalIdpToken null branches into
+  // one opaque error, and backend logs rotate out before the CI dump. Fold the
+  // deciding state (IdP binding present? OIDC config resolvable?) into the
+  // failure message — booleans/status only, never secret config.
+  const serverState = await probeIdpServerState(
+    params.request,
+    params.profileId,
+  );
+
   const lastMsg = lastError instanceof Error ? lastError.message : "";
   throw new Error(
-    `${headline} — ${delaysMs.length} attempts over ~${Math.round(delaysMs.reduce((a, b) => a + b, 0) / 1000)}s. ${errorSummary || "(no failure signal captured)"}${lastMsg && !errorSummary.includes(lastMsg) ? ` Last: ${lastMsg}` : ""}`,
+    `${headline} — ${delaysMs.length} attempts over ~${Math.round(delaysMs.reduce((a, b) => a + b, 0) / 1000)}s. ${errorSummary || "(no failure signal captured)"}${lastMsg && !errorSummary.includes(lastMsg) ? ` Last: ${lastMsg}` : ""} ${serverState}`,
   );
+}
+
+async function probeIdpServerState(
+  request: APIRequestContext,
+  profileId: string,
+): Promise<string> {
+  try {
+    const agentResp = await makeApiRequest({
+      request,
+      method: "get",
+      urlSuffix: `/api/agents/${profileId}`,
+      ignoreStatusCheck: true,
+    });
+    const agent = (await agentResp.json().catch(() => ({}))) as {
+      identityProviderId?: string | null;
+      agentType?: string;
+    };
+    const idpId = agent.identityProviderId;
+    let state = `[agent GET=${agentResp.status()} identityProviderId=${idpId ? "set" : "MISSING"} agentType=${agent.agentType ?? "?"}`;
+    if (idpId) {
+      const idpResp = await makeApiRequest({
+        request,
+        method: "get",
+        urlSuffix: `/api/identity-providers/${idpId}`,
+        ignoreStatusCheck: true,
+      });
+      const idp = (await idpResp.json().catch(() => ({}))) as {
+        oidcConfig?: { clientId?: string; jwksEndpoint?: string } | null;
+      };
+      state += `; idp GET=${idpResp.status()} hasOidcConfig=${!!idp.oidcConfig} hasJwksEndpoint=${!!idp.oidcConfig?.jwksEndpoint} hasClientId=${!!idp.oidcConfig?.clientId}]`;
+    } else {
+      state += "]";
+    }
+    return state;
+  } catch (error) {
+    return `[server-state probe failed: ${error instanceof Error ? error.message : String(error)}]`;
+  }
 }
 
 export async function listMcpTools(

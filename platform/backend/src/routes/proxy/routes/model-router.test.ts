@@ -70,7 +70,7 @@ function createFastifyApp() {
     return reply.status(500).send({
       error: {
         message,
-        type: "internal_server_error",
+        type: "api_internal_server_error",
       },
     });
   });
@@ -90,6 +90,7 @@ function createAzureTestClient() {
 async function upsertModel(params: {
   provider: SupportedProvider;
   modelId: string;
+  embeddingDimensions?: 768 | 1536 | 3072;
 }) {
   await ModelModel.upsert({
     externalId: `${params.provider}/${params.modelId}`,
@@ -97,6 +98,7 @@ async function upsertModel(params: {
     modelId: params.modelId,
     inputModalities: ["text"],
     outputModalities: ["text"],
+    embeddingDimensions: params.embeddingDimensions,
     customPricePerMillionInput: "2.50",
     customPricePerMillionOutput: "10.00",
     lastSyncedAt: new Date(),
@@ -612,7 +614,7 @@ describe("model router proxy routes", () => {
       },
     });
 
-    expect(response.statusCode).toBe(200);
+    expect(response.statusCode, response.body).toBe(200);
     const interactions = await InteractionModel.findAllPaginated(
       { limit: 10, offset: 0 },
       undefined,
@@ -622,6 +624,135 @@ describe("model router proxy routes", () => {
     );
     expect(interactions.data).toHaveLength(1);
     expect(interactions.data[0].source).toBe("model_router");
+  });
+
+  test("routes OpenAI embedding models through embeddings", async ({
+    makeAgent,
+    makeOrganization,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const app = createFastifyApp();
+    await app.register(modelRouterProxyRoutes);
+    const provider = "openai";
+    const modelId = "text-embedding-3-small";
+    await upsertModel({ provider, modelId, embeddingDimensions: 1536 });
+    const organization = await makeOrganization();
+    const { value } = await createModelRouterVirtualKey({
+      organizationId: organization.id,
+      provider,
+      makeSecret,
+      makeLlmProviderApiKey,
+      apiKeyValue: "sk-openai-embedding",
+    });
+    const agent = await makeAgent({
+      organizationId: organization.id,
+      name: "Model Router Embedding Agent",
+      agentType: "llm_proxy",
+    });
+
+    let capturedApiKey: string | undefined;
+    vi.mocked(openaiAdapterFactory.createClient).mockImplementation(
+      (apiKey) => {
+        capturedApiKey = apiKey;
+        return createOpenAiTestClient() as never;
+      },
+    );
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/model-router/${agent.id}/embeddings`,
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${value}`,
+        "user-agent": "test-client",
+      },
+      payload: {
+        model: `${provider}:${modelId}`,
+        input: ["first", "second"],
+      },
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.json()).toMatchObject({
+      object: "list",
+      model: modelId,
+      data: [
+        { object: "embedding", index: 0 },
+        { object: "embedding", index: 1 },
+      ],
+    });
+    expect(capturedApiKey).toBe("sk-openai-embedding");
+
+    const interactions = await InteractionModel.findAllPaginated(
+      { limit: 10, offset: 0 },
+      undefined,
+      undefined,
+      undefined,
+      { profileId: agent.id },
+    );
+    expect(interactions.data[0]).toMatchObject({
+      type: "openai:embeddings",
+      source: "model_router",
+      model: modelId,
+      inputTokens: 2,
+      outputTokens: 0,
+    });
+  });
+
+  test("lists embedding models but rejects them on chat completions", async ({
+    makeAgent,
+    makeOrganization,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const app = createFastifyApp();
+    await app.register(modelRouterProxyRoutes);
+    await upsertModel({
+      provider: "openai",
+      modelId: "text-embedding-3-small",
+      embeddingDimensions: 1536,
+    });
+    const organization = await makeOrganization();
+    const { value } = await createModelRouterVirtualKey({
+      organizationId: organization.id,
+      provider: "openai",
+      makeSecret,
+      makeLlmProviderApiKey,
+    });
+    const agent = await makeAgent({
+      organizationId: organization.id,
+      name: "Model Router Embedding List Agent",
+      agentType: "llm_proxy",
+    });
+
+    const modelsResponse = await app.inject({
+      method: "GET",
+      url: `/v1/model-router/${agent.id}/models`,
+      headers: {
+        authorization: `Bearer ${value}`,
+      },
+    });
+    const chatResponse = await app.inject({
+      method: "POST",
+      url: `/v1/model-router/${agent.id}/chat/completions`,
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${value}`,
+        "user-agent": "test-client",
+      },
+      payload: {
+        model: "openai:text-embedding-3-small",
+        messages: [{ role: "user", content: "Hello" }],
+      },
+    });
+
+    expect(modelsResponse.statusCode).toBe(200);
+    expect(modelsResponse.json().data).toEqual([
+      expect.objectContaining({ id: "openai:text-embedding-3-small" }),
+    ]);
+    expect(chatResponse.statusCode).toBe(404);
+    expect(chatResponse.json().error.message).toContain("not available");
   });
 
   test("routes requests authenticated with an LLM OAuth client access token issued from client credentials", async ({

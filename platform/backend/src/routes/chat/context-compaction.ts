@@ -65,16 +65,6 @@ const ATTR_CONTEXT_COMPACTION_ORIGINAL_TOKEN_ESTIMATE =
 const ATTR_CONTEXT_COMPACTION_COMPACTED_TOKEN_ESTIMATE =
   "archestra.context_compaction.compacted_token_estimate";
 
-export const CONTEXT_COMPACTION_REASONS = [
-  "below_threshold",
-  "using_existing_summary",
-  "nothing_to_compact",
-  "missing_boundary_message_id",
-  "not_beneficial",
-  "aborted",
-  "summary_generation_failed",
-] as const;
-
 export type ContextCompactionStatus =
   | "created"
   | "existing"
@@ -82,7 +72,13 @@ export type ContextCompactionStatus =
   | "failed";
 
 export type ContextCompactionReason =
-  (typeof CONTEXT_COMPACTION_REASONS)[number];
+  | "below_threshold"
+  | "using_existing_summary"
+  | "nothing_to_compact"
+  | "missing_boundary_message_id"
+  | "not_beneficial"
+  | "aborted"
+  | "summary_generation_failed";
 
 export type ContextCompactionParams = {
   conversationId: string;

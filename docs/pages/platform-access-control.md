@@ -3,7 +3,7 @@ title: "Access Control"
 category: Administration
 description: "Role-based access control (RBAC) system for managing user permissions in Archestra"
 order: 1
-lastUpdated: 2026-05-28
+lastUpdated: 2026-05-31
 ---
 <!--
 Check ../docs_writer_prompt.md before changing this file.
@@ -227,6 +227,10 @@ The following table lists all available permissions that can be assigned to cust
 | `scheduledTask:admin` | View and manage all scheduled tasks, not just your own |
 | `secret:read` | View secrets manager configuration |
 | `secret:update` | Modify secrets manager settings and test connectivity |
+| `serviceAccount:read` | View service accounts |
+| `serviceAccount:create` | Create service accounts |
+| `serviceAccount:update` | Modify service accounts |
+| `serviceAccount:delete` | Delete service accounts |
 | `simpleView:enable` | Sidebar is collapsed by default on page load |
 | `siteNotification:read` | View site-wide notifications |
 | `siteNotification:create` | Create new site notifications |

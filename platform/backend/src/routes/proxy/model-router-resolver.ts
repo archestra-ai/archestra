@@ -14,6 +14,7 @@ export type ModelRouterResolution = {
 
 export async function resolveModelRoute(params: {
   requestedModel: string;
+  capability?: "text-chat" | "embeddings";
   allowedProviders?: Set<SupportedProvider>;
   allowedApiKeyIds?: string[];
 }): Promise<ModelRouterResolution> {
@@ -34,10 +35,16 @@ export async function resolveModelRoute(params: {
       );
     }
 
-    const providerMatches = await ModelModel.findTextChatModelsByModelId({
-      modelId: explicit.modelId,
-      provider: explicit.provider,
-    });
+    const providerMatches =
+      params.capability === "embeddings"
+        ? await ModelModel.findEmbeddingModelsByModelId({
+            modelId: explicit.modelId,
+            provider: explicit.provider,
+          })
+        : await ModelModel.findTextChatModelsByModelId({
+            modelId: explicit.modelId,
+            provider: explicit.provider,
+          });
 
     const accessibleMatches = params.allowedApiKeyIds
       ? await filterModelsByLinkedApiKeys(

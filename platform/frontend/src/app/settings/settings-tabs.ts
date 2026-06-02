@@ -12,14 +12,14 @@ export function useSettingsTabs() {
     ...(permissionMap?.["/settings/api-keys"]
       ? [{ label: "API Keys", href: "/settings/api-keys" }]
       : []),
+    ...(permissionMap?.["/settings/service-accounts"]
+      ? [{ label: "Service Accounts", href: "/settings/service-accounts" }]
+      : []),
     ...(permissionMap?.["/settings/agents"]
       ? [{ label: "Agents", href: "/settings/agents" }]
       : []),
     ...(permissionMap?.["/settings/llm"]
       ? [{ label: "LLM", href: "/settings/llm" }]
-      : []),
-    ...(permissionMap?.["/settings/connection"]
-      ? [{ label: "Connect page", href: "/settings/connection" }]
       : []),
     ...(permissionMap?.["/settings/knowledge"]
       ? [{ label: "Knowledge", href: "/settings/knowledge" }]

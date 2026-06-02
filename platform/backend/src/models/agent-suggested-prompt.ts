@@ -1,5 +1,6 @@
-import { asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import db, { schema, withDbTransaction } from "@/database";
+import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import type { SuggestedPromptInput } from "@/types";
 
 class AgentSuggestedPromptModel {
@@ -39,7 +40,16 @@ class AgentSuggestedPromptModel {
         prompt: schema.agentSuggestedPromptsTable.prompt,
       })
       .from(schema.agentSuggestedPromptsTable)
-      .where(eq(schema.agentSuggestedPromptsTable.agentId, agentId))
+      .innerJoin(
+        schema.agentsTable,
+        eq(schema.agentSuggestedPromptsTable.agentId, schema.agentsTable.id),
+      )
+      .where(
+        and(
+          eq(schema.agentSuggestedPromptsTable.agentId, agentId),
+          notDeleted(schema.agentsTable),
+        ),
+      )
       .orderBy(asc(schema.agentSuggestedPromptsTable.sortOrder));
 
     return rows;

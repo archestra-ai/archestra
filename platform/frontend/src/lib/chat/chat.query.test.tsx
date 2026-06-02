@@ -130,6 +130,7 @@ function makeConversation(): archestraApiTypes.GetChatConversationResponses["200
     todoList: null,
     artifact: null,
     pinnedAt: null,
+    lastMessageAt: "2026-03-17T00:00:00.000Z",
     createdAt: "2026-03-17T00:00:00.000Z",
     updatedAt: "2026-03-17T00:00:00.000Z",
     agent: {

@@ -7,6 +7,7 @@ import { eq } from "drizzle-orm";
 import { archestraMcpBranding } from "@/archestra-mcp-server";
 import db, { schema } from "@/database";
 import { beforeEach, describe, expect, test } from "@/test";
+import AgentModel from "./agent";
 import AgentLabelModel from "./agent-label";
 import AgentToolModel from "./agent-tool";
 import McpCatalogLabelModel from "./mcp-catalog-label";
@@ -56,9 +57,99 @@ describe("AgentToolModel.findById", () => {
     expect(result).toBeDefined();
     expect(result?.mcpServerId).toBe(server.id);
   });
+
+  test("returns undefined when the assigned agent is soft-deleted", async ({
+    makeAgent,
+    makeTool,
+    makeAgentTool,
+  }) => {
+    const agent = await makeAgent();
+    const tool = await makeTool();
+    const agentTool = await makeAgentTool(agent.id, tool.id);
+
+    await AgentModel.delete(agent.id);
+
+    await expect(
+      AgentToolModel.findById(agentTool.id),
+    ).resolves.toBeUndefined();
+  });
+});
+
+describe("AgentToolModel delegation queries", () => {
+  test("excludes soft-deleted delegation targets", async ({ makeAgent }) => {
+    const sourceAgent = await makeAgent({ agentType: "agent" });
+    const targetAgent = await makeAgent({ agentType: "agent" });
+    await AgentToolModel.assignDelegation(sourceAgent.id, targetAgent.id);
+
+    await AgentModel.delete(targetAgent.id);
+
+    await expect(
+      AgentToolModel.getDelegationTargets(sourceAgent.id),
+    ).resolves.toEqual([]);
+  });
+
+  test("excludes delegation connections with soft-deleted source or target agents", async ({
+    makeAgent,
+    makeOrganization,
+  }) => {
+    const organization = await makeOrganization();
+    const activeSource = await makeAgent({
+      organizationId: organization.id,
+      agentType: "agent",
+    });
+    const deletedSource = await makeAgent({
+      organizationId: organization.id,
+      agentType: "agent",
+    });
+    const activeTarget = await makeAgent({
+      organizationId: organization.id,
+      agentType: "agent",
+    });
+    const deletedTarget = await makeAgent({
+      organizationId: organization.id,
+      agentType: "agent",
+    });
+
+    await AgentToolModel.assignDelegation(activeSource.id, activeTarget.id);
+    await AgentToolModel.assignDelegation(deletedSource.id, activeTarget.id);
+    await AgentToolModel.assignDelegation(activeSource.id, deletedTarget.id);
+    await AgentModel.delete(deletedSource.id);
+    await AgentModel.delete(deletedTarget.id);
+
+    const connections = await AgentToolModel.getAllDelegationConnections(
+      organization.id,
+    );
+
+    expect(connections).toHaveLength(1);
+    expect(connections[0]).toMatchObject({
+      sourceAgentId: activeSource.id,
+      targetAgentId: activeTarget.id,
+    });
+  });
 });
 
 describe("AgentToolModel.findAll", () => {
+  test("excludes assignments for soft-deleted agents", async ({
+    makeAgent,
+    makeTool,
+    makeAgentTool,
+  }) => {
+    const activeAgent = await makeAgent();
+    const deletedAgent = await makeAgent();
+    const activeTool = await makeTool({ name: "active-agent-tool" });
+    const deletedTool = await makeTool({ name: "deleted-agent-tool" });
+    await makeAgentTool(activeAgent.id, activeTool.id);
+    await makeAgentTool(deletedAgent.id, deletedTool.id);
+    await AgentModel.delete(deletedAgent.id);
+
+    const result = await AgentToolModel.findAll({ skipPagination: true });
+
+    expect(result.data.map((row) => row.agent.id)).toContain(activeAgent.id);
+    expect(result.data.map((row) => row.agent.id)).not.toContain(
+      deletedAgent.id,
+    );
+  });
+
   describe("Pagination", () => {
     test("returns paginated results with correct metadata", async ({
       makeAgent,

@@ -27,7 +27,7 @@ pub fn flush() {
 
 /// matches the node SDK default; the per-signal `/v1/...` path is appended
 /// explicitly because the http exporter uses a provided endpoint verbatim.
-#[cfg(any(feature = "telemetry", test))]
+#[cfg(feature = "telemetry")]
 const DEFAULT_ENDPOINT: &str = "http://localhost:4318";
 
 /// reduce the shared endpoint env var to a bare base. it may hold either a

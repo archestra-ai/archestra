@@ -21,7 +21,7 @@ import {
   Video,
   XIcon,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import {
   ModelSelectorContent,
   ModelSelectorEmpty,
@@ -514,7 +514,7 @@ function modelMatchesFilters(model: LlmModel, filters: ModelFilters): boolean {
  * - Search functionality to filter models
  * - Models filtered by configured API keys
  */
-export function ModelSelector({
+export const ModelSelector = memo(function ModelSelector({
   selectedModel,
   onModelChange,
   disabled = false,
@@ -898,4 +898,4 @@ export function ModelSelector({
       </ModelSelectorRoot>
     </div>
   );
-}
+});

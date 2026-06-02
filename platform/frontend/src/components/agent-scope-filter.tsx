@@ -1,5 +1,6 @@
 "use client";
 
+import type { Permissions } from "@shared";
 import { X } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
@@ -29,6 +30,7 @@ import { useTeams } from "@/lib/teams/team.query";
 
 type ScopeValue = "personal" | "team" | "org" | "built_in";
 type OwnerValue = "mine" | "others";
+type StatusValue = "active" | "deleted";
 
 export function AgentScopeFilter({
   showBuiltIn = false,
@@ -235,6 +237,47 @@ export function AgentScopeFilter({
         LabelKeyRowComponent={AgentLabelKeyRow}
       />
     </div>
+  );
+}
+
+export function AgentDeletedStatusFilter({
+  deletePermission,
+}: {
+  deletePermission: Permissions;
+}) {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
+  const { data: canDelete } = useHasPermissions(deletePermission);
+
+  const status = (searchParams.get("status") as StatusValue | null) ?? "active";
+
+  const handleStatusChange = useCallback(
+    (value: string) => {
+      const params = new URLSearchParams(searchParams.toString());
+      if (value === "deleted") {
+        params.set("status", "deleted");
+      } else {
+        params.delete("status");
+      }
+      params.set("page", "1");
+      router.push(`${pathname}?${params.toString()}`, { scroll: false });
+    },
+    [searchParams, router, pathname],
+  );
+
+  if (!canDelete) return null;
+
+  return (
+    <Select value={status} onValueChange={handleStatusChange}>
+      <SelectTrigger className="w-[150px]">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent position="popper" side="bottom" align="start">
+        <SelectItem value="active">Active</SelectItem>
+        <SelectItem value="deleted">Deleted</SelectItem>
+      </SelectContent>
+    </Select>
   );
 }
 

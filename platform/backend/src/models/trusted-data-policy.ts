@@ -3,6 +3,7 @@ import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { get } from "lodash-es";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import db, { schema } from "@/database";
+import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import type { ResultPolicyCondition } from "@/database/schemas/trusted-data-policy";
 import logger from "@/logging";
 import type { PolicyEvaluationContext } from "@/models/tool-invocation-policy";
@@ -667,7 +668,10 @@ class TrustedDataPolicyModel {
       )
       .innerJoin(
         schema.agentsTable,
-        eq(schema.agentToolsTable.agentId, schema.agentsTable.id),
+        and(
+          eq(schema.agentToolsTable.agentId, schema.agentsTable.id),
+          notDeleted(schema.agentsTable),
+        ),
       )
       .where(
         and(
@@ -718,7 +722,10 @@ class TrustedDataPolicyModel {
       )
       .innerJoin(
         schema.agentsTable,
-        eq(schema.agentsTable.id, schema.agentToolsTable.agentId),
+        and(
+          eq(schema.agentsTable.id, schema.agentToolsTable.agentId),
+          notDeleted(schema.agentsTable),
+        ),
       )
       .where(
         and(

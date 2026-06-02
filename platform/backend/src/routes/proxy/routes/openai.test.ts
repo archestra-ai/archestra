@@ -39,6 +39,7 @@ import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { createOpenAiTestClient } from "@/test/llm-provider-stubs";
 import { ApiError, type OpenAi } from "@/types";
 import {
+  openAiEmbeddingsAdapterFactory,
   openAiResponsesAdapterFactory,
   openaiAdapterFactory,
 } from "../adapters";
@@ -149,7 +150,7 @@ function createOpenAiRouteTestApp() {
     return reply.status(500).send({
       error: {
         message,
-        type: "internal_server_error",
+        type: "api_internal_server_error",
       },
     });
   });
@@ -191,7 +192,7 @@ describe("OpenAI proxy streaming", () => {
       },
     });
 
-    expect(response.statusCode).toBe(200);
+    expect(response.statusCode, response.body).toBe(200);
 
     // The route uses reply.raw.write() which produces SSE format
     const body = response.body;
@@ -220,7 +221,7 @@ describe("OpenAI proxy streaming", () => {
       },
     });
 
-    expect(response.statusCode).toBe(200);
+    expect(response.statusCode, response.body).toBe(200);
 
     //  adapter only emits chunks with actual content
     const chunks = response.body
@@ -298,6 +299,77 @@ describe("OpenAI cost tracking", () => {
     expect(interaction.baselineCost).toBeTruthy();
     expect(typeof interaction.cost).toBe("string");
     expect(typeof interaction.baselineCost).toBe("string");
+  });
+
+  test("creates embeddings through OpenAI proxy routes", async ({
+    makeAgent,
+  }) => {
+    const app = createOpenAiRouteTestApp();
+    await app.register(openAiProxyRoutes);
+
+    await ModelModel.upsert({
+      externalId: "openai/text-embedding-3-small",
+      provider: "openai",
+      modelId: "text-embedding-3-small",
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+      embeddingDimensions: 1536,
+      customPricePerMillionInput: "0.02",
+      customPricePerMillionOutput: "0.00",
+      lastSyncedAt: new Date(),
+    });
+    const agent = await makeAgent({
+      name: "Test Embedding Agent",
+      agentType: "llm_proxy",
+    });
+
+    let capturedApiKey: string | undefined;
+    vi.spyOn(openAiEmbeddingsAdapterFactory, "createClient").mockImplementation(
+      (apiKey) => {
+        capturedApiKey = apiKey;
+        return createOpenAiTestClient() as never;
+      },
+    );
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${agent.id}/embeddings`,
+      headers: {
+        "content-type": "application/json",
+        authorization: "Bearer test-openai-key",
+        "user-agent": "test-client",
+      },
+      payload: {
+        model: "text-embedding-3-small",
+        input: ["first", "second"],
+      },
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.json()).toMatchObject({
+      object: "list",
+      model: "text-embedding-3-small",
+      data: [
+        { object: "embedding", index: 0 },
+        { object: "embedding", index: 1 },
+      ],
+      usage: {
+        prompt_tokens: 2,
+        total_tokens: 2,
+      },
+    });
+    expect(capturedApiKey).toBe("test-openai-key");
+
+    const interactions = await InteractionModel.getAllInteractionsForProfile(
+      agent.id,
+    );
+    const interaction = interactions[interactions.length - 1];
+    expect(interaction).toMatchObject({
+      type: "openai:embeddings",
+      model: "text-embedding-3-small",
+      inputTokens: 2,
+      outputTokens: 0,
+    });
   });
 
   test("accepts LLM OAuth client credentials on provider-specific proxy routes", async ({

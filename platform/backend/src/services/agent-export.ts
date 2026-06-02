@@ -4,6 +4,7 @@ import {
 } from "@shared";
 import { and, eq, inArray } from "drizzle-orm";
 import db, { schema } from "@/database";
+import { AgentModel } from "@/models";
 import type { Agent } from "@/types";
 import type { AgentExportPayload } from "@/types/agent-export";
 
@@ -170,18 +171,10 @@ async function resolveDelegationReferences(
 
   if (targetAgentIds.length === 0) return [];
 
-  const agents = await db
-    .select({
-      id: schema.agentsTable.id,
-      name: schema.agentsTable.name,
-    })
-    .from(schema.agentsTable)
-    .where(
-      and(
-        inArray(schema.agentsTable.id, targetAgentIds),
-        eq(schema.agentsTable.organizationId, agent.organizationId),
-      ),
-    );
+  const agents = await AgentModel.findBasicByOrganizationIdAndIds({
+    organizationId: agent.organizationId,
+    agentIds: targetAgentIds,
+  });
 
   const nameMap = new Map(agents.map((a) => [a.id, a.name]));
 

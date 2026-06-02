@@ -21,6 +21,7 @@ export const ACTION_LABEL: Record<AuditEventName, string> = {
   "agent.created": "Agent created",
   "agent.updated": "Agent updated",
   "agent.deleted": "Agent deleted",
+  "agent.restored": "Agent restored",
   // Agent tool assignment
   "agentTool.created": "Agent tool added",
   "agentTool.updated": "Agent tool updated",
@@ -95,6 +96,10 @@ export const ACTION_LABEL: Record<AuditEventName, string> = {
   "scheduleTrigger.created": "Schedule trigger created",
   "scheduleTrigger.updated": "Schedule trigger updated",
   "scheduleTrigger.deleted": "Schedule trigger deleted",
+  // Service account
+  "serviceAccount.created": "Service account created",
+  "serviceAccount.updated": "Service account updated",
+  "serviceAccount.deleted": "Service account deleted",
   // Skill
   "skill.created": "Skill created",
   "skill.updated": "Skill updated",
@@ -197,6 +202,7 @@ export const ALL_OUTCOMES: AuditOutcome[] = ["success", "failure", "denied"];
 export const ACTOR_TYPE_LABEL: Record<AuditActorType, string> = {
   user: "User",
   api_key: "API key",
+  service_account: "Service account",
   sso: "SSO",
   system: "System",
 };
@@ -204,6 +210,7 @@ export const ACTOR_TYPE_LABEL: Record<AuditActorType, string> = {
 export const ALL_ACTOR_TYPES: AuditActorType[] = [
   "user",
   "api_key",
+  "service_account",
   "sso",
   "system",
 ];

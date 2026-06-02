@@ -25,6 +25,9 @@ vi.mock("@/auth/utils", () => ({
 }));
 
 vi.mock("@/models", () => ({
+  ServiceAccountModel: {
+    verifyToken: vi.fn(),
+  },
   UserModel: {
     getById: vi.fn(),
   },
@@ -41,7 +44,7 @@ vi.mock("@shared/access-control", () => ({
 }));
 
 import { betterAuth, hasPermission } from "@/auth";
-import { UserModel } from "@/models";
+import { ServiceAccountModel, UserModel } from "@/models";
 
 // Type the mocked functions
 const mockBetterAuth = betterAuth as unknown as {
@@ -57,6 +60,10 @@ const mockUserModel = UserModel as unknown as {
   getById: MockedFunction<typeof UserModel.getById>;
 };
 
+const mockServiceAccountModel = ServiceAccountModel as unknown as {
+  verifyToken: MockedFunction<typeof ServiceAccountModel.verifyToken>;
+};
+
 import { Authnz } from "./middleware";
 import { authPlugin } from "./plugin";
 
@@ -69,6 +76,7 @@ describe("authPlugin integration", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockServiceAccountModel.verifyToken.mockResolvedValue(null);
   });
 
   describe("authentication", () => {
@@ -295,6 +303,7 @@ describe("authPlugin integration", () => {
       expect(mockHasPermission).toHaveBeenCalledWith(
         { agent: ["create"] },
         expect.objectContaining({}),
+        undefined,
       );
     });
   });

@@ -1,5 +1,6 @@
 import { vi } from "vitest";
 import { LimitModel } from "@/models";
+import AgentModel from "@/models/agent";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -221,6 +222,43 @@ describe("limits routes", () => {
       const body = response.json();
       expect(Array.isArray(body)).toBe(true);
       expect(body.length).toBe(0);
+    });
+
+    test("excludes limits for soft-deleted agents", async ({ makeAgent }) => {
+      const activeAgent = await makeAgent({
+        name: "Active Limit Agent",
+        organizationId,
+      });
+      const deletedAgent = await makeAgent({
+        name: "Deleted Limit Agent",
+        organizationId,
+      });
+      const activeLimit = await LimitModel.create({
+        entityType: "agent",
+        entityId: activeAgent.id,
+        limitType: "token_cost",
+        limitValue: 1000000,
+        model: ["gpt-4o"],
+      });
+      const deletedLimit = await LimitModel.create({
+        entityType: "agent",
+        entityId: deletedAgent.id,
+        limitType: "token_cost",
+        limitValue: 1000000,
+        model: ["gpt-4o"],
+      });
+
+      await AgentModel.delete(deletedAgent.id);
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/api/limits",
+      });
+
+      expect(response.statusCode).toBe(200);
+      const limitIds = response.json().map((limit: { id: string }) => limit.id);
+      expect(limitIds).toContain(activeLimit.id);
+      expect(limitIds).not.toContain(deletedLimit.id);
     });
 
     test("cleanup with allForOrganizationId respects per-limit cleanup intervals", async ({

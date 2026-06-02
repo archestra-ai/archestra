@@ -1,7 +1,7 @@
 import config from "@/config";
 import { OrganizationModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test, vi } from "@/test";
-import type { Organization } from "@/types";
+import type { OrganizationAnalyticsState } from "@/types";
 import { instanceAnalyticsService } from "./instance-analytics";
 
 const analyticsConfig = {
@@ -54,7 +54,7 @@ describe("instanceAnalyticsService", () => {
       "instance_heartbeat",
     ]);
 
-    const state = await getOrganization(organization.id);
+    const state = await getAnalyticsState(organization.id);
     expect(capturedBodies()).toEqual([
       expect.objectContaining({
         api_key: "ph_test",
@@ -142,9 +142,11 @@ describe("instanceAnalyticsService", () => {
     });
   }
 
-  async function getOrganization(id: string): Promise<Organization> {
-    const organization = await OrganizationModel.getById(id);
-    if (!organization) throw new Error("Expected organization");
-    return organization;
+  async function getAnalyticsState(
+    id: string,
+  ): Promise<OrganizationAnalyticsState> {
+    const state = await OrganizationModel.getAnalyticsState();
+    expect(state.id).toBe(id);
+    return state;
   }
 });

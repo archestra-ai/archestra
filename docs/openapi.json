@@ -170426,16 +170426,6 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
-                    "analyticsInstanceStartedAt": {
-                      "nullable": true,
-                      "type": "string",
-                      "format": "date-time"
-                    },
-                    "analyticsInstanceLastHeartbeatAt": {
-                      "nullable": true,
-                      "type": "string",
-                      "format": "date-time"
-                    },
                     "logo": {
                       "nullable": true,
                       "type": "string"
@@ -170834,8 +170824,6 @@
                     "name",
                     "slug",
                     "analyticsInstanceId",
-                    "analyticsInstanceStartedAt",
-                    "analyticsInstanceLastHeartbeatAt",
                     "logo",
                     "logoDark",
                     "createdAt",
@@ -171327,16 +171315,6 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
-                    "analyticsInstanceStartedAt": {
-                      "nullable": true,
-                      "type": "string",
-                      "format": "date-time"
-                    },
-                    "analyticsInstanceLastHeartbeatAt": {
-                      "nullable": true,
-                      "type": "string",
-                      "format": "date-time"
-                    },
                     "logo": {
                       "nullable": true,
                       "type": "string"
@@ -171735,8 +171713,6 @@
                     "name",
                     "slug",
                     "analyticsInstanceId",
-                    "analyticsInstanceStartedAt",
-                    "analyticsInstanceLastHeartbeatAt",
                     "logo",
                     "logoDark",
                     "createdAt",
@@ -172500,16 +172476,6 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
-                    "analyticsInstanceStartedAt": {
-                      "nullable": true,
-                      "type": "string",
-                      "format": "date-time"
-                    },
-                    "analyticsInstanceLastHeartbeatAt": {
-                      "nullable": true,
-                      "type": "string",
-                      "format": "date-time"
-                    },
                     "logo": {
                       "nullable": true,
                       "type": "string"
@@ -172908,8 +172874,6 @@
                     "name",
                     "slug",
                     "analyticsInstanceId",
-                    "analyticsInstanceStartedAt",
-                    "analyticsInstanceLastHeartbeatAt",
                     "logo",
                     "logoDark",
                     "createdAt",
@@ -173283,16 +173247,6 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
-                    "analyticsInstanceStartedAt": {
-                      "nullable": true,
-                      "type": "string",
-                      "format": "date-time"
-                    },
-                    "analyticsInstanceLastHeartbeatAt": {
-                      "nullable": true,
-                      "type": "string",
-                      "format": "date-time"
-                    },
                     "logo": {
                       "nullable": true,
                       "type": "string"
@@ -173691,8 +173645,6 @@
                     "name",
                     "slug",
                     "analyticsInstanceId",
-                    "analyticsInstanceStartedAt",
-                    "analyticsInstanceLastHeartbeatAt",
                     "logo",
                     "logoDark",
                     "createdAt",
@@ -174053,16 +174005,6 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
-                    "analyticsInstanceStartedAt": {
-                      "nullable": true,
-                      "type": "string",
-                      "format": "date-time"
-                    },
-                    "analyticsInstanceLastHeartbeatAt": {
-                      "nullable": true,
-                      "type": "string",
-                      "format": "date-time"
-                    },
                     "logo": {
                       "nullable": true,
                       "type": "string"
@@ -174461,8 +174403,6 @@
                     "name",
                     "slug",
                     "analyticsInstanceId",
-                    "analyticsInstanceStartedAt",
-                    "analyticsInstanceLastHeartbeatAt",
                     "logo",
                     "logoDark",
                     "createdAt",
@@ -174885,16 +174825,6 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
-                    "analyticsInstanceStartedAt": {
-                      "nullable": true,
-                      "type": "string",
-                      "format": "date-time"
-                    },
-                    "analyticsInstanceLastHeartbeatAt": {
-                      "nullable": true,
-                      "type": "string",
-                      "format": "date-time"
-                    },
                     "logo": {
                       "nullable": true,
                       "type": "string"
@@ -175293,8 +175223,6 @@
                     "name",
                     "slug",
                     "analyticsInstanceId",
-                    "analyticsInstanceStartedAt",
-                    "analyticsInstanceLastHeartbeatAt",
                     "logo",
                     "logoDark",
                     "createdAt",
@@ -175650,16 +175578,6 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
-                    "analyticsInstanceStartedAt": {
-                      "nullable": true,
-                      "type": "string",
-                      "format": "date-time"
-                    },
-                    "analyticsInstanceLastHeartbeatAt": {
-                      "nullable": true,
-                      "type": "string",
-                      "format": "date-time"
-                    },
                     "logo": {
                       "nullable": true,
                       "type": "string"
@@ -176058,8 +175976,6 @@
                     "name",
                     "slug",
                     "analyticsInstanceId",
-                    "analyticsInstanceStartedAt",
-                    "analyticsInstanceLastHeartbeatAt",
                     "logo",
                     "logoDark",
                     "createdAt",
@@ -176408,16 +176324,6 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
-                    "analyticsInstanceStartedAt": {
-                      "nullable": true,
-                      "type": "string",
-                      "format": "date-time"
-                    },
-                    "analyticsInstanceLastHeartbeatAt": {
-                      "nullable": true,
-                      "type": "string",
-                      "format": "date-time"
-                    },
                     "logo": {
                       "nullable": true,
                       "type": "string"
@@ -176816,8 +176722,6 @@
                     "name",
                     "slug",
                     "analyticsInstanceId",
-                    "analyticsInstanceStartedAt",
-                    "analyticsInstanceLastHeartbeatAt",
                     "logo",
                     "logoDark",
                     "createdAt",
@@ -177165,16 +177069,6 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
-                    "analyticsInstanceStartedAt": {
-                      "nullable": true,
-                      "type": "string",
-                      "format": "date-time"
-                    },
-                    "analyticsInstanceLastHeartbeatAt": {
-                      "nullable": true,
-                      "type": "string",
-                      "format": "date-time"
-                    },
                     "logo": {
                       "nullable": true,
                       "type": "string"
@@ -177573,8 +177467,6 @@
                     "name",
                     "slug",
                     "analyticsInstanceId",
-                    "analyticsInstanceStartedAt",
-                    "analyticsInstanceLastHeartbeatAt",
                     "logo",
                     "logoDark",
                     "createdAt",
@@ -177939,16 +177831,6 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
-                    "analyticsInstanceStartedAt": {
-                      "nullable": true,
-                      "type": "string",
-                      "format": "date-time"
-                    },
-                    "analyticsInstanceLastHeartbeatAt": {
-                      "nullable": true,
-                      "type": "string",
-                      "format": "date-time"
-                    },
                     "logo": {
                       "nullable": true,
                       "type": "string"
@@ -178347,8 +178229,6 @@
                     "name",
                     "slug",
                     "analyticsInstanceId",
-                    "analyticsInstanceStartedAt",
-                    "analyticsInstanceLastHeartbeatAt",
                     "logo",
                     "logoDark",
                     "createdAt",
@@ -178696,16 +178576,6 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
-                    "analyticsInstanceStartedAt": {
-                      "nullable": true,
-                      "type": "string",
-                      "format": "date-time"
-                    },
-                    "analyticsInstanceLastHeartbeatAt": {
-                      "nullable": true,
-                      "type": "string",
-                      "format": "date-time"
-                    },
                     "logo": {
                       "nullable": true,
                       "type": "string"
@@ -179104,8 +178974,6 @@
                     "name",
                     "slug",
                     "analyticsInstanceId",
-                    "analyticsInstanceStartedAt",
-                    "analyticsInstanceLastHeartbeatAt",
                     "logo",
                     "logoDark",
                     "createdAt",
@@ -179466,16 +179334,6 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
-                    "analyticsInstanceStartedAt": {
-                      "nullable": true,
-                      "type": "string",
-                      "format": "date-time"
-                    },
-                    "analyticsInstanceLastHeartbeatAt": {
-                      "nullable": true,
-                      "type": "string",
-                      "format": "date-time"
-                    },
                     "logo": {
                       "nullable": true,
                       "type": "string"
@@ -179874,8 +179732,6 @@
                     "name",
                     "slug",
                     "analyticsInstanceId",
-                    "analyticsInstanceStartedAt",
-                    "analyticsInstanceLastHeartbeatAt",
                     "logo",
                     "logoDark",
                     "createdAt",
@@ -180203,16 +180059,6 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
-                    "analyticsInstanceStartedAt": {
-                      "nullable": true,
-                      "type": "string",
-                      "format": "date-time"
-                    },
-                    "analyticsInstanceLastHeartbeatAt": {
-                      "nullable": true,
-                      "type": "string",
-                      "format": "date-time"
-                    },
                     "logo": {
                       "nullable": true,
                       "type": "string"
@@ -180611,8 +180457,6 @@
                     "name",
                     "slug",
                     "analyticsInstanceId",
-                    "analyticsInstanceStartedAt",
-                    "analyticsInstanceLastHeartbeatAt",
                     "logo",
                     "logoDark",
                     "createdAt",
@@ -181253,16 +181097,6 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
-                    "analyticsInstanceStartedAt": {
-                      "nullable": true,
-                      "type": "string",
-                      "format": "date-time"
-                    },
-                    "analyticsInstanceLastHeartbeatAt": {
-                      "nullable": true,
-                      "type": "string",
-                      "format": "date-time"
-                    },
                     "logo": {
                       "nullable": true,
                       "type": "string"
@@ -181661,8 +181495,6 @@
                     "name",
                     "slug",
                     "analyticsInstanceId",
-                    "analyticsInstanceStartedAt",
-                    "analyticsInstanceLastHeartbeatAt",
                     "logo",
                     "logoDark",
                     "createdAt",

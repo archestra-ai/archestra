@@ -322,10 +322,14 @@ const extendedFields = {
   presetEntityDefaultValidationRegex: z.string().nullable(),
 };
 
-export const SelectOrganizationSchema = createSelectSchema(
+const InternalSelectOrganizationSchema = createSelectSchema(
   schema.organizationsTable,
   extendedFields,
 );
+export const SelectOrganizationSchema = InternalSelectOrganizationSchema.omit({
+  analyticsInstanceStartedAt: true,
+  analyticsInstanceLastHeartbeatAt: true,
+});
 export const InsertOrganizationSchema = createInsertSchema(
   schema.organizationsTable,
   extendedFields,
@@ -476,6 +480,13 @@ export type OrganizationCompressionScope = z.infer<
 >;
 export type GlobalToolPolicy = z.infer<typeof GlobalToolPolicySchema>;
 export type Organization = z.infer<typeof SelectOrganizationSchema>;
+export type OrganizationAnalyticsState = Pick<
+  z.infer<typeof InternalSelectOrganizationSchema>,
+  | "id"
+  | "analyticsInstanceId"
+  | "analyticsInstanceStartedAt"
+  | "analyticsInstanceLastHeartbeatAt"
+>;
 export type InsertOrganization = z.infer<typeof InsertOrganizationSchema>;
 export type AppearanceSettings = z.infer<typeof AppearanceSettingsSchema>;
 export type OrganizationChatLink = z.infer<typeof OrganizationChatLinkSchema>;

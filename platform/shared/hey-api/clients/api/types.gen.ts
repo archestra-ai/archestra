@@ -45129,8 +45129,6 @@ export type GetOrganizationResponses = {
         name: string;
         slug: string;
         analyticsInstanceId: string;
-        analyticsInstanceStartedAt: string | null;
-        analyticsInstanceLastHeartbeatAt: string | null;
         logo: string | null;
         logoDark: string | null;
         createdAt: string;
@@ -45418,8 +45416,6 @@ export type UpdateAppearanceSettingsResponses = {
         name: string;
         slug: string;
         analyticsInstanceId: string;
-        analyticsInstanceStartedAt: string | null;
-        analyticsInstanceLastHeartbeatAt: string | null;
         logo: string | null;
         logoDark: string | null;
         createdAt: string;
@@ -45578,8 +45574,6 @@ export type UpdateSecuritySettingsResponses = {
         name: string;
         slug: string;
         analyticsInstanceId: string;
-        analyticsInstanceStartedAt: string | null;
-        analyticsInstanceLastHeartbeatAt: string | null;
         logo: string | null;
         logoDark: string | null;
         createdAt: string;
@@ -45741,8 +45735,6 @@ export type UpdateLlmSettingsResponses = {
         name: string;
         slug: string;
         analyticsInstanceId: string;
-        analyticsInstanceStartedAt: string | null;
-        analyticsInstanceLastHeartbeatAt: string | null;
         logo: string | null;
         logoDark: string | null;
         createdAt: string;
@@ -45903,8 +45895,6 @@ export type UpdateAgentSettingsResponses = {
         name: string;
         slug: string;
         analyticsInstanceId: string;
-        analyticsInstanceStartedAt: string | null;
-        analyticsInstanceLastHeartbeatAt: string | null;
         logo: string | null;
         logoDark: string | null;
         createdAt: string;
@@ -46072,8 +46062,6 @@ export type UpdateConnectionSettingsResponses = {
         name: string;
         slug: string;
         analyticsInstanceId: string;
-        analyticsInstanceStartedAt: string | null;
-        analyticsInstanceLastHeartbeatAt: string | null;
         logo: string | null;
         logoDark: string | null;
         createdAt: string;
@@ -46232,8 +46220,6 @@ export type UpdatePresetEntityNameResponses = {
         name: string;
         slug: string;
         analyticsInstanceId: string;
-        analyticsInstanceStartedAt: string | null;
-        analyticsInstanceLastHeartbeatAt: string | null;
         logo: string | null;
         logoDark: string | null;
         createdAt: string;
@@ -46391,8 +46377,6 @@ export type UpdatePresetEntityDefaultLabelResponses = {
         name: string;
         slug: string;
         analyticsInstanceId: string;
-        analyticsInstanceStartedAt: string | null;
-        analyticsInstanceLastHeartbeatAt: string | null;
         logo: string | null;
         logoDark: string | null;
         createdAt: string;
@@ -46550,8 +46534,6 @@ export type UpdatePresetEntityDefaultValidationRegexResponses = {
         name: string;
         slug: string;
         analyticsInstanceId: string;
-        analyticsInstanceStartedAt: string | null;
-        analyticsInstanceLastHeartbeatAt: string | null;
         logo: string | null;
         logoDark: string | null;
         createdAt: string;
@@ -46713,8 +46695,6 @@ export type UpdateDefaultEnvironmentResponses = {
         name: string;
         slug: string;
         analyticsInstanceId: string;
-        analyticsInstanceStartedAt: string | null;
-        analyticsInstanceLastHeartbeatAt: string | null;
         logo: string | null;
         logoDark: string | null;
         createdAt: string;
@@ -46873,8 +46853,6 @@ export type UpdateAuthSettingsResponses = {
         name: string;
         slug: string;
         analyticsInstanceId: string;
-        analyticsInstanceStartedAt: string | null;
-        analyticsInstanceLastHeartbeatAt: string | null;
         logo: string | null;
         logoDark: string | null;
         createdAt: string;
@@ -47035,8 +47013,6 @@ export type UpdateKnowledgeSettingsResponses = {
         name: string;
         slug: string;
         analyticsInstanceId: string;
-        analyticsInstanceStartedAt: string | null;
-        analyticsInstanceLastHeartbeatAt: string | null;
         logo: string | null;
         logoDark: string | null;
         createdAt: string;
@@ -47192,8 +47168,6 @@ export type DropEmbeddingConfigResponses = {
         name: string;
         slug: string;
         analyticsInstanceId: string;
-        analyticsInstanceStartedAt: string | null;
-        analyticsInstanceLastHeartbeatAt: string | null;
         logo: string | null;
         logoDark: string | null;
         createdAt: string;
@@ -47438,8 +47412,6 @@ export type CompleteOnboardingResponses = {
         name: string;
         slug: string;
         analyticsInstanceId: string;
-        analyticsInstanceStartedAt: string | null;
-        analyticsInstanceLastHeartbeatAt: string | null;
         logo: string | null;
         logoDark: string | null;
         createdAt: string;

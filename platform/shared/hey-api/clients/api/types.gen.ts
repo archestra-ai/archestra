@@ -49997,7 +49997,7 @@ export type ConvertAgentToSkillResponses = {
             metadata: {
                 [key: string]: string;
             };
-            sourceType: 'manual' | 'github';
+            sourceType: 'manual' | 'github' | 'built_in';
             sourceRef: string | null;
             sourceCommit: string | null;
             createdAt: string;

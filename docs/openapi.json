@@ -189860,7 +189860,8 @@
                           "type": "string",
                           "enum": [
                             "manual",
-                            "github"
+                            "github",
+                            "built_in"
                           ]
                         },
                         "sourceRef": {

@@ -296,13 +296,19 @@ export function McpServerCard({
   };
 
   const openEditorConfiguration = () => {
+    // Opening via the pencil writes `?edit=<id>`, which would otherwise wake
+    // the auto-open effect below. Mark the deep-link as already handled so the
+    // manual and shared-link paths don't both fire.
+    deepLinkHandledRef.current = true;
     writeEditParam();
     openSettingsPage("configuration");
   };
 
-  // Auto-open on a shared link. Runs once (ref-guarded), and only after the
-  // edit-permission check resolves so non-editors aren't briefly shown the
-  // form. Builtin items aren't editable, so canEditPresets is false for them.
+  // Auto-open on a shared link. One-shot per mount (ref-guarded): a shared link
+  // is resolved at most once, so a client-side change of `?edit` to a different
+  // id without a remount won't re-trigger it. Runs only after the edit-
+  // permission check resolves so non-editors aren't briefly shown the form.
+  // Builtin items aren't editable, so canEditPresets is false for them.
   useEffect(() => {
     if (deepLinkHandledRef.current) return;
     if (canEditPresetsLoading) return;

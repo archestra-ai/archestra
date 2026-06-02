@@ -1,4 +1,4 @@
-import { stripDanglingToolCalls } from "@shared";
+import { hasRenderableAssistantContent, stripDanglingToolCalls } from "@shared";
 import logger from "@/logging";
 import type { ChatMessage, ChatMessagePart } from "@/types";
 import { stripImagesFromMessages } from "./strip-images-from-messages";
@@ -6,6 +6,22 @@ import { stripImagesFromMessages } from "./strip-images-from-messages";
 export function normalizeChatMessages(messages: ChatMessage[]): ChatMessage[] {
   return stripImagesFromMessages(
     stripDanglingToolCallsFromMessages(dedupeToolPartsFromMessages(messages)),
+  );
+}
+
+/**
+ * Drops assistant messages that normalization emptied of renderable content —
+ * e.g. a turn whose only parts were dangling tool calls that `stripDanglingTool-
+ * Calls` removed. Run after `normalizeChatMessages` and before persisting so the
+ * DB never holds a stuck-looking empty assistant row. Non-assistant messages are
+ * left untouched.
+ */
+export function dropEmptyAssistantMessages(
+  messages: ChatMessage[],
+): ChatMessage[] {
+  return messages.filter(
+    (message) =>
+      message.role !== "assistant" || hasRenderableAssistantContent(message),
   );
 }
 

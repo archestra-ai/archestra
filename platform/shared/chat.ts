@@ -51,6 +51,22 @@ export type ChatMessage = {
 };
 
 /**
+ * True when an assistant message still carries something the chat UI can
+ * render: a non-empty text part, or any non-text part (completed tool result,
+ * reasoning, file, ...). An assistant turn left with no parts — or only empty
+ * text — after normalization is not renderable and must not be persisted or
+ * shown. Structurally typed so both backend `ChatMessagePart`s and the
+ * frontend's AI SDK `UIMessage` parts satisfy it.
+ */
+export function hasRenderableAssistantContent(message: {
+  parts?: ReadonlyArray<{ type: string; text?: unknown }>;
+}): boolean {
+  return (message.parts ?? []).some((part) =>
+    part.type === "text" ? Boolean(part.text) : true,
+  );
+}
+
+/**
  * The skill a user explicitly invoked via slash command, carried on the user
  * message's metadata. The backend uses it to inject the skill's activation
  * block; the chat UI uses it to badge the message.

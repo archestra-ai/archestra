@@ -118,7 +118,10 @@ import { injectSkillActivation } from "./inject-skill-activation";
 import { cloneAttachmentsForFork } from "./normalization/clone-attachments-for-fork";
 import { extractInlineAttachments } from "./normalization/extract-inline-attachments";
 import { materializeAttachments } from "./normalization/materialize-attachments";
-import { normalizeChatMessages } from "./normalization/normalize-chat-messages";
+import {
+  dropEmptyAssistantMessages,
+  normalizeChatMessages,
+} from "./normalization/normalize-chat-messages";
 
 const PromoteChatAttachmentResultSchema = z.object({
   filename: z.string(),
@@ -2592,18 +2595,22 @@ async function persistNewMessages(
       }
 
       if (messagesToSave.length > 0) {
-        let messagesToStore: ChatMessage[];
+        // Strip base64 images and large browser tool results, then drop any
+        // assistant message left non-renderable — normalization can empty a turn
+        // whose only parts were dangling tool calls, and persisting that yields a
+        // stuck-looking empty assistant bubble on reload.
+        const messagesToStore = dropEmptyAssistantMessages(
+          normalizeChatMessages(messagesToSave),
+        );
 
-        // Strip base64 images and large browser tool results before storing
         if (context === "onFinish") {
           // Log size reduction only for onFinish (where we have complete messages)
           const beforeSize = estimateMessagesSize(messagesToSave);
-          messagesToStore = normalizeChatMessages(messagesToSave);
           const afterSize = estimateMessagesSize(messagesToStore);
 
           logger.info(
             {
-              messageCount: messagesToSave.length,
+              messageCount: messagesToStore.length,
               beforeSizeKB: Math.round(beforeSize.length / 1024),
               afterSizeKB: Math.round(afterSize.length / 1024),
               savedKB: Math.round(
@@ -2614,25 +2621,24 @@ async function persistNewMessages(
             },
             "[Chat] Stripped messages before saving to DB",
           );
-        } else {
-          // For onError, just strip without detailed logging
-          messagesToStore = normalizeChatMessages(messagesToSave);
         }
 
-        const now = Date.now();
-        const messageData = messagesToStore.map((msg, index) => ({
-          conversationId,
-          role: msg.role ?? "assistant",
-          content: msg,
-          createdAt: new Date(now + index),
-        }));
+        if (messagesToStore.length > 0) {
+          const now = Date.now();
+          const messageData = messagesToStore.map((msg, index) => ({
+            conversationId,
+            role: msg.role ?? "assistant",
+            content: msg,
+            createdAt: new Date(now + index),
+          }));
 
-        await MessageModel.bulkCreate(messageData);
-        persistedCount += messagesToSave.length;
+          await MessageModel.bulkCreate(messageData);
+          persistedCount += messagesToStore.length;
 
-        logger.info(
-          `Appended ${messagesToSave.length} new messages to conversation ${conversationId} (${context})`,
-        );
+          logger.info(
+            `Appended ${messagesToStore.length} new messages to conversation ${conversationId} (${context})`,
+          );
+        }
       }
     }
 

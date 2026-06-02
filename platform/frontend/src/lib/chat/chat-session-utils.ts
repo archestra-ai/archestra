@@ -1,4 +1,5 @@
 import type { UIMessage } from "@ai-sdk/react";
+import { hasRenderableAssistantContent } from "@shared";
 
 /**
  * Preserves the last renderable assistant content when a live session update
@@ -73,18 +74,10 @@ export function pruneEmptyTrailingAssistantMessage(
   return messages;
 }
 
-/**
- * Returns true when an assistant message still has content the chat UI can
- * actually render. Empty text parts do not count, but any non-text part does.
- */
+// shared with the backend persist path so the live view and what a reload shows
+// agree on what counts as renderable.
 function hasRenderableAssistantParts(message: UIMessage): boolean {
-  return (message.parts ?? []).some((part) => {
-    if (part.type === "text") {
-      return Boolean(part.text);
-    }
-
-    return true;
-  });
+  return hasRenderableAssistantContent(message);
 }
 
 function findPreviousRenderableAssistantMessage(params: {

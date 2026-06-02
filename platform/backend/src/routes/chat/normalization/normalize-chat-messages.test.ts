@@ -1,5 +1,8 @@
 import { describe, expect, test } from "vitest";
-import { normalizeChatMessages } from "./normalize-chat-messages";
+import {
+  dropEmptyAssistantMessages,
+  normalizeChatMessages,
+} from "./normalize-chat-messages";
 
 describe("normalizeChatMessages", () => {
   test("dedupes duplicate tool parts with the same toolCallId", () => {
@@ -98,5 +101,70 @@ describe("normalizeChatMessages", () => {
     const result = normalizeChatMessages(messages);
 
     expect(result[0].parts).toHaveLength(2);
+  });
+});
+
+describe("dropEmptyAssistantMessages", () => {
+  test("drops an assistant turn left empty after a dangling tool call is stripped", () => {
+    // a stopped/interrupted turn whose only part is an unresolved tool call
+    const messages = [
+      {
+        id: "user1",
+        role: "user" as const,
+        parts: [{ type: "text", text: "go" }],
+      },
+      {
+        id: "assistant1",
+        role: "assistant" as const,
+        parts: [
+          {
+            type: "tool-archestra__create_agent",
+            toolCallId: "call_interrupted",
+            state: "input-available",
+            input: {},
+          },
+        ],
+      },
+    ];
+
+    const normalized = normalizeChatMessages(messages);
+    const result = dropEmptyAssistantMessages(normalized);
+
+    expect(result.map((m) => m.id)).toEqual(["user1"]);
+  });
+
+  test("keeps assistant turns that still render text or a completed tool result", () => {
+    const messages = [
+      {
+        id: "with-text",
+        role: "assistant" as const,
+        parts: [{ type: "text", text: "done" }],
+      },
+      {
+        id: "with-result",
+        role: "assistant" as const,
+        parts: [
+          {
+            type: "tool-archestra__create_agent",
+            toolCallId: "call_ok",
+            state: "output-available",
+            output: "created",
+          },
+        ],
+      },
+    ];
+
+    const result = dropEmptyAssistantMessages(messages);
+
+    expect(result.map((m) => m.id)).toEqual(["with-text", "with-result"]);
+  });
+
+  test("leaves non-assistant messages untouched even when empty", () => {
+    const messages = [
+      { id: "u", role: "user" as const, parts: [] },
+      { id: "s", role: "system" as const, parts: [] },
+    ];
+
+    expect(dropEmptyAssistantMessages(messages)).toEqual(messages);
   });
 });

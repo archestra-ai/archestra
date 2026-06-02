@@ -258,6 +258,9 @@ class McpClient {
     string,
     { sessionEndpointUrl: string | null; sessionEndpointPodName: string | null }
   >();
+  // Populated while building an HTTP transport and consumed immediately by
+  // getOrCreateClient, so cached clients are invalidated when outbound
+  // credentials or required upstream headers change.
   private pendingTransportCredentialFingerprints = new Map<string, string>();
   // Cache for resource reads: key is `${agentId}:${uri}`, value is cached result with TTL.
   // Bounded to RESOURCE_CACHE_MAX_SIZE entries (LRU eviction) to prevent unbounded growth
@@ -3014,16 +3017,16 @@ class McpClient {
         });
         if ("error" in secretResult) continue;
 
+        const connectionKey = `${catalogItem.id}:${targetMcpServerId}`;
         const transport = await this.getTransport(
           catalogItem,
           targetMcpServerId,
           secretResult.secrets,
           secretResult.secretId,
-          `${catalogItem.id}:${targetMcpServerId}`,
+          connectionKey,
           tokenAuth,
           enterpriseTransportCredential ?? undefined,
         );
-        const connectionKey = `${catalogItem.id}:${targetMcpServerId}`;
         const client = await this.getOrCreateClient(
           connectionKey,
           transport,

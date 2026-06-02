@@ -4684,32 +4684,34 @@ describe("McpClient", () => {
             },
           ),
         );
-        mockListResources.mockResolvedValueOnce({
-          resources: [{ uri: "resource://exchange" }],
-        });
+        try {
+          mockListResources.mockResolvedValueOnce({
+            resources: [{ uri: "resource://exchange" }],
+          });
 
-        const result = await mcpClient.listResources(agentId, {
-          tokenId: "session-token",
-          teamId: null,
-          isOrganizationToken: false,
-          userId: user.id,
-        });
+          const result = await mcpClient.listResources(agentId, {
+            tokenId: "session-token",
+            teamId: null,
+            isOrganizationToken: false,
+            userId: user.id,
+          });
 
-        expect(result.resources).toEqual([{ uri: "resource://exchange" }]);
-        const { StreamableHTTPClientTransport } = await import(
-          "@modelcontextprotocol/sdk/client/streamableHttp.js"
-        );
-        const [, options] =
-          vi.mocked(StreamableHTTPClientTransport).mock.calls.at(-1) ?? [];
-        const headers =
-          options?.requestInit?.headers instanceof Headers
-            ? options.requestInit.headers
-            : new Headers(options?.requestInit?.headers);
-        expect(headers.get("Authorization")).toBe(
-          "Bearer aggregate-downstream-access-token",
-        );
-
-        fetchMock.mockRestore();
+          expect(result.resources).toEqual([{ uri: "resource://exchange" }]);
+          const { StreamableHTTPClientTransport } = await import(
+            "@modelcontextprotocol/sdk/client/streamableHttp.js"
+          );
+          const [, options] =
+            vi.mocked(StreamableHTTPClientTransport).mock.calls.at(-1) ?? [];
+          const headers =
+            options?.requestInit?.headers instanceof Headers
+              ? options.requestInit.headers
+              : new Headers(options?.requestInit?.headers);
+          expect(headers.get("Authorization")).toBe(
+            "Bearer aggregate-downstream-access-token",
+          );
+        } finally {
+          fetchMock.mockRestore();
+        }
       });
     });
 

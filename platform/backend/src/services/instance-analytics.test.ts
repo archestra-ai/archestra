@@ -46,6 +46,9 @@ describe("instanceAnalyticsService", () => {
     await instanceAnalyticsService.trackStartup();
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
+    for (const [, init] of fetchMock.mock.calls) {
+      expect(init?.signal).toBeInstanceOf(AbortSignal);
+    }
     expect(capturedEventNames()).toEqual([
       "instance_started",
       "instance_heartbeat",

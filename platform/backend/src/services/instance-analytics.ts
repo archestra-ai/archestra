@@ -5,6 +5,7 @@ import config from "@/config";
 import logger from "@/logging";
 
 const HEARTBEAT_INTERVAL_MS = 24 * 60 * 60 * 1000;
+const CAPTURE_TIMEOUT_MS = 10_000;
 const STATE_FILE_NAME = "instance-analytics.json";
 const INSTANCE_STARTED_EVENT = "instance_started";
 const INSTANCE_HEARTBEAT_EVENT = "instance_heartbeat";
@@ -76,6 +77,7 @@ class InstanceAnalyticsService {
   }): Promise<void> {
     const response = await this.getFetch()(getCaptureUrl(analyticsConfig), {
       method: "POST",
+      signal: AbortSignal.timeout(CAPTURE_TIMEOUT_MS),
       headers: {
         "Content-Type": "application/json",
       },

@@ -178,14 +178,23 @@ describe("normalizeChatMessages empty-assistant dropping", () => {
     expect(normalizeChatMessages(messages)).toEqual([]);
   });
 
-  test("keeps an assistant turn whose only non-text part renders an MCP app", () => {
+  test("keeps an MCP-app turn whose tool call completed", () => {
     const messages = [
       {
         id: "assistant1",
         role: "assistant" as const,
         parts: [
           { type: "step-start" },
-          { type: "data-tool-ui-start", data: { toolCallId: "call_ok" } },
+          {
+            type: "data-tool-ui-start",
+            data: { toolCallId: "call_ok", toolName: "render_chart" },
+          },
+          {
+            type: "tool-render_chart",
+            toolCallId: "call_ok",
+            state: "output-available",
+            output: "rendered",
+          },
         ],
       },
     ];
@@ -193,6 +202,33 @@ describe("normalizeChatMessages empty-assistant dropping", () => {
     expect(normalizeChatMessages(messages).map((m) => m.id)).toEqual([
       "assistant1",
     ]);
+  });
+
+  test("drops a stopped MCP-app turn left with an orphaned tool-ui-start", () => {
+    // abort after the MCP app started but before its tool call resolved:
+    // stripDanglingToolCalls removes the input-streaming tool, leaving the
+    // marker orphaned — the renderer would otherwise show a stuck running tool.
+    const messages = [
+      {
+        id: "assistant1",
+        role: "assistant" as const,
+        parts: [
+          { type: "step-start" },
+          {
+            type: "data-tool-ui-start",
+            data: { toolCallId: "call_interrupted", toolName: "render_chart" },
+          },
+          {
+            type: "tool-render_chart",
+            toolCallId: "call_interrupted",
+            state: "input-streaming",
+            input: {},
+          },
+        ],
+      },
+    ];
+
+    expect(normalizeChatMessages(messages)).toEqual([]);
   });
 
   test("leaves non-assistant messages untouched even when empty", () => {

@@ -5,8 +5,12 @@ import { stripImagesFromMessages } from "./strip-images-from-messages";
 
 export function normalizeChatMessages(messages: ChatMessage[]): ChatMessage[] {
   return dropEmptyAssistantMessages(
-    stripImagesFromMessages(
-      stripDanglingToolCallsFromMessages(dedupeToolPartsFromMessages(messages)),
+    stripOrphanedToolUiStartsFromMessages(
+      stripImagesFromMessages(
+        stripDanglingToolCallsFromMessages(
+          dedupeToolPartsFromMessages(messages),
+        ),
+      ),
     ),
   );
 }
@@ -87,6 +91,54 @@ function stripDanglingToolCallsFromMessages(messages: ChatMessage[]) {
   });
 }
 
+// drops `data-tool-ui-start` markers whose tool call no longer survives — e.g. an
+// aborted MCP-app turn whose dangling `tool-*` part was just stripped. The chat
+// renderer treats such a marker as canonical and synthesizes an `input-streaming`
+// tool from it, so an orphaned marker reloads as a perpetually running tool. Runs
+// after dangling-call stripping so "surviving" reflects the cleaned-up parts.
+function stripOrphanedToolUiStartsFromMessages(
+  messages: ChatMessage[],
+): ChatMessage[] {
+  return messages.map((message) => {
+    const parts = message.parts;
+    if (!parts?.length) {
+      return message;
+    }
+
+    const liveToolCallIds = new Set<string>();
+    for (const part of parts) {
+      if (isToolPart(part) && typeof part.toolCallId === "string") {
+        liveToolCallIds.add(part.toolCallId);
+      }
+    }
+
+    const keptParts = parts.filter((part) => {
+      if (!isToolUiStartPart(part)) {
+        return true;
+      }
+
+      const toolCallId = getToolUiStartToolCallId(part);
+      return toolCallId !== null && liveToolCallIds.has(toolCallId);
+    });
+
+    if (keptParts.length === parts.length) {
+      return message;
+    }
+
+    logger.warn(
+      {
+        messageId: message.id,
+        role: message.role,
+        originalCount: parts.length,
+        keptCount: keptParts.length,
+      },
+      "[normalizeChatMessages] Removed orphaned tool-ui-start parts from message",
+    );
+
+    return { ...message, parts: keptParts };
+  });
+}
+
 // drops assistant turns left with no renderable content — e.g. a turn whose only
 // parts were dangling tool calls that stripDanglingToolCalls removed. An empty
 // assistant response is never valid, so neither the model nor the DB should see
@@ -96,6 +148,24 @@ function dropEmptyAssistantMessages(messages: ChatMessage[]): ChatMessage[] {
     (message) =>
       message.role !== "assistant" || hasRenderableAssistantContent(message),
   );
+}
+
+function isToolPart(part: ChatMessagePart): boolean {
+  return part.type.startsWith("tool-");
+}
+
+function isToolUiStartPart(part: ChatMessagePart): boolean {
+  return part.type.startsWith("data-tool-ui-start");
+}
+
+function getToolUiStartToolCallId(part: ChatMessagePart): string | null {
+  const data = part.data;
+  if (typeof data !== "object" || data === null || !("toolCallId" in data)) {
+    return null;
+  }
+
+  const toolCallId = (data as { toolCallId?: unknown }).toolCallId;
+  return typeof toolCallId === "string" ? toolCallId : null;
 }
 
 function getToolPartSignature(part: NonNullable<ChatMessage["parts"]>[number]) {

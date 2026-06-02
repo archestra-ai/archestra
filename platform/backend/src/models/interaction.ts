@@ -33,6 +33,7 @@ import type {
 } from "@/types";
 import { InteractionAuthMethodSchema } from "@/types";
 import { escapeLikePattern } from "@/utils/sql-search";
+import AgentModel from "./agent";
 import AgentTeamModel from "./agent-team";
 import ConversationChatErrorModel from "./conversation-chat-error";
 import LimitModel from "./limit";
@@ -711,20 +712,17 @@ class InteractionModel {
           `Profile ${interaction.profileId} has no team assignments for interaction ${interaction.id}`,
         );
 
-        // Even if agent has no teams, we should still try to update organization limits
-        // We'll use a default organization approach - get the first organization from existing limits
+        // Even if agent has no teams, update organization limits for its own org.
         try {
-          const existingOrgLimits = await db
-            .select({ entityId: schema.limitsTable.entityId })
-            .from(schema.limitsTable)
-            .where(eq(schema.limitsTable.entityType, "organization"))
-            .limit(1);
+          const organizationId = await AgentModel.findOrganizationId(
+            interaction.profileId,
+          );
 
-          if (existingOrgLimits.length > 0) {
+          if (organizationId) {
             updatePromises.push(
               LimitModel.updateTokenLimitUsage(
                 "organization",
-                existingOrgLimits[0].entityId,
+                organizationId,
                 model,
                 inputTokens,
                 outputTokens,

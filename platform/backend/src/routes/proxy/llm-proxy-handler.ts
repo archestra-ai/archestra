@@ -464,16 +464,23 @@ export async function handleLLMProxy<
       });
 
     if (limitViolation) {
-      const [_refusalMessage, contentMessage] = limitViolation;
+      const [_refusalMessage, contentMessage, limitMetadata] = limitViolation;
       logger.info(
         { resolvedAgentId, reason: "token_cost_limit_exceeded" },
         `${providerName} request blocked due to token cost limit`,
       );
+      // Preserve the proxy-compatible error envelope so chat clients can read structured limit metadata.
       return reply.status(429).send({
         error: {
           message: contentMessage,
           type: "rate_limit_exceeded",
           code: "token_cost_limit_exceeded",
+          usage_limit: limitMetadata
+            ? {
+                limit_type: limitMetadata.limitType,
+                entity_type: limitMetadata.entityType,
+              }
+            : undefined,
         },
       });
     }

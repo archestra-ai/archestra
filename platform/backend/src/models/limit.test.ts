@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { describe, expect, test, vi } from "@/test";
 import { CreateLimitSchema } from "@/types";
@@ -476,6 +476,68 @@ describe("LimitModel", () => {
 
       expect(updated).toBeDefined();
       expect(updated?.model).toEqual(["gpt-4o"]);
+    });
+
+    test("resets token usage when cleanup interval changes", async ({
+      makeAgent,
+    }) => {
+      const agent = await makeAgent({ name: "Interval Reset Agent" });
+      const limit = await LimitModel.create({
+        entityType: "agent",
+        entityId: agent.id,
+        limitType: "token_cost",
+        limitValue: 1000000,
+        model: ["gpt-4o"],
+        cleanupInterval: "1w",
+      });
+      await LimitModel.updateTokenLimitUsage(
+        "agent",
+        agent.id,
+        "gpt-4o",
+        500,
+        700,
+      );
+
+      const updated = await LimitModel.patch(limit.id, {
+        cleanupInterval: "calendar_month",
+      });
+
+      const usage = await LimitModel.getRawModelUsage(limit.id);
+      expect(updated?.cleanupInterval).toBe("calendar_month");
+      expect(updated?.lastCleanup).toBeInstanceOf(Date);
+      expect(usage[0].currentUsageTokensIn).toBe(0);
+      expect(usage[0].currentUsageTokensOut).toBe(0);
+    });
+
+    test("does not reset token usage when cleanup interval is unchanged", async ({
+      makeAgent,
+    }) => {
+      const agent = await makeAgent({ name: "Value Update Agent" });
+      const limit = await LimitModel.create({
+        entityType: "agent",
+        entityId: agent.id,
+        limitType: "token_cost",
+        limitValue: 1000000,
+        model: ["gpt-4o"],
+        cleanupInterval: "1w",
+      });
+      await LimitModel.updateTokenLimitUsage(
+        "agent",
+        agent.id,
+        "gpt-4o",
+        500,
+        700,
+      );
+
+      const updated = await LimitModel.patch(limit.id, {
+        limitValue: 2000000,
+        cleanupInterval: "1w",
+      });
+
+      const usage = await LimitModel.getRawModelUsage(limit.id);
+      expect(updated?.limitValue).toBe(2000000);
+      expect(usage[0].currentUsageTokensIn).toBe(500);
+      expect(usage[0].currentUsageTokensOut).toBe(700);
     });
   });
 
@@ -2082,6 +2144,81 @@ describe("cleanupLimitsIfNeeded", () => {
     const monthlyUsage = await LimitModel.getRawModelUsage(monthlyLimit.id);
     expect(hourlyUsage[0].currentUsageTokensIn).toBe(0);
     expect(monthlyUsage[0].currentUsageTokensIn).toBe(500);
+  });
+
+  test("resets calendar monthly limits only after the month boundary", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+
+    const dueLimit = await LimitModel.create({
+      entityType: "organization",
+      entityId: org.id,
+      limitType: "token_cost",
+      limitValue: 1000000,
+      model: ["gpt-4o"],
+      cleanupInterval: "calendar_month",
+    });
+    const currentMonthLimit = await LimitModel.create({
+      entityType: "organization",
+      entityId: org.id,
+      limitType: "token_cost",
+      limitValue: 1000000,
+      model: ["gpt-4o"],
+      cleanupInterval: "calendar_month",
+    });
+
+    await LimitModel.updateTokenLimitUsage(
+      "organization",
+      org.id,
+      "gpt-4o",
+      500,
+      500,
+    );
+
+    const previousMonth = new Date();
+    previousMonth.setMonth(previousMonth.getMonth() - 1, 15);
+    const currentMonth = new Date();
+    currentMonth.setDate(1);
+    currentMonth.setHours(12, 0, 0, 0);
+    await LimitModel.patch(dueLimit.id, { lastCleanup: previousMonth });
+    await LimitModel.patch(currentMonthLimit.id, { lastCleanup: currentMonth });
+
+    await LimitModel.cleanupLimitsIfNeeded({
+      allForOrganizationId: org.id,
+    });
+
+    const dueUsage = await LimitModel.getRawModelUsage(dueLimit.id);
+    const currentMonthUsage = await LimitModel.getRawModelUsage(
+      currentMonthLimit.id,
+    );
+    expect(dueUsage[0].currentUsageTokensIn).toBe(0);
+    expect(currentMonthUsage[0].currentUsageTokensIn).toBe(500);
+  });
+
+  test("calendar Sunday week starts on the current Sunday", async () => {
+    const sunday = "2026-06-07 15:30:00";
+    const tuesday = "2026-06-09 15:30:00";
+
+    const result = await db.execute<{
+      sunday_period_start: string;
+      tuesday_period_start: string;
+    }>(sql`
+      select
+        to_char(
+          date_trunc('day', ${sunday}::timestamp)
+            - (extract(dow from ${sunday}::timestamp) * interval '1 day'),
+          'YYYY-MM-DD HH24:MI:SS'
+        ) as sunday_period_start,
+        to_char(
+          date_trunc('day', ${tuesday}::timestamp)
+            - (extract(dow from ${tuesday}::timestamp) * interval '1 day'),
+          'YYYY-MM-DD HH24:MI:SS'
+        ) as tuesday_period_start
+    `);
+
+    expect(result.rows[0].sunday_period_start).toBe("2026-06-07 00:00:00");
+    expect(result.rows[0].tuesday_period_start).toBe("2026-06-07 00:00:00");
   });
 
   test("default user limits do not create per-user limit rows", async ({

@@ -329,6 +329,10 @@ export interface ChatErrorResponse {
   traceId?: string;
   /** OpenTelemetry span ID for correlating with backend logs */
   spanId?: string;
+  /** True when the request was blocked by a configured usage-limit budget */
+  usageLimitExceeded?: boolean;
+  /** The usage-limit entity that blocked the request, when known */
+  usageLimitEntityType?: string;
   /** Original error details for debugging (provider-specific) */
   originalError?: {
     /** Provider name (anthropic, openai, gemini) */
@@ -351,6 +355,8 @@ export const ChatErrorResponseSchema: z.ZodType<ChatErrorResponse> = z.object({
   sessionId: z.string().optional(),
   traceId: z.string().optional(),
   spanId: z.string().optional(),
+  usageLimitExceeded: z.boolean().optional(),
+  usageLimitEntityType: z.string().optional(),
   originalError: z
     .object({
       provider: SupportedProvidersSchema.optional(),

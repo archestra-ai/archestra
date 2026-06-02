@@ -5,6 +5,7 @@ import type { ColumnDef } from "@tanstack/react-table";
 import {
   Building2,
   Edit,
+  Info,
   Key,
   Network,
   Plus,
@@ -887,7 +888,26 @@ export default function LimitsPage() {
             </div>
 
             <div className="space-y-2">
-              <Label>Cleanup interval</Label>
+              <div className="flex items-center gap-1.5">
+                <Label>Cleanup interval</Label>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-sm"
+                      className="h-5 w-5 text-muted-foreground hover:text-foreground"
+                      aria-label="Cleanup interval help"
+                    >
+                      <Info className="h-3.5 w-3.5" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" align="start" className="max-w-72">
+                    Rolling resets after elapsed time. Calendar resets at the
+                    next day, week, or month boundary.
+                  </TooltipContent>
+                </Tooltip>
+              </div>
               <LimitCleanupIntervalSelect
                 value={formState.cleanupInterval}
                 onValueChange={(value) =>

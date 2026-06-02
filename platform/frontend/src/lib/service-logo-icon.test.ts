@@ -3,9 +3,10 @@ import { getServiceLogoIconSrc } from "./service-logo-icon";
 
 describe("getServiceLogoIconSrc", () => {
   test("resolves supported service logo icon references", () => {
-    expect(getServiceLogoIconSrc("logo:playwright")).toBe(
-      "/icons/simple-icons-microsoft/playwright.svg",
-    );
+    const src = getServiceLogoIconSrc("logo:playwright");
+
+    expect(src).toMatch(/^data:image\/svg\+xml,/);
+    expect(decodeURIComponent(src ?? "")).toContain('fill="#2EAD33"');
   });
 
   test("ignores unsupported icon values", () => {

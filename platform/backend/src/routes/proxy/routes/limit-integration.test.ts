@@ -170,6 +170,10 @@ describe("LLM proxy limit enforcement (integration)", () => {
     expect(response.json()).toMatchObject({
       error: {
         code: "token_cost_limit_exceeded",
+        usage_limit: {
+          entity_type: "virtual_key",
+          limit_type: "token_cost",
+        },
       },
     });
   });
@@ -221,6 +225,10 @@ describe("LLM proxy limit enforcement (integration)", () => {
     expect(response.json()).toMatchObject({
       error: {
         code: "token_cost_limit_exceeded",
+        usage_limit: {
+          entity_type: "user",
+          limit_type: "token_cost",
+        },
       },
     });
   });
@@ -271,6 +279,10 @@ describe("LLM proxy limit enforcement (integration)", () => {
     expect(response.json()).toMatchObject({
       error: {
         code: "token_cost_limit_exceeded",
+        usage_limit: {
+          entity_type: "user",
+          limit_type: "token_cost",
+        },
       },
     });
     expect(response.json().error.message).toContain("user-level");
@@ -355,6 +367,57 @@ describe("LLM proxy limit enforcement (integration)", () => {
     });
 
     expect(response.statusCode).toBe(200);
+  });
+
+  test("blocks org-scoped agent with 429 when organization limit is exceeded", async ({
+    makeAgent,
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const agent = await makeAgent({
+      organizationId: org.id,
+      name: "Org Limit Agent",
+      scope: "org",
+      teams: [],
+    });
+
+    await LimitModel.create({
+      entityType: "organization",
+      entityId: org.id,
+      limitType: "token_cost",
+      limitValue: 1,
+      model: null,
+      lastCleanup: new Date(),
+    });
+
+    await LimitModel.updateTokenLimitUsage(
+      "organization",
+      org.id,
+      "gpt-4o",
+      1_000_000,
+      1_000_000,
+    );
+
+    await setupRoute();
+
+    const response = await app.inject({
+      method: "POST",
+      url: OPENAI_ENDPOINT(agent.id),
+      headers: OPENAI_HEADERS(),
+      payload: SIMPLE_PAYLOAD(),
+    });
+
+    expect(response.statusCode).toBe(429);
+    expect(response.json()).toMatchObject({
+      error: {
+        code: "token_cost_limit_exceeded",
+        usage_limit: {
+          entity_type: "organization",
+          limit_type: "token_cost",
+        },
+      },
+    });
+    expect(response.json().error.message).toContain("organization-level");
   });
 
   test("records usage in limit after successful request", async ({

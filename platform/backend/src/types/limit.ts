@@ -35,6 +35,10 @@ export const LimitCleanupIntervalSchema = z.enum([
   "24h",
   "1w",
   "1m",
+  "calendar_day",
+  "calendar_week_sunday",
+  "calendar_week_monday",
+  "calendar_month",
 ]);
 export type LimitCleanupInterval = z.infer<typeof LimitCleanupIntervalSchema>;
 

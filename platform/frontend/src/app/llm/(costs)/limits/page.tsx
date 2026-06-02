@@ -5,6 +5,7 @@ import type { ColumnDef } from "@tanstack/react-table";
 import {
   Building2,
   Edit,
+  Info,
   Key,
   Network,
   Plus,
@@ -493,7 +494,17 @@ export default function LimitsPage() {
           const cleanupInterval =
             (row.original.cleanupInterval as LimitCleanupInterval | null) ??
             DEFAULT_LIMIT_CLEANUP_INTERVAL;
-          return CLEANUP_INTERVAL_LABELS[cleanupInterval];
+          return (
+            <div className="space-y-0.5">
+              <div>{CLEANUP_INTERVAL_LABELS[cleanupInterval]}</div>
+              <div className="text-xs text-muted-foreground">
+                {formatNextLimitReset(
+                  row.original.lastCleanup,
+                  cleanupInterval,
+                )}
+              </div>
+            </div>
+          );
         },
       },
       {
@@ -877,7 +888,26 @@ export default function LimitsPage() {
             </div>
 
             <div className="space-y-2">
-              <Label>Cleanup interval</Label>
+              <div className="flex items-center gap-1.5">
+                <Label>Cleanup interval</Label>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-sm"
+                      className="h-5 w-5 text-muted-foreground hover:text-foreground"
+                      aria-label="Cleanup interval help"
+                    >
+                      <Info className="h-3.5 w-3.5" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" align="start" className="max-w-72">
+                    Rolling resets after elapsed time. Calendar resets at the
+                    next day, week, or month boundary.
+                  </TooltipContent>
+                </Tooltip>
+              </div>
               <LimitCleanupIntervalSelect
                 value={formState.cleanupInterval}
                 onValueChange={(value) =>
@@ -927,4 +957,109 @@ export function getLimitModels(limit: LimitData): string[] {
   return Array.isArray(limit.model)
     ? limit.model.filter((model): model is string => typeof model === "string")
     : [];
+}
+
+function formatNextLimitReset(
+  lastCleanup: LimitData["lastCleanup"],
+  cleanupInterval: LimitCleanupInterval,
+): string {
+  if (isCalendarCleanupInterval(cleanupInterval)) {
+    return formatResetDate(
+      getNextCalendarResetDate(new Date(), cleanupInterval),
+    );
+  }
+
+  if (!lastCleanup) {
+    return "Resets on next check";
+  }
+
+  const nextReset = addCleanupInterval(new Date(lastCleanup), cleanupInterval);
+  if (Number.isNaN(nextReset.getTime())) {
+    return "Reset schedule unavailable";
+  }
+
+  return formatResetDate(nextReset);
+}
+
+function formatResetDate(date: Date): string {
+  return `Resets ${date.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year:
+      date.getFullYear() === new Date().getFullYear() ? undefined : "numeric",
+  })}`;
+}
+
+function addCleanupInterval(
+  date: Date,
+  cleanupInterval: LimitCleanupInterval,
+): Date {
+  const next = new Date(date);
+  switch (cleanupInterval) {
+    case "1h":
+      next.setHours(next.getHours() + 1);
+      return next;
+    case "12h":
+      next.setHours(next.getHours() + 12);
+      return next;
+    case "24h":
+      next.setDate(next.getDate() + 1);
+      return next;
+    case "1w":
+      next.setDate(next.getDate() + 7);
+      return next;
+    case "1m":
+      next.setMonth(next.getMonth() + 1);
+      return next;
+    case "calendar_day":
+    case "calendar_week_sunday":
+    case "calendar_week_monday":
+    case "calendar_month":
+      return getNextCalendarResetDate(next, cleanupInterval);
+  }
+}
+
+function isCalendarCleanupInterval(
+  cleanupInterval: LimitCleanupInterval,
+): cleanupInterval is Extract<
+  LimitCleanupInterval,
+  | "calendar_day"
+  | "calendar_week_sunday"
+  | "calendar_week_monday"
+  | "calendar_month"
+> {
+  return cleanupInterval.startsWith("calendar_");
+}
+
+function getNextCalendarResetDate(
+  date: Date,
+  cleanupInterval: Extract<
+    LimitCleanupInterval,
+    | "calendar_day"
+    | "calendar_week_sunday"
+    | "calendar_week_monday"
+    | "calendar_month"
+  >,
+): Date {
+  const next = new Date(date);
+  next.setHours(0, 0, 0, 0);
+
+  switch (cleanupInterval) {
+    case "calendar_day":
+      next.setDate(next.getDate() + 1);
+      return next;
+    case "calendar_week_sunday": {
+      const daysUntilSunday = (7 - next.getDay()) % 7 || 7;
+      next.setDate(next.getDate() + daysUntilSunday);
+      return next;
+    }
+    case "calendar_week_monday": {
+      const daysUntilMonday = (8 - next.getDay()) % 7 || 7;
+      next.setDate(next.getDate() + daysUntilMonday);
+      return next;
+    }
+    case "calendar_month":
+      next.setMonth(next.getMonth() + 1, 1);
+      return next;
+  }
 }

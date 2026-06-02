@@ -31,6 +31,18 @@ vi.mock("@/lib/auth/auth.query", () => ({
 
 vi.mock("@/lib/organization.query", () => ({
   usePresetEntityName: vi.fn(() => ({ singular: "Preset", plural: "Presets" })),
+  useDefaultEnvironment: vi.fn(() => ({
+    name: "Default",
+    namespace: null,
+    description: null,
+    restricted: false,
+  })),
+}));
+
+vi.mock("@/lib/organization/environment.query", () => ({
+  useEnvironments: vi.fn(() => ({
+    data: { environments: [], defaultAssignedCatalogCount: 0 },
+  })),
 }));
 
 vi.mock("@/lib/auth/identity-provider-read.query", () => ({

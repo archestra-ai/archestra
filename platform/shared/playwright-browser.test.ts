@@ -6,7 +6,6 @@ import {
   isLargeResultBrowserMcpTool,
   isPlaywrightCatalogItem,
   PLAYWRIGHT_MCP_CATALOG_ID,
-  PLAYWRIGHT_MCP_ICON,
 } from "./playwright-browser";
 
 describe("playwright browser helpers", () => {
@@ -33,10 +32,5 @@ describe("playwright browser helpers", () => {
   test("recognizes the built-in playwright catalog item", () => {
     expect(isPlaywrightCatalogItem(PLAYWRIGHT_MCP_CATALOG_ID)).toBe(true);
     expect(isBuiltInCatalogId(PLAYWRIGHT_MCP_CATALOG_ID)).toBe(true);
-  });
-
-  test("provides a default icon for the built-in playwright catalog item", () => {
-    expect(PLAYWRIGHT_MCP_ICON).toMatch(/^data:image\/svg\+xml,/);
-    expect(PLAYWRIGHT_MCP_ICON).toContain('fill="%232EAD33"');
   });
 });

@@ -40,6 +40,25 @@ export class ProviderError extends Error {
   }
 }
 
+/**
+ * Thrown when the provider finishes a turn cleanly (finishReason stop/length)
+ * but produces no renderable content, after the empty-response auto-retries are
+ * exhausted. Carries the last finishReason for diagnostics. mapProviderError
+ * turns it into a structured EmptyResponse error so the frontend shows the same
+ * styled, retryable error card as any provider failure.
+ */
+export class EmptyModelResponseError extends Error {
+  public readonly finishReason: string;
+  public readonly attempts: number;
+
+  constructor(params: { finishReason: string; attempts: number }) {
+    super(`Model returned an empty response after ${params.attempts} attempts`);
+    this.name = "EmptyModelResponseError";
+    this.finishReason = params.finishReason;
+    this.attempts = params.attempts;
+  }
+}
+
 // =============================================================================
 // Safe Serialization
 // =============================================================================
@@ -1475,6 +1494,20 @@ export function mapProviderError(
           : undefined,
       };
     }
+  }
+
+  // Handle EmptyModelResponseError — the provider finished cleanly but gave no
+  // content, and the empty-response retries were exhausted. Surface it as a
+  // structured, retryable EmptyResponse error.
+  if (error instanceof EmptyModelResponseError) {
+    return createErrorResponse(
+      ChatErrorCode.EmptyResponse,
+      provider,
+      undefined,
+      ChatErrorMessages[ChatErrorCode.EmptyResponse],
+      "EmptyModelResponseError",
+      { finishReason: error.finishReason, attempts: error.attempts },
+    );
   }
 
   // Handle NoOutputGeneratedError — the provider failed before producing any

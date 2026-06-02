@@ -250,3 +250,50 @@ describe("pruneEmptyTrailingAssistantMessage", () => {
     expect(pruneEmptyTrailingAssistantMessage(messages)).toEqual(messages);
   });
 });
+
+describe("restoreTruncatedAssistantTail renderability gating", () => {
+  test("does not restore a truncated tail that is a telemetry-only assistant", () => {
+    const previousMessages = [
+      {
+        id: "user-1",
+        role: "user",
+        parts: [{ type: "text", text: "go" }],
+      },
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          { type: "step-start" },
+          { type: "data-token-usage", data: { totalTokens: 10 } },
+        ],
+      },
+    ] as UIMessage[];
+
+    const nextMessages = [previousMessages[0]] as UIMessage[];
+
+    expect(
+      restoreRenderableAssistantParts({ previousMessages, nextMessages }),
+    ).toEqual(nextMessages);
+  });
+
+  test("does not restore when the live session clears to a non-renderable assistant tail", () => {
+    const previousMessages = [
+      {
+        id: "user-1",
+        role: "user",
+        parts: [{ type: "text", text: "go" }],
+      },
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [{ type: "step-start" }],
+      },
+    ] as UIMessage[];
+
+    const nextMessages = [] as UIMessage[];
+
+    expect(
+      restoreRenderableAssistantParts({ previousMessages, nextMessages }),
+    ).toEqual(nextMessages);
+  });
+});

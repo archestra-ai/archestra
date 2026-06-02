@@ -120,9 +120,11 @@ function restoreTruncatedAssistantTail(params: {
     return nextMessages;
   }
 
+  const lastPreviousMessage = previousMessages.at(-1);
   if (
     nextMessages.length === 0 &&
-    previousMessages.at(-1)?.role === "assistant"
+    lastPreviousMessage?.role === "assistant" &&
+    hasRenderableAssistantContent(lastPreviousMessage)
   ) {
     return previousMessages;
   }
@@ -134,11 +136,17 @@ function restoreTruncatedAssistantTail(params: {
   const hasStablePrefix = nextMessages.every((message, index) =>
     sameMessageIdentity(message, previousMessages[index]),
   );
+  // only restore a tail that carries content worth keeping — restoring a
+  // non-renderable assistant (e.g. step-start/telemetry after a stopped turn)
+  // would resurrect the empty bubble the persist path just pruned away.
   const truncatedTail = previousMessages.slice(nextMessages.length);
   if (
     hasStablePrefix &&
     truncatedTail.length > 0 &&
-    truncatedTail.every((message) => message.role === "assistant")
+    truncatedTail.every(
+      (message) =>
+        message.role === "assistant" && hasRenderableAssistantContent(message),
+    )
   ) {
     return previousMessages;
   }

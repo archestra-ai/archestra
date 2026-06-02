@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildSkillDescriptionPrompt,
   type DescribableAgent,
+  sanitizeDescription,
 } from "./skill-description";
 
 function makeAgent(
@@ -73,5 +74,24 @@ describe("buildSkillDescriptionPrompt", () => {
 
     expect(prompt).toContain("…");
     expect(prompt.length).toBeLessThan(5000);
+  });
+});
+
+describe("sanitizeDescription", () => {
+  it("collapses whitespace into a single line", () => {
+    expect(sanitizeDescription("Drafts replies\n  to  tickets.")).toBe(
+      "Drafts replies to tickets.",
+    );
+  });
+
+  it("strips wrapping quotes and backticks", () => {
+    expect(sanitizeDescription('"Reviews pull requests."')).toBe(
+      "Reviews pull requests.",
+    );
+    expect(sanitizeDescription("`Summarizes logs.`")).toBe("Summarizes logs.");
+  });
+
+  it("caps an overlong response at the spec limit", () => {
+    expect(sanitizeDescription("x".repeat(2000)).length).toBe(1024);
   });
 });

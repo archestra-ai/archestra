@@ -1,17 +1,16 @@
 import { parseFullToolName, SKILL_ARCHESTRA_TOOL_SHORT_NAMES } from "@shared";
-import { generateText, Output } from "ai";
-import { z } from "zod";
 import { createLLMModel } from "@/clients/llm-client";
 import logger from "@/logging";
+import { generateTaggedText } from "@/utils/generate-tagged-text";
 import { resolveAgentLlmOrDefault } from "@/utils/llm-resolution";
 
 /**
  * Suggest a skill `description` from a source agent during agent→skill
  * migration. The description is required and drives activation, so when the
  * agent has nothing usable the conversion dialog otherwise falls back to the
- * agent name. This is a single `generateText` call over the org's
- * best-available model (the agent's own model if set) — no agent record, no
- * built-in subagent, no persistence. Returns null when no LLM is configured or
+ * agent name. Runs over the org's best-available model (the agent's own model
+ * if set) via {@link generateTaggedText} — no agent record, no built-in
+ * subagent, no persistence. Returns null when no LLM is configured or
  * generation fails, so callers can fall back to "write one manually" rather
  * than block the conversion.
  *
@@ -53,19 +52,29 @@ export async function suggestSkillDescription(params: {
   });
 
   try {
-    const { output } = await generateText({
+    return await generateTaggedText({
       model,
+      tag: "description",
       system: SKILL_DESCRIPTION_SYSTEM_PROMPT,
       prompt: buildSkillDescriptionPrompt(agent),
-      output: Output.object({ schema: SkillDescriptionSchema }),
-      maxOutputTokens: 256,
+      maxOutputTokens: 512,
+      sanitize: sanitizeDescription,
     });
-    const description = output.description.trim();
-    return description.length > 0 ? description : null;
   } catch (error) {
     logger.error({ err: error }, "Failed to generate skill description");
     return null;
   }
+}
+
+/**
+ * Normalize a generated description into a single clean line: collapse
+ * whitespace, drop wrapping quotes/backticks a model may add, and cap length so
+ * a runaway response can't overflow the description field. Exported for testing.
+ */
+export function sanitizeDescription(raw: string): string {
+  const oneLine = raw.replace(/\s+/g, " ").trim();
+  const unquoted = oneLine.replace(/^["'`]+|["'`]+$/g, "").trim();
+  return unquoted.slice(0, MAX_DESCRIPTION_CHARS);
 }
 
 /**
@@ -106,10 +115,8 @@ export function buildSkillDescriptionPrompt(agent: DescribableAgent): string {
 
 // ===== Internal =====
 
-/** One-field structured output, so the model can't wrap the text in prose. */
-const SkillDescriptionSchema = z.object({
-  description: z.string(),
-});
+/** Agent Skill spec caps `description` at 1024 characters. */
+const MAX_DESCRIPTION_CHARS = 1024;
 
 const SKILL_DESCRIPTION_SYSTEM_PROMPT = `You write the "description" field of an Agent Skill (a reusable instruction set an AI agent activates on demand).
 

@@ -63,6 +63,13 @@ archestra:
         # Enable SSRF protection for MCP server pods
         create: true
 
+      rbac:
+        # Namespaces backing deployment environments the platform may deploy
+        # MCP servers into. Each entry gets a namespace-scoped Role + RoleBinding
+        # and is surfaced to the app as ARCHESTRA_ORCHESTRATOR_ENVIRONMENT_NAMESPACES.
+        environmentNamespaces:
+          - env-test
+
       serviceAccount:
         # GKE Workload Identity binding to allow Vertex AI access via ADC
         # The GCP service account (archestra-vertex-ai@friendly-path-465518-r6.iam.gserviceaccount.com)
@@ -113,3 +120,4 @@ archestra:
           - path: /
             port: 9000
             pathType: Prefix
+

@@ -21,14 +21,14 @@ import type { SkillFileKind } from "@/types/skill";
 // Public interface
 // ============================================================================
 
-export interface BuiltInSkillFile {
+interface BuiltInSkillFile {
   /** Path relative to the skill root, e.g. `references/mcp-and-tools.md`. */
   path: string;
   kind: SkillFileKind;
   content: string;
 }
 
-export interface BuiltInSkill {
+interface BuiltInSkill {
   /** Stable identifier; never changes once shipped. */
   builtInSkillId: string;
   name: string;

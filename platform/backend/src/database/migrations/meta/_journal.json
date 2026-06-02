@@ -1891,6 +1891,13 @@
       "when": 1780397149205,
       "tag": "0269_typical_bill_hollister",
       "breakpoints": true
+    },
+    {
+      "idx": 270,
+      "version": "7",
+      "when": 1780406123483,
+      "tag": "0270_add_playwright_catalog_icon",
+      "breakpoints": true
     }
   ]
 }

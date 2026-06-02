@@ -4,6 +4,7 @@ import { ARCHESTRA_MCP_CATALOG_ID, DEFAULT_APP_NAME } from "@shared";
 import { Server } from "lucide-react";
 import Image from "next/image";
 import { useAppIconLogo } from "@/lib/hooks/use-app-name";
+import { getServiceLogoIconSrc } from "@/lib/service-logo-icon";
 import { cn } from "@/lib/utils";
 
 interface McpCatalogIconProps {
@@ -20,6 +21,19 @@ export function McpCatalogIcon({
   className,
 }: McpCatalogIconProps) {
   const appIconLogo = useAppIconLogo();
+  const serviceLogoSrc = getServiceLogoIconSrc(icon);
+
+  if (serviceLogoSrc) {
+    return (
+      <Image
+        src={serviceLogoSrc}
+        alt="MCP server icon"
+        width={size}
+        height={size}
+        className={cn("shrink-0 rounded-sm object-contain", className)}
+      />
+    );
+  }
 
   if (!icon && catalogId === ARCHESTRA_MCP_CATALOG_ID) {
     return (

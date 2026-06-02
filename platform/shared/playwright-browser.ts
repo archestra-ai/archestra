@@ -11,6 +11,7 @@ export const PLAYWRIGHT_MCP_SERVER_NAME = buildFullToolName(
   "microsoft",
   "playwright-mcp",
 );
+export const PLAYWRIGHT_MCP_ICON = "logo:playwright";
 
 /**
  * Set of all built-in MCP catalog item IDs that are system-managed

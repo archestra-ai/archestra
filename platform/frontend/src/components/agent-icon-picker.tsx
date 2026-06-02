@@ -23,6 +23,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { getServiceLogoIconSrc } from "@/lib/service-logo-icon";
 import { cn } from "@/lib/utils";
 import { ServiceLogoPicker } from "./service-logo-picker";
 
@@ -48,6 +49,7 @@ export function AgentIconPicker({
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const isImage = value?.startsWith("data:");
+  const serviceLogoSrc = getServiceLogoIconSrc(value);
 
   const handleEmojiSelect = useCallback(
     (emoji: string) => {
@@ -124,7 +126,15 @@ export function AgentIconPicker({
           )}
         >
           {value ? (
-            isImage ? (
+            serviceLogoSrc ? (
+              <Image
+                src={serviceLogoSrc}
+                alt="Agent icon"
+                width={32}
+                height={32}
+                className="rounded-md object-contain"
+              />
+            ) : isImage ? (
               <Image
                 src={value}
                 alt="Agent icon"

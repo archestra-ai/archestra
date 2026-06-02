@@ -1,8 +1,9 @@
 "use client";
 
 import type { archestraApiTypes } from "@shared";
-import { Globe, Link, Lock, UserRound, Users } from "lucide-react";
+import { Globe, Lock, UserRound, Users } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { CopyableCode } from "@/components/copyable-code";
 import { FormDialog } from "@/components/form-dialog";
 import { AssignmentCombobox } from "@/components/ui/assignment-combobox";
 import { Badge } from "@/components/ui/badge";
@@ -187,15 +188,6 @@ export function ShareConversationDialog({
     visibility,
   ]);
 
-  const handleCopyLinkAndClose = useCallback(async () => {
-    if (!shareLink) {
-      return;
-    }
-
-    await navigator.clipboard.writeText(shareLink);
-    onOpenChange(false);
-  }, [onOpenChange, shareLink]);
-
   return (
     <FormDialog
       open={open}
@@ -257,11 +249,11 @@ export function ShareConversationDialog({
         </VisibilitySelector>
 
         {hasVisibleShareLink && shareLink && (
-          <div className="flex min-w-0 items-center gap-2 overflow-hidden rounded-md border bg-muted/50 px-3 py-2">
-            <span className="min-w-0 flex-1 truncate font-mono text-sm text-muted-foreground">
-              {shareLink}
-            </span>
-          </div>
+          <CopyableCode
+            value={shareLink}
+            toastMessage="Share link copied"
+            className="border bg-muted/50"
+          />
         )}
       </DialogBody>
       <DialogStickyFooter className="mt-0">
@@ -283,15 +275,6 @@ export function ShareConversationDialog({
           }
         >
           Save
-        </Button>
-        <Button
-          variant="secondary"
-          className="w-full sm:w-auto"
-          onClick={handleCopyLinkAndClose}
-          disabled={isPending || !hasVisibleShareLink || !shareLink}
-        >
-          <Link className="mr-2 h-4 w-4" />
-          Copy Link
         </Button>
       </DialogStickyFooter>
     </FormDialog>

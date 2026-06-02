@@ -8,6 +8,7 @@ import {
   DUAL_LLM_MAIN_SYSTEM_PROMPT,
   DUAL_LLM_QUARANTINE_SYSTEM_PROMPT,
   PLAYWRIGHT_MCP_CATALOG_ID,
+  PLAYWRIGHT_MCP_ICON,
   PLAYWRIGHT_MCP_SERVER_NAME,
   POLICY_CONFIG_SYSTEM_PROMPT,
   type PredefinedRoleName,
@@ -408,6 +409,7 @@ async function seedPlaywrightCatalog(): Promise<void> {
         "Browser automation for chat - each user gets their own isolated browser session",
       serverType: "local",
       requiresAuth: false,
+      icon: PLAYWRIGHT_MCP_ICON,
       localConfig: playwrightLocalConfig,
     })
     .onConflictDoNothing();

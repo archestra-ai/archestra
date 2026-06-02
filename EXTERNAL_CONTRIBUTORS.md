@@ -525,3 +525,4 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @theoCrepinDev
 - @nicky-ru
 - @omar391
+- @AVtheking

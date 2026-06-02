@@ -1,1 +1,0 @@
-ALTER TABLE "skills" ADD COLUMN "allowed_tools" text;

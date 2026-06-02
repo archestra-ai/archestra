@@ -1,5 +1,5 @@
 {
-  "id": "63f0ea32-279c-4399-afe7-1127eabbb3d5",
+  "id": "fd2d8615-a749-4c90-a53b-5abb994e79ff",
   "prevId": "04a171f3-7434-4f0f-9435-4f61d3256c46",
   "version": "7",
   "dialect": "postgresql",
@@ -10780,6 +10780,12 @@
         },
         "compatibility": {
           "name": "compatibility",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "allowed_tools": {
+          "name": "allowed_tools",
           "type": "text",
           "primaryKey": false,
           "notNull": false

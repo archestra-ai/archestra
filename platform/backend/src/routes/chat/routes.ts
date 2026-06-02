@@ -105,10 +105,10 @@ import {
 } from "./context-compaction";
 import {
   parseMaxInputTokens,
-  shouldProbeTextStreamForContextTrimRetry,
   trimMessagesToTokenLimit,
 } from "./context-trimming";
 import {
+  EmptyModelResponseError,
   getActiveTraceContext,
   mapProviderError,
   ProviderError,
@@ -119,6 +119,10 @@ import { cloneAttachmentsForFork } from "./normalization/clone-attachments-for-f
 import { extractInlineAttachments } from "./normalization/extract-inline-attachments";
 import { materializeAttachments } from "./normalization/materialize-attachments";
 import { normalizeChatMessages } from "./normalization/normalize-chat-messages";
+import {
+  isRetryableEmptyFinishReason,
+  probeFirstRenderableEvent,
+} from "./stream-probe";
 
 const PromoteChatAttachmentResultSchema = z.object({
   filename: z.string(),
@@ -756,7 +760,10 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                     });
                   },
                   onFinish: async ({ usage, finishReason }) => {
-                    removeAbortListeners();
+                    // abort listeners are removed in the toUIMessageStream
+                    // onFinish, which fires only for the final merged result —
+                    // not for discarded empty-response retry attempts, whose
+                    // streams we also consume here.
                     logger.info(
                       {
                         conversationId,
@@ -781,28 +788,30 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   };
                 }
 
-                // Stream tokens to the client in real-time while also
-                // handling context-length errors from vLLM/LiteLLM.
-                //
-                // Context-length errors (400) are rejected by the provider
-                // before any tokens are emitted. We detect this by reading
-                // the first chunk from textStream — if the provider rejects,
-                // the iterator throws immediately. We then parse the error,
-                // trim messages, and retry with a new streamText call.
-                //
-                // For successful requests, the first chunk arrives quickly
-                // and we proceed to merge the full stream to the client.
+                // Probe each attempt's stream for its first renderable event
+                // before merging it to the client. This lets us, before anything
+                // reaches the user:
+                //   - trim + retry on a context-length rejection (vLLM/LiteLLM), and
+                //   - silently retry a clean-but-empty response (a stupid-model /
+                //     inference glitch), then surface a stream error if it persists.
+                // tee() buffers the stream, so consuming the probe prefix does not
+                // drop events from the toUIMessageStream merge below. Returning on
+                // the first *renderable* event (not first text) keeps Gemini's
+                // tool-call-before-text turns streaming the tool indicator promptly.
+                const MAX_EMPTY_RESPONSE_ATTEMPTS = 3;
                 let result = streamText(streamTextConfig);
 
-                // Try reading the first text chunk to detect immediate provider errors.
-                // Context-length errors fire before any tokens, so this catches them
-                // without blocking normal streaming (first token arrives in ~100-500ms).
-                if (shouldProbeTextStreamForContextTrimRetry(provider)) {
-                  try {
-                    const reader = result.textStream[Symbol.asyncIterator]();
-                    await reader.next();
-                  } catch (error) {
-                    const maxTokens = parseMaxInputTokens(error);
+                for (let attempt = 1; ; attempt++) {
+                  const probe = await probeFirstRenderableEvent(
+                    result.fullStream[Symbol.asyncIterator](),
+                  );
+
+                  if (probe.kind === "renderable" || probe.kind === "aborted") {
+                    break;
+                  }
+
+                  if (probe.kind === "error") {
+                    const maxTokens = parseMaxInputTokens(probe.error);
                     if (maxTokens !== null) {
                       const trimmed = trimMessagesToTokenLimit({
                         messages: modelMessages,
@@ -822,27 +831,53 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                         ...streamTextConfig,
                         messages: trimmed,
                       });
-                    } else {
-                      // Save messages before throwing — this error path runs before
-                      // writer.merge(), so onError/onFinish callbacks won't fire.
-                      if (!messagesPersisted && conversationId) {
-                        messagesPersisted = true;
-                        try {
-                          await persistNewMessages(
-                            conversationId,
-                            messages,
-                            "onExecuteError",
-                          );
-                        } catch (persistError) {
-                          logger.error(
-                            { persistError, conversationId },
-                            "Failed to persist messages during execute error",
-                          );
-                        }
-                      }
-                      throw error;
+                      continue;
+                    }
+                    // Any non-context error: fall through to the merge so the
+                    // existing toUIMessageStream onError surfaces it (preserving
+                    // e.g. unavailable-tool handling). tee() replays the error.
+                    break;
+                  }
+
+                  // probe.kind === "empty": the provider finished with no content.
+                  const canRetryEmptyResponse =
+                    isRetryableEmptyFinishReason(probe.finishReason) &&
+                    attempt < MAX_EMPTY_RESPONSE_ATTEMPTS;
+                  if (canRetryEmptyResponse) {
+                    logger.warn(
+                      {
+                        conversationId,
+                        finishReason: probe.finishReason,
+                        attempt,
+                      },
+                      "[EmptyResponse] model produced no content, retrying",
+                    );
+                    result = streamText(streamTextConfig);
+                    continue;
+                  }
+
+                  // Exhausted retries (or a non-retryable finishReason): treat the
+                  // empty turn as a stream error. Persist first — this runs before
+                  // writer.merge(), so the stream onError/onFinish won't fire.
+                  if (!messagesPersisted && conversationId) {
+                    messagesPersisted = true;
+                    try {
+                      await persistNewMessages(
+                        conversationId,
+                        messages,
+                        "onExecuteError",
+                      );
+                    } catch (persistError) {
+                      logger.error(
+                        { persistError, conversationId },
+                        "Failed to persist messages during empty-response error",
+                      );
                     }
                   }
+                  throw new EmptyModelResponseError({
+                    finishReason: probe.finishReason,
+                    attempts: attempt,
+                  });
                 }
 
                 // toUIMessageStream invokes onError twice for the same upstream

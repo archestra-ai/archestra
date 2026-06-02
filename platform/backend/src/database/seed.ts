@@ -26,6 +26,8 @@ import {
   McpHttpSessionModel,
   MemberModel,
   OrganizationModel,
+  SkillFileModel,
+  SkillModel,
   TeamModel,
   TeamTokenModel,
   ToolModel,
@@ -33,6 +35,11 @@ import {
 } from "@/models";
 import { secretManager } from "@/secrets-manager";
 import { modelSyncService } from "@/services/model-sync";
+import {
+  BUILT_IN_SKILLS,
+  builtInSkillSourceRef,
+  builtInSkillVersion,
+} from "@/skills/built-in-skills";
 import {
   encryptSecretValue,
   ensureEncryptionKeyAvailable,
@@ -178,6 +185,118 @@ export async function syncBuiltInAgents(): Promise<void> {
           organizationId: organization.id,
         },
         "Built-in agent already exists, skipping seed",
+      );
+    }
+  }
+}
+
+/**
+ * Reconciles Archestra's shipped built-in skills into every organization.
+ *
+ * Insert when missing. When present and still pristine (its live content hashes
+ * to the version we last wrote), auto-upgrade it to the current shipped
+ * revision. When the user has edited it, leave it untouched — administrators
+ * reset to default explicitly. Identity is the stable `builtin:<id>` source
+ * ref, so a rename never detaches a skill from its definition.
+ *
+ * @public — exported for testability
+ */
+export async function syncBuiltInSkills(): Promise<void> {
+  const organizations = await getOrganizationsForBuiltInAgentSync();
+
+  for (const organization of organizations) {
+    for (const builtInSkill of BUILT_IN_SKILLS) {
+      const sourceRef = builtInSkillSourceRef(builtInSkill.builtInSkillId);
+      const shippedVersion = builtInSkillVersion(builtInSkill);
+      const files = builtInSkill.files.map((file) => ({
+        path: file.path,
+        content: file.content,
+        kind: file.kind,
+      }));
+
+      const existing = await SkillModel.findBuiltIn({
+        organizationId: organization.id,
+        sourceRef,
+      });
+
+      if (!existing) {
+        const created = await SkillModel.createWithFiles({
+          skill: {
+            organizationId: organization.id,
+            scope: "org",
+            name: builtInSkill.name,
+            description: builtInSkill.description,
+            content: builtInSkill.content,
+            sourceType: "built_in",
+            sourceRef,
+            sourceCommit: shippedVersion,
+          },
+          files,
+        });
+        // createWithFiles is ON CONFLICT DO NOTHING on the per-org shared-name
+        // index, so a null means a pre-existing non-built-in skill already
+        // holds this name. Surface it instead of reporting a phantom seed — that
+        // org has no built-in copy and thus no reset path until the clash clears.
+        if (!created) {
+          logger.warn(
+            {
+              builtInSkillId: builtInSkill.builtInSkillId,
+              organizationId: organization.id,
+              name: builtInSkill.name,
+            },
+            "Skipped seeding built-in skill: a skill with this name already exists",
+          );
+          continue;
+        }
+        logger.info(
+          {
+            builtInSkillId: builtInSkill.builtInSkillId,
+            organizationId: organization.id,
+          },
+          "Seeded built-in skill",
+        );
+        continue;
+      }
+
+      if (existing.sourceCommit === shippedVersion) {
+        continue;
+      }
+
+      const liveFiles = await SkillFileModel.findBySkillId(existing.id);
+      const liveVersion = builtInSkillVersion({
+        content: existing.content,
+        files: liveFiles,
+      });
+
+      // Only auto-upgrade copies that still match the revision we last wrote; a
+      // diverged copy was edited by the user and is reset explicitly instead.
+      if (liveVersion !== existing.sourceCommit) {
+        logger.info(
+          {
+            builtInSkillId: builtInSkill.builtInSkillId,
+            organizationId: organization.id,
+          },
+          "Built-in skill was edited, preserving user changes",
+        );
+        continue;
+      }
+
+      await SkillModel.updateWithFiles({
+        id: existing.id,
+        skill: {
+          name: builtInSkill.name,
+          description: builtInSkill.description,
+          content: builtInSkill.content,
+          sourceCommit: shippedVersion,
+        },
+        files,
+      });
+      logger.info(
+        {
+          builtInSkillId: builtInSkill.builtInSkillId,
+          organizationId: organization.id,
+        },
+        "Upgraded built-in skill to current revision",
       );
     }
   }
@@ -612,6 +731,7 @@ export async function seedRequiredStartingData(): Promise<void> {
   // Create default agents before seeding internal agents
   await AgentModel.getLLMProxyOrCreateDefault();
   await syncBuiltInAgents();
+  await syncBuiltInSkills();
   await seedArchestraCatalogAndTools();
   await seedPlaywrightCatalog();
   await migratePlaywrightToolsToDynamicCredential();

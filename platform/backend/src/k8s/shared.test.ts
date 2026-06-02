@@ -362,7 +362,7 @@ describe("shared K8s utilities", () => {
 
       const result = await checkNamespaceDeployAccess(
         "prod-ns",
-        authApi as Parameters<typeof checkNamespaceDeployAccess>[1],
+        authApi as unknown as Parameters<typeof checkNamespaceDeployAccess>[1],
       );
 
       expect(result).toEqual({ ok: true });
@@ -392,7 +392,7 @@ describe("shared K8s utilities", () => {
 
       const result = await checkNamespaceDeployAccess(
         "prod-ns",
-        authApi as Parameters<typeof checkNamespaceDeployAccess>[1],
+        authApi as unknown as Parameters<typeof checkNamespaceDeployAccess>[1],
       );
 
       expect(result).toEqual({ ok: false, reason: "forbidden" });
@@ -408,7 +408,7 @@ describe("shared K8s utilities", () => {
 
       const result = await checkNamespaceDeployAccess(
         "prod-ns",
-        authApi as Parameters<typeof checkNamespaceDeployAccess>[1],
+        authApi as unknown as Parameters<typeof checkNamespaceDeployAccess>[1],
       );
 
       expect(result).toEqual({ ok: false, reason: "unavailable" });

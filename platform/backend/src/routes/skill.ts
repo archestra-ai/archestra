@@ -32,6 +32,10 @@ import {
 } from "@/models";
 import { agentToSkill, SCOPE_FIELD } from "@/skills/agent-migration";
 import {
+  builtInSkillVersion,
+  findBuiltInSkillBySourceRef,
+} from "@/skills/built-in-skills";
+import {
   discoverSkills,
   importSkills,
   MAX_FILES_PER_SKILL,
@@ -679,6 +683,84 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Skill not found");
       }
       return reply.send({ success: true });
+    },
+  );
+
+  fastify.post(
+    "/api/skills/:id/reset",
+    {
+      schema: {
+        operationId: RouteId.ResetSkill,
+        description:
+          "Reset a built-in skill to its shipped default SKILL.md and resource files. Only applies to skills with sourceType `built_in`.",
+        tags: ["Skills"],
+        params: z.object({ id: z.string() }),
+        response: constructResponseSchema(SkillDetailSchema),
+      },
+    },
+    async ({ params: { id }, organizationId, user }, reply) => {
+      const skill = await findSkillOrThrow(id, organizationId);
+
+      if (skill.sourceType !== "built_in") {
+        throw new ApiError(400, "Only built-in skills can be reset to default");
+      }
+      const definition = skill.sourceRef
+        ? findBuiltInSkillBySourceRef(skill.sourceRef)
+        : null;
+      if (!definition) {
+        throw new ApiError(404, "No shipped default exists for this skill");
+      }
+
+      const checker = await getSkillPermissionChecker({
+        userId: user.id,
+        organizationId,
+      });
+      const userTeamIds = checker.isAdmin
+        ? []
+        : await TeamModel.getUserTeamIds(user.id);
+      const teamIds = await SkillTeamModel.getTeamsForSkill(id);
+
+      const hasAccess = await SkillTeamModel.userHasSkillAccess({
+        organizationId,
+        userId: user.id,
+        skill,
+        isSkillAdmin: checker.isAdmin,
+      });
+      if (!hasAccess) {
+        throw new ApiError(404, "Skill not found");
+      }
+      requireSkillModifyPermission({
+        checker,
+        scope: skill.scope,
+        authorId: skill.authorId,
+        skillTeamIds: teamIds,
+        userTeamIds,
+        userId: user.id,
+      });
+
+      const reset = await SkillModel.updateWithFiles({
+        id,
+        skill: {
+          name: definition.name,
+          description: definition.description,
+          content: definition.content,
+          sourceCommit: builtInSkillVersion(definition),
+        },
+        files: definition.files.map((file) => ({
+          path: file.path,
+          content: file.content,
+          kind: file.kind,
+        })),
+      });
+      if (!reset) {
+        throw new ApiError(404, "Skill not found");
+      }
+
+      logger.info(
+        { skillId: id, organizationId },
+        "[Skills] Reset built-in skill to default",
+      );
+      return reply.send(await loadSkillDetail(reset));
     },
   );
 

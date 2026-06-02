@@ -310,6 +310,14 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     resourceType: "skill",
     fetchById: (id, orgId) => SkillModel.findByIdForAudit(id, orgId),
   },
+  // Reset is a POST carrying :id, so the hook suppresses the parent walk-up.
+  // Register it directly to capture the target id and before/after snapshots of
+  // this destructive overwrite.
+  "/api/skills/:id/reset": {
+    resourceType: "skill",
+    action: "skill.updated",
+    fetchById: (id, orgId) => SkillModel.findByIdForAudit(id, orgId),
+  },
   // Enabling skill slash commands patches the org record — audit as org-level change.
   "/api/skills/enable-defaults": {
     resourceType: "organization",

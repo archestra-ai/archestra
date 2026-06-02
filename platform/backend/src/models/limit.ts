@@ -760,27 +760,27 @@ export class LimitValidationService {
             `[LimitValidation] Team-level limits OK for team: ${team.id}`,
           );
         }
+      }
 
-        // Check organization-level limits
-        if (organizationId) {
-          logger.info(
-            `[LimitValidation] Checking organization-level limits for org: ${organizationId}`,
+      // Check organization-level limits for any agent with a resolvable org.
+      if (organizationId) {
+        logger.info(
+          `[LimitValidation] Checking organization-level limits for org: ${organizationId}`,
+        );
+        const orgLimitViolation =
+          await LimitValidationService.checkEntityLimits(
+            "organization",
+            organizationId,
           );
-          const orgLimitViolation =
-            await LimitValidationService.checkEntityLimits(
-              "organization",
-              organizationId,
-            );
-          if (orgLimitViolation) {
-            logger.info(
-              `[LimitValidation] BLOCKED by organization-level limit for org: ${organizationId}`,
-            );
-            return orgLimitViolation;
-          }
+        if (orgLimitViolation) {
           logger.info(
-            `[LimitValidation] Organization-level limits OK for org: ${organizationId}`,
+            `[LimitValidation] BLOCKED by organization-level limit for org: ${organizationId}`,
           );
+          return orgLimitViolation;
         }
+        logger.info(
+          `[LimitValidation] Organization-level limits OK for org: ${organizationId}`,
+        );
       }
 
       logger.info(

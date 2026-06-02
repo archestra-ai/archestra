@@ -5,6 +5,7 @@ import {
   ChevronDown,
   ChevronRight,
   Copy,
+  Gauge,
   RefreshCw,
 } from "lucide-react";
 import { useState } from "react";
@@ -48,6 +49,16 @@ export function InlineChatError({
     organizationSettings: ["read"],
   });
   const chatError = parseErrorResponse(error) ?? mapClientError(error);
+  const isUsageLimitExceeded = chatError.usageLimitExceeded === true;
+  const StatusIcon = isUsageLimitExceeded ? Gauge : AlertCircle;
+  const containerClassName = isUsageLimitExceeded
+    ? "bg-muted/30 border border-border rounded-lg"
+    : "bg-destructive/10 border border-destructive/20 rounded-lg";
+  const iconClassName = isUsageLimitExceeded
+    ? "text-muted-foreground"
+    : "text-destructive";
+  const usageLimitMessage =
+    isUsageLimitExceeded && supportMessage ? chatError.message : undefined;
   // Conversation IDs double as chat session IDs for the end-user chat flow.
   const sessionId = chatError.sessionId ?? conversationId;
 
@@ -90,9 +101,11 @@ export function InlineChatError({
   if (slimChatErrorUi) {
     return (
       <Message from="assistant">
-        <MessageContent className="bg-destructive/10 border border-destructive/20 rounded-lg">
-          <div className="flex items-start gap-2 text-destructive">
-            <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+        <MessageContent className={containerClassName}>
+          <div className="flex items-start gap-2">
+            <StatusIcon
+              className={`h-4 w-4 mt-0.5 flex-shrink-0 ${iconClassName}`}
+            />
             <div className="flex-1 space-y-2">
               <p className="text-sm text-foreground">
                 {supportMessage ? supportMessage : chatError.message}
@@ -119,6 +132,11 @@ export function InlineChatError({
                   <Copy className="h-3 w-3" />
                 </Button>
               </div>
+              {usageLimitMessage && (
+                <p className="text-xs text-muted-foreground">
+                  {usageLimitMessage}
+                </p>
+              )}
             </div>
           </div>
         </MessageContent>
@@ -128,9 +146,11 @@ export function InlineChatError({
 
   return (
     <Message from="assistant">
-      <MessageContent className="bg-destructive/10 border border-destructive/20 rounded-lg">
-        <div className="flex items-start gap-2 text-destructive">
-          <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+      <MessageContent className={containerClassName}>
+        <div className="flex items-start gap-2">
+          <StatusIcon
+            className={`h-4 w-4 mt-0.5 flex-shrink-0 ${iconClassName}`}
+          />
           <div className="flex-1 space-y-2">
             {supportMessage ? (
               <p className="text-sm text-foreground">{supportMessage}</p>
@@ -181,6 +201,11 @@ export function InlineChatError({
                 <Copy className="h-3 w-3" />
               </Button>
             </div>
+            {usageLimitMessage && (
+              <p className="text-xs text-muted-foreground">
+                {usageLimitMessage}
+              </p>
+            )}
 
             {isAdmin && (
               <Collapsible open={isDetailsOpen} onOpenChange={setIsDetailsOpen}>

@@ -187,6 +187,25 @@ function extractArchestraInternalCode(
   return undefined;
 }
 
+function extractUsageLimitError(
+  responseBody: string | undefined,
+): { entityType?: string } | null {
+  if (!responseBody) return null;
+  try {
+    const parsed = JSON.parse(responseBody);
+    if (parsed?.error?.code !== "token_cost_limit_exceeded") {
+      return null;
+    }
+    const message =
+      typeof parsed.error.message === "string" ? parsed.error.message : "";
+    return {
+      entityType: extractUsageLimitEntityType(message),
+    };
+  } catch {
+    return null;
+  }
+}
+
 // =============================================================================
 // Provider-Specific Error Parsers
 // =============================================================================
@@ -1413,10 +1432,13 @@ function createErrorResponse(
   originalMessage: string,
   errorType: string | undefined,
   rawError: unknown,
+  usageLimitError?: { entityType?: string } | null,
 ): ChatErrorResponse {
-  return {
+  const response: ChatErrorResponse = {
     code,
-    message: ChatErrorMessages[code],
+    message: usageLimitError
+      ? formatUsageLimitMessage(usageLimitError.entityType)
+      : ChatErrorMessages[code],
     isRetryable: RetryableErrorCodes.has(code),
     originalError: {
       provider,
@@ -1426,6 +1448,11 @@ function createErrorResponse(
       raw: safeSerialize(rawError),
     },
   };
+  if (usageLimitError) {
+    response.usageLimitExceeded = true;
+    response.usageLimitEntityType = usageLimitError.entityType;
+  }
+  return response;
 }
 
 /**
@@ -1542,6 +1569,7 @@ export function mapProviderError(
   if (normalizedCode === ArchestraInternalErrorCode.ContextLengthExceeded) {
     errorCode = ChatErrorCode.ContextTooLong;
   }
+  const usageLimitError = extractUsageLimitError(responseBody);
 
   // Extract the most meaningful error message
   const errorMessage = extractErrorMessage(parsedError, responseBody, error);
@@ -1596,6 +1624,7 @@ export function mapProviderError(
         ? (error as InstanceType<typeof APICallError>).isRetryable
         : undefined,
     },
+    usageLimitError,
   );
 }
 
@@ -1637,7 +1666,7 @@ export function getActiveTraceContext(): {
 export function sanitizeChatErrorForFrontend(
   error: ChatErrorResponse,
 ): ChatErrorResponse {
-  return {
+  const sanitized: ChatErrorResponse = {
     code: error.code,
     message: error.message,
     isRetryable: error.isRetryable,
@@ -1645,4 +1674,21 @@ export function sanitizeChatErrorForFrontend(
     traceId: error.traceId,
     spanId: error.spanId,
   };
+  if (error.usageLimitExceeded) {
+    sanitized.usageLimitExceeded = true;
+    sanitized.usageLimitEntityType = error.usageLimitEntityType;
+  }
+  return sanitized;
+}
+
+function extractUsageLimitEntityType(message: string): string | undefined {
+  const match = message.match(/\b([a-z_]+)-level token cost limit\b/i);
+  return match?.[1]?.toLowerCase();
+}
+
+function formatUsageLimitMessage(entityType: string | undefined): string {
+  if (!entityType) {
+    return "A usage limit budget has been exceeded.";
+  }
+  return `The ${entityType.replace(/_/g, " ")} usage limit budget has been exceeded.`;
 }

@@ -2,7 +2,7 @@
 title: Costs & Limits
 category: LLM Proxy
 order: 4
-lastUpdated: 2026-05-14
+lastUpdated: 2026-06-02
 ---
 
 Archestra tracks LLM usage costs, enforces usage limits, and records savings from model optimization and tool-result compression. These controls work together: pricing defines cost, logs and statistics show what happened, limits stop or shape usage, and optimization reduces spend before a request reaches a model.
@@ -46,7 +46,7 @@ A custom per-user limit overrides the default for that user. Use this when one u
 
 ## Limit Cleanup
 
-Limit usage is reset according to each limit's cleanup interval. New limits default to weekly cleanup unless an admin chooses a different interval.
+Limit usage is reset according to each limit's cleanup interval. Intervals are rolling from the limit's last reset, not calendar boundaries. For example, a monthly limit resets one month after its previous reset, not automatically on the first day of the month. New limits default to weekly cleanup unless an admin chooses a different interval.
 
 Default user limits use their own cleanup interval from LLM settings.
 

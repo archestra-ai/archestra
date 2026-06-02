@@ -182,6 +182,23 @@ describe("mapProviderError - OpenAI", () => {
       expect(result.code).toBe(ChatErrorCode.RateLimit);
       expect(result.isRetryable).toBe(true);
     });
+
+    it("marks usage-limit budget overages from the proxy", () => {
+      const error = createOpenAIError(
+        429,
+        OpenAIErrorTypes.RATE_LIMIT,
+        "I cannot process this request because the organization-level token cost limit has been exceeded.",
+        "token_cost_limit_exceeded",
+      );
+      const result = mapProviderError(error, "openai");
+
+      expect(result.code).toBe(ChatErrorCode.RateLimit);
+      expect(result.usageLimitExceeded).toBe(true);
+      expect(result.usageLimitEntityType).toBe("organization");
+      expect(result.message).toBe(
+        "The organization usage limit budget has been exceeded.",
+      );
+    });
   });
 
   describe("500 - server_error", () => {
@@ -1664,6 +1681,29 @@ describe("ProviderError", () => {
       sessionId: "session-123",
       traceId: "trace-123",
       spanId: "span-123",
+    });
+  });
+
+  it("preserves usage-limit metadata in the frontend error payload", () => {
+    expect(
+      sanitizeChatErrorForFrontend({
+        code: ChatErrorCode.RateLimit,
+        message: "The organization usage limit budget has been exceeded.",
+        isRetryable: true,
+        usageLimitExceeded: true,
+        usageLimitEntityType: "organization",
+        originalError: {
+          provider: "openai",
+          status: 429,
+          message: "Internal limit detail",
+        },
+      }),
+    ).toEqual({
+      code: ChatErrorCode.RateLimit,
+      message: "The organization usage limit budget has been exceeded.",
+      isRetryable: true,
+      usageLimitExceeded: true,
+      usageLimitEntityType: "organization",
     });
   });
 });

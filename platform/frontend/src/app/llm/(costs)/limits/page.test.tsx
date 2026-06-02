@@ -368,6 +368,35 @@ describe("LimitsPage", () => {
     expect(modelsBadge).toHaveTextContent("All models");
   });
 
+  it("shows the next reset date for monthly limits", () => {
+    mockUseLimits.mockReturnValue({
+      data: [
+        {
+          id: "limit-1",
+          entityType: "organization",
+          entityId: "org-1",
+          limitType: "token_cost",
+          limitValue: 1000,
+          model: null,
+          mcpServerName: null,
+          toolName: null,
+          cleanupInterval: "1m",
+          lastCleanup: "2026-01-15T12:00:00.000Z",
+          createdAt: "2026-01-01",
+          updatedAt: "2026-01-01",
+          modelUsage: [],
+        },
+      ],
+      isPending: false,
+    });
+
+    render(<LimitsPage />);
+
+    const row = screen.getByTestId("data-table-row-limit-1");
+    expect(row).toHaveTextContent("Every month");
+    expect(row).toHaveTextContent("Resets Feb 15");
+  });
+
   it("shows multiple model badges for limits with multiple models", () => {
     const models = getLimitModels({
       id: "limit-1",

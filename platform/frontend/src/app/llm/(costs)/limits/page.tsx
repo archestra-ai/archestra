@@ -493,7 +493,17 @@ export default function LimitsPage() {
           const cleanupInterval =
             (row.original.cleanupInterval as LimitCleanupInterval | null) ??
             DEFAULT_LIMIT_CLEANUP_INTERVAL;
-          return CLEANUP_INTERVAL_LABELS[cleanupInterval];
+          return (
+            <div className="space-y-0.5">
+              <div>{CLEANUP_INTERVAL_LABELS[cleanupInterval]}</div>
+              <div className="text-xs text-muted-foreground">
+                {formatNextLimitReset(
+                  row.original.lastCleanup,
+                  cleanupInterval,
+                )}
+              </div>
+            </div>
+          );
         },
       },
       {
@@ -927,4 +937,51 @@ export function getLimitModels(limit: LimitData): string[] {
   return Array.isArray(limit.model)
     ? limit.model.filter((model): model is string => typeof model === "string")
     : [];
+}
+
+function formatNextLimitReset(
+  lastCleanup: LimitData["lastCleanup"],
+  cleanupInterval: LimitCleanupInterval,
+): string {
+  if (!lastCleanup) {
+    return "Resets on next check";
+  }
+
+  const nextReset = addCleanupInterval(new Date(lastCleanup), cleanupInterval);
+  if (Number.isNaN(nextReset.getTime())) {
+    return "Reset schedule unavailable";
+  }
+
+  return `Resets ${nextReset.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year:
+      nextReset.getFullYear() === new Date().getFullYear()
+        ? undefined
+        : "numeric",
+  })}`;
+}
+
+function addCleanupInterval(
+  date: Date,
+  cleanupInterval: LimitCleanupInterval,
+): Date {
+  const next = new Date(date);
+  switch (cleanupInterval) {
+    case "1h":
+      next.setHours(next.getHours() + 1);
+      return next;
+    case "12h":
+      next.setHours(next.getHours() + 12);
+      return next;
+    case "24h":
+      next.setDate(next.getDate() + 1);
+      return next;
+    case "1w":
+      next.setDate(next.getDate() + 7);
+      return next;
+    case "1m":
+      next.setMonth(next.getMonth() + 1);
+      return next;
+  }
 }

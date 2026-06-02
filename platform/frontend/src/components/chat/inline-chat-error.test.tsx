@@ -37,13 +37,13 @@ describe("InlineChatError", () => {
             }),
           )
         }
-        supportMessage="Contact support@example.com and include these IDs."
+        supportMessage="Contact your administrator and include these IDs."
         slimChatErrorUi
       />,
     );
 
     expect(
-      screen.getByText("Contact support@example.com and include these IDs."),
+      screen.getByText("Contact your administrator and include these IDs."),
     ).toBeInTheDocument();
     expect(screen.getByText("session-12345678")).toBeInTheDocument();
     expect(screen.getByText("trace-12345678")).toBeInTheDocument();
@@ -88,6 +88,40 @@ describe("InlineChatError", () => {
     expect(
       screen.queryByText("secret provider detail"),
     ).not.toBeInTheDocument();
+  });
+
+  it("shows usage limit overages as a quiet slim notice below correlation IDs", () => {
+    render(
+      <InlineChatError
+        error={
+          new Error(
+            JSON.stringify({
+              code: "rate_limit",
+              message: "The organization usage limit budget has been exceeded.",
+              isRetryable: true,
+              sessionId: "session-12345678",
+              traceId: "trace-12345678",
+              spanId: "span-12345678",
+              usageLimitExceeded: true,
+              usageLimitEntityType: "organization",
+            }),
+          )
+        }
+        supportMessage="Contact support@example.com and include these IDs."
+        slimChatErrorUi
+      />,
+    );
+
+    expect(
+      screen.getByText("Contact support@example.com and include these IDs."),
+    ).toBeInTheDocument();
+    expect(screen.getByText("session-12345678")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "The organization usage limit budget has been exceeded.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Error Details")).not.toBeInTheDocument();
   });
 
   it("still shows a copy button in slim mode when no IDs are available", () => {

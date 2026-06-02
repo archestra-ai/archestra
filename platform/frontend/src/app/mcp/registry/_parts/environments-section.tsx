@@ -1,13 +1,6 @@
 "use client";
 
-import {
-  CheckCircle2,
-  Loader2,
-  Pencil,
-  Plus,
-  Trash2,
-  XCircle,
-} from "lucide-react";
+import { Pencil, Plus, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { ReinstallConfirmBar } from "@/components/reinstall-confirm-bar";
@@ -24,6 +17,13 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import {
   Table,
@@ -37,8 +37,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { useFeature } from "@/lib/config/config.query";
 import {
   type EnvironmentWithAssignedCount,
-  type NamespaceTestResult,
-  testNamespaceAccess,
   useCreateEnvironment,
   useDeleteEnvironment,
   useEnvironments,
@@ -260,15 +258,9 @@ function NamespaceCell({ namespace }: { namespace: string | null }) {
   return <span className="text-muted-foreground">—</span>;
 }
 
-const K8S_NAMESPACE_RE = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/;
-
-function validateNamespace(value: string): string | null {
-  if (value === "") return null;
-  if (value.length > 63) return "Must be 63 characters or fewer";
-  if (!K8S_NAMESPACE_RE.test(value))
-    return "Lowercase letters, numbers, and hyphens only; no leading or trailing hyphens";
-  return null;
-}
+// Sentinel for the "use default" namespace option (maps to a null namespace —
+// the environment inherits the org default). shadcn Select can't use "".
+const NAMESPACE_DEFAULT_VALUE = "__default_namespace__";
 
 function EnvironmentEditorDialog({
   mode,
@@ -299,23 +291,21 @@ function EnvironmentEditorDialog({
   );
   const runtimeEnabled = useFeature("orchestratorK8sRuntime");
   const orchestratorNamespace = useFeature("orchestratorK8sNamespace");
+  // Namespaces the platform has RBAC for (Helm rbac.environmentNamespaces).
+  // These populate the namespace dropdown so an admin can't pick a namespace the
+  // platform can't deploy to.
+  const environmentNamespaces = useFeature("environmentNamespaces");
 
   const [name, setName] = useState("");
   const [namespace, setNamespace] = useState("");
   const [description, setDescription] = useState("");
   const [restricted, setRestricted] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
-  const [nsTest, setNsTest] = useState<
-    "idle" | "pending" | NamespaceTestResult
-  >("idle");
-
-  const nameEditable = mode !== "edit";
 
   // Sync drafts whenever the dialog (re)opens for a target.
   useEffect(() => {
     if (open) {
       setShowConfirm(false);
-      setNsTest("idle");
       if (mode === "default") {
         setName(defaultEnvironment?.name ?? "");
         setNamespace(defaultEnvironment?.namespace ?? "");
@@ -337,9 +327,15 @@ function EnvironmentEditorDialog({
   const trimmedName = name.trim();
   const trimmedNamespace = namespace.trim();
   const trimmedDescription = description.trim();
-  const namespaceError = validateNamespace(trimmedNamespace);
-  const canSave =
-    !namespaceError && (mode === "edit" ? true : trimmedName.length > 0);
+  const canSave = mode === "edit" ? true : trimmedName.length > 0;
+
+  // The current value is included so editing an environment whose namespace
+  // predates the configured list never silently drops it.
+  const namespaceOptions = Array.from(
+    new Set(
+      [...(environmentNamespaces ?? []), trimmedNamespace].filter(Boolean),
+    ),
+  );
 
   const willRestart =
     mode === "edit" &&
@@ -387,16 +383,7 @@ function EnvironmentEditorDialog({
     }
   };
 
-  const handleSave = async () => {
-    // Verify the platform can deploy to the namespace before saving, and show
-    // the result inline (same surface as the Test button) instead of letting a
-    // raw access error surface as a toast. Block the save if it can't.
-    if (trimmedNamespace) {
-      setNsTest("pending");
-      const result = await testNamespaceAccess(trimmedNamespace);
-      setNsTest(result);
-      if (!result.accessible) return;
-    }
+  const handleSave = () => {
     if (willRestart) {
       setShowConfirm(true);
     } else {
@@ -450,61 +437,34 @@ function EnvironmentEditorDialog({
           </div>
           <div className="space-y-2">
             <Label htmlFor="environment-namespace">Namespace</Label>
-            <div className="flex gap-2">
-              <Input
-                id="environment-namespace"
-                value={namespace}
-                onChange={(e) => {
-                  setNamespace(e.target.value);
-                  setShowConfirm(false);
-                  setNsTest("idle");
-                }}
-                placeholder={
-                  runtimeEnabled && orchestratorNamespace
-                    ? orchestratorNamespace
-                    : "e.g. prod-eu"
-                }
-                maxLength={63}
-                disabled={isPending}
-                className="flex-1"
-              />
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={
-                  !trimmedNamespace ||
-                  !!namespaceError ||
-                  nsTest === "pending" ||
-                  isPending
-                }
-                onClick={async () => {
-                  setNsTest("pending");
-                  setNsTest(await testNamespaceAccess(trimmedNamespace));
-                }}
-              >
-                {nsTest === "pending" ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  "Test"
-                )}
-              </Button>
-            </div>
-            {namespaceError && (
-              <p className="text-xs text-destructive">{namespaceError}</p>
-            )}
-            {nsTest !== "idle" && nsTest !== "pending" && (
-              <p
-                className={`flex items-center gap-1 text-xs ${nsTest.accessible ? "text-green-600 dark:text-green-400" : "text-destructive"}`}
-              >
-                {nsTest.accessible ? (
-                  <CheckCircle2 className="h-3.5 w-3.5" />
-                ) : (
-                  <XCircle className="h-3.5 w-3.5" />
-                )}
-                {nsTest.accessible ? "Namespace is accessible" : nsTest.message}
-              </p>
-            )}
+            <Select
+              value={
+                trimmedNamespace === ""
+                  ? NAMESPACE_DEFAULT_VALUE
+                  : trimmedNamespace
+              }
+              onValueChange={(value) => {
+                setNamespace(value === NAMESPACE_DEFAULT_VALUE ? "" : value);
+                setShowConfirm(false);
+              }}
+              disabled={isPending}
+            >
+              <SelectTrigger id="environment-namespace" className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={NAMESPACE_DEFAULT_VALUE}>
+                  {runtimeEnabled && orchestratorNamespace
+                    ? `Use default (${orchestratorNamespace})`
+                    : "Use default"}
+                </SelectItem>
+                {namespaceOptions.map((ns) => (
+                  <SelectItem key={ns} value={ns}>
+                    {ns}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
           <div className="flex items-start justify-between gap-4">
             <div className="space-y-1">

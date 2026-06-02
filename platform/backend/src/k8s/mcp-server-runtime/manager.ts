@@ -96,24 +96,6 @@ export class McpServerRuntimeManager {
     }
   }
 
-  async testNamespaceAccess(
-    namespaceName: string,
-  ): Promise<
-    | { accessible: true }
-    | { accessible: false; reason: "forbidden" | "unavailable" }
-  > {
-    if (!this.k8sAuthApi) {
-      return { accessible: false, reason: "unavailable" };
-    }
-    const result = await checkNamespaceDeployAccess(
-      namespaceName,
-      this.k8sAuthApi,
-    );
-    return result.ok
-      ? { accessible: true }
-      : { accessible: false, reason: result.reason };
-  }
-
   /**
    * Initialize the runtime and start all installed MCP servers
    */

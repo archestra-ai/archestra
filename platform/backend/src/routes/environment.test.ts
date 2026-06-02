@@ -24,7 +24,6 @@ vi.mock("@/k8s/mcp-server-runtime/manager", () => ({
   default: {
     isEnabled: true,
     validateNamespace: vi.fn().mockResolvedValue(undefined),
-    testNamespaceAccess: vi.fn().mockResolvedValue({ accessible: true }),
     getOrLoadDeployment: vi.fn().mockResolvedValue(undefined),
     restartServer: vi.fn().mockResolvedValue(undefined),
     reinstallSharedDeployment: vi.fn().mockResolvedValue(undefined),

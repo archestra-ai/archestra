@@ -2691,3 +2691,25 @@ tests:
             name: vertex-ai-credentials
             mountPath: /var/run/gcp
             readOnly: true
+
+  - it: should inject ARCHESTRA_ORCHESTRATOR_ENVIRONMENT_NAMESPACES from rbac.environmentNamespaces
+    documentIndex: 1
+    set:
+      archestra.orchestrator.kubernetes.rbac.environmentNamespaces:
+        - staging
+        - prod-ns
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_ORCHESTRATOR_ENVIRONMENT_NAMESPACES
+            value: "staging,prod-ns"
+
+  - it: should not inject ARCHESTRA_ORCHESTRATOR_ENVIRONMENT_NAMESPACES when the list is empty
+    documentIndex: 1
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_ORCHESTRATOR_ENVIRONMENT_NAMESPACES
+            value: ""

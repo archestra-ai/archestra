@@ -23142,6 +23142,7 @@ export type GetConfigResponses = {
             };
             mcpServerBaseImage: string;
             orchestratorK8sNamespace: string;
+            environmentNamespaces: Array<string>;
             isQuickstart: boolean;
             ngrokDomain: string;
             virtualKeyDefaultExpirationSeconds: number;
@@ -23714,94 +23715,6 @@ export type UpdateEnvironmentResponses = {
 };
 
 export type UpdateEnvironmentResponse = UpdateEnvironmentResponses[keyof UpdateEnvironmentResponses];
-
-export type ValidateEnvironmentNamespaceData = {
-    body?: never;
-    path?: never;
-    query: {
-        namespace: string;
-    };
-    url: '/api/organization/environments/validate-namespace';
-};
-
-export type ValidateEnvironmentNamespaceErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type ValidateEnvironmentNamespaceError = ValidateEnvironmentNamespaceErrors[keyof ValidateEnvironmentNamespaceErrors];
-
-export type ValidateEnvironmentNamespaceResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        accessible: true;
-    } | {
-        accessible: false;
-        message: string;
-    };
-};
-
-export type ValidateEnvironmentNamespaceResponse = ValidateEnvironmentNamespaceResponses[keyof ValidateEnvironmentNamespaceResponses];
 
 export type PostV1GeminiV1BetaModelsByModelGenerateContentData = {
     body: GeminiGenerateContentRequestInput;

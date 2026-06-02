@@ -137,6 +137,10 @@ If ARCHESTRA_AUTH_SECRET env variable is explicitly set, it will override the au
 - name: ARCHESTRA_ORCHESTRATOR_K8S_CLUSTER_DOMAIN
   value: {{ .Values.archestra.orchestrator.kubernetes.clusterDomain | quote }}
 {{- end }}
+{{- if and .Values.archestra.orchestrator.kubernetes.rbac.environmentNamespaces (not (hasKey .Values.archestra.env "ARCHESTRA_ORCHESTRATOR_ENVIRONMENT_NAMESPACES")) }}
+- name: ARCHESTRA_ORCHESTRATOR_ENVIRONMENT_NAMESPACES
+  value: {{ join "," .Values.archestra.orchestrator.kubernetes.rbac.environmentNamespaces | quote }}
+{{- end }}
 {{- if .Values.archestra.codeRuntime.enabled }}
 {{- if not (hasKey .Values.archestra.env "ARCHESTRA_CODE_RUNTIME_ENABLED") }}
 - name: ARCHESTRA_CODE_RUNTIME_ENABLED

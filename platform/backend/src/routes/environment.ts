@@ -2,7 +2,6 @@ import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import mcpServerRuntimeManager from "@/k8s/mcp-server-runtime/manager";
-import { namespaceAccessMessage } from "@/k8s/shared";
 import logger from "@/logging";
 import {
   EnvironmentModel,
@@ -201,46 +200,6 @@ const environmentRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async ({ organizationId, params }, reply) => {
       await deleteEnvironment({ id: params.id, organizationId });
       return reply.send({ success: true });
-    },
-  );
-
-  fastify.get(
-    "/api/organization/environments/validate-namespace",
-    {
-      schema: {
-        operationId: RouteId.ValidateEnvironmentNamespace,
-        description:
-          "Probe whether a Kubernetes namespace exists and is reachable. Returns accessible:true when the runtime is disabled (namespace will be stored but not verified).",
-        tags: ["Organization"],
-        querystring: z.object({ namespace: z.string().min(1) }),
-        response: constructResponseSchema(
-          z.discriminatedUnion("accessible", [
-            z.object({ accessible: z.literal(true) }),
-            z.object({
-              accessible: z.literal(false),
-              message: z.string(),
-            }),
-          ]),
-        ),
-      },
-    },
-    async ({ query }, reply) => {
-      if (!mcpServerRuntimeManager.isEnabled) {
-        return reply.send({ accessible: true });
-      }
-
-      const result = await mcpServerRuntimeManager.testNamespaceAccess(
-        query.namespace,
-      );
-
-      if (result.accessible) {
-        return reply.send({ accessible: true });
-      }
-
-      return reply.send({
-        accessible: false,
-        message: namespaceAccessMessage(query.namespace, result.reason),
-      });
     },
   );
 };

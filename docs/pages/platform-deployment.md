@@ -1104,6 +1104,10 @@ The sandbox inherits origin restrictions from `ARCHESTRA_FRONTEND_URL` and `ARCH
   - Default: Helm release namespace (if relevant) or `default`
   - Example: `archestra-mcp` or `production`
 
+- **`ARCHESTRA_ORCHESTRATOR_ENVIRONMENT_NAMESPACES`** - Comma-separated namespaces the platform ServiceAccount is granted RBAC in (mirrors the Helm chart's `archestra.orchestrator.kubernetes.rbac.environmentNamespaces`, which is injected automatically). Surfaced to the UI so the environment editor offers a namespace dropdown instead of free text; leave empty to keep free-text entry.
+  - Default: empty
+  - Example: `staging,production`
+
 - **`ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE`** - Base Docker image for MCP servers.
   - Default: `europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:0.0.3`
   - Can be overridden per individual MCP server.

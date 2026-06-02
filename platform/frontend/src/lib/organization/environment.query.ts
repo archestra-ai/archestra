@@ -3,22 +3,6 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { handleApiError } from "@/lib/utils";
 
-export type NamespaceTestResult =
-  | { accessible: true }
-  | { accessible: false; message: string };
-
-export async function testNamespaceAccess(
-  namespace: string,
-): Promise<NamespaceTestResult> {
-  const { data, error } = await archestraApiSdk.validateEnvironmentNamespace({
-    query: { namespace },
-  });
-  if (error || !data) {
-    return { accessible: false, message: "Validation request failed" };
-  }
-  return data;
-}
-
 export const environmentKeys = {
   all: ["environments"] as const,
   list: () => [...environmentKeys.all, "list"] as const,

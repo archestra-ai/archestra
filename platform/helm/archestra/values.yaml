@@ -465,6 +465,9 @@ archestra:
         # `helm upgrade` (a RoleBinding cannot be created in a missing namespace).
         # An entry equal to the release namespace is ignored (already covered above).
         #
+        # This list is also surfaced to the app (as ARCHESTRA_ORCHESTRATOR_ENVIRONMENT_NAMESPACES)
+        # so the environment editor offers a namespace dropdown instead of free text.
+        #
         # Note: unlike mcpServerRbac.additionalRoleBindings (which only creates a
         # binding to an externally-managed Role), this creates the Role too.
         #

@@ -974,11 +974,44 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         });
       }
 
+      // A multi-tenant local catalog shares one K8s Deployment across all
+      // installs, and a per-install restart no-ops on it (the sibling guard in
+      // restartServer). So an environment reassignment would leave the shared
+      // pod in the old namespace unless we relocate the shared Deployment
+      // explicitly, mirroring the environment-namespace-edit route.
+      const relocatingSharedDeployment =
+        "environmentId" in restBody &&
+        restBody.environmentId !== originalCatalogItem.environmentId &&
+        originalCatalogItem.multitenant === true &&
+        originalCatalogItem.serverType === "local" &&
+        mcpServerRuntimeManager.isEnabled;
+      if (relocatingSharedDeployment) {
+        // Pre-load deployments while the catalog row still holds the OLD
+        // namespace, so the teardown targets the old-namespace pod
+        // (reinstallSharedDeployment resolves the namespace from the row, which
+        // the update below rewrites to the new environment).
+        const installs = await McpServerModel.findByCatalogId(id);
+        await Promise.all(
+          installs.map((s) =>
+            mcpServerRuntimeManager.getOrLoadDeployment(s.id),
+          ),
+        );
+      }
+
       // Update the catalog item
       const catalogItem = await InternalMcpCatalogModel.update(id, restBody);
 
       if (!catalogItem) {
         throw new ApiError(404, "Catalog item not found");
+      }
+
+      // Now that the row holds the new environment, recreate the shared
+      // Deployment in the new namespace. Awaited before the cascade so its
+      // per-install tool sync runs against the relocated, ready pod rather than
+      // racing the recreate. Single-tenant installs relocate via the cascade's
+      // per-install restart below.
+      if (relocatingSharedDeployment) {
+        await mcpServerRuntimeManager.reinstallSharedDeployment(id);
       }
 
       // Cascade reinstall for the parent's own installs. Use the

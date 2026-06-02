@@ -987,9 +987,6 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.UpdateDefaultEnvironment]: {
     environment: ["update"],
   },
-  [RouteId.ValidateEnvironmentNamespace]: {
-    environment: ["read"],
-  },
   [RouteId.UpdateKnowledgeSettings]: {
     knowledgeSettings: ["update"],
   },

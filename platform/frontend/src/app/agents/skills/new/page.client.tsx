@@ -15,6 +15,11 @@ import { Separator } from "@/components/ui/separator";
 import { ImportSkillsDialog } from "../_parts/import-skills-dialog";
 import { POPULAR_REPOS } from "../_parts/popular-repos";
 import { SkillEditorDialog } from "../_parts/skill-editor-dialog";
+import {
+  SKILL_INDEX_ENTRY_COUNT,
+  type SkillIndexEntry,
+  searchSkillIndex,
+} from "../_parts/skill-index";
 
 export default function NewSkillPage() {
   return (
@@ -31,6 +36,7 @@ function NewSkillChooser() {
   const [importState, setImportState] = useState<{
     repoUrl: string;
     autoDiscover: boolean;
+    initialSkillPath?: string;
   } | null>(null);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -38,7 +44,15 @@ function NewSkillChooser() {
   const openImport = () => setImportState({ repoUrl: "", autoDiscover: false });
   const importPopular = (repoUrl: string) =>
     setImportState({ repoUrl, autoDiscover: true });
+  const importIndexedSkill = (skill: SkillIndexEntry) =>
+    setImportState({
+      repoUrl: skill.repo,
+      autoDiscover: true,
+      initialSkillPath: skill.skillPath,
+    });
   const goToSkills = () => router.push("/agents/skills");
+
+  const skillResults = useMemo(() => searchSkillIndex(search), [search]);
 
   const filteredRepos = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -49,6 +63,8 @@ function NewSkillChooser() {
         item.description.toLowerCase().includes(q),
     );
   }, [search]);
+
+  const isSearchingSkills = search.trim().length > 0;
 
   return (
     <>
@@ -84,11 +100,11 @@ function NewSkillChooser() {
             <CardHeader className="gap-3 border-b py-4">
               <div className="flex items-center justify-between gap-3">
                 <CardTitle className="text-base">
-                  Popular repositories
+                  {isSearchingSkills ? "Skill index" : "Popular repositories"}
                 </CardTitle>
                 <Badge variant="secondary" className="tabular-nums">
-                  {search
-                    ? `${filteredRepos.length} / ${POPULAR_REPOS.length}`
+                  {isSearchingSkills
+                    ? `${skillResults.length} / ${SKILL_INDEX_ENTRY_COUNT}`
                     : POPULAR_REPOS.length}
                 </Badge>
               </div>
@@ -96,12 +112,30 @@ function NewSkillChooser() {
                 value={search}
                 onSearchChange={setSearch}
                 syncQueryParams={false}
-                placeholder="Search popular repositories..."
+                placeholder="Search skills by name, repo, or use case..."
                 className="relative w-full"
               />
             </CardHeader>
             <CardContent className="p-0">
-              {filteredRepos.length === 0 ? (
+              {isSearchingSkills ? (
+                skillResults.length === 0 ? (
+                  <div className="px-6 py-10 text-center text-sm text-muted-foreground">
+                    No indexed skills match “{search}”.
+                  </div>
+                ) : (
+                  <ul>
+                    {skillResults.map((skill, idx) => (
+                      <li key={`${skill.repo}:${skill.skillPath}`}>
+                        {idx > 0 && <Separator />}
+                        <SkillIndexResult
+                          skill={skill}
+                          onClick={() => importIndexedSkill(skill)}
+                        />
+                      </li>
+                    ))}
+                  </ul>
+                )
+              ) : filteredRepos.length === 0 ? (
                 <div className="px-6 py-10 text-center text-sm text-muted-foreground">
                   No repositories match “{search}”.
                 </div>
@@ -149,6 +183,7 @@ function NewSkillChooser() {
       <ImportSkillsDialog
         open={importState !== null}
         initialRepoUrl={importState?.repoUrl ?? ""}
+        initialSkillPath={importState?.initialSkillPath}
         autoDiscover={importState?.autoDiscover ?? false}
         onOpenChange={(open) => {
           if (!open) setImportState(null);
@@ -163,6 +198,47 @@ function NewSkillChooser() {
         onSaved={goToSkills}
       />
     </>
+  );
+}
+
+function SkillIndexResult({
+  skill,
+  onClick,
+}: {
+  skill: SkillIndexEntry;
+  onClick: () => void;
+}) {
+  const owner = skill.repo.split("/")[0];
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="group flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50 focus-visible:bg-muted/50 focus-visible:outline-none"
+      aria-label={`Import ${skill.name} from ${skill.repo}`}
+    >
+      <Avatar className="size-8">
+        <AvatarImage src={`https://github.com/${owner}.png?size=64`} alt="" />
+        <AvatarFallback>
+          <Github className="size-4 text-muted-foreground" />
+        </AvatarFallback>
+      </Avatar>
+      <div className="min-w-0 flex-1 space-y-1">
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="truncate text-sm font-medium">{skill.name}</span>
+          <span className="shrink-0 rounded border px-1.5 py-px font-mono text-[10px] text-muted-foreground">
+            {skill.repo}
+          </span>
+        </div>
+        <div className="truncate text-xs text-muted-foreground">
+          {skill.description}
+        </div>
+        <div className="truncate font-mono text-[11px] text-muted-foreground/80">
+          {skill.skillPath || "repo root"} · {skill.fileCount}{" "}
+          {skill.fileCount === 1 ? "file" : "files"}
+        </div>
+      </div>
+      <ArrowRight className="size-4 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
+    </button>
   );
 }
 

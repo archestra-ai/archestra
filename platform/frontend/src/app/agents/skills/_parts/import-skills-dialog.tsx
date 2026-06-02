@@ -49,12 +49,14 @@ export function ImportSkillsDialog({
   onOpenChange,
   onImported,
   initialRepoUrl = "",
+  initialSkillPath,
   autoDiscover = false,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onImported?: () => void;
   initialRepoUrl?: string;
+  initialSkillPath?: string;
   autoDiscover?: boolean;
 }) {
   const discover = useDiscoverGithubSkills();
@@ -116,9 +118,18 @@ export function ImportSkillsDialog({
     });
     if (data) {
       setDiscovered(data.skills);
-      setSelected(
-        new Set(data.skills.filter((s) => !s.exists).map((s) => s.skillPath)),
-      );
+      const importableSkills = data.skills.filter((s) => !s.exists);
+      const hasInitialSkillPath = initialSkillPath !== undefined;
+      const initialSkill = hasInitialSkillPath
+        ? importableSkills.find((s) => s.skillPath === initialSkillPath)
+        : null;
+      if (hasInitialSkillPath) {
+        setSelected(
+          initialSkill ? new Set([initialSkill.skillPath]) : new Set(),
+        );
+      } else {
+        setSelected(new Set(importableSkills.map((s) => s.skillPath)));
+      }
     } else if (errorMessage) {
       setDiscoverError(errorMessage);
     }

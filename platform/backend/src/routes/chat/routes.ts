@@ -799,9 +799,16 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 // the first *renderable* event (not first text) keeps Gemini's
                 // tool-call-before-text turns streaming the tool indicator promptly.
                 const MAX_EMPTY_RESPONSE_ATTEMPTS = 3;
+                // a still-too-long trimmed payload reproduces the same context
+                // error (trim is deterministic from the unchanged messages), so
+                // cap trim retries to avoid an unbounded loop; on the cap we fall
+                // through to merge and let the existing onError surface it.
+                const MAX_CONTEXT_TRIM_ATTEMPTS = 1;
+                let emptyResponseAttempts = 0;
+                let contextTrimAttempts = 0;
                 let result = streamText(streamTextConfig);
 
-                for (let attempt = 1; ; attempt++) {
+                while (true) {
                   const probe = await probeFirstRenderableEvent(
                     result.fullStream[Symbol.asyncIterator](),
                   );
@@ -812,7 +819,11 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
                   if (probe.kind === "error") {
                     const maxTokens = parseMaxInputTokens(probe.error);
-                    if (maxTokens !== null) {
+                    if (
+                      maxTokens !== null &&
+                      contextTrimAttempts < MAX_CONTEXT_TRIM_ATTEMPTS
+                    ) {
+                      contextTrimAttempts++;
                       const trimmed = trimMessagesToTokenLimit({
                         messages: modelMessages,
                         maxTokens,
@@ -833,22 +844,24 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                       });
                       continue;
                     }
-                    // Any non-context error: fall through to the merge so the
-                    // existing toUIMessageStream onError surfaces it (preserving
-                    // e.g. unavailable-tool handling). tee() replays the error.
+                    // Non-context error, or context-trim retries exhausted: fall
+                    // through to the merge so the existing toUIMessageStream
+                    // onError surfaces it (preserving e.g. unavailable-tool
+                    // handling). tee() replays the error.
                     break;
                   }
 
                   // probe.kind === "empty": the provider finished with no content.
+                  emptyResponseAttempts++;
                   const canRetryEmptyResponse =
                     isRetryableEmptyFinishReason(probe.finishReason) &&
-                    attempt < MAX_EMPTY_RESPONSE_ATTEMPTS;
+                    emptyResponseAttempts < MAX_EMPTY_RESPONSE_ATTEMPTS;
                   if (canRetryEmptyResponse) {
                     logger.warn(
                       {
                         conversationId,
                         finishReason: probe.finishReason,
-                        attempt,
+                        attempt: emptyResponseAttempts,
                       },
                       "[EmptyResponse] model produced no content, retrying",
                     );
@@ -876,7 +889,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   }
                   throw new EmptyModelResponseError({
                     finishReason: probe.finishReason,
-                    attempts: attempt,
+                    attempts: emptyResponseAttempts,
                   });
                 }
 

@@ -872,6 +872,27 @@ function fakeStreamResult(events: Array<Record<string, unknown>>) {
   };
 }
 
+// streamText result whose fullStream throws a context-length error on first read,
+// matching parseMaxInputTokens. Used to exercise the bounded context-trim retry.
+function fakeContextLengthErrorResult() {
+  return {
+    fullStream: {
+      [Symbol.asyncIterator]: () => ({
+        next: async () => {
+          throw new Error("maximum input length of 100 tokens");
+        },
+      }),
+    },
+    toUIMessageStream: () =>
+      new ReadableStream({
+        start(controller) {
+          controller.close();
+        },
+      }),
+    usage: Promise.resolve(null),
+  };
+}
+
 const EMPTY_STREAM_EVENTS = [
   { type: "start" },
   { type: "finish", finishReason: "stop" },
@@ -1017,5 +1038,28 @@ describe("POST /api/chat empty-response retry", () => {
     expect(capturedOuterErrorPayload).toBeDefined();
     const payload = JSON.parse(capturedOuterErrorPayload ?? "{}");
     expect(payload.code).toBe("empty_response");
+  });
+
+  test("bounds context-trim retries instead of looping on a repeated context-length error", async ({
+    expect,
+  }) => {
+    // content-shaped model messages so trimMessagesToTokenLimit runs cleanly and
+    // the cap (not a crash) is what bounds the loop.
+    mockCompactMessagesForChat.mockImplementation(async () => ({
+      messages: [{ role: "user", content: "hi" }],
+      status: "skipped",
+      compaction: null,
+      reason: "below_threshold",
+    }));
+    // every attempt rejects with the same max-token error; trimming is
+    // deterministic, so without a cap this would retry forever.
+    mockStreamText.mockImplementation(() => fakeContextLengthErrorResult());
+
+    const response = await postMessage();
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+
+    // initial attempt + exactly one trim retry, then fall through to the merge.
+    expect(mockStreamText).toHaveBeenCalledTimes(2);
   });
 });

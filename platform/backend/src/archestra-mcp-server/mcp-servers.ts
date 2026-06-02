@@ -24,6 +24,7 @@ import {
   TeamModel,
   ToolModel,
 } from "@/models";
+import { assertCanAssignEnvironment } from "@/services/environments/environment";
 import {
   InsertInternalMcpCatalogSchema,
   type InternalMcpCatalog,
@@ -145,6 +146,11 @@ const CatalogMetadataToolSchema = z
       .array(UuidIdSchema)
       .optional()
       .describe("Team IDs for team-scoped access control."),
+    environmentId: UuidIdSchema.nullable()
+      .optional()
+      .describe(
+        "ID of the environment this server belongs to. Omit (or pass null) to leave it in the default environment.",
+      ),
   })
   .strict();
 
@@ -326,7 +332,7 @@ const EditMcpDescriptionToolArgsSchema = z
       `The catalog ID of the MCP server to edit. Use ${TOOL_GET_MCP_SERVERS_SHORT_NAME} to look it up by name.`,
     ),
   })
-  .merge(CatalogMetadataToolSchema.partial())
+  .merge(CatalogMetadataToolSchema.omit({ environmentId: true }).partial())
   .strict();
 
 const EditMcpConfigToolArgsSchema = z
@@ -890,6 +896,24 @@ async function handleCreateMcpServer(
       return errorResult("user/organization context not available.");
     }
 
+    try {
+      const hasEnvironmentAdmin = await userHasPermission(
+        context.userId,
+        organizationId,
+        "environment",
+        "admin",
+      );
+      await assertCanAssignEnvironment({
+        environmentId: args.environmentId ?? null,
+        organizationId,
+        hasEnvironmentAdmin,
+      });
+    } catch (error) {
+      return errorResult(
+        error instanceof Error ? error.message : "Failed to assign environment",
+      );
+    }
+
     const serverType = args.serverType ?? "local";
     if (!["local", "remote", "builtin"].includes(serverType)) {
       return errorResult("serverType must be one of: local, remote, builtin.");
@@ -966,6 +990,8 @@ async function handleCreateMcpServer(
     }
     if (args.userConfig !== undefined)
       createParams.userConfig = args.userConfig;
+    if (args.environmentId !== undefined)
+      createParams.environmentId = args.environmentId;
     if (labels) createParams.labels = labels;
     if (teams.length > 0) createParams.teams = teams;
 

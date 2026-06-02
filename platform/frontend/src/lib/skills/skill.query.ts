@@ -10,6 +10,7 @@ const {
   createSkill,
   updateSkill,
   deleteSkill,
+  resetSkill,
   discoverGithubSkills,
   previewGithubSkill,
   importGithubSkills,
@@ -134,6 +135,26 @@ export function useDeleteSkill() {
       if (!data) return;
       queryClient.invalidateQueries({ queryKey: ["skills"] });
       toast.success("Skill deleted");
+    },
+  });
+}
+
+export function useResetSkill() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { data, error } = await resetSkill({ path: { id } });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data;
+    },
+    onSuccess: (data) => {
+      if (!data) return;
+      queryClient.invalidateQueries({ queryKey: ["skills"] });
+      queryClient.invalidateQueries({ queryKey: ["skills", data.id] });
+      toast.success("Skill reset to default");
     },
   });
 }

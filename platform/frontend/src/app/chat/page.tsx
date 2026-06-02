@@ -38,7 +38,10 @@ import { ButtonWithTooltip } from "@/components/button-with-tooltip";
 import { BrowserPanel } from "@/components/chat/browser-panel";
 import { ChatLinkButton } from "@/components/chat/chat-help-link";
 import { ChatMessages } from "@/components/chat/chat-messages";
-import { deriveCanvasesFromMessages } from "@/components/chat/chat-messages.utils";
+import {
+  collectBrowserToolCallIds,
+  deriveCanvasesFromMessages,
+} from "@/components/chat/chat-messages.utils";
 import { ConversationArtifactPanel } from "@/components/chat/conversation-artifact";
 import { InitialAgentSelector } from "@/components/chat/initial-agent-selector";
 import { OnboardingWizardButton } from "@/components/chat/onboarding-wizard-button";
@@ -928,6 +931,14 @@ export function ChatPageContent({
   const addToolApprovalResponse = chatSession?.addToolApprovalResponse;
   const pendingCustomServerToolCall = chatSession?.pendingCustomServerToolCall;
   const optimisticToolCalls = chatSession?.optimisticToolCalls ?? [];
+  const browserToolCallIds = useMemo(
+    () =>
+      collectBrowserToolCallIds({
+        messages,
+        optimisticToolCalls,
+      }),
+    [messages, optimisticToolCalls],
+  );
   const setPendingCustomServerToolCall =
     chatSession?.setPendingCustomServerToolCall;
   const tokenUsage = chatSession?.tokenUsage;
@@ -1487,6 +1498,46 @@ export function ChatPageContent({
       openRightPanelTab("canvas");
     }
   }, [conversationId, openRightPanelTab]);
+
+  const browserAutoOpenConversationRef = useRef<string | undefined>(undefined);
+  const seenBrowserToolCallIdsRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (!conversationId) {
+      browserAutoOpenConversationRef.current = undefined;
+      seenBrowserToolCallIdsRef.current = new Set();
+      return;
+    }
+
+    if (browserAutoOpenConversationRef.current !== conversationId) {
+      browserAutoOpenConversationRef.current = conversationId;
+      seenBrowserToolCallIdsRef.current = new Set(browserToolCallIds);
+      return;
+    }
+
+    const seenBrowserToolCallIds = seenBrowserToolCallIdsRef.current;
+    const hasNewBrowserToolCall = Array.from(browserToolCallIds).some(
+      (toolCallId) => !seenBrowserToolCallIds.has(toolCallId),
+    );
+
+    seenBrowserToolCallIdsRef.current = new Set([
+      ...seenBrowserToolCallIds,
+      ...browserToolCallIds,
+    ]);
+
+    if (
+      hasNewBrowserToolCall &&
+      showBrowserButton &&
+      !isPlaywrightSetupVisible
+    ) {
+      openRightPanelTab("browser");
+    }
+  }, [
+    browserToolCallIds,
+    conversationId,
+    isPlaywrightSetupVisible,
+    openRightPanelTab,
+    showBrowserButton,
+  ]);
 
   // Handle creating conversation from browser URL input (when no conversation exists)
   const createInitialConversation = useCallback(

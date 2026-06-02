@@ -252,12 +252,13 @@ jobs:
 
           # The external-IdP validation logs (validateExternalIdpToken /
           # "JWKS JWT validation failed") fire mid-run, well before this dump,
-          # so --tail=200 above misses them. Grep the full backend log so a
+          # so the --tail=200 above misses them. Grep the full backend log so a
           # flaky JWKS-gateway 401 can be traced to the branch that rejected
-          # the token.
+          # the token. --tail=-1 is required: with a label selector, kubectl
+          # logs otherwise caps output at the last 10 lines.
           echo "=== External IdP validation (full-log grep) ==="
           kubectl logs -l app.kubernetes.io/name=archestra-platform \
-            -c archestra-platform 2>/dev/null \
+            -c archestra-platform --tail=-1 2>/dev/null \
             | grep -iE 'validateExternalIdpToken|JWKS JWT validation failed|Invalid token for this profile' \
             || echo "(no external-IdP validation log found)"
 
@@ -399,12 +400,13 @@ jobs:
 
           # The external-IdP validation logs (validateExternalIdpToken /
           # "JWKS JWT validation failed") fire mid-run, well before this dump,
-          # so --tail=200 above misses them. Grep the full backend log so a
+          # so the --tail=200 above misses them. Grep the full backend log so a
           # flaky JWKS-gateway 401 can be traced to the branch that rejected
-          # the token.
+          # the token. --tail=-1 is required: with a label selector, kubectl
+          # logs otherwise caps output at the last 10 lines.
           echo "=== External IdP validation (full-log grep) ==="
           kubectl logs -l app.kubernetes.io/name=archestra-platform \
-            -c archestra-platform 2>/dev/null \
+            -c archestra-platform --tail=-1 2>/dev/null \
             | grep -iE 'validateExternalIdpToken|JWKS JWT validation failed|Invalid token for this profile' \
             || echo "(no external-IdP validation log found)"
 

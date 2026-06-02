@@ -2,7 +2,14 @@
 
 import type { archestraApiTypes } from "@shared";
 import type { ColumnDef } from "@tanstack/react-table";
-import { AlertTriangle, BookOpen, Pencil, Plus, Trash2 } from "lucide-react";
+import {
+  AlertTriangle,
+  BookOpen,
+  Pencil,
+  Plus,
+  RotateCcw,
+  Trash2,
+} from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useState } from "react";
@@ -42,6 +49,7 @@ import {
 import {
   useDeleteSkill,
   useEnableSkillToolDefaults,
+  useResetSkill,
   useSkillSourceRepos,
   useSkillsPaginated,
 } from "@/lib/skills/skill.query";
@@ -98,6 +106,7 @@ function SkillsList() {
 
   const [editingSkillId, setEditingSkillId] = useState<string | null>(null);
   const [deletingSkill, setDeletingSkill] = useState<SkillItem | null>(null);
+  const [resettingSkill, setResettingSkill] = useState<SkillItem | null>(null);
   const { data: session } = useSession();
   const currentUserId = session?.user?.id;
 
@@ -129,6 +138,11 @@ function SkillsList() {
             <div className="min-w-0 flex-1">
               <div className="flex items-baseline gap-2">
                 <span className="truncate font-medium">{skill.name}</span>
+                {skill.sourceType === "built_in" && (
+                  <Badge variant="secondary" className="shrink-0">
+                    Archestra
+                  </Badge>
+                )}
                 {repo && (
                   <span className="truncate font-mono text-xs text-muted-foreground">
                     {repo}
@@ -190,6 +204,7 @@ function SkillsList() {
       header: () => <div className="text-right">Actions</div>,
       cell: ({ row }) => {
         const skill = row.original;
+        const isBuiltIn = skill.sourceType === "built_in";
         const actions: TableRowAction[] = [
           {
             icon: <Pencil className="h-4 w-4" />,
@@ -197,6 +212,16 @@ function SkillsList() {
             permissions: { skill: ["update"] },
             onClick: () => setEditingSkillId(skill.id),
           },
+          ...(isBuiltIn
+            ? [
+                {
+                  icon: <RotateCcw className="h-4 w-4" />,
+                  label: "Reset to default",
+                  permissions: { skill: ["update"] },
+                  onClick: () => setResettingSkill(skill),
+                } satisfies TableRowAction,
+              ]
+            : []),
           {
             icon: <Trash2 className="h-4 w-4" />,
             label: "Delete",
@@ -303,6 +328,14 @@ function SkillsList() {
           skill={deletingSkill}
           open={!!deletingSkill}
           onOpenChange={(open) => !open && setDeletingSkill(null)}
+        />
+      )}
+
+      {resettingSkill && (
+        <ResetSkillDialog
+          skill={resettingSkill}
+          open={!!resettingSkill}
+          onOpenChange={(open) => !open && setResettingSkill(null)}
         />
       )}
     </LoadingWrapper>
@@ -451,6 +484,38 @@ function DeleteSkillDialog({
       onConfirm={handleDelete}
       confirmLabel="Delete Skill"
       pendingLabel="Deleting..."
+    />
+  );
+}
+
+function ResetSkillDialog({
+  skill,
+  open,
+  onOpenChange,
+}: {
+  skill: SkillItem;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const resetSkill = useResetSkill();
+
+  const handleReset = useCallback(async () => {
+    const result = await resetSkill.mutateAsync(skill.id);
+    if (result) {
+      onOpenChange(false);
+    }
+  }, [skill.id, resetSkill, onOpenChange]);
+
+  return (
+    <DeleteConfirmDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Reset Skill"
+      description={`Reset "${skill.name}" to the version Archestra ships? Any local edits to its instructions and resource files will be overwritten.`}
+      isPending={resetSkill.isPending}
+      onConfirm={handleReset}
+      confirmLabel="Reset to default"
+      pendingLabel="Resetting..."
     />
   );
 }

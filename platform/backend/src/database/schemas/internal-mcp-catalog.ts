@@ -19,6 +19,7 @@ import type {
   UserConfig,
   UserConfigFieldDefault,
 } from "@/types";
+import environmentsTable from "./environment";
 import mcpPresetEntriesTable from "./mcp-preset-entry";
 import secretTable from "./secret";
 import usersTable from "./user";
@@ -134,6 +135,16 @@ const internalMcpCatalogTable = pgTable(
       onDelete: "set null",
     }),
     /**
+     * Optional deployment environment this catalog item is assigned to.
+     * NULL = the virtual "Default" environment. Set-null on environment delete
+     * so items survive environment removal. Assignment is ungated in this
+     * iteration (see spec §9).
+     */
+    environmentId: uuid("environment_id").references(
+      () => environmentsTable.id,
+      { onDelete: "set null" },
+    ),
+    /**
      * To re-install multi-tenant self-hosted MCPs.
      *
      * Set to `true` when an admin/owner edits a catalog-scope execution
@@ -169,6 +180,9 @@ const internalMcpCatalogTable = pgTable(
     parentNameUnique: unique("internal_mcp_catalog_parent_name_unique").on(
       table.parentCatalogItemId,
       table.name,
+    ),
+    environmentIdIdx: index("internal_mcp_catalog_environment_id_idx").on(
+      table.environmentId,
     ),
   }),
 );

@@ -30,6 +30,7 @@ export function makeConfig(
       incomingEmail: { enabled: false },
       mcpServerBaseImage: "",
       orchestratorK8sNamespace: "",
+      environmentNamespaces: [],
       isQuickstart: false,
       ngrokDomain: "",
       virtualKeyDefaultExpirationSeconds: 3600,

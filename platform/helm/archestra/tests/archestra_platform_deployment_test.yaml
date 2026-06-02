@@ -2691,3 +2691,47 @@ tests:
             name: vertex-ai-credentials
             mountPath: /var/run/gcp
             readOnly: true
+
+  - it: should inject ARCHESTRA_ORCHESTRATOR_ENVIRONMENT_NAMESPACES from rbac.environmentNamespaces
+    documentIndex: 1
+    set:
+      archestra.orchestrator.kubernetes.rbac.environmentNamespaces:
+        - staging
+        - prod-ns
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_ORCHESTRATOR_ENVIRONMENT_NAMESPACES
+            value: "staging,prod-ns"
+
+  - it: should not inject ARCHESTRA_ORCHESTRATOR_ENVIRONMENT_NAMESPACES when the list is empty
+    documentIndex: 1
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_ORCHESTRATOR_ENVIRONMENT_NAMESPACES
+            value: ""
+
+  - it: should not inject a duplicate ARCHESTRA_ORCHESTRATOR_ENVIRONMENT_NAMESPACES when set via archestra.env
+    documentIndex: 1
+    set:
+      archestra.orchestrator.kubernetes.rbac.environmentNamespaces:
+        - staging
+        - prod-ns
+      archestra.env:
+        ARCHESTRA_ORCHESTRATOR_ENVIRONMENT_NAMESPACES: custom-ns
+    asserts:
+      # The user override (from archestra.env) is present...
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_ORCHESTRATOR_ENVIRONMENT_NAMESPACES
+            value: custom-ns
+      # ...and the rbac-derived value is NOT injected (no duplicate env entry).
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_ORCHESTRATOR_ENVIRONMENT_NAMESPACES
+            value: "staging,prod-ns"

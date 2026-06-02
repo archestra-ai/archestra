@@ -321,6 +321,9 @@ export async function waitForMcpGatewayJwtReady(params: {
   token: string;
   expectedToolName?: string;
   requireToolsListed?: boolean;
+  /** IdP the profile was bound to; lets the give-up probe report whether that
+   *  provider row still exists (404 = deleted, which FK-nulls the binding). */
+  identityProviderId?: string;
 }): Promise<McpTool[]> {
   const requireToolsListed = params.requireToolsListed !== false;
   const delaysMs = [
@@ -383,10 +386,65 @@ export async function waitForMcpGatewayJwtReady(params: {
     ? `Tool ${params.expectedToolName} was not available via JWT auth`
     : "MCP Gateway did not become ready for external JWT auth";
 
+  // The 401 collapses many silent validateExternalIdpToken null branches into
+  // one opaque error, and backend logs rotate out before the CI dump. Fold the
+  // deciding state (IdP binding present? OIDC config resolvable?) into the
+  // failure message — booleans/status only, never secret config.
+  const serverState = await probeIdpServerState(
+    params.request,
+    params.profileId,
+    params.identityProviderId,
+  );
+
   const lastMsg = lastError instanceof Error ? lastError.message : "";
   throw new Error(
-    `${headline} — ${delaysMs.length} attempts over ~${Math.round(delaysMs.reduce((a, b) => a + b, 0) / 1000)}s. ${errorSummary || "(no failure signal captured)"}${lastMsg && !errorSummary.includes(lastMsg) ? ` Last: ${lastMsg}` : ""}`,
+    `${headline} — ${delaysMs.length} attempts over ~${Math.round(delaysMs.reduce((a, b) => a + b, 0) / 1000)}s. ${errorSummary || "(no failure signal captured)"}${lastMsg && !errorSummary.includes(lastMsg) ? ` Last: ${lastMsg}` : ""} ${serverState}`,
   );
+}
+
+async function probeIdpServerState(
+  request: APIRequestContext,
+  profileId: string,
+  expectedIdpId?: string,
+): Promise<string> {
+  try {
+    const agentResp = await makeApiRequest({
+      request,
+      method: "get",
+      urlSuffix: `/api/agents/${profileId}`,
+      ignoreStatusCheck: true,
+    });
+    const agent = (await agentResp.json().catch(() => ({}))) as {
+      identityProviderId?: string | null;
+      agentType?: string;
+    };
+    const idpId = agent.identityProviderId;
+    let state = `[agent GET=${agentResp.status()} identityProviderId=${idpId ? "set" : "MISSING"} agentType=${agent.agentType ?? "?"}`;
+    // Resolve which provider to probe: the one still on the agent, or — if the
+    // binding is gone — the one the profile was created with. A 404 on the
+    // latter proves the provider row was deleted (FK ON DELETE SET NULL nulled
+    // the binding); a 200 means the binding vanished without the row being
+    // deleted.
+    const probeIdpId = idpId ?? expectedIdpId;
+    if (probeIdpId) {
+      const idpResp = await makeApiRequest({
+        request,
+        method: "get",
+        urlSuffix: `/api/identity-providers/${probeIdpId}`,
+        ignoreStatusCheck: true,
+      });
+      const idp = (await idpResp.json().catch(() => ({}))) as {
+        oidcConfig?: { clientId?: string; jwksEndpoint?: string } | null;
+      };
+      const which = idpId ? "idp" : "expectedIdp";
+      state += `; ${which} GET=${idpResp.status()} hasOidcConfig=${!!idp.oidcConfig} hasJwksEndpoint=${!!idp.oidcConfig?.jwksEndpoint} hasClientId=${!!idp.oidcConfig?.clientId}]`;
+    } else {
+      state += "]";
+    }
+    return state;
+  } catch (error) {
+    return `[server-state probe failed: ${error instanceof Error ? error.message : String(error)}]`;
+  }
 }
 
 export async function listMcpTools(

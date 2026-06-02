@@ -5,10 +5,19 @@ import {
   CONTEXT_COMPACTION_SYSTEM_PROMPT,
   POLICY_CONFIG_SYSTEM_PROMPT,
 } from "@shared";
+import { and, eq } from "drizzle-orm";
 import db, { schema } from "@/database";
+import { SkillFileModel, SkillModel } from "@/models";
 import AgentModel from "@/models/agent";
+import {
+  BUILT_IN_SKILLS,
+  builtInSkillSourceRef,
+  builtInSkillVersion,
+} from "@/skills/built-in-skills";
 import { describe, expect, test } from "@/test";
-import { syncBuiltInAgents } from "./seed";
+import { syncBuiltInAgents, syncBuiltInSkills } from "./seed";
+
+const [BASE_SKILL] = BUILT_IN_SKILLS;
 
 describe("syncBuiltInAgents", () => {
   test("creates built-in agents for every organization", async ({
@@ -133,3 +142,144 @@ Examples:
 - File writes: invocation="block_always", result="mark_as_trusted"
 - External APIs (raw data): invocation="block_when_context_is_untrusted", result="mark_as_untrusted"
 - Code execution: invocation="block_always", result="mark_as_untrusted"`;
+
+describe("syncBuiltInSkills", () => {
+  async function countBuiltInSkills(organizationId: string): Promise<number> {
+    const rows = await db
+      .select()
+      .from(schema.skillsTable)
+      .where(
+        and(
+          eq(schema.skillsTable.organizationId, organizationId),
+          eq(schema.skillsTable.sourceType, "built_in"),
+        ),
+      );
+    return rows.length;
+  }
+
+  test("seeds built-in skills with their files for every organization", async ({
+    makeOrganization,
+  }) => {
+    const firstOrg = await makeOrganization();
+    const secondOrg = await makeOrganization();
+
+    await syncBuiltInSkills();
+
+    const sourceRef = builtInSkillSourceRef(BASE_SKILL.builtInSkillId);
+    for (const org of [firstOrg, secondOrg]) {
+      const skill = await SkillModel.findBuiltIn({
+        organizationId: org.id,
+        sourceRef,
+      });
+      expect(skill).not.toBeNull();
+      expect(skill?.scope).toBe("org");
+      expect(skill?.authorId).toBeNull();
+      expect(skill?.content).toBe(BASE_SKILL.content);
+
+      const files = await SkillFileModel.findBySkillId(skill?.id ?? "");
+      expect(files.map((file) => file.path).sort()).toEqual(
+        BASE_SKILL.files.map((file) => file.path).sort(),
+      );
+    }
+  });
+
+  test("is idempotent across repeated runs", async ({ makeOrganization }) => {
+    const org = await makeOrganization();
+
+    await syncBuiltInSkills();
+    await syncBuiltInSkills();
+
+    expect(await countBuiltInSkills(org.id)).toBe(BUILT_IN_SKILLS.length);
+  });
+
+  test("does not seed a phantom copy when the name is already taken", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+
+    // a pre-existing shared skill squats on the built-in's display name.
+    await SkillModel.createWithFiles({
+      skill: {
+        organizationId: org.id,
+        scope: "org",
+        name: BASE_SKILL.name,
+        description: "user's own skill",
+        content: "# not the built-in",
+        sourceType: "manual",
+      },
+      files: [],
+    });
+
+    await syncBuiltInSkills();
+
+    // no built-in row was created, and the squatting skill is untouched.
+    expect(await countBuiltInSkills(org.id)).toBe(0);
+    const built = await SkillModel.findBuiltIn({
+      organizationId: org.id,
+      sourceRef: builtInSkillSourceRef(BASE_SKILL.builtInSkillId),
+    });
+    expect(built).toBeNull();
+  });
+
+  test("auto-upgrades a pristine copy when the shipped revision changes", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const sourceRef = builtInSkillSourceRef(BASE_SKILL.builtInSkillId);
+
+    // a stale-but-untouched copy: live content matches its stored version.
+    const staleVersion = builtInSkillVersion({ content: "OLD", files: [] });
+    await SkillModel.createWithFiles({
+      skill: {
+        organizationId: org.id,
+        scope: "org",
+        name: BASE_SKILL.name,
+        description: "old description",
+        content: "OLD",
+        sourceType: "built_in",
+        sourceRef,
+        sourceCommit: staleVersion,
+      },
+      files: [],
+    });
+
+    await syncBuiltInSkills();
+
+    const upgraded = await SkillModel.findBuiltIn({
+      organizationId: org.id,
+      sourceRef,
+    });
+    expect(upgraded?.content).toBe(BASE_SKILL.content);
+    expect(upgraded?.sourceCommit).toBe(builtInSkillVersion(BASE_SKILL));
+    const files = await SkillFileModel.findBySkillId(upgraded?.id ?? "");
+    expect(files).toHaveLength(BASE_SKILL.files.length);
+  });
+
+  test("preserves a copy the user has edited", async ({ makeOrganization }) => {
+    const org = await makeOrganization();
+    const sourceRef = builtInSkillSourceRef(BASE_SKILL.builtInSkillId);
+
+    // an edited copy: live content diverges from its stored version.
+    await SkillModel.createWithFiles({
+      skill: {
+        organizationId: org.id,
+        scope: "org",
+        name: BASE_SKILL.name,
+        description: "user description",
+        content: "EDITED BY USER",
+        sourceType: "built_in",
+        sourceRef,
+        sourceCommit: builtInSkillVersion({ content: "OLD", files: [] }),
+      },
+      files: [],
+    });
+
+    await syncBuiltInSkills();
+
+    const preserved = await SkillModel.findBuiltIn({
+      organizationId: org.id,
+      sourceRef,
+    });
+    expect(preserved?.content).toBe("EDITED BY USER");
+  });
+});

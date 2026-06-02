@@ -34,6 +34,7 @@ import { EnvironmentVariablesFormField } from "@/components/environment-variable
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { HeaderDialog, type HeaderDraft } from "@/components/header-dialog";
 import { HeadersReadOnlyTable } from "@/components/headers-read-only-table";
+import { ReinstallConfirmBar } from "@/components/reinstall-confirm-bar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -80,6 +81,8 @@ import {
   MCP_CONFIG_AUTOCOMPLETE,
   MCP_SECRET_AUTOCOMPLETE,
 } from "@/lib/mcp/mcp-form-autocomplete";
+import { useEnvironments } from "@/lib/organization/environment.query";
+import { useDefaultEnvironment } from "@/lib/organization.query";
 import { useGetSecret } from "@/lib/secrets.query";
 import { useTeams } from "@/lib/teams/team.query";
 import {
@@ -94,13 +97,17 @@ import {
   transformCatalogItemToFormValues,
   transformFormToApiData,
 } from "./mcp-catalog-form.utils";
-import { ReinstallConfirmBar } from "./reinstall-confirm-bar";
 
 const ExternalSecretSelector = lazy(
   () =>
     // biome-ignore lint/style/noRestrictedImports: lazy loading
     import("@/components/external-secret-selector.ee"),
 );
+
+// Sentinel value for the default environment option (null assignment). The shadcn
+// Select cannot use an empty-string item value, so a sentinel maps to `null`
+// (no environment assigned).
+const ENVIRONMENT_DEFAULT_VALUE = "__default__";
 
 interface McpCatalogFormProps {
   mode: "create" | "edit";
@@ -246,6 +253,7 @@ export function McpCatalogForm({
           },
           scope: "personal",
           teams: [],
+          environmentId: null,
         }),
   });
 
@@ -519,6 +527,20 @@ export function McpCatalogForm({
     mcpServerInstallation: ["admin"],
   });
   const { data: teams } = useTeams();
+  const { data: environmentList } = useEnvironments();
+  const environments = environmentList?.environments;
+  const { data: canDeployRestricted } = useHasPermissions({
+    environment: ["admin"],
+  });
+  const defaultEnvironment = useDefaultEnvironment();
+  // Environments the user can deploy to. Restricted environments the user lacks
+  // environment:admin for are hidden entirely. The default is always available,
+  // so with no accessible custom environments there's only one option and the
+  // selector is hidden.
+  const accessibleEnvironments = (environments ?? []).filter(
+    (e) => !e.restricted || canDeployRestricted,
+  );
+  const showEnvironmentSelector = accessibleEnvironments.length > 0;
   const currentScope = form.watch("scope");
   const enterpriseAuthDisabledReason: ReactNode | null =
     !isEnterpriseCoreEnabled
@@ -799,7 +821,6 @@ export function McpCatalogForm({
                   )}
                 />
               </div>
-
               <FormField
                 control={form.control}
                 name="description"
@@ -817,7 +838,6 @@ export function McpCatalogForm({
                   </FormItem>
                 )}
               />
-
               <FormField
                 control={form.control}
                 name="scope"
@@ -866,7 +886,70 @@ export function McpCatalogForm({
                   </FormItem>
                 )}
               />
+              {showEnvironmentSelector && (
+                <FormField
+                  control={form.control}
+                  name="environmentId"
+                  render={({ field }) => {
+                    const environmentOptions = [
+                      {
+                        value: ENVIRONMENT_DEFAULT_VALUE,
+                        label: defaultEnvironment.name,
+                        description: defaultEnvironment.description ?? "",
+                      },
+                      ...accessibleEnvironments.map((environment) => ({
+                        value: environment.id,
+                        label: environment.name,
+                        description: environment.description ?? "",
+                      })),
+                    ];
+                    const selectedValue =
+                      field.value ?? ENVIRONMENT_DEFAULT_VALUE;
+                    const selectedDescription = environmentOptions.find(
+                      (option) => option.value === selectedValue,
+                    )?.description;
 
+                    return (
+                      <FormItem className="space-y-2">
+                        <Label>Environment</Label>
+                        <FormControl>
+                          <Select
+                            value={selectedValue}
+                            onValueChange={(value) =>
+                              field.onChange(
+                                value === ENVIRONMENT_DEFAULT_VALUE
+                                  ? null
+                                  : value,
+                              )
+                            }
+                          >
+                            <SelectTrigger className="w-full">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent position="popper">
+                              {environmentOptions.map((option) => (
+                                <SelectItem
+                                  key={option.value}
+                                  value={option.value}
+                                  description={option.description || undefined}
+                                >
+                                  {option.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </FormControl>
+                        {selectedDescription ? (
+                          <p className="text-xs text-muted-foreground">
+                            {selectedDescription}
+                          </p>
+                        ) : null}
+                        <FormMessage />
+                      </FormItem>
+                    );
+                  }}
+                />
+              )}
               {mode === "create" && (
                 <div className="space-y-2">
                   <Label>Server Type</Label>
@@ -929,7 +1012,6 @@ export function McpCatalogForm({
                   </div>
                 </div>
               )}
-
               {currentServerType === "local" && (
                 <div className="space-y-2">
                   <Label>Tenancy</Label>

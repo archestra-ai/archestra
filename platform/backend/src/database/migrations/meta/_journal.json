@@ -1874,8 +1874,36 @@
     {
       "idx": 267,
       "version": "7",
-      "when": 1780329000000,
-      "tag": "0267_add_embedding_error",
+      "when": 1780392851404,
+      "tag": "0267_curious_marrow",
+      "breakpoints": true
+    },
+    {
+      "idx": 268,
+      "version": "7",
+      "when": 1780394552365,
+      "tag": "0268_rename_environment_to_environments",
+      "breakpoints": true
+    },
+    {
+      "idx": 269,
+      "version": "7",
+      "when": 1780397149205,
+      "tag": "0269_typical_bill_hollister",
+      "breakpoints": true
+    },
+    {
+      "idx": 270,
+      "version": "7",
+      "when": 1780407104791,
+      "tag": "0270_add_playwright_catalog_icon",
+      "breakpoints": true
+    },
+    {
+      "idx": 271,
+      "version": "7",
+      "when": 1780414098861,
+      "tag": "0271_lively_spacker_dave",
       "breakpoints": true
     }
   ]

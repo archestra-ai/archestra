@@ -33,6 +33,7 @@ export function makeCatalogItem(
     organizationId: null,
     authorId: null,
     scope: "org",
+    environmentId: null,
     parentCatalogItemId: null,
     clonedFrom: null,
     childName: null,

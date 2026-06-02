@@ -1,5 +1,5 @@
 {
-  "id": "5d5b3533-7ef8-4867-8849-bdee6c33d135",
+  "id": "c4d23452-01e6-411f-a12b-4091c4e27151",
   "prevId": "a79ceeb3-2e47-4f78-80f9-396f5573722f",
   "version": "7",
   "dialect": "postgresql",
@@ -3574,6 +3574,117 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.environment": {
+      "name": "environment",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "organization_id": {
+          "name": "organization_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "namespace": {
+          "name": "namespace",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "restricted": {
+          "name": "restricted",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "sort_order": {
+          "name": "sort_order",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "environment_org_idx": {
+          "name": "environment_org_idx",
+          "columns": [
+            {
+              "expression": "organization_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "environment_organization_id_organization_id_fk": {
+          "name": "environment_organization_id_organization_id_fk",
+          "tableFrom": "environment",
+          "tableTo": "organization",
+          "columnsFrom": [
+            "organization_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "environment_org_name_unique": {
+          "name": "environment_org_name_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "organization_id",
+            "name"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.identity_provider": {
       "name": "identity_provider",
       "schema": "",
@@ -4306,6 +4417,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "environment_id": {
+          "name": "environment_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
         "catalog_reinstall_required": {
           "name": "catalog_reinstall_required",
           "type": "boolean",
@@ -4403,6 +4520,21 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "internal_mcp_catalog_environment_id_idx": {
+          "name": "internal_mcp_catalog_environment_id_idx",
+          "columns": [
+            {
+              "expression": "environment_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
@@ -4490,6 +4622,19 @@
           "tableTo": "secret",
           "columnsFrom": [
             "preset_secret_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "internal_mcp_catalog_environment_id_environment_id_fk": {
+          "name": "internal_mcp_catalog_environment_id_environment_id_fk",
+          "tableFrom": "internal_mcp_catalog",
+          "tableTo": "environment",
+          "columnsFrom": [
+            "environment_id"
           ],
           "columnsTo": [
             "id"
@@ -4838,13 +4983,6 @@
           "primaryKey": false,
           "notNull": true,
           "default": "'pending'"
-        },
-        "embedding_error": {
-          "name": "embedding_error",
-          "type": "kb_document_embedding_error",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": false
         },
         "chunk_count": {
           "name": "chunk_count",
@@ -8434,6 +8572,31 @@
           "type": "text",
           "primaryKey": false,
           "notNull": false
+        },
+        "default_environment_name": {
+          "name": "default_environment_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "default_environment_namespace": {
+          "name": "default_environment_namespace",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "default_environment_description": {
+          "name": "default_environment_description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "default_environment_restricted": {
+          "name": "default_environment_restricted",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
         },
         "skill_tools_enabled": {
           "name": "skill_tools_enabled",
@@ -12302,18 +12465,6 @@
       "values": [
         "refresh_failed",
         "no_refresh_token"
-      ]
-    },
-    "public.kb_document_embedding_error": {
-      "name": "kb_document_embedding_error",
-      "schema": "public",
-      "values": [
-        "rate_limit",
-        "auth_error",
-        "model_not_found",
-        "server_error",
-        "dimensions_mismatch",
-        "unknown"
       ]
     }
   },

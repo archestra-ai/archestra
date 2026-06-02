@@ -520,3 +520,8 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @muhammad-saadd
 - @ashu75575
 - @crowndlt
+- @chiraggowdam
+- @fennhelloworld
+- @theoCrepinDev
+- @nicky-ru
+- @omar391

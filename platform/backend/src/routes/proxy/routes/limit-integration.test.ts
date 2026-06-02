@@ -170,6 +170,10 @@ describe("LLM proxy limit enforcement (integration)", () => {
     expect(response.json()).toMatchObject({
       error: {
         code: "token_cost_limit_exceeded",
+        usage_limit: {
+          entity_type: "virtual_key",
+          limit_type: "token_cost",
+        },
       },
     });
   });
@@ -221,6 +225,10 @@ describe("LLM proxy limit enforcement (integration)", () => {
     expect(response.json()).toMatchObject({
       error: {
         code: "token_cost_limit_exceeded",
+        usage_limit: {
+          entity_type: "user",
+          limit_type: "token_cost",
+        },
       },
     });
   });
@@ -271,6 +279,10 @@ describe("LLM proxy limit enforcement (integration)", () => {
     expect(response.json()).toMatchObject({
       error: {
         code: "token_cost_limit_exceeded",
+        usage_limit: {
+          entity_type: "user",
+          limit_type: "token_cost",
+        },
       },
     });
     expect(response.json().error.message).toContain("user-level");
@@ -399,6 +411,10 @@ describe("LLM proxy limit enforcement (integration)", () => {
     expect(response.json()).toMatchObject({
       error: {
         code: "token_cost_limit_exceeded",
+        usage_limit: {
+          entity_type: "organization",
+          limit_type: "token_cost",
+        },
       },
     });
     expect(response.json().error.message).toContain("organization-level");

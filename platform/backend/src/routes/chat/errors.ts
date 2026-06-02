@@ -196,10 +196,11 @@ function extractUsageLimitError(
     if (parsed?.error?.code !== "token_cost_limit_exceeded") {
       return null;
     }
-    const message =
-      typeof parsed.error.message === "string" ? parsed.error.message : "";
     return {
-      entityType: extractUsageLimitEntityType(message),
+      entityType:
+        typeof parsed.error.usage_limit?.entity_type === "string"
+          ? parsed.error.usage_limit.entity_type
+          : undefined,
     };
   } catch {
     return null;
@@ -1679,11 +1680,6 @@ export function sanitizeChatErrorForFrontend(
     sanitized.usageLimitEntityType = error.usageLimitEntityType;
   }
   return sanitized;
-}
-
-function extractUsageLimitEntityType(message: string): string | undefined {
-  const match = message.match(/\b([a-z_]+)-level token cost limit\b/i);
-  return match?.[1]?.toLowerCase();
 }
 
 function formatUsageLimitMessage(entityType: string | undefined): string {

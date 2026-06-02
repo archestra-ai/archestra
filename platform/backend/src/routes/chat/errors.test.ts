@@ -41,6 +41,7 @@ describe("mapProviderError - OpenAI", () => {
     message: string,
     code?: string,
     internalCode?: string,
+    usageLimit?: { entity_type: string; limit_type: string },
   ) {
     return {
       name: "AI_APICallError",
@@ -51,6 +52,7 @@ describe("mapProviderError - OpenAI", () => {
           message,
           code,
           internal_code: internalCode,
+          usage_limit: usageLimit,
         },
       }),
       isRetryable: statusCode >= 500 || statusCode === 429,
@@ -189,6 +191,11 @@ describe("mapProviderError - OpenAI", () => {
         OpenAIErrorTypes.RATE_LIMIT,
         "I cannot process this request because the organization-level token cost limit has been exceeded.",
         "token_cost_limit_exceeded",
+        undefined,
+        {
+          entity_type: "organization",
+          limit_type: "token_cost",
+        },
       );
       const result = mapProviderError(error, "openai");
 

@@ -40,6 +40,14 @@ type RollingLimitCleanupInterval = Extract<
 >;
 
 type LimitModelUsageRecord = typeof schema.limitModelUsageTable.$inferSelect;
+type LimitViolationResponse = [
+  refusalMessage: string,
+  contentMessage: string,
+  metadata?: {
+    entityType: LimitEntityType;
+    limitType: "token_cost";
+  },
+];
 
 class LimitModel {
   // rollingCleanupIntervalSqlLiterals exists to compile-time check rolling literals.
@@ -622,13 +630,13 @@ class LimitModel {
 export class LimitValidationService {
   /**
    * Check if current usage has already exceeded any token cost limits
-   * Returns null if allowed, or [refusalMessage, contentMessage] if blocked
+   * Returns null if allowed, or a refusal tuple if blocked.
    */
   static async checkLimitsBeforeRequest(params: {
     agentId: string;
     userId?: string;
     virtualKeyId?: string;
-  }): Promise<null | [string, string]> {
+  }): Promise<null | LimitViolationResponse> {
     const { agentId, userId, virtualKeyId } = params;
 
     try {
@@ -644,13 +652,14 @@ export class LimitValidationService {
 
       // Get organization ID to cleanup and check organization limits (either from teams or fallback)
       let organizationId: string | null = null;
+      let agentTeams: (typeof schema.teamsTable.$inferSelect)[] = [];
       if (agentTeamIds.length > 0) {
-        const teams = await db
+        agentTeams = await db
           .select()
           .from(schema.teamsTable)
           .where(inArray(schema.teamsTable.id, agentTeamIds));
-        if (teams.length > 0 && teams[0].organizationId) {
-          organizationId = teams[0].organizationId;
+        if (agentTeams.length > 0 && agentTeams[0].organizationId) {
+          organizationId = agentTeams[0].organizationId;
         }
       } else {
         organizationId = await AgentModel.findOrganizationId(agentId);
@@ -740,15 +749,11 @@ export class LimitValidationService {
         logger.info(
           `[LimitValidation] Checking team-level limits for agent: ${agentId}`,
         );
-        const teams = await db
-          .select()
-          .from(schema.teamsTable)
-          .where(inArray(schema.teamsTable.id, agentTeamIds));
         logger.info(
-          `[LimitValidation] Found ${teams.length} teams for agent ${agentId}: ${teams.map((t) => `${t.id}(org:${t.organizationId})`).join(", ")}`,
+          `[LimitValidation] Found ${agentTeams.length} teams for agent ${agentId}: ${agentTeams.map((t) => `${t.id}(org:${t.organizationId})`).join(", ")}`,
         );
 
-        for (const team of teams) {
+        for (const team of agentTeams) {
           logger.info(
             `[LimitValidation] Checking team limit for team: ${team.id}`,
           );
@@ -806,7 +811,7 @@ export class LimitValidationService {
   private static async checkEntityLimits(
     entityType: LimitEntityType,
     entityId: string,
-  ): Promise<null | [string, string]> {
+  ): Promise<null | LimitViolationResponse> {
     try {
       logger.info(
         `[LimitValidation] Querying limits for ${entityType} ${entityId}`,
@@ -919,7 +924,11 @@ Please contact your administrator to increase the limit or wait for the usage to
           const refusalMessage = `${archestraMetadata}
 ${contentMessage}`;
 
-          return [refusalMessage, contentMessage];
+          return [
+            refusalMessage,
+            contentMessage,
+            { entityType, limitType: "token_cost" },
+          ];
         } else {
           logger.info(
             `[LimitValidation] Limit OK for ${entityType} ${entityId}: ${comparisonValue} < ${limit.limitValue}`,
@@ -942,7 +951,7 @@ ${contentMessage}`;
   private static async checkDefaultUserLimit(params: {
     organizationId: string;
     userId: string;
-  }): Promise<null | [string, string]> {
+  }): Promise<null | LimitViolationResponse> {
     try {
       const [organization] = await db
         .select({
@@ -1229,7 +1238,7 @@ function buildLimitViolationResponse(params: {
   limitDescription: "tokens" | "cost_dollars";
   totalTokensIn: number;
   totalTokensOut: number;
-}): [string, string] {
+}): LimitViolationResponse {
   const totalTokens = params.totalTokensIn + params.totalTokensOut;
   const remaining = Math.max(0, params.limitValue - params.comparisonValue);
   const archestraMetadata = `
@@ -1259,7 +1268,11 @@ Remaining: ${Math.max(0, params.limitValue - totalTokens).toLocaleString()} toke
 
 Please contact your administrator to increase the limit or wait for the usage to reset.`;
 
-  return [`${archestraMetadata}\n${contentMessage}`, contentMessage];
+  return [
+    `${archestraMetadata}\n${contentMessage}`,
+    contentMessage,
+    { entityType: params.entityType, limitType: "token_cost" },
+  ];
 }
 
 function normalizeLimitModels(models: string[] | null | undefined) {

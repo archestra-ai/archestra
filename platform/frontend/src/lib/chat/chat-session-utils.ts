@@ -56,10 +56,10 @@ export function restoreRenderableAssistantParts(params: {
 }
 
 /**
- * Drops a trailing assistant message left with no parts. Mirrors the backend's
- * persist behavior (an empty last message is not stored), keeping the live view
- * consistent with what a reload would show — used after stripping dangling tool
- * parts from a stopped turn.
+ * Drops a trailing assistant message left with no renderable content. Mirrors the
+ * backend's persist behavior (an empty last message is not stored), keeping the live
+ * view consistent with what a reload would show — used after stripping dangling tool
+ * parts from a stopped turn, which can leave only `step-start`/telemetry parts behind.
  */
 export function pruneEmptyTrailingAssistantMessage(
   messages: UIMessage[],
@@ -67,7 +67,7 @@ export function pruneEmptyTrailingAssistantMessage(
   const lastMessage = messages.at(-1);
   if (
     lastMessage?.role === "assistant" &&
-    (lastMessage.parts?.length ?? 0) === 0
+    !hasRenderableAssistantContent(lastMessage)
   ) {
     return messages.slice(0, -1);
   }

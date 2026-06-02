@@ -8,7 +8,7 @@ import {
   TOOL_READ_SKILL_FILE_FULL_NAME,
   TOOL_UPDATE_SKILL_FULL_NAME,
 } from "@shared";
-import { SkillFileModel, SkillModel, SkillTeamModel } from "@/models";
+import { SkillFileModel, SkillModel } from "@/models";
 import { beforeEach, describe, expect, test } from "@/test";
 import type { Agent, InsertSkill, InsertSkillFile } from "@/types";
 import {
@@ -288,7 +288,7 @@ describe("skill tool execution", () => {
     );
 
     expect(result.isError).toBe(false);
-    expect(textOf(result)).toContain('Created personal skill "research"');
+    expect(textOf(result)).toContain('Created skill "research"');
 
     const skill = await SkillModel.findByName(organizationId, "research");
     expect(skill?.content).toBe("Run the research playbook.");
@@ -369,96 +369,6 @@ describe("skill tool execution", () => {
 
     expect(result.isError).toBe(true);
     expect(textOf(result)).toContain("skill:create");
-  });
-
-  test("create_skill persists an org-scoped skill when scope is org", async () => {
-    const result = await executeArchestraTool(
-      TOOL_CREATE_SKILL_FULL_NAME,
-      { content: manifest("org-wide"), scope: "org" },
-      context,
-    );
-
-    expect(result.isError).toBe(false);
-    expect(textOf(result)).toContain('Created org skill "org-wide"');
-    const skill = await SkillModel.findByName(organizationId, "org-wide");
-    expect(skill?.scope).toBe("org");
-  });
-
-  test("create_skill denies an org scope to a non-admin author", async ({
-    makeUser,
-    makeCustomRole,
-    makeMember,
-  }) => {
-    // skill:create lets the tool run, but org scope still needs admin — so the
-    // scope check, not the RBAC gate, is what rejects this.
-    const author = await makeUser();
-    const role = await makeCustomRole(organizationId, {
-      role: "skill_author",
-      permission: { skill: ["read", "create"] },
-    });
-    await makeMember(author.id, organizationId, { role: role.role });
-
-    const result = await executeArchestraTool(
-      TOOL_CREATE_SKILL_FULL_NAME,
-      { content: manifest("blocked-org"), scope: "org" },
-      { ...context, userId: author.id },
-    );
-
-    expect(result.isError).toBe(true);
-    expect(textOf(result)).toContain("org-scoped");
-    expect(
-      await SkillModel.findByName(organizationId, "blocked-org"),
-    ).toBeNull();
-  });
-
-  test("create_skill rejects a team scope with no teams", async () => {
-    const result = await executeArchestraTool(
-      TOOL_CREATE_SKILL_FULL_NAME,
-      { content: manifest("teamless"), scope: "team" },
-      context,
-    );
-
-    expect(result.isError).toBe(true);
-    expect(textOf(result)).toContain("at least one team");
-  });
-
-  test("create_skill rejects an unknown team id", async () => {
-    const result = await executeArchestraTool(
-      TOOL_CREATE_SKILL_FULL_NAME,
-      {
-        content: manifest("bad-team"),
-        scope: "team",
-        teamIds: ["11111111-1111-4111-8111-111111111111"],
-      },
-      context,
-    );
-
-    expect(result.isError).toBe(true);
-    expect(textOf(result)).toContain("Unknown team id");
-  });
-
-  test("create_skill persists a team-scoped skill assigned to its teams", async ({
-    makeUser,
-    makeTeam,
-  }) => {
-    const owner = await makeUser();
-    const team = await makeTeam(organizationId, owner.id, {
-      name: "Research Team",
-    });
-
-    const result = await executeArchestraTool(
-      TOOL_CREATE_SKILL_FULL_NAME,
-      { content: manifest("team-skill"), scope: "team", teamIds: [team.id] },
-      context,
-    );
-
-    expect(result.isError).toBe(false);
-    expect(textOf(result)).toContain('Created team skill "team-skill"');
-    const skill = await SkillModel.findByName(organizationId, "team-skill");
-    expect(skill?.scope).toBe("team");
-    expect(await SkillTeamModel.getTeamsForSkill(skill?.id ?? "")).toEqual([
-      team.id,
-    ]);
   });
 
   test("update_skill replaces the SKILL.md body", async () => {

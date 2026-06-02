@@ -64,7 +64,6 @@ const toolGroups: Record<ArchestraToolShortName, ToolGroup> = {
   get_agent: ToolGroup.Agents,
   list_agents: ToolGroup.Agents,
   edit_agent: ToolGroup.Agents,
-  draft_skill_from_agent: ToolGroup.Agents,
 
   create_llm_proxy: ToolGroup.LLMProxies,
   get_llm_proxy: ToolGroup.LLMProxies,

@@ -1,7 +1,5 @@
 import {
   TOOL_CREATE_AGENT_SHORT_NAME,
-  TOOL_CREATE_SKILL_SHORT_NAME,
-  TOOL_DRAFT_SKILL_FROM_AGENT_SHORT_NAME,
   TOOL_EDIT_AGENT_SHORT_NAME,
   TOOL_GET_AGENT_SHORT_NAME,
   TOOL_GET_MCP_SERVER_TOOLS_SHORT_NAME,
@@ -16,11 +14,6 @@ import {
   KnowledgeBaseConnectorModel,
   KnowledgeBaseModel,
 } from "@/models";
-import {
-  agentToSkill,
-  SCOPE_FIELD,
-  serializeSkillManifest,
-} from "@/skills/agent-migration";
 import {
   AgentScopeSchema,
   InsertAgentSchemaBase,
@@ -49,7 +42,6 @@ import {
   catchError,
   defineArchestraTool,
   defineArchestraTools,
-  errorResult,
   structuredSuccessResult,
 } from "./helpers";
 
@@ -92,43 +84,6 @@ const GetAgentToolArgsSchema = GetResourceToolArgsSchema.extend({
   ),
 }).refine((data) => data.id || data.name, {
   message: "either id or name parameter is required",
-});
-
-const DraftSkillFromAgentToolArgsSchema = z
-  .object({
-    id: UuidIdSchema.describe(
-      `The ID of the agent to convert into a skill draft. Use ${TOOL_LIST_AGENTS_SHORT_NAME} or ${TOOL_GET_AGENT_SHORT_NAME} to look it up by name.`,
-    ),
-  })
-  .strict();
-
-const MigrationFieldOutputSchema = z.object({
-  field: z.string(),
-  detail: z.string(),
-});
-
-const DraftSkillFromAgentOutputSchema = z.object({
-  manifest: z
-    .string()
-    .describe(
-      "The complete SKILL.md manifest, as data. Review and edit it, then pass it to create_skill to persist. Keep the metadata block to preserve the link to the origin agent.",
-    ),
-  scope: AgentScopeSchema.describe(
-    `The source agent's scope. Pass it to ${TOOL_CREATE_SKILL_SHORT_NAME} (with teamIds when "team") to give the skill the same visibility; omit there to default to a personal skill. Sharing still requires the matching permission.`,
-  ),
-  teamIds: z
-    .array(z.string())
-    .describe(
-      `Teams the agent is scoped to — pass these to ${TOOL_CREATE_SKILL_SHORT_NAME} alongside scope "team". Empty for personal/org agents.`,
-    ),
-  carried: z
-    .array(MigrationFieldOutputSchema)
-    .describe("Agent fields carried over directly to native skill fields."),
-  annotated: z
-    .array(MigrationFieldOutputSchema)
-    .describe(
-      "Agent fields with no skill equivalent — folded into metadata or reported as not carried.",
-    ),
 });
 
 const ListAgentsToolArgsSchema = z
@@ -268,81 +223,6 @@ const registry = defineArchestraTools([
         context,
         expectedType: "agent",
         getLabel: "agent",
-      });
-    },
-  }),
-  defineArchestraTool({
-    shortName: TOOL_DRAFT_SKILL_FROM_AGENT_SHORT_NAME,
-    title: "Draft Skill From Agent",
-    description:
-      "Convert an internal agent into a draft SKILL.md manifest for review. " +
-      "Returns the manifest plus a summary of what was carried over versus " +
-      "annotated — the agent's tools are listed under a Recommended tools " +
-      "section, while its model and knowledge bindings have no skill equivalent " +
-      "and are reported as not carried (not written into the body). " +
-      "This does NOT create anything: edit the manifest body if you like, then " +
-      `call ${TOOL_CREATE_SKILL_SHORT_NAME} with the final manifest to persist ` +
-      "it. Keep the metadata block so the skill stays linked to its origin " +
-      `agent. To give the skill the agent's visibility, pass the returned ` +
-      `\`scope\` (and \`teamIds\` for a team agent) to ${TOOL_CREATE_SKILL_SHORT_NAME}; ` +
-      "omit them to create a personal skill. Sharing requires the matching " +
-      "permission (admin for org, team-admin for team).",
-    schema: DraftSkillFromAgentToolArgsSchema,
-    outputSchema: DraftSkillFromAgentOutputSchema,
-    async handler({ args, context }) {
-      if (!context.userId || !context.organizationId) {
-        return errorResult("This tool requires an authenticated user session.");
-      }
-
-      const isAdmin = await isAgentTypeAdmin({
-        userId: context.userId,
-        organizationId: context.organizationId,
-        agentType: "agent",
-      });
-      const agent = await AgentModel.findById(args.id, context.userId, isAdmin);
-      if (!agent || agent.organizationId !== context.organizationId) {
-        return errorResult(
-          `No agent "${args.id}" exists, or you do not have access to it.`,
-        );
-      }
-      // findById with isAdmin returns other users' personal agents, but MCP must
-      // never expose them — converting would leak another user's system prompt
-      // into the model context. Mirror handleGetResource's owner guard.
-      if (agent.scope === "personal" && agent.authorId !== context.userId) {
-        return errorResult(
-          `No agent "${args.id}" exists, or you do not have access to it.`,
-        );
-      }
-      if (agent.agentType !== "agent" || agent.builtInAgentConfig) {
-        return errorResult("Only internal agents can be converted to skills.");
-      }
-
-      const { draft, teamIds, report } = agentToSkill(agent);
-
-      // The SKILL.md manifest can't encode scope, but create_skill now accepts
-      // one — so the scope is carryable through this path as long as the caller
-      // passes the returned scope/teamIds. Report it carried and surface both as
-      // structured fields for the caller to forward.
-      const carried = [
-        ...report.carried,
-        {
-          field: SCOPE_FIELD,
-          detail: `agent scope "${draft.scope}" — pass scope${draft.scope === "team" ? " and teamIds" : ""} to ${TOOL_CREATE_SKILL_SHORT_NAME} to preserve it.`,
-        },
-      ];
-
-      // Return the manifest as a discrete structured field rather than embedding
-      // it in a markdown code fence. The manifest body contains the agent's
-      // system prompt verbatim (untrusted for shared agents); a fenced block lets
-      // a prompt with triple backticks break out and inject instructions next to
-      // the "now call create_skill" guidance. As a JSON string value it stays
-      // inert data — the guidance lives in this tool's description instead.
-      return structuredSuccessResult({
-        manifest: serializeSkillManifest(draft),
-        scope: draft.scope,
-        teamIds,
-        carried,
-        annotated: report.annotated,
       });
     },
   }),

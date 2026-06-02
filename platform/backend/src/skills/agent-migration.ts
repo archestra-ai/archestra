@@ -1,13 +1,12 @@
 import { parseFullToolName, SKILL_ARCHESTRA_TOOL_SHORT_NAMES } from "@shared";
-import { dump as dumpYaml } from "js-yaml";
 import type { ResourceVisibilityScope } from "@/types/visibility";
 
 /**
  * Short names of the Archestra skill-runtime/plumbing tools (activate, read,
- * list, create, update, draft-from-agent). Every skill-enabled agent carries
- * the whole set once its org opts in, so recommending them inside a generated
- * skill is circular noise — the activating agent already has them. Matched by
- * short name (prefix stripped) so white-labeled tool prefixes are caught too.
+ * list, create, update). Every skill-enabled agent carries the whole set once
+ * its org opts in, so recommending them inside a generated skill is circular
+ * noise — the activating agent already has them. Matched by short name (prefix
+ * stripped) so white-labeled tool prefixes are caught too.
  */
 const SKILL_RUNTIME_TOOL_SHORT_NAMES: ReadonlySet<string> = new Set(
   SKILL_ARCHESTRA_TOOL_SHORT_NAMES,
@@ -168,27 +167,6 @@ export function agentToSkill(
     teamIds,
     report: { carried, annotated },
   };
-}
-
-/**
- * Render a {@link SkillDraft} as a complete SKILL.md manifest (YAML frontmatter
- * + body) that round-trips through `parseSkillManifest`. The MCP draft tool
- * returns this string for the model to edit before calling `create_skill`; the
- * REST route persists the structured draft directly and does not need it.
- */
-export function serializeSkillManifest(draft: SkillDraft): string {
-  const frontmatter: Record<string, unknown> = {
-    name: draft.name,
-    description: draft.description,
-  };
-  if (draft.license) frontmatter.license = draft.license;
-  if (draft.compatibility) frontmatter.compatibility = draft.compatibility;
-  if (Object.keys(draft.metadata).length > 0) {
-    frontmatter.metadata = draft.metadata;
-  }
-
-  const yaml = dumpYaml(frontmatter, { lineWidth: -1 }).trimEnd();
-  return `---\n${yaml}\n---\n\n${draft.content}\n`;
 }
 
 // ===== Internal helpers =====

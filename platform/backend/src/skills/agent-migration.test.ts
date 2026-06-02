@@ -1,7 +1,6 @@
 import {
   TOOL_ACTIVATE_SKILL_FULL_NAME,
   TOOL_CREATE_SKILL_FULL_NAME,
-  TOOL_DRAFT_SKILL_FROM_AGENT_FULL_NAME,
   TOOL_LIST_SKILLS_FULL_NAME,
   TOOL_READ_SKILL_FILE_FULL_NAME,
   TOOL_UPDATE_SKILL_FULL_NAME,
@@ -11,9 +10,7 @@ import {
   agentToSkill,
   type MigratableAgent,
   SKILL_ORIGIN_AGENT,
-  serializeSkillManifest,
 } from "./agent-migration";
-import { parseSkillManifest } from "./parser";
 
 function makeMigratableAgent(
   overrides: Partial<MigratableAgent> = {},
@@ -135,7 +132,6 @@ describe("agentToSkill", () => {
       TOOL_LIST_SKILLS_FULL_NAME,
       TOOL_CREATE_SKILL_FULL_NAME,
       TOOL_UPDATE_SKILL_FULL_NAME,
-      TOOL_DRAFT_SKILL_FROM_AGENT_FULL_NAME,
     ];
     const { draft } = agentToSkill(
       makeMigratableAgent({
@@ -226,37 +222,5 @@ describe("agentToSkill", () => {
       makeMigratableAgent({ scope: "personal", teams: [{ id: "team-1" }] }),
     );
     expect(personalScoped.teamIds).toEqual([]);
-  });
-});
-
-describe("serializeSkillManifest", () => {
-  it("produces a manifest that round-trips through parseSkillManifest", () => {
-    const { draft } = agentToSkill(
-      makeMigratableAgent({
-        name: "Round Trip",
-        description: "Tests serialization: with colons & quotes",
-        icon: "🎧",
-      }),
-    );
-
-    const parsed = parseSkillManifest(serializeSkillManifest(draft));
-
-    expect(parsed.name).toBe(draft.name);
-    expect(parsed.description).toBe(draft.description);
-    expect(parsed.content).toBe(draft.content);
-    expect(parsed.metadata.origin).toBe(SKILL_ORIGIN_AGENT);
-    expect(parsed.metadata.icon).toBe("🎧");
-  });
-
-  it("preserves a system prompt containing code fences through serialization", () => {
-    const { draft } = agentToSkill(
-      makeMigratableAgent({
-        systemPrompt: "Run this:\n```ts\nconst x = 1;\n```\nDone.",
-      }),
-    );
-
-    const parsed = parseSkillManifest(serializeSkillManifest(draft));
-    expect(parsed.content).toContain("```ts");
-    expect(parsed.content).toContain("const x = 1;");
   });
 });

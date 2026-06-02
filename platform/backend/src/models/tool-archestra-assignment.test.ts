@@ -1,7 +1,7 @@
 import {
   ARCHESTRA_MCP_CATALOG_ID,
   TOOL_ACTIVATE_SKILL_FULL_NAME,
-  TOOL_DRAFT_SKILL_FROM_AGENT_FULL_NAME,
+  TOOL_CREATE_SKILL_FULL_NAME,
   TOOL_READ_SKILL_FILE_FULL_NAME,
 } from "@shared";
 import { getArchestraMcpTools } from "@/archestra-mcp-server";
@@ -193,9 +193,7 @@ describe("Archestra Tools Dynamic Assignment", () => {
     const skillToolNames = [
       TOOL_ACTIVATE_SKILL_FULL_NAME,
       TOOL_READ_SKILL_FILE_FULL_NAME,
-      // the agent→skill draft tool is part of the opt-in skill toolset, so the
-      // documented "convert, then create_skill" flow is actually reachable.
-      TOOL_DRAFT_SKILL_FROM_AGENT_FULL_NAME,
+      TOOL_CREATE_SKILL_FULL_NAME,
     ];
     for (const agentId of [agentA.id, agentB.id]) {
       const tools = await ToolModel.getMcpToolsByAgent(agentId);
@@ -351,13 +349,13 @@ describe("Archestra Tools Dynamic Assignment", () => {
     const enabledNames = (
       await ToolModel.getMcpToolsByAgent(enabledAgent.id)
     ).map((t) => t.name);
-    expect(enabledNames).toContain(TOOL_DRAFT_SKILL_FROM_AGENT_FULL_NAME);
+    expect(enabledNames).toContain(TOOL_CREATE_SKILL_FULL_NAME);
 
     // org that never opted in is left untouched
     const disabledNames = (
       await ToolModel.getMcpToolsByAgent(disabledAgent.id)
     ).map((t) => t.name);
-    expect(disabledNames).not.toContain(TOOL_DRAFT_SKILL_FROM_AGENT_FULL_NAME);
+    expect(disabledNames).not.toContain(TOOL_CREATE_SKILL_FULL_NAME);
   });
 
   test("backfillNewSkillToolsToEnabledOrgs is a no-op when no skill tools were created", async ({
@@ -375,6 +373,6 @@ describe("Archestra Tools Dynamic Assignment", () => {
     const names = (await ToolModel.getMcpToolsByAgent(agent.id)).map(
       (t) => t.name,
     );
-    expect(names).not.toContain(TOOL_DRAFT_SKILL_FROM_AGENT_FULL_NAME);
+    expect(names).not.toContain(TOOL_CREATE_SKILL_FULL_NAME);
   });
 });

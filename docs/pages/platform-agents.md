@@ -82,8 +82,6 @@ The **Convert to skill** action on the agents page opens a confirmation dialog w
 - suggested prompts, icon, and labels are folded into the body or metadata, and the origin agent is recorded in metadata so the skill stays linked back to it
 - removing the source agent is optional and off by default; it is a soft delete, so the agent can be restored later from the deleted-agents filter
 
-The model can run the same field mapping through the [`draft_skill_from_agent`](/docs/platform-archestra-mcp-server) MCP tool. It returns a draft manifest — plus the agent's `scope` and `teamIds` — that the model edits and persists separately with `create_skill`; passing that scope through carries the agent's visibility (sharing still requires the matching permission). Unlike the UI action it never deletes the source agent.
-
 ## System Prompt Templating
 
 Agent system prompts support [Handlebars](https://handlebarsjs.com/) templating. Templates are rendered at runtime before the prompt is sent to the LLM, with the current user's context injected as variables.

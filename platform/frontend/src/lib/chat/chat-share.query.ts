@@ -13,6 +13,7 @@ const {
 
 type ShareConversationMutationInput = {
   conversationId: string;
+  suppressSuccessToast?: boolean;
 } & NonNullable<archestraApiTypes.ShareConversationData["body"]>;
 
 export function useConversationShare(conversationId: string | undefined) {
@@ -46,6 +47,7 @@ export function useShareConversation() {
       visibility,
       teamIds,
       userIds,
+      suppressSuccessToast: _suppressSuccessToast,
     }: ShareConversationMutationInput) => {
       const { data, error } = await shareConversation({
         path: { id: conversationId },
@@ -57,14 +59,16 @@ export function useShareConversation() {
       }
       return data;
     },
-    onSuccess: (data, { conversationId }) => {
+    onSuccess: (data, { conversationId, suppressSuccessToast }) => {
       if (!data) return;
       queryClient.setQueryData(["conversation-share", conversationId], data);
       queryClient.invalidateQueries({
         queryKey: ["conversation", conversationId],
       });
       queryClient.invalidateQueries({ queryKey: ["conversations"] });
-      toast.success("Chat visibility updated");
+      if (!suppressSuccessToast) {
+        toast.success("Chat visibility updated");
+      }
     },
   });
 }

@@ -6,6 +6,9 @@ import { ShareConversationDialog } from "./share-conversation-dialog";
 
 const mockShareMutateAsync = vi.fn();
 const mockUnshareMutateAsync = vi.fn();
+const { mockToastSuccess } = vi.hoisted(() => ({
+  mockToastSuccess: vi.fn(),
+}));
 const mockUseConversationShare = vi.fn<
   () => {
     data: {
@@ -31,6 +34,12 @@ vi.mock("@/lib/chat/chat-share.query", () => ({
     mutateAsync: mockUnshareMutateAsync,
     isPending: false,
   })),
+}));
+
+vi.mock("sonner", () => ({
+  toast: {
+    success: mockToastSuccess,
+  },
 }));
 
 vi.mock("@/lib/auth/auth.query", () => ({
@@ -121,9 +130,20 @@ describe("ShareConversationDialog", () => {
       isLoading: false,
     });
     mockShareMutateAsync.mockReset();
+    mockShareMutateAsync.mockResolvedValue({
+      id: "share-1",
+      visibility: "organization",
+      teamIds: [],
+      userIds: [],
+    });
     mockUnshareMutateAsync.mockReset();
+    mockToastSuccess.mockReset();
     Object.defineProperty(window, "location", {
       value: { origin: "http://localhost:3000" },
+      configurable: true,
+    });
+    Object.defineProperty(navigator, "clipboard", {
+      value: { writeText: vi.fn() },
       configurable: true,
     });
   });
@@ -149,7 +169,40 @@ describe("ShareConversationDialog", () => {
       visibility: "team",
       teamIds: ["team-1"],
       userIds: [],
+      suppressSuccessToast: true,
     });
+  });
+
+  it("keeps the dialog open, shows the share URL, and copies it after saving a visible share", async () => {
+    const user = userEvent.setup();
+    const onOpenChange = vi.fn();
+    const writeText = vi.fn();
+    Object.defineProperty(navigator, "clipboard", {
+      value: { writeText },
+      configurable: true,
+    });
+
+    render(
+      <ShareConversationDialog
+        conversationId="conv-1"
+        open
+        onOpenChange={onOpenChange}
+      />,
+    );
+
+    expect(
+      screen.queryByText("http://localhost:3000/chat/conv-1"),
+    ).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /Organization/i }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(onOpenChange).not.toHaveBeenCalledWith(false);
+    expect(screen.getByText("http://localhost:3000/chat/conv-1")).toBeVisible();
+    expect(writeText).toHaveBeenCalledWith("http://localhost:3000/chat/conv-1");
+    expect(mockToastSuccess).toHaveBeenCalledWith(
+      "Chat visibility updated and share link copied",
+    );
   });
 
   it("shows an inline copyable share URL for saved visible shares", async () => {

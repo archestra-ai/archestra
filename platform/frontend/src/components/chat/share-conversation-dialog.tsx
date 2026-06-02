@@ -3,6 +3,7 @@
 import type { archestraApiTypes } from "@shared";
 import { Globe, Lock, UserRound, Users } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
 import { CopyableCode } from "@/components/copyable-code";
 import { FormDialog } from "@/components/form-dialog";
 import { AssignmentCombobox } from "@/components/ui/assignment-combobox";
@@ -51,11 +52,11 @@ export function ShareConversationDialog({
   const [visibility, setVisibility] = useState<ShareVisibility>("private");
   const [teamIds, setTeamIds] = useState<string[]>([]);
   const [userIds, setUserIds] = useState<string[]>([]);
-  const hasVisibleShareLink = !!share && visibility !== "private";
+  const [hasSavedVisibleShare, setHasSavedVisibleShare] = useState(false);
+  const hasVisibleShareLink =
+    (isShared || hasSavedVisibleShare) && visibility !== "private";
 
-  const shareLink = share
-    ? `${window.location.origin}/chat/${conversationId}`
-    : "";
+  const shareLink = `${window.location.origin}/chat/${conversationId}`;
 
   const availableMembers = useMemo(
     () => members.filter((member) => member.id !== currentUserId),
@@ -98,12 +99,14 @@ export function ShareConversationDialog({
       setVisibility("private");
       setTeamIds([]);
       setUserIds([]);
+      setHasSavedVisibleShare(false);
       return;
     }
 
     setVisibility(share.visibility);
     setTeamIds(share.teamIds);
     setUserIds(share.userIds);
+    setHasSavedVisibleShare(true);
   }, [open, share]);
 
   const visibilityOptions = useMemo<Array<VisibilityOption<ShareVisibility>>>(
@@ -168,19 +171,28 @@ export function ShareConversationDialog({
       return;
     }
 
-    await shareMutation.mutateAsync({
+    const savedShare = await shareMutation.mutateAsync({
       conversationId,
       visibility,
       teamIds: nextTeamIds,
       userIds: nextUserIds,
+      suppressSuccessToast: true,
     });
-    onOpenChange(false);
+
+    if (!savedShare) {
+      return;
+    }
+
+    setHasSavedVisibleShare(true);
+    await navigator.clipboard.writeText(shareLink);
+    toast.success("Chat visibility updated and share link copied");
   }, [
     conversationId,
     isLoading,
     isPending,
     isShared,
     onOpenChange,
+    shareLink,
     shareMutation,
     teamIds,
     unshareMutation,

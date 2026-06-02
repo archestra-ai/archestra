@@ -238,7 +238,7 @@ class LimitModel {
         patchData.cleanupInterval !== undefined &&
         patchData.cleanupInterval !== existingLimit.cleanupInterval;
       const limitPatchData = shouldResetUsage
-        ? { ...patchData, lastCleanup: new Date() }
+        ? { ...patchData, lastCleanup: sql`now()` }
         : patchData;
 
       const updatedLimits = await tx
@@ -1120,7 +1120,7 @@ function getCalendarPeriodStartSql(
     case "calendar_day":
       return sql`date_trunc('day', now())`;
     case "calendar_week_sunday":
-      return sql`date_trunc('week', now() + interval '1 day') - interval '1 day'`;
+      return sql`date_trunc('day', now()) - (extract(dow from now()) * interval '1 day')`;
     case "calendar_week_monday":
       return sql`date_trunc('week', now())`;
     case "calendar_month":

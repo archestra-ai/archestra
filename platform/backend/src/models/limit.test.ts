@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { describe, expect, test, vi } from "@/test";
 import { CreateLimitSchema } from "@/types";
@@ -2194,6 +2194,31 @@ describe("cleanupLimitsIfNeeded", () => {
     );
     expect(dueUsage[0].currentUsageTokensIn).toBe(0);
     expect(currentMonthUsage[0].currentUsageTokensIn).toBe(500);
+  });
+
+  test("calendar Sunday week starts on the current Sunday", async () => {
+    const sunday = "2026-06-07 15:30:00";
+    const tuesday = "2026-06-09 15:30:00";
+
+    const result = await db.execute<{
+      sunday_period_start: string;
+      tuesday_period_start: string;
+    }>(sql`
+      select
+        to_char(
+          date_trunc('day', ${sunday}::timestamp)
+            - (extract(dow from ${sunday}::timestamp) * interval '1 day'),
+          'YYYY-MM-DD HH24:MI:SS'
+        ) as sunday_period_start,
+        to_char(
+          date_trunc('day', ${tuesday}::timestamp)
+            - (extract(dow from ${tuesday}::timestamp) * interval '1 day'),
+          'YYYY-MM-DD HH24:MI:SS'
+        ) as tuesday_period_start
+    `);
+
+    expect(result.rows[0].sunday_period_start).toBe("2026-06-07 00:00:00");
+    expect(result.rows[0].tuesday_period_start).toBe("2026-06-07 00:00:00");
   });
 
   test("default user limits do not create per-user limit rows", async ({

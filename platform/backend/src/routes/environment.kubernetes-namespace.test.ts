@@ -131,7 +131,7 @@ describe("Environment kubernetes namespace", () => {
       url: "/api/organization/environments",
     });
     expect(list.statusCode).toBe(200);
-    const entries = list.json();
+    const { environments: entries } = list.json();
     expect(entries.length).toBeGreaterThan(0);
     expect("namespace" in entries[0]).toBe(true);
     expect(entries[0].namespace).toBe("list-ns");

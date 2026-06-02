@@ -43,9 +43,10 @@ export class ProviderError extends Error {
 /**
  * Thrown when the provider finishes a turn cleanly (finishReason stop/length)
  * but produces no renderable content, after the empty-response auto-retries are
- * exhausted. Carries the last finishReason for diagnostics. mapProviderError
- * turns it into a structured EmptyResponse error so the frontend shows the same
- * styled, retryable error card as any provider failure.
+ * exhausted (or immediately for a non-retryable finishReason). Carries the last
+ * finishReason for diagnostics. mapProviderError turns it into a structured
+ * error card: a content-filter finish becomes the non-retryable ContentFiltered
+ * card, everything else the retryable EmptyResponse card.
  */
 export class EmptyModelResponseError extends Error {
   public readonly finishReason: string;
@@ -1500,11 +1501,19 @@ export function mapProviderError(
   // content, and the empty-response retries were exhausted. Surface it as a
   // structured, retryable EmptyResponse error.
   if (error instanceof EmptyModelResponseError) {
+    // A content-filter finish is a deterministic block, not a transient empty
+    // turn — surface it as the non-retryable ContentFiltered card so the UI
+    // doesn't offer a pointless retry. Exhausted stop/length/unknown turns stay
+    // the retryable EmptyResponse.
+    const code =
+      error.finishReason === "content-filter"
+        ? ChatErrorCode.ContentFiltered
+        : ChatErrorCode.EmptyResponse;
     return createErrorResponse(
-      ChatErrorCode.EmptyResponse,
+      code,
       provider,
       undefined,
-      ChatErrorMessages[ChatErrorCode.EmptyResponse],
+      ChatErrorMessages[code],
       "EmptyModelResponseError",
       { finishReason: error.finishReason, attempts: error.attempts },
     );

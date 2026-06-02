@@ -77,6 +77,7 @@ export interface SkillPreview {
   content: string;
   license: string | null;
   compatibility: string | null;
+  allowedTools: string | null;
   templated: boolean;
   metadata: Record<string, string>;
   files: (ResourceFile & { kind?: "reference" | "script" | "asset" })[];
@@ -959,6 +960,7 @@ function composeManifest(skill: {
   description: string;
   license: string | null;
   compatibility: string | null;
+  allowedTools: string | null;
   templated: boolean;
   metadata: Record<string, string>;
   content: string;
@@ -971,6 +973,9 @@ function composeManifest(skill: {
   if (skill.license) lines.push(`license: ${yamlScalar(skill.license)}`);
   if (skill.compatibility) {
     lines.push(`compatibility: ${yamlScalar(skill.compatibility)}`);
+  }
+  if (skill.allowedTools) {
+    lines.push(`allowed-tools: ${yamlScalar(skill.allowedTools)}`);
   }
   if (skill.templated) lines.push("templated: true");
   const metadataEntries = Object.entries(skill.metadata ?? {});

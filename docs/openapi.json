@@ -193150,6 +193150,10 @@
                             "nullable": true,
                             "type": "string"
                           },
+                          "allowedTools": {
+                            "nullable": true,
+                            "type": "string"
+                          },
                           "templated": {
                             "type": "boolean"
                           },
@@ -193220,6 +193224,7 @@
                           "content",
                           "license",
                           "compatibility",
+                          "allowedTools",
                           "templated",
                           "metadata",
                           "sourceType",
@@ -193633,6 +193638,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "allowedTools": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "templated": {
                       "type": "boolean"
                     },
@@ -193749,6 +193758,7 @@
                     "content",
                     "license",
                     "compatibility",
+                    "allowedTools",
                     "templated",
                     "metadata",
                     "sourceType",
@@ -194129,6 +194139,10 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "allowedTools": {
+                          "nullable": true,
+                          "type": "string"
+                        },
                         "templated": {
                           "type": "boolean"
                         },
@@ -194245,6 +194259,7 @@
                         "content",
                         "license",
                         "compatibility",
+                        "allowedTools",
                         "templated",
                         "metadata",
                         "sourceType",
@@ -194619,6 +194634,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "allowedTools": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "templated": {
                       "type": "boolean"
                     },
@@ -194735,6 +194754,7 @@
                     "content",
                     "license",
                     "compatibility",
+                    "allowedTools",
                     "templated",
                     "metadata",
                     "sourceType",
@@ -195109,6 +195129,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "allowedTools": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "templated": {
                       "type": "boolean"
                     },
@@ -195225,6 +195249,7 @@
                     "content",
                     "license",
                     "compatibility",
+                    "allowedTools",
                     "templated",
                     "metadata",
                     "sourceType",
@@ -196078,6 +196103,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "allowedTools": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "templated": {
                       "type": "boolean"
                     },
@@ -196194,6 +196223,7 @@
                     "content",
                     "license",
                     "compatibility",
+                    "allowedTools",
                     "templated",
                     "metadata",
                     "sourceType",
@@ -196781,6 +196811,10 @@
                             "nullable": true,
                             "type": "string"
                           },
+                          "allowedTools": {
+                            "nullable": true,
+                            "type": "string"
+                          },
                           "templated": {
                             "type": "boolean"
                           },
@@ -196796,6 +196830,7 @@
                           "name",
                           "description",
                           "compatibility",
+                          "allowedTools",
                           "templated",
                           "fileCount",
                           "exists"
@@ -197112,6 +197147,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "allowedTools": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "templated": {
                       "type": "boolean"
                     },
@@ -197170,6 +197209,7 @@
                     "content",
                     "license",
                     "compatibility",
+                    "allowedTools",
                     "templated",
                     "metadata",
                     "files",
@@ -197522,6 +197562,10 @@
                             "nullable": true,
                             "type": "string"
                           },
+                          "allowedTools": {
+                            "nullable": true,
+                            "type": "string"
+                          },
                           "templated": {
                             "type": "boolean"
                           },
@@ -197566,6 +197610,7 @@
                           "content",
                           "license",
                           "compatibility",
+                          "allowedTools",
                           "templated",
                           "metadata",
                           "sourceType",

@@ -53,6 +53,12 @@ const skillsTable = pgTable(
     /** Optional `compatibility` frontmatter field (environment requirements). */
     compatibility: text("compatibility"),
     /**
+     * Optional `allowed-tools` frontmatter field (agentskills.io): a
+     * space-separated list of tools the skill is pre-approved to use. Populated
+     * from the source agent's tools on conversion; round-trips through SKILL.md.
+     */
+    allowedTools: text("allowed_tools"),
+    /**
      * When true, the SKILL.md body is rendered through Handlebars (with the
      * activating user's context) at activation, like an agent system prompt.
      * Set automatically when converting a templated agent; off for authored

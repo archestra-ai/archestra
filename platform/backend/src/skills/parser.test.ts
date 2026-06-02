@@ -24,8 +24,37 @@ describe("parseSkillManifest", () => {
     expect(parsed.description).toBe("Extract text from PDF files.");
     expect(parsed.license).toBe("MIT");
     expect(parsed.compatibility).toBeNull();
+    expect(parsed.allowedTools).toBeNull();
     expect(parsed.content).toBe("# PDF Processing\nUse pdftotext.");
     expect(parsed.metadata).toEqual({});
+  });
+
+  test("normalizes allowed-tools from a string or a YAML sequence", () => {
+    const fromString = parseSkillManifest(
+      [
+        "---",
+        "name: git-helper",
+        "description: Runs git.",
+        "allowed-tools: Bash(git:*)  Read",
+        "---",
+        "Body.",
+      ].join("\n"),
+    );
+    expect(fromString.allowedTools).toBe("Bash(git:*) Read");
+
+    const fromList = parseSkillManifest(
+      [
+        "---",
+        "name: git-helper",
+        "description: Runs git.",
+        "allowed-tools:",
+        "  - slack__send",
+        "  - jira__create",
+        "---",
+        "Body.",
+      ].join("\n"),
+    );
+    expect(fromList.allowedTools).toBe("slack__send jira__create");
   });
 
   test("coerces the metadata map to string values", () => {

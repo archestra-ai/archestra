@@ -111,10 +111,11 @@ const manifestContentSchema = z
   .max(MAX_SKILL_FILE_BYTES)
   .describe(
     "A complete SKILL.md manifest: a YAML frontmatter block with `name` and " +
-      "`description` (and optional `license`, `compatibility`, `templated`, " +
-      "`metadata`), followed by the Markdown instruction body. Set " +
+      "`description` (and optional `license`, `compatibility`, `allowed-tools`, " +
+      "`templated`, `metadata`), followed by the Markdown instruction body. Set " +
       "`templated: true` to render the body through Handlebars (e.g. " +
-      "`{{user.name}}`) at activation.",
+      "`{{user.name}}`) at activation. `allowed-tools` is a space-separated " +
+      "list of tools the skill is pre-approved to use.",
   );
 
 const CreateSkillSchema = z
@@ -305,6 +306,7 @@ const registry = defineArchestraTools([
           content: parsed.content,
           license: parsed.license,
           compatibility: parsed.compatibility,
+          allowedTools: parsed.allowedTools,
           templated: parsed.templated,
           metadata: parsed.metadata,
           sourceType: "manual",
@@ -367,6 +369,7 @@ const registry = defineArchestraTools([
             content: parsed.content,
             license: parsed.license,
             compatibility: parsed.compatibility,
+            allowedTools: parsed.allowedTools,
             templated: parsed.templated,
             metadata: parsed.metadata,
             scope: skill.scope,

@@ -47,7 +47,7 @@ type FormValues = {
 /**
  * Confirms an agent→skill conversion before it happens. A skill carries
  * instructions only, so this previews what the conversion keeps (the system
- * prompt and a recommended-tools list) versus drops (model, knowledge sources),
+ * prompt and an allowed-tools list) versus drops (model, knowledge sources),
  * requires a real description, and offers to remove the now-redundant agent.
  */
 export function ConvertToSkillDialog({
@@ -83,7 +83,7 @@ export function ConvertToSkillDialog({
     }
   }, [agent, reset]);
 
-  const recommendedTools =
+  const allowedToolNames =
     agent?.tools
       .filter(
         (tool) =>
@@ -163,15 +163,15 @@ export function ConvertToSkillDialog({
                 ) : null}
               </div>
 
-              {recommendedTools.length > 0 ? (
+              {allowedToolNames.length > 0 ? (
                 <div className="space-y-1.5">
-                  <p className="font-medium text-sm">Recommended tools</p>
+                  <p className="font-medium text-sm">Allowed tools</p>
                   <p className="text-muted-foreground text-xs">
-                    Listed in the skill so the activating agent knows what to
-                    enable:
+                    Carried into the skill's <code>allowed-tools</code> so the
+                    activating agent knows what to enable:
                   </p>
                   <div className="flex flex-wrap gap-1">
-                    {recommendedTools.map((tool) => (
+                    {allowedToolNames.map((tool) => (
                       <code
                         key={tool}
                         className="rounded bg-muted px-1.5 py-0.5 text-xs"

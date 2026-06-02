@@ -50840,6 +50840,7 @@ export type GetSkillsResponses = {
             content: string;
             license: string | null;
             compatibility: string | null;
+            allowedTools: string | null;
             templated: boolean;
             metadata: {
                 [key: string]: string;
@@ -50964,6 +50965,7 @@ export type CreateSkillResponses = {
         content: string;
         license: string | null;
         compatibility: string | null;
+        allowedTools: string | null;
         templated: boolean;
         metadata: {
             [key: string]: string;
@@ -51103,6 +51105,7 @@ export type ConvertAgentToSkillResponses = {
             content: string;
             license: string | null;
             compatibility: string | null;
+            allowedTools: string | null;
             templated: boolean;
             metadata: {
                 [key: string]: string;
@@ -51315,6 +51318,7 @@ export type GetSkillResponses = {
         content: string;
         license: string | null;
         compatibility: string | null;
+        allowedTools: string | null;
         templated: boolean;
         metadata: {
             [key: string]: string;
@@ -51439,6 +51443,7 @@ export type UpdateSkillResponses = {
         content: string;
         license: string | null;
         compatibility: string | null;
+        allowedTools: string | null;
         templated: boolean;
         metadata: {
             [key: string]: string;
@@ -51637,6 +51642,7 @@ export type ResetSkillResponses = {
         content: string;
         license: string | null;
         compatibility: string | null;
+        allowedTools: string | null;
         templated: boolean;
         metadata: {
             [key: string]: string;
@@ -51836,6 +51842,7 @@ export type DiscoverGithubSkillsResponses = {
             name: string;
             description: string;
             compatibility: string | null;
+            allowedTools: string | null;
             templated: boolean;
             fileCount: number;
             exists: boolean;
@@ -51932,6 +51939,7 @@ export type PreviewGithubSkillResponses = {
         content: string;
         license: string | null;
         compatibility: string | null;
+        allowedTools: string | null;
         templated: boolean;
         metadata: {
             [key: string]: string;
@@ -52043,6 +52051,7 @@ export type ImportGithubSkillsResponses = {
             content: string;
             license: string | null;
             compatibility: string | null;
+            allowedTools: string | null;
             templated: boolean;
             metadata: {
                 [key: string]: string;

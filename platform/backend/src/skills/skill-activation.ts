@@ -27,7 +27,10 @@ export function formatSkillActivation({
   canRunSandbox,
   promptContext,
 }: {
-  skill: Pick<Skill, "name" | "content" | "compatibility" | "templated">;
+  skill: Pick<
+    Skill,
+    "name" | "content" | "compatibility" | "allowedTools" | "templated"
+  >;
   files: Pick<SkillFile, "path" | "kind">[];
   /**
    * Whether the sandbox tools are usable for this caller (feature enabled +
@@ -68,9 +71,15 @@ export function formatSkillActivation({
       "and proceed with what is possible."
     : "";
 
+  const allowedTools = skill.allowedTools
+    ? `\n<skill_allowed_tools>${escapeXmlText(skill.allowedTools)}</skill_allowed_tools>\n` +
+      "This skill expects these tools; enable any that are not already active."
+    : "";
+
   return (
     `<skill_content name="${escapeXmlAttr(skill.name)}">\n${escapeXmlText(body)}\n</skill_content>` +
     compatibility +
+    allowedTools +
     resources
   );
 }

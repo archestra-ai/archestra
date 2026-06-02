@@ -1015,6 +1015,32 @@ describe("mcp-reinstall", () => {
 
       expect(onlyForwardCompatibleEnvDiff(oldConfig, newConfig)).toBe(false);
     });
+
+    test("assigning from default (null env) to an environment returns false", () => {
+      const oldConfig = {
+        ...baseLocal([]),
+        environmentId: null,
+      } as InternalMcpCatalog;
+      const newConfig = {
+        ...baseLocal([]),
+        environmentId: "env-a",
+      } as InternalMcpCatalog;
+
+      expect(onlyForwardCompatibleEnvDiff(oldConfig, newConfig)).toBe(false);
+    });
+
+    test("unassigning an environment (back to default/null) returns false", () => {
+      const oldConfig = {
+        ...baseLocal([]),
+        environmentId: "env-a",
+      } as InternalMcpCatalog;
+      const newConfig = {
+        ...baseLocal([]),
+        environmentId: null,
+      } as InternalMcpCatalog;
+
+      expect(onlyForwardCompatibleEnvDiff(oldConfig, newConfig)).toBe(false);
+    });
   });
 
   describe("autoReinstallServer", () => {

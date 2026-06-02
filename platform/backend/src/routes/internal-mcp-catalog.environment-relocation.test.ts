@@ -128,11 +128,15 @@ describe("PUT /api/internal_mcp_catalog/:id — environment relocation", () => {
     expect(response.json().environmentId).toBe(to.id);
     // Shared deployment relocated via the catalog-level primitive...
     expect(reinstallSpy).toHaveBeenCalledWith(catalog.id);
-    // ...and pre-loaded while the row still held the old namespace.
+    // ...and pre-loaded while the row still held the old namespace, i.e. the
+    // pre-load runs BEFORE the relocation so teardown targets the old ns.
     expect(getOrLoadSpy).toHaveBeenCalled();
+    expect(getOrLoadSpy.mock.invocationCallOrder[0]).toBeLessThan(
+      reinstallSpy.mock.invocationCallOrder[0],
+    );
   });
 
-  test("single-tenant local catalog: env reassignment does not use the shared-deployment primitive", async ({
+  test("single-tenant local catalog: env reassignment relocates via per-install restart, not the shared primitive", async ({
     makeMcpServer,
   }) => {
     const from = await createEnvironment({
@@ -166,6 +170,89 @@ describe("PUT /api/internal_mcp_catalog/:id — environment relocation", () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json().environmentId).toBe(to.id);
+    // Single-tenant relocates via the cascade's per-install restart, never the
+    // shared-deployment primitive (that path no-ops on a shared deployment).
+    // That the cascade actually fires for an environment change — rather than
+    // being skipped by onlyForwardCompatibleEnvDiff, which was the bug — is the
+    // regression guard in mcp-reinstall.test.ts ("environment reassignment ...
+    // returns false"); the end-to-end relocation was verified against a live
+    // cluster.
+    await drainCascade();
     expect(reinstallSpy).not.toHaveBeenCalled();
+  });
+
+  test("multi-tenant: assigning from default (null) to an environment relocates the shared deployment", async ({
+    makeMcpServer,
+  }) => {
+    const to = await createEnvironment({
+      organizationId,
+      data: { name: "Prod", restricted: false },
+    });
+
+    const name = `mt-from-default-${crypto.randomUUID().slice(0, 8)}`;
+    const catalog = await InternalMcpCatalogModel.create(
+      {
+        name,
+        serverType: "local",
+        multitenant: true,
+        environmentId: null,
+        localConfig,
+        scope: "org",
+      },
+      { organizationId },
+    );
+    await makeMcpServer({ catalogId: catalog.id });
+
+    const response = await app.inject({
+      method: "PUT",
+      url: `/api/internal_mcp_catalog/${catalog.id}`,
+      payload: putBody(name, to.id),
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().environmentId).toBe(to.id);
+    expect(reinstallSpy).toHaveBeenCalledWith(catalog.id);
+  });
+
+  test("multi-tenant: a combined environment + command change still relocates the shared deployment", async ({
+    makeMcpServer,
+  }) => {
+    const from = await createEnvironment({
+      organizationId,
+      data: { name: "Staging", restricted: false },
+    });
+    const to = await createEnvironment({
+      organizationId,
+      data: { name: "Prod", restricted: false },
+    });
+
+    const name = `mt-combined-${crypto.randomUUID().slice(0, 8)}`;
+    const catalog = await InternalMcpCatalogModel.create(
+      {
+        name,
+        serverType: "local",
+        multitenant: true,
+        environmentId: from.id,
+        localConfig,
+        scope: "org",
+      },
+      { organizationId },
+    );
+    await makeMcpServer({ catalogId: catalog.id });
+
+    const response = await app.inject({
+      method: "PUT",
+      url: `/api/internal_mcp_catalog/${catalog.id}`,
+      payload: {
+        name,
+        serverType: "local" as const,
+        // Environment changes AND the command changes in the same edit.
+        localConfig: { ...localConfig, command: "bun" },
+        environmentId: to.id,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(reinstallSpy).toHaveBeenCalledWith(catalog.id);
   });
 });

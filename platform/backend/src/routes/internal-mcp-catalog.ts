@@ -191,17 +191,15 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         delete restBody.teams;
       }
 
-      // Gate assigning a restricted environment. Built-in Admin holds
-      // environment:admin via ...allAvailableActions; custom roles can be
-      // granted it. Unrestricted and default (null) environments are open.
-      const { success: hasEnvironmentAdmin } = await hasPermission(
-        { environment: ["admin"] },
-        request.headers,
-      );
+      // Gate assigning a restricted environment. Requires
+      // environment:deploy-to-restricted (environment:admin implies it).
+      // Unrestricted and default (null) environments are open.
       await assertCanAssignEnvironment({
         environmentId: restBody.environmentId ?? null,
         organizationId: request.organizationId,
-        hasEnvironmentAdmin,
+        canDeployToRestricted: await callerCanDeployToRestricted(
+          request.headers,
+        ),
       });
 
       let clientSecretId: string | undefined;
@@ -975,19 +973,18 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // When the environment assignment changes, gate it the same way create
       // does — the target must belong to this org, and a restricted environment
-      // (or restricted default) requires environment:admin.
+      // (or restricted default) requires environment:deploy-to-restricted
+      // (environment:admin implies it).
       if (
         "environmentId" in restBody &&
         restBody.environmentId !== originalCatalogItem.environmentId
       ) {
-        const { success: hasEnvironmentAdmin } = await hasPermission(
-          { environment: ["admin"] },
-          request.headers,
-        );
         await assertCanAssignEnvironment({
           environmentId: restBody.environmentId ?? null,
           organizationId: request.organizationId,
-          hasEnvironmentAdmin,
+          canDeployToRestricted: await callerCanDeployToRestricted(
+            request.headers,
+          ),
         });
       }
 
@@ -1784,6 +1781,21 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
  * Mirror catalog item permissions - preset scoped fields could be added or
  * edited by same person who can edit catalog item.
  */
+/**
+ * Whether the caller may deploy catalog items to restricted environments.
+ * Holding `environment:admin` (full environment management) implies the
+ * `environment:deploy-to-restricted` capability.
+ */
+async function callerCanDeployToRestricted(
+  headers: FastifyRequest["headers"],
+): Promise<boolean> {
+  const [{ success: hasAdmin }, { success: hasDeploy }] = await Promise.all([
+    hasPermission({ environment: ["admin"] }, headers),
+    hasPermission({ environment: ["deploy-to-restricted"] }, headers),
+  ]);
+  return hasAdmin || hasDeploy;
+}
+
 async function assertCanEditCatalogPresets(
   parent: InternalMcpCatalog,
   request: FastifyRequest,

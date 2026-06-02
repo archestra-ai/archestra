@@ -3,7 +3,7 @@ title: "Access Control"
 category: Administration
 description: "Role-based access control (RBAC) system for managing user permissions in Archestra"
 order: 1
-lastUpdated: 2026-06-01
+lastUpdated: 2026-06-02
 ---
 <!--
 Check ../docs_writer_prompt.md before changing this file.
@@ -53,7 +53,7 @@ Full access to core resources and settings, but cannot manage users, roles, or i
 | MCP Registry | `read`, `create`, `update`, `delete` |
 | MCP Server Installations | `read`, `create`, `update`, `delete` |
 | MCP Server Installation Requests | `read`, `create`, `update`, `delete` |
-| Environments | `read`, `create`, `update`, `delete` |
+| Environments | `admin` |
 | Network Policies | `read`, `create`, `update`, `delete` |
 | Knowledge Files | `read`, `create`, `update`, `delete` |
 | Knowledge Sources | `read`, `create`, `update`, `delete`, `query` |
@@ -93,7 +93,6 @@ Can manage agents, tools, and chat, with read-only access to most other resource
 | MCP Registry | `read` |
 | MCP Server Installations | `read`, `create`, `delete` |
 | MCP Server Installation Requests | `read`, `create`, `update` |
-| Environments | `read` |
 | Network Policies | `read` |
 | Knowledge Files | `read` |
 | Knowledge Sources | `read`, `query` |
@@ -144,11 +143,8 @@ The following table lists all available permissions that can be assigned to cust
 | `chatAgentPicker:enable` | Show agent picker in chat |
 | `chatExpandToolCalls:enable` | Allow expanding tool call details in chat |
 | `chatProviderSettings:enable` | Show model and API key selectors in chat |
-| `environment:read` | View deployment environments |
-| `environment:create` | Create deployment environments |
-| `environment:update` | Modify deployment environment settings |
-| `environment:delete` | Delete deployment environments |
-| `environment:admin` | Assign catalog items to restricted environments |
+| `environment:admin` | Create, edit, and delete deployment environments (everyone can view them) |
+| `environment:deploy-to-restricted` | Deploy catalog items to restricted environments |
 | `identityProvider:read` | View identity provider configurations (SSO) |
 | `identityProvider:create` | Set up new identity providers |
 | `identityProvider:update` | Modify identity provider settings |

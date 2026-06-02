@@ -82372,7 +82372,7 @@
         "tags": [
           "Organization"
         ],
-        "description": "List org-level deployment environments with their assigned catalog counts, plus the count of catalog items with no environment (the default environment).\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`environment:read`: View deployment environments",
+        "description": "List org-level deployment environments with their assigned catalog counts, plus the count of catalog items with no environment (the default environment).\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -82694,10 +82694,9 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "environment:read"
-          ]
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       },
       "post": {
@@ -82705,7 +82704,7 @@
         "tags": [
           "Organization"
         ],
-        "description": "Create an org-level deployment environment.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`environment:create`: Create deployment environments",
+        "description": "Create an org-level deployment environment.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`environment:admin`: Create, edit, and delete deployment environments (everyone can view them)",
         "requestBody": {
           "required": true,
           "content": {
@@ -83046,7 +83045,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "environment:create"
+            "environment:admin"
           ]
         }
       }
@@ -83057,7 +83056,7 @@
         "tags": [
           "Organization"
         ],
-        "description": "Update an environment's name, description, namespace, and restricted flag. When the namespace changes and the runtime is enabled, all MCP servers assigned to this environment are restarted in the new namespace.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`environment:update`: Modify deployment environment settings",
+        "description": "Update an environment's name, description, namespace, and restricted flag. When the namespace changes and the runtime is enabled, all MCP servers assigned to this environment are restarted in the new namespace.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`environment:admin`: Create, edit, and delete deployment environments (everyone can view them)",
         "requestBody": {
           "required": true,
           "content": {
@@ -83407,7 +83406,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "environment:update"
+            "environment:admin"
           ]
         }
       },
@@ -83416,7 +83415,7 @@
         "tags": [
           "Organization"
         ],
-        "description": "Delete an org-level environment. Fails with 409 if any catalog items are still assigned to it.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`environment:delete`: Delete deployment environments",
+        "description": "Delete an org-level environment. Fails with 409 if any catalog items are still assigned to it.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`environment:admin`: Create, edit, and delete deployment environments (everyone can view them)",
         "parameters": [
           {
             "schema": {
@@ -83681,7 +83680,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "environment:delete"
+            "environment:admin"
           ]
         }
       }
@@ -168659,7 +168658,8 @@
                                   "cancel",
                                   "enable",
                                   "query",
-                                  "execute"
+                                  "execute",
+                                  "deploy-to-restricted"
                                 ]
                               }
                             }
@@ -169015,7 +169015,8 @@
                           "cancel",
                           "enable",
                           "query",
-                          "execute"
+                          "execute",
+                          "deploy-to-restricted"
                         ]
                       }
                     }
@@ -169069,7 +169070,8 @@
                             "cancel",
                             "enable",
                             "query",
-                            "execute"
+                            "execute",
+                            "deploy-to-restricted"
                           ]
                         }
                       }
@@ -169412,7 +169414,8 @@
                             "cancel",
                             "enable",
                             "query",
-                            "execute"
+                            "execute",
+                            "deploy-to-restricted"
                           ]
                         }
                       }
@@ -169720,7 +169723,8 @@
                           "cancel",
                           "enable",
                           "query",
-                          "execute"
+                          "execute",
+                          "deploy-to-restricted"
                         ]
                       }
                     }
@@ -169795,7 +169799,8 @@
                             "cancel",
                             "enable",
                             "query",
-                            "execute"
+                            "execute",
+                            "deploy-to-restricted"
                           ]
                         }
                       }
@@ -177660,7 +177665,7 @@
         "tags": [
           "Organization"
         ],
-        "description": "Configure the implicit default environment (the deployment target referenced by internal_mcp_catalog.environment_id = null). Pass null for name to reset to the built-in 'Default' label, or null for namespace to unset it. Omitted fields are left unchanged.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`environment:update`: Modify deployment environment settings",
+        "description": "Configure the implicit default environment (the deployment target referenced by internal_mcp_catalog.environment_id = null). Pass null for name to reset to the built-in 'Default' label, or null for namespace to unset it. Omitted fields are left unchanged.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`environment:admin`: Create, edit, and delete deployment environments (everyone can view them)",
         "requestBody": {
           "required": true,
           "content": {
@@ -178405,7 +178410,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "environment:update"
+            "environment:admin"
           ]
         }
       }
@@ -206177,7 +206182,8 @@
                         "cancel",
                         "enable",
                         "query",
-                        "execute"
+                        "execute",
+                        "deploy-to-restricted"
                       ]
                     }
                   }

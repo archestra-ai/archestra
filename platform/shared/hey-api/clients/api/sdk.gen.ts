@@ -1783,7 +1783,7 @@ export const deepseekChatCompletionsWithAgent = <ThrowOnError extends boolean = 
  *
  * Authorization:
  *
- * `environment:read`: View deployment environments
+ * None (no additional RBAC permission required)
  */
 export const listEnvironments = <ThrowOnError extends boolean = false>(options?: Options<ListEnvironmentsData, ThrowOnError>) => (options?.client ?? client).get<ListEnvironmentsResponses, ListEnvironmentsErrors, ThrowOnError>({ url: '/api/organization/environments', ...options });
 
@@ -1796,7 +1796,7 @@ export const listEnvironments = <ThrowOnError extends boolean = false>(options?:
  *
  * Authorization:
  *
- * `environment:create`: Create deployment environments
+ * `environment:admin`: Create, edit, and delete deployment environments (everyone can view them)
  */
 export const createEnvironment = <ThrowOnError extends boolean = false>(options: Options<CreateEnvironmentData, ThrowOnError>) => (options.client ?? client).post<CreateEnvironmentResponses, CreateEnvironmentErrors, ThrowOnError>({
     url: '/api/organization/environments',
@@ -1816,7 +1816,7 @@ export const createEnvironment = <ThrowOnError extends boolean = false>(options:
  *
  * Authorization:
  *
- * `environment:delete`: Delete deployment environments
+ * `environment:admin`: Create, edit, and delete deployment environments (everyone can view them)
  */
 export const deleteEnvironment = <ThrowOnError extends boolean = false>(options: Options<DeleteEnvironmentData, ThrowOnError>) => (options.client ?? client).delete<DeleteEnvironmentResponses, DeleteEnvironmentErrors, ThrowOnError>({ url: '/api/organization/environments/{id}', ...options });
 
@@ -1829,7 +1829,7 @@ export const deleteEnvironment = <ThrowOnError extends boolean = false>(options:
  *
  * Authorization:
  *
- * `environment:update`: Modify deployment environment settings
+ * `environment:admin`: Create, edit, and delete deployment environments (everyone can view them)
  */
 export const updateEnvironment = <ThrowOnError extends boolean = false>(options: Options<UpdateEnvironmentData, ThrowOnError>) => (options.client ?? client).patch<UpdateEnvironmentResponses, UpdateEnvironmentErrors, ThrowOnError>({
     url: '/api/organization/environments/{id}',
@@ -4335,7 +4335,7 @@ export const updatePresetEntityDefaultValidationRegex = <ThrowOnError extends bo
  *
  * Authorization:
  *
- * `environment:update`: Modify deployment environment settings
+ * `environment:admin`: Create, edit, and delete deployment environments (everyone can view them)
  */
 export const updateDefaultEnvironment = <ThrowOnError extends boolean = false>(options: Options<UpdateDefaultEnvironmentData, ThrowOnError>) => (options.client ?? client).patch<UpdateDefaultEnvironmentResponses, UpdateDefaultEnvironmentErrors, ThrowOnError>({
     url: '/api/organization/default-environment',

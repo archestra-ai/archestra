@@ -1068,6 +1068,35 @@ class ToolModel {
   }
 
   /**
+   * One-time backfill triggered on startup: when a skill built-in tool is
+   * created for the first time on this seed run, assign the skill toolset to
+   * every agent in orgs that already opted in via `organization.skillToolsEnabled`.
+   *
+   * Newly created agents inherit skill tools via {@link assignSkillToolsToAgent},
+   * but agents that predate a tool's introduction would otherwise never receive
+   * it — leaving the documented MCP flow unreachable until someone re-runs the
+   * opt-in. Idempotent (delegates to {@link backfillSkillToolsToOrgAgents}).
+   *
+   * @param newlyCreatedToolNames names returned by {@link seedArchestraTools}.
+   */
+  static async backfillNewSkillToolsToEnabledOrgs(
+    newlyCreatedToolNames: string[],
+  ): Promise<void> {
+    const skillShortNames = new Set<string>(SKILL_ARCHESTRA_TOOL_SHORT_NAMES);
+    const hasNewSkillTool = newlyCreatedToolNames.some((name) => {
+      const shortName = extractArchestraBuiltInShortName(name);
+      return shortName !== null && skillShortNames.has(shortName);
+    });
+    if (!hasNewSkillTool) return;
+
+    const organizationIds =
+      await OrganizationModel.findIdsWithSkillToolsEnabled();
+    for (const organizationId of organizationIds) {
+      await ToolModel.backfillSkillToolsToOrgAgents(organizationId);
+    }
+  }
+
+  /**
    * Assign skill tools to a single agent if its org has opted in
    * (`organization.skillToolsEnabled`). No-op otherwise.
    *

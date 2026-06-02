@@ -12,6 +12,7 @@ import { handleApiError } from "@/lib/utils";
 const {
   createAgent,
   cloneAgent,
+  convertAgentToSkill,
   deleteAgent,
   exportAgent,
   getAgents,
@@ -81,6 +82,39 @@ export function useCloneAgent() {
       if (data.id) {
         queryClient.setQueryData(["agents", data.id], data);
       }
+    },
+  });
+}
+
+type ConvertAgentToSkillArgs = {
+  id: string;
+} & archestraApiTypes.ConvertAgentToSkillData["body"];
+
+export function useConvertAgentToSkill() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, ...body }: ConvertAgentToSkillArgs) => {
+      const { data, error } = await convertAgentToSkill({
+        path: { id },
+        body,
+      });
+      if (error) {
+        handleApiError(error);
+      }
+      return data;
+    },
+    onSuccess: (data) => {
+      if (!data) return;
+      queryClient.invalidateQueries({ queryKey: ["skills"] });
+      // the source agent may have been deleted, so refresh the agents list too.
+      if (data.deletedAgent) {
+        queryClient.invalidateQueries({ queryKey: ["agents"] });
+      }
+      toast.success(
+        data.deletedAgent
+          ? `Created skill "${data.skill.name}" and removed the agent`
+          : `Created skill "${data.skill.name}" from agent`,
+      );
     },
   });
 }

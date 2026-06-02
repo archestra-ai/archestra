@@ -3,7 +3,7 @@ title: Overview
 category: Agents
 order: 1
 description: Agent overview, invocation paths, knowledge sources, and prompt templating
-lastUpdated: 2026-04-27
+lastUpdated: 2026-06-01
 ---
 
 <!--
@@ -69,6 +69,18 @@ See [Knowledge Bases](/docs/platform-knowledge-bases) for how retrieval works an
 ## Delegation
 
 When an agent delegates work to another agent, Archestra tracks the full call chain for observability. Delegated agents also inherit the current [tool guardrails](/docs/platform-ai-tool-guardrails) trust state, so downstream tool policy enforcement does not reset mid-run.
+
+## Convert to Skill
+
+An agent can be converted into an [Agent Skill](/docs/platform-agent-skills-sharing) — a reusable `SKILL.md` instruction set that any agent can activate from chat. Use this when the agent's value is mostly in its instructions and you want them available as a `/slash-command` rather than as a separate agent to switch to.
+
+The **Convert to skill** action on the agents page opens a confirmation dialog where you set the skill's description and choose whether to remove the source agent once the skill is created. The skill inherits the agent's scope. Conversion is lossy by nature: a skill carries instructions only, with no tools, model, or knowledge of its own. Each field is either carried over or annotated:
+
+- the system prompt becomes the skill body, and the scope carries over directly; the name is normalized into a slug (for example `Support Helper` → `support-helper`) so it works as a `/slash-command`
+- the description is required — the agent's own is prefilled, and you must supply one when the agent has none (an activating agent uses it to decide when to run the skill)
+- assigned tools are listed under a `Recommended tools` section so the activating agent knows what to enable; the default model and knowledge sources have no skill equivalent and are reported as not carried, without cluttering the skill body
+- suggested prompts, icon, and labels are folded into the body or metadata, and the origin agent is recorded in metadata so the skill stays linked back to it
+- removing the source agent is optional and off by default; it is a soft delete, so the agent can be restored later from the deleted-agents filter
 
 ## System Prompt Templating
 

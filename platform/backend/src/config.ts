@@ -652,11 +652,9 @@ export const getAnalyticsConfig = () => ({
       process.env.ARCHESTRA_ANALYTICS_POSTHOG_HOST?.trim() ||
       DEFAULT_POSTHOG_HOST,
   },
-  stateDir:
-    process.env.ARCHESTRA_ANALYTICS_STATE_DIR?.trim() ||
-    (isProduction
-      ? "/app/data/analytics"
-      : path.join(homedir(), ".archestra", "analytics")),
+  stateDir: isProduction
+    ? "/app/data/analytics"
+    : path.join(homedir(), ".archestra", "analytics"),
 });
 
 const mcpServerBaseImage =

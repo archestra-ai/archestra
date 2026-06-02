@@ -992,9 +992,6 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.UpdateDefaultEnvironment]: {
     environment: ["admin"],
   },
-  [RouteId.ValidateEnvironmentNamespace]: {
-    environment: ["admin"],
-  },
   [RouteId.GetK8sCapabilities]: {
     networkPolicy: ["read"],
   },

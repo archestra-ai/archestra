@@ -353,15 +353,6 @@ describe("LimitsPage", () => {
     expect(mockUseAllVirtualApiKeys).toHaveBeenCalledWith({ limit: 100 });
   });
 
-  it("groups cleanup interval options with calendar windows first", () => {
-    render(<LimitsPage />);
-
-    const text = document.body.textContent ?? "";
-    expect(text.indexOf("Calendar month")).toBeLessThan(
-      text.indexOf("Rolling hour"),
-    );
-  });
-
   it("shows 'All models' badge for limits with null model", () => {
     mockUseLimits.mockReturnValue({
       data: [

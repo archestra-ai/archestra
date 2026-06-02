@@ -198,9 +198,9 @@ export function sanitizeLabelValue(value: string): string {
     .replace(/[^a-z0-9]+$/, "");
 }
 
-export type NamespaceAccessReason = "forbidden" | "unavailable";
+type NamespaceAccessReason = "forbidden" | "unavailable";
 
-export type NamespaceAccessResult =
+type NamespaceAccessResult =
   | { ok: true }
   | { ok: false; reason: NamespaceAccessReason };
 

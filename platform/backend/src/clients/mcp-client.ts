@@ -227,7 +227,7 @@ class McpClient {
       this.activeConnectionServerState.delete(key);
       this.toolNameCache.delete(key);
       this.pendingHttpSessionMetadata.delete(key);
-      this.pendingTransportCredentialFingerprints.delete(key);
+      this.latestTransportCredentialFingerprints.delete(key);
       this.activeConnectionLastValidatedAt.delete(key);
     },
   });
@@ -258,10 +258,10 @@ class McpClient {
     string,
     { sessionEndpointUrl: string | null; sessionEndpointPodName: string | null }
   >();
-  // Populated while building an HTTP transport and consumed immediately by
-  // getOrCreateClient, so cached clients are invalidated when outbound
-  // credentials or required upstream headers change.
-  private pendingTransportCredentialFingerprints = new Map<string, string>();
+  // Latest outbound HTTP credential/header fingerprint per connection key.
+  // Retained until connection state is cleared so cached clients are
+  // invalidated when credentials or required upstream headers change.
+  private latestTransportCredentialFingerprints = new Map<string, string>();
   // Cache for resource reads: key is `${agentId}:${uri}`, value is cached result with TTL.
   // Bounded to RESOURCE_CACHE_MAX_SIZE entries (LRU eviction) to prevent unbounded growth
   // in multi-tenant environments with many agents and resources.
@@ -898,7 +898,7 @@ class McpClient {
     targetMcpServerId: string,
     currentServerState: CachedServerState,
   ): Promise<Client> {
-    const effectiveServerState = this.withPendingCredentialFingerprint(
+    const effectiveServerState = this.withLatestCredentialFingerprint(
       connectionKey,
       currentServerState,
     );
@@ -1083,7 +1083,7 @@ class McpClient {
     this.activeConnectionServerState.delete(connectionKey);
     this.toolNameCache.delete(connectionKey);
     this.pendingHttpSessionMetadata.delete(connectionKey);
-    this.pendingTransportCredentialFingerprints.delete(connectionKey);
+    this.latestTransportCredentialFingerprints.delete(connectionKey);
     this.activeConnectionLastValidatedAt.delete(connectionKey);
   }
 
@@ -1092,7 +1092,7 @@ class McpClient {
     this.activeConnectionServerState.clear();
     this.toolNameCache.clear();
     this.pendingHttpSessionMetadata.clear();
-    this.pendingTransportCredentialFingerprints.clear();
+    this.latestTransportCredentialFingerprints.clear();
     this.activeConnectionLastValidatedAt.clear();
   }
 
@@ -3226,20 +3226,20 @@ class McpClient {
       return;
     }
 
-    this.pendingTransportCredentialFingerprints.set(
+    this.latestTransportCredentialFingerprints.set(
       connectionKey,
       fingerprintHeaders(headers),
     );
   }
 
-  private withPendingCredentialFingerprint(
+  private withLatestCredentialFingerprint(
     connectionKey: string,
     serverState: CachedServerState,
   ): CachedServerState {
     return {
       ...serverState,
       credentialFingerprint:
-        this.pendingTransportCredentialFingerprints.get(connectionKey) ?? null,
+        this.latestTransportCredentialFingerprints.get(connectionKey) ?? null,
     };
   }
 }

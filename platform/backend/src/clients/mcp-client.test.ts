@@ -4672,18 +4672,23 @@ describe("McpClient", () => {
           updatedAt: new Date(),
         });
 
-        const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
-          new Response(
-            JSON.stringify({
-              access_token: "aggregate-downstream-access-token",
-              expires_in: 300,
-            }),
-            {
-              status: 200,
-              headers: { "Content-Type": "application/json" },
-            },
-          ),
-        );
+        const fetchMock = vi
+          .spyOn(globalThis, "fetch")
+          .mockImplementation(async (input) => {
+            const url = input instanceof Request ? input.url : input.toString();
+            expect(url).toBe("https://idp.example.com/oauth/token");
+
+            return new Response(
+              JSON.stringify({
+                access_token: "aggregate-downstream-access-token",
+                expires_in: 300,
+              }),
+              {
+                status: 200,
+                headers: { "Content-Type": "application/json" },
+              },
+            );
+          });
         try {
           mockListResources.mockResolvedValueOnce({
             resources: [{ uri: "resource://exchange" }],
@@ -4709,6 +4714,7 @@ describe("McpClient", () => {
           expect(headers.get("Authorization")).toBe(
             "Bearer aggregate-downstream-access-token",
           );
+          expect(fetchMock).toHaveBeenCalledTimes(1);
         } finally {
           fetchMock.mockRestore();
         }

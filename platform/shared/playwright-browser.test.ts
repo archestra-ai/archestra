@@ -36,6 +36,7 @@ describe("playwright browser helpers", () => {
   });
 
   test("provides a default icon for the built-in playwright catalog item", () => {
-    expect(PLAYWRIGHT_MCP_ICON).toBe("logo:playwright");
+    expect(PLAYWRIGHT_MCP_ICON).toMatch(/^data:image\/svg\+xml,/);
+    expect(PLAYWRIGHT_MCP_ICON).toContain('fill="%232EAD33"');
   });
 });

@@ -3,7 +3,6 @@
 import type { archestraApiTypes } from "@shared";
 import { Bot, Network, Route } from "lucide-react";
 import Image from "next/image";
-import { getServiceLogoIconSrc } from "@/lib/service-logo-icon";
 import { cn } from "@/lib/utils";
 
 export type AgentIconVariant = Exclude<
@@ -24,20 +23,6 @@ export function AgentIcon({
   size = 16,
   fallbackType = "agent",
 }: AgentIconProps) {
-  const serviceLogoSrc = getServiceLogoIconSrc(icon);
-
-  if (serviceLogoSrc) {
-    return (
-      <Image
-        src={serviceLogoSrc}
-        alt="Agent icon"
-        width={size}
-        height={size}
-        className={cn("shrink-0 rounded-sm object-contain", className)}
-      />
-    );
-  }
-
   if (!icon) {
     const FallbackIcon =
       fallbackType === "llm_proxy"

@@ -676,13 +676,13 @@ export class LimitValidationService {
     const { agentId, userId, virtualKeyId } = params;
 
     try {
-      logger.info(
+      logger.debug(
         `[LimitValidation] Starting limit check for agent: ${agentId}`,
       );
 
       // Get agent's teams to cleanup and check team and organization limits
       const agentTeamIds = await AgentTeamModel.getTeamsForAgent(agentId);
-      logger.info(
+      logger.debug(
         `[LimitValidation] Agent ${agentId} belongs to teams: ${agentTeamIds.join(", ")}`,
       );
 
@@ -717,11 +717,11 @@ export class LimitValidationService {
         entities.organization = organizationId;
       }
 
-      logger.info({ entities }, `[LimitValidation] Running limits cleanup`);
+      logger.debug({ entities }, `[LimitValidation] Running limits cleanup`);
       await LimitModel.cleanupLimitsIfNeeded({ entities });
 
       if (virtualKeyId) {
-        logger.info(
+        logger.debug(
           `[LimitValidation] Checking virtual-key-level limits for: ${virtualKeyId}`,
         );
         const vkLimitViolation = await LimitValidationService.checkEntityLimits(
@@ -734,13 +734,13 @@ export class LimitValidationService {
           );
           return vkLimitViolation;
         }
-        logger.info(
+        logger.debug(
           `[LimitValidation] Virtual-key-level limits OK for: ${virtualKeyId}`,
         );
       }
 
       if (userId) {
-        logger.info(
+        logger.debug(
           `[LimitValidation] Checking user-level limits for: ${userId}`,
         );
         const userLimitViolation =
@@ -764,10 +764,10 @@ export class LimitValidationService {
             return defaultUserLimitViolation;
           }
         }
-        logger.info(`[LimitValidation] User-level limits OK for: ${userId}`);
+        logger.debug(`[LimitValidation] User-level limits OK for: ${userId}`);
       }
 
-      logger.info(
+      logger.debug(
         `[LimitValidation] Checking agent-level limits for: ${agentId}`,
       );
       const agentLimitViolation =
@@ -778,19 +778,19 @@ export class LimitValidationService {
         );
         return agentLimitViolation;
       }
-      logger.info(`[LimitValidation] Agent-level limits OK for: ${agentId}`);
+      logger.debug(`[LimitValidation] Agent-level limits OK for: ${agentId}`);
 
       // Check team-level limits
       if (agentTeamIds.length > 0) {
-        logger.info(
+        logger.debug(
           `[LimitValidation] Checking team-level limits for agent: ${agentId}`,
         );
-        logger.info(
+        logger.debug(
           `[LimitValidation] Found ${agentTeams.length} teams for agent ${agentId}: ${agentTeams.map((t) => `${t.id}(org:${t.organizationId})`).join(", ")}`,
         );
 
         for (const team of agentTeams) {
-          logger.info(
+          logger.debug(
             `[LimitValidation] Checking team limit for team: ${team.id}`,
           );
           const teamLimitViolation =
@@ -801,7 +801,7 @@ export class LimitValidationService {
             );
             return teamLimitViolation;
           }
-          logger.info(
+          logger.debug(
             `[LimitValidation] Team-level limits OK for team: ${team.id}`,
           );
         }
@@ -809,7 +809,7 @@ export class LimitValidationService {
 
       // Check organization-level limits for any agent with a resolvable org.
       if (organizationId) {
-        logger.info(
+        logger.debug(
           `[LimitValidation] Checking organization-level limits for org: ${organizationId}`,
         );
         const orgLimitViolation =
@@ -823,7 +823,7 @@ export class LimitValidationService {
           );
           return orgLimitViolation;
         }
-        logger.info(
+        logger.debug(
           `[LimitValidation] Organization-level limits OK for org: ${organizationId}`,
         );
       }
@@ -849,7 +849,7 @@ export class LimitValidationService {
     entityId: string,
   ): Promise<null | LimitViolationResponse> {
     try {
-      logger.info(
+      logger.debug(
         `[LimitValidation] Querying limits for ${entityType} ${entityId}`,
       );
       const limits = await LimitModel.findLimitsForValidation(
@@ -858,25 +858,25 @@ export class LimitValidationService {
         "token_cost",
       );
 
-      logger.info(
+      logger.debug(
         `[LimitValidation] Found ${limits.length} token_cost limits for ${entityType} ${entityId}`,
       );
 
       if (limits.length === 0) {
-        logger.info(
+        logger.debug(
           `[LimitValidation] No token_cost limits found for ${entityType} ${entityId} - allowing`,
         );
         return null;
       }
 
       for (const limit of limits) {
-        logger.info(
+        logger.debug(
           `[LimitValidation] Checking limit ${limit.id} for ${entityType} ${entityId}`,
         );
 
         // For token_cost limits, convert tokens to actual cost using token prices
         let comparisonValue = 0;
-        let limitDescription = "tokens";
+        let limitDescription: "tokens" | "cost_dollars" = "tokens";
         let totalTokensIn = 0;
         let totalTokensOut = 0;
 
@@ -922,51 +922,17 @@ export class LimitValidationService {
             `[LimitValidation] LIMIT EXCEEDED for ${entityType} ${entityId}: ${comparisonValue} ${limitDescription} >= ${limit.limitValue}`,
           );
 
-          // Calculate remaining based on the comparison type (tokens vs dollars)
-          const remaining = Math.max(0, limit.limitValue - comparisonValue);
-          const totalTokens = totalTokensIn + totalTokensOut;
-
-          // For metadata, use token counts for programmatic access
-          const archestraMetadata = `
-<archestra-limit-type>token_cost</archestra-limit-type>
-<archestra-limit-entity-type>${entityType}</archestra-limit-entity-type>
-<archestra-limit-entity-id>${entityId}</archestra-limit-entity-id>
-<archestra-limit-current-usage>${totalTokens}</archestra-limit-current-usage>
-<archestra-limit-value>${limit.limitValue}</archestra-limit-value>
-<archestra-limit-remaining>${Math.max(0, limit.limitValue - totalTokens)}</archestra-limit-remaining>`;
-
-          // For user message, use appropriate units based on limit type
-          let contentMessage: string;
-          if (limitDescription === "cost_dollars") {
-            contentMessage = `
-I cannot process this request because the ${entityType}-level token cost limit has been exceeded.
-
-Current usage: $${comparisonValue.toFixed(2)}
-Limit: $${limit.limitValue.toFixed(2)}
-Remaining: $${remaining.toFixed(2)}
-
-Please contact your administrator to increase the limit or wait for the usage to reset.`;
-          } else {
-            contentMessage = `
-I cannot process this request because the ${entityType}-level token cost limit has been exceeded.
-
-Current usage: ${totalTokens.toLocaleString()} tokens
-Limit: ${limit.limitValue.toLocaleString()} tokens
-Remaining: ${Math.max(0, limit.limitValue - totalTokens).toLocaleString()} tokens
-
-Please contact your administrator to increase the limit or wait for the usage to reset.`;
-          }
-
-          const refusalMessage = `${archestraMetadata}
-${contentMessage}`;
-
-          return [
-            refusalMessage,
-            contentMessage,
-            { entityType, limitType: "token_cost" },
-          ];
+          return buildLimitViolationResponse({
+            entityType,
+            entityId,
+            limitValue: limit.limitValue,
+            comparisonValue,
+            limitDescription,
+            totalTokensIn,
+            totalTokensOut,
+          });
         } else {
-          logger.info(
+          logger.debug(
             `[LimitValidation] Limit OK for ${entityType} ${entityId}: ${comparisonValue} < ${limit.limitValue}`,
           );
         }

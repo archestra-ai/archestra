@@ -77,16 +77,20 @@ export function formatSkillActivation({
 
 /**
  * Build the user context for rendering a `templated` skill body, mirroring the
- * agent system-prompt path (name, email, team names). Returns `null` when there
- * is no user to resolve, so callers skip the lookups for non-templated skills.
+ * agent system-prompt path (name, email, team names). Team names are scoped to
+ * the activating organization so a skill never sees the user's teams from other
+ * orgs. Returns `null` when there is no user/org to resolve, so callers skip the
+ * lookups for non-templated skills.
  */
-export async function buildSkillActivationPromptContext(
-  userId: string | undefined,
-): Promise<UserSystemPromptContext | null> {
-  if (!userId) return null;
+export async function buildSkillActivationPromptContext(params: {
+  userId: string | undefined;
+  organizationId: string | undefined;
+}): Promise<UserSystemPromptContext | null> {
+  const { userId, organizationId } = params;
+  if (!userId || !organizationId) return null;
   const [user, teams] = await Promise.all([
     UserModel.getById(userId),
-    TeamModel.getUserTeams(userId),
+    TeamModel.getUserTeamsForOrganization({ userId, organizationId }),
   ]);
   return buildUserSystemPromptContext({
     userName: user?.name ?? "",

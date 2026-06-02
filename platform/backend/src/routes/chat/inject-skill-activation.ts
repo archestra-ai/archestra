@@ -101,7 +101,7 @@ export async function injectSkillActivation({
         agentId,
       }),
       promptContext: skill.templated
-        ? await buildSkillActivationPromptContext(userId)
+        ? await buildSkillActivationPromptContext({ userId, organizationId })
         : null,
     }),
   );

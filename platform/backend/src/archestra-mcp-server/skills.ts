@@ -219,7 +219,10 @@ const registry = defineArchestraTools([
           files,
           canRunSandbox: await canRunSkillSandbox(ctx, context.agent.id),
           promptContext: skill.templated
-            ? await buildSkillActivationPromptContext(ctx.userId)
+            ? await buildSkillActivationPromptContext({
+                userId: ctx.userId,
+                organizationId: ctx.organizationId,
+              })
             : null,
         }),
       );

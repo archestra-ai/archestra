@@ -4507,6 +4507,51 @@ describe("McpClient", () => {
     });
 
     describe("MCP aggregate methods with OAuth headers", () => {
+      test("uses separate aggregate cached clients for external IdP users", async () => {
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "github-mcp-server__external_idp_resources",
+          description: "External IdP resources",
+          parameters: {},
+          catalogId,
+        });
+        await AgentToolModel.create(agentId, tool.id, {
+          mcpServerId,
+          credentialResolutionMode: "static",
+        });
+
+        mockListResources
+          .mockResolvedValueOnce({
+            resources: [{ uri: "resource://external-a" }],
+          })
+          .mockResolvedValueOnce({
+            resources: [{ uri: "resource://external-b" }],
+          });
+
+        const firstResult = await mcpClient.listResources(agentId, {
+          tokenId: "external-token-a",
+          teamId: null,
+          isOrganizationToken: false,
+          isExternalIdp: true,
+          userId: "external-user-a",
+        });
+        const secondResult = await mcpClient.listResources(agentId, {
+          tokenId: "external-token-b",
+          teamId: null,
+          isOrganizationToken: false,
+          isExternalIdp: true,
+          userId: "external-user-b",
+        });
+
+        expect(firstResult.resources).toEqual([
+          { uri: "resource://external-a" },
+        ]);
+        expect(secondResult.resources).toEqual([
+          { uri: "resource://external-b" },
+        ]);
+        expect(mockConnect).toHaveBeenCalledTimes(2);
+        expect(mockClose).not.toHaveBeenCalled();
+      });
+
       const authCodeCases = [
         {
           label: "public authorization-code",
@@ -4601,7 +4646,7 @@ describe("McpClient", () => {
         });
       }
 
-      test("passes token-exchange Bearer token for resources/list", async ({
+      test("passes token-exchange Bearer token for resources/list and rebuilds after credential rotation", async ({
         makeIdentityProvider,
         makeOrganization,
         makeUser,
@@ -4672,15 +4717,22 @@ describe("McpClient", () => {
           updatedAt: new Date(),
         });
 
+        const downstreamTokens = [
+          "aggregate-downstream-access-token",
+          "aggregate-rotated-downstream-access-token",
+        ];
+        let tokenExchangeCount = 0;
         const fetchMock = vi
           .spyOn(globalThis, "fetch")
           .mockImplementation(async (input) => {
             const url = input instanceof Request ? input.url : input.toString();
             expect(url).toBe("https://idp.example.com/oauth/token");
+            const accessToken = downstreamTokens[tokenExchangeCount];
+            tokenExchangeCount += 1;
 
             return new Response(
               JSON.stringify({
-                access_token: "aggregate-downstream-access-token",
+                access_token: accessToken,
                 expires_in: 300,
               }),
               {
@@ -4690,31 +4742,55 @@ describe("McpClient", () => {
             );
           });
         try {
-          mockListResources.mockResolvedValueOnce({
-            resources: [{ uri: "resource://exchange" }],
-          });
+          mockListResources
+            .mockResolvedValueOnce({
+              resources: [{ uri: "resource://exchange" }],
+            })
+            .mockResolvedValueOnce({
+              resources: [{ uri: "resource://exchange-rotated" }],
+            });
 
           const result = await mcpClient.listResources(agentId, {
-            tokenId: "session-token",
+            tokenId: "session-token-a",
+            teamId: null,
+            isOrganizationToken: false,
+            userId: user.id,
+          });
+          const rotatedResult = await mcpClient.listResources(agentId, {
+            tokenId: "session-token-b",
             teamId: null,
             isOrganizationToken: false,
             userId: user.id,
           });
 
           expect(result.resources).toEqual([{ uri: "resource://exchange" }]);
+          expect(rotatedResult.resources).toEqual([
+            { uri: "resource://exchange-rotated" },
+          ]);
           const { StreamableHTTPClientTransport } = await import(
             "@modelcontextprotocol/sdk/client/streamableHttp.js"
           );
-          const [, options] =
-            vi.mocked(StreamableHTTPClientTransport).mock.calls.at(-1) ?? [];
-          const headers =
-            options?.requestInit?.headers instanceof Headers
-              ? options.requestInit.headers
-              : new Headers(options?.requestInit?.headers);
-          expect(headers.get("Authorization")).toBe(
+          const transportCalls = vi.mocked(StreamableHTTPClientTransport).mock
+            .calls;
+          const [, firstOptions] = transportCalls.at(-2) ?? [];
+          const firstHeaders =
+            firstOptions?.requestInit?.headers instanceof Headers
+              ? firstOptions.requestInit.headers
+              : new Headers(firstOptions?.requestInit?.headers);
+          expect(firstHeaders.get("Authorization")).toBe(
             "Bearer aggregate-downstream-access-token",
           );
-          expect(fetchMock).toHaveBeenCalledTimes(1);
+          const [, secondOptions] = transportCalls.at(-1) ?? [];
+          const secondHeaders =
+            secondOptions?.requestInit?.headers instanceof Headers
+              ? secondOptions.requestInit.headers
+              : new Headers(secondOptions?.requestInit?.headers);
+          expect(secondHeaders.get("Authorization")).toBe(
+            "Bearer aggregate-rotated-downstream-access-token",
+          );
+          expect(fetchMock).toHaveBeenCalledTimes(2);
+          expect(mockClose).toHaveBeenCalledTimes(1);
+          expect(mockConnect).toHaveBeenCalledTimes(2);
         } finally {
           fetchMock.mockRestore();
         }

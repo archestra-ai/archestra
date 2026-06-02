@@ -3017,7 +3017,13 @@ class McpClient {
         });
         if ("error" in secretResult) continue;
 
-        const connectionKey = `${catalogItem.id}:${targetMcpServerId}`;
+        const externalIdpUserId = tokenAuth?.isExternalIdp
+          ? tokenAuth.userId
+          : undefined;
+        let connectionKey = `${catalogItem.id}:${targetMcpServerId}`;
+        if (externalIdpUserId) {
+          connectionKey = `${connectionKey}:ext:${externalIdpUserId}`;
+        }
         const transport = await this.getTransport(
           catalogItem,
           targetMcpServerId,

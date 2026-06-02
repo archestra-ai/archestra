@@ -19609,6 +19609,8 @@ export type GetChatConversationsResponses = {
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                usageLimitExceeded?: boolean;
+                usageLimitEntityType?: string;
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -19758,6 +19760,8 @@ export type CreateChatConversationResponses = {
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                usageLimitExceeded?: boolean;
+                usageLimitEntityType?: string;
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -19989,6 +19993,8 @@ export type GetChatConversationResponses = {
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                usageLimitExceeded?: boolean;
+                usageLimitEntityType?: string;
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -20142,6 +20148,8 @@ export type UpdateChatConversationResponses = {
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                usageLimitExceeded?: boolean;
+                usageLimitEntityType?: string;
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -20455,6 +20463,8 @@ export type ForkChatConversationResponses = {
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                usageLimitExceeded?: boolean;
+                usageLimitEntityType?: string;
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -20705,6 +20715,8 @@ export type CompactChatConversationResponses = {
                     sessionId?: string;
                     traceId?: string;
                     spanId?: string;
+                    usageLimitExceeded?: boolean;
+                    usageLimitEntityType?: string;
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                         status?: number;
@@ -21125,6 +21137,8 @@ export type GetSharedConversationResponses = {
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                usageLimitExceeded?: boolean;
+                usageLimitEntityType?: string;
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -21274,6 +21288,8 @@ export type ForkSharedConversationResponses = {
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                usageLimitExceeded?: boolean;
+                usageLimitEntityType?: string;
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -21425,6 +21441,8 @@ export type GenerateChatConversationTitleResponses = {
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                usageLimitExceeded?: boolean;
+                usageLimitEntityType?: string;
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -21575,6 +21593,8 @@ export type UpdateChatMessageResponses = {
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                usageLimitExceeded?: boolean;
+                usageLimitEntityType?: string;
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -24979,6 +24999,8 @@ export type GetInteractionsResponses = {
                     sessionId?: string;
                     traceId?: string;
                     spanId?: string;
+                    usageLimitExceeded?: boolean;
+                    usageLimitEntityType?: string;
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                         status?: number;
@@ -25162,6 +25184,8 @@ export type GetInteractionsResponses = {
                     sessionId?: string;
                     traceId?: string;
                     spanId?: string;
+                    usageLimitExceeded?: boolean;
+                    usageLimitEntityType?: string;
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                         status?: number;
@@ -25251,6 +25275,8 @@ export type GetInteractionsResponses = {
                     sessionId?: string;
                     traceId?: string;
                     spanId?: string;
+                    usageLimitExceeded?: boolean;
+                    usageLimitEntityType?: string;
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                         status?: number;
@@ -25316,6 +25342,8 @@ export type GetInteractionsResponses = {
                     sessionId?: string;
                     traceId?: string;
                     spanId?: string;
+                    usageLimitExceeded?: boolean;
+                    usageLimitEntityType?: string;
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                         status?: number;
@@ -25383,6 +25411,8 @@ export type GetInteractionsResponses = {
                     sessionId?: string;
                     traceId?: string;
                     spanId?: string;
+                    usageLimitExceeded?: boolean;
+                    usageLimitEntityType?: string;
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                         status?: number;
@@ -25824,6 +25854,8 @@ export type GetInteractionsResponses = {
                     sessionId?: string;
                     traceId?: string;
                     spanId?: string;
+                    usageLimitExceeded?: boolean;
+                    usageLimitEntityType?: string;
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                         status?: number;
@@ -25891,6 +25923,8 @@ export type GetInteractionsResponses = {
                     sessionId?: string;
                     traceId?: string;
                     spanId?: string;
+                    usageLimitExceeded?: boolean;
+                    usageLimitEntityType?: string;
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                         status?: number;
@@ -25958,6 +25992,8 @@ export type GetInteractionsResponses = {
                     sessionId?: string;
                     traceId?: string;
                     spanId?: string;
+                    usageLimitExceeded?: boolean;
+                    usageLimitEntityType?: string;
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                         status?: number;
@@ -26025,6 +26061,8 @@ export type GetInteractionsResponses = {
                     sessionId?: string;
                     traceId?: string;
                     spanId?: string;
+                    usageLimitExceeded?: boolean;
+                    usageLimitEntityType?: string;
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                         status?: number;
@@ -26092,6 +26130,8 @@ export type GetInteractionsResponses = {
                     sessionId?: string;
                     traceId?: string;
                     spanId?: string;
+                    usageLimitExceeded?: boolean;
+                    usageLimitEntityType?: string;
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                         status?: number;
@@ -26159,6 +26199,8 @@ export type GetInteractionsResponses = {
                     sessionId?: string;
                     traceId?: string;
                     spanId?: string;
+                    usageLimitExceeded?: boolean;
+                    usageLimitEntityType?: string;
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                         status?: number;
@@ -26226,6 +26268,8 @@ export type GetInteractionsResponses = {
                     sessionId?: string;
                     traceId?: string;
                     spanId?: string;
+                    usageLimitExceeded?: boolean;
+                    usageLimitEntityType?: string;
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                         status?: number;
@@ -26293,6 +26337,8 @@ export type GetInteractionsResponses = {
                     sessionId?: string;
                     traceId?: string;
                     spanId?: string;
+                    usageLimitExceeded?: boolean;
+                    usageLimitEntityType?: string;
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                         status?: number;
@@ -26358,6 +26404,8 @@ export type GetInteractionsResponses = {
                     sessionId?: string;
                     traceId?: string;
                     spanId?: string;
+                    usageLimitExceeded?: boolean;
+                    usageLimitEntityType?: string;
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                         status?: number;
@@ -26423,6 +26471,8 @@ export type GetInteractionsResponses = {
                     sessionId?: string;
                     traceId?: string;
                     spanId?: string;
+                    usageLimitExceeded?: boolean;
+                    usageLimitEntityType?: string;
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                         status?: number;
@@ -26490,6 +26540,8 @@ export type GetInteractionsResponses = {
                     sessionId?: string;
                     traceId?: string;
                     spanId?: string;
+                    usageLimitExceeded?: boolean;
+                    usageLimitEntityType?: string;
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                         status?: number;
@@ -26557,6 +26609,8 @@ export type GetInteractionsResponses = {
                     sessionId?: string;
                     traceId?: string;
                     spanId?: string;
+                    usageLimitExceeded?: boolean;
+                    usageLimitEntityType?: string;
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                         status?: number;
@@ -26624,6 +26678,8 @@ export type GetInteractionsResponses = {
                     sessionId?: string;
                     traceId?: string;
                     spanId?: string;
+                    usageLimitExceeded?: boolean;
+                    usageLimitEntityType?: string;
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                         status?: number;
@@ -26758,6 +26814,8 @@ export type GetInteractionsResponses = {
                     sessionId?: string;
                     traceId?: string;
                     spanId?: string;
+                    usageLimitExceeded?: boolean;
+                    usageLimitEntityType?: string;
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                         status?: number;
@@ -26941,6 +26999,8 @@ export type GetInteractionsResponses = {
                     sessionId?: string;
                     traceId?: string;
                     spanId?: string;
+                    usageLimitExceeded?: boolean;
+                    usageLimitEntityType?: string;
                     originalError?: {
                         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                         status?: number;
@@ -27422,6 +27482,8 @@ export type GetInteractionResponses = {
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                usageLimitExceeded?: boolean;
+                usageLimitEntityType?: string;
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -27605,6 +27667,8 @@ export type GetInteractionResponses = {
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                usageLimitExceeded?: boolean;
+                usageLimitEntityType?: string;
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -27694,6 +27758,8 @@ export type GetInteractionResponses = {
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                usageLimitExceeded?: boolean;
+                usageLimitEntityType?: string;
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -27759,6 +27825,8 @@ export type GetInteractionResponses = {
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                usageLimitExceeded?: boolean;
+                usageLimitEntityType?: string;
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -27826,6 +27894,8 @@ export type GetInteractionResponses = {
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                usageLimitExceeded?: boolean;
+                usageLimitEntityType?: string;
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -28267,6 +28337,8 @@ export type GetInteractionResponses = {
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                usageLimitExceeded?: boolean;
+                usageLimitEntityType?: string;
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -28334,6 +28406,8 @@ export type GetInteractionResponses = {
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                usageLimitExceeded?: boolean;
+                usageLimitEntityType?: string;
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -28401,6 +28475,8 @@ export type GetInteractionResponses = {
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                usageLimitExceeded?: boolean;
+                usageLimitEntityType?: string;
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -28468,6 +28544,8 @@ export type GetInteractionResponses = {
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                usageLimitExceeded?: boolean;
+                usageLimitEntityType?: string;
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -28535,6 +28613,8 @@ export type GetInteractionResponses = {
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                usageLimitExceeded?: boolean;
+                usageLimitEntityType?: string;
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -28602,6 +28682,8 @@ export type GetInteractionResponses = {
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                usageLimitExceeded?: boolean;
+                usageLimitEntityType?: string;
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -28669,6 +28751,8 @@ export type GetInteractionResponses = {
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                usageLimitExceeded?: boolean;
+                usageLimitEntityType?: string;
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -28736,6 +28820,8 @@ export type GetInteractionResponses = {
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                usageLimitExceeded?: boolean;
+                usageLimitEntityType?: string;
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -28801,6 +28887,8 @@ export type GetInteractionResponses = {
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                usageLimitExceeded?: boolean;
+                usageLimitEntityType?: string;
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -28866,6 +28954,8 @@ export type GetInteractionResponses = {
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                usageLimitExceeded?: boolean;
+                usageLimitEntityType?: string;
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -28933,6 +29023,8 @@ export type GetInteractionResponses = {
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                usageLimitExceeded?: boolean;
+                usageLimitEntityType?: string;
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -29000,6 +29092,8 @@ export type GetInteractionResponses = {
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                usageLimitExceeded?: boolean;
+                usageLimitEntityType?: string;
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -29067,6 +29161,8 @@ export type GetInteractionResponses = {
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                usageLimitExceeded?: boolean;
+                usageLimitEntityType?: string;
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -29201,6 +29297,8 @@ export type GetInteractionResponses = {
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                usageLimitExceeded?: boolean;
+                usageLimitEntityType?: string;
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -29384,6 +29482,8 @@ export type GetInteractionResponses = {
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                usageLimitExceeded?: boolean;
+                usageLimitEntityType?: string;
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;
@@ -35819,7 +35919,7 @@ export type GetLimitsResponses = {
         mcpServerName: string | null;
         toolName: string | null;
         model?: Array<string> | null;
-        cleanupInterval?: '1h' | '12h' | '24h' | '1w' | '1m';
+        cleanupInterval?: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
         lastCleanup: string | null;
         createdAt: string;
         updatedAt: string;
@@ -35843,7 +35943,7 @@ export type CreateLimitData = {
         mcpServerName?: string | null;
         toolName?: string | null;
         model?: Array<string> | null;
-        cleanupInterval?: '1h' | '12h' | '24h' | '1w' | '1m';
+        cleanupInterval?: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
         lastCleanup?: unknown;
     };
     path?: never;
@@ -35929,7 +36029,7 @@ export type CreateLimitResponses = {
         mcpServerName: string | null;
         toolName: string | null;
         model?: Array<string> | null;
-        cleanupInterval?: '1h' | '12h' | '24h' | '1w' | '1m';
+        cleanupInterval?: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
         lastCleanup: string | null;
         createdAt: string;
         updatedAt: string;
@@ -36110,7 +36210,7 @@ export type GetLimitResponses = {
         mcpServerName: string | null;
         toolName: string | null;
         model?: Array<string> | null;
-        cleanupInterval?: '1h' | '12h' | '24h' | '1w' | '1m';
+        cleanupInterval?: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
         lastCleanup: string | null;
         createdAt: string;
         updatedAt: string;
@@ -36128,7 +36228,7 @@ export type UpdateLimitData = {
         mcpServerName?: string | null;
         toolName?: string | null;
         model?: Array<string> | null;
-        cleanupInterval?: '1h' | '12h' | '24h' | '1w' | '1m';
+        cleanupInterval?: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
         lastCleanup?: unknown;
     };
     path: {
@@ -36216,7 +36316,7 @@ export type UpdateLimitResponses = {
         mcpServerName: string | null;
         toolName: string | null;
         model?: Array<string> | null;
-        cleanupInterval?: '1h' | '12h' | '24h' | '1w' | '1m';
+        cleanupInterval?: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
         lastCleanup: string | null;
         createdAt: string;
         updatedAt: string;
@@ -45149,7 +45249,7 @@ export type GetOrganizationResponses = {
         defaultLlmApiKeyId: string | null;
         defaultUserLimitValue: number | null;
         defaultUserLimitModel: Array<string> | null;
-        defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m';
+        defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
         defaultAgentId: string | null;
         favicon: string | null;
         appName: string | null;
@@ -45435,7 +45535,7 @@ export type UpdateAppearanceSettingsResponses = {
         defaultLlmApiKeyId: string | null;
         defaultUserLimitValue: number | null;
         defaultUserLimitModel: Array<string> | null;
-        defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m';
+        defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
         defaultAgentId: string | null;
         favicon: string | null;
         appName: string | null;
@@ -45592,7 +45692,7 @@ export type UpdateSecuritySettingsResponses = {
         defaultLlmApiKeyId: string | null;
         defaultUserLimitValue: number | null;
         defaultUserLimitModel: Array<string> | null;
-        defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m';
+        defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
         defaultAgentId: string | null;
         favicon: string | null;
         appName: string | null;
@@ -45650,7 +45750,7 @@ export type UpdateLlmSettingsData = {
         compressionScope?: 'organization' | 'team';
         defaultUserLimitValue?: number | null;
         defaultUserLimitModel?: Array<string> | null;
-        defaultUserLimitCleanupInterval?: '1h' | '12h' | '24h' | '1w' | '1m';
+        defaultUserLimitCleanupInterval?: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
     };
     path?: never;
     query?: never;
@@ -45752,7 +45852,7 @@ export type UpdateLlmSettingsResponses = {
         defaultLlmApiKeyId: string | null;
         defaultUserLimitValue: number | null;
         defaultUserLimitModel: Array<string> | null;
-        defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m';
+        defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
         defaultAgentId: string | null;
         favicon: string | null;
         appName: string | null;
@@ -45911,7 +46011,7 @@ export type UpdateAgentSettingsResponses = {
         defaultLlmApiKeyId: string | null;
         defaultUserLimitValue: number | null;
         defaultUserLimitModel: Array<string> | null;
-        defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m';
+        defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
         defaultAgentId: string | null;
         favicon: string | null;
         appName: string | null;
@@ -46077,7 +46177,7 @@ export type UpdateConnectionSettingsResponses = {
         defaultLlmApiKeyId: string | null;
         defaultUserLimitValue: number | null;
         defaultUserLimitModel: Array<string> | null;
-        defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m';
+        defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
         defaultAgentId: string | null;
         favicon: string | null;
         appName: string | null;
@@ -46234,7 +46334,7 @@ export type UpdatePresetEntityNameResponses = {
         defaultLlmApiKeyId: string | null;
         defaultUserLimitValue: number | null;
         defaultUserLimitModel: Array<string> | null;
-        defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m';
+        defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
         defaultAgentId: string | null;
         favicon: string | null;
         appName: string | null;
@@ -46390,7 +46490,7 @@ export type UpdatePresetEntityDefaultLabelResponses = {
         defaultLlmApiKeyId: string | null;
         defaultUserLimitValue: number | null;
         defaultUserLimitModel: Array<string> | null;
-        defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m';
+        defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
         defaultAgentId: string | null;
         favicon: string | null;
         appName: string | null;
@@ -46546,7 +46646,7 @@ export type UpdatePresetEntityDefaultValidationRegexResponses = {
         defaultLlmApiKeyId: string | null;
         defaultUserLimitValue: number | null;
         defaultUserLimitModel: Array<string> | null;
-        defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m';
+        defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
         defaultAgentId: string | null;
         favicon: string | null;
         appName: string | null;
@@ -46706,7 +46806,7 @@ export type UpdateDefaultEnvironmentResponses = {
         defaultLlmApiKeyId: string | null;
         defaultUserLimitValue: number | null;
         defaultUserLimitModel: Array<string> | null;
-        defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m';
+        defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
         defaultAgentId: string | null;
         favicon: string | null;
         appName: string | null;
@@ -46863,7 +46963,7 @@ export type UpdateAuthSettingsResponses = {
         defaultLlmApiKeyId: string | null;
         defaultUserLimitValue: number | null;
         defaultUserLimitModel: Array<string> | null;
-        defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m';
+        defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
         defaultAgentId: string | null;
         favicon: string | null;
         appName: string | null;
@@ -47022,7 +47122,7 @@ export type UpdateKnowledgeSettingsResponses = {
         defaultLlmApiKeyId: string | null;
         defaultUserLimitValue: number | null;
         defaultUserLimitModel: Array<string> | null;
-        defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m';
+        defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
         defaultAgentId: string | null;
         favicon: string | null;
         appName: string | null;
@@ -47176,7 +47276,7 @@ export type DropEmbeddingConfigResponses = {
         defaultLlmApiKeyId: string | null;
         defaultUserLimitValue: number | null;
         defaultUserLimitModel: Array<string> | null;
-        defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m';
+        defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
         defaultAgentId: string | null;
         favicon: string | null;
         appName: string | null;
@@ -47419,7 +47519,7 @@ export type CompleteOnboardingResponses = {
         defaultLlmApiKeyId: string | null;
         defaultUserLimitValue: number | null;
         defaultUserLimitModel: Array<string> | null;
-        defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m';
+        defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
         defaultAgentId: string | null;
         favicon: string | null;
         appName: string | null;
@@ -49257,6 +49357,8 @@ export type CreateScheduleTriggerRunConversationResponses = {
                 sessionId?: string;
                 traceId?: string;
                 spanId?: string;
+                usageLimitExceeded?: boolean;
+                usageLimitEntityType?: string;
                 originalError?: {
                     provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
                     status?: number;

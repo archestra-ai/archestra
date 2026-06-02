@@ -1,5 +1,5 @@
 import { render, screen } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import LimitsPage, { getLimitModels } from "./page";
 
 const mockSetCostsAction = vi.fn();
@@ -310,6 +310,10 @@ describe("LimitsPage", () => {
     });
   });
 
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("shows a settings notice when a default user limit is configured", () => {
     render(<LimitsPage />);
 
@@ -368,7 +372,7 @@ describe("LimitsPage", () => {
     expect(modelsBadge).toHaveTextContent("All models");
   });
 
-  it("shows the next reset date for monthly limits", () => {
+  it("shows the next reset date for rolling monthly limits", () => {
     mockUseLimits.mockReturnValue({
       data: [
         {
@@ -393,8 +397,39 @@ describe("LimitsPage", () => {
     render(<LimitsPage />);
 
     const row = screen.getByTestId("data-table-row-limit-1");
-    expect(row).toHaveTextContent("Every month");
+    expect(row).toHaveTextContent("Rolling month");
     expect(row).toHaveTextContent("Resets Feb 15");
+  });
+
+  it("shows the next reset date for calendar monthly limits", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-15T12:00:00.000Z"));
+    mockUseLimits.mockReturnValue({
+      data: [
+        {
+          id: "limit-1",
+          entityType: "organization",
+          entityId: "org-1",
+          limitType: "token_cost",
+          limitValue: 1000,
+          model: null,
+          mcpServerName: null,
+          toolName: null,
+          cleanupInterval: "calendar_month",
+          lastCleanup: "2026-01-02T12:00:00.000Z",
+          createdAt: "2026-01-01",
+          updatedAt: "2026-01-01",
+          modelUsage: [],
+        },
+      ],
+      isPending: false,
+    });
+
+    render(<LimitsPage />);
+
+    const row = screen.getByTestId("data-table-row-limit-1");
+    expect(row).toHaveTextContent("Calendar month");
+    expect(row).toHaveTextContent("Resets Feb 1");
   });
 
   it("shows multiple model badges for limits with multiple models", () => {

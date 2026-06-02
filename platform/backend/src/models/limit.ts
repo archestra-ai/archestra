@@ -34,13 +34,17 @@ type LimitsCleanupIntervalSqlLiteral =
   | "24 hours"
   | "1 week"
   | "1 month";
+type RollingLimitCleanupInterval = Extract<
+  LimitCleanupInterval,
+  "1h" | "12h" | "24h" | "1w" | "1m"
+>;
 
 type LimitModelUsageRecord = typeof schema.limitModelUsageTable.$inferSelect;
 
 class LimitModel {
-  // limitsCleanupIntervalSqlLiterals exists basically to compile-time check set of literals
-  static readonly limitsCleanupIntervalSqlLiterals: Record<
-    LimitCleanupInterval,
+  // rollingCleanupIntervalSqlLiterals exists to compile-time check rolling literals.
+  static readonly rollingCleanupIntervalSqlLiterals: Record<
+    RollingLimitCleanupInterval,
     LimitsCleanupIntervalSqlLiteral
   > = {
     "1h": "1 hour",
@@ -999,6 +1003,13 @@ ${contentMessage}`;
   }
 }
 
+const calendarCleanupIntervals = [
+  "calendar_day",
+  "calendar_week_sunday",
+  "calendar_week_monday",
+  "calendar_month",
+] as const satisfies readonly LimitCleanupInterval[];
+
 function buildOrganizationLimitScopeCondition(organizationId: string): SQL {
   return or(
     and(
@@ -1043,7 +1054,7 @@ function buildOrganizationLimitScopeCondition(organizationId: string): SQL {
 
 function buildCleanupDueCondition(): SQL {
   const intervalConditions = Object.entries(
-    LimitModel.limitsCleanupIntervalSqlLiterals,
+    LimitModel.rollingCleanupIntervalSqlLiterals,
   ).map(([cleanupInterval, sqlLiteral]) =>
     and(
       eq(
@@ -1054,7 +1065,50 @@ function buildCleanupDueCondition(): SQL {
     ),
   );
 
+  intervalConditions.push(
+    ...calendarCleanupIntervals.map((cleanupInterval) =>
+      and(
+        eq(schema.limitsTable.cleanupInterval, cleanupInterval),
+        lt(
+          schema.limitsTable.lastCleanup,
+          getCalendarPeriodStartSql(cleanupInterval),
+        ),
+      ),
+    ),
+  );
+
   return or(...intervalConditions) as SQL;
+}
+
+function buildUsagePeriodStartCondition(
+  cleanupInterval: LimitCleanupInterval,
+): SQL {
+  const rollingInterval =
+    LimitModel.rollingCleanupIntervalSqlLiterals[
+      cleanupInterval as RollingLimitCleanupInterval
+    ];
+  if (rollingInterval) {
+    return sql`${schema.interactionsTable.createdAt} >= now() - ${rollingInterval}::interval`;
+  }
+
+  return sql`${schema.interactionsTable.createdAt} >= ${getCalendarPeriodStartSql(cleanupInterval)}`;
+}
+
+function getCalendarPeriodStartSql(cleanupInterval: LimitCleanupInterval): SQL {
+  switch (cleanupInterval) {
+    case "calendar_day":
+      return sql`date_trunc('day', now())`;
+    case "calendar_week_sunday":
+      return sql`date_trunc('week', now() + interval '1 day') - interval '1 day'`;
+    case "calendar_week_monday":
+      return sql`date_trunc('week', now())`;
+    case "calendar_month":
+      return sql`date_trunc('month', now())`;
+    default:
+      throw new Error(
+        `Unsupported calendar cleanup interval: ${cleanupInterval}`,
+      );
+  }
 }
 
 async function calculateModelUsageCosts(modelUsages: LimitModelUsageRecord[]) {
@@ -1100,7 +1154,7 @@ async function getDefaultUserLimitUsage(params: {
     eq(schema.interactionsTable.userId, params.userId),
     eq(schema.agentsTable.organizationId, params.organizationId),
     notDeleted(schema.agentsTable),
-    sql`${schema.interactionsTable.createdAt} >= now() - ${LimitModel.limitsCleanupIntervalSqlLiterals[params.cleanupInterval]}::interval`,
+    buildUsagePeriodStartCondition(params.cleanupInterval),
   ];
 
   if (params.models && params.models.length > 0) {

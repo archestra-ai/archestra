@@ -943,6 +943,12 @@ function formatNextLimitReset(
   lastCleanup: LimitData["lastCleanup"],
   cleanupInterval: LimitCleanupInterval,
 ): string {
+  if (isCalendarCleanupInterval(cleanupInterval)) {
+    return formatResetDate(
+      getNextCalendarResetDate(new Date(), cleanupInterval),
+    );
+  }
+
   if (!lastCleanup) {
     return "Resets on next check";
   }
@@ -952,13 +958,15 @@ function formatNextLimitReset(
     return "Reset schedule unavailable";
   }
 
-  return `Resets ${nextReset.toLocaleDateString(undefined, {
+  return formatResetDate(nextReset);
+}
+
+function formatResetDate(date: Date): string {
+  return `Resets ${date.toLocaleDateString(undefined, {
     month: "short",
     day: "numeric",
     year:
-      nextReset.getFullYear() === new Date().getFullYear()
-        ? undefined
-        : "numeric",
+      date.getFullYear() === new Date().getFullYear() ? undefined : "numeric",
   })}`;
 }
 
@@ -982,6 +990,56 @@ function addCleanupInterval(
       return next;
     case "1m":
       next.setMonth(next.getMonth() + 1);
+      return next;
+    case "calendar_day":
+    case "calendar_week_sunday":
+    case "calendar_week_monday":
+    case "calendar_month":
+      return getNextCalendarResetDate(next, cleanupInterval);
+  }
+}
+
+function isCalendarCleanupInterval(
+  cleanupInterval: LimitCleanupInterval,
+): cleanupInterval is Extract<
+  LimitCleanupInterval,
+  | "calendar_day"
+  | "calendar_week_sunday"
+  | "calendar_week_monday"
+  | "calendar_month"
+> {
+  return cleanupInterval.startsWith("calendar_");
+}
+
+function getNextCalendarResetDate(
+  date: Date,
+  cleanupInterval: Extract<
+    LimitCleanupInterval,
+    | "calendar_day"
+    | "calendar_week_sunday"
+    | "calendar_week_monday"
+    | "calendar_month"
+  >,
+): Date {
+  const next = new Date(date);
+  next.setHours(0, 0, 0, 0);
+
+  switch (cleanupInterval) {
+    case "calendar_day":
+      next.setDate(next.getDate() + 1);
+      return next;
+    case "calendar_week_sunday": {
+      const daysUntilSunday = (7 - next.getDay()) % 7 || 7;
+      next.setDate(next.getDate() + daysUntilSunday);
+      return next;
+    }
+    case "calendar_week_monday": {
+      const daysUntilMonday = (8 - next.getDay()) % 7 || 7;
+      next.setDate(next.getDate() + daysUntilMonday);
+      return next;
+    }
+    case "calendar_month":
+      next.setMonth(next.getMonth() + 1, 1);
       return next;
   }
 }

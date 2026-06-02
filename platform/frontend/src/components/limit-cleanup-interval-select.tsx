@@ -16,11 +16,15 @@ export type LimitCleanupInterval = NonNullable<
 export const DEFAULT_LIMIT_CLEANUP_INTERVAL: LimitCleanupInterval = "1w";
 
 export const CLEANUP_INTERVAL_LABELS: Record<LimitCleanupInterval, string> = {
-  "1h": "Every hour",
-  "12h": "Every 12 hours",
-  "24h": "Every 24 hours",
-  "1w": "Every week",
-  "1m": "Every month",
+  "1h": "Rolling hour",
+  "12h": "Rolling 12 hours",
+  "24h": "Rolling day",
+  "1w": "Rolling week",
+  "1m": "Rolling month",
+  calendar_day: "Calendar day",
+  calendar_week_sunday: "Calendar week (Sun-Sat)",
+  calendar_week_monday: "Calendar week (Mon-Sun)",
+  calendar_month: "Calendar month",
 };
 
 type LimitCleanupIntervalSelectProps = {

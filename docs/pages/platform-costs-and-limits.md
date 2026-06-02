@@ -46,7 +46,7 @@ A custom per-user limit overrides the default for that user. Use this when one u
 
 ## Limit Cleanup
 
-Limit usage is reset according to each limit's cleanup interval. Intervals are rolling from the limit's last reset, not calendar boundaries. For example, a monthly limit resets one month after its previous reset, not automatically on the first day of the month. New limits default to weekly cleanup unless an admin chooses a different interval.
+Limit usage is reset according to each limit's cleanup interval. Rolling intervals reset after the selected amount of time has elapsed since the previous reset. Calendar intervals reset at the next calendar boundary: day, week, or month. Calendar week limits can use either Sunday-Saturday or Monday-Sunday weeks. New limits default to a rolling weekly cleanup unless an admin chooses a different interval.
 
 Default user limits use their own cleanup interval from LLM settings.
 

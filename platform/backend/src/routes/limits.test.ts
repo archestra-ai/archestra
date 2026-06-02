@@ -341,4 +341,31 @@ describe("limits routes", () => {
       cleanupSpy.mockRestore();
     });
   });
+
+  describe("POST /api/limits", () => {
+    test("creates a limit with a calendar-aligned cleanup interval", async () => {
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/limits",
+        payload: {
+          entityType: "organization",
+          entityId: organizationId,
+          limitType: "token_cost",
+          limitValue: 1000,
+          cleanupInterval: "calendar_month",
+          model: ["gpt-4o"],
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({
+        entityType: "organization",
+        entityId: organizationId,
+        limitType: "token_cost",
+        limitValue: 1000,
+        cleanupInterval: "calendar_month",
+        model: ["gpt-4o"],
+      });
+    });
+  });
 });

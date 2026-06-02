@@ -2084,6 +2084,56 @@ describe("cleanupLimitsIfNeeded", () => {
     expect(monthlyUsage[0].currentUsageTokensIn).toBe(500);
   });
 
+  test("resets calendar monthly limits only after the month boundary", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+
+    const dueLimit = await LimitModel.create({
+      entityType: "organization",
+      entityId: org.id,
+      limitType: "token_cost",
+      limitValue: 1000000,
+      model: ["gpt-4o"],
+      cleanupInterval: "calendar_month",
+    });
+    const currentMonthLimit = await LimitModel.create({
+      entityType: "organization",
+      entityId: org.id,
+      limitType: "token_cost",
+      limitValue: 1000000,
+      model: ["gpt-4o"],
+      cleanupInterval: "calendar_month",
+    });
+
+    await LimitModel.updateTokenLimitUsage(
+      "organization",
+      org.id,
+      "gpt-4o",
+      500,
+      500,
+    );
+
+    const previousMonth = new Date();
+    previousMonth.setMonth(previousMonth.getMonth() - 1, 15);
+    const currentMonth = new Date();
+    currentMonth.setDate(1);
+    currentMonth.setHours(12, 0, 0, 0);
+    await LimitModel.patch(dueLimit.id, { lastCleanup: previousMonth });
+    await LimitModel.patch(currentMonthLimit.id, { lastCleanup: currentMonth });
+
+    await LimitModel.cleanupLimitsIfNeeded({
+      allForOrganizationId: org.id,
+    });
+
+    const dueUsage = await LimitModel.getRawModelUsage(dueLimit.id);
+    const currentMonthUsage = await LimitModel.getRawModelUsage(
+      currentMonthLimit.id,
+    );
+    expect(dueUsage[0].currentUsageTokensIn).toBe(0);
+    expect(currentMonthUsage[0].currentUsageTokensIn).toBe(500);
+  });
+
   test("default user limits do not create per-user limit rows", async ({
     makeOrganization,
     makeUser,

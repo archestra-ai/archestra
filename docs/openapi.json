@@ -67975,6 +67975,12 @@
                                 "spanId": {
                                   "type": "string"
                                 },
+                                "usageLimitExceeded": {
+                                  "type": "boolean"
+                                },
+                                "usageLimitEntityType": {
+                                  "type": "string"
+                                },
                                 "originalError": {
                                   "type": "object",
                                   "properties": {
@@ -68645,6 +68651,12 @@
                               "spanId": {
                                 "type": "string"
                               },
+                              "usageLimitExceeded": {
+                                "type": "boolean"
+                              },
+                              "usageLimitEntityType": {
+                                "type": "string"
+                              },
                               "originalError": {
                                 "type": "object",
                                 "properties": {
@@ -69290,6 +69302,12 @@
                                 "type": "string"
                               },
                               "spanId": {
+                                "type": "string"
+                              },
+                              "usageLimitExceeded": {
+                                "type": "boolean"
+                              },
+                              "usageLimitEntityType": {
                                 "type": "string"
                               },
                               "originalError": {
@@ -69978,6 +69996,12 @@
                                 "type": "string"
                               },
                               "spanId": {
+                                "type": "string"
+                              },
+                              "usageLimitExceeded": {
+                                "type": "boolean"
+                              },
+                              "usageLimitEntityType": {
                                 "type": "string"
                               },
                               "originalError": {
@@ -71505,6 +71529,12 @@
                               "spanId": {
                                 "type": "string"
                               },
+                              "usageLimitExceeded": {
+                                "type": "boolean"
+                              },
+                              "usageLimitEntityType": {
+                                "type": "string"
+                              },
                               "originalError": {
                                 "type": "object",
                                 "properties": {
@@ -72517,6 +72547,12 @@
                                     "type": "string"
                                   },
                                   "spanId": {
+                                    "type": "string"
+                                  },
+                                  "usageLimitExceeded": {
+                                    "type": "boolean"
+                                  },
+                                  "usageLimitEntityType": {
                                     "type": "string"
                                   },
                                   "originalError": {
@@ -74122,6 +74158,12 @@
                               "spanId": {
                                 "type": "string"
                               },
+                              "usageLimitExceeded": {
+                                "type": "boolean"
+                              },
+                              "usageLimitEntityType": {
+                                "type": "string"
+                              },
                               "originalError": {
                                 "type": "object",
                                 "properties": {
@@ -74793,6 +74835,12 @@
                               "spanId": {
                                 "type": "string"
                               },
+                              "usageLimitExceeded": {
+                                "type": "boolean"
+                              },
+                              "usageLimitEntityType": {
+                                "type": "string"
+                              },
                               "originalError": {
                                 "type": "object",
                                 "properties": {
@@ -75454,6 +75502,12 @@
                                 "type": "string"
                               },
                               "spanId": {
+                                "type": "string"
+                              },
+                              "usageLimitExceeded": {
+                                "type": "boolean"
+                              },
+                              "usageLimitEntityType": {
                                 "type": "string"
                               },
                               "originalError": {
@@ -76127,6 +76181,12 @@
                                 "type": "string"
                               },
                               "spanId": {
+                                "type": "string"
+                              },
+                              "usageLimitExceeded": {
+                                "type": "boolean"
+                              },
+                              "usageLimitEntityType": {
                                 "type": "string"
                               },
                               "originalError": {
@@ -87507,6 +87567,12 @@
                                         "spanId": {
                                           "type": "string"
                                         },
+                                        "usageLimitExceeded": {
+                                          "type": "boolean"
+                                        },
+                                        "usageLimitEntityType": {
+                                          "type": "string"
+                                        },
                                         "originalError": {
                                           "type": "object",
                                           "properties": {
@@ -88341,6 +88407,12 @@
                                         "spanId": {
                                           "type": "string"
                                         },
+                                        "usageLimitExceeded": {
+                                          "type": "boolean"
+                                        },
+                                        "usageLimitEntityType": {
+                                          "type": "string"
+                                        },
                                         "originalError": {
                                           "type": "object",
                                           "properties": {
@@ -88877,6 +88949,12 @@
                                         "spanId": {
                                           "type": "string"
                                         },
+                                        "usageLimitExceeded": {
+                                          "type": "boolean"
+                                        },
+                                        "usageLimitEntityType": {
+                                          "type": "string"
+                                        },
                                         "originalError": {
                                           "type": "object",
                                           "properties": {
@@ -89275,6 +89353,12 @@
                                           "type": "string"
                                         },
                                         "spanId": {
+                                          "type": "string"
+                                        },
+                                        "usageLimitExceeded": {
+                                          "type": "boolean"
+                                        },
+                                        "usageLimitEntityType": {
                                           "type": "string"
                                         },
                                         "originalError": {
@@ -89686,6 +89770,12 @@
                                           "type": "string"
                                         },
                                         "spanId": {
+                                          "type": "string"
+                                        },
+                                        "usageLimitExceeded": {
+                                          "type": "boolean"
+                                        },
+                                        "usageLimitEntityType": {
                                           "type": "string"
                                         },
                                         "originalError": {
@@ -91811,6 +91901,12 @@
                                         "spanId": {
                                           "type": "string"
                                         },
+                                        "usageLimitExceeded": {
+                                          "type": "boolean"
+                                        },
+                                        "usageLimitEntityType": {
+                                          "type": "string"
+                                        },
                                         "originalError": {
                                           "type": "object",
                                           "properties": {
@@ -92220,6 +92316,12 @@
                                           "type": "string"
                                         },
                                         "spanId": {
+                                          "type": "string"
+                                        },
+                                        "usageLimitExceeded": {
+                                          "type": "boolean"
+                                        },
+                                        "usageLimitEntityType": {
                                           "type": "string"
                                         },
                                         "originalError": {
@@ -92633,6 +92735,12 @@
                                         "spanId": {
                                           "type": "string"
                                         },
+                                        "usageLimitExceeded": {
+                                          "type": "boolean"
+                                        },
+                                        "usageLimitEntityType": {
+                                          "type": "string"
+                                        },
                                         "originalError": {
                                           "type": "object",
                                           "properties": {
@@ -93042,6 +93150,12 @@
                                           "type": "string"
                                         },
                                         "spanId": {
+                                          "type": "string"
+                                        },
+                                        "usageLimitExceeded": {
+                                          "type": "boolean"
+                                        },
+                                        "usageLimitEntityType": {
                                           "type": "string"
                                         },
                                         "originalError": {
@@ -93455,6 +93569,12 @@
                                         "spanId": {
                                           "type": "string"
                                         },
+                                        "usageLimitExceeded": {
+                                          "type": "boolean"
+                                        },
+                                        "usageLimitEntityType": {
+                                          "type": "string"
+                                        },
                                         "originalError": {
                                           "type": "object",
                                           "properties": {
@@ -93864,6 +93984,12 @@
                                           "type": "string"
                                         },
                                         "spanId": {
+                                          "type": "string"
+                                        },
+                                        "usageLimitExceeded": {
+                                          "type": "boolean"
+                                        },
+                                        "usageLimitEntityType": {
                                           "type": "string"
                                         },
                                         "originalError": {
@@ -94277,6 +94403,12 @@
                                         "spanId": {
                                           "type": "string"
                                         },
+                                        "usageLimitExceeded": {
+                                          "type": "boolean"
+                                        },
+                                        "usageLimitEntityType": {
+                                          "type": "string"
+                                        },
                                         "originalError": {
                                           "type": "object",
                                           "properties": {
@@ -94688,6 +94820,12 @@
                                         "spanId": {
                                           "type": "string"
                                         },
+                                        "usageLimitExceeded": {
+                                          "type": "boolean"
+                                        },
+                                        "usageLimitEntityType": {
+                                          "type": "string"
+                                        },
                                         "originalError": {
                                           "type": "object",
                                           "properties": {
@@ -95088,6 +95226,12 @@
                                         "spanId": {
                                           "type": "string"
                                         },
+                                        "usageLimitExceeded": {
+                                          "type": "boolean"
+                                        },
+                                        "usageLimitEntityType": {
+                                          "type": "string"
+                                        },
                                         "originalError": {
                                           "type": "object",
                                           "properties": {
@@ -95486,6 +95630,12 @@
                                           "type": "string"
                                         },
                                         "spanId": {
+                                          "type": "string"
+                                        },
+                                        "usageLimitExceeded": {
+                                          "type": "boolean"
+                                        },
+                                        "usageLimitEntityType": {
                                           "type": "string"
                                         },
                                         "originalError": {
@@ -95899,6 +96049,12 @@
                                         "spanId": {
                                           "type": "string"
                                         },
+                                        "usageLimitExceeded": {
+                                          "type": "boolean"
+                                        },
+                                        "usageLimitEntityType": {
+                                          "type": "string"
+                                        },
                                         "originalError": {
                                           "type": "object",
                                           "properties": {
@@ -96310,6 +96466,12 @@
                                         "spanId": {
                                           "type": "string"
                                         },
+                                        "usageLimitExceeded": {
+                                          "type": "boolean"
+                                        },
+                                        "usageLimitEntityType": {
+                                          "type": "string"
+                                        },
                                         "originalError": {
                                           "type": "object",
                                           "properties": {
@@ -96719,6 +96881,12 @@
                                           "type": "string"
                                         },
                                         "spanId": {
+                                          "type": "string"
+                                        },
+                                        "usageLimitExceeded": {
+                                          "type": "boolean"
+                                        },
+                                        "usageLimitEntityType": {
                                           "type": "string"
                                         },
                                         "originalError": {
@@ -97356,6 +97524,12 @@
                                           "type": "string"
                                         },
                                         "spanId": {
+                                          "type": "string"
+                                        },
+                                        "usageLimitExceeded": {
+                                          "type": "boolean"
+                                        },
+                                        "usageLimitEntityType": {
                                           "type": "string"
                                         },
                                         "originalError": {
@@ -98190,6 +98364,12 @@
                                           "type": "string"
                                         },
                                         "spanId": {
+                                          "type": "string"
+                                        },
+                                        "usageLimitExceeded": {
+                                          "type": "boolean"
+                                        },
+                                        "usageLimitEntityType": {
                                           "type": "string"
                                         },
                                         "originalError": {
@@ -100079,6 +100259,12 @@
                                   "spanId": {
                                     "type": "string"
                                   },
+                                  "usageLimitExceeded": {
+                                    "type": "boolean"
+                                  },
+                                  "usageLimitEntityType": {
+                                    "type": "string"
+                                  },
                                   "originalError": {
                                     "type": "object",
                                     "properties": {
@@ -100913,6 +101099,12 @@
                                   "spanId": {
                                     "type": "string"
                                   },
+                                  "usageLimitExceeded": {
+                                    "type": "boolean"
+                                  },
+                                  "usageLimitEntityType": {
+                                    "type": "string"
+                                  },
                                   "originalError": {
                                     "type": "object",
                                     "properties": {
@@ -101449,6 +101641,12 @@
                                   "spanId": {
                                     "type": "string"
                                   },
+                                  "usageLimitExceeded": {
+                                    "type": "boolean"
+                                  },
+                                  "usageLimitEntityType": {
+                                    "type": "string"
+                                  },
                                   "originalError": {
                                     "type": "object",
                                     "properties": {
@@ -101847,6 +102045,12 @@
                                     "type": "string"
                                   },
                                   "spanId": {
+                                    "type": "string"
+                                  },
+                                  "usageLimitExceeded": {
+                                    "type": "boolean"
+                                  },
+                                  "usageLimitEntityType": {
                                     "type": "string"
                                   },
                                   "originalError": {
@@ -102258,6 +102462,12 @@
                                     "type": "string"
                                   },
                                   "spanId": {
+                                    "type": "string"
+                                  },
+                                  "usageLimitExceeded": {
+                                    "type": "boolean"
+                                  },
+                                  "usageLimitEntityType": {
                                     "type": "string"
                                   },
                                   "originalError": {
@@ -104383,6 +104593,12 @@
                                   "spanId": {
                                     "type": "string"
                                   },
+                                  "usageLimitExceeded": {
+                                    "type": "boolean"
+                                  },
+                                  "usageLimitEntityType": {
+                                    "type": "string"
+                                  },
                                   "originalError": {
                                     "type": "object",
                                     "properties": {
@@ -104792,6 +105008,12 @@
                                     "type": "string"
                                   },
                                   "spanId": {
+                                    "type": "string"
+                                  },
+                                  "usageLimitExceeded": {
+                                    "type": "boolean"
+                                  },
+                                  "usageLimitEntityType": {
                                     "type": "string"
                                   },
                                   "originalError": {
@@ -105205,6 +105427,12 @@
                                   "spanId": {
                                     "type": "string"
                                   },
+                                  "usageLimitExceeded": {
+                                    "type": "boolean"
+                                  },
+                                  "usageLimitEntityType": {
+                                    "type": "string"
+                                  },
                                   "originalError": {
                                     "type": "object",
                                     "properties": {
@@ -105614,6 +105842,12 @@
                                     "type": "string"
                                   },
                                   "spanId": {
+                                    "type": "string"
+                                  },
+                                  "usageLimitExceeded": {
+                                    "type": "boolean"
+                                  },
+                                  "usageLimitEntityType": {
                                     "type": "string"
                                   },
                                   "originalError": {
@@ -106027,6 +106261,12 @@
                                   "spanId": {
                                     "type": "string"
                                   },
+                                  "usageLimitExceeded": {
+                                    "type": "boolean"
+                                  },
+                                  "usageLimitEntityType": {
+                                    "type": "string"
+                                  },
                                   "originalError": {
                                     "type": "object",
                                     "properties": {
@@ -106436,6 +106676,12 @@
                                     "type": "string"
                                   },
                                   "spanId": {
+                                    "type": "string"
+                                  },
+                                  "usageLimitExceeded": {
+                                    "type": "boolean"
+                                  },
+                                  "usageLimitEntityType": {
                                     "type": "string"
                                   },
                                   "originalError": {
@@ -106849,6 +107095,12 @@
                                   "spanId": {
                                     "type": "string"
                                   },
+                                  "usageLimitExceeded": {
+                                    "type": "boolean"
+                                  },
+                                  "usageLimitEntityType": {
+                                    "type": "string"
+                                  },
                                   "originalError": {
                                     "type": "object",
                                     "properties": {
@@ -107260,6 +107512,12 @@
                                   "spanId": {
                                     "type": "string"
                                   },
+                                  "usageLimitExceeded": {
+                                    "type": "boolean"
+                                  },
+                                  "usageLimitEntityType": {
+                                    "type": "string"
+                                  },
                                   "originalError": {
                                     "type": "object",
                                     "properties": {
@@ -107660,6 +107918,12 @@
                                   "spanId": {
                                     "type": "string"
                                   },
+                                  "usageLimitExceeded": {
+                                    "type": "boolean"
+                                  },
+                                  "usageLimitEntityType": {
+                                    "type": "string"
+                                  },
                                   "originalError": {
                                     "type": "object",
                                     "properties": {
@@ -108058,6 +108322,12 @@
                                     "type": "string"
                                   },
                                   "spanId": {
+                                    "type": "string"
+                                  },
+                                  "usageLimitExceeded": {
+                                    "type": "boolean"
+                                  },
+                                  "usageLimitEntityType": {
                                     "type": "string"
                                   },
                                   "originalError": {
@@ -108471,6 +108741,12 @@
                                   "spanId": {
                                     "type": "string"
                                   },
+                                  "usageLimitExceeded": {
+                                    "type": "boolean"
+                                  },
+                                  "usageLimitEntityType": {
+                                    "type": "string"
+                                  },
                                   "originalError": {
                                     "type": "object",
                                     "properties": {
@@ -108882,6 +109158,12 @@
                                   "spanId": {
                                     "type": "string"
                                   },
+                                  "usageLimitExceeded": {
+                                    "type": "boolean"
+                                  },
+                                  "usageLimitEntityType": {
+                                    "type": "string"
+                                  },
                                   "originalError": {
                                     "type": "object",
                                     "properties": {
@@ -109291,6 +109573,12 @@
                                     "type": "string"
                                   },
                                   "spanId": {
+                                    "type": "string"
+                                  },
+                                  "usageLimitExceeded": {
+                                    "type": "boolean"
+                                  },
+                                  "usageLimitEntityType": {
                                     "type": "string"
                                   },
                                   "originalError": {
@@ -109928,6 +110216,12 @@
                                     "type": "string"
                                   },
                                   "spanId": {
+                                    "type": "string"
+                                  },
+                                  "usageLimitExceeded": {
+                                    "type": "boolean"
+                                  },
+                                  "usageLimitEntityType": {
                                     "type": "string"
                                   },
                                   "originalError": {
@@ -110762,6 +111056,12 @@
                                     "type": "string"
                                   },
                                   "spanId": {
+                                    "type": "string"
+                                  },
+                                  "usageLimitExceeded": {
+                                    "type": "boolean"
+                                  },
+                                  "usageLimitEntityType": {
                                     "type": "string"
                                   },
                                   "originalError": {
@@ -136625,7 +136925,11 @@
                           "12h",
                           "24h",
                           "1w",
-                          "1m"
+                          "1m",
+                          "calendar_day",
+                          "calendar_week_sunday",
+                          "calendar_week_monday",
+                          "calendar_month"
                         ]
                       },
                       "lastCleanup": {
@@ -136986,7 +137290,11 @@
                       "12h",
                       "24h",
                       "1w",
-                      "1m"
+                      "1m",
+                      "calendar_day",
+                      "calendar_week_sunday",
+                      "calendar_week_monday",
+                      "calendar_month"
                     ]
                   },
                   "lastCleanup": {
@@ -137066,7 +137374,11 @@
                         "12h",
                         "24h",
                         "1w",
-                        "1m"
+                        "1m",
+                        "calendar_day",
+                        "calendar_week_sunday",
+                        "calendar_week_monday",
+                        "calendar_month"
                       ]
                     },
                     "lastCleanup": {
@@ -137419,7 +137731,11 @@
                         "12h",
                         "24h",
                         "1w",
-                        "1m"
+                        "1m",
+                        "calendar_day",
+                        "calendar_week_sunday",
+                        "calendar_week_monday",
+                        "calendar_month"
                       ]
                     },
                     "lastCleanup": {
@@ -137752,7 +138068,11 @@
                       "12h",
                       "24h",
                       "1w",
-                      "1m"
+                      "1m",
+                      "calendar_day",
+                      "calendar_week_sunday",
+                      "calendar_week_monday",
+                      "calendar_month"
                     ]
                   },
                   "lastCleanup": {
@@ -137838,7 +138158,11 @@
                         "12h",
                         "24h",
                         "1w",
-                        "1m"
+                        "1m",
+                        "calendar_day",
+                        "calendar_week_sunday",
+                        "calendar_week_monday",
+                        "calendar_month"
                       ]
                     },
                     "lastCleanup": {
@@ -170531,7 +170855,11 @@
                         "12h",
                         "24h",
                         "1w",
-                        "1m"
+                        "1m",
+                        "calendar_day",
+                        "calendar_week_sunday",
+                        "calendar_week_monday",
+                        "calendar_month"
                       ]
                     },
                     "defaultAgentId": {
@@ -171414,7 +171742,11 @@
                         "12h",
                         "24h",
                         "1w",
-                        "1m"
+                        "1m",
+                        "calendar_day",
+                        "calendar_week_sunday",
+                        "calendar_week_monday",
+                        "calendar_month"
                       ]
                     },
                     "defaultAgentId": {
@@ -172569,7 +172901,11 @@
                         "12h",
                         "24h",
                         "1w",
-                        "1m"
+                        "1m",
+                        "calendar_day",
+                        "calendar_week_sunday",
+                        "calendar_week_monday",
+                        "calendar_month"
                       ]
                     },
                     "defaultAgentId": {
@@ -173142,7 +173478,11 @@
                       "12h",
                       "24h",
                       "1w",
-                      "1m"
+                      "1m",
+                      "calendar_day",
+                      "calendar_week_sunday",
+                      "calendar_week_monday",
+                      "calendar_month"
                     ]
                   }
                 }
@@ -173334,7 +173674,11 @@
                         "12h",
                         "24h",
                         "1w",
-                        "1m"
+                        "1m",
+                        "calendar_day",
+                        "calendar_week_sunday",
+                        "calendar_week_monday",
+                        "calendar_month"
                       ]
                     },
                     "defaultAgentId": {
@@ -174086,7 +174430,11 @@
                         "12h",
                         "24h",
                         "1w",
-                        "1m"
+                        "1m",
+                        "calendar_day",
+                        "calendar_week_sunday",
+                        "calendar_week_monday",
+                        "calendar_month"
                       ]
                     },
                     "defaultAgentId": {
@@ -174900,7 +175248,11 @@
                         "12h",
                         "24h",
                         "1w",
-                        "1m"
+                        "1m",
+                        "calendar_day",
+                        "calendar_week_sunday",
+                        "calendar_week_monday",
+                        "calendar_month"
                       ]
                     },
                     "defaultAgentId": {
@@ -175647,7 +175999,11 @@
                         "12h",
                         "24h",
                         "1w",
-                        "1m"
+                        "1m",
+                        "calendar_day",
+                        "calendar_week_sunday",
+                        "calendar_week_monday",
+                        "calendar_month"
                       ]
                     },
                     "defaultAgentId": {
@@ -176387,7 +176743,11 @@
                         "12h",
                         "24h",
                         "1w",
-                        "1m"
+                        "1m",
+                        "calendar_day",
+                        "calendar_week_sunday",
+                        "calendar_week_monday",
+                        "calendar_month"
                       ]
                     },
                     "defaultAgentId": {
@@ -177126,7 +177486,11 @@
                         "12h",
                         "24h",
                         "1w",
-                        "1m"
+                        "1m",
+                        "calendar_day",
+                        "calendar_week_sunday",
+                        "calendar_week_monday",
+                        "calendar_month"
                       ]
                     },
                     "defaultAgentId": {
@@ -177882,7 +178246,11 @@
                         "12h",
                         "24h",
                         "1w",
-                        "1m"
+                        "1m",
+                        "calendar_day",
+                        "calendar_week_sunday",
+                        "calendar_week_monday",
+                        "calendar_month"
                       ]
                     },
                     "defaultAgentId": {
@@ -178621,7 +178989,11 @@
                         "12h",
                         "24h",
                         "1w",
-                        "1m"
+                        "1m",
+                        "calendar_day",
+                        "calendar_week_sunday",
+                        "calendar_week_monday",
+                        "calendar_month"
                       ]
                     },
                     "defaultAgentId": {
@@ -179373,7 +179745,11 @@
                         "12h",
                         "24h",
                         "1w",
-                        "1m"
+                        "1m",
+                        "calendar_day",
+                        "calendar_week_sunday",
+                        "calendar_week_monday",
+                        "calendar_month"
                       ]
                     },
                     "defaultAgentId": {
@@ -180092,7 +180468,11 @@
                         "12h",
                         "24h",
                         "1w",
-                        "1m"
+                        "1m",
+                        "calendar_day",
+                        "calendar_week_sunday",
+                        "calendar_week_monday",
+                        "calendar_month"
                       ]
                     },
                     "defaultAgentId": {
@@ -181124,7 +181504,11 @@
                         "12h",
                         "24h",
                         "1w",
-                        "1m"
+                        "1m",
+                        "calendar_day",
+                        "calendar_week_sunday",
+                        "calendar_week_monday",
+                        "calendar_month"
                       ]
                     },
                     "defaultAgentId": {
@@ -187678,6 +188062,12 @@
                                 "type": "string"
                               },
                               "spanId": {
+                                "type": "string"
+                              },
+                              "usageLimitExceeded": {
+                                "type": "boolean"
+                              },
+                              "usageLimitEntityType": {
                                 "type": "string"
                               },
                               "originalError": {

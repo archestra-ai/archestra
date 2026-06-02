@@ -28,7 +28,7 @@ export const publicConfigRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (_request, reply) => {
-      return reply.send(getPublicConfigResponse());
+      return reply.send(await getPublicConfigResponse());
     },
   );
 };
@@ -154,6 +154,7 @@ const PublicConfigResponseSchema = z.strictObject({
   maintenanceMode: z.string().nullable(),
   analytics: z.strictObject({
     enabled: z.boolean(),
+    instanceId: z.string().uuid().nullable(),
     posthog: z.strictObject({
       key: z.string(),
       host: z.string(),
@@ -161,16 +162,24 @@ const PublicConfigResponseSchema = z.strictObject({
   }),
 });
 
-function getPublicConfigResponse(): z.infer<typeof PublicConfigResponseSchema> {
+async function getPublicConfigResponse(): Promise<
+  z.infer<typeof PublicConfigResponseSchema>
+> {
   return {
     disableBasicAuth: config.auth.disableBasicAuth,
     disableInvitations: config.auth.disableInvitations,
     maintenanceMode: config.maintenanceMode,
     analytics: {
       enabled: config.analytics.enabled,
+      instanceId: await getAnalyticsInstanceId(),
       posthog: config.analytics.posthog,
     },
   };
+}
+
+async function getAnalyticsInstanceId(): Promise<string | null> {
+  if (config.maintenanceMode) return null;
+  return (await OrganizationModel.getAnalyticsState()).analyticsInstanceId;
 }
 
 /**

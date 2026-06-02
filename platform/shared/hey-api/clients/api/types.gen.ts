@@ -23107,6 +23107,7 @@ export type GetPublicConfigResponses = {
         maintenanceMode: string | null;
         analytics: {
             enabled: boolean;
+            instanceId: string | null;
             posthog: {
                 key: string;
                 host: string;

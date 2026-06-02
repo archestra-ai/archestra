@@ -81562,6 +81562,11 @@
                         "enabled": {
                           "type": "boolean"
                         },
+                        "instanceId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid"
+                        },
                         "posthog": {
                           "type": "object",
                           "properties": {
@@ -81581,6 +81586,7 @@
                       },
                       "required": [
                         "enabled",
+                        "instanceId",
                         "posthog"
                       ],
                       "additionalProperties": false

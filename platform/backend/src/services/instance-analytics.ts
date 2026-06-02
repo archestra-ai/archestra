@@ -1,22 +1,12 @@
-import { randomUUID } from "node:crypto";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import path from "node:path";
 import config from "@/config";
-import logger from "@/logging";
+import { OrganizationModel } from "@/models";
 
 const HEARTBEAT_INTERVAL_MS = 24 * 60 * 60 * 1000;
 const CAPTURE_TIMEOUT_MS = 10_000;
-const STATE_FILE_NAME = "instance-analytics.json";
 const INSTANCE_STARTED_EVENT = "instance_started";
 const INSTANCE_HEARTBEAT_EVENT = "instance_heartbeat";
 
 type Fetch = typeof fetch;
-
-type InstanceAnalyticsState = {
-  instanceId: string;
-  startedAt?: string;
-  lastHeartbeatAt?: string;
-};
 
 type InstanceAnalyticsConfig = {
   enabled: boolean;
@@ -24,7 +14,6 @@ type InstanceAnalyticsConfig = {
     key: string;
     host: string;
   };
-  stateDir: string;
 };
 
 class InstanceAnalyticsService {
@@ -34,7 +23,6 @@ class InstanceAnalyticsService {
       appVersion?: string;
       fetch?: Fetch;
       now?: () => Date;
-      createInstanceId?: () => string;
     } = {},
   ) {}
 
@@ -43,26 +31,30 @@ class InstanceAnalyticsService {
     if (!analyticsConfig.enabled || !analyticsConfig.posthog.key) return;
 
     const now = this.getNow();
-    const state = await this.readState(analyticsConfig.stateDir);
+    const state = await OrganizationModel.getAnalyticsState();
 
-    if (!state.startedAt) {
+    if (!state.analyticsInstanceStartedAt) {
       await this.capture({
         analyticsConfig,
         event: INSTANCE_STARTED_EVENT,
-        distinctId: state.instanceId,
+        distinctId: state.analyticsInstanceId,
       });
-      state.startedAt = now.toISOString();
-      await this.writeState(analyticsConfig.stateDir, state);
+      await OrganizationModel.updateAnalyticsState({
+        id: state.id,
+        analyticsInstanceStartedAt: now,
+      });
     }
 
-    if (shouldSendHeartbeat(state.lastHeartbeatAt, now)) {
+    if (shouldSendHeartbeat(state.analyticsInstanceLastHeartbeatAt, now)) {
       await this.capture({
         analyticsConfig,
         event: INSTANCE_HEARTBEAT_EVENT,
-        distinctId: state.instanceId,
+        distinctId: state.analyticsInstanceId,
       });
-      state.lastHeartbeatAt = now.toISOString();
-      await this.writeState(analyticsConfig.stateDir, state);
+      await OrganizationModel.updateAnalyticsState({
+        id: state.id,
+        analyticsInstanceLastHeartbeatAt: now,
+      });
     }
   }
 
@@ -87,7 +79,11 @@ class InstanceAnalyticsService {
         distinct_id: distinctId,
         properties: {
           app_version: this.options.appVersion ?? config.api.version,
+          instance_id: distinctId,
           source: "backend",
+          $groups: {
+            instance: distinctId,
+          },
         },
       }),
     });
@@ -99,48 +95,6 @@ class InstanceAnalyticsService {
     }
   }
 
-  private async readState(stateDir: string): Promise<InstanceAnalyticsState> {
-    try {
-      const contents = await readFile(getStateFilePath(stateDir), "utf-8");
-      const state = JSON.parse(contents) as Partial<InstanceAnalyticsState>;
-      if (typeof state.instanceId === "string" && state.instanceId.length > 0) {
-        return {
-          instanceId: state.instanceId,
-          startedAt:
-            typeof state.startedAt === "string" ? state.startedAt : undefined,
-          lastHeartbeatAt:
-            typeof state.lastHeartbeatAt === "string"
-              ? state.lastHeartbeatAt
-              : undefined,
-        };
-      }
-    } catch (error) {
-      if (
-        !(error instanceof Error) ||
-        !("code" in error) ||
-        error.code !== "ENOENT"
-      ) {
-        logger.warn({ err: error }, "Failed to read instance analytics state");
-      }
-    }
-
-    return {
-      instanceId: this.createInstanceId(),
-    };
-  }
-
-  private async writeState(
-    stateDir: string,
-    state: InstanceAnalyticsState,
-  ): Promise<void> {
-    await mkdir(stateDir, { recursive: true });
-    await writeFile(
-      getStateFilePath(stateDir),
-      `${JSON.stringify(state, null, 2)}\n`,
-      "utf-8",
-    );
-  }
-
   private getFetch(): Fetch {
     return this.options.fetch ?? fetch;
   }
@@ -148,30 +102,16 @@ class InstanceAnalyticsService {
   private getNow(): Date {
     return this.options.now?.() ?? new Date();
   }
-
-  private createInstanceId(): string {
-    return this.options.createInstanceId?.() ?? randomUUID();
-  }
 }
 
 export const instanceAnalyticsService = new InstanceAnalyticsService();
 
-function shouldSendHeartbeat(
-  lastHeartbeatAt: string | undefined,
-  now: Date,
-): boolean {
+function shouldSendHeartbeat(lastHeartbeatAt: Date | null, now: Date): boolean {
   if (!lastHeartbeatAt) return true;
 
-  const lastHeartbeatTime = Date.parse(lastHeartbeatAt);
-  if (Number.isNaN(lastHeartbeatTime)) return true;
-
-  return now.getTime() - lastHeartbeatTime >= HEARTBEAT_INTERVAL_MS;
+  return now.getTime() - lastHeartbeatAt.getTime() >= HEARTBEAT_INTERVAL_MS;
 }
 
 function getCaptureUrl(analyticsConfig: InstanceAnalyticsConfig): string {
   return new URL("/capture/", analyticsConfig.posthog.host).toString();
-}
-
-function getStateFilePath(stateDir: string): string {
-  return path.join(stateDir, STATE_FILE_NAME);
 }

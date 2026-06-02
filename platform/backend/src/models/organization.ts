@@ -60,6 +60,64 @@ class OrganizationModel {
   }
 
   /**
+   * Get persistent analytics identity and event timestamps for this installation.
+   */
+  static async getAnalyticsState(): Promise<
+    Pick<
+      Organization,
+      | "id"
+      | "analyticsInstanceId"
+      | "analyticsInstanceStartedAt"
+      | "analyticsInstanceLastHeartbeatAt"
+    >
+  > {
+    const organization =
+      await OrganizationModel.getOrCreateDefaultOrganization();
+    return {
+      id: organization.id,
+      analyticsInstanceId: organization.analyticsInstanceId,
+      analyticsInstanceStartedAt: organization.analyticsInstanceStartedAt,
+      analyticsInstanceLastHeartbeatAt:
+        organization.analyticsInstanceLastHeartbeatAt,
+    };
+  }
+
+  /**
+   * Update installation analytics timestamps after successful event capture.
+   */
+  static async updateAnalyticsState({
+    id,
+    analyticsInstanceStartedAt,
+    analyticsInstanceLastHeartbeatAt,
+  }: {
+    id: string;
+    analyticsInstanceStartedAt?: Date;
+    analyticsInstanceLastHeartbeatAt?: Date;
+  }): Promise<void> {
+    const values: Partial<
+      Pick<
+        Organization,
+        "analyticsInstanceStartedAt" | "analyticsInstanceLastHeartbeatAt"
+      >
+    > = {};
+
+    if (analyticsInstanceStartedAt) {
+      values.analyticsInstanceStartedAt = analyticsInstanceStartedAt;
+    }
+    if (analyticsInstanceLastHeartbeatAt) {
+      values.analyticsInstanceLastHeartbeatAt =
+        analyticsInstanceLastHeartbeatAt;
+    }
+
+    if (Object.keys(values).length === 0) return;
+
+    await db
+      .update(schema.organizationsTable)
+      .set(values)
+      .where(eq(schema.organizationsTable.id, id));
+  }
+
+  /**
    * Update an organization with partial data
    */
   static async patch(

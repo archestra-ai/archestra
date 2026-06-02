@@ -44,6 +44,7 @@ describe("config routes", () => {
       maintenanceMode: null,
       analytics: {
         enabled: expect.any(Boolean),
+        instanceId: expect.any(String),
         posthog: {
           key: expect.any(String),
           host: expect.any(String),

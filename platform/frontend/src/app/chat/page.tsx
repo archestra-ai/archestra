@@ -926,6 +926,7 @@ export function ChatPageContent({
     chatSession?.setPendingCustomServerToolCall;
   const tokenUsage = chatSession?.tokenUsage;
   const contextTokensUsed = chatSession?.contextTokensUsed;
+  const contextWindow = chatSession?.contextWindow ?? null;
   const contextCompaction = chatSession?.contextCompaction;
   const recordContextCompaction = chatSession?.recordContextCompaction;
 
@@ -2219,6 +2220,8 @@ export function ChatPageContent({
                           isModelsLoading={isModelsLoading}
                           tokensUsed={tokensUsed}
                           maxContextLength={selectedModelContextLength}
+                          contextWindow={contextWindow}
+                          lastCompaction={contextCompaction?.lastCompaction}
                           inputModalities={selectedModelInputModalities}
                           agentLlmApiKeyId={
                             conversation?.agent?.llmApiKeyId ?? null

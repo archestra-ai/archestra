@@ -3,6 +3,7 @@
 import { type UIMessage, useChat } from "@ai-sdk/react";
 import {
   type ArchestraToolShortName,
+  type ContextWindowBreakdown,
   type ContextWindowEstimate,
   EXTERNAL_AGENT_ID_HEADER,
   getArchestraToolShortName,
@@ -134,6 +135,8 @@ interface ChatSession {
   /** Token usage for the current/last response */
   tokenUsage: TokenUsage | null;
   contextTokensUsed: number | null;
+  /** Per-category breakdown of the assembled request for the current turn */
+  contextWindow: ContextWindowBreakdown | null;
   contextCompaction: ContextCompactionState;
   recordContextCompaction: (compaction: ContextCompactionRecord) => void;
   /** Early UI data from data-tool-ui-start events (toolCallId → resource data incl. pre-fetched HTML) */
@@ -365,6 +368,8 @@ function ChatSessionHook({
   const [contextTokensUsed, setContextTokensUsed] = useState<number | null>(
     null,
   );
+  const [contextWindow, setContextWindow] =
+    useState<ContextWindowBreakdown | null>(null);
   const [contextCompaction, setContextCompaction] =
     useState<ContextCompactionState>({
       isCompacting: false,
@@ -641,6 +646,12 @@ function ChatSessionHook({
         }
       }
 
+      // Per-category breakdown of the assembled request, powering the Context
+      // Window Visualizer panel. Emitted once per turn after assembly.
+      if (dataPart.type === "data-context-window-breakdown") {
+        setContextWindow(dataPart.data as ContextWindowBreakdown);
+      }
+
       if (dataPart.type === "data-context-compaction-start") {
         const data = dataPart.data as { trigger?: "auto" | "manual" };
         setContextCompaction((current) => ({
@@ -795,6 +806,7 @@ function ChatSessionHook({
     setPendingCustomServerToolCall,
     tokenUsage,
     contextTokensUsed,
+    contextWindow,
     contextCompaction,
     recordContextCompaction,
     earlyToolUiStarts,
@@ -821,6 +833,7 @@ function ChatSessionHook({
     optimisticToolCalls,
     tokenUsage,
     contextTokensUsed,
+    contextWindow,
     contextCompaction,
     recordContextCompaction,
     earlyToolUiStarts,

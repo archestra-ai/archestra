@@ -2,6 +2,7 @@
 
 import {
   type ChatSkillMetadata,
+  type ContextWindowBreakdown,
   E2eTestId,
   getAcceptedFileTypes,
   getSupportedFileTypesDescription,
@@ -37,6 +38,7 @@ import {
   usePromptInputController,
 } from "@/components/ai-elements/prompt-input";
 import { ContextIndicator } from "@/components/chat/context-indicator";
+import { ContextWindowDialog } from "@/components/chat/context-window-panel";
 import { InitialAgentSelector } from "@/components/chat/initial-agent-selector";
 import { LlmProviderApiKeySelector } from "@/components/chat/llm-provider-api-key-selector";
 import {
@@ -109,6 +111,14 @@ export interface ArchestraPromptInputProps {
   tokensUsed?: number;
   /** Maximum context length of the selected model (for context indicator) */
   maxContextLength?: number | null;
+  /** Per-category breakdown of the assembled request (for context usage panel) */
+  contextWindow?: ContextWindowBreakdown | null;
+  /** Most recent compaction result, surfaced as a marker in the context panel */
+  lastCompaction?: {
+    originalTokenEstimate?: number;
+    compactedTokenEstimate?: number;
+    trigger?: "auto" | "manual";
+  } | null;
   /** Input modalities supported by the selected model (for file type filtering) */
   inputModalities?: ModelInputModality[] | null;
   /** Agent's configured LLM API key ID - passed to LlmProviderApiKeySelector */
@@ -165,6 +175,8 @@ const PromptInputContent = ({
   isModelsLoading = false,
   tokensUsed = 0,
   maxContextLength,
+  contextWindow,
+  lastCompaction,
   inputModalities,
   agentLlmApiKeyId,
   submitDisabled = false,
@@ -900,11 +912,26 @@ const PromptInputContent = ({
                   </div>
                 )}
                 {tokensUsed > 0 && maxContextLength && (
-                  <ContextIndicator
+                  <ContextWindowDialog
+                    breakdown={contextWindow ?? null}
                     tokensUsed={tokensUsed}
                     maxTokens={maxContextLength}
-                    size="sm"
-                  />
+                    lastCompaction={lastCompaction}
+                  >
+                    <button
+                      type="button"
+                      aria-label="Context usage"
+                      data-testid={E2eTestId.ChatContextUsageTrigger}
+                      className="inline-flex items-center justify-center rounded-full outline-none transition-opacity hover:opacity-80 focus-visible:ring-2 focus-visible:ring-ring"
+                    >
+                      <ContextIndicator
+                        tokensUsed={tokensUsed}
+                        maxTokens={maxContextLength}
+                        size="sm"
+                        hideTooltip
+                      />
+                    </button>
+                  </ContextWindowDialog>
                 )}
               </>
             )}
@@ -948,6 +975,8 @@ const ArchestraPromptInput = ({
   isModelsLoading = false,
   tokensUsed = 0,
   maxContextLength,
+  contextWindow,
+  lastCompaction,
   inputModalities,
   agentLlmApiKeyId,
   submitDisabled,
@@ -999,6 +1028,8 @@ const ArchestraPromptInput = ({
           isModelsLoading={isModelsLoading}
           tokensUsed={tokensUsed}
           maxContextLength={maxContextLength}
+          contextWindow={contextWindow}
+          lastCompaction={lastCompaction}
           inputModalities={inputModalities}
           agentLlmApiKeyId={agentLlmApiKeyId}
           submitDisabled={submitDisabled}

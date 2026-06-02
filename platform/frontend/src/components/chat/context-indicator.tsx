@@ -18,6 +18,11 @@ interface ContextIndicatorProps {
   className?: string;
   /** Size of the indicator */
   size?: "sm" | "md";
+  /**
+   * Hide the built-in hover tooltip. Use when the indicator is a trigger for a
+   * richer surface (e.g. the Context usage popover) that already explains it.
+   */
+  hideTooltip?: boolean;
 }
 
 /**
@@ -63,6 +68,7 @@ export function ContextIndicator({
   maxTokens,
   className,
   size = "sm",
+  hideTooltip = false,
 }: ContextIndicatorProps) {
   const { percentage, circumference, strokeDashoffset } = useMemo(() => {
     if (!maxTokens || maxTokens === 0) {
@@ -93,63 +99,69 @@ export function ContextIndicator({
   const strokeWidth = size === "sm" ? 2 : 2.5;
   const center = svgSize / 2;
 
+  const ring = (
+    <div
+      className={cn(
+        "relative inline-flex items-center justify-center cursor-default",
+        dimensions,
+        className,
+      )}
+    >
+      {/* Background circle */}
+      <svg
+        className="absolute inset-0 -rotate-90"
+        width={svgSize}
+        height={svgSize}
+        viewBox={`0 0 ${svgSize} ${svgSize}`}
+        aria-hidden="true"
+      >
+        {/* Track */}
+        <circle
+          cx={center}
+          cy={center}
+          r={radius}
+          fill="none"
+          strokeWidth={strokeWidth}
+          className="stroke-muted"
+        />
+        {/* Progress */}
+        <circle
+          cx={center}
+          cy={center}
+          r={radius}
+          fill="none"
+          strokeWidth={strokeWidth}
+          strokeLinecap="round"
+          strokeDasharray={circumference}
+          strokeDashoffset={strokeDashoffset}
+          className={cn(
+            "transition-all duration-300",
+            getStrokeColor(percentage),
+          )}
+        />
+      </svg>
+      {/* Percentage text (only show for md size) */}
+      {size === "md" && (
+        <span
+          className={cn(
+            "text-[8px] font-medium tabular-nums",
+            getUsageColor(percentage),
+          )}
+        >
+          {Math.round(percentage)}
+        </span>
+      )}
+    </div>
+  );
+
+  if (hideTooltip) {
+    return ring;
+  }
+
   return (
     <TooltipProvider delayDuration={300}>
       <Tooltip>
-        <TooltipTrigger asChild>
-          <div
-            className={cn(
-              "relative inline-flex items-center justify-center cursor-default",
-              dimensions,
-              className,
-            )}
-          >
-            {/* Background circle */}
-            <svg
-              className="absolute inset-0 -rotate-90"
-              width={svgSize}
-              height={svgSize}
-              viewBox={`0 0 ${svgSize} ${svgSize}`}
-              aria-hidden="true"
-            >
-              {/* Track */}
-              <circle
-                cx={center}
-                cy={center}
-                r={radius}
-                fill="none"
-                strokeWidth={strokeWidth}
-                className="stroke-muted"
-              />
-              {/* Progress */}
-              <circle
-                cx={center}
-                cy={center}
-                r={radius}
-                fill="none"
-                strokeWidth={strokeWidth}
-                strokeLinecap="round"
-                strokeDasharray={circumference}
-                strokeDashoffset={strokeDashoffset}
-                className={cn(
-                  "transition-all duration-300",
-                  getStrokeColor(percentage),
-                )}
-              />
-            </svg>
-            {/* Percentage text (only show for md size) */}
-            {size === "md" && (
-              <span
-                className={cn(
-                  "text-[8px] font-medium tabular-nums",
-                  getUsageColor(percentage),
-                )}
-              >
-                {Math.round(percentage)}
-              </span>
-            )}
-          </div>
-        </TooltipTrigger>
+        <TooltipTrigger asChild>{ring}</TooltipTrigger>
         <TooltipContent side="top" className="text-xs">
           <div className="flex flex-col gap-0.5">
             <span className="font-medium">Context Usage</span>

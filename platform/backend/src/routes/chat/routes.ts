@@ -4,6 +4,7 @@ import {
   buildUserSystemPromptContext,
   CHAT_TITLE_GENERATION_SYSTEM_PROMPT,
   type ChatErrorResponse,
+  type ContextWindowBreakdown,
   type ContextWindowEstimate,
   isModelSelectionComplete,
   ResourceVisibilityScopeSchema,
@@ -58,6 +59,7 @@ import {
   LlmProviderApiKeyModel,
   MemberModel,
   MessageModel,
+  ModelModel,
   OrganizationModel,
   ScheduleTriggerModel,
   ScheduleTriggerRunModel,
@@ -108,6 +110,7 @@ import {
   shouldProbeTextStreamForContextTrimRetry,
   trimMessagesToTokenLimit,
 } from "./context-trimming";
+import { buildContextWindowBreakdown } from "./context-window-breakdown";
 import {
   getActiveTraceContext,
   mapProviderError,
@@ -728,6 +731,35 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                       estimatedTokens: compactionResult.inputTokenEstimate,
                     } satisfies ContextWindowEstimate,
                   });
+                }
+
+                // Per-category breakdown of the same assembled request, powering
+                // the Context Window Visualizer. Computed from the post-compaction
+                // messages so it reflects exactly what is sent this turn.
+                try {
+                  const modelRow = await ModelModel.findByProviderAndModelId(
+                    provider,
+                    selectedModel,
+                  );
+                  const breakdown = buildContextWindowBreakdown({
+                    provider,
+                    model: selectedModel,
+                    contextLength: modelRow?.contextLength ?? null,
+                    inputPricePerToken: resolveInputPricePerToken(modelRow),
+                    systemPrompt,
+                    tools: supportsToolCalling ? mcpTools : undefined,
+                    messages: compactionResult.messages,
+                  });
+                  writer.write({
+                    type: "data-context-window-breakdown",
+                    data: breakdown satisfies ContextWindowBreakdown,
+                  });
+                } catch (error) {
+                  // The visualizer is non-essential; never let it break a chat turn.
+                  logger.warn(
+                    { error, conversationId },
+                    "[ContextWindow] failed to build context window breakdown",
+                  );
                 }
 
                 const modelMessages = await buildModelMessagesForProvider({
@@ -2899,6 +2931,35 @@ function prepareMessagesForProvider(params: {
   }
 
   return messages;
+}
+
+/**
+ * Effective input price per token (USD) for a model row, preferring the
+ * admin-set custom price over the synced models.dev price. Used to estimate the
+ * cost of the assembled context for the Context Window Visualizer.
+ */
+function resolveInputPricePerToken(
+  model: {
+    promptPricePerToken: string | null;
+    customPricePerMillionInput: string | null;
+  } | null,
+): number | null {
+  if (!model) {
+    return null;
+  }
+  if (model.customPricePerMillionInput) {
+    const perMillion = Number(model.customPricePerMillionInput);
+    if (Number.isFinite(perMillion) && perMillion > 0) {
+      return perMillion / 1_000_000;
+    }
+  }
+  if (model.promptPricePerToken) {
+    const perToken = Number(model.promptPricePerToken);
+    if (Number.isFinite(perToken) && perToken > 0) {
+      return perToken;
+    }
+  }
+  return null;
 }
 
 async function buildModelMessagesForProvider(params: {

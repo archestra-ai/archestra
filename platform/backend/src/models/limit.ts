@@ -1263,7 +1263,7 @@ function buildLimitViolationResponse(params: {
 <archestra-limit-entity-id>${params.entityId}</archestra-limit-entity-id>
 <archestra-limit-current-usage>${totalTokens}</archestra-limit-current-usage>
 <archestra-limit-value>${params.limitValue}</archestra-limit-value>
-<archestra-limit-remaining>${Math.max(0, params.limitValue - totalTokens)}</archestra-limit-remaining>`;
+<archestra-limit-remaining>${remaining}</archestra-limit-remaining>`;
 
   const contentMessage =
     params.limitDescription === "cost_dollars"

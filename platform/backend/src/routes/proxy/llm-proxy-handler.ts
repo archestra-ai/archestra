@@ -469,6 +469,7 @@ export async function handleLLMProxy<
         { resolvedAgentId, reason: "token_cost_limit_exceeded" },
         `${providerName} request blocked due to token cost limit`,
       );
+      // Preserve the proxy-compatible error envelope so chat clients can read structured limit metadata.
       return reply.status(429).send({
         error: {
           message: contentMessage,

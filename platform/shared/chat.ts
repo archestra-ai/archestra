@@ -124,7 +124,9 @@ export function hasPersistableAssistantContent(message: {
   parts?: ReadonlyArray<AssistantContentPart>;
 }): boolean {
   const parts = message.parts;
-  if (!parts || parts.length === 0) {
+  // read-path callers pass historical JSON that is only cast, so reject any
+  // shape that is not an array of `type`-tagged parts before inspecting it.
+  if (!Array.isArray(parts) || parts.length === 0) {
     return false;
   }
 
@@ -136,6 +138,10 @@ export function hasPersistableAssistantContent(message: {
   }
 
   return parts.some((part) => {
+    if (typeof part?.type !== "string") {
+      return false;
+    }
+
     if (part.type === "text" || part.type === "reasoning") {
       return typeof part.text === "string" && part.text.trim().length > 0;
     }
@@ -175,6 +181,9 @@ export function hasPersistableAssistantContent(message: {
 }
 
 function isTerminalToolPart(part: AssistantContentPart): boolean {
+  if (typeof part?.type !== "string") {
+    return false;
+  }
   if (part.type === "tool-result") {
     return true;
   }

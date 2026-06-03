@@ -3,6 +3,7 @@ import {
   getAcceptedFileTypes,
   getMediaType,
   getSupportedFileTypesDescription,
+  hasPersistableAssistantContent,
   INPUT_MODALITY_OPTIONS,
   OUTPUT_MODALITY_OPTIONS,
   supportsFileUploads,
@@ -89,5 +90,42 @@ describe("chat file upload helpers", () => {
       "image",
       "audio",
     ]);
+  });
+});
+
+describe("hasPersistableAssistantContent", () => {
+  test("keeps assistant turns carrying renderable content", () => {
+    expect(
+      hasPersistableAssistantContent({
+        parts: [{ type: "text", text: "hello" }],
+      }),
+    ).toBe(true);
+  });
+
+  test("drops empty turns", () => {
+    expect(hasPersistableAssistantContent({})).toBe(false);
+    expect(hasPersistableAssistantContent({ parts: [] })).toBe(false);
+    expect(
+      hasPersistableAssistantContent({ parts: [{ type: "text", text: "  " }] }),
+    ).toBe(false);
+  });
+
+  // read-path callers pass historical JSON that is only cast, so malformed
+  // rows must be treated as empty rather than throwing and failing the load.
+  test("tolerates malformed persisted parts without throwing", () => {
+    const malformed = [
+      { parts: {} },
+      { parts: [{}] },
+      { parts: [null] },
+      { parts: [{ type: 42 }] },
+      { parts: "not-an-array" },
+    ];
+    for (const message of malformed) {
+      expect(
+        hasPersistableAssistantContent(
+          message as Parameters<typeof hasPersistableAssistantContent>[0],
+        ),
+      ).toBe(false);
+    }
   });
 });

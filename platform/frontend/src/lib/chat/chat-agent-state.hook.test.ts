@@ -183,6 +183,7 @@ function makeConversationAgent(id: string, name: string) {
     name,
     systemPrompt: null,
     agentType: "agent" as const,
+    toolExposureMode: "full" as const,
     llmApiKeyId: null,
   };
 }
@@ -214,6 +215,7 @@ function makeConversation(
       name: "Agent A",
       systemPrompt: null,
       agentType: "agent",
+      toolExposureMode: "full",
       llmApiKeyId: null,
     },
     share: null,

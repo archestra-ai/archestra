@@ -58,6 +58,7 @@ export function decodeSkillCatalog(
 // skills. collapse entries that are the same skill -- identical name and
 // description -- keeping one canonical copy. same name but a different
 // description is a genuinely different skill and is preserved.
+/** @public — consumed by the standalone-scripts skill-index generator */
 export function dedupeSkillCatalogEntries(
   entries: readonly SkillCatalogEntry[],
 ): SkillCatalogEntry[] {
@@ -224,7 +225,7 @@ export function searchSkillCatalogIndex(
   return ranked.slice(0, limit).map(({ entry }) => entry);
 }
 
-/** convenience for tests: build a one-shot index, then query. */
+/** @public — convenience for tests: build a one-shot index, then query. */
 export function searchSkillCatalogEntries(params: {
   entries: readonly SkillCatalogEntry[];
   query: string;

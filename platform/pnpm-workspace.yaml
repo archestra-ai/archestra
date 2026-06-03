@@ -2,6 +2,7 @@ packages:
   - "backend"
   - "frontend"
   - "shared"
+  - "sorting-hat-mcp"
   - "archestra-rs/sandbox-rs"
   - "e2e-tests"
 

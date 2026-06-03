@@ -6,6 +6,7 @@ import { Suspense, useEffect, useMemo, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { ChangePasswordDialog } from "@/app/settings/account/_components/change-password-dialog";
 import { LightDarkToggle } from "@/app/settings/account/_components/light-dark-toggle";
+import { PatronusPicker } from "@/app/settings/account/_components/patronus-picker";
 import { useSetSettingsAction } from "@/app/settings/layout";
 import { LoadingSpinner } from "@/components/loading";
 import { PersonalTokenCard } from "@/components/settings/personal-token-card";
@@ -52,6 +53,7 @@ function AccountSettingsContent() {
       <SettingsSectionStack>
         <RolePermissionsCard />
         <PersonalTokenCard />
+        <PatronusPicker />
         {organization?.showTwoFactor && (
           <TwoFactorCard classNames={{ base: "w-full" }} />
         )}

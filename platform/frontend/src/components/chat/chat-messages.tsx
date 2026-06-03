@@ -73,6 +73,7 @@ import {
   getToolHeaderState,
   getToolNameFromPart,
 } from "@/lib/chat/chat-tools-display.utils";
+import { getSortingHatHouse } from "@/lib/chat/sorting-hat";
 import { PERSISTED_MESSAGE_ID_METADATA_KEY } from "@/lib/chat/chat-utils";
 import { useGlobalChat } from "@/lib/chat/global-chat.context";
 import {
@@ -1668,6 +1669,7 @@ const MessageTool = memo(
     // Use the text content string when available; fall back to the raw output for non-MCP tools.
     const output = mcpOutput?.content ?? rawOutput;
     const errorText = getToolErrorText({ part, toolResultPart });
+    const sortingHouse = getSortingHatHouse(rawOutput);
 
     const isApprovalRequested = part.state === "approval-requested";
     const isToolDenied = part.state === "output-denied";
@@ -1867,6 +1869,7 @@ const MessageTool = memo(
                     toolResultPart,
                     errorText,
                   })}
+                  sortingHouse={sortingHouse}
                   isCollapsible={!!hasInput}
                 />
                 <ToolContent>
@@ -1924,6 +1927,7 @@ const MessageTool = memo(
             toolResultPart,
             errorText,
           })}
+          sortingHouse={sortingHouse}
           isCollapsible={isExpandable}
           actionButton={logsButton}
         />

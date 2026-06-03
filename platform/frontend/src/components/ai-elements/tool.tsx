@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
 import { CodeBlock } from "./code-block";
+import { GoldenSnitchLoader } from "./golden-snitch-loader";
 
 export type ToolProps = ComponentProps<typeof Collapsible>;
 
@@ -63,6 +64,7 @@ export type ToolHeaderProps = {
   state: ToolUIPart["state"] | "output-available-dual-llm" | "output-denied";
   className?: string;
   icon?: React.ReactNode;
+  sortingHouse?: "gryffindor" | "slytherin" | "ravenclaw" | "hufflepuff" | null;
   isCollapsible?: boolean;
   /** Optional action button to display in the header (e.g., View Logs) */
   actionButton?: React.ReactNode;
@@ -70,6 +72,7 @@ export type ToolHeaderProps = {
 
 const getStatusBadge = (
   status: ToolUIPart["state"] | "output-available-dual-llm" | "output-denied",
+  sortingHouse?: ToolHeaderProps["sortingHouse"],
 ) => {
   const labels = {
     "input-streaming": "Pending",
@@ -84,7 +87,12 @@ const getStatusBadge = (
 
   const icons = {
     "input-streaming": <CircleIcon className="size-4" />,
-    "input-available": <ClockIcon className="size-4 animate-pulse" />,
+    "input-available":
+      sortingHouse === "gryffindor" ? (
+        <GoldenSnitchLoader size={16} />
+      ) : (
+        <ClockIcon className="size-4 animate-pulse" />
+      ),
     "approval-requested": <ClockIcon className="size-4 text-yellow-600" />,
     "approval-responded": <CheckCircleIcon className="size-4 text-blue-600" />,
     "output-available": <CheckCircleIcon className="size-4 text-green-600" />,
@@ -109,6 +117,7 @@ export const ToolHeader = ({
   type,
   state,
   icon,
+  sortingHouse,
   isCollapsible = true,
   actionButton,
   ...props
@@ -127,7 +136,7 @@ export const ToolHeader = ({
         <span className="font-medium text-sm">
           {title ?? type.split("-").slice(1).join("-")}
         </span>
-        {getStatusBadge(state)}
+        {getStatusBadge(state, sortingHouse)}
       </div>
     </div>
     {actionButton && (

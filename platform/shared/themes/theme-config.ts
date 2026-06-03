@@ -31,6 +31,7 @@ export const SUPPORTED_THEMES = [
   "dracula-dark",
   "monokai-dark",
   "moonlight-dark",
+  "forbidden-forest",
 ] as const;
 
 /**

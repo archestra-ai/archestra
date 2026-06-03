@@ -10,11 +10,8 @@ import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
 import { sanitizeSvg } from "@/utils/sanitize-svg";
+import { NetworkPolicyInputSchema, NetworkPolicySchema } from "./environment";
 import { LimitCleanupIntervalSchema } from "./limit";
-import {
-  NetworkPolicyInputSchema,
-  NetworkPolicySchema,
-} from "./network-policy";
 
 const DATA_URI_PREFIX = "data:image/png;base64,";
 const GIF_DATA_URI_PREFIX = "data:image/gif;base64,";

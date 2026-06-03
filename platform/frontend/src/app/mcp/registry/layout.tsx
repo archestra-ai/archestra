@@ -26,7 +26,6 @@ export default function McpCatalogLayout({
   const pathname = usePathname();
   const isRegistryPage = pathname === "/mcp/registry";
   const [pageActionButton, setActionButton] = useState<React.ReactNode>(null);
-  const tabs = [{ label: "Catalog", href: "/mcp/registry" }];
   const contextValue = useMemo(() => ({ setActionButton }), []);
   const registryActionButton = isRegistryPage ? (
     <PermissionButton
@@ -50,7 +49,6 @@ export default function McpCatalogLayout({
             servers and make them available to your agents.
           </>
         }
-        tabs={tabs}
         actionButton={registryActionButton ?? pageActionButton}
       >
         {children}

@@ -14,6 +14,13 @@ export interface ParsedSkill {
   content: string;
   license: string | null;
   compatibility: string | null;
+  /**
+   * Space-separated `allowed-tools` list, normalized from either a string or a
+   * YAML sequence. `null` when the field is absent or empty.
+   */
+  allowedTools: string | null;
+  /** When true, the body is rendered through Handlebars at activation. */
+  templated: boolean;
   metadata: Record<string, string>;
 }
 
@@ -74,6 +81,8 @@ export function parseSkillManifest(raw: string): ParsedSkill {
     content: raw.slice(match[0].length).trim(),
     license: readString(fields.license) || null,
     compatibility: readString(fields.compatibility) || null,
+    allowedTools: readAllowedTools(fields["allowed-tools"]),
+    templated: readBoolean(fields.templated),
     metadata: readStringMap(fields.metadata),
   };
 }
@@ -94,6 +103,28 @@ export function deriveSkillFileKind(path: string): SkillFileKind {
 
 function readString(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
+}
+
+/**
+ * Normalize the `allowed-tools` field into a single space-separated string. The
+ * spec defines it as space-separated, but YAML authors often write a sequence;
+ * accept both. Returns `null` when nothing usable remains.
+ */
+function readAllowedTools(value: unknown): string | null {
+  const tools = Array.isArray(value)
+    ? value.filter((entry): entry is string => typeof entry === "string")
+    : typeof value === "string"
+      ? value.split(/\s+/)
+      : [];
+  const normalized = tools.map((tool) => tool.trim()).filter(Boolean);
+  return normalized.length > 0 ? normalized.join(" ") : null;
+}
+
+/** Coerce a YAML scalar into a boolean, accepting `true` or the string "true". */
+function readBoolean(value: unknown): boolean {
+  return (
+    value === true || (typeof value === "string" && value.trim() === "true")
+  );
 }
 
 /** Coerce a YAML mapping into a flat `Record<string, string>`. */

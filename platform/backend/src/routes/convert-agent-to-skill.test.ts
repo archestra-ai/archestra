@@ -16,6 +16,7 @@ interface ConvertResponse {
     name: string;
     description: string;
     content: string;
+    allowedTools: string | null;
     scope: string;
     metadata: Record<string, string>;
   };
@@ -102,7 +103,7 @@ describe("POST /api/agents/:id/convert-to-skill", () => {
     expect(await AgentModel.findById(agent.id, user.id, true)).not.toBeNull();
   });
 
-  test("lists tool bindings as recommended tools", async ({
+  test("carries tool bindings into allowed-tools", async ({
     makeInternalAgent,
     makeTool,
     makeAgentTool,
@@ -130,8 +131,8 @@ describe("POST /api/agents/:id/convert-to-skill", () => {
 
     expect(response.statusCode).toBe(200);
     const body = response.json() as ConvertResponse;
-    expect(body.skill.content).toContain("## Recommended tools");
-    expect(body.skill.content).toContain("slack__send");
+    expect(body.skill.allowedTools).toBe("slack__send");
+    expect(body.skill.content).not.toContain("slack__send");
     expect(body.skill.content).not.toContain("## Requirements");
   });
 

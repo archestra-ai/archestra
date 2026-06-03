@@ -5,9 +5,11 @@ import {
   memberPermissions,
   permissionDescriptions,
   predefinedPermissionsMap,
+  requiredEndpointPermissionsMap,
 } from "./access-control";
 import { internalResources, type Resource } from "./permission.types";
 import { ADMIN_ROLE_NAME } from "./roles";
+import { RouteId } from "./routes";
 
 describe("access-control", () => {
   test("every resource:action combination has a permissionDescription", () => {
@@ -65,6 +67,20 @@ describe("access-control", () => {
 
     test("auditLog only exposes the read action", () => {
       expect(allAvailableActions.auditLog).toEqual(["read"]);
+    });
+  });
+
+  describe("LLM-spending skill routes", () => {
+    // suggestSkillDescription resolves and spends the source agent's configured
+    // LLM key, so it must be gated like chatting with the agent — not by the
+    // weaker skill:create + agent:read the convert flow uses. Without chat:read,
+    // a caller who can only view+convert a shared agent could burn its key.
+    test("suggestSkillDescription requires chat:read", () => {
+      const required =
+        requiredEndpointPermissionsMap[RouteId.SuggestSkillDescription];
+      expect(required?.chat).toContain("read");
+      expect(required?.skill).toContain("create");
+      expect(required?.agent).toContain("read");
     });
   });
 });

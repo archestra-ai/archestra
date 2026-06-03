@@ -6,7 +6,10 @@ import {
 import { getSkillPermissionChecker } from "@/auth/skill-permissions";
 import logger from "@/logging";
 import { SkillFileModel, SkillModel, SkillTeamModel } from "@/models";
-import { formatSkillActivation } from "@/skills/skill-activation";
+import {
+  buildSkillActivationPromptContext,
+  formatSkillActivation,
+} from "@/skills/skill-activation";
 import { isSkillSandboxAvailableForAgent } from "@/skills/skill-sandbox-availability";
 
 /**
@@ -97,6 +100,9 @@ export async function injectSkillActivation({
         checker,
         agentId,
       }),
+      promptContext: skill.templated
+        ? await buildSkillActivationPromptContext({ userId, organizationId })
+        : null,
     }),
   );
   return next;

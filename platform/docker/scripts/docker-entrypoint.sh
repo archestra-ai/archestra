@@ -229,19 +229,33 @@ if [ "$ARCHESTRA_QUICKSTART" = "true" ]; then
     if [ "${ARCHESTRA_CODE_RUNTIME_ENABLED:-true}" = "true" ]; then
         echo "Deploying embedded Dagger Engine for code runtime..."
         echo "NOTE: the engine is privileged and memory-hungry; ensure Docker has at least 6 GB."
-        if kubectl --kubeconfig "${KUBECONFIG_PATH}" apply -f /app/dagger-engine.quickstart.yaml; then
-            # don't block boot on the engine image pull: the pod comes up
-            # asynchronously and the backend's sandbox runtime inits lazily and
-            # retries until the engine is reachable, the same way MCP server
-            # pods start after boot. the dagger CLI spawned by the backend uses
-            # KUBECONFIG to exec into the engine pod for the kube-pod:// transport.
+
+        # Pre-load the engine image straight into the node's containerd. KinD is
+        # recreated each run and its containerd cannot see the host Docker image
+        # cache, so without this every boot would pull ~352MB from the registry.
+        # The image is baked into this image as a docker-archive at build time, so
+        # the engine starts offline (manifest uses imagePullPolicy: IfNotPresent).
+        echo "Loading bundled Dagger Engine image into KinD (offline, no registry pull)..."
+        kind load image-archive /app/dagger-engine.tar --name "${CLUSTER_NAME}" \
+            || echo "WARNING: kind load failed; the engine will fall back to a registry pull"
+
+        # Gate the runtime on the engine actually being Ready: kubectl apply only
+        # proves the API accepted the manifest, not that the pod scheduled and
+        # passed its probe. With the image pre-loaded, 60s is ample on the happy
+        # path; on timeout we leave the feature off rather than advertise a pod
+        # that never came up.
+        if kubectl --kubeconfig "${KUBECONFIG_PATH}" apply -f /app/dagger-engine.quickstart.yaml \
+            && kubectl --kubeconfig "${KUBECONFIG_PATH}" rollout status \
+                statefulset/dagger-runtime-engine -n default --timeout=60s; then
+            # the dagger CLI spawned by the backend uses KUBECONFIG to exec into
+            # the engine pod for the kube-pod:// transport.
             export KUBECONFIG="${KUBECONFIG_PATH}"
             export ARCHESTRA_CODE_RUNTIME_ENABLED="true"
             export ARCHESTRA_AGENTS_SKILLS_ENABLED="${ARCHESTRA_AGENTS_SKILLS_ENABLED:-true}"
             export ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST="kube-pod://dagger-runtime-engine-0?namespace=default&container=dagger-engine"
-            echo "Dagger Engine deploying in the background - code runtime enabled (ready shortly)"
+            echo "Dagger Engine ready - code runtime enabled"
         else
-            echo "WARNING: Failed to apply Dagger Engine manifest; code runtime stays disabled"
+            echo "WARNING: Dagger Engine did not become ready; code runtime stays disabled"
         fi
     fi
 fi

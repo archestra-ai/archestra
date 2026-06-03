@@ -339,7 +339,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       try {
         const { agentId, agent } = conversation;
-        const toolExposureMode = await AgentModel.getToolExposureMode(agentId);
 
         // Extract and ingest documents to agent's knowledge base (fire and forget)
         // This runs asynchronously to avoid blocking the chat response
@@ -419,7 +418,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "When a tool execution is not approved by the user, do not retry it. Explain what happened and ask the user what they'd like to do instead.";
 
         const toolLoadingInstructions =
-          toolExposureMode === "search_and_run_only"
+          agent.toolExposureMode === "search_and_run_only"
             ? buildLoadToolsWhenNeededSystemPrompt()
             : "";
 

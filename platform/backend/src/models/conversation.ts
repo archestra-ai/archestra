@@ -13,6 +13,7 @@ import db, { schema } from "@/database";
 import type {
   Conversation,
   InsertConversation,
+  ToolExposureMode,
   UpdateConversation,
 } from "@/types";
 import { escapeLikePattern } from "@/utils/sql-search";
@@ -126,6 +127,7 @@ class ConversationModel {
             name: schema.agentsTable.name,
             systemPrompt: schema.agentsTable.systemPrompt,
             agentType: schema.agentsTable.agentType,
+            toolExposureMode: schema.agentsTable.toolExposureMode,
             llmApiKeyId: schema.agentsTable.llmApiKeyId,
             deletedAt: schema.agentsTable.deletedAt,
           },
@@ -227,6 +229,7 @@ class ConversationModel {
             name: schema.agentsTable.name,
             systemPrompt: schema.agentsTable.systemPrompt,
             agentType: schema.agentsTable.agentType,
+            toolExposureMode: schema.agentsTable.toolExposureMode,
             llmApiKeyId: schema.agentsTable.llmApiKeyId,
             deletedAt: schema.agentsTable.deletedAt,
           },
@@ -278,6 +281,7 @@ class ConversationModel {
           name: schema.agentsTable.name,
           systemPrompt: schema.agentsTable.systemPrompt,
           agentType: schema.agentsTable.agentType,
+          toolExposureMode: schema.agentsTable.toolExposureMode,
           llmApiKeyId: schema.agentsTable.llmApiKeyId,
           deletedAt: schema.agentsTable.deletedAt,
         },
@@ -384,6 +388,7 @@ class ConversationModel {
           name: schema.agentsTable.name,
           systemPrompt: schema.agentsTable.systemPrompt,
           agentType: schema.agentsTable.agentType,
+          toolExposureMode: schema.agentsTable.toolExposureMode,
           llmApiKeyId: schema.agentsTable.llmApiKeyId,
           deletedAt: schema.agentsTable.deletedAt,
         },
@@ -579,6 +584,7 @@ type JoinedConversationAgent = {
   name: string | null;
   systemPrompt: string | null;
   agentType: "profile" | "mcp_gateway" | "llm_proxy" | "agent" | null;
+  toolExposureMode: ToolExposureMode | null;
   llmApiKeyId: string | null;
   deletedAt: Date | null;
 } | null;
@@ -604,6 +610,7 @@ function withVisibleAgent(
       name: agent.name ?? "",
       systemPrompt: agent.systemPrompt,
       agentType: agent.agentType ?? "agent",
+      toolExposureMode: agent.toolExposureMode ?? "full",
       llmApiKeyId: agent.llmApiKeyId,
     },
   };

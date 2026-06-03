@@ -6,37 +6,42 @@ export interface PopularRepo {
 }
 
 // Curated popular agent-skill repositories. Source: https://www.skills.sh/.
-// Stars sampled via shields.io; ordered by stars descending.
+// Stars sampled from the GitHub API and rounded; ordered by stars descending.
 export const POPULAR_REPOS: PopularRepo[] = [
   {
     repo: "obra/superpowers",
     description: "Agent coordination and development workflow.",
-    stars: 200_000,
+    stars: 220_000,
   },
   {
     repo: "anthropics/skills",
     description: "Document processing and AI capabilities from Anthropic.",
-    stars: 138_000,
+    stars: 150_000,
   },
   {
     repo: "mattpocock/skills",
     description: "Debugging, architecture, and code review.",
-    stars: 97_000,
+    stars: 120_000,
   },
   {
     repo: "browser-use/browser-use",
     description: "Browser automation and interaction capabilities.",
-    stars: 95_000,
+    stars: 97_000,
   },
   {
     repo: "github/awesome-copilot",
     description: "GitHub's curated Copilot skills.",
-    stars: 33_000,
+    stars: 34_000,
   },
   {
     repo: "anthropics/financial-services",
     description: "Financial-services agent skills and domain patterns.",
-    stars: 29_646,
+    stars: 30_000,
+  },
+  {
+    repo: "googleworkspace/cli",
+    description: "Google Workspace integrations.",
+    stars: 27_000,
   },
   {
     repo: "vercel-labs/agent-skills",
@@ -44,61 +49,66 @@ export const POPULAR_REPOS: PopularRepo[] = [
     stars: 27_000,
   },
   {
-    repo: "googleworkspace/cli",
-    description: "Google Workspace integrations.",
-    stars: 26_000,
-  },
-  {
     repo: "openai/skills",
     description: "Skills authored by OpenAI.",
-    stars: 20_000,
+    stars: 21_000,
   },
   {
     repo: "anthropics/knowledge-work-plugins",
     description:
       "Knowledge-work plugins from Anthropic (docs, slides, sheets).",
-    stars: 18_950,
-  },
-  {
-    repo: "huggingface/skills",
-    description: "Hugging Face models, datasets, and ML workflows.",
-    stars: 10_611,
+    stars: 19_000,
   },
   {
     repo: "google/skills",
     description: "Skills authored by Google.",
-    stars: 10_000,
+    stars: 11_000,
+  },
+  {
+    repo: "huggingface/skills",
+    description: "Hugging Face models, datasets, and ML workflows.",
+    stars: 11_000,
   },
   {
     repo: "trailofbits/skills",
     description:
       "Security auditing and vulnerability research from Trail of Bits.",
-    stars: 5_529,
+    stars: 5_500,
   },
   {
     repo: "antfu/skills",
     description: "Skills from Anthony Fu (Vite/Vue ecosystem).",
-    stars: 5_000,
+    stars: 5_200,
   },
   {
     repo: "google-gemini/gemini-skills",
     description: "Gemini agent skills.",
-    stars: 3_500,
+    stars: 3_600,
   },
   {
     repo: "remotion-dev/skills",
     description: "Programmatic video creation with Remotion.",
+    stars: 3_400,
+  },
+  {
+    repo: "dotnet/skills",
+    description: ".NET development skills.",
     stars: 3_200,
   },
   {
     repo: "microsoft/skills",
     description: "Microsoft development tooling and patterns.",
-    stars: 2_451,
+    stars: 2_500,
+  },
+  {
+    repo: "flutter/skills",
+    description: "Flutter mobile development.",
+    stars: 2_300,
   },
   {
     repo: "supabase/agent-skills",
     description: "PostgreSQL and Supabase best practices.",
-    stars: 2_100,
+    stars: 2_200,
   },
   {
     repo: "apify/agent-skills",
@@ -106,29 +116,19 @@ export const POPULAR_REPOS: PopularRepo[] = [
     stars: 2_100,
   },
   {
-    repo: "flutter/skills",
-    description: "Flutter mobile development.",
-    stars: 2_100,
-  },
-  {
-    repo: "dotnet/skills",
-    description: ".NET development skills.",
-    stars: 1_900,
-  },
-  {
     repo: "expo/skills",
     description: "Expo and React Native development.",
-    stars: 1_900,
+    stars: 2_000,
   },
   {
     repo: "ibelick/ui-skills",
     description: "UI component patterns.",
-    stars: 1_700,
+    stars: 1_800,
   },
   {
     repo: "cloudflare/skills",
     description: "Cloudflare Workers, CDN, and edge skills.",
-    stars: 1_600,
+    stars: 1_700,
   },
   {
     repo: "microsoft/azure-skills",
@@ -138,22 +138,22 @@ export const POPULAR_REPOS: PopularRepo[] = [
   {
     repo: "NVIDIA/skills",
     description: "NVIDIA GPU computing and AI development.",
-    stars: 933,
+    stars: 930,
   },
   {
     repo: "vercel-labs/next-skills",
     description: "Next.js framework best practices.",
-    stars: 882,
+    stars: 900,
   },
   {
     repo: "langchain-ai/langchain-skills",
     description: "LangChain agent patterns.",
-    stars: 713,
+    stars: 770,
   },
   {
     repo: "hashicorp/agent-skills",
     description: "Terraform, Vault, and HashiCorp infrastructure automation.",
-    stars: 646,
+    stars: 650,
   },
   {
     repo: "dbt-labs/dbt-agent-skills",
@@ -163,47 +163,47 @@ export const POPULAR_REPOS: PopularRepo[] = [
   {
     repo: "elastic/agent-skills",
     description: "Search, observability, and security with Elastic.",
-    stars: 501,
+    stars: 500,
   },
   {
     repo: "firecrawl/cli",
     description: "Web crawling and data extraction.",
-    stars: 413,
+    stars: 430,
   },
   {
     repo: "angular/skills",
     description: "Angular framework best practices.",
-    stars: 360,
+    stars: 390,
   },
   {
     repo: "LukasNiessen/kubernetes-skill",
     description: "Kubernetes operations and troubleshooting.",
-    stars: 344,
+    stars: 340,
   },
   {
     repo: "firebase/agent-skills",
     description: "Firebase auth, hosting, and Genkit development.",
-    stars: 293,
+    stars: 330,
   },
   {
     repo: "semgrep/skills",
     description: "Static analysis and security scanning with Semgrep.",
-    stars: 217,
+    stars: 220,
   },
   {
     repo: "better-auth/skills",
     description: "Authentication best practices with Better Auth.",
-    stars: 191,
+    stars: 200,
   },
   {
     repo: "fluxcd/agent-skills",
     description: "GitOps continuous delivery for Kubernetes with Flux.",
-    stars: 163,
+    stars: 160,
   },
   {
     repo: "databricks/databricks-agent-skills",
     description: "Data engineering and analytics on Databricks.",
-    stars: 144,
+    stars: 140,
   },
   {
     repo: "grafana/skills",
@@ -213,7 +213,7 @@ export const POPULAR_REPOS: PopularRepo[] = [
   {
     repo: "datadog-labs/agent-skills",
     description: "Monitoring, metrics, and tracing with Datadog.",
-    stars: 126,
+    stars: 130,
   },
   {
     repo: "ServiceNow/sdk",
@@ -243,7 +243,7 @@ export const POPULAR_REPOS: PopularRepo[] = [
   {
     repo: "prisma/skills",
     description: "Prisma ORM best practices.",
-    stars: 37,
+    stars: 39,
   },
   {
     repo: "Snowflake-Labs/coco-skills",
@@ -253,7 +253,7 @@ export const POPULAR_REPOS: PopularRepo[] = [
   {
     repo: "get-convex/agent-skills",
     description: "Convex backend, database, and performance.",
-    stars: 29,
+    stars: 31,
   },
   {
     repo: "aws-samples/sample-agent-skills-for-builders",
@@ -268,7 +268,7 @@ export const POPULAR_REPOS: PopularRepo[] = [
   {
     repo: "neondatabase/postgres-skills",
     description: "Postgres + Neon serverless best practices.",
-    stars: 9,
+    stars: 11,
   },
   {
     repo: "aws-samples/sample-aws-ops-skills-for-agents",

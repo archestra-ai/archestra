@@ -30,12 +30,6 @@ export function ClientIcon({ client, size = 36 }: ClientIconProps) {
         >
           <path d={client.svg} fill={client.iconColor || "currentColor"} />
         </svg>
-      ) : client.image ? (
-        <img
-          src={client.image}
-          alt={`${client.label} logo`}
-          className="size-full rounded-[inherit] object-cover"
-        />
       ) : client.iconOverride ? (
         <div
           className="flex size-full items-center justify-center font-mono font-bold"

@@ -87,12 +87,11 @@ describe("Copilot CLI connection client", () => {
     expect(rendered).toContain("archestra-copilot-cli-ok");
   });
 
-  it("uses the Copilot logo image in the client picker", () => {
+  it("uses the Copilot SVG path in the client picker", () => {
     const client = getCopilotClient();
 
-    expect(client.image).toBe(
-      "https://img.icons8.com/fluent/1200/github-copilot.jpg",
-    );
+    expect(client.svg).toContain("M19.245 5.364");
+    expect(client.iconColor).toBe("#24292f");
     expect(client.iconOverride).toBeUndefined();
   });
 });

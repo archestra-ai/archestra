@@ -241,6 +241,9 @@ class SkillSandboxRuntimeService {
         path: params.path,
         defaultCwd: sandbox.defaultCwd,
       });
+      // reject paths the Rust replay validator would later reject, so a bad
+      // upload fails this call instead of poisoning every future replay.
+      validateUploadPath(resolvedPath);
 
       const limit = config.skillsSandbox.artifactBytesLimit;
       if (params.data.byteLength > limit) {
@@ -621,6 +624,24 @@ function resolveArtifactPath(params: {
     ? params.defaultCwd.slice(0, -1)
     : params.defaultCwd;
   return `${cwd}/${params.path}`;
+}
+
+/**
+ * TS twin of the Rust `validate_upload_path`, run on the already-resolved
+ * absolute path. `resolveArtifactPath` covers null bytes, `..` traversal, and
+ * the under-roots bound; this adds the remaining replay-validator checks (shell
+ * metacharacters, directory targets) so the upload is rejected at the tool call
+ * rather than after it has been persisted as an unreplayable event.
+ */
+function validateUploadPath(path: string): void {
+  if (/["$`\\\n\r]/.test(path)) {
+    throw new SkillSandboxError(`invalid upload path: ${JSON.stringify(path)}`);
+  }
+  if (path.endsWith("/")) {
+    throw new SkillSandboxError(
+      `upload path must be a file, not a directory: ${JSON.stringify(path)}`,
+    );
+  }
 }
 
 /** @public — exported for tests */

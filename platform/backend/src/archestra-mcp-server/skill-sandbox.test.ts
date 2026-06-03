@@ -668,6 +668,27 @@ describe("skill sandbox tools (runtime enabled)", () => {
         expect(result.isError).toBe(true);
         expect(textOf(result)).toContain("empty");
       });
+
+      // a path the Rust replay validator would reject must fail the tool call
+      // up front; otherwise it persists as an event that breaks every later
+      // replay (the "poisoned sandbox" failure mode).
+      test("rejects a shell-metacharacter path without persisting anything", async () => {
+        const sandboxId = await createSandbox();
+        const result = await executeArchestraTool(
+          TOOL_UPLOAD_SKILL_SANDBOX_FILE_FULL_NAME,
+          {
+            sandboxId,
+            path: "data/in$put.csv",
+            source: { type: "text", text: "x" },
+          },
+          context,
+        );
+        expect(result.isError).toBe(true);
+        expect(textOf(result)).toContain("invalid upload path");
+
+        const log = await SkillSandboxReplayEventModel.listBySandbox(sandboxId);
+        expect(log.filter((e) => e.kind === "upload")).toHaveLength(0);
+      });
     });
   });
 });

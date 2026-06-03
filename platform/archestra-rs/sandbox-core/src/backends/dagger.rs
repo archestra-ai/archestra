@@ -399,7 +399,7 @@ async fn materialize(warm: Container, req: &RunRequest) -> Result<Container> {
     // them here keeps pre-existing sandboxes usable. Live `req.cwd` is validated
     // at the entry points, and upload paths/encodings are re-validated when the
     // entry is converted to a `ReplayStep`.
-    for step in &req.replay_steps {
+    for (index, step) in req.replay_steps.iter().enumerate() {
         match step {
             ReplayStep::Command(entry) => {
                 // each command is wrapped with its own `with_workdir` so cwd
@@ -411,7 +411,7 @@ async fn materialize(warm: Container, req: &RunRequest) -> Result<Container> {
                     .with_exec_opts(argv, any_exit_opts());
             }
             ReplayStep::File(file) => {
-                container = apply_upload_file(container, file)?;
+                container = apply_upload_file(container, index, file)?;
             }
         }
     }
@@ -419,18 +419,21 @@ async fn materialize(warm: Container, req: &RunRequest) -> Result<Container> {
     Ok(container)
 }
 
-/// write an uploaded file at its absolute path. runs the decode as root so it
-/// works even when `mkdir -p` has to create fresh (root-owned) parents, then
-/// hands the file to the sandbox user and removes the staged bytes.
-fn apply_upload_file(container: Container, file: &ReplayInputFile) -> Result<Container> {
-    let parent = file
-        .path
-        .rsplit_once('/')
-        .map(|(parent, _)| parent)
-        .filter(|parent| !parent.is_empty())
-        .unwrap_or("/");
-    let temp_path = format!("{}.archestra-upload", file.path);
-    let materialize_bytes = match file.encoding.as_str() {
+/// write an uploaded file at its absolute path. runs as root so it works even
+/// when parent dirs must be created, then hands the file (and every parent dir
+/// it created) to the sandbox user and removes the staged bytes.
+///
+/// `index` is the upload's position in the replay step list; it keys a reserved
+/// `/tmp` staging path so the raw bytes never land under the user-visible
+/// sandbox roots — replaying an upload can't clobber a file an earlier command
+/// created next to the target. each step removes its own staged file.
+fn apply_upload_file(
+    container: Container,
+    index: usize,
+    file: &ReplayInputFile,
+) -> Result<Container> {
+    let temp_path = format!("/tmp/.archestra-upload-{index}");
+    let decode = match file.encoding.as_str() {
         "base64" => format!(
             "base64 -d {} > {}",
             shell_quote(&temp_path),
@@ -443,9 +446,18 @@ fn apply_upload_file(container: Container, file: &ReplayInputFile) -> Result<Con
             )));
         }
     };
+    // create each missing parent dir shallowest-first and chown only the ones
+    // we create, so commands running as the sandbox user can write siblings in
+    // a fresh upload dir. pre-existing dirs (the sandbox roots) are untouched.
+    let mut create_parents = String::new();
+    for dir in ancestor_dirs(&file.path) {
+        let quoted = shell_quote(&dir);
+        create_parents.push_str(&format!(
+            "[ -d {quoted} ] || {{ mkdir {quoted} && chown {SKILL_SANDBOX_USER} {quoted}; }} && "
+        ));
+    }
     let script = format!(
-        "mkdir -p {parent} && {materialize_bytes} && chown {user} {target} && rm -f {temp}",
-        parent = shell_quote(parent),
+        "{create_parents}{decode} && chown {user} {target} && rm -f {temp}",
         user = SKILL_SANDBOX_USER,
         target = shell_quote(&file.path),
         temp = shell_quote(&temp_path),
@@ -455,6 +467,24 @@ fn apply_upload_file(container: Container, file: &ReplayInputFile) -> Result<Con
         .with_new_file(&temp_path, &file.content)
         .with_exec(vec!["bash".to_string(), "-c".to_string(), script])
         .with_user(SKILL_SANDBOX_USER))
+}
+
+/// absolute parent directories of `path`, shallowest first, excluding the root
+/// `/` and the file itself — e.g. `/home/sandbox/a/b.txt` yields `/home`,
+/// `/home/sandbox`, `/home/sandbox/a`. assumes an absolute, traversal-free path
+/// (guaranteed by `validate_upload_path` before the step is built).
+fn ancestor_dirs(path: &str) -> Vec<String> {
+    let components: Vec<&str> = path.split('/').filter(|s| !s.is_empty()).collect();
+    let mut acc = String::new();
+    components
+        .iter()
+        .take(components.len().saturating_sub(1))
+        .map(|component| {
+            acc.push('/');
+            acc.push_str(component);
+            acc.clone()
+        })
+        .collect()
 }
 
 fn apply_snapshot_file(container: Container, root: &str, file: &SnapshotFile) -> Result<Container> {
@@ -663,5 +693,19 @@ mod tests {
 
         let generic = domain_error("connection reset", None);
         assert_eq!(classify_engine_fault(&generic), EngineFault::Unreachable);
+    }
+
+    #[test]
+    fn ancestor_dirs_lists_parents_shallowest_first() {
+        assert_eq!(
+            ancestor_dirs("/home/sandbox/a/b.txt"),
+            vec!["/home", "/home/sandbox", "/home/sandbox/a"]
+        );
+        assert_eq!(
+            ancestor_dirs("/home/sandbox/input.csv"),
+            vec!["/home", "/home/sandbox"]
+        );
+        // a file directly under root `/` has no parent dir to create.
+        assert_eq!(ancestor_dirs("/file"), Vec::<String>::new());
     }
 }

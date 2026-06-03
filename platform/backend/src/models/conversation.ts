@@ -1,3 +1,4 @@
+import { hasPersistableAssistantContent } from "@shared";
 import {
   and,
   desc,
@@ -192,7 +193,11 @@ class ConversationModel {
         }
 
         const conversation = conversationMap.get(conversationId);
-        if (conversation && row?.message?.content) {
+        if (
+          conversation &&
+          row?.message?.content &&
+          shouldReturnPersistedMessageRow(row.message)
+        ) {
           // Limit messages per conversation for preview
           if (
             conversation.messages.length <
@@ -314,7 +319,10 @@ class ConversationModel {
     const messages = [];
 
     for (const row of rows) {
-      if (row.message?.content) {
+      if (
+        row.message?.content &&
+        shouldReturnPersistedMessageRow(row.message)
+      ) {
         // Merge database UUID into message content (overrides AI SDK's temporary ID)
         messages.push(addMessagePersistenceMetadata(row.message));
       }
@@ -416,7 +424,10 @@ class ConversationModel {
     const messages = [];
 
     for (const row of rows) {
-      if (row.message?.content) {
+      if (
+        row.message?.content &&
+        shouldReturnPersistedMessageRow(row.message)
+      ) {
         messages.push(addMessagePersistenceMetadata(row.message));
       }
     }
@@ -517,6 +528,25 @@ class ConversationModel {
 }
 
 export default ConversationModel;
+
+// Read-side guard for assistant rows that were persisted before the strict
+// persist normalization (or by an older client) and would otherwise reload as
+// an empty bubble. The DB `role` column is authoritative — a `content: ""` row
+// has no role inside its content. Read-only: bad rows are hidden, never deleted.
+function shouldReturnPersistedMessageRow(message: {
+  role: string;
+  content: unknown;
+}): boolean {
+  if (message.role !== "assistant") {
+    return true;
+  }
+  if (typeof message.content !== "object" || message.content === null) {
+    return false;
+  }
+  return hasPersistableAssistantContent(
+    message.content as { parts?: ReadonlyArray<{ type: string }> },
+  );
+}
 
 function addMessagePersistenceMetadata(message: {
   id: string;

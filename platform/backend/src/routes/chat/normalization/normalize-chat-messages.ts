@@ -1,4 +1,8 @@
-import { hasRenderableAssistantContent, stripDanglingToolCalls } from "@shared";
+import {
+  hasPersistableAssistantContent,
+  hasRenderableAssistantContent,
+  stripDanglingToolCalls,
+} from "@shared";
 import logger from "@/logging";
 import type { ChatMessage, ChatMessagePart } from "@/types";
 import { stripImagesFromMessages } from "./strip-images-from-messages";
@@ -13,6 +17,16 @@ export function normalizeChatMessages(messages: ChatMessage[]): ChatMessage[] {
       ),
     ),
   );
+}
+
+// Stricter normalization for the persist path: after the shared cleanup, drop
+// assistant turns that would reload as an empty bubble. The replay/model path
+// uses the looser `normalizeChatMessages` so live-streamed turns aren't blanked,
+// but only durably-renderable assistant turns should ever reach the DB.
+export function normalizeChatMessagesForPersistence(
+  messages: ChatMessage[],
+): ChatMessage[] {
+  return dropNonPersistableAssistantMessages(normalizeChatMessages(messages));
 }
 
 function dedupeToolPartsFromMessages(messages: ChatMessage[]): ChatMessage[] {
@@ -148,6 +162,33 @@ function dropEmptyAssistantMessages(messages: ChatMessage[]): ChatMessage[] {
     (message) =>
       message.role !== "assistant" || hasRenderableAssistantContent(message),
   );
+}
+
+// drops assistant turns that survive UI-renderability but would reload as an
+// empty bubble — e.g. a turn left with only a `data-tool-ui-start` whose tool
+// call never resolved, an unrecognized telemetry `data-*`, or `content: ""`.
+function dropNonPersistableAssistantMessages(
+  messages: ChatMessage[],
+): ChatMessage[] {
+  return messages.filter((message) => {
+    if (message.role !== "assistant") {
+      return true;
+    }
+
+    if (hasPersistableAssistantContent(message)) {
+      return true;
+    }
+
+    logger.warn(
+      {
+        messageId: message.id,
+        role: message.role,
+        partCount: message.parts?.length ?? 0,
+      },
+      "[normalizeChatMessages] Dropped non-persistable empty assistant message",
+    );
+    return false;
+  });
 }
 
 // matches both statically-typed `tool-<name>` parts and the `dynamic-tool`

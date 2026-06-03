@@ -118,7 +118,10 @@ import { injectSkillActivation } from "./inject-skill-activation";
 import { cloneAttachmentsForFork } from "./normalization/clone-attachments-for-fork";
 import { extractInlineAttachments } from "./normalization/extract-inline-attachments";
 import { materializeAttachments } from "./normalization/materialize-attachments";
-import { normalizeChatMessages } from "./normalization/normalize-chat-messages";
+import {
+  normalizeChatMessages,
+  normalizeChatMessagesForPersistence,
+} from "./normalization/normalize-chat-messages";
 import {
   isRetryableEmptyFinishReason,
   probeFirstRenderableEvent,
@@ -2630,9 +2633,11 @@ async function persistNewMessages(
 
       if (messagesToSave.length > 0) {
         // Strip base64 images / large tool results and drop assistant turns left
-        // non-renderable (e.g. only a dangling tool call) — persisting one of
-        // those yields a stuck-looking empty bubble on reload.
-        const messagesToStore = normalizeChatMessages(messagesToSave);
+        // non-renderable (e.g. only a dangling tool call, an unpaired MCP-app
+        // marker, or empty/telemetry-only parts) — persisting one of those
+        // yields a stuck-looking empty bubble on reload.
+        const messagesToStore =
+          normalizeChatMessagesForPersistence(messagesToSave);
 
         if (context === "onFinish") {
           // Log size reduction only for onFinish (where we have complete messages)
@@ -2970,9 +2975,47 @@ async function buildModelMessagesForProvider(params: {
   });
 
   // Cast to UIMessage[] - ChatMessage is structurally compatible at runtime.
-  return await convertToModelMessages(
+  const modelMessages = await convertToModelMessages(
     providerPreparedMessages as unknown as Omit<UIMessage, "id">[],
   );
+
+  // convertToModelMessages can split an assistant turn at `step-start` and drop
+  // provider-invisible parts (data-*, tool-ui-start), yielding an assistant
+  // message with empty content that some providers reject. Drop those here —
+  // after Bedrock's `(no content)` padding above, so its intentional
+  // placeholders survive while other providers never see an empty turn. An
+  // empty assistant message has no tool-call block, so removing it cannot
+  // orphan a tool result.
+  return modelMessages.filter(
+    (message) => !isEmptyAssistantModelMessage(message),
+  );
+}
+
+function isEmptyAssistantModelMessage(message: {
+  role: string;
+  content: unknown;
+}): boolean {
+  if (message.role !== "assistant") {
+    return false;
+  }
+
+  const { content } = message;
+  if (typeof content === "string") {
+    return content.trim().length === 0;
+  }
+
+  if (Array.isArray(content)) {
+    // empty, or only blank text parts — any tool-call/file/reasoning part is
+    // real provider-visible content and keeps the message.
+    return content.every(
+      (part) =>
+        part?.type === "text" &&
+        (typeof part.text !== "string" || part.text.trim().length === 0),
+    );
+  }
+
+  // unknown content shape: keep, to avoid dropping something the provider needs.
+  return false;
 }
 
 function normalizeAnthropicMessageFileParts(message: ChatMessage): ChatMessage {
@@ -3409,6 +3452,7 @@ async function validateChatApiKeyAccess(
 }
 
 export const __test = {
+  buildModelMessagesForProvider,
   getMessagesNotYetPersisted,
   getMessagesWithChangedContent,
   persistNewMessages,

@@ -1,5 +1,8 @@
 import { describe, expect, test } from "vitest";
-import { normalizeChatMessages } from "./normalize-chat-messages";
+import {
+  normalizeChatMessages,
+  normalizeChatMessagesForPersistence,
+} from "./normalize-chat-messages";
 
 describe("normalizeChatMessages", () => {
   test("dedupes duplicate tool parts with the same toolCallId", () => {
@@ -272,5 +275,210 @@ describe("normalizeChatMessages empty-assistant dropping", () => {
     ];
 
     expect(normalizeChatMessages(messages)).toEqual(messages);
+  });
+});
+
+describe("normalizeChatMessagesForPersistence", () => {
+  const keep = (id: string) => ({
+    id,
+    role: "user" as const,
+    parts: [{ type: "text", text: "anchor" }],
+  });
+
+  test("drops an assistant turn with an empty parts array", () => {
+    const messages = [
+      keep("user1"),
+      { id: "assistant1", role: "assistant" as const, parts: [] },
+    ];
+
+    expect(
+      normalizeChatMessagesForPersistence(messages).map((m) => m.id),
+    ).toEqual(["user1"]);
+  });
+
+  test("drops an assistant turn with missing parts", () => {
+    const messages = [
+      keep("user1"),
+      { id: "assistant1", role: "assistant" as const },
+    ];
+
+    expect(
+      normalizeChatMessagesForPersistence(messages).map((m) => m.id),
+    ).toEqual(["user1"]);
+  });
+
+  test("drops an assistant turn with only empty/whitespace text", () => {
+    const messages = [
+      keep("user1"),
+      {
+        id: "assistant1",
+        role: "assistant" as const,
+        parts: [{ type: "text", text: "   " }],
+      },
+    ];
+
+    expect(
+      normalizeChatMessagesForPersistence(messages).map((m) => m.id),
+    ).toEqual(["user1"]);
+  });
+
+  test("drops an assistant turn with only step-start/telemetry parts", () => {
+    const messages = [
+      keep("user1"),
+      {
+        id: "assistant1",
+        role: "assistant" as const,
+        parts: [
+          { type: "step-start" },
+          { type: "data-token-usage", data: { totalTokens: 10 } },
+        ],
+      },
+    ];
+
+    expect(
+      normalizeChatMessagesForPersistence(messages).map((m) => m.id),
+    ).toEqual(["user1"]);
+  });
+
+  test("drops an assistant turn left with an orphaned data-tool-ui-start", () => {
+    // the marker's tool call never resolved — the looser normalize keeps the
+    // turn for live view, but it must not be persisted as an empty bubble.
+    const messages = [
+      keep("user1"),
+      {
+        id: "assistant1",
+        role: "assistant" as const,
+        parts: [
+          { type: "step-start" },
+          {
+            type: "data-tool-ui-start",
+            data: { toolCallId: "call_interrupted", toolName: "render_chart" },
+          },
+          {
+            type: "tool-render_chart",
+            toolCallId: "call_interrupted",
+            state: "input-streaming",
+            input: {},
+          },
+        ],
+      },
+    ];
+
+    expect(
+      normalizeChatMessagesForPersistence(messages).map((m) => m.id),
+    ).toEqual(["user1"]);
+  });
+
+  test("keeps an assistant turn with a completed tool result", () => {
+    const messages = [
+      keep("user1"),
+      {
+        id: "assistant1",
+        role: "assistant" as const,
+        parts: [
+          {
+            type: "tool-archestra__create_agent",
+            toolCallId: "call_ok",
+            state: "output-available",
+            output: "created",
+          },
+        ],
+      },
+    ];
+
+    expect(
+      normalizeChatMessagesForPersistence(messages).map((m) => m.id),
+    ).toEqual(["user1", "assistant1"]);
+  });
+
+  test("keeps an MCP-app marker only when paired with a completed tool part", () => {
+    const paired = {
+      id: "paired",
+      role: "assistant" as const,
+      parts: [
+        { type: "step-start" },
+        {
+          type: "data-tool-ui-start",
+          data: { toolCallId: "call_ok", toolName: "render_chart" },
+        },
+        {
+          type: "tool-render_chart",
+          toolCallId: "call_ok",
+          state: "output-available",
+          output: "rendered",
+        },
+      ],
+    };
+    // an MCP-app marker whose paired tool part never reached a terminal state
+    // (here it is only input-available, which normalize strips as dangling).
+    const unpaired = {
+      id: "unpaired",
+      role: "assistant" as const,
+      parts: [
+        { type: "step-start" },
+        {
+          type: "data-tool-ui-start",
+          data: { toolCallId: "call_pending", toolName: "render_chart" },
+        },
+        {
+          type: "tool-render_chart",
+          toolCallId: "call_pending",
+          state: "input-available",
+          input: {},
+        },
+      ],
+    };
+
+    const result = normalizeChatMessagesForPersistence([
+      keep("user1"),
+      paired,
+      unpaired,
+    ]);
+
+    expect(result.map((m) => m.id)).toEqual(["user1", "paired"]);
+  });
+
+  test("keeps an assistant turn whose only content is a generated image", () => {
+    // model-generated images (e.g. Gemini) are preserved for multi-turn image
+    // editing and must survive persistence.
+    const messages = [
+      keep("user1"),
+      {
+        id: "assistant1",
+        role: "assistant" as const,
+        parts: [
+          { type: "step-start" },
+          { type: "image", image: "data:image/png;base64,iVBOR..." },
+        ],
+      },
+    ];
+
+    expect(
+      normalizeChatMessagesForPersistence(messages).map((m) => m.id),
+    ).toEqual(["user1", "assistant1"]);
+  });
+
+  test("keeps an assistant turn that is still in approval-requested state", () => {
+    // a paused tool approval renders a prompt the user must answer — it is real
+    // content and must survive persistence (#4030).
+    const messages = [
+      keep("user1"),
+      {
+        id: "assistant1",
+        role: "assistant" as const,
+        parts: [
+          {
+            type: "tool-print_test",
+            toolCallId: "call_wait",
+            state: "approval-requested",
+            input: {},
+          },
+        ],
+      },
+    ];
+
+    expect(
+      normalizeChatMessagesForPersistence(messages).map((m) => m.id),
+    ).toEqual(["user1", "assistant1"]);
   });
 });

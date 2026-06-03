@@ -4,6 +4,12 @@ import { forwardRef, useImperativeHandle } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AgentDialog } from "./agent-dialog";
 
+global.ResizeObserver = class ResizeObserver {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+} as typeof ResizeObserver;
+
 const {
   pendingSaveChanges,
   useAvailableLlmProviderApiKeysMock,

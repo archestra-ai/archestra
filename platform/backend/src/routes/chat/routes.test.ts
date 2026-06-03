@@ -380,6 +380,72 @@ describe("prepareMessagesForProvider", () => {
   });
 });
 
+describe("buildModelMessagesForProvider", () => {
+  // ref-free messages never hit the attachment table, so these run without DB.
+  const conversationId = "conv-model-prep";
+
+  it("drops an assistant turn that converts to empty model content", async () => {
+    const modelMessages = await __test.buildModelMessagesForProvider({
+      provider: "openai",
+      conversationId,
+      messages: [
+        { role: "user", parts: [{ type: "text", text: "hi" }] },
+        {
+          // only provider-invisible parts — convertToModelMessages yields an
+          // assistant message with empty content here.
+          role: "assistant",
+          parts: [
+            { type: "step-start" },
+            {
+              type: "data-tool-ui-start",
+              data: { toolCallId: "call_x", toolName: "render_chart" },
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(modelMessages.map((message) => message.role)).toEqual(["user"]);
+  });
+
+  it("keeps normal text and tool assistant turns", async () => {
+    const modelMessages = await __test.buildModelMessagesForProvider({
+      provider: "openai",
+      conversationId,
+      messages: [
+        { role: "user", parts: [{ type: "text", text: "search please" }] },
+        {
+          role: "assistant",
+          parts: [
+            { type: "step-start" },
+            {
+              type: "tool-search",
+              toolCallId: "call_ok",
+              toolName: "search",
+              state: "output-available",
+              input: { q: "query" },
+              output: { hits: [] },
+            },
+          ],
+        },
+        {
+          role: "assistant",
+          parts: [{ type: "text", text: "Here are the results." }],
+        },
+      ],
+    });
+
+    const assistantMessages = modelMessages.filter(
+      (message) => message.role === "assistant",
+    );
+    // the tool-call turn and the text turn both survive.
+    expect(assistantMessages.length).toBeGreaterThanOrEqual(2);
+    expect(assistantMessages.at(-1)?.content).toContainEqual(
+      expect.objectContaining({ type: "text", text: "Here are the results." }),
+    );
+  });
+});
+
 describe("getMessagesNotYetPersisted", () => {
   it("keeps new messages even when the incoming thread is shorter than the persisted thread", () => {
     const newMessages = __test.getMessagesNotYetPersisted({

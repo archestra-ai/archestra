@@ -358,11 +358,11 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
   },
 
   // Deployment environments
-  "/api/organization/environments": {
+  "/api/environments": {
     resourceType: "environment",
     fetchById: (id, orgId) => EnvironmentModel.findByIdForAudit(id, orgId),
   },
-  "/api/organization/environments/:id": {
+  "/api/environments/:id": {
     resourceType: "environment",
     fetchById: (id, orgId) => EnvironmentModel.findByIdForAudit(id, orgId),
   },

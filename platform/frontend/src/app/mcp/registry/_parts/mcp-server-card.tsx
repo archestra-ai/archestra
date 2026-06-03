@@ -53,13 +53,13 @@ import { fetchInternalAgents, useCreateProfile } from "@/lib/agent.query";
 import { useBulkAssignTools } from "@/lib/agent-tools.query";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
+import { useEnvironments } from "@/lib/environment.query";
 import {
   fetchCatalogTools,
   useCatalogPresets,
   useReinstallInternalMcpCatalogItem,
 } from "@/lib/mcp/internal-mcp-catalog.query";
 import { useMcpServers } from "@/lib/mcp/mcp-server.query";
-import { useEnvironments } from "@/lib/organization/environment.query";
 import {
   useDefaultEnvironment,
   usePresetEntityName,

@@ -40,7 +40,7 @@ vi.mock("@/lib/organization.query", () => ({
   })),
 }));
 
-vi.mock("@/lib/organization/environment.query", () => ({
+vi.mock("@/lib/environment.query", () => ({
   useEnvironments: vi.fn(() => ({
     data: { environments: [], defaultAssignedCatalogCount: 0 },
   })),

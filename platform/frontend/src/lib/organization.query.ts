@@ -9,7 +9,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { useSession } from "@/lib/auth/auth.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
-import { environmentKeys } from "./organization/environment.query";
+import { environmentKeys } from "./environment.query";
 import { handleApiError } from "./utils";
 
 export const appearanceKeys = {

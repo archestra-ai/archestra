@@ -204,9 +204,6 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       let clientSecretId: string | undefined;
       let localConfigSecretId: string | undefined;
-      let cloneSource: Awaited<
-        ReturnType<typeof InternalMcpCatalogModel.findById>
-      > | null = null;
 
       // Handle OAuth client secret - either via BYOS or direct value
       if (oauthClientSecretVaultPath && oauthClientSecretVaultKey) {
@@ -413,7 +410,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // the source's tools + guardrail policies, so an unscoped `clonedFrom`
       // would let a caller pull another org's catalog config into their own.
       if (restBody.clonedFrom) {
-        cloneSource = await InternalMcpCatalogModel.findById(
+        const cloneSource = await InternalMcpCatalogModel.findById(
           restBody.clonedFrom,
           {
             expandSecrets: false,
@@ -424,36 +421,6 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
         if (!cloneSource) {
           throw new ApiError(400, "Clone source catalog item not found");
-        }
-
-        if (!restBody.clientSecretId && cloneSource.clientSecretId) {
-          const secret = await cloneSecretBag({
-            sourceSecretId: cloneSource.clientSecretId,
-            targetName: `${restBody.name}-client-secret`,
-          });
-          if (secret) {
-            restBody.clientSecretId = secret.id;
-          }
-        }
-
-        if (!restBody.localConfigSecretId && cloneSource.localConfigSecretId) {
-          const secret = await cloneSecretBag({
-            sourceSecretId: cloneSource.localConfigSecretId,
-            targetName: `${restBody.name}-local-config-env`,
-          });
-          if (secret) {
-            restBody.localConfigSecretId = secret.id;
-          }
-        }
-
-        if (!restBody.presetSecretId && cloneSource.presetSecretId) {
-          const secret = await cloneSecretBag({
-            sourceSecretId: cloneSource.presetSecretId,
-            targetName: `${restBody.name}-preset-fields`,
-          });
-          if (secret) {
-            restBody.presetSecretId = secret.id;
-          }
         }
       }
 
@@ -1021,29 +988,13 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         });
       }
 
-      // A multi-tenant local catalog shares one K8s Deployment across all
-      // installs, and a per-install restart no-ops on it (the sibling guard in
-      // restartServer). So an environment reassignment would leave the shared
-      // pod in the old namespace unless we relocate the shared Deployment
-      // explicitly, mirroring the environment-namespace-edit route.
-      const relocatingSharedDeployment =
+      // Detect an environment reassignment of a local catalog — it relocates
+      // the pod to a different namespace.
+      const relocatingLocalDeployment =
         "environmentId" in restBody &&
         restBody.environmentId !== originalCatalogItem.environmentId &&
-        originalCatalogItem.multitenant === true &&
         originalCatalogItem.serverType === "local" &&
         mcpServerRuntimeManager.isEnabled;
-      if (relocatingSharedDeployment) {
-        // Pre-load deployments while the catalog row still holds the OLD
-        // namespace, so the teardown targets the old-namespace pod
-        // (reinstallSharedDeployment resolves the namespace from the row, which
-        // the update below rewrites to the new environment).
-        const installs = await McpServerModel.findByCatalogId(id);
-        await Promise.all(
-          installs.map((s) =>
-            mcpServerRuntimeManager.getOrLoadDeployment(s.id),
-          ),
-        );
-      }
 
       // Update the catalog item
       const catalogItem = await InternalMcpCatalogModel.update(id, restBody);
@@ -1052,12 +1003,45 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Catalog item not found");
       }
 
-      // Now that the row holds the new environment, recreate the shared
-      // Deployment in the new namespace. Awaited before the cascade so its
-      // per-install tool sync runs against the relocated, ready pod rather than
-      // racing the recreate. Single-tenant installs relocate via the cascade's
-      // per-install restart below.
-      if (relocatingSharedDeployment) {
+      // Only tear down the old-namespace deployment when it will actually be
+      // recreated. A single-tenant edit that ALSO requires new user input (e.g.
+      // a command or prompted-env-var change in the same PUT) makes the cascade
+      // mark the install reinstall-required WITHOUT recreating the pod — so
+      // tearing it down here would leave the install with no running pod until a
+      // manual reinstall. Multi-tenant always recreates via
+      // reinstallSharedDeployment below, so it's always safe there.
+      const recreatingRelocatedDeployment =
+        relocatingLocalDeployment &&
+        (originalCatalogItem.multitenant === true ||
+          !requiresNewUserInputForReinstall(
+            originalCatalogItemForGate,
+            catalogItem,
+          ));
+      if (recreatingRelocatedDeployment) {
+        // Remove the deployment(s) from the OLD namespace before recreating in
+        // the new one. The old namespace is derived from `originalCatalogItem`
+        // (captured before the update), so the teardown is correct even on a
+        // cache-cold or cache-stale replica — unlike the recreate paths below,
+        // which resolve the namespace from the now-updated row. Without this the
+        // old-namespace pod is orphaned: it keeps running in a namespace the
+        // catalog no longer points at, and the reconciler only scans the default
+        // namespace so it never reclaims it.
+        await mcpServerRuntimeManager.tearDownOldNamespaceDeployments(
+          originalCatalogItem,
+        );
+      }
+
+      // Recreate in the new namespace. A multi-tenant local catalog shares one
+      // K8s Deployment across all installs, and a per-install restart no-ops on
+      // it (the sibling guard in restartServer), so it must be recreated
+      // explicitly via reinstallSharedDeployment — awaited before the cascade so
+      // its per-install tool sync runs against the relocated, ready pod rather
+      // than racing the recreate. Single-tenant installs are recreated by the
+      // cascade's per-install restart below.
+      if (
+        relocatingLocalDeployment &&
+        originalCatalogItem.multitenant === true
+      ) {
         await mcpServerRuntimeManager.reinstallSharedDeployment(id);
       }
 
@@ -1844,18 +1828,6 @@ async function assertCanEditCatalogPresets(
       "You can only edit presets on your own personal catalog items",
     );
   }
-}
-
-async function cloneSecretBag(params: {
-  sourceSecretId: string;
-  targetName: string;
-}) {
-  const sourceSecret = await secretManager().getSecret(params.sourceSecretId);
-  if (!sourceSecret) {
-    return null;
-  }
-
-  return secretManager().createSecret(sourceSecret.secret, params.targetName);
 }
 
 async function upsertCatalogClientSecretValue(params: {

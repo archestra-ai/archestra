@@ -43,9 +43,9 @@ import {
   useCreateEnvironment,
   useDeleteEnvironment,
   useEnvironments,
+  useK8sCapabilities,
   useUpdateEnvironment,
-} from "@/lib/organization/environment.query";
-import { useK8sCapabilities } from "@/lib/organization/network-policy.query";
+} from "@/lib/environment.query";
 import {
   useDefaultEnvironment,
   useUpdateDefaultEnvironment,

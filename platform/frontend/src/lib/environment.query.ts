@@ -6,12 +6,15 @@ import { handleApiError } from "@/lib/utils";
 export const environmentKeys = {
   all: ["environments"] as const,
   list: () => [...environmentKeys.all, "list"] as const,
+  k8sCapabilities: () => [...environmentKeys.all, "k8s-capabilities"] as const,
 };
 
 export type EnvironmentList =
   archestraApiTypes.ListEnvironmentsResponses["200"];
 export type EnvironmentWithAssignedCount =
   EnvironmentList["environments"][number];
+export type K8sCapabilities =
+  archestraApiTypes.GetK8sCapabilitiesResponses["200"];
 
 const EMPTY_ENVIRONMENT_LIST: EnvironmentList = {
   environments: [],
@@ -31,6 +34,22 @@ export function useEnvironments(enabled = true) {
     },
     enabled,
     staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function useK8sCapabilities(enabled = true) {
+  return useQuery({
+    queryKey: environmentKeys.k8sCapabilities(),
+    queryFn: async () => {
+      const { data, error } = await archestraApiSdk.getK8sCapabilities();
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data ?? null;
+    },
+    enabled,
+    staleTime: 60 * 1000,
   });
 }
 

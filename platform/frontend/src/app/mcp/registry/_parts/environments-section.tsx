@@ -561,7 +561,7 @@ function EnvironmentEditorDialog({
             disabled={isPending}
           />
         </div>
-        <section className="space-y-4 rounded-md border p-4">
+        <section className="space-y-4 border-t pt-4">
           <div className="space-y-1">
             <h3 className="font-medium text-sm">Network Egress Policy</h3>
             <p className="text-xs text-muted-foreground">

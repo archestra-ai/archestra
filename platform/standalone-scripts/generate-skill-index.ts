@@ -6,6 +6,7 @@ import {
   parseSkillManifest,
   SkillParseError,
 } from "../backend/src/skills/parser";
+import { dedupeSkillCatalogEntries } from "../backend/src/skills/skill-catalog-index";
 import { POPULAR_REPOS } from "../frontend/src/app/agents/skills/_parts/popular-repos";
 
 interface CrawledSkill {
@@ -111,10 +112,13 @@ async function main() {
     return;
   }
 
-  const crawled = results.flatMap((result) => result.skills);
-  crawled.sort(compareCrawledSkills);
+  // the crawl records every on-disk copy of a skill (repos bundle the same
+  // skill into many plugin folders and re-vendor each other's skills); collapse
+  // identical copies so the catalog lists each distinct skill once.
+  const deduped = dedupeSkillCatalogEntries(results.flatMap((r) => r.skills));
+  deduped.sort(compareCrawledSkills);
 
-  const { repos, skills } = compact(crawled);
+  const { repos, skills } = compact(deduped);
   const index: GeneratedSkillIndex = {
     v: 1,
     generatedAt: new Date().toISOString(),

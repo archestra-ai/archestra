@@ -53,6 +53,45 @@ export function decodeSkillCatalog(
   );
 }
 
+// the crawl records every on-disk copy of a skill: one repo bundles the same
+// skill into many plugin folders, and aggregator repos re-vendor each other's
+// skills. collapse entries that are the same skill -- identical name and
+// description -- keeping one canonical copy. same name but a different
+// description is a genuinely different skill and is preserved.
+export function dedupeSkillCatalogEntries(
+  entries: readonly SkillCatalogEntry[],
+): SkillCatalogEntry[] {
+  // Map insertion order follows the (already repo/path-sorted) input, so the
+  // surviving entries keep a deterministic order. The key NUL-joins name and
+  // description so "ab"+"c" can't collide with "a"+"bc".
+  const byContent = new Map<string, SkillCatalogEntry>();
+  for (const entry of entries) {
+    const key = `${normalize(entry.name)}\u0000${normalize(entry.description)}`;
+    const kept = byContent.get(key);
+    if (kept === undefined || isMoreCanonical(entry, kept)) {
+      byContent.set(key, entry);
+    }
+  }
+  return [...byContent.values()];
+}
+
+// prefer the shallowest path (a bare `skills/x` over `.github/plugins/.../x`),
+// then settle ties lexically for stability.
+function isMoreCanonical(
+  candidate: SkillCatalogEntry,
+  current: SkillCatalogEntry,
+): boolean {
+  const byDepth = pathDepth(candidate.skillPath) - pathDepth(current.skillPath);
+  if (byDepth !== 0) return byDepth < 0;
+  const byPath = candidate.skillPath.localeCompare(current.skillPath);
+  if (byPath !== 0) return byPath < 0;
+  return candidate.repo.localeCompare(current.repo) < 0;
+}
+
+function pathDepth(skillPath: string): number {
+  return skillPath.split("/").length;
+}
+
 // ===== Token inverted index (built once at load) =====
 
 // field a token was found in, ordered by search weight (lower = stronger).

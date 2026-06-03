@@ -1,8 +1,47 @@
 import { describe, expect, it } from "vitest";
 import {
+  dedupeSkillCatalogEntries,
   type SkillCatalogEntry,
   searchSkillCatalogEntries,
 } from "./skill-catalog-index";
+
+describe("dedupeSkillCatalogEntries", () => {
+  it("collapses identical skills mirrored across paths and repos", () => {
+    const deduped = dedupeSkillCatalogEntries([
+      skill({
+        repo: "microsoft/azure-skills",
+        name: "azure-cloud-migrate",
+        description: "Migrate workloads to Azure.",
+        skillPath: ".github/plugins/azure-skills/skills/azure-cloud-migrate",
+      }),
+      skill({
+        repo: "microsoft/azure-skills",
+        name: "azure-cloud-migrate",
+        description: "Migrate workloads to Azure.",
+        skillPath: "skills/azure-cloud-migrate",
+      }),
+      skill({
+        repo: "microsoft/skills",
+        name: "azure-cloud-migrate",
+        description: "Migrate workloads to Azure.",
+        skillPath: ".github/plugins/azure-skills/skills/azure-cloud-migrate",
+      }),
+    ]);
+
+    expect(deduped).toHaveLength(1);
+    // shallowest path wins as the canonical copy
+    expect(deduped[0].skillPath).toBe("skills/azure-cloud-migrate");
+  });
+
+  it("keeps same-name skills that have different descriptions", () => {
+    const deduped = dedupeSkillCatalogEntries([
+      skill({ name: "code-review", description: "Review engineering diffs." }),
+      skill({ name: "code-review", description: "Review Flutter widgets." }),
+    ]);
+
+    expect(deduped).toHaveLength(2);
+  });
+});
 
 describe("searchSkillCatalogEntries", () => {
   it("ranks skill name matches above repo and description matches", () => {

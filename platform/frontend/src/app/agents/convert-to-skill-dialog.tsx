@@ -3,7 +3,8 @@ import {
   TOOL_ACTIVATE_SKILL_FULL_NAME,
   TOOL_READ_SKILL_FILE_FULL_NAME,
 } from "@shared";
-import { useEffect } from "react";
+import { Loader2, Sparkles } from "lucide-react";
+import { useEffect, useRef } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -13,12 +14,16 @@ import {
   DialogContent,
   DialogDescription,
   DialogFooter,
+  DialogForm,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { useConvertAgentToSkill } from "@/lib/agent.query";
+import {
+  useConvertAgentToSkill,
+  useSuggestSkillDescription,
+} from "@/lib/agent.query";
 
 type Agent = archestraApiTypes.GetAgentsResponses["200"]["data"][number];
 
@@ -42,7 +47,7 @@ type FormValues = {
 /**
  * Confirms an agent→skill conversion before it happens. A skill carries
  * instructions only, so this previews what the conversion keeps (the system
- * prompt and a recommended-tools list) versus drops (model, knowledge sources),
+ * prompt and an allowed-tools list) versus drops (model, knowledge sources),
  * requires a real description, and offers to remove the now-redundant agent.
  */
 export function ConvertToSkillDialog({
@@ -50,25 +55,48 @@ export function ConvertToSkillDialog({
   onOpenChange,
 }: ConvertToSkillDialogProps) {
   const convertToSkill = useConvertAgentToSkill();
+  const suggestDescription = useSuggestSkillDescription();
 
   const {
     register,
     handleSubmit,
     control,
     reset,
+    setValue,
+    getValues,
     formState: { errors },
   } = useForm<FormValues>({
     defaultValues: { description: "", deleteAgent: false },
   });
 
-  // Prefill from the agent each time the dialog opens for a new one.
+  // monotonic token; bumped whenever the dialog switches agent or closes, so an
+  // in-flight suggestion that resolves late can detect it is now stale.
+  const suggestionToken = useRef(0);
+
+  const onSuggestDescription = async () => {
+    if (!agent) return;
+    suggestionToken.current += 1;
+    const token = suggestionToken.current;
+    const descriptionAtRequest = getValues("description");
+    const description = await suggestDescription.mutateAsync(agent.id);
+    // drop the result if the dialog moved on or the user edited meanwhile.
+    if (token !== suggestionToken.current) return;
+    if (getValues("description") !== descriptionAtRequest) return;
+    if (description) {
+      setValue("description", description, { shouldValidate: true });
+    }
+  };
+
+  // Prefill from the agent each time the dialog opens for a new one, and
+  // invalidate any suggestion still in flight for the previous agent.
   useEffect(() => {
+    suggestionToken.current += 1;
     if (agent) {
       reset({ description: agent.description ?? "", deleteAgent: false });
     }
   }, [agent, reset]);
 
-  const recommendedTools =
+  const allowedToolNames =
     agent?.tools
       .filter(
         (tool) =>
@@ -97,7 +125,7 @@ export function ConvertToSkillDialog({
 
   return (
     <Dialog open={agent !== null} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent className="overflow-hidden">
         <DialogHeader>
           <DialogTitle>Convert to skill</DialogTitle>
           <DialogDescription>
@@ -108,10 +136,30 @@ export function ConvertToSkillDialog({
         </DialogHeader>
 
         {agent ? (
-          <form onSubmit={onSubmit}>
+          <DialogForm
+            onSubmit={onSubmit}
+            className="flex min-h-0 flex-1 flex-col"
+          >
             <DialogBody className="space-y-4">
               <div className="space-y-1.5">
-                <Label htmlFor="skill-description">Description</Label>
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="skill-description">Description</Label>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 px-2 text-xs"
+                    onClick={onSuggestDescription}
+                    disabled={suggestDescription.isPending}
+                  >
+                    {suggestDescription.isPending ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Sparkles className="h-3.5 w-3.5" />
+                    )}
+                    Generate
+                  </Button>
+                </div>
                 <Textarea
                   id="skill-description"
                   placeholder="What this skill does and when to use it"
@@ -128,15 +176,15 @@ export function ConvertToSkillDialog({
                 ) : null}
               </div>
 
-              {recommendedTools.length > 0 ? (
+              {allowedToolNames.length > 0 ? (
                 <div className="space-y-1.5">
-                  <p className="font-medium text-sm">Recommended tools</p>
+                  <p className="font-medium text-sm">Allowed tools</p>
                   <p className="text-muted-foreground text-xs">
-                    Listed in the skill so the activating agent knows what to
-                    enable:
+                    Carried into the skill's <code>allowed-tools</code> so the
+                    activating agent knows what to enable:
                   </p>
                   <div className="flex flex-wrap gap-1">
-                    {recommendedTools.map((tool) => (
+                    {allowedToolNames.map((tool) => (
                       <code
                         key={tool}
                         className="rounded bg-muted px-1.5 py-0.5 text-xs"
@@ -195,7 +243,7 @@ export function ConvertToSkillDialog({
                   : "Convert to skill"}
               </Button>
             </DialogFooter>
-          </form>
+          </DialogForm>
         ) : null}
       </DialogContent>
     </Dialog>

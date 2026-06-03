@@ -1,5 +1,5 @@
 {
-  "id": "2d22aec0-e6e2-4132-bd0e-0a93c801dd71",
+  "id": "48abbf4c-654f-4e3e-98da-93eaac606951",
   "prevId": "9c2e122d-aba0-4c03-a3ee-8caed650f54e",
   "version": "7",
   "dialect": "postgresql",
@@ -1231,6 +1231,13 @@
           "primaryKey": false,
           "notNull": true,
           "default": "'full'"
+        },
+        "tool_assignment_mode": {
+          "name": "tool_assignment_mode",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'manual'"
         },
         "built_in_agent_config": {
           "name": "built_in_agent_config",
@@ -10795,6 +10802,19 @@
           "type": "text",
           "primaryKey": false,
           "notNull": false
+        },
+        "allowed_tools": {
+          "name": "allowed_tools",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "templated": {
+          "name": "templated",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
         },
         "metadata": {
           "name": "metadata",

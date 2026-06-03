@@ -27,8 +27,8 @@ export default function McpCatalogLayout({
   const pathname = usePathname();
   const isRegistryPage = pathname === "/mcp/registry";
   const [pageActionButton, setActionButton] = useState<React.ReactNode>(null);
-  const { data: canReadEnvironments } = useHasPermissions({
-    environment: ["read"],
+  const { data: canManageEnvironments } = useHasPermissions({
+    environment: ["admin"],
   });
   const { data: canReadNetworkPolicies } = useHasPermissions({
     networkPolicy: ["read"],
@@ -36,7 +36,10 @@ export default function McpCatalogLayout({
 
   const tabs = [
     { label: "Catalog", href: "/mcp/registry" },
-    ...(canReadEnvironments
+    // The Environments tab leads to environment management — gate it on
+    // environment:admin. (Listing environments via the API stays ungated so the
+    // catalog deploy-selector works for everyone.)
+    ...(canManageEnvironments
       ? [{ label: "Environments", href: "/mcp/registry/environments" }]
       : []),
     ...(canReadNetworkPolicies

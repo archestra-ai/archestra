@@ -78,9 +78,9 @@ Registry entries can carry labels — key-value pairs set under **Labels** in th
 
 ## Environments
 
-An environment is an organization-level deployment target — for example `sandbox`, `staging`, or `production`. Admins manage the list of environments, and each carries a name, an optional Kubernetes namespace, and an optional default network policy.
+An environment is an organization-level deployment target — for example `sandbox`, `staging`, or `production`. Any member can view the list of environments; creating, editing, and deleting them requires the `environment:admin` permission. Each environment carries a name, an optional Kubernetes namespace, and an optional default network policy.
 
-An environment can be marked **restricted**. Only members with the `environment:admin` permission can assign catalog entries to a restricted environment. Unrestricted environments and Default stay open to anyone who can create MCP registry catalog entries.
+An environment can be marked **restricted**. Only members with the `environment:deploy-to-restricted` permission (or `environment:admin`, which implies it) can assign catalog entries to a restricted environment. Unrestricted environments and Default stay open to anyone who can create MCP registry catalog entries.
 
 ### Network Policies
 

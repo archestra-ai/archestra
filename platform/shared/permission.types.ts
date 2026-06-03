@@ -20,6 +20,7 @@ export const actions = [
   "enable",
   "query",
   "execute",
+  "deploy-to-restricted",
 ] as const;
 
 export const resources = [

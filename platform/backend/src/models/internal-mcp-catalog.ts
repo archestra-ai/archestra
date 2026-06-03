@@ -756,18 +756,28 @@ class InternalMcpCatalogModel {
   }
 
   /**
-   * Duplicate a DB-backed secret into a new row and return its id; null if the
-   * source is missing or externally backed. External secrets (Archestra Vault /
-   * BYOS) store path references, not values — resolving and re-storing them would
-   * materialize the customer's vault secret into our DB, so those are skipped and
-   * the clone keeps the slot empty.
+   * Duplicate a secret into a new entry and return its id, or null if the source
+   * is missing or BYOS-backed. BYOS secrets store `path#key` references into the
+   * customer's own vault; copying or resolving them would either share or
+   * materialize a secret we don't own, so those are skipped (clone keeps the
+   * slot empty). Archestra-managed Vault secrets are duplicated through
+   * secretManager() so the value is read from and written back to Vault rather
+   * than landing in the DB; plain DB secrets are copied as a new DB row.
    */
   private static async duplicateSecret(
     sourceSecretId: string,
     name: string,
   ): Promise<string | null> {
     const source = await SecretModel.findById(sourceSecretId);
-    if (!source || source.isVault || source.isByosVault) return null;
+    if (!source || source.isByosVault) return null;
+
+    if (source.isVault) {
+      const resolved = await secretManager().getSecret(sourceSecretId);
+      if (!resolved) return null;
+      const copy = await secretManager().createSecret(resolved.secret, name);
+      return copy.id;
+    }
+
     const copy = await SecretModel.create({
       name,
       secret: source.secret,

@@ -191,14 +191,14 @@ describe("Internal MCP Catalog - secret carry-over on clone", () => {
     expect(clone.presetSecretId).toBeNull();
   });
 
-  test("skips externally-backed (vault/BYOS) source secrets instead of materializing them", async ({
+  test("skips BYOS source secrets instead of materializing the vault reference", async ({
     makeOrganization,
     makeUser,
   }) => {
     const org = await makeOrganization();
     const user = await makeUser();
 
-    // A BYOS secret stores a vault path reference, not the value itself.
+    // A BYOS secret stores a vault path reference into the customer's own vault.
     const byosSecret = await SecretModel.create({
       name: "byos-src",
       secret: { client_secret: "secret/data/path#client_secret" },
@@ -224,5 +224,45 @@ describe("Internal MCP Catalog - secret carry-over on clone", () => {
 
     // The reference is not resolved and copied into a new DB row.
     expect(clone.clientSecretId).toBeNull();
+  });
+
+  test("duplicates Archestra-managed Vault source secrets into a new entry", async ({
+    makeOrganization,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+
+    const vaultSecret = await SecretModel.create({
+      name: "vault-src",
+      secret: { client_secret: "vault-managed-value" },
+      isVault: true,
+    });
+    const source = await InternalMcpCatalogModel.create(
+      {
+        name: "clone-src-vault",
+        serverType: "remote",
+        clientSecretId: vaultSecret.id,
+      },
+      { organizationId: org.id, authorId: user.id },
+    );
+
+    const clone = await InternalMcpCatalogModel.create(
+      {
+        name: "clone-src-vault-copy",
+        serverType: "remote",
+        clonedFrom: source.id,
+      },
+      { organizationId: org.id, authorId: user.id },
+    );
+
+    // Unlike BYOS, managed-Vault secrets are duplicated (via secretManager) into
+    // an independent entry rather than skipped.
+    expect(clone.clientSecretId).toBeTruthy();
+    expect(clone.clientSecretId).not.toBe(vaultSecret.id);
+    const copy = await secretManager().getSecret(
+      clone.clientSecretId as string,
+    );
+    expect(copy?.secret).toEqual({ client_secret: "vault-managed-value" });
   });
 });

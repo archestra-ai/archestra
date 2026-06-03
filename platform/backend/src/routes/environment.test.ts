@@ -5,7 +5,6 @@ import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import AuditLogModel from "@/models/audit-log";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
-import { createNetworkPolicy } from "@/services/environments/network-policy";
 import { afterEach, describe, expect, test } from "@/test";
 import { ApiError, type User } from "@/types";
 
@@ -101,7 +100,7 @@ describe("environment routes", () => {
 
     const created = await app.inject({
       method: "POST",
-      url: "/api/organization/environments",
+      url: "/api/environments",
       payload: { name: "Production", namespace: "prod" },
     });
     expect(created.statusCode).toBe(200);
@@ -111,7 +110,7 @@ describe("environment routes", () => {
 
     const list = await app.inject({
       method: "GET",
-      url: "/api/organization/environments",
+      url: "/api/environments",
     });
     expect(list.statusCode).toBe(200);
     expect(list.json().environments).toHaveLength(1);
@@ -120,7 +119,7 @@ describe("environment routes", () => {
 
     const updated = await app.inject({
       method: "PATCH",
-      url: `/api/organization/environments/${env.id}`,
+      url: `/api/environments/${env.id}`,
       payload: { name: "Production EU", namespace: "prod-eu" },
     });
     expect(updated.statusCode).toBe(200);
@@ -129,7 +128,7 @@ describe("environment routes", () => {
 
     const deleted = await app.inject({
       method: "DELETE",
-      url: `/api/organization/environments/${env.id}`,
+      url: `/api/environments/${env.id}`,
     });
     expect(deleted.statusCode).toBe(200);
     expect(deleted.json().success).toBe(true);
@@ -172,7 +171,7 @@ describe("environment routes", () => {
     expect(auditRows[2].after).toBeNull();
   });
 
-  test("can create and update an environment network policy assignment", async ({
+  test("can create and update an environment network egress policy", async ({
     makeUser,
     makeOrganization,
   }) => {
@@ -182,51 +181,28 @@ describe("environment routes", () => {
     const organization = await makeOrganization();
     organizationId = organization.id;
     app = await buildApp(user, organizationId);
-    const policy = await createNetworkPolicy({
-      organizationId,
-      data: { name: "Sandbox egress" },
-    });
+    const policy = {
+      egressMode: "restricted",
+      domainPreset: "package_managers",
+      allowedDomains: ["registry.npmjs.org"],
+      allowedCidrs: ["203.0.113.0/24"],
+    };
 
     const created = await app.inject({
       method: "POST",
-      url: "/api/organization/environments",
-      payload: { name: "Sandbox", networkPolicyId: policy.id },
+      url: "/api/environments",
+      payload: { name: "Sandbox", networkPolicy: policy },
     });
     expect(created.statusCode).toBe(200);
-    expect(created.json().networkPolicyId).toBe(policy.id);
+    expect(created.json().networkPolicy).toEqual(policy);
 
     const updated = await app.inject({
       method: "PATCH",
-      url: `/api/organization/environments/${created.json().id}`,
-      payload: { networkPolicyId: null },
+      url: `/api/environments/${created.json().id}`,
+      payload: { networkPolicy: null },
     });
     expect(updated.statusCode).toBe(200);
-    expect(updated.json().networkPolicyId).toBeNull();
-  });
-
-  test("rejects environment network policy assignments from another organization", async ({
-    makeUser,
-    makeOrganization,
-  }) => {
-    vi.clearAllMocks();
-    mockHasPermission.mockResolvedValue({ success: true, error: null });
-    const user = await makeUser();
-    const organization = await makeOrganization();
-    const otherOrganization = await makeOrganization();
-    organizationId = organization.id;
-    app = await buildApp(user, organizationId);
-    const otherPolicy = await createNetworkPolicy({
-      organizationId: otherOrganization.id,
-      data: { name: "Other org egress" },
-    });
-
-    const response = await app.inject({
-      method: "POST",
-      url: "/api/organization/environments",
-      payload: { name: "Sandbox", networkPolicyId: otherPolicy.id },
-    });
-    expect(response.statusCode).toBe(400);
-    expect(response.json().error.message).toBe("Network policy not found");
+    expect(updated.json().networkPolicy).toBeNull();
   });
 
   test("member without environment:admin is forbidden from creating", async ({
@@ -245,7 +221,7 @@ describe("environment routes", () => {
 
     const res = await app.inject({
       method: "POST",
-      url: "/api/organization/environments",
+      url: "/api/environments",
       payload: { name: "Nope" },
     });
     expect(res.statusCode).toBe(403);
@@ -262,13 +238,13 @@ describe("environment routes", () => {
     const payload = { name: "Staging" };
     const first = await app.inject({
       method: "POST",
-      url: "/api/organization/environments",
+      url: "/api/environments",
       payload,
     });
     expect(first.statusCode).toBe(200);
     const second = await app.inject({
       method: "POST",
-      url: "/api/organization/environments",
+      url: "/api/environments",
       payload,
     });
     expect(second.statusCode).toBe(409);

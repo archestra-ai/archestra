@@ -18,15 +18,12 @@ import type {
   ConnectionBaseUrl,
   GlobalToolPolicy,
   LimitCleanupInterval,
+  NetworkPolicy,
   OnboardingWizard,
   OrganizationChatLink,
   OrganizationCompressionScope,
 } from "@/types";
 import modelsTable from "./model";
-
-const networkPoliciesReferenceTable = pgTable("network_policies", {
-  id: uuid("id").primaryKey(),
-});
 
 const organizationsTable = pgTable("organization", {
   id: text("id").primaryKey(),
@@ -261,14 +258,10 @@ const organizationsTable = pgTable("organization", {
   defaultEnvironmentDescription: text("default_environment_description"),
 
   /**
-   * Optional default network policy for the implicit "default" environment.
-   * Uses a local reference table object to avoid a runtime import cycle with
-   * network_policies, whose organization_id points back here.
+   * Optional default network egress policy for the implicit "default"
+   * environment. NULL falls back to built-in unrestricted behavior.
    */
-  defaultNetworkPolicyId: uuid("default_network_policy_id").references(
-    () => networkPoliciesReferenceTable.id,
-    { onDelete: "set null" },
-  ),
+  defaultNetworkPolicy: jsonb("default_network_policy").$type<NetworkPolicy>(),
 
   /**
    * When true, assigning a catalog item to the implicit "default" environment

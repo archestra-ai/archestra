@@ -29,7 +29,7 @@ import {
 // All business logic (dup-name 409, not-found 404) lives in the service.
 const environmentRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(
-    "/api/organization/environments",
+    "/api/environments",
     {
       schema: {
         operationId: RouteId.ListEnvironments,
@@ -45,7 +45,7 @@ const environmentRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   fastify.post(
-    "/api/organization/environments",
+    "/api/environments",
     {
       schema: {
         operationId: RouteId.CreateEnvironment,
@@ -73,7 +73,7 @@ const environmentRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   fastify.patch(
-    "/api/organization/environments/:id",
+    "/api/environments/:id",
     {
       schema: {
         operationId: RouteId.UpdateEnvironment,
@@ -186,7 +186,7 @@ const environmentRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   fastify.delete(
-    "/api/organization/environments/:id",
+    "/api/environments/:id",
     {
       schema: {
         operationId: RouteId.DeleteEnvironment,

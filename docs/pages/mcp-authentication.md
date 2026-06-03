@@ -12,7 +12,7 @@ Check ../docs_writer_prompt.md before changing this file.
 
 MCP authentication in Archestra has two separate layers: the client-facing gateway layer and the upstream MCP server layer.
 
-This separation is important because the MCP client usually should not know how every upstream system is authenticated. Cursor, Claude Desktop, Open WebUI, or a custom agent authenticates once to an MCP Gateway. Archestra then decides which installed MCP server connection and which upstream credential should be used for each tool call.
+This separation is important because the MCP client usually should not know how every upstream system is authenticated. Cursor, Claude Desktop, Copilot CLI, Open WebUI, or a custom agent authenticates once to an MCP Gateway. Archestra then decides which installed MCP server connection and which upstream credential should be used for each tool call.
 
 That means one gateway can expose tools backed by different credential models. A GitHub tool might use a user's OAuth token, a Jira tool might use an enterprise IdP token exchange, and an internal self-hosted tool might require no external credential at all. The client still talks to the same gateway.
 
@@ -35,7 +35,7 @@ The MCP Gateway supports four client authentication paths. They do not all prese
 
 ### OAuth 2.1
 
-MCP-native clients such as Claude Desktop, Cursor, and Open WebUI authenticate automatically using the [MCP Authorization spec](https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization). The gateway acts as both the resource server and the authorization server.
+MCP-native clients such as Claude Desktop, Cursor, Copilot CLI, and Open WebUI authenticate automatically using the [MCP Authorization spec](https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization). The gateway acts as both the resource server and the authorization server.
 
 The gateway supports the following OAuth flows and client registration methods:
 

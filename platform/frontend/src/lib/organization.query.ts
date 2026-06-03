@@ -9,8 +9,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { useSession } from "@/lib/auth/auth.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
-import { environmentKeys } from "./organization/environment.query";
-import { networkPolicyKeys } from "./organization/network-policy.query";
+import { environmentKeys } from "./environment.query";
 import { handleApiError } from "./utils";
 
 export const appearanceKeys = {
@@ -526,16 +525,15 @@ export function useUpdateDefaultEnvironment(
       if (!updatedOrganization) return;
       queryClient.setQueryData(organizationKeys.details(), updatedOrganization);
       queryClient.invalidateQueries({ queryKey: environmentKeys.list() });
-      queryClient.invalidateQueries({ queryKey: networkPolicyKeys.list() });
       toast.success(onSuccessMessage);
     },
   });
 }
 
 /**
- * Returns the org-configured default environment (name + namespace +
- * restricted). When unconfigured, `name` falls back to "Default", `namespace`
- * to null, and `restricted` to false.
+ * Returns the org-configured default environment fields. When unconfigured,
+ * `name` falls back to "Default", nullable fields fall back to null, and
+ * `restricted` falls back to false.
  */
 export function useDefaultEnvironment() {
   const { data: organization } = useOrganization();
@@ -543,7 +541,7 @@ export function useDefaultEnvironment() {
     name: organization?.defaultEnvironmentName ?? "Default",
     namespace: organization?.defaultEnvironmentNamespace ?? null,
     description: organization?.defaultEnvironmentDescription ?? null,
-    networkPolicyId: organization?.defaultNetworkPolicyId ?? null,
+    networkPolicy: organization?.defaultNetworkPolicy ?? null,
     restricted: organization?.defaultEnvironmentRestricted ?? false,
   };
 }

@@ -15,7 +15,6 @@ import McpServerModel from "@/models/mcp-server";
 import McpServerInstallationRequestModel from "@/models/mcp-server-installation-request";
 import MemberModel from "@/models/member";
 import ModelModel from "@/models/model";
-import NetworkPolicyModel from "@/models/network-policy";
 import OptimizationRuleModel from "@/models/optimization-rule";
 import OrganizationModel from "@/models/organization";
 import OrganizationRoleModel from "@/models/organization-role";
@@ -100,7 +99,6 @@ export const AUDIT_DECISIONS = {
   },
   membersTable: { audited: true, model: MemberModel },
   modelsTable: { audited: true, model: ModelModel },
-  networkPoliciesTable: { audited: true, model: NetworkPolicyModel },
   // oauthClientsTable stores LLM OAuth clients managed via /api/llm-oauth-clients
   oauthClientsTable: { audited: true, model: LlmOauthClientModel },
   optimizationRulesTable: { audited: true, model: OptimizationRuleModel },

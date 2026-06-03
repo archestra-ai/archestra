@@ -174,6 +174,13 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // before persistence, so work on a cloned object instead of the request body.
       const restBody = structuredClone(restBodyInput);
 
+      // Secret FK columns are server-managed: clients submit secret values, never
+      // ids. Trusting an inbound id would let a caller point the row at another
+      // org's secret (which create()'s clone-secret merge would then read/write).
+      restBody.clientSecretId = undefined;
+      restBody.localConfigSecretId = undefined;
+      restBody.presetSecretId = undefined;
+
       // Enforce scope restrictions
       const { success: isAdmin } = await hasPermission(
         { mcpServerInstallation: ["admin"] },
@@ -551,6 +558,13 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Downstream secret extraction removes plaintext values from the payload
       // before persistence, so work on a cloned object instead of the request body.
       const restBody = structuredClone(restBodyInput);
+
+      // Secret FK columns are server-managed (see POST): a client-supplied id
+      // would otherwise be persisted onto the row, repointing it at another
+      // org's secret. Secret handling below sets them from the existing row.
+      restBody.clientSecretId = undefined;
+      restBody.localConfigSecretId = undefined;
+      restBody.presetSecretId = undefined;
 
       const { success: isAdmin } = await hasPermission(
         { mcpServerInstallation: ["admin"] },

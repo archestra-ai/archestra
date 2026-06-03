@@ -1,7 +1,7 @@
 import { archestraApiSdk, type archestraApiTypes } from "@shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { environmentKeys } from "@/lib/organization/environment.query";
+import { environmentKeys } from "@/lib/environment.query";
 import { usePresetEntityName } from "@/lib/organization.query";
 
 const {

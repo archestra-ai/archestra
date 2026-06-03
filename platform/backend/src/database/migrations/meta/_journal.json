@@ -1919,6 +1919,13 @@
       "when": 1780487668988,
       "tag": "0273_remarkable_punisher",
       "breakpoints": true
+    },
+    {
+      "idx": 274,
+      "version": "7",
+      "when": 1780493123672,
+      "tag": "0274_futuristic_madelyne_pryor",
+      "breakpoints": true
     }
   ]
 }

@@ -427,16 +427,10 @@ function makeEffectivePolicy(
   return {
     source: "environment",
     policy: {
-      id: "policy-id",
-      organizationId: "org-id",
-      name: "Test policy",
-      description: null,
       egressMode: "restricted",
       domainPreset: "none",
       allowedDomains: [],
       allowedCidrs: [],
-      createdAt: new Date("2026-01-01T00:00:00.000Z"),
-      updatedAt: new Date("2026-01-01T00:00:00.000Z"),
       ...overrides,
     },
   };

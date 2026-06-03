@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import NewSkillPage from "./page.client";
@@ -31,6 +31,24 @@ vi.mock("@/components/page-layout", () => ({
       {actionButton}
       {children}
     </main>
+  ),
+}));
+
+vi.mock("@/components/search-input", () => ({
+  SearchInput: ({
+    onSearchChange,
+    placeholder,
+    value,
+  }: {
+    onSearchChange?: (value: string) => void;
+    placeholder?: string;
+    value?: string;
+  }) => (
+    <input
+      placeholder={placeholder}
+      value={value ?? ""}
+      onChange={(event) => onSearchChange?.(event.currentTarget.value)}
+    />
   ),
 }));
 
@@ -78,11 +96,11 @@ describe("NewSkillPage", () => {
     const user = userEvent.setup();
     render(<NewSkillPage />);
 
-    await user.type(
+    fireEvent.change(
       screen.getByPlaceholderText(
         "Search skills by name, repo, or use case...",
       ),
-      "policy",
+      { target: { value: "policy" } },
     );
     await user.click(
       await screen.findByRole("button", {

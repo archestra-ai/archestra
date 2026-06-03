@@ -18,6 +18,7 @@ import {
   type InternalMcpCatalog,
   type ListInternalMcpCatalog,
   type PresetFieldValues,
+  type SecretValue,
   type UpdateInternalMcpCatalog,
   type UserConfigFieldDefault,
 } from "@/types";
@@ -81,10 +82,12 @@ class InternalMcpCatalogModel {
       ...(context?.authorId ? { authorId: context.authorId } : {}),
     };
 
-    const [createdItem] = await db
-      .insert(schema.internalMcpCatalogTable)
-      .values(insertValues)
-      .returning();
+    let createdItem = (
+      await db
+        .insert(schema.internalMcpCatalogTable)
+        .values(insertValues)
+        .returning()
+    )[0];
 
     if (labels && labels.length > 0) {
       await McpCatalogLabelModel.syncCatalogLabels(
@@ -104,13 +107,16 @@ class InternalMcpCatalogModel {
       createdItem.id,
     );
 
-    // A clone copies the source's tools + guardrails as provisional rows.
+    // A clone copies the source's tools + guardrails as provisional rows, and
+    // its secrets as independent copies (see cloneSecretsFromSource).
     if (createdItem.clonedFrom) {
       await ToolModel.cloneToolsAndPoliciesFromCatalog({
         sourceCatalogId: createdItem.clonedFrom,
         targetCatalogId: createdItem.id,
         targetCatalogName: createdItem.name,
       });
+      createdItem =
+        await InternalMcpCatalogModel.cloneSecretsFromSource(createdItem);
     }
 
     const result: InternalMcpCatalog = {
@@ -689,6 +695,134 @@ class InternalMcpCatalogModel {
       .from(schema.internalMcpCatalogTable)
       .where(eq(schema.internalMcpCatalogTable.id, id));
     return row ?? null;
+  }
+
+  /**
+   * Copy the clone source's secrets onto the clone, per key. Inherited keys
+   * fill in only what the create payload did not already supply, so a value the
+   * user entered while cloning wins over the source's. Returns the row with any
+   * new secret FK ids applied.
+   */
+  private static async cloneSecretsFromSource(
+    clone: typeof schema.internalMcpCatalogTable.$inferSelect,
+  ): Promise<typeof schema.internalMcpCatalogTable.$inferSelect> {
+    if (!clone.clonedFrom) return clone;
+
+    const [source] = await db
+      .select({
+        clientSecretId: schema.internalMcpCatalogTable.clientSecretId,
+        localConfigSecretId: schema.internalMcpCatalogTable.localConfigSecretId,
+        presetSecretId: schema.internalMcpCatalogTable.presetSecretId,
+      })
+      .from(schema.internalMcpCatalogTable)
+      .where(eq(schema.internalMcpCatalogTable.id, clone.clonedFrom));
+    if (!source) return clone;
+
+    const updates: Partial<{
+      clientSecretId: string;
+      localConfigSecretId: string;
+      presetSecretId: string;
+    }> = {};
+
+    const clientSecretId = await InternalMcpCatalogModel.cloneSecretSlot({
+      sourceSecretId: source.clientSecretId,
+      cloneSecretId: clone.clientSecretId,
+      name: `${clone.name}-oauth-client-secret`,
+    });
+    if (clientSecretId) updates.clientSecretId = clientSecretId;
+
+    const localConfigSecretId = await InternalMcpCatalogModel.cloneSecretSlot({
+      sourceSecretId: source.localConfigSecretId,
+      cloneSecretId: clone.localConfigSecretId,
+      name: `${clone.name}-local-config-env`,
+    });
+    if (localConfigSecretId) updates.localConfigSecretId = localConfigSecretId;
+
+    const presetSecretId = await InternalMcpCatalogModel.cloneSecretSlot({
+      sourceSecretId: source.presetSecretId,
+      cloneSecretId: clone.presetSecretId,
+      name: `${clone.name}-preset-secrets`,
+    });
+    if (presetSecretId) updates.presetSecretId = presetSecretId;
+
+    if (Object.keys(updates).length === 0) return clone;
+
+    const [updated] = await db
+      .update(schema.internalMcpCatalogTable)
+      .set(updates)
+      .where(eq(schema.internalMcpCatalogTable.id, clone.id))
+      .returning();
+    return updated ?? clone;
+  }
+
+  /**
+   * Reconcile one secret slot of a clone against its source. Returns a new
+   * secret id to write on the clone, or null if the clone's FK is unchanged
+   * (it already had its own secret, or there is nothing to inherit).
+   *
+   * - Clone already has a secret (create payload supplied values): merge in the
+   *   source keys it is missing, so per-key the user's value wins. The clone
+   *   keeps its own secret row, so no FK change.
+   * - Clone has none: duplicate the whole source bag into a new entry.
+   */
+  private static async cloneSecretSlot(params: {
+    sourceSecretId: string | null;
+    cloneSecretId: string | null;
+    name: string;
+  }): Promise<string | null> {
+    const { sourceSecretId, cloneSecretId, name } = params;
+    const source =
+      await InternalMcpCatalogModel.readClonableSecret(sourceSecretId);
+    if (!source) return null;
+
+    if (cloneSecretId) {
+      const cloneBag =
+        (await secretManager().getSecret(cloneSecretId))?.secret ?? {};
+      const merged: SecretValue = { ...cloneBag };
+      let added = false;
+      for (const [key, value] of Object.entries(source.bag)) {
+        if (!(key in cloneBag)) {
+          merged[key] = value;
+          added = true;
+        }
+      }
+      if (added) await secretManager().updateSecret(cloneSecretId, merged);
+      return null;
+    }
+
+    if (Object.keys(source.bag).length === 0) return null;
+    if (source.isVault) {
+      return (await secretManager().createSecret(source.bag, name)).id;
+    }
+    const copy = await SecretModel.create({
+      name,
+      secret: source.bag,
+      isVault: false,
+      isByosVault: false,
+    });
+    return copy.id;
+  }
+
+  /**
+   * Resolve a source secret's value bag for cloning, or null if missing or
+   * BYOS-backed. BYOS secrets store `path#key` references into the customer's
+   * own vault; copying or resolving them would either share or materialize a
+   * secret we don't own, so they are skipped. Archestra-managed Vault secrets
+   * are read through secretManager() so the clone copy is written back to Vault
+   * rather than the DB; plain DB secrets carry their decrypted bag.
+   */
+  private static async readClonableSecret(
+    secretId: string | null,
+  ): Promise<{ bag: SecretValue; isVault: boolean } | null> {
+    if (!secretId) return null;
+    const source = await SecretModel.findById(secretId);
+    if (!source || source.isByosVault) return null;
+    if (source.isVault) {
+      const resolved = await secretManager().getSecret(secretId);
+      if (!resolved) return null;
+      return { bag: resolved.secret, isVault: true };
+    }
+    return { bag: source.secret, isVault: false };
   }
 
   /**

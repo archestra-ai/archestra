@@ -49,6 +49,7 @@ import {
   SkillParseError,
 } from "@/skills/parser";
 import { skillCatalog } from "@/skills/skill-catalog";
+import { suggestSkillDescription } from "@/skills/skill-description";
 import {
   isSkillNameConflict,
   refineUniqueFilePaths,
@@ -106,6 +107,11 @@ const MigrationReportSchema = z.object({
   annotated: z.array(MigrationFieldSchema),
 });
 
+/** An LLM-suggested skill description for the convert-to-skill dialog. */
+const SuggestSkillDescriptionResponseSchema = z.object({
+  description: z.string(),
+});
+
 const ConvertAgentToSkillResponseSchema = z.object({
   skill: SkillDetailSchema,
   report: MigrationReportSchema,
@@ -161,6 +167,8 @@ const DiscoveredSkillSchema = z.object({
   name: z.string(),
   description: z.string(),
   compatibility: z.string().nullable(),
+  allowedTools: z.string().nullable(),
+  templated: z.boolean(),
   fileCount: z.number(),
 });
 
@@ -285,6 +293,8 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
             content: parsed.content,
             license: parsed.license,
             compatibility: parsed.compatibility,
+            allowedTools: parsed.allowedTools,
+            templated: parsed.templated,
             metadata: parsed.metadata,
             sourceType: "manual",
             scope,
@@ -436,6 +446,8 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 content: draft.content,
                 license: draft.license,
                 compatibility: draft.compatibility,
+                allowedTools: draft.allowedTools,
+                templated: draft.templated,
                 metadata: draft.metadata,
                 sourceType: "manual",
                 scope: draft.scope,
@@ -471,6 +483,65 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         report,
         deletedAgent,
       });
+    },
+  );
+
+  fastify.post(
+    "/api/agents/:id/suggest-skill-description",
+    {
+      schema: {
+        operationId: RouteId.SuggestSkillDescription,
+        description:
+          "Suggest a skill description for an agent using an LLM, for the convert-to-skill flow. Does not modify the agent or create a skill.",
+        tags: ["Skills"],
+        params: z.object({ id: UuidIdSchema }),
+        response: constructResponseSchema(
+          SuggestSkillDescriptionResponseSchema,
+        ),
+      },
+    },
+    async ({ params: { id }, user, organizationId }, reply) => {
+      // Mirror the convert route's read-authorization so the suggestion endpoint
+      // can't be used to probe agents the caller may not see. admin-view load
+      // first, then re-impose access filtering before disclosing anything.
+      const agent = await AgentModel.findById(id, user.id, true);
+      if (!agent || agent.organizationId !== organizationId) {
+        throw new ApiError(404, "Agent not found");
+      }
+      const agentChecker = await getAgentTypePermissionChecker({
+        userId: user.id,
+        organizationId,
+      });
+      try {
+        agentChecker.require(agent.agentType, "read");
+      } catch {
+        throw new ApiError(404, "Agent not found");
+      }
+      if (!agentChecker.isAdmin(agent.agentType)) {
+        const accessible = await AgentModel.findById(id, user.id, false);
+        if (!accessible) {
+          throw new ApiError(404, "Agent not found");
+        }
+      }
+      if (agent.agentType !== "agent" || agent.builtInAgentConfig) {
+        throw new ApiError(
+          400,
+          "Only internal agents can be converted to skills.",
+        );
+      }
+
+      const description = await suggestSkillDescription({
+        agent,
+        organizationId,
+        userId: user.id,
+      });
+      if (!description) {
+        throw new ApiError(
+          502,
+          "Could not generate a description. Please write one manually.",
+        );
+      }
+      return reply.send({ description });
     },
   );
 
@@ -590,6 +661,8 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
               content: parsed.content,
               license: parsed.license,
               compatibility: parsed.compatibility,
+              allowedTools: parsed.allowedTools,
+              templated: parsed.templated,
               metadata: parsed.metadata,
               scope: newScope,
             },
@@ -912,6 +985,8 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
             content: z.string(),
             license: z.string().nullable(),
             compatibility: z.string().nullable(),
+            allowedTools: z.string().nullable(),
+            templated: z.boolean(),
             metadata: z.record(z.string(), z.string()),
             files: z.array(
               z.object({
@@ -1018,6 +1093,8 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
               content: item.parsed.content,
               license: item.parsed.license,
               compatibility: item.parsed.compatibility,
+              allowedTools: item.parsed.allowedTools,
+              templated: item.parsed.templated,
               metadata: item.parsed.metadata,
               sourceType: "github",
               sourceRef: item.sourceRef,

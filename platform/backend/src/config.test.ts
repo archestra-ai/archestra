@@ -67,7 +67,6 @@ describe("getAnalyticsConfig", () => {
         key: expect.stringMatching(/^phc_/),
         host: "https://eu.i.posthog.com",
       },
-      stateDir: expect.any(String),
     });
   });
 
@@ -83,7 +82,6 @@ describe("getAnalyticsConfig", () => {
         key: "ph_custom",
         host: "https://posthog.example.com",
       },
-      stateDir: expect.any(String),
     });
   });
 });

@@ -529,14 +529,19 @@ export function McpCatalogForm({
   const { data: teams } = useTeams();
   const { data: environmentList } = useEnvironments();
   const environments = environmentList?.environments;
-  const { data: canDeployRestricted } = useHasPermissions({
-    environment: ["admin"],
+  // Deploying to a restricted environment needs environment:deploy-to-restricted;
+  // environment:admin (full environment management) implies it.
+  const { data: hasEnvAdmin } = useHasPermissions({ environment: ["admin"] });
+  const { data: hasDeployToRestricted } = useHasPermissions({
+    environment: ["deploy-to-restricted"],
   });
+  const canDeployRestricted =
+    (hasEnvAdmin ?? false) || (hasDeployToRestricted ?? false);
   const defaultEnvironment = useDefaultEnvironment();
-  // Environments the user can deploy to. Restricted environments the user lacks
-  // environment:admin for are hidden entirely. The default is always available,
-  // so with no accessible custom environments there's only one option and the
-  // selector is hidden.
+  // Environments the user can deploy to. Restricted environments the user can't
+  // deploy to are hidden entirely. The default is always available, so with no
+  // accessible custom environments there's only one option and the selector is
+  // hidden.
   const accessibleEnvironments = (environments ?? []).filter(
     (e) => !e.restricted || canDeployRestricted,
   );

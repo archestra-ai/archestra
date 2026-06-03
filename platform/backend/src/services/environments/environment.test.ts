@@ -172,7 +172,7 @@ describe("EnvironmentService", () => {
       assertCanAssignEnvironment({
         environmentId: null,
         organizationId: org.id,
-        hasEnvironmentAdmin: false,
+        canDeployToRestricted: false,
       }),
     ).resolves.toBeUndefined();
   });
@@ -188,7 +188,7 @@ describe("EnvironmentService", () => {
       assertCanAssignEnvironment({
         environmentId: null,
         organizationId: org.id,
-        hasEnvironmentAdmin: false,
+        canDeployToRestricted: false,
       }),
     ).rejects.toMatchObject({ statusCode: 403 });
   });
@@ -204,7 +204,7 @@ describe("EnvironmentService", () => {
       assertCanAssignEnvironment({
         environmentId: null,
         organizationId: org.id,
-        hasEnvironmentAdmin: true,
+        canDeployToRestricted: true,
       }),
     ).resolves.toBeUndefined();
   });
@@ -221,7 +221,7 @@ describe("EnvironmentService", () => {
       assertCanAssignEnvironment({
         environmentId: env.id,
         organizationId: org.id,
-        hasEnvironmentAdmin: false,
+        canDeployToRestricted: false,
       }),
     ).resolves.toBeUndefined();
   });
@@ -238,7 +238,7 @@ describe("EnvironmentService", () => {
       assertCanAssignEnvironment({
         environmentId: env.id,
         organizationId: org.id,
-        hasEnvironmentAdmin: false,
+        canDeployToRestricted: false,
       }),
     ).rejects.toMatchObject({ statusCode: 403 });
   });
@@ -255,7 +255,7 @@ describe("EnvironmentService", () => {
       assertCanAssignEnvironment({
         environmentId: env.id,
         organizationId: org.id,
-        hasEnvironmentAdmin: true,
+        canDeployToRestricted: true,
       }),
     ).resolves.toBeUndefined();
   });
@@ -268,7 +268,7 @@ describe("EnvironmentService", () => {
       assertCanAssignEnvironment({
         environmentId: MISSING_ID,
         organizationId: org.id,
-        hasEnvironmentAdmin: true,
+        canDeployToRestricted: true,
       }),
     ).rejects.toMatchObject({ statusCode: 404 });
   });

@@ -20,8 +20,6 @@ export type FieldScopeValue = "installation" | "preset" | "static";
 interface FieldScopeSelectProps {
   value: FieldScopeValue;
   onChange: (next: FieldScopeValue) => void;
-  /** When false, the "preset" option is hidden (caller doesn't model preset-scoped values). */
-  allowPresetScope?: boolean;
   /** When true, "installation" is forbidden (e.g. multi-tenant servers). */
   disableInstallation?: boolean;
   /** Tooltip copy shown when the disabled "Installation" option is hovered. */
@@ -31,12 +29,14 @@ interface FieldScopeSelectProps {
 export function FieldScopeSelect({
   value,
   onChange,
-  allowPresetScope = true,
   disableInstallation = false,
   disabledReason,
 }: FieldScopeSelectProps) {
-  const { singular, configured } = usePresetEntityName();
-  const showPresetScope = allowPresetScope && configured;
+  const { singular } = usePresetEntityName();
+  // "preset" is deprecated as a selectable scope: it is no longer offered when
+  // adding a field, but a field that already has preset scope keeps rendering
+  // the option so its value still displays and existing config isn't dropped.
+  const showPresetScope = value === "preset";
   const installationItem = (
     <SelectItem
       value="installation"

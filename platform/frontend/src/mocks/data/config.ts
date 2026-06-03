@@ -55,6 +55,7 @@ export function makePublicConfig(
     disableInvitations: false,
     analytics: {
       enabled: false,
+      instanceId: null,
       posthog: { key: "", host: "" },
     },
     ...overrides,

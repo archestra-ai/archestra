@@ -261,9 +261,7 @@ const organizationsTable = pgTable("organization", {
    * Optional default network egress policy for the implicit "default"
    * environment. NULL falls back to built-in unrestricted behavior.
    */
-  defaultNetworkPolicy: jsonb(
-    "default_network_policy",
-  ).$type<NetworkPolicy | null>(),
+  defaultNetworkPolicy: jsonb("default_network_policy").$type<NetworkPolicy>(),
 
   /**
    * When true, assigning a catalog item to the implicit "default" environment

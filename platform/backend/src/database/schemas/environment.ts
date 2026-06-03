@@ -34,7 +34,7 @@ const environmentsTable = pgTable(
      * not yet applied at deployment time. NULL means "unset".
      */
     namespace: text("namespace"),
-    networkPolicy: jsonb("network_policy").$type<NetworkPolicy | null>(),
+    networkPolicy: jsonb("network_policy").$type<NetworkPolicy>(),
     /**
      * When true, assigning a catalog item to this environment requires the
      * `environment:admin` permission. Unrestricted environments (and the

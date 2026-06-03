@@ -988,22 +988,22 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         });
       }
 
-      // A multi-tenant local catalog shares one K8s Deployment across all
-      // installs, and a per-install restart no-ops on it (the sibling guard in
-      // restartServer). So an environment reassignment would leave the shared
-      // pod in the old namespace unless we relocate the shared Deployment
-      // explicitly, mirroring the environment-namespace-edit route.
-      const relocatingSharedDeployment =
+      // On an environment reassignment of a local catalog, the teardown must
+      // target the OLD namespace. Both teardown paths resolve the namespace
+      // from the catalog row — reinstallSharedDeployment (multi-tenant) and the
+      // cascade's per-install restartServer→stopServer→getOrLoadDeployment
+      // (single-tenant) — and the update below rewrites that row to the new
+      // environment. Pre-load the existing deployments now, while the row still
+      // holds the old namespace, so they are cached against the old-namespace
+      // pod and the teardown deletes it. Without this warm-up, a cache-cold
+      // replica (any of several) re-derives the new namespace at teardown and
+      // orphans the old-namespace pod.
+      const relocatingLocalDeployment =
         "environmentId" in restBody &&
         restBody.environmentId !== originalCatalogItem.environmentId &&
-        originalCatalogItem.multitenant === true &&
         originalCatalogItem.serverType === "local" &&
         mcpServerRuntimeManager.isEnabled;
-      if (relocatingSharedDeployment) {
-        // Pre-load deployments while the catalog row still holds the OLD
-        // namespace, so the teardown targets the old-namespace pod
-        // (reinstallSharedDeployment resolves the namespace from the row, which
-        // the update below rewrites to the new environment).
+      if (relocatingLocalDeployment) {
         const installs = await McpServerModel.findByCatalogId(id);
         await Promise.all(
           installs.map((s) =>
@@ -1019,12 +1019,19 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Catalog item not found");
       }
 
-      // Now that the row holds the new environment, recreate the shared
-      // Deployment in the new namespace. Awaited before the cascade so its
-      // per-install tool sync runs against the relocated, ready pod rather than
-      // racing the recreate. Single-tenant installs relocate via the cascade's
-      // per-install restart below.
-      if (relocatingSharedDeployment) {
+      // A multi-tenant local catalog shares one K8s Deployment across all
+      // installs, and a per-install restart no-ops on it (the sibling guard in
+      // restartServer), so the shared Deployment must be relocated explicitly,
+      // mirroring the environment-namespace-edit route. Now that the row holds
+      // the new environment, recreate it in the new namespace — awaited before
+      // the cascade so its per-install tool sync runs against the relocated,
+      // ready pod rather than racing the recreate. Single-tenant installs
+      // relocate via the cascade's per-install restart below, using the
+      // deployments pre-loaded above.
+      if (
+        relocatingLocalDeployment &&
+        originalCatalogItem.multitenant === true
+      ) {
         await mcpServerRuntimeManager.reinstallSharedDeployment(id);
       }
 

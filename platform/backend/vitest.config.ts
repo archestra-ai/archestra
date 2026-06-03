@@ -20,6 +20,9 @@ export default defineConfig({
     globals: true,
     include: ["./src/**/*.test.ts"],
     environment: "node",
+    // Build the migrated schema once and snapshot it (see global-setup.ts); each test
+    // file's beforeAll then loads the snapshot instead of replaying all migrations.
+    globalSetup: ["./src/test/global-setup.ts"],
     setupFiles: ["./src/test/setup.ts"],
 
     /**

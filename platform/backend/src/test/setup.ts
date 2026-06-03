@@ -14,12 +14,11 @@
  */
 
 import fs from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { PGlite } from "@electric-sql/pglite";
 import { vector } from "@electric-sql/pglite/vector";
 import { drizzle } from "drizzle-orm/pglite";
 import { afterAll, afterEach, beforeAll, beforeEach, vi } from "vitest";
+import { getMigrationsSql, SNAPSHOT_PATH_ENV } from "./migrations-helper.js";
 
 // Disable Sentry for tests - set BEFORE any config modules are loaded
 process.env.ARCHESTRA_SENTRY_BACKEND_DSN = "";
@@ -40,12 +39,9 @@ process.env.ARCHESTRA_AUTH_SECRET = "auth-secret-unit-tests-32-chars!";
 // backend test setup/teardown; raise the cap slightly to avoid noisy warnings.
 process.setMaxListeners(20);
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-
 // Module-level variables to persist across tests within a file
 let pgliteClient: PGlite | null = null;
 let testDb: ReturnType<typeof drizzle> | null = null;
-let migrationsSql: string[] | null = null;
 const originalConsoleWarn = console.warn;
 
 console.warn = (...args: unknown[]) => {
@@ -66,37 +62,29 @@ console.warn = (...args: unknown[]) => {
 };
 
 /**
- * Read and cache migration files - done once per worker
- */
-function getMigrationsSql(): string[] {
-  if (migrationsSql) return migrationsSql;
-
-  const migrationsDir = path.join(__dirname, "../database/migrations");
-  const migrationFiles = fs
-    .readdirSync(migrationsDir)
-    .filter((file) => file.endsWith(".sql"))
-    .sort(); // Ensure consistent order
-
-  migrationsSql = migrationFiles.map((file) =>
-    fs.readFileSync(path.join(migrationsDir, file), "utf8"),
-  );
-
-  return migrationsSql;
-}
-
-/**
  * Initialize the database once per test file.
- * This runs the migrations once, which is the expensive operation.
+ *
+ * Fast path: load the fully-migrated schema from the snapshot built once by
+ * `global-setup.ts` (see SNAPSHOT_PATH_ENV) — a flat cost regardless of migration count.
+ * Fallback: if no snapshot is available (e.g. a tooling path that skips globalSetup),
+ * replay the migrations directly so the suite still works.
  */
 beforeAll(async () => {
-  // Create a new in-memory PGlite instance with pgvector extension
-  pgliteClient = new PGlite("memory://", { extensions: { vector } });
-  testDb = drizzle({ client: pgliteClient });
+  const snapshotPath = process.env[SNAPSHOT_PATH_ENV];
 
-  // Run all migrations once
-  const migrations = getMigrationsSql();
-  for (const migrationSql of migrations) {
-    await pgliteClient.exec(migrationSql);
+  if (snapshotPath && fs.existsSync(snapshotPath)) {
+    const snapshot = new Blob([fs.readFileSync(snapshotPath)]);
+    pgliteClient = new PGlite({
+      loadDataDir: snapshot,
+      extensions: { vector },
+    });
+    testDb = drizzle({ client: pgliteClient });
+  } else {
+    pgliteClient = new PGlite("memory://", { extensions: { vector } });
+    testDb = drizzle({ client: pgliteClient });
+    for (const migrationSql of getMigrationsSql()) {
+      await pgliteClient.exec(migrationSql);
+    }
   }
 
   // Set the test database via the internal setter (for getDb() and proxy)

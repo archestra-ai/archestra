@@ -717,6 +717,86 @@ describe("ConversationModel", () => {
     expect(found?.messages[0].id).not.toBe("temp-ai-sdk-id");
   });
 
+  test("findById filters already-persisted empty assistant rows", async ({
+    makeUser,
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const user = await makeUser();
+    const org = await makeOrganization();
+    const agent = await makeAgent({ name: "Empty Bubble Agent", teams: [] });
+
+    const conversation = await ConversationModel.create({
+      userId: user.id,
+      organizationId: org.id,
+      agentId: agent.id,
+      title: "Empty Bubble Test",
+    });
+
+    // a healthy turn: user prompt + assistant answer.
+    await MessageModel.create({
+      conversationId: conversation.id,
+      role: "user",
+      content: { role: "user", parts: [{ type: "text", text: "hello" }] },
+    });
+    await MessageModel.create({
+      conversationId: conversation.id,
+      role: "assistant",
+      content: { role: "assistant", parts: [{ type: "text", text: "hi" }] },
+    });
+
+    // historical bad assistant rows that must not render after refresh.
+    await MessageModel.create({
+      conversationId: conversation.id,
+      role: "assistant",
+      content: { role: "assistant", parts: [] },
+    });
+    await MessageModel.create({
+      conversationId: conversation.id,
+      role: "assistant",
+      content: { role: "assistant" },
+    });
+    await MessageModel.create({
+      conversationId: conversation.id,
+      role: "assistant",
+      content: "",
+    });
+    await MessageModel.create({
+      conversationId: conversation.id,
+      role: "assistant",
+      content: {
+        role: "assistant",
+        parts: [
+          { type: "step-start" },
+          { type: "data-token-usage", data: { totalTokens: 5 } },
+        ],
+      },
+    });
+    await MessageModel.create({
+      conversationId: conversation.id,
+      role: "assistant",
+      content: {
+        role: "assistant",
+        parts: [
+          {
+            type: "data-tool-ui-start",
+            data: { toolCallId: "call_orphan", toolName: "render_chart" },
+          },
+        ],
+      },
+    });
+
+    const found = await ConversationModel.findById({
+      id: conversation.id,
+      userId: user.id,
+      organizationId: org.id,
+    });
+
+    expect(found?.messages).toHaveLength(2);
+    expect(found?.messages.map((m) => m.role)).toEqual(["user", "assistant"]);
+    expect(found?.messages[1].parts).toEqual([{ type: "text", text: "hi" }]);
+  });
+
   test("findById merges database UUIDs into multiple messages", async ({
     makeUser,
     makeOrganization,

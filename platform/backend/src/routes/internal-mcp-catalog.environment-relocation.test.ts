@@ -160,7 +160,7 @@ describe("PUT /api/internal_mcp_catalog/:id — environment relocation", () => {
       },
       { organizationId },
     );
-    await makeMcpServer({ catalogId: catalog.id });
+    const server = await makeMcpServer({ catalogId: catalog.id });
 
     const response = await app.inject({
       method: "PUT",
@@ -170,13 +170,57 @@ describe("PUT /api/internal_mcp_catalog/:id — environment relocation", () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json().environmentId).toBe(to.id);
+    // The install's deployment is pre-loaded synchronously in the handler,
+    // while the catalog row still holds the OLD namespace — BEFORE the deferred
+    // cascade runs its per-install restartServer→stopServer teardown (which
+    // re-derives the namespace from the now-updated row). Asserting it here,
+    // before draining the cascade, proves the pre-load ran in-handler ahead of
+    // any teardown. Without it the teardown targets the new namespace and
+    // orphans the old-namespace pod on a cache-cold replica.
+    expect(getOrLoadSpy).toHaveBeenCalledWith(server.id);
+
+    await drainCascade();
     // Single-tenant relocates via the cascade's per-install restart, never the
     // shared-deployment primitive (that path no-ops on a shared deployment).
-    // That the cascade actually fires for an environment change — rather than
-    // being skipped by onlyForwardCompatibleEnvDiff, which was the bug — is the
-    // regression guard in mcp-reinstall.test.ts ("environment reassignment ...
-    // returns false"); the end-to-end relocation was verified against a live
-    // cluster.
+    expect(reinstallSpy).not.toHaveBeenCalled();
+  });
+
+  test("single-tenant: reassignment back to default (null) still pre-loads the deployment", async ({
+    makeMcpServer,
+  }) => {
+    const from = await createEnvironment({
+      organizationId,
+      data: { name: "Prod", restricted: false },
+    });
+
+    const name = `st-to-default-${crypto.randomUUID().slice(0, 8)}`;
+    const catalog = await InternalMcpCatalogModel.create(
+      {
+        name,
+        serverType: "local",
+        multitenant: false,
+        environmentId: from.id,
+        localConfig,
+        scope: "org",
+      },
+      { organizationId },
+    );
+    const server = await makeMcpServer({ catalogId: catalog.id });
+
+    const response = await app.inject({
+      method: "PUT",
+      url: `/api/internal_mcp_catalog/${catalog.id}`,
+      payload: putBody(name, null),
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().environmentId).toBeNull();
+    // Prod→Default is the direction observed orphaning a pod in the previous
+    // environment's namespace. The pre-load must still run (in-handler, before
+    // the deferred cascade) so the teardown targets that namespace rather than
+    // the resolved default.
+    expect(getOrLoadSpy).toHaveBeenCalledWith(server.id);
+
     await drainCascade();
     expect(reinstallSpy).not.toHaveBeenCalled();
   });

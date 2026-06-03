@@ -43,4 +43,3 @@ class SkillCatalogService {
 }
 
 export const skillCatalog = new SkillCatalogService();
-export type { SkillCatalogEntry } from "./skill-catalog-index";

@@ -1615,7 +1615,7 @@ Required RBAC permission: `skill:create`
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `content` | `string` | Yes | A complete SKILL.md manifest: a YAML frontmatter block with `name` and `description` (and optional `license`, `compatibility`, `metadata`), followed by the Markdown instruction body. |
+| `content` | `string` | Yes | A complete SKILL.md manifest: a YAML frontmatter block with `name` and `description` (and optional `license`, `compatibility`, `allowed-tools`, `templated`, `metadata`), followed by the Markdown instruction body. Set `templated: true` to render the body through Handlebars (e.g. `{{user.name}}`) at activation. `allowed-tools` is a space-separated list of tools the skill is pre-approved to use. |
 | `files` | `object[]` | No | Optional bundled resource files. Each is `{ path, content }` with text content; the path prefix classifies the file — `references/` for docs, `scripts/` for code, `assets/` for other files. |
 | `files[].path` | `string` | Yes | Resource path, e.g. references/API.md or scripts/run.py |
 | `files[].content` | `string` | Yes | Text content of the file |
@@ -1631,7 +1631,7 @@ Required RBAC permission: `skill:update`
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `name` | `string` | Yes | The current name of the skill to update, as named by list_skills. |
-| `content` | `string` | Yes | A complete SKILL.md manifest: a YAML frontmatter block with `name` and `description` (and optional `license`, `compatibility`, `metadata`), followed by the Markdown instruction body. |
+| `content` | `string` | Yes | A complete SKILL.md manifest: a YAML frontmatter block with `name` and `description` (and optional `license`, `compatibility`, `allowed-tools`, `templated`, `metadata`), followed by the Markdown instruction body. Set `templated: true` to render the body through Handlebars (e.g. `{{user.name}}`) at activation. `allowed-tools` is a space-separated list of tools the skill is pre-approved to use. |
 | `files` | `object[]` | No | Optional. WHEN PROVIDED, REPLACES THE SKILL'S ENTIRE bundled file set. Omit it to leave the existing resource files untouched. There is no per-file patch: to change one file you must resend all of them — read the current files back first with activate_skill + read_skill_file. |
 | `files[].path` | `string` | Yes | Resource path, e.g. references/API.md or scripts/run.py |
 | `files[].content` | `string` | Yes | Text content of the file |

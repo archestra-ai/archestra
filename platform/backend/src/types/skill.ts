@@ -43,6 +43,7 @@ export const InsertSkillSchema = createInsertSchema(schema.skillsTable, {
   sourceType: SkillSourceTypeSchema.optional(),
   scope: ResourceVisibilityScopeSchema.optional(),
   metadata: SkillMetadataSchema.optional(),
+  templated: z.boolean().optional(),
 }).omit({
   id: true,
   createdAt: true,
@@ -53,6 +54,7 @@ export const UpdateSkillSchema = createUpdateSchema(schema.skillsTable, {
   sourceType: SkillSourceTypeSchema.optional(),
   scope: ResourceVisibilityScopeSchema.optional(),
   metadata: SkillMetadataSchema.optional(),
+  templated: z.boolean().optional(),
 }).omit({
   id: true,
   organizationId: true,

@@ -13,6 +13,7 @@ const {
   createAgent,
   cloneAgent,
   convertAgentToSkill,
+  suggestSkillDescription,
   deleteAgent,
   exportAgent,
   getAgents,
@@ -115,6 +116,24 @@ export function useConvertAgentToSkill() {
           ? `Created skill "${data.skill.name}" and removed the agent`
           : `Created skill "${data.skill.name}" from agent`,
       );
+    },
+  });
+}
+
+/**
+ * Suggests a skill description for an agent (LLM-generated) for the
+ * convert-to-skill dialog. Read-only: it neither creates a skill nor mutates
+ * the agent, so it invalidates nothing — the caller fills the form field.
+ */
+export function useSuggestSkillDescription() {
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { data, error } = await suggestSkillDescription({ path: { id } });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data?.description ?? null;
     },
   });
 }

@@ -425,6 +425,32 @@ class TeamModel {
   }
 
   /**
+   * Get the teams a user belongs to within a single organization. Unlike
+   * {@link getUserTeams}, this is scoped to one org, so callers that render
+   * user context into prompts (templated skills, agent system prompts) cannot
+   * leak team names from the user's other organizations.
+   */
+  static async getUserTeamsForOrganization(params: {
+    userId: string;
+    organizationId: string;
+  }): Promise<Team[]> {
+    const { userId, organizationId } = params;
+    return db
+      .select(getTableColumns(schema.teamsTable))
+      .from(schema.teamsTable)
+      .innerJoin(
+        schema.teamMembersTable,
+        eq(schema.teamMembersTable.teamId, schema.teamsTable.id),
+      )
+      .where(
+        and(
+          eq(schema.teamMembersTable.userId, userId),
+          eq(schema.teamsTable.organizationId, organizationId),
+        ),
+      );
+  }
+
+  /**
    * Get paginated teams a user belongs to with optional name filter
    */
   static async getUserTeamsPaginated(params: {

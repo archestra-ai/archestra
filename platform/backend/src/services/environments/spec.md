@@ -7,26 +7,18 @@ servers run and *who* is allowed to deploy into it. An environment
 is a property of a catalog item: each catalog item belongs to exactly one
 environment. Each environment defines:
 
-- a **Kubernetes namespace** the server's pods are deployed into - **actual implementation deferred**
-- a **default network policy** to apply to workloads in that environment.
-- a **validation rule** (regex) applied to user-supplied configuration values — identical
+
+1. **Deployment Isolation** — different namespaces for MCP pods, so a sandbox MCP can't reach production resources. It's implemented via a k8s namespace optionally defined for each environment.
+
+2. **Network Isolation** — UI to edit a k8s NetworkPolicy for the environment.
+
+3. **RBAC for deployment** — Each environment could be marked as `restricted`. Only users holding `environment:admin` or `environment:deploy-to-restricted` can assign catalog items to a
+   `restricted` environment.
+
+4. **Validation** — a **validation rule** (regex) applied to user-supplied configuration values — identical
   semantics to today's preset `validation_regex`.
-- a **`restricted` flag** that gates assignment: assigning a catalog item to a restricted
-  environment requires the org-wide `environment:admin` permission, while unrestricted
-  environments are open to anyone who can create catalog items. The implicit **default**
-  environment (catalog items with `environment_id = null`) carries the same flag, stored on the
-  organization (`default_environment_restricted`); when set, creating a catalog item without
-  choosing an environment is itself `environment:admin`-gated.
 
-Environments give an org three things at once:
-
-1. **Isolation** — different namespaces (and network policies) for sandbox vs. staging
-   vs. production workloads, so a sandbox MCP cannot reach production resources.
-2. **RBAC for deployment** — only users holding `environment:admin` can assign catalog items to a
-   `restricted` environment (including the default environment when the org has marked it
-   restricted). A regular user can experiment in a sandbox (unrestricted); assigning into a
-   restricted environment such as production is an admin-gated action.
-3. **Promotion** — a path to move a server up through environments (sandbox → staging →
+5. **Promotion** — a path to move a server up through environments (sandbox → staging →
    production) as it matures. Promotion is deliberately thin: an admin clones an existing
    server, the add-MCP form reappears pre-filled, and the admin changes the environment and
    visibility scope. There is no dedicated promotion API.

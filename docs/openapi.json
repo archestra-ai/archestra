@@ -82449,7 +82449,7 @@
         "tags": [
           "Organization"
         ],
-        "description": "List org-level deployment environments with their assigned catalog counts, plus the count of catalog items with no environment (the default environment).\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`environment:read`: View deployment environments",
+        "description": "List org-level deployment environments with their assigned catalog counts, plus the count of catalog items with no environment (the default environment).\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -82771,10 +82771,9 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "environment:read"
-          ]
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       },
       "post": {
@@ -82782,7 +82781,7 @@
         "tags": [
           "Organization"
         ],
-        "description": "Create an org-level deployment environment.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`environment:create`: Create deployment environments",
+        "description": "Create an org-level deployment environment.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`environment:admin`: Create, edit, and delete deployment environments (everyone can view them)",
         "requestBody": {
           "required": true,
           "content": {
@@ -83123,7 +83122,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "environment:create"
+            "environment:admin"
           ]
         }
       }
@@ -83134,7 +83133,7 @@
         "tags": [
           "Organization"
         ],
-        "description": "Update an environment's name, description, namespace, and restricted flag. When the namespace changes and the runtime is enabled, all MCP servers assigned to this environment are restarted in the new namespace.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`environment:update`: Modify deployment environment settings",
+        "description": "Update an environment's name, description, namespace, and restricted flag. When the namespace changes and the runtime is enabled, all MCP servers assigned to this environment are restarted in the new namespace.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`environment:admin`: Create, edit, and delete deployment environments (everyone can view them)",
         "requestBody": {
           "required": true,
           "content": {
@@ -83484,7 +83483,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "environment:update"
+            "environment:admin"
           ]
         }
       },
@@ -83493,7 +83492,7 @@
         "tags": [
           "Organization"
         ],
-        "description": "Delete an org-level environment. Fails with 409 if any catalog items are still assigned to it.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`environment:delete`: Delete deployment environments",
+        "description": "Delete an org-level environment. Fails with 409 if any catalog items are still assigned to it.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`environment:admin`: Create, edit, and delete deployment environments (everyone can view them)",
         "parameters": [
           {
             "schema": {
@@ -83758,7 +83757,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "environment:delete"
+            "environment:admin"
           ]
         }
       }
@@ -87321,6 +87320,7 @@
                                   "chat",
                                   "chat:compaction",
                                   "chat:title_generation",
+                                  "skill:description_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
                                   "email",
@@ -87739,6 +87739,7 @@
                                   "chat",
                                   "chat:compaction",
                                   "chat:title_generation",
+                                  "skill:description_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
                                   "email",
@@ -88580,6 +88581,7 @@
                                   "chat",
                                   "chat:compaction",
                                   "chat:title_generation",
+                                  "skill:description_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
                                   "email",
@@ -89112,6 +89114,7 @@
                                   "chat",
                                   "chat:compaction",
                                   "chat:title_generation",
+                                  "skill:description_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
                                   "email",
@@ -89530,6 +89533,7 @@
                                   "chat",
                                   "chat:compaction",
                                   "chat:title_generation",
+                                  "skill:description_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
                                   "email",
@@ -89948,6 +89952,7 @@
                                   "chat",
                                   "chat:compaction",
                                   "chat:title_generation",
+                                  "skill:description_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
                                   "email",
@@ -92078,6 +92083,7 @@
                                   "chat",
                                   "chat:compaction",
                                   "chat:title_generation",
+                                  "skill:description_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
                                   "email",
@@ -92496,6 +92502,7 @@
                                   "chat",
                                   "chat:compaction",
                                   "chat:title_generation",
+                                  "skill:description_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
                                   "email",
@@ -92914,6 +92921,7 @@
                                   "chat",
                                   "chat:compaction",
                                   "chat:title_generation",
+                                  "skill:description_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
                                   "email",
@@ -93332,6 +93340,7 @@
                                   "chat",
                                   "chat:compaction",
                                   "chat:title_generation",
+                                  "skill:description_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
                                   "email",
@@ -93750,6 +93759,7 @@
                                   "chat",
                                   "chat:compaction",
                                   "chat:title_generation",
+                                  "skill:description_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
                                   "email",
@@ -94168,6 +94178,7 @@
                                   "chat",
                                   "chat:compaction",
                                   "chat:title_generation",
+                                  "skill:description_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
                                   "email",
@@ -94586,6 +94597,7 @@
                                   "chat",
                                   "chat:compaction",
                                   "chat:title_generation",
+                                  "skill:description_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
                                   "email",
@@ -94993,6 +95005,7 @@
                                   "chat",
                                   "chat:compaction",
                                   "chat:title_generation",
+                                  "skill:description_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
                                   "email",
@@ -95400,6 +95413,7 @@
                                   "chat",
                                   "chat:compaction",
                                   "chat:title_generation",
+                                  "skill:description_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
                                   "email",
@@ -95818,6 +95832,7 @@
                                   "chat",
                                   "chat:compaction",
                                   "chat:title_generation",
+                                  "skill:description_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
                                   "email",
@@ -96236,6 +96251,7 @@
                                   "chat",
                                   "chat:compaction",
                                   "chat:title_generation",
+                                  "skill:description_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
                                   "email",
@@ -96654,6 +96670,7 @@
                                   "chat",
                                   "chat:compaction",
                                   "chat:title_generation",
+                                  "skill:description_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
                                   "email",
@@ -97072,6 +97089,7 @@
                                   "chat",
                                   "chat:compaction",
                                   "chat:title_generation",
+                                  "skill:description_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
                                   "email",
@@ -97716,6 +97734,7 @@
                                   "chat",
                                   "chat:compaction",
                                   "chat:title_generation",
+                                  "skill:description_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
                                   "email",
@@ -98835,6 +98854,7 @@
                 "chat",
                 "chat:compaction",
                 "chat:title_generation",
+                "skill:description_generation",
                 "chatops:slack",
                 "chatops:ms-teams",
                 "email",
@@ -98942,6 +98962,7 @@
                               "chat",
                               "chat:compaction",
                               "chat:title_generation",
+                              "skill:description_generation",
                               "chatops:slack",
                               "chatops:ms-teams",
                               "email",
@@ -98961,6 +98982,7 @@
                                 "chat",
                                 "chat:compaction",
                                 "chat:title_generation",
+                                "skill:description_generation",
                                 "chatops:slack",
                                 "chatops:ms-teams",
                                 "email",
@@ -100033,6 +100055,7 @@
                             "chat",
                             "chat:compaction",
                             "chat:title_generation",
+                            "skill:description_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
                             "email",
@@ -100451,6 +100474,7 @@
                             "chat",
                             "chat:compaction",
                             "chat:title_generation",
+                            "skill:description_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
                             "email",
@@ -101292,6 +101316,7 @@
                             "chat",
                             "chat:compaction",
                             "chat:title_generation",
+                            "skill:description_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
                             "email",
@@ -101824,6 +101849,7 @@
                             "chat",
                             "chat:compaction",
                             "chat:title_generation",
+                            "skill:description_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
                             "email",
@@ -102242,6 +102268,7 @@
                             "chat",
                             "chat:compaction",
                             "chat:title_generation",
+                            "skill:description_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
                             "email",
@@ -102660,6 +102687,7 @@
                             "chat",
                             "chat:compaction",
                             "chat:title_generation",
+                            "skill:description_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
                             "email",
@@ -104790,6 +104818,7 @@
                             "chat",
                             "chat:compaction",
                             "chat:title_generation",
+                            "skill:description_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
                             "email",
@@ -105208,6 +105237,7 @@
                             "chat",
                             "chat:compaction",
                             "chat:title_generation",
+                            "skill:description_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
                             "email",
@@ -105626,6 +105656,7 @@
                             "chat",
                             "chat:compaction",
                             "chat:title_generation",
+                            "skill:description_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
                             "email",
@@ -106044,6 +106075,7 @@
                             "chat",
                             "chat:compaction",
                             "chat:title_generation",
+                            "skill:description_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
                             "email",
@@ -106462,6 +106494,7 @@
                             "chat",
                             "chat:compaction",
                             "chat:title_generation",
+                            "skill:description_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
                             "email",
@@ -106880,6 +106913,7 @@
                             "chat",
                             "chat:compaction",
                             "chat:title_generation",
+                            "skill:description_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
                             "email",
@@ -107298,6 +107332,7 @@
                             "chat",
                             "chat:compaction",
                             "chat:title_generation",
+                            "skill:description_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
                             "email",
@@ -107705,6 +107740,7 @@
                             "chat",
                             "chat:compaction",
                             "chat:title_generation",
+                            "skill:description_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
                             "email",
@@ -108112,6 +108148,7 @@
                             "chat",
                             "chat:compaction",
                             "chat:title_generation",
+                            "skill:description_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
                             "email",
@@ -108530,6 +108567,7 @@
                             "chat",
                             "chat:compaction",
                             "chat:title_generation",
+                            "skill:description_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
                             "email",
@@ -108948,6 +108986,7 @@
                             "chat",
                             "chat:compaction",
                             "chat:title_generation",
+                            "skill:description_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
                             "email",
@@ -109366,6 +109405,7 @@
                             "chat",
                             "chat:compaction",
                             "chat:title_generation",
+                            "skill:description_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
                             "email",
@@ -109784,6 +109824,7 @@
                             "chat",
                             "chat:compaction",
                             "chat:title_generation",
+                            "skill:description_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
                             "email",
@@ -110428,6 +110469,7 @@
                             "chat",
                             "chat:compaction",
                             "chat:title_generation",
+                            "skill:description_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
                             "email",
@@ -169040,7 +169082,8 @@
                                   "cancel",
                                   "enable",
                                   "query",
-                                  "execute"
+                                  "execute",
+                                  "deploy-to-restricted"
                                 ]
                               }
                             }
@@ -169396,7 +169439,8 @@
                           "cancel",
                           "enable",
                           "query",
-                          "execute"
+                          "execute",
+                          "deploy-to-restricted"
                         ]
                       }
                     }
@@ -169450,7 +169494,8 @@
                             "cancel",
                             "enable",
                             "query",
-                            "execute"
+                            "execute",
+                            "deploy-to-restricted"
                           ]
                         }
                       }
@@ -169793,7 +169838,8 @@
                             "cancel",
                             "enable",
                             "query",
-                            "execute"
+                            "execute",
+                            "deploy-to-restricted"
                           ]
                         }
                       }
@@ -170101,7 +170147,8 @@
                           "cancel",
                           "enable",
                           "query",
-                          "execute"
+                          "execute",
+                          "deploy-to-restricted"
                         ]
                       }
                     }
@@ -170176,7 +170223,8 @@
                             "cancel",
                             "enable",
                             "query",
-                            "execute"
+                            "execute",
+                            "deploy-to-restricted"
                           ]
                         }
                       }
@@ -178135,7 +178183,7 @@
         "tags": [
           "Organization"
         ],
-        "description": "Configure the implicit default environment (the deployment target referenced by internal_mcp_catalog.environment_id = null). Pass null for name to reset to the built-in 'Default' label, or null for namespace to unset it. Omitted fields are left unchanged.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`environment:update`: Modify deployment environment settings",
+        "description": "Configure the implicit default environment (the deployment target referenced by internal_mcp_catalog.environment_id = null). Pass null for name to reset to the built-in 'Default' label, or null for namespace to unset it. Omitted fields are left unchanged.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`environment:admin`: Create, edit, and delete deployment environments (everyone can view them)",
         "requestBody": {
           "required": true,
           "content": {
@@ -178890,7 +178938,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "environment:update"
+            "environment:admin"
           ]
         }
       }
@@ -193639,6 +193687,13 @@
                             "nullable": true,
                             "type": "string"
                           },
+                          "allowedTools": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "templated": {
+                            "type": "boolean"
+                          },
                           "metadata": {
                             "type": "object",
                             "additionalProperties": {
@@ -193706,6 +193761,8 @@
                           "content",
                           "license",
                           "compatibility",
+                          "allowedTools",
+                          "templated",
                           "metadata",
                           "sourceType",
                           "sourceRef",
@@ -194118,6 +194175,13 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "allowedTools": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "templated": {
+                      "type": "boolean"
+                    },
                     "metadata": {
                       "type": "object",
                       "additionalProperties": {
@@ -194231,6 +194295,8 @@
                     "content",
                     "license",
                     "compatibility",
+                    "allowedTools",
+                    "templated",
                     "metadata",
                     "sourceType",
                     "sourceRef",
@@ -194569,6 +194635,13 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "allowedTools": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "templated": {
+                          "type": "boolean"
+                        },
                         "metadata": {
                           "type": "object",
                           "additionalProperties": {
@@ -194682,6 +194755,8 @@
                         "content",
                         "license",
                         "compatibility",
+                        "allowedTools",
+                        "templated",
                         "metadata",
                         "sourceType",
                         "sourceRef",
@@ -194993,6 +195068,284 @@
         }
       }
     },
+    "/api/agents/{id}/suggest-skill-description": {
+      "post": {
+        "operationId": "suggestSkillDescription",
+        "tags": [
+          "Skills"
+        ],
+        "description": "Suggest a skill description for an agent using an LLM, for the convert-to-skill flow. Does not modify the agent or create a skill.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:read`: View and list agents\n`chat:read`: View and access chat conversations\n`skill:create`: Create new agent skills",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "description": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "description"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "agent:read",
+            "chat:read",
+            "skill:create"
+          ]
+        }
+      }
+    },
     "/api/skills/{id}": {
       "get": {
         "operationId": "getSkill",
@@ -195054,6 +195407,13 @@
                     "compatibility": {
                       "nullable": true,
                       "type": "string"
+                    },
+                    "allowedTools": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "templated": {
+                      "type": "boolean"
                     },
                     "metadata": {
                       "type": "object",
@@ -195168,6 +195528,8 @@
                     "content",
                     "license",
                     "compatibility",
+                    "allowedTools",
+                    "templated",
                     "metadata",
                     "sourceType",
                     "sourceRef",
@@ -195541,6 +195903,13 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "allowedTools": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "templated": {
+                      "type": "boolean"
+                    },
                     "metadata": {
                       "type": "object",
                       "additionalProperties": {
@@ -195654,6 +196023,8 @@
                     "content",
                     "license",
                     "compatibility",
+                    "allowedTools",
+                    "templated",
                     "metadata",
                     "sourceType",
                     "sourceRef",
@@ -196506,6 +196877,13 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "allowedTools": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "templated": {
+                      "type": "boolean"
+                    },
                     "metadata": {
                       "type": "object",
                       "additionalProperties": {
@@ -196619,6 +196997,8 @@
                     "content",
                     "license",
                     "compatibility",
+                    "allowedTools",
+                    "templated",
                     "metadata",
                     "sourceType",
                     "sourceRef",
@@ -197205,6 +197585,13 @@
                             "nullable": true,
                             "type": "string"
                           },
+                          "allowedTools": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "templated": {
+                            "type": "boolean"
+                          },
                           "fileCount": {
                             "type": "number"
                           },
@@ -197217,6 +197604,8 @@
                           "name",
                           "description",
                           "compatibility",
+                          "allowedTools",
+                          "templated",
                           "fileCount",
                           "exists"
                         ],
@@ -197532,6 +197921,13 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "allowedTools": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "templated": {
+                      "type": "boolean"
+                    },
                     "metadata": {
                       "type": "object",
                       "additionalProperties": {
@@ -197587,6 +197983,8 @@
                     "content",
                     "license",
                     "compatibility",
+                    "allowedTools",
+                    "templated",
                     "metadata",
                     "files",
                     "sourceRef",
@@ -197938,6 +198336,13 @@
                             "nullable": true,
                             "type": "string"
                           },
+                          "allowedTools": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "templated": {
+                            "type": "boolean"
+                          },
                           "metadata": {
                             "type": "object",
                             "additionalProperties": {
@@ -197979,6 +198384,8 @@
                           "content",
                           "license",
                           "compatibility",
+                          "allowedTools",
+                          "templated",
                           "metadata",
                           "sourceType",
                           "sourceRef",
@@ -206709,7 +207116,8 @@
                         "cancel",
                         "enable",
                         "query",
-                        "execute"
+                        "execute",
+                        "deploy-to-restricted"
                       ]
                     }
                   }

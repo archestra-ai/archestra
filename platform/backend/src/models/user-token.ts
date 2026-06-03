@@ -89,6 +89,7 @@ class UserTokenModel {
           schema.userTokensTable.organizationId,
           schema.userTokensTable.userId,
         ],
+        where: notDeleted(schema.userTokensTable),
       })
       .returning();
 

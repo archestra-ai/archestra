@@ -25,6 +25,7 @@ import McpCatalogTeamModel from "./mcp-catalog-team";
 import McpServerModel from "./mcp-server";
 import SecretModel from "./secret";
 import ToolModel, { toolUiResourceUriSql } from "./tool";
+import UserModel from "./user";
 
 /**
  * Data-access layer for `internal_mcp_catalog` — the org's private registry
@@ -982,14 +983,9 @@ class InternalMcpCatalogModel {
 
     if (authorIds.size === 0) return;
 
-    // soft-delete: include deleted users so the author name can still be
-    // shown for catalog items whose author was later removed.
-    const users = await db
-      .select({ id: schema.usersTable.id, name: schema.usersTable.name })
-      .from(schema.usersTable)
-      .where(inArray(schema.usersTable.id, Array.from(authorIds)));
-
-    const nameMap = new Map(users.map((u) => [u.id, u.name]));
+    // soft-delete: getNamesByIds is intentionally unfiltered so the author
+    // name still resolves for catalog items whose author was later removed.
+    const nameMap = await UserModel.getNamesByIds(Array.from(authorIds));
 
     for (const item of catalogItems) {
       item.authorName = item.authorId

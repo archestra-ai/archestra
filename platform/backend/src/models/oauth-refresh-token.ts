@@ -1,5 +1,5 @@
 import { and, eq, isNull } from "drizzle-orm";
-import db, { schema } from "@/database";
+import db, { schema, type Transaction } from "@/database";
 
 class OAuthRefreshTokenModel {
   /**
@@ -40,6 +40,22 @@ class OAuthRefreshTokenModel {
       )
       .returning();
     return row ?? null;
+  }
+
+  /**
+   * Hard-delete every refresh token issued to a user. Used by the user-deletion
+   * cascade.
+   */
+  static async deleteAllByUserId(
+    userId: string,
+    tx?: Transaction,
+  ): Promise<number> {
+    const dbOrTx = tx ?? db;
+    const deleted = await dbOrTx
+      .delete(schema.oauthRefreshTokensTable)
+      .where(eq(schema.oauthRefreshTokensTable.userId, userId))
+      .returning({ id: schema.oauthRefreshTokensTable.id });
+    return deleted.length;
   }
 }
 

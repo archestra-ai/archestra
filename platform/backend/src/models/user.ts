@@ -7,7 +7,7 @@ import {
 import { and, count, eq, getTableColumns, inArray } from "drizzle-orm";
 import { betterAuth } from "@/auth";
 import config from "@/config";
-import db, { schema, type Transaction } from "@/database";
+import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import { hardDelete, softDelete } from "@/database/soft-delete";
 import logger from "@/logging";
@@ -15,8 +15,12 @@ import type { UpdateUser } from "@/types";
 import AccountModel from "./account";
 import ApiKeyModel from "./api-key";
 import MemberModel from "./member";
+import OAuthAccessTokenModel from "./oauth-access-token";
+import OAuthConsentModel from "./oauth-consent";
+import OAuthRefreshTokenModel from "./oauth-refresh-token";
 import OrganizationRoleModel from "./organization-role";
 import SessionModel from "./session";
+import TwoFactorModel from "./two-factor";
 import UserTokenModel from "./user-token";
 
 class UserModel {
@@ -250,34 +254,11 @@ class UserModel {
    */
   static async delete(userId: string, tx?: Transaction): Promise<boolean> {
     logger.debug("UserModel.delete: soft-deleting user");
-    const dbOrTx = tx ?? db;
-    await SessionModel.deleteAllByUserId(userId, tx);
-    await AccountModel.deleteAllByUserId(userId, tx);
-    await ApiKeyModel.deleteAllByUserId(userId, tx);
-    await UserTokenModel.deleteAllByUserId(userId, tx);
-    await dbOrTx
-      .delete(schema.twoFactorsTable)
-      .where(eq(schema.twoFactorsTable.userId, userId));
-    await dbOrTx
-      .delete(schema.oauthAccessTokensTable)
-      .where(eq(schema.oauthAccessTokensTable.userId, userId));
-    await dbOrTx
-      .delete(schema.oauthRefreshTokensTable)
-      .where(eq(schema.oauthRefreshTokensTable.userId, userId));
-    await dbOrTx
-      .delete(schema.oauthConsentsTable)
-      .where(eq(schema.oauthConsentsTable.userId, userId));
-    await dbOrTx
-      .update(schema.usersTable)
-      .set({ email: makeEmailTombstone() })
-      .where(
-        and(eq(schema.usersTable.id, userId), notDeleted(schema.usersTable)),
-      );
-    const count = await softDelete(
-      dbOrTx,
-      schema.usersTable,
-      eq(schema.usersTable.id, userId),
-    );
+    // The cascade spans several tables; run it atomically so a mid-way failure
+    // can't leave a half-deleted user (e.g. sessions gone but email not freed).
+    // When a caller already supplies a transaction, reuse it.
+    const run = (txn: Transaction) => UserModel.runDeleteCascade(userId, txn);
+    const count = tx ? await run(tx) : await withDbTransaction(run);
     logger.debug({ deleted: count > 0 }, "UserModel.delete: completed");
     return count > 0;
   }
@@ -293,6 +274,27 @@ class UserModel {
       eq(schema.usersTable.id, userId),
     );
     return count > 0;
+  }
+
+  private static async runDeleteCascade(
+    userId: string,
+    tx: Transaction,
+  ): Promise<number> {
+    await SessionModel.deleteAllByUserId(userId, tx);
+    await AccountModel.deleteAllByUserId(userId, tx);
+    await ApiKeyModel.deleteAllByUserId(userId, tx);
+    await UserTokenModel.deleteAllByUserId(userId, tx);
+    await TwoFactorModel.deleteAllByUserId(userId, tx);
+    await OAuthAccessTokenModel.deleteAllByUserId(userId, tx);
+    await OAuthRefreshTokenModel.deleteAllByUserId(userId, tx);
+    await OAuthConsentModel.deleteAllByUserId(userId, tx);
+    await tx
+      .update(schema.usersTable)
+      .set({ email: makeEmailTombstone() })
+      .where(
+        and(eq(schema.usersTable.id, userId), notDeleted(schema.usersTable)),
+      );
+    return softDelete(tx, schema.usersTable, eq(schema.usersTable.id, userId));
   }
 }
 

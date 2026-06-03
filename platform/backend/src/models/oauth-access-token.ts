@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { and, eq, isNull } from "drizzle-orm";
-import db, { schema } from "@/database";
+import db, { schema, type Transaction } from "@/database";
 
 class OAuthAccessTokenModel {
   static hashTokenForLookup(oauthAccessToken: string): string {
@@ -136,6 +136,22 @@ class OAuthAccessTokenModel {
       .returning();
 
     return accessToken ?? null;
+  }
+
+  /**
+   * Hard-delete every access token issued to a user. Used by the user-deletion
+   * cascade.
+   */
+  static async deleteAllByUserId(
+    userId: string,
+    tx?: Transaction,
+  ): Promise<number> {
+    const dbOrTx = tx ?? db;
+    const deleted = await dbOrTx
+      .delete(schema.oauthAccessTokensTable)
+      .where(eq(schema.oauthAccessTokensTable.userId, userId))
+      .returning({ id: schema.oauthAccessTokensTable.id });
+    return deleted.length;
   }
 }
 

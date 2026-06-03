@@ -600,7 +600,7 @@ function EnvironmentEditorDialog({
               <p className="text-xs text-muted-foreground">
                 Only users who hold the{" "}
                 <code className="rounded bg-muted px-1 py-0.5 font-mono">
-                  environment:admin
+                  environment:deploy-to-restricted
                 </code>{" "}
                 permission are allowed to deploy in this environment.
               </p>

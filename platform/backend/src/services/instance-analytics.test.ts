@@ -1,8 +1,7 @@
-import { mkdtemp, readFile, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import path from "node:path";
 import config from "@/config";
+import { OrganizationModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test, vi } from "@/test";
+import type { OrganizationAnalyticsState } from "@/types";
 import { instanceAnalyticsService } from "./instance-analytics";
 
 const analyticsConfig = {
@@ -14,13 +13,11 @@ const analyticsConfig = {
 };
 
 describe("instanceAnalyticsService", () => {
-  let stateDir: string;
   let fetchMock: ReturnType<typeof vi.fn<typeof fetch>>;
   const originalAnalyticsConfig = config.analytics;
   const originalAppVersion = config.api.version;
 
-  beforeEach(async () => {
-    stateDir = await mkdtemp(path.join(tmpdir(), "archestra-analytics-"));
+  beforeEach(() => {
     fetchMock = vi.fn<typeof fetch>().mockResolvedValue({
       ok: true,
       status: 200,
@@ -30,7 +27,6 @@ describe("instanceAnalyticsService", () => {
 
     config.analytics = {
       ...analyticsConfig,
-      stateDir,
     };
     config.api.version = "1.2.3";
   });
@@ -42,7 +38,11 @@ describe("instanceAnalyticsService", () => {
     vi.restoreAllMocks();
   });
 
-  test("captures started and heartbeat once for a new installation", async () => {
+  test("captures started and heartbeat once for a new installation", async ({
+    makeOrganization,
+  }) => {
+    const organization = await makeOrganization();
+
     await instanceAnalyticsService.trackStartup();
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
@@ -54,35 +54,44 @@ describe("instanceAnalyticsService", () => {
       "instance_heartbeat",
     ]);
 
-    const state = await readState();
+    const state = await getAnalyticsState(organization.id);
     expect(capturedBodies()).toEqual([
       expect.objectContaining({
         api_key: "ph_test",
-        distinct_id: state.instanceId,
+        distinct_id: state.analyticsInstanceId,
         event: "instance_started",
         properties: {
+          $groups: {
+            instance: state.analyticsInstanceId,
+          },
           app_version: "1.2.3",
+          instance_id: state.analyticsInstanceId,
           source: "backend",
         },
       }),
       expect.objectContaining({
         api_key: "ph_test",
-        distinct_id: state.instanceId,
+        distinct_id: state.analyticsInstanceId,
         event: "instance_heartbeat",
         properties: {
+          $groups: {
+            instance: state.analyticsInstanceId,
+          },
           app_version: "1.2.3",
+          instance_id: state.analyticsInstanceId,
           source: "backend",
         },
       }),
     ]);
-    expect(state).toEqual({
-      instanceId: expect.any(String),
-      startedAt: expect.any(String),
-      lastHeartbeatAt: expect.any(String),
-    });
+    expect(state.analyticsInstanceId).toEqual(expect.any(String));
+    expect(state.analyticsInstanceStartedAt).toBeInstanceOf(Date);
+    expect(state.analyticsInstanceLastHeartbeatAt).toBeInstanceOf(Date);
   });
 
-  test("does not recapture before the heartbeat window elapses", async () => {
+  test("does not recapture before the heartbeat window elapses", async ({
+    makeOrganization,
+  }) => {
+    await makeOrganization();
     await instanceAnalyticsService.trackStartup();
     fetchMock.mockClear();
 
@@ -91,14 +100,18 @@ describe("instanceAnalyticsService", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  test("captures heartbeat after 24 hours without recapturing started", async () => {
+  test("captures heartbeat after 24 hours without recapturing started", async ({
+    makeOrganization,
+  }) => {
+    const organization = await makeOrganization();
     await instanceAnalyticsService.trackStartup();
     fetchMock.mockClear();
 
-    const state = await readState();
-    await writeState({
-      ...state,
-      lastHeartbeatAt: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
+    await OrganizationModel.updateAnalyticsState({
+      id: organization.id,
+      analyticsInstanceLastHeartbeatAt: new Date(
+        Date.now() - 24 * 60 * 60 * 1000,
+      ),
     });
 
     await instanceAnalyticsService.trackStartup();
@@ -111,7 +124,6 @@ describe("instanceAnalyticsService", () => {
     config.analytics = {
       ...analyticsConfig,
       enabled: false,
-      stateDir,
     };
 
     await instanceAnalyticsService.trackStartup();
@@ -130,19 +142,11 @@ describe("instanceAnalyticsService", () => {
     });
   }
 
-  async function readState(): Promise<Record<string, unknown>> {
-    const contents = await readFile(
-      path.join(stateDir, "instance-analytics.json"),
-      "utf-8",
-    );
-    return JSON.parse(contents);
-  }
-
-  async function writeState(state: Record<string, unknown>): Promise<void> {
-    await writeFile(
-      path.join(stateDir, "instance-analytics.json"),
-      `${JSON.stringify(state, null, 2)}\n`,
-      "utf-8",
-    );
+  async function getAnalyticsState(
+    id: string,
+  ): Promise<OrganizationAnalyticsState> {
+    const state = await OrganizationModel.getAnalyticsState();
+    expect(state.id).toBe(id);
+    return state;
   }
 });

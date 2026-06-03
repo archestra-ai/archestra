@@ -32,6 +32,11 @@ const organizationsTable = pgTable("organization", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
   slug: text("slug").notNull().unique(),
+  analyticsInstanceId: uuid("analytics_instance_id").notNull().defaultRandom(),
+  analyticsInstanceStartedAt: timestamp("analytics_instance_started_at"),
+  analyticsInstanceLastHeartbeatAt: timestamp(
+    "analytics_instance_last_heartbeat_at",
+  ),
   logo: text("logo"),
   logoDark: text("logo_dark"),
   createdAt: timestamp("created_at").notNull(),

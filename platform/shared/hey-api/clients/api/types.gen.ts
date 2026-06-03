@@ -23127,6 +23127,7 @@ export type GetPublicConfigResponses = {
         maintenanceMode: string | null;
         analytics: {
             enabled: boolean;
+            instanceId: string | null;
             posthog: {
                 key: string;
                 host: string;
@@ -45232,6 +45233,7 @@ export type GetOrganizationResponses = {
         id: string;
         name: string;
         slug: string;
+        analyticsInstanceId: string;
         logo: string | null;
         logoDark: string | null;
         createdAt: string;
@@ -45518,6 +45520,7 @@ export type UpdateAppearanceSettingsResponses = {
         id: string;
         name: string;
         slug: string;
+        analyticsInstanceId: string;
         logo: string | null;
         logoDark: string | null;
         createdAt: string;
@@ -45675,6 +45678,7 @@ export type UpdateSecuritySettingsResponses = {
         id: string;
         name: string;
         slug: string;
+        analyticsInstanceId: string;
         logo: string | null;
         logoDark: string | null;
         createdAt: string;
@@ -45835,6 +45839,7 @@ export type UpdateLlmSettingsResponses = {
         id: string;
         name: string;
         slug: string;
+        analyticsInstanceId: string;
         logo: string | null;
         logoDark: string | null;
         createdAt: string;
@@ -45994,6 +45999,7 @@ export type UpdateAgentSettingsResponses = {
         id: string;
         name: string;
         slug: string;
+        analyticsInstanceId: string;
         logo: string | null;
         logoDark: string | null;
         createdAt: string;
@@ -46160,6 +46166,7 @@ export type UpdateConnectionSettingsResponses = {
         id: string;
         name: string;
         slug: string;
+        analyticsInstanceId: string;
         logo: string | null;
         logoDark: string | null;
         createdAt: string;
@@ -46317,6 +46324,7 @@ export type UpdatePresetEntityNameResponses = {
         id: string;
         name: string;
         slug: string;
+        analyticsInstanceId: string;
         logo: string | null;
         logoDark: string | null;
         createdAt: string;
@@ -46473,6 +46481,7 @@ export type UpdatePresetEntityDefaultLabelResponses = {
         id: string;
         name: string;
         slug: string;
+        analyticsInstanceId: string;
         logo: string | null;
         logoDark: string | null;
         createdAt: string;
@@ -46629,6 +46638,7 @@ export type UpdatePresetEntityDefaultValidationRegexResponses = {
         id: string;
         name: string;
         slug: string;
+        analyticsInstanceId: string;
         logo: string | null;
         logoDark: string | null;
         createdAt: string;
@@ -46789,6 +46799,7 @@ export type UpdateDefaultEnvironmentResponses = {
         id: string;
         name: string;
         slug: string;
+        analyticsInstanceId: string;
         logo: string | null;
         logoDark: string | null;
         createdAt: string;
@@ -46946,6 +46957,7 @@ export type UpdateAuthSettingsResponses = {
         id: string;
         name: string;
         slug: string;
+        analyticsInstanceId: string;
         logo: string | null;
         logoDark: string | null;
         createdAt: string;
@@ -47105,6 +47117,7 @@ export type UpdateKnowledgeSettingsResponses = {
         id: string;
         name: string;
         slug: string;
+        analyticsInstanceId: string;
         logo: string | null;
         logoDark: string | null;
         createdAt: string;
@@ -47259,6 +47272,7 @@ export type DropEmbeddingConfigResponses = {
         id: string;
         name: string;
         slug: string;
+        analyticsInstanceId: string;
         logo: string | null;
         logoDark: string | null;
         createdAt: string;
@@ -47502,6 +47516,7 @@ export type CompleteOnboardingResponses = {
         id: string;
         name: string;
         slug: string;
+        analyticsInstanceId: string;
         logo: string | null;
         logoDark: string | null;
         createdAt: string;

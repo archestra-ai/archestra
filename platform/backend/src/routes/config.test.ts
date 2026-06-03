@@ -1,5 +1,6 @@
+import { OrganizationModel } from "@/models";
 import { createFastifyInstance, type FastifyInstanceWithZod } from "@/server";
-import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { afterEach, beforeEach, describe, expect, test, vi } from "@/test";
 import type { User } from "@/types";
 
 describe("config routes", () => {
@@ -32,6 +33,11 @@ describe("config routes", () => {
   });
 
   test("returns public config without authentication", async () => {
+    const getAnalyticsStateSpy = vi.spyOn(
+      OrganizationModel,
+      "getAnalyticsState",
+    );
+
     const response = await app.inject({
       method: "GET",
       url: "/api/config/public",
@@ -44,12 +50,24 @@ describe("config routes", () => {
       maintenanceMode: null,
       analytics: {
         enabled: expect.any(Boolean),
+        instanceId: expect.any(String),
         posthog: {
           key: expect.any(String),
           host: expect.any(String),
         },
       },
     });
+
+    const cachedResponse = await app.inject({
+      method: "GET",
+      url: "/api/config/public",
+    });
+
+    expect(cachedResponse.statusCode).toBe(200);
+    expect(cachedResponse.json().analytics.instanceId).toBe(
+      response.json().analytics.instanceId,
+    );
+    expect(getAnalyticsStateSpy).toHaveBeenCalledTimes(1);
   });
 
   test("returns authenticated config with feature flags and provider base URLs", async () => {

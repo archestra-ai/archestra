@@ -1,5 +1,5 @@
 {
-  "id": "f5a4a5ec-f3ee-464d-a8ad-74dfc4c44aa9",
+  "id": "9c2e122d-aba0-4c03-a3ee-8caed650f54e",
   "prevId": "04a171f3-7434-4f0f-9435-4f61d3256c46",
   "version": "7",
   "dialect": "postgresql",
@@ -5018,13 +5018,6 @@
           "notNull": true,
           "default": "'pending'"
         },
-        "embedding_error": {
-          "name": "embedding_error",
-          "type": "kb_document_embedding_error",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": false
-        },
         "chunk_count": {
           "name": "chunk_count",
           "type": "integer",
@@ -8439,6 +8432,25 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true
+        },
+        "analytics_instance_id": {
+          "name": "analytics_instance_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "analytics_instance_started_at": {
+          "name": "analytics_instance_started_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "analytics_instance_last_heartbeat_at": {
+          "name": "analytics_instance_last_heartbeat_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
         },
         "logo": {
           "name": "logo",
@@ -12636,18 +12648,6 @@
         "personal",
         "team",
         "org"
-      ]
-    },
-    "public.kb_document_embedding_error": {
-      "name": "kb_document_embedding_error",
-      "schema": "public",
-      "values": [
-        "rate_limit",
-        "auth_error",
-        "model_not_found",
-        "server_error",
-        "dimensions_mismatch",
-        "unknown"
       ]
     },
     "public.oauth_refresh_error_enum": {

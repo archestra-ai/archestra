@@ -345,7 +345,6 @@ function EnvironmentEditorDialog({
   const [name, setName] = useState("");
   const [namespace, setNamespace] = useState("");
   const [description, setDescription] = useState("");
-  const [networkPolicyEnabled, setNetworkPolicyEnabled] = useState(false);
   const [egressMode, setEgressMode] = useState<EgressMode>("restricted");
   const [domainPreset, setDomainPreset] = useState<DomainPreset>("none");
   const [allowedDomainsText, setAllowedDomainsText] = useState("");
@@ -354,7 +353,6 @@ function EnvironmentEditorDialog({
   const [showConfirm, setShowConfirm] = useState(false);
   const syncNetworkPolicyDraft = useCallback((policy: NetworkPolicy | null) => {
     const nextPolicy = policy ?? EMPTY_NETWORK_POLICY;
-    setNetworkPolicyEnabled(policy !== null);
     setEgressMode(nextPolicy.egressMode);
     setDomainPreset(nextPolicy.domainPreset);
     setAllowedDomainsText(nextPolicy.allowedDomains.join("\n"));
@@ -390,19 +388,17 @@ function EnvironmentEditorDialog({
   const trimmedDescription = description.trim();
   const canSave = trimmedName.length > 0;
   const supportsFqdn = capabilities?.networkPolicy.supportsFqdn === true;
-  const networkPolicy = networkPolicyEnabled
-    ? {
-        egressMode,
-        domainPreset:
-          egressMode === "restricted" && supportsFqdn ? domainPreset : "none",
-        allowedDomains:
-          egressMode === "restricted" && supportsFqdn
-            ? splitPolicyList(allowedDomainsText)
-            : [],
-        allowedCidrs:
-          egressMode === "restricted" ? splitPolicyList(allowedCidrsText) : [],
-      }
-    : null;
+  const networkPolicy = {
+    egressMode,
+    domainPreset:
+      egressMode === "restricted" && supportsFqdn ? domainPreset : "none",
+    allowedDomains:
+      egressMode === "restricted" && supportsFqdn
+        ? splitPolicyList(allowedDomainsText)
+        : [],
+    allowedCidrs:
+      egressMode === "restricted" ? splitPolicyList(allowedCidrsText) : [],
+  };
 
   // The current value is included so editing an environment whose namespace
   // predates the configured list never silently drops it.
@@ -566,42 +562,30 @@ function EnvironmentEditorDialog({
           />
         </div>
         <section className="space-y-4 rounded-md border p-4">
-          <div className="flex items-start justify-between gap-4">
-            <div className="space-y-1">
-              <Label htmlFor="network-policy-enabled">
-                Network Egress Policy
-              </Label>
-              <p className="text-xs text-muted-foreground">
-                Configure outbound network access for MCP workloads in this
-                environment.{" "}
-                <ExternalDocsLink href={NETWORK_POLICY_DOCS_URL}>
-                  View docs
-                </ExternalDocsLink>
-              </p>
-            </div>
-            <Switch
-              id="network-policy-enabled"
-              checked={networkPolicyEnabled}
-              onCheckedChange={setNetworkPolicyEnabled}
-              disabled={isPending}
-            />
+          <div className="space-y-1">
+            <h3 className="font-medium text-sm">Network Egress Policy</h3>
+            <p className="text-xs text-muted-foreground">
+              Configure outbound network access for MCP workloads in this
+              environment.{" "}
+              <ExternalDocsLink href={NETWORK_POLICY_DOCS_URL}>
+                View docs
+              </ExternalDocsLink>
+            </p>
           </div>
 
-          {networkPolicyEnabled ? (
-            <NetworkPolicyFields
-              egressMode={egressMode}
-              setEgressMode={setEgressMode}
-              domainPreset={domainPreset}
-              setDomainPreset={setDomainPreset}
-              allowedDomainsText={allowedDomainsText}
-              setAllowedDomainsText={setAllowedDomainsText}
-              allowedCidrsText={allowedCidrsText}
-              setAllowedCidrsText={setAllowedCidrsText}
-              supportsFqdn={supportsFqdn}
-              provider={capabilities?.networkPolicy.provider ?? null}
-              disabled={isPending}
-            />
-          ) : null}
+          <NetworkPolicyFields
+            egressMode={egressMode}
+            setEgressMode={setEgressMode}
+            domainPreset={domainPreset}
+            setDomainPreset={setDomainPreset}
+            allowedDomainsText={allowedDomainsText}
+            setAllowedDomainsText={setAllowedDomainsText}
+            allowedCidrsText={allowedCidrsText}
+            setAllowedCidrsText={setAllowedCidrsText}
+            supportsFqdn={supportsFqdn}
+            provider={capabilities?.networkPolicy.provider ?? null}
+            disabled={isPending}
+          />
         </section>
       </DialogBody>
       {showConfirm ? (
@@ -757,15 +741,15 @@ function NetworkPolicyFields({
       <div className="space-y-2">
         <FieldLabel
           htmlFor="network-policy-domains"
-          label="Additional allowed domains"
-          description="Exact domains or wildcard subdomains to allow in restricted mode. Domain rules require a supported FQDN policy provider; otherwise use CIDR rules."
+          label="Allowed domains"
+          description="Domain names or wildcard domains that restricted workloads may reach. Requires a supported FQDN policy provider."
         />
         <Textarea
           id="network-policy-domains"
           value={allowedDomainsText}
           onChange={(e) => setAllowedDomainsText(e.target.value)}
-          placeholder={"api.example.com\n*.example.org"}
-          className="min-h-24 font-mono text-sm"
+          placeholder={"api.example.com\n*.registry.example.com"}
+          className="min-h-20 font-mono text-sm"
           disabled={disabled || egressMode !== "restricted" || !supportsFqdn}
         />
       </div>

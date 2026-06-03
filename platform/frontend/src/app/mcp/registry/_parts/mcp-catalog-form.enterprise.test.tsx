@@ -1,6 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useEnterpriseFeature, useFeature } from "@/lib/config/config.query";
+import { useEnvironments } from "@/lib/environment.query";
 import { McpCatalogForm } from "./mcp-catalog-form";
 
 const { useIdentityProvidersMock } = vi.hoisted(() => ({
@@ -256,5 +257,22 @@ describe("McpCatalogForm enterprise gating", () => {
       "autocomplete",
       "new-password",
     );
+  });
+
+  it("shows a disabled default environment selector when no custom environments are available", () => {
+    vi.mocked(useEnvironments).mockReturnValue({
+      data: { environments: [], defaultAssignedCatalogCount: 0 },
+    } as never);
+
+    render(<McpCatalogForm mode="create" onSubmit={vi.fn()} />);
+
+    expect(screen.getByText("Environment")).toBeInTheDocument();
+    expect(screen.getAllByText("Default").length).toBeGreaterThan(0);
+    expect(
+      screen.getByText("Only the default environment is available."),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Manage environments" }),
+    ).toHaveAttribute("href", "/settings/environments");
   });
 });

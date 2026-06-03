@@ -839,6 +839,61 @@ describe("ChatMessages", () => {
     expect(screen.getAllByText("Sensitive context below")).toHaveLength(1);
   });
 
+  it("renders the sensitive-context divider only once across multiple turns calling the same tool", () => {
+    const messages = [
+      {
+        id: "assistant-sensitive",
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-internal-dev-test-server__print_archestra_test",
+            toolCallId: "ai-sdk-tool-call-id-1",
+            state: "output-available",
+            input: {},
+            output: { content: "ARCHESTRA_TEST = first-value" },
+          },
+          {
+            type: "text",
+            text: "First result processed.",
+          },
+        ],
+      },
+      {
+        id: "assistant-sensitive-repeat",
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-internal-dev-test-server__print_archestra_test",
+            toolCallId: "ai-sdk-tool-call-id-2",
+            state: "output-available",
+            input: {},
+            output: { content: "ARCHESTRA_TEST = second-value" },
+          },
+          {
+            type: "text",
+            text: "Second result processed.",
+          },
+        ],
+      },
+    ] as UIMessage[];
+
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        status="ready"
+        unsafeContextBoundary={{
+          kind: "tool_result",
+          reason: "tool_result_marked_untrusted",
+          toolCallId: "mcp-tool-call-id",
+          toolName: "internal-dev-test-server__print_archestra_test",
+        }}
+      />,
+    );
+
+    expect(screen.getAllByText("Sensitive context below")).toHaveLength(1);
+  });
+
   it("keeps an expanded compact tool panel open when later tool calls append to the same message", () => {
     const initialMessages = [
       {
@@ -1020,8 +1075,10 @@ describe("ChatMessages", () => {
     );
 
     expect(screen.getByText("Approval required")).toBeInTheDocument();
-    expect(screen.getByText("tool-sparky__run_tool")).toBeInTheDocument();
-    expect(screen.getByText(/workspace__export_records/)).toBeInTheDocument();
+    expect(screen.getByText("tool-workspace__export_records")).toBeInTheDocument();
+    expect(screen.queryByText("tool-sparky__run_tool")).not.toBeInTheDocument();
+    expect(screen.getByText('{"destination":"external"}')).toBeInTheDocument();
+    expect(screen.queryByText(/tool_name/)).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Decline" }));
     expect(onToolApprovalResponse).toHaveBeenCalledWith({

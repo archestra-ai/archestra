@@ -182,7 +182,7 @@ export async function executeA2AMessage(
   if (promptNeedsRendering(agent.systemPrompt)) {
     const [userDetails, userTeams] = await Promise.all([
       UserModel.getById(userId),
-      TeamModel.getUserTeams(userId),
+      TeamModel.getUserTeamsForOrganization({ userId, organizationId }),
     ]);
     promptContext = buildUserSystemPromptContext({
       userName: userDetails?.name ?? "",

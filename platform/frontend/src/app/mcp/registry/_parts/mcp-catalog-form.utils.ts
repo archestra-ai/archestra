@@ -238,6 +238,9 @@ export function transformFormToApiData(
     data.teams = values.teams;
   }
 
+  // Deployment environment assignment (null = the default environment)
+  data.environmentId = values.environmentId ?? null;
+
   return data;
 }
 
@@ -490,6 +493,8 @@ export function transformCatalogItemToFormValues(
     scope: (item.scope as AgentScope) ?? "org",
     // Teams
     teams: item.teams?.map((t) => t.id) ?? [],
+    // Deployment environment (null = the default environment)
+    environmentId: item.environmentId ?? null,
   } as McpCatalogFormValues;
 }
 

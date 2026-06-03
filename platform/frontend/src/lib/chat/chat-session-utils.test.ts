@@ -1,6 +1,9 @@
 import type { UIMessage } from "@ai-sdk/react";
 import { describe, expect, test } from "vitest";
-import { restoreRenderableAssistantParts } from "./chat-session-utils";
+import {
+  pruneEmptyTrailingAssistantMessage,
+  restoreRenderableAssistantParts,
+} from "./chat-session-utils";
 
 describe("restoreRenderableAssistantParts", () => {
   test("preserves previous assistant parts when the same assistant message becomes empty", () => {
@@ -211,5 +214,86 @@ describe("restoreRenderableAssistantParts", () => {
     expect(
       restoreRenderableAssistantParts({ previousMessages, nextMessages }),
     ).toEqual(previousMessages);
+  });
+});
+
+describe("pruneEmptyTrailingAssistantMessage", () => {
+  test("drops a trailing assistant left with only step-start/telemetry after dangling-tool stripping", () => {
+    const messages = [
+      {
+        id: "user-1",
+        role: "user",
+        parts: [{ type: "text", text: "go" }],
+      },
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          { type: "step-start" },
+          { type: "data-token-usage", data: { totalTokens: 10 } },
+        ],
+      },
+    ] as UIMessage[];
+
+    expect(pruneEmptyTrailingAssistantMessage(messages)).toEqual([messages[0]]);
+  });
+
+  test("keeps a trailing assistant that still renders text", () => {
+    const messages = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [{ type: "step-start" }, { type: "text", text: "done" }],
+      },
+    ] as UIMessage[];
+
+    expect(pruneEmptyTrailingAssistantMessage(messages)).toEqual(messages);
+  });
+});
+
+describe("restoreTruncatedAssistantTail renderability gating", () => {
+  test("does not restore a truncated tail that is a telemetry-only assistant", () => {
+    const previousMessages = [
+      {
+        id: "user-1",
+        role: "user",
+        parts: [{ type: "text", text: "go" }],
+      },
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          { type: "step-start" },
+          { type: "data-token-usage", data: { totalTokens: 10 } },
+        ],
+      },
+    ] as UIMessage[];
+
+    const nextMessages = [previousMessages[0]] as UIMessage[];
+
+    expect(
+      restoreRenderableAssistantParts({ previousMessages, nextMessages }),
+    ).toEqual(nextMessages);
+  });
+
+  test("does not restore when the live session clears to a non-renderable assistant tail", () => {
+    const previousMessages = [
+      {
+        id: "user-1",
+        role: "user",
+        parts: [{ type: "text", text: "go" }],
+      },
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [{ type: "step-start" }],
+      },
+    ] as UIMessage[];
+
+    const nextMessages = [] as UIMessage[];
+
+    expect(
+      restoreRenderableAssistantParts({ previousMessages, nextMessages }),
+    ).toEqual(nextMessages);
   });
 });

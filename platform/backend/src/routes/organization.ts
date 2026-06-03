@@ -27,6 +27,7 @@ import {
   UserModel,
   UserTokenModel,
 } from "@/models";
+import { assertNetworkPolicyBelongsToOrganization } from "@/services/environments/network-policy";
 import {
   ApiError,
   AppearanceSettingsSchema,
@@ -37,6 +38,7 @@ import {
   UpdateAppearanceSettingsSchema,
   UpdateAuthSettingsSchema,
   UpdateConnectionSettingsSchema,
+  UpdateDefaultEnvironmentSchema,
   UpdateKnowledgeSettingsSchema,
   UpdateLlmSettingsSchema,
   UpdatePresetEntityDefaultLabelSchema,
@@ -365,6 +367,59 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async ({ organizationId, body }, reply) => {
       const organization = await OrganizationModel.patch(organizationId, body);
+
+      if (!organization) {
+        throw new ApiError(404, "Organization not found");
+      }
+
+      return reply.send(organization);
+    },
+  );
+
+  fastify.patch(
+    "/api/organization/default-environment",
+    {
+      schema: {
+        operationId: RouteId.UpdateDefaultEnvironment,
+        description:
+          "Configure the implicit default environment (the deployment target referenced by internal_mcp_catalog.environment_id = null). Pass null for name to reset to the built-in 'Default' label, or null for namespace to unset it. Omitted fields are left unchanged.",
+        tags: ["Organization"],
+        body: UpdateDefaultEnvironmentSchema,
+        response: constructResponseSchema(SelectOrganizationSchema),
+      },
+    },
+    async ({ organizationId, body }, reply) => {
+      // Map the clean API shape to DB columns, including only keys that are
+      // present in the body so omitting a field leaves it unchanged (an
+      // explicit null clears the column).
+      const data: Partial<{
+        defaultEnvironmentName: string | null;
+        defaultEnvironmentDescription: string | null;
+        defaultEnvironmentNamespace: string | null;
+        defaultNetworkPolicyId: string | null;
+        defaultEnvironmentRestricted: boolean;
+      }> = {};
+      if ("name" in body) {
+        data.defaultEnvironmentName = body.name ?? null;
+      }
+      if ("description" in body) {
+        data.defaultEnvironmentDescription = body.description ?? null;
+      }
+      if ("namespace" in body) {
+        data.defaultEnvironmentNamespace = body.namespace ?? null;
+      }
+      if ("networkPolicyId" in body) {
+        await assertNetworkPolicyBelongsToOrganization({
+          networkPolicyId: body.networkPolicyId,
+          organizationId,
+        });
+        data.defaultNetworkPolicyId = body.networkPolicyId ?? null;
+      }
+      if ("restricted" in body) {
+        data.defaultEnvironmentRestricted = body.restricted ?? false;
+      }
+
+      const organization = await OrganizationModel.patch(organizationId, data);
 
       if (!organization) {
         throw new ApiError(404, "Organization not found");

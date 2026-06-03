@@ -30,6 +30,7 @@ export function makeConfig(
       incomingEmail: { enabled: false },
       mcpServerBaseImage: "",
       orchestratorK8sNamespace: "",
+      environmentNamespaces: [],
       isQuickstart: false,
       ngrokDomain: "",
       virtualKeyDefaultExpirationSeconds: 3600,
@@ -54,6 +55,7 @@ export function makePublicConfig(
     disableInvitations: false,
     analytics: {
       enabled: false,
+      instanceId: null,
       posthog: { key: "", host: "" },
     },
     ...overrides,

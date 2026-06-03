@@ -14,6 +14,9 @@ interface K8sClients {
   coreApi: k8s.CoreV1Api;
   appsApi: k8s.AppsV1Api;
   batchApi: k8s.BatchV1Api;
+  authApi: k8s.AuthorizationV1Api;
+  networkingApi: k8s.NetworkingV1Api;
+  customObjectsApi: k8s.CustomObjectsApi;
   attach: k8s.Attach;
   exec: k8s.Exec;
   log: k8s.Log;
@@ -112,6 +115,9 @@ export function createK8sClients(
     coreApi: kubeConfig.makeApiClient(k8s.CoreV1Api),
     appsApi: kubeConfig.makeApiClient(k8s.AppsV1Api),
     batchApi: kubeConfig.makeApiClient(k8s.BatchV1Api),
+    authApi: kubeConfig.makeApiClient(k8s.AuthorizationV1Api),
+    networkingApi: kubeConfig.makeApiClient(k8s.NetworkingV1Api),
+    customObjectsApi: kubeConfig.makeApiClient(k8s.CustomObjectsApi),
     attach: new k8s.Attach(kubeConfig),
     exec: new k8s.Exec(kubeConfig),
     log: new k8s.Log(kubeConfig),
@@ -194,6 +200,62 @@ export function sanitizeLabelValue(value: string): string {
   return ensureStringIsRfc1123Compliant(value)
     .substring(0, 63)
     .replace(/[^a-z0-9]+$/, "");
+}
+
+type NamespaceAccessReason = "forbidden" | "unavailable";
+
+type NamespaceAccessResult =
+  | { ok: true }
+  | { ok: false; reason: NamespaceAccessReason };
+
+/**
+ * Checks whether the platform's service account can deploy MCP server workloads
+ * into a namespace, via a SelfSubjectAccessReview for `create deployments`.
+ *
+ * This deliberately does NOT read the namespace object: `get namespaces` is a
+ * cluster-scoped permission, and the chart's least-privilege design grants the
+ * platform SA only namespaced Roles (pods/deployments/services/secrets). So
+ * reading the namespace would 403 even when the SA can fully deploy there. The
+ * access review checks exactly the permission the runtime needs — the same thing
+ * `kubectl auth can-i create deployments -n <ns>` answers — and requires no extra
+ * RBAC (a SelfSubjectAccessReview is always allowed for one's own permissions).
+ */
+export async function checkNamespaceDeployAccess(
+  namespaceName: string,
+  authApi: k8s.AuthorizationV1Api,
+): Promise<NamespaceAccessResult> {
+  try {
+    const review = await authApi.createSelfSubjectAccessReview({
+      body: {
+        spec: {
+          resourceAttributes: {
+            namespace: namespaceName,
+            verb: "create",
+            group: "apps",
+            resource: "deployments",
+          },
+        },
+      },
+    });
+    return review.status?.allowed
+      ? { ok: true }
+      : { ok: false, reason: "forbidden" };
+  } catch {
+    return { ok: false, reason: "unavailable" };
+  }
+}
+
+/**
+ * User-facing message for a namespace the platform SA cannot deploy into.
+ * Shared by the create/update guard and the "Test" probe so both read the same.
+ */
+export function namespaceAccessMessage(
+  namespaceName: string,
+  reason: NamespaceAccessReason,
+): string {
+  return reason === "forbidden"
+    ? `No access to namespace "${namespaceName}" — the platform's Kubernetes service account cannot deploy there. Grant it via the Helm chart (orchestrator.kubernetes.rbac.environmentNamespaces) and redeploy.`
+    : "Could not reach the Kubernetes cluster.";
 }
 
 /**

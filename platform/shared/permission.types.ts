@@ -20,6 +20,7 @@ export const actions = [
   "enable",
   "query",
   "execute",
+  "deploy-to-restricted",
 ] as const;
 
 export const resources = [
@@ -36,6 +37,8 @@ export const resources = [
   "knowledgeSource",
   "knowledgeSettings",
   "mcpServerInstallationRequest",
+  "environment",
+  "networkPolicy",
   "chat",
   "llmCost",
   "llmLimit",
@@ -96,6 +99,8 @@ export const resourceLabels: Record<Resource, string> = {
   knowledgeSource: "Knowledge Sources",
   knowledgeSettings: "Knowledge Settings",
   mcpServerInstallationRequest: "MCP Server Installation Requests",
+  environment: "Environments",
+  networkPolicy: "Network Policies",
   team: "Teams",
   ac: "Roles",
   chat: "Chats",
@@ -145,6 +150,8 @@ export const resourceDescriptions: Record<Resource, string> = {
   mcpServerInstallation: "Installed MCP servers and their runtime",
   knowledgeFile: "Uploaded files available for knowledge retrieval",
   mcpServerInstallationRequest: "Requests for new MCP server installations",
+  environment: "Deployment environments (namespace) for catalog items",
+  networkPolicy: "Reusable network egress policies for deployment environments",
   optimizationRule: "LLM optimization rules for routing to cheaper models",
   member: "Users and role assignments",
   ac: "Custom RBAC roles",
@@ -190,6 +197,8 @@ export const resourceCategories: Record<string, Resource[]> = {
     "mcpRegistry",
     "mcpServerInstallation",
     "mcpServerInstallationRequest",
+    "environment",
+    "networkPolicy",
   ],
   LLM: [
     "llmProxy",

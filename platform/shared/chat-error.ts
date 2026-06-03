@@ -270,6 +270,8 @@ export enum ChatErrorCode {
   ServerError = "server_error",
   /** Network/connection issues - retryable */
   NetworkError = "network_error",
+  /** Provider finished cleanly but produced no content - retryable */
+  EmptyResponse = "empty_response",
   /** Catch-all for unrecognized errors */
   Unknown = "unknown",
 }
@@ -295,6 +297,8 @@ export const ChatErrorMessages: Record<ChatErrorCode, string> = {
   [ChatErrorCode.ServerError]: "The AI provider is experiencing issues.",
   [ChatErrorCode.NetworkError]:
     "Connection error. Please check your network and try again.",
+  [ChatErrorCode.EmptyResponse]:
+    "The model returned an empty response. Please try again.",
   [ChatErrorCode.Unknown]: "An unexpected error occurred. Please try again.",
 };
 
@@ -305,6 +309,7 @@ export const RetryableErrorCodes: Set<ChatErrorCode> = new Set([
   ChatErrorCode.RateLimit,
   ChatErrorCode.ServerError,
   ChatErrorCode.NetworkError,
+  ChatErrorCode.EmptyResponse,
 ]);
 
 /**
@@ -324,6 +329,10 @@ export interface ChatErrorResponse {
   traceId?: string;
   /** OpenTelemetry span ID for correlating with backend logs */
   spanId?: string;
+  /** True when the request was blocked by a configured usage-limit budget */
+  usageLimitExceeded?: boolean;
+  /** The usage-limit entity that blocked the request, when known */
+  usageLimitEntityType?: string;
   /** Original error details for debugging (provider-specific) */
   originalError?: {
     /** Provider name (anthropic, openai, gemini) */
@@ -346,6 +355,8 @@ export const ChatErrorResponseSchema: z.ZodType<ChatErrorResponse> = z.object({
   sessionId: z.string().optional(),
   traceId: z.string().optional(),
   spanId: z.string().optional(),
+  usageLimitExceeded: z.boolean().optional(),
+  usageLimitEntityType: z.string().optional(),
   originalError: z
     .object({
       provider: SupportedProvidersSchema.optional(),

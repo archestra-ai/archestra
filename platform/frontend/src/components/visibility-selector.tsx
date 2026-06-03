@@ -15,7 +15,7 @@ export type VisibilityOption<Value extends string> = {
   value: Value;
   label: string;
   description: string;
-  icon: LucideIcon;
+  icon?: LucideIcon;
   disabled?: boolean;
   disabledLabel?: string;
   disabledReason?: string;
@@ -28,6 +28,7 @@ export function VisibilitySelector<Value extends string>({
   value,
   options,
   onValueChange,
+  readOnly = false,
   children,
 }: {
   label?: string;
@@ -36,12 +37,13 @@ export function VisibilitySelector<Value extends string>({
   value: Value;
   options: VisibilityOption<Value>[];
   onValueChange: (value: Value) => void;
+  readOnly?: boolean;
   children?: React.ReactNode;
 }) {
   const [expanded, setExpanded] = useState(false);
   const selected =
     options.find((option) => option.value === value) ?? options[0];
-  const isStatic = options.length <= 1;
+  const isStatic = options.length <= 1 || readOnly;
 
   return (
     <div className="space-y-4">
@@ -60,9 +62,11 @@ export function VisibilitySelector<Value extends string>({
         {isStatic ? (
           <div className="w-full rounded-lg border p-3">
             <div className="flex items-center gap-3">
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-muted">
-                <selected.icon className="h-4 w-4" />
-              </div>
+              {selected.icon ? (
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-muted">
+                  <selected.icon className="h-4 w-4" />
+                </div>
+              ) : null}
               <div className="min-w-0 flex-1">
                 <div className="text-sm font-medium">{selected.label}</div>
                 <div className="text-xs text-muted-foreground">
@@ -95,13 +99,15 @@ export function VisibilitySelector<Value extends string>({
                         : "hover:bg-muted/50 cursor-pointer"
                   }`}
                 >
-                  <div
-                    className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-md ${
-                      isSelected ? "bg-primary-foreground/20" : "bg-muted"
-                    }`}
-                  >
-                    <Icon className="h-4 w-4" />
-                  </div>
+                  {Icon ? (
+                    <div
+                      className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-md ${
+                        isSelected ? "bg-primary-foreground/20" : "bg-muted"
+                      }`}
+                    >
+                      <Icon className="h-4 w-4" />
+                    </div>
+                  ) : null}
                   <div className="min-w-0 flex-1">
                     <div className="text-sm font-medium">
                       {option.label}
@@ -154,9 +160,11 @@ export function VisibilitySelector<Value extends string>({
             className="w-full cursor-pointer rounded-lg border p-3 text-left transition-colors hover:bg-muted/50"
           >
             <div className="flex items-center gap-3">
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-muted">
-                <selected.icon className="h-4 w-4" />
-              </div>
+              {selected.icon ? (
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-muted">
+                  <selected.icon className="h-4 w-4" />
+                </div>
+              ) : null}
               <div className="min-w-0 flex-1">
                 <div className="text-sm font-medium">{selected.label}</div>
                 <div className="text-xs text-muted-foreground">

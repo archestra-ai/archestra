@@ -453,6 +453,30 @@ archestra:
         # Specifies whether RBAC resources should be created
         create: true
 
+        # Kubernetes namespaces backing deployment environments that the platform
+        # may deploy MCP servers into. The platform ServiceAccount only gets
+        # MCP-manager permissions in the release namespace by default, so an
+        # environment pointing at any other namespace fails with a 403 until that
+        # namespace is listed here.
+        #
+        # For each entry the chart creates a namespace-scoped Role + RoleBinding
+        # granting the platform ServiceAccount the same MCP-manager permissions it
+        # has in the release namespace. The namespaces MUST already exist before
+        # `helm upgrade` (a RoleBinding cannot be created in a missing namespace).
+        # An entry equal to the release namespace is ignored (already covered above).
+        #
+        # This list is also surfaced to the app (as ARCHESTRA_ORCHESTRATOR_ENVIRONMENT_NAMESPACES)
+        # so the environment editor offers a namespace dropdown instead of free text.
+        #
+        # Note: unlike mcpServerRbac.additionalRoleBindings (which only creates a
+        # binding to an externally-managed Role), this creates the Role too.
+        #
+        # Example:
+        #   environmentNamespaces:
+        #     - staging
+        #     - production
+        environmentNamespaces: []
+
       # NetworkPolicy configuration for MCP server pods (SSRF protection)
       # When enabled, creates a Kubernetes NetworkPolicy that prevents MCP server pods from
       # accessing private/internal IP ranges, blocking SSRF attacks against cluster services,

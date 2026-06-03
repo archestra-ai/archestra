@@ -2,7 +2,10 @@ import type { archestraApiTypes } from "@shared";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
+  SelectSeparator,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -13,15 +16,39 @@ export type LimitCleanupInterval = NonNullable<
   >["defaultUserLimitCleanupInterval"]
 >;
 
-export const DEFAULT_LIMIT_CLEANUP_INTERVAL: LimitCleanupInterval = "1w";
+export const DEFAULT_LIMIT_CLEANUP_INTERVAL: LimitCleanupInterval =
+  "calendar_month";
 
 export const CLEANUP_INTERVAL_LABELS: Record<LimitCleanupInterval, string> = {
-  "1h": "Every hour",
-  "12h": "Every 12 hours",
-  "24h": "Every 24 hours",
-  "1w": "Every week",
-  "1m": "Every month",
+  calendar_day: "Calendar day",
+  calendar_week_sunday: "Calendar week (Sun-Sat)",
+  calendar_week_monday: "Calendar week (Mon-Sun)",
+  calendar_month: "Calendar month",
+  "1h": "Rolling hour",
+  "12h": "Rolling 12 hours",
+  "24h": "Rolling day",
+  "1w": "Rolling week",
+  "1m": "Rolling month",
 };
+
+const CLEANUP_INTERVAL_GROUPS: Array<{
+  label: string;
+  options: LimitCleanupInterval[];
+}> = [
+  {
+    label: "Calendar",
+    options: [
+      "calendar_day",
+      "calendar_week_sunday",
+      "calendar_week_monday",
+      "calendar_month",
+    ],
+  },
+  {
+    label: "Rolling",
+    options: ["1h", "12h", "24h", "1w", "1m"],
+  },
+];
 
 type LimitCleanupIntervalSelectProps = {
   value: LimitCleanupInterval;
@@ -40,10 +67,16 @@ export function LimitCleanupIntervalSelect({
         <SelectValue />
       </SelectTrigger>
       <SelectContent>
-        {Object.entries(CLEANUP_INTERVAL_LABELS).map(([value, label]) => (
-          <SelectItem key={value} value={value}>
-            {label}
-          </SelectItem>
+        {CLEANUP_INTERVAL_GROUPS.map((group, index) => (
+          <SelectGroup key={group.label}>
+            <SelectLabel>{group.label}</SelectLabel>
+            {group.options.map((value) => (
+              <SelectItem key={value} value={value}>
+                {CLEANUP_INTERVAL_LABELS[value]}
+              </SelectItem>
+            ))}
+            {index < CLEANUP_INTERVAL_GROUPS.length - 1 && <SelectSeparator />}
+          </SelectGroup>
         ))}
       </SelectContent>
     </Select>

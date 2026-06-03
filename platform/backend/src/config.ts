@@ -1066,6 +1066,12 @@ const config = {
       clusterDomain:
         process.env.ARCHESTRA_ORCHESTRATOR_K8S_CLUSTER_DOMAIN ||
         "cluster.local",
+      // Namespaces the platform ServiceAccount is granted RBAC in (Helm
+      // rbac.environmentNamespaces). Surfaced to the UI so the environment
+      // editor can offer a namespace dropdown instead of free text.
+      environmentNamespaces: parseCommaSeparatedList(
+        process.env.ARCHESTRA_ORCHESTRATOR_ENVIRONMENT_NAMESPACES ?? "",
+      ),
     },
   },
   /**

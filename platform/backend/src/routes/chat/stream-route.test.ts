@@ -271,6 +271,24 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
             next: async () => ({ done: true, value: undefined }),
           }),
         },
+        // the route probes fullStream for the first renderable event before
+        // merging; yield one so the probe proceeds to the merge these tests
+        // capture (errors are then injected via capturedInnerOnError).
+        fullStream: {
+          [Symbol.asyncIterator]: () => {
+            const events = [
+              { type: "text-delta", text: "" },
+              { type: "finish", finishReason: "stop" },
+            ];
+            let index = 0;
+            return {
+              next: async () =>
+                index < events.length
+                  ? { done: false, value: events[index++] }
+                  : { done: true, value: undefined },
+            };
+          },
+        },
         usage: Promise.resolve(null),
       }));
 
@@ -828,3 +846,257 @@ function toSseStream(stream: ReadableStream<unknown>): ReadableStream<string> {
 function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
+
+// streamText result whose fullStream yields the given events. Used to drive the
+// route's empty-response probe/retry loop without a live provider.
+function fakeStreamResult(events: Array<Record<string, unknown>>) {
+  return {
+    fullStream: {
+      [Symbol.asyncIterator]: () => {
+        let index = 0;
+        return {
+          next: async () =>
+            index < events.length
+              ? { done: false, value: events[index++] }
+              : { done: true, value: undefined },
+        };
+      },
+    },
+    toUIMessageStream: () =>
+      new ReadableStream({
+        start(controller) {
+          controller.close();
+        },
+      }),
+    usage: Promise.resolve(null),
+  };
+}
+
+// streamText result whose fullStream throws a context-length error on first read,
+// matching parseMaxInputTokens. Used to exercise the bounded context-trim retry.
+function fakeContextLengthErrorResult() {
+  return {
+    fullStream: {
+      [Symbol.asyncIterator]: () => ({
+        next: async () => {
+          throw new Error("maximum input length of 100 tokens");
+        },
+      }),
+    },
+    toUIMessageStream: () =>
+      new ReadableStream({
+        start(controller) {
+          controller.close();
+        },
+      }),
+    usage: Promise.resolve(null),
+  };
+}
+
+const EMPTY_STREAM_EVENTS = [
+  { type: "start" },
+  { type: "finish", finishReason: "stop" },
+];
+const RENDERABLE_STREAM_EVENTS = [
+  { type: "text-delta", text: "hi" },
+  { type: "finish", finishReason: "stop" },
+];
+
+describe("POST /api/chat empty-response retry", () => {
+  let app: FastifyInstanceWithZod;
+  let user: User;
+  let organizationId: string;
+  let conversationId: string;
+  let executionPromise: Promise<void> | undefined;
+  let capturedOuterErrorPayload: string | undefined;
+
+  beforeEach(
+    async ({ makeAgent, makeConversation, makeOrganization, makeUser }) => {
+      executionPromise = undefined;
+      capturedOuterErrorPayload = undefined;
+
+      user = await makeUser();
+      const organization = await makeOrganization({ name: "Test Org" });
+      organizationId = organization.id;
+      const agent = await makeAgent({
+        organizationId,
+        name: "Router Agent",
+        systemPrompt: "",
+      });
+      const conversation = await makeConversation(agent.id, {
+        userId: user.id,
+        organizationId,
+      });
+      conversationId = conversation.id;
+
+      mockCreateLLMModelForAgent.mockResolvedValue({ model: "mock-model" });
+      mockGetChatMcpTools.mockResolvedValue({});
+      mockGetChatMcpToolUiResourceUris.mockResolvedValue({});
+      mockExtractAndIngestDocuments.mockResolvedValue(undefined);
+      mockCompactMessagesForChat.mockImplementation(
+        async ({ messages }: { messages: unknown[] }) => ({
+          messages,
+          status: "skipped",
+          compaction: null,
+          reason: "below_threshold",
+        }),
+      );
+      mockStartActiveChatSpan.mockImplementation(
+        async ({ callback }: { callback: () => Promise<Response> }) =>
+          callback(),
+      );
+      mockCreateUIMessageStream.mockImplementation(
+        ({
+          execute,
+          onError,
+        }: {
+          execute: (args: {
+            writer: {
+              write: (x: unknown) => void;
+              merge: (s: unknown) => void;
+            };
+          }) => Promise<void>;
+          onError: (error: unknown) => string;
+        }) => {
+          const writer = { write: vi.fn(), merge: vi.fn() };
+          // route the pre-merge throw (exhausted empty response) to onError,
+          // mirroring how createUIMessageStream surfaces an execute() rejection.
+          executionPromise = execute({ writer }).catch((error) => {
+            capturedOuterErrorPayload = onError(error);
+          });
+          return new ReadableStream({
+            start(controller) {
+              controller.close();
+            },
+          });
+        },
+      );
+      mockCreateUIMessageStreamResponse.mockImplementation(
+        ({ stream }: { stream: ReadableStream }) =>
+          new Response(stream, {
+            status: 200,
+            headers: { "content-type": "text/plain" },
+          }),
+      );
+
+      app = createFastifyInstance();
+      app.addHook("onRequest", async (request) => {
+        (request as typeof request & { user: User }).user = user;
+        (
+          request as typeof request & { organizationId: string }
+        ).organizationId = organizationId;
+      });
+      const { default: chatRoutes } = await import("./routes");
+      await app.register(chatRoutes);
+    },
+  );
+
+  afterEach(async () => {
+    await app.close();
+  });
+
+  async function postMessage() {
+    return app.inject({
+      method: "POST",
+      url: "/api/chat",
+      payload: {
+        id: conversationId,
+        messages: [
+          { id: "msg-1", role: "user", parts: [{ type: "text", text: "hi" }] },
+        ],
+      },
+    });
+  }
+
+  test("retries a clean-but-empty response, then streams the renderable one", async ({
+    expect,
+  }) => {
+    mockStreamText
+      .mockImplementationOnce(() => fakeStreamResult(EMPTY_STREAM_EVENTS))
+      .mockImplementationOnce(() => fakeStreamResult(RENDERABLE_STREAM_EVENTS));
+
+    const response = await postMessage();
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+
+    expect(mockStreamText).toHaveBeenCalledTimes(2);
+    expect(capturedOuterErrorPayload).toBeUndefined();
+  });
+
+  test("surfaces an EmptyResponse stream error after exhausting retries", async ({
+    expect,
+  }) => {
+    mockStreamText.mockImplementation(() =>
+      fakeStreamResult(EMPTY_STREAM_EVENTS),
+    );
+
+    const response = await postMessage();
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+
+    expect(mockStreamText).toHaveBeenCalledTimes(3);
+    expect(capturedOuterErrorPayload).toBeDefined();
+    const payload = JSON.parse(capturedOuterErrorPayload ?? "{}");
+    expect(payload.code).toBe("empty_response");
+  });
+
+  test("reuses the trimmed payload when a trimmed attempt then returns empty", async ({
+    expect,
+  }) => {
+    // messages large enough that trimMessagesToTokenLimit (400-char budget for the
+    // mocked 100-token limit) actually drops content, so the trimmed payload is
+    // observably different from the original.
+    const longContent = "x".repeat(300);
+    mockCompactMessagesForChat.mockImplementation(async () => ({
+      messages: [
+        { role: "user", content: longContent },
+        { role: "assistant", content: longContent },
+        { role: "user", content: longContent },
+      ],
+      status: "skipped",
+      compaction: null,
+      reason: "below_threshold",
+    }));
+    mockStreamText
+      .mockImplementationOnce(() => fakeContextLengthErrorResult())
+      .mockImplementationOnce(() => fakeStreamResult(EMPTY_STREAM_EVENTS))
+      .mockImplementationOnce(() => fakeStreamResult(RENDERABLE_STREAM_EVENTS));
+
+    const response = await postMessage();
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+
+    expect(mockStreamText).toHaveBeenCalledTimes(3);
+    const originalMessages = mockStreamText.mock.calls[0][0].messages;
+    const trimmedMessages = mockStreamText.mock.calls[1][0].messages;
+    const emptyRetryMessages = mockStreamText.mock.calls[2][0].messages;
+    // the trim must have actually changed the payload, otherwise this test proves
+    // nothing about which payload the empty-retry resends.
+    expect(trimmedMessages).not.toEqual(originalMessages);
+    // the empty-response retry resends the trimmed payload, not the original.
+    expect(emptyRetryMessages).toEqual(trimmedMessages);
+  });
+
+  test("bounds context-trim retries instead of looping on a repeated context-length error", async ({
+    expect,
+  }) => {
+    // content-shaped model messages so trimMessagesToTokenLimit runs cleanly and
+    // the cap (not a crash) is what bounds the loop.
+    mockCompactMessagesForChat.mockImplementation(async () => ({
+      messages: [{ role: "user", content: "hi" }],
+      status: "skipped",
+      compaction: null,
+      reason: "below_threshold",
+    }));
+    // every attempt rejects with the same max-token error; trimming is
+    // deterministic, so without a cap this would retry forever.
+    mockStreamText.mockImplementation(() => fakeContextLengthErrorResult());
+
+    const response = await postMessage();
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+
+    // initial attempt + exactly one trim retry, then fall through to the merge.
+    expect(mockStreamText).toHaveBeenCalledTimes(2);
+  });
+});

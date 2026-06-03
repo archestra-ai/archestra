@@ -4,6 +4,7 @@ import {
   type archestraApiTypes,
   E2eTestId,
   getManageCredentialsButtonTestId,
+  MCP_CATALOG_EDIT_QUERY_PARAM,
   type McpDeploymentStatusEntry,
 } from "@shared";
 import {
@@ -16,7 +17,8 @@ import {
   User,
   Wrench,
 } from "lucide-react";
-import { useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
@@ -28,8 +30,16 @@ import {
   AvatarGroupCount,
 } from "@/components/ui/avatar";
 
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { PermissionButton } from "@/components/ui/permission-button";
 import {
   Tooltip,
@@ -49,12 +59,22 @@ import {
   useReinstallInternalMcpCatalogItem,
 } from "@/lib/mcp/internal-mcp-catalog.query";
 import { useMcpServers } from "@/lib/mcp/mcp-server.query";
-import { usePresetEntityName } from "@/lib/organization.query";
+import { useEnvironments } from "@/lib/organization/environment.query";
+import {
+  useDefaultEnvironment,
+  usePresetEntityName,
+} from "@/lib/organization.query";
 import { useTeams } from "@/lib/teams/team.query";
+import {
+  clearCatalogEditParam,
+  setCatalogEditParam,
+} from "./catalog-edit-link";
+import { resolveCatalogEnvironmentLabel } from "./catalog-environment-label";
 import {
   computeDeploymentStatusSummary,
   DeploymentStatusDot,
 } from "./deployment-status";
+import { CatalogEditNoAccess } from "./edit-catalog-dialog";
 import { InstallationProgress } from "./installation-progress";
 import {
   McpServerSettingsDialog,
@@ -173,14 +193,29 @@ export function McpServerCard({
   });
   const isLocalMcpEnabled = useFeature("orchestratorK8sRuntime");
 
+  // Environment label shown next to the title. Only surfaced once the org has
+  // more than the single implicit Default environment; Default-assigned items
+  // only show it when Default has been renamed. Built-in (Playwright) servers
+  // aren't environment-scoped, so skip them. Both queries are shared/cached, so
+  // calling them per card doesn't fan out requests.
+  const { data: environmentList } = useEnvironments();
+  const defaultEnvironment = useDefaultEnvironment();
+  const environmentLabel =
+    variant === "builtin"
+      ? null
+      : resolveCatalogEnvironmentLabel({
+          environmentId: item.environmentId,
+          environments: environmentList?.environments ?? [],
+          defaultEnvironmentName: defaultEnvironment.name,
+        });
+
   // Gate the Install button when the default preset (the parent catalog
   // itself) has unfilled preset-scoped fields and the current user cannot
   // edit them — clicking Install would land on Step 1 and 403 on save.
   const { singular: presetSingular, defaultLabel } = usePresetEntityName();
   const presetSingularLower = presetSingular.toLowerCase();
-  const { canEdit: canEditPresets } = useCanEditCatalogPresets(
-    variant !== "builtin" ? item : null,
-  );
+  const { canEdit: canEditPresets, isLoading: canEditPresetsLoading } =
+    useCanEditCatalogPresets(variant !== "builtin" ? item : null);
   const defaultPresetNeedsFill =
     variant !== "builtin" && presetHasUnfilledFields(item, item);
   const installBlockedByPresetFill = defaultPresetNeedsFill && !canEditPresets;
@@ -230,11 +265,62 @@ export function McpServerCard({
     null,
   );
   const [uninstallDialogOpen, setUninstallDialogOpen] = useState(false);
+  // Shown when a shared `?edit=<id>` link targets this item but the current
+  // user can't edit it.
+  const [editNoAccessOpen, setEditNoAccessOpen] = useState(false);
 
   const openSettingsPage = (page: SettingsPage) => {
     setSettingsInitialPage(page);
     setSettingsDialogOpen(true);
   };
+
+  // ── Shareable edit deep-link (`?edit=<catalogId>`) ──────────────────────
+  // The pencil opens the Configuration page and writes `?edit=<id>` so the
+  // address bar can be copied and shared. Opening a shared link auto-opens the
+  // editor for users who can edit, or a "no access" dialog for everyone else.
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
+  const editParam = searchParams.get(MCP_CATALOG_EDIT_QUERY_PARAM);
+  const deepLinkHandledRef = useRef(false);
+
+  const writeEditParam = () => {
+    const qs = setCatalogEditParam(searchParams.toString(), item.id);
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+  };
+
+  const clearEditParam = () => {
+    if (!searchParams.get(MCP_CATALOG_EDIT_QUERY_PARAM)) return;
+    const qs = clearCatalogEditParam(searchParams.toString());
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+  };
+
+  const openEditorConfiguration = () => {
+    // Opening via the pencil writes `?edit=<id>`, which would otherwise wake
+    // the auto-open effect below. Mark the deep-link as already handled so the
+    // manual and shared-link paths don't both fire.
+    deepLinkHandledRef.current = true;
+    writeEditParam();
+    openSettingsPage("configuration");
+  };
+
+  // Auto-open on a shared link. One-shot per mount (ref-guarded): a shared link
+  // is resolved at most once, so a client-side change of `?edit` to a different
+  // id without a remount won't re-trigger it. Runs only after the edit-
+  // permission check resolves so non-editors aren't briefly shown the form.
+  // Builtin items aren't editable, so canEditPresets is false for them.
+  useEffect(() => {
+    if (deepLinkHandledRef.current) return;
+    if (canEditPresetsLoading) return;
+    if (editParam !== item.id) return;
+    deepLinkHandledRef.current = true;
+    if (canEditPresets) {
+      setSettingsInitialPage("configuration");
+      setSettingsDialogOpen(true);
+    } else {
+      setEditNoAccessOpen(true);
+    }
+  }, [editParam, item.id, canEditPresets, canEditPresetsLoading]);
 
   const handleChatWithMcpServer = async () => {
     setIsChatCreating(true);
@@ -574,7 +660,7 @@ export function McpServerCard({
       size="icon"
       className="h-8 w-8"
       data-testid={`${E2eTestId.McpServerSettingsButton}-${item.name}`}
-      onClick={() => openSettingsPage("configuration")}
+      onClick={openEditorConfiguration}
     >
       <Pencil className="h-4 w-4" />
     </Button>
@@ -948,6 +1034,8 @@ export function McpServerCard({
           if (!open) {
             setLogsInitialServerId(null);
             setSettingsInitialPage(undefined);
+            // Drop the shareable `?edit` param when the editor closes.
+            clearEditParam();
           }
         }}
         initialPage={settingsInitialPage}
@@ -980,6 +1068,24 @@ export function McpServerCard({
         }
       />
 
+      <Dialog
+        open={editNoAccessOpen}
+        onOpenChange={(open) => {
+          setEditNoAccessOpen(open);
+          if (!open) clearEditParam();
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader className="sr-only">
+            <DialogTitle>No access</DialogTitle>
+            <DialogDescription>
+              You don't have access to edit this catalog item.
+            </DialogDescription>
+          </DialogHeader>
+          <CatalogEditNoAccess />
+        </DialogContent>
+      </Dialog>
+
       <UninstallServerDialog
         open={uninstallDialogOpen}
         onClose={() => setUninstallDialogOpen(false)}
@@ -1005,6 +1111,14 @@ export function McpServerCard({
                   {item.name}
                 </span>
               </TruncatedTooltip>
+              {environmentLabel && (
+                <Badge
+                  variant="outline"
+                  className="shrink-0 text-muted-foreground"
+                >
+                  <span className="max-w-32 truncate">{environmentLabel}</span>
+                </Badge>
+              )}
             </div>
             {item.description && (
               <p className="text-xs text-muted-foreground line-clamp-2">

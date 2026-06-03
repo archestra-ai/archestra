@@ -387,6 +387,18 @@ export const RouteId = {
   UpdateMcpPresetEntry: "updateMcpPresetEntry",
   DeleteMcpPresetEntry: "deleteMcpPresetEntry",
 
+  // Org-level deployment environments
+  ListEnvironments: "listEnvironments",
+  CreateEnvironment: "createEnvironment",
+  UpdateEnvironment: "updateEnvironment",
+  DeleteEnvironment: "deleteEnvironment",
+  UpdateDefaultEnvironment: "updateDefaultEnvironment",
+  GetK8sCapabilities: "getK8sCapabilities",
+  ListNetworkPolicies: "listNetworkPolicies",
+  CreateNetworkPolicy: "createNetworkPolicy",
+  UpdateNetworkPolicy: "updateNetworkPolicy",
+  DeleteNetworkPolicy: "deleteNetworkPolicy",
+
   // Knowledge Settings Routes (organization-level)
   UpdateKnowledgeSettings: "updateKnowledgeSettings",
   DropEmbeddingConfig: "dropEmbeddingConfig",
@@ -511,9 +523,11 @@ export const RouteId = {
   // Agent Skill Routes
   GetSkills: "getSkills",
   CreateSkill: "createSkill",
+  ConvertAgentToSkill: "convertAgentToSkill",
   GetSkill: "getSkill",
   UpdateSkill: "updateSkill",
   DeleteSkill: "deleteSkill",
+  ResetSkill: "resetSkill",
   DiscoverGithubSkills: "discoverGithubSkills",
   PreviewGithubSkill: "previewGithubSkill",
   ImportGithubSkills: "importGithubSkills",

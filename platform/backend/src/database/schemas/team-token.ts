@@ -1,15 +1,16 @@
+import { sql } from "drizzle-orm";
 import {
   boolean,
   index,
-  pgTable,
   text,
   timestamp,
-  unique,
+  uniqueIndex,
   uuid,
   varchar,
 } from "drizzle-orm/pg-core";
 import organizationsTable from "./organization";
 import secretsTable from "./secret";
+import { softDeletablePgTable } from "./soft-deletable-table";
 import { team } from "./team";
 
 /**
@@ -17,7 +18,7 @@ import { team } from "./team";
  * Each token is scoped to either the organization or a specific team
  * Token values are stored via secretsManager for Vault integration
  */
-const teamTokensTable = pgTable(
+const teamTokensTable = softDeletablePgTable(
   "team_token",
   {
     id: uuid("id").primaryKey().defaultRandom(),
@@ -45,7 +46,9 @@ const teamTokensTable = pgTable(
   },
   (table) => [
     // One org token per org (teamId=null), one token per team
-    unique().on(table.organizationId, table.teamId),
+    uniqueIndex("team_token_org_team_uidx")
+      .on(table.organizationId, table.teamId)
+      .where(sql`${table.deletedAt} IS NULL`),
     index("idx_team_token_org_id").on(table.organizationId),
     index("idx_team_token_team_id").on(table.teamId),
     index("idx_team_token_token_start").on(table.tokenStart),

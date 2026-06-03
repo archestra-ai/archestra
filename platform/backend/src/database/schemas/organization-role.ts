@@ -1,7 +1,9 @@
-import { pgTable, text, timestamp, unique } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
+import { text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
 import organizationsTable from "./organization";
+import { softDeletablePgTable } from "./soft-deletable-table";
 
-export const organizationRole = pgTable(
+export const organizationRole = softDeletablePgTable(
   "organization_role",
   {
     id: text("id").primaryKey(), // Better-auth uses base62 IDs, not UUIDs
@@ -22,6 +24,8 @@ export const organizationRole = pgTable(
      * Unique constraint ensures:
      * - One role per (organizationId, role) combination
      */
-    unique().on(table.organizationId, table.role),
+    uniqueIndex("organization_role_org_role_uidx")
+      .on(table.organizationId, table.role)
+      .where(sql`${table.deletedAt} IS NULL`),
   ],
 );

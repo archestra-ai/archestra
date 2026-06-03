@@ -1,12 +1,13 @@
 import { MEMBER_ROLE_NAME } from "@archestra/shared";
-import { index, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { index, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import agentsTable from "./agent";
 import llmProviderApiKeysTable from "./llm-provider-api-key";
 import modelsTable from "./model";
 import organizationsTable from "./organization";
+import { softDeletablePgTable } from "./soft-deletable-table";
 import usersTable from "./user";
 
-const member = pgTable(
+const member = softDeletablePgTable(
   "member",
   {
     id: text("id").primaryKey(),
@@ -33,12 +34,12 @@ const member = pgTable(
       { onDelete: "set null" },
     ),
   },
-  (table) => ({
-    userOrganizationIdx: index("member_user_id_organization_id_idx").on(
+  (table) => [
+    index("member_user_id_organization_id_idx").on(
       table.userId,
       table.organizationId,
     ),
-  }),
+  ],
 );
 
 export default member;

@@ -8,9 +8,10 @@ import {
 } from "drizzle-orm/pg-core";
 import type { TeamMemberRole } from "@/types/team-role";
 import organizationsTable from "./organization";
+import { softDeletablePgTable } from "./soft-deletable-table";
 import usersTable from "./user";
 
-export const team = pgTable("team", {
+export const team = softDeletablePgTable("team", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
   description: text("description"),

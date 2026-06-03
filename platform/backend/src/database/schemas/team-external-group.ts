@@ -1,4 +1,6 @@
-import { pgTable, text, timestamp, unique } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
+import { text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
+import { softDeletablePgTable } from "./soft-deletable-table";
 import { team } from "./team";
 
 /**
@@ -8,7 +10,7 @@ import { team } from "./team";
  * When a user logs in via SSO, their group memberships from the identity provider
  * are matched against these mappings to automatically add/remove them from teams.
  */
-const teamExternalGroupsTable = pgTable(
+const teamExternalGroupsTable = softDeletablePgTable(
   "team_external_group",
   {
     id: text("id").primaryKey(),
@@ -28,10 +30,9 @@ const teamExternalGroupsTable = pgTable(
   },
   (table) => [
     // Ensure unique combination of team and group
-    unique("team_external_group_team_group_unique").on(
-      table.teamId,
-      table.groupIdentifier,
-    ),
+    uniqueIndex("team_external_group_team_group_unique")
+      .on(table.teamId, table.groupIdentifier)
+      .where(sql`${table.deletedAt} IS NULL`),
   ],
 );
 

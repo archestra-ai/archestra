@@ -1,8 +1,9 @@
-import { pgTable, text, timestamp } from "drizzle-orm/pg-core";
+import { text, timestamp } from "drizzle-orm/pg-core";
 import organizationsTable from "./organization";
+import { softDeletablePgTable } from "./soft-deletable-table";
 import usersTable from "./user";
 
-const invitation = pgTable("invitation", {
+const invitation = softDeletablePgTable("invitation", {
   id: text("id").primaryKey(),
   organizationId: text("organization_id")
     .notNull()

@@ -8,7 +8,6 @@ import {
   boolean,
   integer,
   jsonb,
-  pgTable,
   text,
   timestamp,
   uuid,
@@ -25,10 +24,13 @@ import type {
   OrganizationCompressionScope,
 } from "@/types";
 import modelsTable from "./model";
+import { softDeletablePgTable } from "./soft-deletable-table";
 
-const organizationsTable = pgTable("organization", {
+const organizationsTable = softDeletablePgTable("organization", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
+  // Bucket A: slug stays globally unique even across soft-deleted rows.
+  // OrganizationModel.delete tombstones the value so the slug is freed.
   slug: text("slug").notNull().unique(),
   analyticsInstanceId: uuid("analytics_instance_id").notNull().defaultRandom(),
   analyticsInstanceStartedAt: timestamp("analytics_instance_started_at"),

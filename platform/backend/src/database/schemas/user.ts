@@ -1,8 +1,11 @@
-import { boolean, pgTable, text, timestamp } from "drizzle-orm/pg-core";
+import { boolean, text, timestamp } from "drizzle-orm/pg-core";
+import { softDeletablePgTable } from "./soft-deletable-table";
 
-const usersTable = pgTable("user", {
+const usersTable = softDeletablePgTable("user", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
+  // Bucket A: email stays globally unique even across soft-deleted rows.
+  // UserModel.delete tombstones the value so the address is freed.
   email: text("email").notNull().unique(),
   emailVerified: boolean("email_verified").default(false).notNull(),
   image: text("image"),

@@ -463,4 +463,67 @@ describe("InvitationModel", () => {
       expect(found).toBeUndefined();
     });
   });
+
+  describe("soft-delete", () => {
+    test("delete soft-deletes the invitation and hides it from getById", async ({
+      makeOrganization,
+      makeUser,
+      makeInvitation,
+    }) => {
+      const org = await makeOrganization();
+      const inviter = await makeUser();
+      const invitation = await makeInvitation(org.id, inviter.id, {
+        email: "soft@example.com",
+      });
+
+      const count = await InvitationModel.delete(invitation.id);
+      expect(count).toBe(1);
+
+      expect(await InvitationModel.getById(invitation.id)).toBeUndefined();
+
+      const [row] = await db
+        .select()
+        .from(schema.invitationsTable)
+        .where(eq(schema.invitationsTable.id, invitation.id));
+      expect(row.deletedAt).toBeInstanceOf(Date);
+    });
+
+    test("findByEmail excludes soft-deleted invitations", async ({
+      makeOrganization,
+      makeUser,
+      makeInvitation,
+    }) => {
+      const org = await makeOrganization();
+      const inviter = await makeUser();
+      const invitation = await makeInvitation(org.id, inviter.id, {
+        email: "hidden@example.com",
+      });
+
+      await InvitationModel.delete(invitation.id);
+
+      expect(await InvitationModel.findByEmail("hidden@example.com")).toEqual(
+        [],
+      );
+    });
+
+    test("hardDelete physically removes the invitation", async ({
+      makeOrganization,
+      makeUser,
+      makeInvitation,
+    }) => {
+      const org = await makeOrganization();
+      const inviter = await makeUser();
+      const invitation = await makeInvitation(org.id, inviter.id, {
+        email: "purge@example.com",
+      });
+
+      await InvitationModel.hardDelete(invitation.id);
+
+      const rows = await db
+        .select()
+        .from(schema.invitationsTable)
+        .where(eq(schema.invitationsTable.id, invitation.id));
+      expect(rows).toHaveLength(0);
+    });
+  });
 });

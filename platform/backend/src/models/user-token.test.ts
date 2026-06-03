@@ -429,4 +429,97 @@ describe("UserTokenModel", () => {
       expect(foundOrg2).not.toBeNull();
     });
   });
+
+  describe("soft-delete", () => {
+    test("delete soft-deletes the token and validateToken rejects it", async ({
+      makeUser,
+      makeOrganization,
+      makeMember,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      await makeMember(user.id, org.id);
+      const { token, value } = await UserTokenModel.create(user.id, org.id);
+
+      expect(await UserTokenModel.validateToken(value)).not.toBeNull();
+
+      const deleted = await UserTokenModel.delete(token.id);
+      expect(deleted).toBe(true);
+
+      // Security-critical: a soft-deleted token must not authenticate.
+      expect(await UserTokenModel.validateToken(value)).toBeNull();
+      expect(await UserTokenModel.findById(token.id)).toBeNull();
+
+      // The row is retained (tombstoned) so the token could be restored.
+      const [row] = await db
+        .select()
+        .from(schema.userTokensTable)
+        .where(eq(schema.userTokensTable.id, token.id));
+      expect(row.deletedAt).toBeInstanceOf(Date);
+    });
+
+    test("deleteAllByUserId soft-deletes every token for the user", async ({
+      makeUser,
+      makeOrganization,
+      makeMember,
+    }) => {
+      const org1 = await makeOrganization();
+      const org2 = await makeOrganization();
+      const user = await makeUser();
+      await makeMember(user.id, org1.id);
+      await makeMember(user.id, org2.id);
+      await UserTokenModel.create(user.id, org1.id);
+      await UserTokenModel.create(user.id, org2.id);
+
+      const count = await UserTokenModel.deleteAllByUserId(user.id);
+      expect(count).toBe(2);
+
+      expect(
+        await UserTokenModel.findByUserAndOrg(user.id, org1.id),
+      ).toBeNull();
+      expect(
+        await UserTokenModel.findByUserAndOrg(user.id, org2.id),
+      ).toBeNull();
+    });
+
+    test("a new token can be created for the same (org,user) after soft-delete (Bucket B)", async ({
+      makeUser,
+      makeOrganization,
+      makeMember,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      await makeMember(user.id, org.id);
+      const first = await UserTokenModel.create(user.id, org.id);
+
+      await UserTokenModel.delete(first.token.id);
+
+      // The (organizationId, userId) unique index is partial (deleted_at IS NULL),
+      // so a replacement token can be created while the soft-deleted row is
+      // retained.
+      const second = await UserTokenModel.create(user.id, org.id);
+      expect(second.token.id).not.toBe(first.token.id);
+    });
+
+    test("hardDelete physically removes a soft-deleted token", async ({
+      makeUser,
+      makeOrganization,
+      makeMember,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      await makeMember(user.id, org.id);
+      const { token } = await UserTokenModel.create(user.id, org.id);
+
+      await UserTokenModel.delete(token.id);
+      const purged = await UserTokenModel.hardDelete(token.id);
+      expect(purged).toBe(true);
+
+      const rows = await db
+        .select()
+        .from(schema.userTokensTable)
+        .where(eq(schema.userTokensTable.id, token.id));
+      expect(rows).toHaveLength(0);
+    });
+  });
 });

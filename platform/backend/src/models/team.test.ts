@@ -1,4 +1,6 @@
 import { MEMBER_ROLE_NAME } from "@archestra/shared";
+import { eq } from "drizzle-orm";
+import db, { schema } from "@/database";
 import { describe, expect, test } from "@/test";
 import TeamModel from "./team";
 
@@ -1460,6 +1462,126 @@ describe("TeamModel", () => {
 
       expect(result.data).toHaveLength(0);
       expect(result.total).toBe(0);
+    });
+  });
+
+  describe("soft-delete", () => {
+    test("delete sets deletedAt and hides the team from reads", async ({
+      makeUser,
+      makeOrganization,
+      makeTeam,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+      const team = await makeTeam(org.id, user.id);
+
+      const ok = await TeamModel.delete(team.id);
+      expect(ok).toBe(true);
+
+      expect(await TeamModel.findById(team.id)).toBeNull();
+
+      const [row] = await db
+        .select()
+        .from(schema.teamsTable)
+        .where(eq(schema.teamsTable.id, team.id));
+      expect(row.deletedAt).toBeInstanceOf(Date);
+    });
+
+    test("findById with includeDeleted returns the soft-deleted team", async ({
+      makeUser,
+      makeOrganization,
+      makeTeam,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+      const team = await makeTeam(org.id, user.id);
+
+      await TeamModel.delete(team.id);
+
+      const found = await TeamModel.findById(team.id, { includeDeleted: true });
+      expect(found?.id).toBe(team.id);
+      expect(found?.deletedAt).toBeInstanceOf(Date);
+    });
+
+    test("delete cascades to external groups (soft-delete)", async ({
+      makeUser,
+      makeOrganization,
+      makeTeam,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+      const team = await makeTeam(org.id, user.id);
+      await TeamModel.addExternalGroup(team.id, "engineering");
+
+      await TeamModel.delete(team.id);
+
+      expect(await TeamModel.getExternalGroups(team.id)).toHaveLength(0);
+
+      const [row] = await db
+        .select()
+        .from(schema.teamExternalGroupsTable)
+        .where(eq(schema.teamExternalGroupsTable.teamId, team.id));
+      expect(row.deletedAt).toBeInstanceOf(Date);
+    });
+
+    test("findByOrganization excludes soft-deleted teams", async ({
+      makeUser,
+      makeOrganization,
+      makeTeam,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+      const kept = await makeTeam(org.id, user.id, { name: "Kept" });
+      const removed = await makeTeam(org.id, user.id, { name: "Removed" });
+
+      await TeamModel.delete(removed.id);
+
+      const teams = await TeamModel.findByOrganization(org.id);
+      const ids = teams.map((t) => t.id);
+      expect(ids).toContain(kept.id);
+      expect(ids).not.toContain(removed.id);
+    });
+
+    test("an external group mapping can be re-added after soft-delete (Bucket B)", async ({
+      makeUser,
+      makeOrganization,
+      makeTeam,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+      const team = await makeTeam(org.id, user.id);
+
+      await TeamModel.addExternalGroup(team.id, "reusable-group");
+      await TeamModel.removeExternalGroup(team.id, "reusable-group");
+
+      // The (team, groupIdentifier) unique index is partial (deleted_at IS NULL),
+      // so re-adding the same mapping must succeed.
+      const readded = await TeamModel.addExternalGroup(
+        team.id,
+        "reusable-group",
+      );
+      expect(readded.groupIdentifier).toBe("reusable-group");
+
+      const groups = await TeamModel.getExternalGroups(team.id);
+      expect(groups).toHaveLength(1);
+    });
+
+    test("hardDelete physically removes the team", async ({
+      makeUser,
+      makeOrganization,
+      makeTeam,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+      const team = await makeTeam(org.id, user.id);
+
+      await TeamModel.hardDelete(team.id);
+
+      const rows = await db
+        .select()
+        .from(schema.teamsTable)
+        .where(eq(schema.teamsTable.id, team.id));
+      expect(rows).toHaveLength(0);
     });
   });
 });

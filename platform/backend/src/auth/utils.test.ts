@@ -430,6 +430,7 @@ function makeUserWithOrganization(
     createdAt: new Date(),
     updatedAt: new Date(),
     organizationId: "org-1",
+    deletedAt: null,
     ...overrides,
   };
 }

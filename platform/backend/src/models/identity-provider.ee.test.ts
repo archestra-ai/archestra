@@ -5,6 +5,7 @@ import {
   OAUTH_TOKEN_TYPE,
 } from "@archestra/shared";
 import { APIError } from "better-auth";
+import { eq } from "drizzle-orm";
 import { vi } from "vitest";
 import { retrieveIdpGroups } from "@/auth/idp-team-sync-cache.ee";
 import config from "@/config";
@@ -3303,6 +3304,58 @@ describe("resolveSsoRole", () => {
       );
       expect(cachedData).not.toBeNull();
       expect(cachedData?.groups).toEqual(["from-token"]);
+    });
+  });
+
+  describe("soft-delete", () => {
+    test("delete soft-deletes the provider and hides it from reads", async ({
+      makeOrganization,
+      makeIdentityProvider,
+    }) => {
+      const org = await makeOrganization();
+      const provider = await makeIdentityProvider(org.id, {
+        providerId: "Okta-Soft",
+      });
+
+      const ok = await IdentityProviderModel.delete(provider.id, org.id);
+      expect(ok).toBe(true);
+
+      expect(
+        await IdentityProviderModel.findById(provider.id, org.id),
+      ).toBeNull();
+      expect(
+        await IdentityProviderModel.findByProviderId("Okta-Soft"),
+      ).toBeNull();
+      expect(await IdentityProviderModel.findAll(org.id)).toEqual([]);
+
+      const [row] = await db
+        .select()
+        .from(schema.identityProvidersTable)
+        .where(eq(schema.identityProvidersTable.id, provider.id));
+      expect(row.deletedAt).toBeInstanceOf(Date);
+    });
+
+    test("a provider with the same providerId can be re-created after soft-delete (Bucket B)", async ({
+      makeOrganization,
+      makeIdentityProvider,
+    }) => {
+      const org = await makeOrganization();
+      const first = await makeIdentityProvider(org.id, {
+        providerId: "Reusable-Okta",
+      });
+
+      await IdentityProviderModel.delete(first.id, org.id);
+
+      // The provider_id unique index is partial (deleted_at IS NULL), so a new
+      // provider reusing the same providerId must not raise a unique violation.
+      const second = await makeIdentityProvider(org.id, {
+        providerId: "Reusable-Okta",
+      });
+      expect(second.id).not.toBe(first.id);
+
+      const active =
+        await IdentityProviderModel.findByProviderId("Reusable-Okta");
+      expect(active?.id).toBe(second.id);
     });
   });
 });

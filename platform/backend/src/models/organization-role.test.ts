@@ -4,6 +4,9 @@ import {
   MEMBER_ROLE_NAME,
 } from "@archestra/shared";
 import { predefinedPermissionsMap } from "@archestra/shared/access-control";
+import { eq } from "drizzle-orm";
+import db, { schema } from "@/database";
+import { softDelete } from "@/database/soft-delete";
 import { describe, expect, test, vi } from "@/test";
 import OrganizationRoleModel from "./organization-role";
 
@@ -539,6 +542,77 @@ describe("OrganizationRoleModel", () => {
 
       expect(result.data.every((r) => r.predefined)).toBe(true);
       expect(result.data.some((r) => r.name === "Secret Role")).toBe(false);
+    });
+  });
+
+  describe("soft-delete", () => {
+    test("getByIdentifier and getById exclude soft-deleted custom roles", async ({
+      makeOrganization,
+      makeCustomRole,
+    }) => {
+      const org = await makeOrganization();
+      const role = await makeCustomRole(org.id, { role: "qa-lead" });
+
+      // Sanity: visible before deletion.
+      expect(
+        await OrganizationRoleModel.getByIdentifier("qa-lead", org.id),
+      ).not.toBeNull();
+
+      await softDelete(
+        db,
+        schema.organizationRolesTable,
+        eq(schema.organizationRolesTable.id, role.id),
+      );
+
+      expect(
+        await OrganizationRoleModel.getByIdentifier("qa-lead", org.id),
+      ).toBeNull();
+      expect(await OrganizationRoleModel.getById(role.id, org.id)).toBeNull();
+    });
+
+    test("getAll excludes soft-deleted custom roles", async ({
+      makeOrganization,
+      makeCustomRole,
+    }) => {
+      const org = await makeOrganization();
+      const kept = await makeCustomRole(org.id, { role: "kept-role" });
+      const removed = await makeCustomRole(org.id, { role: "removed-role" });
+
+      await softDelete(
+        db,
+        schema.organizationRolesTable,
+        eq(schema.organizationRolesTable.id, removed.id),
+      );
+
+      const roles = await OrganizationRoleModel.getAll(org.id);
+      const ids = roles.map((r) => r.id);
+      expect(ids).toContain(kept.id);
+      expect(ids).not.toContain(removed.id);
+    });
+
+    test("the same (organizationId, role) can be re-created after soft-delete (Bucket B)", async ({
+      makeOrganization,
+      makeCustomRole,
+    }) => {
+      const org = await makeOrganization();
+      const first = await makeCustomRole(org.id, { role: "reusable-role" });
+
+      await softDelete(
+        db,
+        schema.organizationRolesTable,
+        eq(schema.organizationRolesTable.id, first.id),
+      );
+
+      // The (organizationId, role) unique index is partial (deleted_at IS NULL),
+      // so re-creating the same identifier must not raise a unique violation.
+      const second = await makeCustomRole(org.id, { role: "reusable-role" });
+      expect(second.id).not.toBe(first.id);
+
+      const active = await OrganizationRoleModel.getByIdentifier(
+        "reusable-role",
+        org.id,
+      );
+      expect(active?.id).toBe(second.id);
     });
   });
 });

@@ -1,4 +1,6 @@
 import { ADMIN_ROLE_NAME, MEMBER_ROLE_NAME } from "@archestra/shared";
+import { eq } from "drizzle-orm";
+import db, { schema } from "@/database";
 import { describe, expect, test } from "@/test";
 import MemberModel from "./member";
 
@@ -488,6 +490,118 @@ describe("MemberModel", () => {
       });
 
       expect(result).toEqual([inOrgUser.id]);
+    });
+  });
+
+  describe("soft-delete", () => {
+    test("deleteAllByUserId soft-deletes memberships and hides them from reads", async ({
+      makeUser,
+      makeOrganization,
+      makeMember,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+      await makeMember(user.id, org.id);
+
+      const count = await MemberModel.deleteAllByUserId(user.id);
+      expect(count).toBe(1);
+
+      expect(await MemberModel.getByUserId(user.id, org.id)).toBeUndefined();
+      expect(await MemberModel.countByUserId(user.id)).toBe(0);
+      expect(await MemberModel.hasAnyMembership(user.id)).toBe(false);
+
+      const [row] = await db
+        .select()
+        .from(schema.membersTable)
+        .where(eq(schema.membersTable.userId, user.id));
+      expect(row.deletedAt).toBeInstanceOf(Date);
+    });
+
+    test("deleteByMemberOrUserId soft-deletes by member id", async ({
+      makeUser,
+      makeOrganization,
+      makeMember,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+      const member = await makeMember(user.id, org.id);
+
+      const deleted = await MemberModel.deleteByMemberOrUserId(
+        member.id,
+        org.id,
+      );
+      expect(deleted).toBe(true);
+
+      expect(await MemberModel.getById(member.id)).toBeUndefined();
+    });
+
+    test("deleteByMemberOrUserId soft-deletes by user id + organization id", async ({
+      makeUser,
+      makeOrganization,
+      makeMember,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+      await makeMember(user.id, org.id);
+
+      const deleted = await MemberModel.deleteByMemberOrUserId(user.id, org.id);
+      expect(deleted).toBe(true);
+
+      expect(await MemberModel.getByUserId(user.id, org.id)).toBeUndefined();
+    });
+
+    test("findAllByOrganization excludes soft-deleted members", async ({
+      makeUser,
+      makeOrganization,
+      makeMember,
+    }) => {
+      const org = await makeOrganization();
+      const kept = await makeUser({ email: "kept@test.com" });
+      const removed = await makeUser({ email: "removed@test.com" });
+      await makeMember(kept.id, org.id);
+      await makeMember(removed.id, org.id);
+
+      await MemberModel.deleteAllByUserId(removed.id);
+
+      const members = await MemberModel.findAllByOrganization(org.id);
+      const ids = members.map((m) => m.id);
+      expect(ids).toContain(kept.id);
+      expect(ids).not.toContain(removed.id);
+    });
+
+    test("a user can re-join an org after their membership is soft-deleted", async ({
+      makeUser,
+      makeOrganization,
+      makeMember,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+      await makeMember(user.id, org.id, { role: MEMBER_ROLE_NAME });
+      await MemberModel.deleteAllByUserId(user.id);
+
+      await MemberModel.create(user.id, org.id, ADMIN_ROLE_NAME);
+
+      // The active row wins; the soft-deleted one stays hidden.
+      const current = await MemberModel.getByUserId(user.id, org.id);
+      expect(current?.role).toBe(ADMIN_ROLE_NAME);
+    });
+
+    test("hardDeleteAllByUserId physically removes membership rows", async ({
+      makeUser,
+      makeOrganization,
+      makeMember,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+      await makeMember(user.id, org.id);
+
+      await MemberModel.hardDeleteAllByUserId(user.id);
+
+      const rows = await db
+        .select()
+        .from(schema.membersTable)
+        .where(eq(schema.membersTable.userId, user.id));
+      expect(rows).toHaveLength(0);
     });
   });
 });

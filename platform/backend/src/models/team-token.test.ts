@@ -2,6 +2,8 @@ import {
   ARCHESTRA_TOKEN_PREFIX,
   LEGACY_ARCHESTRA_TOKEN_PREFIXES,
 } from "@archestra/shared";
+import { eq } from "drizzle-orm";
+import db, { schema } from "@/database";
 import { describe, expect, test } from "@/test";
 import TeamTokenModel from "./team-token";
 
@@ -347,6 +349,103 @@ describe("TeamTokenModel", () => {
     test("returns false for non-existent token", async () => {
       const deleted = await TeamTokenModel.delete(crypto.randomUUID());
       expect(deleted).toBe(false);
+    });
+  });
+
+  describe("soft-delete", () => {
+    test("delete soft-deletes the token and validateToken rejects it", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+      const { token, value } = await TeamTokenModel.create({
+        organizationId: org.id,
+        name: "To Delete",
+        teamId: null,
+      });
+
+      // Sanity: the token authenticates before deletion.
+      expect(await TeamTokenModel.validateToken(value)).not.toBeNull();
+
+      const deleted = await TeamTokenModel.delete(token.id);
+      expect(deleted).toBe(true);
+
+      // Security-critical: a soft-deleted token must not authenticate.
+      expect(await TeamTokenModel.validateToken(value)).toBeNull();
+      expect(await TeamTokenModel.findById(token.id)).toBeNull();
+
+      // The row is retained (tombstoned) so the token could be restored.
+      const [row] = await db
+        .select()
+        .from(schema.teamTokensTable)
+        .where(eq(schema.teamTokensTable.id, token.id));
+      expect(row.deletedAt).toBeInstanceOf(Date);
+    });
+
+    test("findAll excludes soft-deleted tokens", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+      const kept = await TeamTokenModel.create({
+        organizationId: org.id,
+        name: "Kept",
+        teamId: null,
+      });
+      const { token: removed } = await TeamTokenModel.create({
+        organizationId: org.id,
+        name: "Removed",
+        teamId: null,
+      });
+
+      await TeamTokenModel.delete(removed.id);
+
+      const tokens = await TeamTokenModel.findAll(org.id);
+      const ids = tokens.map((t) => t.id);
+      expect(ids).toContain(kept.token.id);
+      expect(ids).not.toContain(removed.id);
+    });
+
+    test("a new org token can be created after the old one is soft-deleted (Bucket B)", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+      const first = await TeamTokenModel.create({
+        organizationId: org.id,
+        name: "First",
+        teamId: null,
+      });
+
+      await TeamTokenModel.delete(first.token.id);
+
+      // The (organizationId, teamId) unique index is partial (deleted_at IS NULL),
+      // so a replacement org token can be created while the soft-deleted row
+      // is retained.
+      const second = await TeamTokenModel.create({
+        organizationId: org.id,
+        name: "Second",
+        teamId: null,
+      });
+      expect(second.token.id).not.toBe(first.token.id);
+    });
+
+    test("hardDelete physically removes a soft-deleted token", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+      const { token } = await TeamTokenModel.create({
+        organizationId: org.id,
+        name: "Purge",
+        teamId: null,
+      });
+
+      await TeamTokenModel.delete(token.id);
+      const purged = await TeamTokenModel.hardDelete(token.id);
+      expect(purged).toBe(true);
+
+      const rows = await db
+        .select()
+        .from(schema.teamTokensTable)
+        .where(eq(schema.teamTokensTable.id, token.id));
+      expect(rows).toHaveLength(0);
     });
   });
 });

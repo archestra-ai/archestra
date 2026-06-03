@@ -34,21 +34,26 @@ vi.mock("@/components/page-layout", () => ({
   ),
 }));
 
-// lazily loaded by the page on first search; the real search logic in
-// ../_parts/skill-index runs against these entries.
-vi.mock("../_parts/skill-index-data", () => ({
-  SKILL_INDEX_ENTRY_COUNT: 1,
-  SKILL_INDEX_ENTRIES: [
-    {
-      repo: "acme/skills",
-      repoDescription: "Example skills.",
-      skillPath: "skills/policy-designer",
-      name: "Policy Designer",
-      description: "Write tool invocation policies.",
-      compatibility: null,
-      fileCount: 3,
+// the page queries the backend skill catalog on each (debounced) search; stub
+// the query hook so the page renders a single deterministic result.
+vi.mock("@/lib/skills/skill.query", () => ({
+  useSearchSkillCatalog: () => ({
+    data: {
+      totalCount: 1,
+      results: [
+        {
+          repo: "acme/skills",
+          skillPath: "skills/policy-designer",
+          name: "Policy Designer",
+          description: "Write tool invocation policies.",
+          compatibility: null,
+          fileCount: 3,
+        },
+      ],
     },
-  ],
+    isLoading: false,
+    isError: false,
+  }),
 }));
 
 vi.mock("../_parts/import-skills-dialog", () => ({

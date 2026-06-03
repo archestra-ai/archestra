@@ -113,6 +113,42 @@ describe("ImportSkillsDialog", () => {
     expect(onImported).toHaveBeenCalled();
   });
 
+  it("keeps the dialog open when the import created nothing", async () => {
+    mocks.importGithubSkills.mockResolvedValue({
+      created: [],
+      skipped: ["skills/target"],
+    });
+    const onImported = vi.fn();
+    const onOpenChange = vi.fn();
+
+    render(
+      <ImportSkillsDialog
+        open
+        onOpenChange={onOpenChange}
+        onImported={onImported}
+        initialRepoUrl="acme/skills"
+        initialSkill={{
+          skillPath: "skills/target",
+          name: "Target skill",
+          description: "Target skill description",
+          compatibility: null,
+          fileCount: 3,
+        }}
+        autoDiscover
+      />,
+    );
+
+    await userEvent.click(
+      await screen.findByRole("button", { name: /^Import/ }),
+    );
+
+    await waitFor(() => {
+      expect(mocks.importGithubSkills).toHaveBeenCalled();
+    });
+    expect(onImported).not.toHaveBeenCalled();
+    expect(onOpenChange).not.toHaveBeenCalledWith(false);
+  });
+
   it("can show a repo-root indexed skill", async () => {
     render(
       <ImportSkillsDialog

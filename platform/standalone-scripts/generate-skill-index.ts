@@ -19,8 +19,9 @@ interface SkillIndexError {
   message: string;
 }
 
-// repos are normalized out and skills are positional tuples to keep the shipped
-// artifact small; the frontend rehydrates via decodeSkillIndex in skill-index.ts.
+// repos are normalized out and skills are positional tuples to keep the
+// artifact small; the backend rehydrates via decodeSkillCatalog in
+// backend/src/skills/skill-catalog-index.ts.
 type CompactRepo = [repo: string, repoDescription: string];
 type CompactSkill = [
   repoIndex: number,
@@ -76,15 +77,40 @@ const scriptPath = fileURLToPath(import.meta.url);
 const platformRoot = path.resolve(path.dirname(scriptPath), "..");
 const outputPath = path.join(
   platformRoot,
-  "frontend/src/app/agents/skills/_parts/skill-index.generated.json",
+  "backend/src/skills/skill-catalog.generated.json",
 );
 
 async function main() {
+  if (!process.env.GITHUB_TOKEN) {
+    console.warn(
+      `No GITHUB_TOKEN set: crawling ${POPULAR_REPOS.length} repos unauthenticated will likely exceed GitHub's 60 req/hour limit. Set GITHUB_TOKEN to regenerate the full index.`,
+    );
+  }
+
   const results = await mapConcurrent(
     POPULAR_REPOS,
     REPO_CONCURRENCY,
     async (repo) => crawlRepo(repo),
   );
+
+  // refuse to overwrite the checked-in index with a partial crawl — a single
+  // failed repo (rate limiting, network, truncated tree) would silently drop
+  // every skill it contains.
+  const incomplete = results.filter((result) => !result.ok);
+  if (incomplete.length > 0) {
+    console.error(
+      `Aborting without writing: ${incomplete.length}/${POPULAR_REPOS.length} repositories could not be fully crawled. The existing index was left untouched.`,
+    );
+    for (const result of incomplete) {
+      for (const error of result.errors) {
+        if (error.path === null) {
+          console.error(`  ${error.repo}: ${error.message}`);
+        }
+      }
+    }
+    process.exitCode = 1;
+    return;
+  }
 
   const crawled = results.flatMap((result) => result.skills);
   crawled.sort(compareCrawledSkills);
@@ -118,6 +144,9 @@ async function main() {
 
 async function crawlRepo(repo: (typeof POPULAR_REPOS)[number]) {
   const errors: SkillIndexError[] = [];
+  // a repo is only "ok" if we crawled its whole tree; a thrown request (e.g.
+  // rate limiting) or a truncated tree means we'd be writing a partial index.
+  let ok = true;
   try {
     const repoResponse = await fetchGithubJson<GithubRepoResponse>(
       `${GITHUB_API_URL}/repos/${repo.repo}`,
@@ -130,6 +159,7 @@ async function crawlRepo(repo: (typeof POPULAR_REPOS)[number]) {
     );
 
     if (tree.truncated) {
+      ok = false;
       errors.push({
         repo: repo.repo,
         path: null,
@@ -191,6 +221,7 @@ async function crawlRepo(repo: (typeof POPULAR_REPOS)[number]) {
     return {
       skills: parsed.filter((skill) => skill !== null),
       errors,
+      ok,
     };
   } catch (error) {
     return {
@@ -203,6 +234,7 @@ async function crawlRepo(repo: (typeof POPULAR_REPOS)[number]) {
           message: errorMessage(error),
         },
       ],
+      ok: false,
     };
   }
 }

@@ -1,4 +1,8 @@
-export interface SkillIndexEntry {
+// token inverted index over the crawled public-GitHub skill catalog. pure
+// logic with no I/O: `skill-catalog.ts` owns loading the generated data and
+// building the index once; this module owns the data shapes and the search.
+
+export interface SkillCatalogEntry {
   repo: string;
   repoDescription: string;
   skillPath: string;
@@ -10,8 +14,8 @@ export interface SkillIndexEntry {
 
 // ===== Compact on-disk format (decoded once at load) =====
 
-// repos are normalized out of the per-skill rows so the 50 repo strings aren't
-// duplicated across 2,445 skills; skills are positional tuples to drop repeated
+// repos are normalized out of the per-skill rows so the repo strings aren't
+// duplicated across every skill; skills are positional tuples to drop repeated
 // JSON key names. See standalone-scripts/generate-skill-index.ts.
 type CompactRepo = [repo: string, repoDescription: string];
 type CompactSkill = [
@@ -23,12 +27,14 @@ type CompactSkill = [
   fileCount: number,
 ];
 
-export interface CompactSkillIndex {
+export interface CompactSkillCatalog {
   repos: CompactRepo[];
   skills: CompactSkill[];
 }
 
-export function decodeSkillIndex(data: CompactSkillIndex): SkillIndexEntry[] {
+export function decodeSkillCatalog(
+  data: CompactSkillCatalog,
+): SkillCatalogEntry[] {
   return data.skills.map(
     ([repoIndex, skillPath, name, description, compatibility, fileCount]) => {
       // reuse the repo/description string references from the repos table so
@@ -47,9 +53,9 @@ export function decodeSkillIndex(data: CompactSkillIndex): SkillIndexEntry[] {
   );
 }
 
-// ===== Token inverted index (built once at load, not shipped) =====
+// ===== Token inverted index (built once at load) =====
 
-// Field a token was found in, ordered by search weight (lower = stronger).
+// field a token was found in, ordered by search weight (lower = stronger).
 const Field = {
   Name: 0,
   Repo: 1,
@@ -60,31 +66,31 @@ const Field = {
 } as const;
 type Field = (typeof Field)[keyof typeof Field];
 
-// Per-field score; Field.Name is scored separately (exact vs prefix).
+// per-field score; Field.Name is scored separately (exact vs prefix).
 const FIELD_WEIGHT = [0, 35, 30, 25, 15, 10];
 const NAME_EXACT_WEIGHT = 100;
 const NAME_PREFIX_WEIGHT = 80;
 const FULL_NAME_MATCH_BONUS = 120;
 
-// A posting packs (entryIndex, field) into one integer: entryIndex * 8 + field.
+// a posting packs (entryIndex, field) into one integer: entryIndex * 8 + field.
 // Field fits in 3 bits (0..5), so the shift is lossless and avoids allocating
 // an object per (token, entry) pair.
 const FIELD_BITS = 3;
 const FIELD_MASK = (1 << FIELD_BITS) - 1;
 
-export interface SkillSearchIndex {
-  entries: readonly SkillIndexEntry[];
-  /** Sorted distinct tokens, for prefix range scans via binary search. */
+export interface SkillCatalogSearchIndex {
+  entries: readonly SkillCatalogEntry[];
+  /** sorted distinct tokens, for prefix range scans via binary search. */
   tokens: string[];
   /** token -> packed postings. */
   postings: Map<string, number[]>;
-  /** Normalized full name per entry, for the exact-name bonus. */
+  /** normalized full name per entry, for the exact-name bonus. */
   normalizedNames: string[];
 }
 
-export function buildSkillIndex(
-  entries: readonly SkillIndexEntry[],
-): SkillSearchIndex {
+export function buildSkillCatalogIndex(
+  entries: readonly SkillCatalogEntry[],
+): SkillCatalogSearchIndex {
   const postings = new Map<string, number[]>();
   const normalizedNames = new Array<string>(entries.length);
 
@@ -118,11 +124,11 @@ export function buildSkillIndex(
   };
 }
 
-export function searchSkillIndex(
-  index: SkillSearchIndex,
+export function searchSkillCatalogIndex(
+  index: SkillCatalogSearchIndex,
   query: string,
   limit = 100,
-): SkillIndexEntry[] {
+): SkillCatalogEntry[] {
   const queryTokens = tokenize(query);
   if (queryTokens.length === 0) return [];
 
@@ -166,7 +172,7 @@ export function searchSkillIndex(
   if (scores === null) return [];
 
   const joinedQuery = queryTokens.join(" ");
-  const ranked: { entry: SkillIndexEntry; score: number }[] = [];
+  const ranked: { entry: SkillCatalogEntry; score: number }[] = [];
   for (const [entryIndex, score] of scores) {
     const bonus =
       index.normalizedNames[entryIndex] === joinedQuery
@@ -179,14 +185,14 @@ export function searchSkillIndex(
   return ranked.slice(0, limit).map(({ entry }) => entry);
 }
 
-/** Convenience for ad-hoc/tested searches: build a one-shot index, then query. */
-export function searchSkillIndexEntries(params: {
-  entries: readonly SkillIndexEntry[];
+/** convenience for tests: build a one-shot index, then query. */
+export function searchSkillCatalogEntries(params: {
+  entries: readonly SkillCatalogEntry[];
   query: string;
   limit?: number;
-}): SkillIndexEntry[] {
-  return searchSkillIndex(
-    buildSkillIndex(params.entries),
+}): SkillCatalogEntry[] {
+  return searchSkillCatalogIndex(
+    buildSkillCatalogIndex(params.entries),
     params.query,
     params.limit,
   );
@@ -205,7 +211,7 @@ function indexField(
   }
 }
 
-/** Tokens in `sorted` that equal `prefix` or start with it (a contiguous run). */
+/** tokens in `sorted` that equal `prefix` or start with it (a contiguous run). */
 function matchingTokens(sorted: string[], prefix: string): string[] {
   let lo = 0;
   let hi = sorted.length;
@@ -222,8 +228,8 @@ function matchingTokens(sorted: string[], prefix: string): string[] {
 }
 
 function compareRanked(
-  left: { entry: SkillIndexEntry; score: number },
-  right: { entry: SkillIndexEntry; score: number },
+  left: { entry: SkillCatalogEntry; score: number },
+  right: { entry: SkillCatalogEntry; score: number },
 ): number {
   if (left.score !== right.score) return right.score - left.score;
   const byName = left.entry.name.localeCompare(right.entry.name);

@@ -161,7 +161,10 @@ export function ImportSkillsDialog({
       scope,
       teamIds: scope === "team" ? teamIds : [],
     });
-    if (result) {
+    // only navigate away when something was actually created; if every selected
+    // skill was already in the org (created: [], skipped: [...]) the import was
+    // a no-op, so keep the dialog open — the mutation's toast reports the skip.
+    if (result && result.created.length > 0) {
       handleClose(false);
       onImported?.();
     }

@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { type SkillIndexEntry, searchSkillIndexEntries } from "./skill-index";
+import {
+  type SkillCatalogEntry,
+  searchSkillCatalogEntries,
+} from "./skill-catalog-index";
 
-describe("searchSkillIndexEntries", () => {
+describe("searchSkillCatalogEntries", () => {
   it("ranks skill name matches above repo and description matches", () => {
-    const results = searchSkillIndexEntries({
+    const results = searchSkillCatalogEntries({
       entries: [
         skill({
           name: "Workflow Builder",
@@ -30,7 +33,7 @@ describe("searchSkillIndexEntries", () => {
   });
 
   it("requires every search token to match", () => {
-    const results = searchSkillIndexEntries({
+    const results = searchSkillCatalogEntries({
       entries: [
         skill({
           name: "Policy Designer",
@@ -48,7 +51,7 @@ describe("searchSkillIndexEntries", () => {
   });
 
   it("matches token prefixes", () => {
-    const results = searchSkillIndexEntries({
+    const results = searchSkillCatalogEntries({
       entries: [
         skill({ name: "Workflow Builder" }),
         skill({ name: "Policy Designer" }),
@@ -60,7 +63,7 @@ describe("searchSkillIndexEntries", () => {
   });
 
   it("ignores stop words in the query", () => {
-    const results = searchSkillIndexEntries({
+    const results = searchSkillCatalogEntries({
       entries: [
         skill({
           name: "Policy Designer",
@@ -74,7 +77,7 @@ describe("searchSkillIndexEntries", () => {
   });
 
   it("returns nothing for an all-stop-word query", () => {
-    const results = searchSkillIndexEntries({
+    const results = searchSkillCatalogEntries({
       entries: [skill({ name: "Policy Designer" })],
       query: "the and of",
     });
@@ -83,7 +86,7 @@ describe("searchSkillIndexEntries", () => {
   });
 });
 
-function skill(overrides: Partial<SkillIndexEntry>): SkillIndexEntry {
+function skill(overrides: Partial<SkillCatalogEntry>): SkillCatalogEntry {
   return {
     repo: "acme/skills",
     repoDescription: "Example skill repository.",

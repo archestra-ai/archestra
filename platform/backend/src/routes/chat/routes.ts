@@ -165,10 +165,19 @@ function getMinimalFrontendError(errorForFrontend: ChatErrorResponse) {
   };
 }
 
+function buildLoadToolsWhenNeededSystemPrompt(): string {
+  const searchToolsName = archestraMcpBranding.getToolName(
+    TOOL_SEARCH_TOOLS_SHORT_NAME,
+  );
+  const runToolName = archestraMcpBranding.getToolName(
+    TOOL_RUN_TOOL_SHORT_NAME,
+  );
+
+  return `Some available tools are not listed upfront. If the visible tools do not fit the task, use \`${searchToolsName}\` to find relevant tools, then call \`${runToolName}\` with the selected tool name and arguments. Do not guess hidden tool names without searching unless the exact tool name is already known from the conversation.`;
+}
+
 const UNAVAILABLE_TOOL_ERROR_MESSAGE =
   "The requested tool is not available in this chat. Available tools are listed in the details below; use an exact available tool name for the next tool call.";
-
-const LOAD_TOOLS_WHEN_NEEDED_SYSTEM_PROMPT = `Some available tools are not listed upfront. If the visible tools do not fit the task, use \`${TOOL_SEARCH_TOOLS_SHORT_NAME}\` to find relevant tools, then call \`${TOOL_RUN_TOOL_SHORT_NAME}\` with the selected tool name and arguments. Do not guess hidden tool names without searching unless the exact tool name is already known from the conversation.`;
 
 type UnavailableToolErrorDetails = {
   type: "unavailable_tool";
@@ -408,7 +417,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
         const toolLoadingInstructions =
           toolExposureMode === "search_and_run_only"
-            ? LOAD_TOOLS_WHEN_NEEDED_SYSTEM_PROMPT
+            ? buildLoadToolsWhenNeededSystemPrompt()
             : "";
 
         systemPrompt =

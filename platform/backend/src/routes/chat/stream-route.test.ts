@@ -1,5 +1,10 @@
+import {
+  TOOL_RUN_TOOL_SHORT_NAME,
+  TOOL_SEARCH_TOOLS_SHORT_NAME,
+} from "@shared";
 import { NoSuchToolError } from "ai";
 import { vi } from "vitest";
+import { archestraMcpBranding } from "@/archestra-mcp-server";
 import { MessageModel } from "@/models";
 import ActiveChatRunModel from "@/models/chat-active-run";
 import type { FastifyInstanceWithZod } from "@/server";
@@ -342,6 +347,7 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
   );
 
   afterEach(async () => {
+    archestraMcpBranding.syncFromOrganization(null);
     await app.close();
   });
 
@@ -624,8 +630,12 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
     expect(systemPrompt).toContain(
       "Some available tools are not listed upfront",
     );
-    expect(systemPrompt).toContain("use `search_tools` to find relevant tools");
-    expect(systemPrompt).toContain("then call `run_tool`");
+    expect(systemPrompt).toContain(
+      `use \`${archestraMcpBranding.getToolName(TOOL_SEARCH_TOOLS_SHORT_NAME)}\` to find relevant tools`,
+    );
+    expect(systemPrompt).toContain(
+      `then call \`${archestraMcpBranding.getToolName(TOOL_RUN_TOOL_SHORT_NAME)}\``,
+    );
     expect(systemPrompt).toContain("You are a careful analyst.");
     expect(systemPrompt?.indexOf("Some available tools")).toBeLessThan(
       systemPrompt?.indexOf("You are a careful analyst.") ?? -1,
@@ -662,8 +672,51 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
     expect(systemPrompt).toContain(
       "Some available tools are not listed upfront",
     );
-    expect(systemPrompt).toContain("use `search_tools` to find relevant tools");
-    expect(systemPrompt).toContain("then call `run_tool`");
+    expect(systemPrompt).toContain(
+      `use \`${archestraMcpBranding.getToolName(TOOL_SEARCH_TOOLS_SHORT_NAME)}\` to find relevant tools`,
+    );
+    expect(systemPrompt).toContain(
+      `then call \`${archestraMcpBranding.getToolName(TOOL_RUN_TOOL_SHORT_NAME)}\``,
+    );
+  });
+
+  test("uses branded full tool names in load-tools guidance", async () => {
+    archestraMcpBranding.syncFromOrganization({
+      appName: "Custom Ops",
+      iconLogo: null,
+    });
+    const { AgentModel } = await import("@/models");
+    await AgentModel.update(agentId, {
+      toolExposureMode: "search_and_run_only",
+      systemPrompt: null,
+    });
+    mockStreamText.mockClear();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/chat",
+      payload: {
+        id: conversationId,
+        messages: [
+          {
+            id: "msg-1",
+            role: "user",
+            parts: [{ type: "text", text: "hello" }],
+          },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+
+    const systemPrompt = mockStreamText.mock.calls[0]?.[0].system;
+    expect(systemPrompt).toContain(
+      "use `custom_ops__search_tools` to find relevant tools",
+    );
+    expect(systemPrompt).toContain("then call `custom_ops__run_tool`");
+    expect(systemPrompt).not.toContain("use `search_tools`");
+    expect(systemPrompt).not.toContain("then call `run_tool`");
   });
 
   test("does not add load-tools guidance for fully exposed tools", async () => {

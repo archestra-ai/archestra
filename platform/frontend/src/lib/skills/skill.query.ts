@@ -74,8 +74,10 @@ export function useSearchSkillCatalog(search: string) {
     queryFn: async () => {
       const { data, error } = await searchSkillCatalog({ query: { q: query } });
       if (error) {
+        // re-throw so the query enters its error state and the page renders
+        // its "could not search" branch, rather than an empty-results state.
         handleApiError(error);
-        return null;
+        throw new Error(getApiErrorMessage(error));
       }
       return data;
     },

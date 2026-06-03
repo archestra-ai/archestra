@@ -559,6 +559,13 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // before persistence, so work on a cloned object instead of the request body.
       const restBody = structuredClone(restBodyInput);
 
+      // Secret FK columns are server-managed (see POST): a client-supplied id
+      // would otherwise be persisted onto the row, repointing it at another
+      // org's secret. Secret handling below sets them from the existing row.
+      restBody.clientSecretId = undefined;
+      restBody.localConfigSecretId = undefined;
+      restBody.presetSecretId = undefined;
+
       const { success: isAdmin } = await hasPermission(
         { mcpServerInstallation: ["admin"] },
         request.headers,

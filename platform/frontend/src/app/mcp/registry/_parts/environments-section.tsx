@@ -2,25 +2,18 @@
 
 import { DocsPage, getDocsUrl } from "@shared";
 import type { ColumnDef } from "@tanstack/react-table";
-import { Info, Pencil, Plus, Trash2 } from "lucide-react";
+import { Info, Pencil, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { ExternalDocsLink } from "@/components/external-docs-link";
+import { FormDialog } from "@/components/form-dialog";
 import { ReinstallConfirmBar } from "@/components/reinstall-confirm-bar";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
-import {
-  Dialog,
-  DialogBody,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { DialogBody, DialogStickyFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -77,14 +70,21 @@ type EnvironmentTableRow =
     }
   | (EnvironmentWithAssignedCount & { kind: "environment" });
 
-export function EnvironmentsSection({ canEdit }: { canEdit: boolean }) {
+export function EnvironmentsSection({
+  canEdit,
+  createOpen,
+  onCreateOpenChange,
+}: {
+  canEdit: boolean;
+  createOpen: boolean;
+  onCreateOpenChange: (open: boolean) => void;
+}) {
   const { data: environmentList, isLoading } = useEnvironments();
   const environments = environmentList?.environments ?? [];
   const defaultAssignedCatalogCount =
     environmentList?.defaultAssignedCatalogCount ?? 0;
   const { data: capabilities } = useK8sCapabilities(canEdit);
   const defaultEnvironment = useDefaultEnvironment();
-  const [createOpen, setCreateOpen] = useState(false);
   const [editDefaultOpen, setEditDefaultOpen] = useState(false);
   const [editTarget, setEditTarget] =
     useState<EnvironmentWithAssignedCount | null>(null);
@@ -207,16 +207,6 @@ export function EnvironmentsSection({ canEdit }: { canEdit: boolean }) {
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-end">
-        <Button
-          className="h-9 shrink-0 px-3 text-sm"
-          disabled={!canEdit}
-          onClick={() => setCreateOpen(true)}
-        >
-          <Plus className="h-4 w-4" />
-          Add Environment
-        </Button>
-      </div>
       <DataTable
         columns={columns}
         data={rows}
@@ -228,7 +218,7 @@ export function EnvironmentsSection({ canEdit }: { canEdit: boolean }) {
       <EnvironmentEditorDialog
         mode="create"
         open={createOpen}
-        onOpenChange={setCreateOpen}
+        onOpenChange={onCreateOpenChange}
         environment={null}
         capabilities={capabilities}
       />
@@ -479,164 +469,164 @@ function EnvironmentEditorDialog({
     }
   };
 
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg max-h-[85vh] overflow-hidden">
-        <DialogHeader>
-          <DialogTitle>
-            {mode === "create"
-              ? "Add environment"
-              : mode === "default"
-                ? "Edit default environment"
-                : "Edit environment"}
-          </DialogTitle>
-          <DialogDescription>
-            {mode === "create"
-              ? "Create an org-level deployment environment."
-              : mode === "default"
-                ? "Update the default environment."
-                : "Update this environment."}
-          </DialogDescription>
-        </DialogHeader>
-        <DialogBody className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="environment-name">
-              Name <span className="text-destructive">*</span>
-            </Label>
-            <Input
-              id="environment-name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. Production"
-              maxLength={50}
-              disabled={isPending}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="environment-description">Description</Label>
-            <Textarea
-              id="environment-description"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              maxLength={500}
-              className="min-h-20"
-              disabled={isPending}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="environment-namespace">Namespace</Label>
-            <Select
-              value={
-                trimmedNamespace === ""
-                  ? NAMESPACE_DEFAULT_VALUE
-                  : trimmedNamespace
-              }
-              onValueChange={(value) => {
-                setNamespace(value === NAMESPACE_DEFAULT_VALUE ? "" : value);
-                setShowConfirm(false);
-              }}
-              disabled={isPending}
-            >
-              <SelectTrigger id="environment-namespace" className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={NAMESPACE_DEFAULT_VALUE}>
-                  {runtimeEnabled && orchestratorNamespace
-                    ? `Use default (${orchestratorNamespace})`
-                    : "Use default"}
-                </SelectItem>
-                {namespaceOptions.map((ns) => (
-                  <SelectItem key={ns} value={ns}>
-                    {ns}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-2">
-            <div className="rounded-md border p-4 space-y-4">
-              <div className="flex items-start justify-between gap-4">
-                <div className="space-y-1">
-                  <Label htmlFor="network-policy-enabled">
-                    Network Egress Policy
-                  </Label>
-                  <p className="text-xs text-muted-foreground">
-                    Configure outbound network access for MCP workloads in this
-                    environment.{" "}
-                    <ExternalDocsLink href={NETWORK_POLICY_DOCS_URL}>
-                      View docs
-                    </ExternalDocsLink>
-                  </p>
-                </div>
-                <Switch
-                  id="network-policy-enabled"
-                  checked={networkPolicyEnabled}
-                  onCheckedChange={setNetworkPolicyEnabled}
-                  disabled={isPending}
-                />
-              </div>
+  const title =
+    mode === "create"
+      ? "Add environment"
+      : mode === "default"
+        ? "Edit default environment"
+        : "Edit environment";
+  const dialogDescription =
+    mode === "create"
+      ? "Create an org-level deployment environment."
+      : mode === "default"
+        ? "Update the default environment."
+        : "Update this environment.";
 
-              {networkPolicyEnabled ? (
-                <NetworkPolicyFields
-                  egressMode={egressMode}
-                  setEgressMode={setEgressMode}
-                  domainPreset={domainPreset}
-                  setDomainPreset={setDomainPreset}
-                  allowedDomainsText={allowedDomainsText}
-                  setAllowedDomainsText={setAllowedDomainsText}
-                  allowedCidrsText={allowedCidrsText}
-                  setAllowedCidrsText={setAllowedCidrsText}
-                  supportsFqdn={supportsFqdn}
-                  provider={capabilities?.networkPolicy.provider ?? null}
-                  disabled={isPending}
-                />
-              ) : null}
-            </div>
+  return (
+    <FormDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title={title}
+      description={dialogDescription}
+      size="medium"
+      className="sm:max-w-3xl h-[88vh]"
+    >
+      <DialogBody className="space-y-4">
+        <div className="space-y-2">
+          <Label htmlFor="environment-name">
+            Name <span className="text-destructive">*</span>
+          </Label>
+          <Input
+            id="environment-name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="e.g. Production"
+            maxLength={50}
+            disabled={isPending}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="environment-description">Description</Label>
+          <Textarea
+            id="environment-description"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            maxLength={500}
+            className="min-h-20"
+            disabled={isPending}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="environment-namespace">Namespace</Label>
+          <Select
+            value={
+              trimmedNamespace === ""
+                ? NAMESPACE_DEFAULT_VALUE
+                : trimmedNamespace
+            }
+            onValueChange={(value) => {
+              setNamespace(value === NAMESPACE_DEFAULT_VALUE ? "" : value);
+              setShowConfirm(false);
+            }}
+            disabled={isPending}
+          >
+            <SelectTrigger id="environment-namespace" className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={NAMESPACE_DEFAULT_VALUE}>
+                {runtimeEnabled && orchestratorNamespace
+                  ? `Use default (${orchestratorNamespace})`
+                  : "Use default"}
+              </SelectItem>
+              {namespaceOptions.map((ns) => (
+                <SelectItem key={ns} value={ns}>
+                  {ns}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex items-start justify-between gap-4">
+          <div className="space-y-1">
+            <Label htmlFor="environment-restricted">Restricted</Label>
+            <p className="text-xs text-muted-foreground">
+              Only users who hold the{" "}
+              <code className="rounded bg-muted px-1 py-0.5 font-mono">
+                environment:deploy-to-restricted
+              </code>{" "}
+              permission are allowed to deploy in this environment.
+            </p>
           </div>
+          <Switch
+            id="environment-restricted"
+            checked={restricted}
+            onCheckedChange={setRestricted}
+            disabled={isPending}
+          />
+        </div>
+        <section className="space-y-4 rounded-md border p-4">
           <div className="flex items-start justify-between gap-4">
             <div className="space-y-1">
-              <Label htmlFor="environment-restricted">Restricted</Label>
+              <Label htmlFor="network-policy-enabled">
+                Network Egress Policy
+              </Label>
               <p className="text-xs text-muted-foreground">
-                Only users who hold the{" "}
-                <code className="rounded bg-muted px-1 py-0.5 font-mono">
-                  environment:deploy-to-restricted
-                </code>{" "}
-                permission are allowed to deploy in this environment.
+                Configure outbound network access for MCP workloads in this
+                environment.{" "}
+                <ExternalDocsLink href={NETWORK_POLICY_DOCS_URL}>
+                  View docs
+                </ExternalDocsLink>
               </p>
             </div>
             <Switch
-              id="environment-restricted"
-              checked={restricted}
-              onCheckedChange={setRestricted}
+              id="network-policy-enabled"
+              checked={networkPolicyEnabled}
+              onCheckedChange={setNetworkPolicyEnabled}
               disabled={isPending}
             />
           </div>
-        </DialogBody>
-        {showConfirm ? (
-          <ReinstallConfirmBar
-            mode="auto"
-            affectedServerCount={environment?.assignedCatalogCount ?? 0}
-            isSubmitting={isPending}
-            onCancel={() => setShowConfirm(false)}
-            onConfirm={doSave}
-          />
-        ) : (
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => onOpenChange(false)}
+
+          {networkPolicyEnabled ? (
+            <NetworkPolicyFields
+              egressMode={egressMode}
+              setEgressMode={setEgressMode}
+              domainPreset={domainPreset}
+              setDomainPreset={setDomainPreset}
+              allowedDomainsText={allowedDomainsText}
+              setAllowedDomainsText={setAllowedDomainsText}
+              allowedCidrsText={allowedCidrsText}
+              setAllowedCidrsText={setAllowedCidrsText}
+              supportsFqdn={supportsFqdn}
+              provider={capabilities?.networkPolicy.provider ?? null}
               disabled={isPending}
-            >
-              Cancel
-            </Button>
-            <Button onClick={handleSave} disabled={!canSave || isPending}>
-              {isPending ? "Saving…" : "Save"}
-            </Button>
-          </DialogFooter>
-        )}
-      </DialogContent>
-    </Dialog>
+            />
+          ) : null}
+        </section>
+      </DialogBody>
+      {showConfirm ? (
+        <ReinstallConfirmBar
+          mode="auto"
+          affectedServerCount={environment?.assignedCatalogCount ?? 0}
+          isSubmitting={isPending}
+          onCancel={() => setShowConfirm(false)}
+          onConfirm={doSave}
+        />
+      ) : (
+        <DialogStickyFooter>
+          <Button
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+            disabled={isPending}
+          >
+            Cancel
+          </Button>
+          <Button onClick={handleSave} disabled={!canSave || isPending}>
+            {isPending ? "Saving…" : "Save"}
+          </Button>
+        </DialogStickyFooter>
+      )}
+    </FormDialog>
   );
 }
 

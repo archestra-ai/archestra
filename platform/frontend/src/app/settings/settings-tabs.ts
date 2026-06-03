@@ -18,14 +18,14 @@ export function useSettingsTabs() {
     ...(permissionMap?.["/settings/agents"]
       ? [{ label: "Agents", href: "/settings/agents" }]
       : []),
-    ...(permissionMap?.["/settings/environments"]
-      ? [{ label: "Environments", href: "/settings/environments" }]
-      : []),
     ...(permissionMap?.["/settings/llm"]
       ? [{ label: "LLM", href: "/settings/llm" }]
       : []),
     ...(permissionMap?.["/settings/knowledge"]
       ? [{ label: "Knowledge", href: "/settings/knowledge" }]
+      : []),
+    ...(permissionMap?.["/settings/environments"]
+      ? [{ label: "Environments", href: "/settings/environments" }]
       : []),
     ...(permissionMap?.["/settings/users"]
       ? [{ label: "Users", href: "/settings/users" }]

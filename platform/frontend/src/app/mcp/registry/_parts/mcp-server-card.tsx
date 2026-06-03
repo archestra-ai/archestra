@@ -56,6 +56,7 @@ import { useFeature } from "@/lib/config/config.query";
 import {
   fetchCatalogTools,
   useCatalogPresets,
+  useRefreshInternalMcpCatalogImage,
   useReinstallInternalMcpCatalogItem,
 } from "@/lib/mcp/internal-mcp-catalog.query";
 import { useMcpServers } from "@/lib/mcp/mcp-server.query";
@@ -542,6 +543,14 @@ export function McpServerCard({
   const reinstallCatalogMutation = useReinstallInternalMcpCatalogItem();
   const triggerCatalogReinstall = () =>
     reinstallCatalogMutation.mutate(item.id);
+  const refreshImageMutation = useRefreshInternalMcpCatalogImage();
+  const hasDockerImage = Boolean(item.localConfig?.dockerImage);
+  const showRefreshImage =
+    variant === "local" &&
+    hasDockerImage &&
+    allServersAcrossPresets.some((server) => server.serverType === "local") &&
+    canEditCatalog;
+  const triggerRefreshImage = () => refreshImageMutation.mutate(item.id);
 
   // Show ONE Reinstall button. For admins on a multi-tenant local catalog,
   // a single click drives both the per-install input collection (existing
@@ -982,6 +991,32 @@ export function McpServerCard({
             <RefreshCw className="h-4 w-4" />
             Reinstall
           </PermissionButton>
+        )}
+        {!isInstalling && showRefreshImage && (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <PermissionButton
+                  permissions={{ mcpRegistry: ["update"] }}
+                  onClick={triggerRefreshImage}
+                  disabled={refreshImageMutation.isPending}
+                  size="sm"
+                  variant="outline"
+                  className="flex-1"
+                >
+                  <RefreshCw
+                    className={`h-4 w-4 ${
+                      refreshImageMutation.isPending ? "animate-spin" : ""
+                    }`}
+                  />
+                  Refresh image
+                </PermissionButton>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">
+                <p>Pull the current tag again and restart pods.</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         )}
         {!isInstalling && (
           <>

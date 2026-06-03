@@ -1187,6 +1187,76 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
+  fastify.post(
+    "/api/internal_mcp_catalog/:id/refresh-image",
+    {
+      schema: {
+        operationId: RouteId.RefreshInternalMcpCatalogImage,
+        description:
+          "Refresh the configured Docker image by restarting all local MCP server pods for a catalog.",
+        tags: ["MCP Catalog"],
+        params: z.object({
+          id: UuidIdSchema,
+        }),
+        response: constructResponseSchema(DeleteObjectResponseSchema),
+      },
+    },
+    async (request, reply) => {
+      const { id } = request.params;
+
+      const { success: isAdmin } = await hasPermission(
+        { mcpServerInstallation: ["admin"] },
+        request.headers,
+      );
+
+      const catalogItem = await InternalMcpCatalogModel.findById(id, {
+        userId: request.user.id,
+        isAdmin,
+        organizationId: request.organizationId,
+        expandSecrets: false,
+      });
+      if (!catalogItem) {
+        throw new ApiError(404, "Catalog item not found");
+      }
+
+      if (
+        !isAdmin &&
+        (catalogItem.scope !== "personal" ||
+          catalogItem.authorId !== request.user.id)
+      ) {
+        throw new ApiError(
+          403,
+          "Only catalog editors can refresh this catalog image",
+        );
+      }
+
+      const children =
+        catalogItem.parentCatalogItemId === null
+          ? await InternalMcpCatalogModel.findChildren(id)
+          : [];
+      const targetCatalogItems = [catalogItem, ...children].filter(
+        (item) => item.serverType === "local" && item.localConfig?.dockerImage,
+      );
+
+      if (targetCatalogItems.length === 0) {
+        throw new ApiError(
+          400,
+          "Image refresh is only supported for local catalogs with a Docker image",
+        );
+      }
+
+      try {
+        await Promise.all(targetCatalogItems.map(refreshCatalogImage));
+      } catch (error) {
+        const errorMessage =
+          error instanceof Error ? error.message : "Unknown error";
+        throw new ApiError(500, errorMessage);
+      }
+
+      return reply.send({ success: true });
+    },
+  );
+
   fastify.delete(
     "/api/internal_mcp_catalog/:id",
     {
@@ -2267,6 +2337,46 @@ async function cascadeReinstallForCatalog(
       );
     }
   });
+}
+
+async function refreshCatalogImage(catalogItem: InternalMcpCatalog) {
+  if (catalogItem.multitenant === true) {
+    await reinstallMultitenantCatalog(catalogItem);
+    return;
+  }
+
+  const installs = await McpServerModel.findByCatalogId(catalogItem.id);
+  await Promise.all(
+    installs.map(async (server) => {
+      await McpServerModel.update(server.id, {
+        localInstallationStatus: "pending",
+        localInstallationError: null,
+      });
+      broadcastMcpInstallationStatus(server.id, "pending", null);
+
+      try {
+        await autoReinstallServer(server, catalogItem);
+        await McpServerModel.update(server.id, {
+          localInstallationStatus: "success",
+          localInstallationError: null,
+        });
+        broadcastMcpInstallationStatus(server.id, "success", null);
+      } catch (error) {
+        const errorMessage =
+          error instanceof Error ? error.message : "Unknown error";
+        logger.error(
+          { err: error, serverId: server.id, catalogId: catalogItem.id },
+          "Image refresh failed for MCP server install",
+        );
+        await McpServerModel.update(server.id, {
+          localInstallationStatus: "error",
+          localInstallationError: errorMessage,
+        });
+        broadcastMcpInstallationStatus(server.id, "error", errorMessage);
+        throw error;
+      }
+    }),
+  );
 }
 
 /**

@@ -144,8 +144,17 @@ export function ImportSkillsDialog({
     if (!autoDiscover) return;
     if (initialSkill) {
       // launched from the skill index: the exact skill is already known, so
-      // skip the repo-wide scan and go straight to the confirm step.
-      setDiscovered([{ ...initialSkill, exists: false }]);
+      // skip the repo-wide scan and go straight to the confirm step. the index
+      // doesn't carry allowedTools/templated (the server reads them from the
+      // manifest at import time), so default them for the preview row.
+      setDiscovered([
+        {
+          ...initialSkill,
+          allowedTools: null,
+          templated: false,
+          exists: false,
+        },
+      ]);
       setSelected(new Set([initialSkill.skillPath]));
     } else if (initialRepoUrl) {
       handleDiscover(initialRepoUrl);

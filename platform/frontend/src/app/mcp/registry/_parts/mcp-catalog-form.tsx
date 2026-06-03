@@ -171,17 +171,11 @@ export function McpCatalogForm({
   const mcpServerBaseImage = useFeature("mcpServerBaseImage") ?? "";
 
   const isLocalMcpEnabled = useFeature("orchestratorK8sRuntime");
-  const advancedToolFeaturesEnabled =
-    useFeature("advancedToolFeaturesEnabled") === true;
   const isEnterpriseCoreEnabled = useEnterpriseFeature("core");
   const appName = useAppName();
   const mcpAuthDocsUrl = getFrontendDocsUrl(
     DocsPage.McpAuthentication,
     "upstream-mcp-server-authentication",
-  );
-  const gatewayLabelsDocsUrl = getFrontendDocsUrl(
-    DocsPage.PlatformMcpGateway,
-    "tool-assignment-mode",
   );
   const mcpAuthTokenExchangeDocsUrl = getFrontendDocsUrl(
     DocsPage.McpAuthentication,
@@ -2258,23 +2252,6 @@ export function McpCatalogForm({
                     </span>
                   )}
                 </div>
-                {advancedToolFeaturesEnabled && (
-                  <p className="text-sm text-muted-foreground">
-                    Organize servers and drive automatic tool assignment.
-                    {gatewayLabelsDocsUrl && (
-                      <>
-                        {" "}
-                        <ExternalDocsLink
-                          href={gatewayLabelsDocsUrl}
-                          className="underline"
-                          showIcon={false}
-                        >
-                          Learn more
-                        </ExternalDocsLink>
-                      </>
-                    )}
-                  </p>
-                )}
               </div>
               <div className="pt-4">
                 <ProfileLabels

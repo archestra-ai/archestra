@@ -35539,13 +35539,6 @@
                               "search_and_run_only"
                             ]
                           },
-                          "toolAssignmentMode": {
-                            "type": "string",
-                            "enum": [
-                              "automatic",
-                              "manual"
-                            ]
-                          },
                           "builtInAgentConfig": {
                             "nullable": true,
                             "oneOf": [
@@ -35898,7 +35891,6 @@
                           "identityProviderId",
                           "passthroughHeaders",
                           "toolExposureMode",
-                          "toolAssignmentMode",
                           "builtInAgentConfig",
                           "builtIn",
                           "createdAt",
@@ -36306,13 +36298,6 @@
                       "search_and_run_only"
                     ]
                   },
-                  "toolAssignmentMode": {
-                    "type": "string",
-                    "enum": [
-                      "automatic",
-                      "manual"
-                    ]
-                  },
                   "builtInAgentConfig": {
                     "nullable": true,
                     "oneOf": [
@@ -36596,13 +36581,6 @@
                       "enum": [
                         "full",
                         "search_and_run_only"
-                      ]
-                    },
-                    "toolAssignmentMode": {
-                      "type": "string",
-                      "enum": [
-                        "automatic",
-                        "manual"
                       ]
                     },
                     "builtInAgentConfig": {
@@ -36957,7 +36935,6 @@
                     "identityProviderId",
                     "passthroughHeaders",
                     "toolExposureMode",
-                    "toolAssignmentMode",
                     "builtInAgentConfig",
                     "builtIn",
                     "createdAt",
@@ -37415,13 +37392,6 @@
                           "search_and_run_only"
                         ]
                       },
-                      "toolAssignmentMode": {
-                        "type": "string",
-                        "enum": [
-                          "automatic",
-                          "manual"
-                        ]
-                      },
                       "builtInAgentConfig": {
                         "nullable": true,
                         "oneOf": [
@@ -37774,7 +37744,6 @@
                       "identityProviderId",
                       "passthroughHeaders",
                       "toolExposureMode",
-                      "toolAssignmentMode",
                       "builtInAgentConfig",
                       "builtIn",
                       "createdAt",
@@ -38150,13 +38119,6 @@
                         "search_and_run_only"
                       ]
                     },
-                    "toolAssignmentMode": {
-                      "type": "string",
-                      "enum": [
-                        "automatic",
-                        "manual"
-                      ]
-                    },
                     "builtInAgentConfig": {
                       "nullable": true,
                       "oneOf": [
@@ -38509,7 +38471,6 @@
                     "identityProviderId",
                     "passthroughHeaders",
                     "toolExposureMode",
-                    "toolAssignmentMode",
                     "builtInAgentConfig",
                     "builtIn",
                     "createdAt",
@@ -38885,13 +38846,6 @@
                         "search_and_run_only"
                       ]
                     },
-                    "toolAssignmentMode": {
-                      "type": "string",
-                      "enum": [
-                        "automatic",
-                        "manual"
-                      ]
-                    },
                     "builtInAgentConfig": {
                       "nullable": true,
                       "oneOf": [
@@ -39244,7 +39198,6 @@
                     "identityProviderId",
                     "passthroughHeaders",
                     "toolExposureMode",
-                    "toolAssignmentMode",
                     "builtInAgentConfig",
                     "builtIn",
                     "createdAt",
@@ -39566,13 +39519,6 @@
                       "considerContextUntrusted": {
                         "type": "boolean"
                       },
-                      "toolAssignmentMode": {
-                        "type": "string",
-                        "enum": [
-                          "automatic",
-                          "manual"
-                        ]
-                      },
                       "toolExposureMode": {
                         "type": "string",
                         "enum": [
@@ -39615,7 +39561,6 @@
                       "icon",
                       "scope",
                       "considerContextUntrusted",
-                      "toolAssignmentMode",
                       "toolExposureMode",
                       "incomingEmailEnabled",
                       "incomingEmailSecurityMode",
@@ -39960,13 +39905,6 @@
                           "enum": [
                             "full",
                             "search_and_run_only"
-                          ]
-                        },
-                        "toolAssignmentMode": {
-                          "type": "string",
-                          "enum": [
-                            "automatic",
-                            "manual"
                           ]
                         },
                         "builtInAgentConfig": {
@@ -40321,7 +40259,6 @@
                         "identityProviderId",
                         "passthroughHeaders",
                         "toolExposureMode",
-                        "toolAssignmentMode",
                         "builtInAgentConfig",
                         "builtIn",
                         "createdAt",
@@ -40744,13 +40681,6 @@
                         "search_and_run_only"
                       ]
                     },
-                    "toolAssignmentMode": {
-                      "type": "string",
-                      "enum": [
-                        "automatic",
-                        "manual"
-                      ]
-                    },
                     "builtInAgentConfig": {
                       "nullable": true,
                       "oneOf": [
@@ -41103,7 +41033,6 @@
                     "identityProviderId",
                     "passthroughHeaders",
                     "toolExposureMode",
-                    "toolAssignmentMode",
                     "builtInAgentConfig",
                     "builtIn",
                     "createdAt",
@@ -41463,13 +41392,6 @@
                       "search_and_run_only"
                     ]
                   },
-                  "toolAssignmentMode": {
-                    "type": "string",
-                    "enum": [
-                      "automatic",
-                      "manual"
-                    ]
-                  },
                   "builtInAgentConfig": {
                     "nullable": true,
                     "oneOf": [
@@ -41758,13 +41680,6 @@
                       "enum": [
                         "full",
                         "search_and_run_only"
-                      ]
-                    },
-                    "toolAssignmentMode": {
-                      "type": "string",
-                      "enum": [
-                        "automatic",
-                        "manual"
                       ]
                     },
                     "builtInAgentConfig": {
@@ -42119,7 +42034,6 @@
                     "identityProviderId",
                     "passthroughHeaders",
                     "toolExposureMode",
-                    "toolAssignmentMode",
                     "builtInAgentConfig",
                     "builtIn",
                     "createdAt",
@@ -42779,13 +42693,6 @@
                         "search_and_run_only"
                       ]
                     },
-                    "toolAssignmentMode": {
-                      "type": "string",
-                      "enum": [
-                        "automatic",
-                        "manual"
-                      ]
-                    },
                     "builtInAgentConfig": {
                       "nullable": true,
                       "oneOf": [
@@ -43138,7 +43045,6 @@
                     "identityProviderId",
                     "passthroughHeaders",
                     "toolExposureMode",
-                    "toolAssignmentMode",
                     "builtInAgentConfig",
                     "builtIn",
                     "createdAt",
@@ -43472,13 +43378,6 @@
                         "considerContextUntrusted": {
                           "type": "boolean"
                         },
-                        "toolAssignmentMode": {
-                          "type": "string",
-                          "enum": [
-                            "automatic",
-                            "manual"
-                          ]
-                        },
                         "toolExposureMode": {
                           "type": "string",
                           "enum": [
@@ -43516,7 +43415,6 @@
                         "icon",
                         "scope",
                         "considerContextUntrusted",
-                        "toolAssignmentMode",
                         "toolExposureMode",
                         "incomingEmailEnabled",
                         "incomingEmailSecurityMode",
@@ -44123,13 +44021,6 @@
                         "search_and_run_only"
                       ]
                     },
-                    "toolAssignmentMode": {
-                      "type": "string",
-                      "enum": [
-                        "automatic",
-                        "manual"
-                      ]
-                    },
                     "builtInAgentConfig": {
                       "nullable": true,
                       "oneOf": [
@@ -44482,7 +44373,6 @@
                     "identityProviderId",
                     "passthroughHeaders",
                     "toolExposureMode",
-                    "toolAssignmentMode",
                     "builtInAgentConfig",
                     "builtIn",
                     "createdAt",
@@ -81716,9 +81606,6 @@
                         "codeRuntime": {
                           "type": "boolean"
                         },
-                        "advancedToolFeaturesEnabled": {
-                          "type": "boolean"
-                        },
                         "agentSkillsEnabled": {
                           "type": "boolean"
                         },
@@ -81809,7 +81696,6 @@
                       "required": [
                         "orchestratorK8sRuntime",
                         "codeRuntime",
-                        "advancedToolFeaturesEnabled",
                         "agentSkillsEnabled",
                         "byosEnabled",
                         "byosVaultKvVersion",

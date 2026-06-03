@@ -74,9 +74,7 @@ See [Credential Resolution](/docs/mcp-authentication#credential-resolution) for 
 
 ## Labels
 
-Registry entries can carry labels — key-value pairs set under **Labels** in the registry form. Labels organize the catalog and act as a selector for [MCP Gateways](/docs/platform-mcp-gateway#tool-assignment-mode) in **Automatic** tool assignment mode. A gateway in Automatic mode receives every tool from every registry entry that shares at least one `key: value` label pair with the gateway.
-
-For example, every catalog entry tagged `department: finance` is automatically wired into a gateway tagged `department: finance`. Adding or removing labels on a registry entry reconciles the affected gateways in sync.
+Registry entries can carry labels — key-value pairs set under **Labels** in the registry form. Labels organize the catalog and make registry entries easier to filter and manage.
 
 ## Environments
 

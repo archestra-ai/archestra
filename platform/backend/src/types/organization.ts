@@ -11,7 +11,6 @@ import { z } from "zod";
 import { schema } from "@/database";
 import { sanitizeSvg } from "@/utils/sanitize-svg";
 import { LimitCleanupIntervalSchema } from "./limit";
-import { ValidationRegexSchema } from "./mcp-preset-entry";
 
 const DATA_URI_PREFIX = "data:image/png;base64,";
 const GIF_DATA_URI_PREFIX = "data:image/gif;base64,";
@@ -426,31 +425,6 @@ export const UpdateConnectionSettingsSchema = z.object({
         });
       }
     }),
-});
-
-export const UpdatePresetEntityNameSchema = z
-  .object({
-    presetEntityName: z.string().trim().min(1).max(50).nullable(),
-    presetEntityNamePlural: z.string().trim().min(1).max(50).nullable(),
-  })
-  .superRefine((value, ctx) => {
-    const singularSet = value.presetEntityName !== null;
-    const pluralSet = value.presetEntityNamePlural !== null;
-    if (singularSet !== pluralSet) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message:
-          "Both presetEntityName and presetEntityNamePlural must be set together (or both null to reset).",
-      });
-    }
-  });
-
-export const UpdatePresetEntityDefaultLabelSchema = z.object({
-  presetEntityDefaultLabel: z.string().trim().min(1).max(50).nullable(),
-});
-
-export const UpdatePresetEntityDefaultValidationRegexSchema = z.object({
-  presetEntityDefaultValidationRegex: ValidationRegexSchema.nullable(),
 });
 
 /**

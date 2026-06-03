@@ -226,16 +226,18 @@ const organizationsTable = pgTable("organization", {
   /**
    * Custom label admins choose for the child-configuration entity of every
    * catalog item (internally still called "preset"). When both singular and
-   * plural are set, the catalog UI exposes the per-item presets section and
-   * replaces "Preset"/"presets" copy. Both must be set together — partial
-   * values are rejected at the API.
+   * plural are set, the catalog UI replaces "Preset"/"presets" copy.
+   *
+   * Deprecated/read-only: the registry admin UI and the write endpoints that
+   * set these were removed. Existing values are still read; no new writes.
    */
   presetEntityName: text("preset_entity_name"),
   presetEntityNamePlural: text("preset_entity_name_plural"),
 
   /**
    * Custom display label for the implicit "default" preset row (parent catalog
-   * item). NULL falls back to "Default" in the UI.
+   * item). NULL falls back to "Default" in the UI. Deprecated/read-only — the
+   * write endpoint was removed.
    */
   presetEntityDefaultLabel: text("preset_entity_default_label"),
 
@@ -300,6 +302,7 @@ const organizationsTable = pgTable("organization", {
    * Validation regex applied to default-scoped field values when installing an
    * MCP server (mirrors `mcp_preset_entries.validation_regex` for the implicit
    * default row). Stored without delimiters or flags. NULL disables validation.
+   * Deprecated/read-only — the write endpoint was removed.
    */
   presetEntityDefaultValidationRegex: text(
     "preset_entity_default_validation_regex",

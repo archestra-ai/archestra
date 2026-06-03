@@ -1,6 +1,5 @@
 import { archestraApiSdk, type archestraApiTypes } from "@shared";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { toast } from "sonner";
+import { useQuery } from "@tanstack/react-query";
 import { handleApiError } from "@/lib/utils";
 
 export const mcpPresetEntryKeys = {
@@ -24,76 +23,5 @@ export function useMcpPresetEntries(enabled = true) {
     },
     enabled,
     staleTime: 5 * 60 * 1000,
-  });
-}
-
-export function useCreateMcpPresetEntry() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async (
-      body: archestraApiTypes.CreateMcpPresetEntryData["body"],
-    ) => {
-      const { data, error } = await archestraApiSdk.createMcpPresetEntry({
-        body,
-      });
-      if (error) {
-        handleApiError(error);
-        return null;
-      }
-      return data;
-    },
-    onSuccess: (entry) => {
-      if (!entry) return;
-      queryClient.invalidateQueries({ queryKey: mcpPresetEntryKeys.list() });
-      toast.success(`${entry.name} added`);
-    },
-  });
-}
-
-export function useUpdateMcpPresetEntry() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async (params: {
-      id: string;
-      body: archestraApiTypes.UpdateMcpPresetEntryData["body"];
-    }) => {
-      const { data, error } = await archestraApiSdk.updateMcpPresetEntry({
-        path: { id: params.id },
-        body: params.body,
-      });
-      if (error) {
-        handleApiError(error);
-        return null;
-      }
-      return data;
-    },
-    onSuccess: (entry) => {
-      if (!entry) return;
-      queryClient.invalidateQueries({ queryKey: mcpPresetEntryKeys.list() });
-      toast.success(`${entry.name} updated`);
-    },
-  });
-}
-
-export function useDeleteMcpPresetEntry() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async (id: string) => {
-      const { data, error } = await archestraApiSdk.deleteMcpPresetEntry({
-        path: { id },
-      });
-      if (error) {
-        handleApiError(error);
-        return null;
-      }
-      return data;
-    },
-    onSuccess: (_data, _id) => {
-      queryClient.invalidateQueries({ queryKey: mcpPresetEntryKeys.list() });
-      // Catalog children with the matching presetEntryId were cascade-deleted.
-      queryClient.invalidateQueries({ queryKey: ["mcp-catalog"] });
-      queryClient.invalidateQueries({ queryKey: ["internal-mcp-catalog"] });
-      toast.success("Entry deleted");
-    },
   });
 }

@@ -25,9 +25,20 @@ export interface ContextWindowEstimate {
 }
 
 /**
- * The parts that make up an assembled request, in stack order (top of the
- * prompt first). Used by the Context Window Visualizer to explain *what* fills
- * the context window, not just how full it is.
+ * Stream event name for the per-category context window breakdown payload.
+ * Used by both the backend emitter and frontend consumer — never use the raw
+ * string literal in either place.
+ */
+export const CONTEXT_WINDOW_BREAKDOWN_EVENT =
+  "data-context-window-breakdown" as const;
+
+/**
+ * Canonical display order of context window categories, matching the
+ * top-to-bottom stack in the assembled request:
+ *   system_prompt → tools → messages → tool_results → files
+ *
+ * The visualizer renders segments in this order; the estimator must produce
+ * segments in this order so the stacked bar reads correctly.
  */
 export const CONTEXT_WINDOW_CATEGORIES = [
   "system_prompt",
@@ -40,48 +51,91 @@ export const CONTEXT_WINDOW_CATEGORIES = [
 export type ContextWindowCategory = (typeof CONTEXT_WINDOW_CATEGORIES)[number];
 
 /**
- * A single contributor within a category (one tool, one message turn, one tool
- * call, one file) — powers the drill-down view that answers "what exactly is
- * filling this part of my context window?".
+ * A single named contributor within a category (one tool definition, one
+ * conversation turn, one tool-result block, one attached file).
+ * Powers the drill-down list inside each gauge.
  */
-export interface ContextWindowItem {
-  label: string;
-  tokens: number;
-}
+export const ContextWindowItemSchema = z.object({
+  /** Human-readable name of the contributor (tool name, file name, etc.). */
+  label: z.string(),
+  /** Estimated token count for this contributor. Always ≥ 0. */
+  tokens: z.number().int().nonnegative(),
+});
 
-export interface ContextWindowSegment {
-  category: ContextWindowCategory;
-  /** Estimated tokens this segment contributes to the request. */
-  tokens: number;
-  /** Largest individual contributors in this category, sorted descending. */
-  items?: ContextWindowItem[];
-}
+export type ContextWindowItem = z.infer<typeof ContextWindowItemSchema>;
 
 /**
- * Per-category breakdown of the request Archestra is about to send, streamed at
- * the start of a turn alongside `ContextWindowEstimate`. Token counts are
- * estimates on the same yardstick that drives auto-compaction; the provider's
- * exact prompt size arrives later via `TokenUsage`.
+ * One category's share of the assembled request.
+ * Only non-empty categories are included in `ContextWindowBreakdown.segments`.
  */
-export interface ContextWindowBreakdown {
-  provider: string;
-  model: string;
-  /** Model's max context window, or null when unknown. */
-  contextLength: number | null;
-  /** Sum of all segment tokens. */
-  usedTokens: number;
-  /** contextLength - usedTokens, or null when contextLength is unknown. */
-  freeTokens: number | null;
-  /** Share of the context window used (0-100), or null when unknown. */
-  usedPercent: number | null;
+export const ContextWindowSegmentSchema = z.object({
+  /** Which part of the request this segment represents. */
+  category: z.enum(CONTEXT_WINDOW_CATEGORIES),
+  /** Estimated tokens this category contributes to the request. Always ≥ 0. */
+  tokens: z.number().int().nonnegative(),
   /**
-   * Estimated USD cost of sending this context once (input side only), or null
-   * when the model has no known input price.
+   * Largest individual contributors in this category, sorted descending by
+   * token count. Omitted when no per-item breakdown is available.
    */
-  estimatedInputCostUsd: number | null;
-  /** Non-empty segments in canonical stack order. */
-  segments: ContextWindowSegment[];
-}
+  items: z.array(ContextWindowItemSchema).optional(),
+});
+
+export type ContextWindowSegment = z.infer<typeof ContextWindowSegmentSchema>;
+
+/**
+ * Per-category breakdown of the request about to be sent, streamed once per
+ * turn at assembly time (event: `CONTEXT_WINDOW_BREAKDOWN_EVENT`).
+ *
+ * Token counts are estimates on the same yardstick that drives auto-compaction
+ * (chars/token, PDF bytes/token). The provider's exact prompt size arrives
+ * afterward via `TokenUsage` and supersedes `usedTokens` for the indicator.
+ *
+ * Invariant: `usedTokens === sum(segments[*].tokens)`.
+ */
+export const ContextWindowBreakdownSchema = z.object({
+  /** LLM provider identifier (e.g. `"anthropic"`, `"openai"`). */
+  provider: z.string(),
+  /** Model ID as sent to the provider (e.g. `"claude-sonnet-4-6"`). */
+  model: z.string(),
+  /**
+   * Provider's advertised maximum context length in tokens, or `null` when the
+   * model's context length is not known. When `null`, `freeTokens` and
+   * `usedPercent` are also `null` and the bar renders relative proportions only.
+   */
+  contextLength: z.number().int().positive().nullable(),
+  /**
+   * Sum of all segment token estimates. Always ≥ 0.
+   * Must equal `sum(segments[*].tokens)`.
+   */
+  usedTokens: z.number().int().nonnegative(),
+  /**
+   * `contextLength - usedTokens`, or `null` when `contextLength` is `null`.
+   * May be negative when the assembled request exceeds the model's limit.
+   */
+  freeTokens: z.number().int().nullable(),
+  /**
+   * Percentage of the context window occupied (0–100, inclusive), or `null`
+   * when `contextLength` is `null`. Clamped to [0, 100] — values > 100 mean
+   * the request is over-limit but are displayed as 100 to avoid breaking the
+   * progress bar.
+   */
+  usedPercent: z.number().min(0).max(100).nullable(),
+  /**
+   * Estimated USD cost of sending this context once (input tokens only), or
+   * `null` when no input price is configured for the model. The cost row in the
+   * UI is hidden when this is `null`.
+   */
+  estimatedInputCostUsd: z.number().nonnegative().nullable(),
+  /**
+   * Non-empty segments in canonical stack order (`CONTEXT_WINDOW_CATEGORIES`).
+   * Categories with zero tokens are omitted.
+   */
+  segments: z.array(ContextWindowSegmentSchema),
+});
+
+export type ContextWindowBreakdown = z.infer<
+  typeof ContextWindowBreakdownSchema
+>;
 
 // ============================================================================
 // Chat Message Part Types

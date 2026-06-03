@@ -98,6 +98,22 @@ RUN git clone --depth 1 --branch "${KUBECTL_VERSION}" https://github.com/kuberne
     -ldflags "-X k8s.io/component-base/version.gitVersion=${KUBECTL_VERSION} -X k8s.io/component-base/version.gitCommit=${KUBECTL_COMMIT} -X k8s.io/component-base/version.gitTreeState=clean" \
     -o /kubectl-binary ./cmd/kubectl
 
+# render the quickstart Dagger Engine manifest from the helm/dagger-runtime chart
+# at build time (offline — the subchart is vendored in charts/). rendering here
+# instead of committing a snapshot keeps it in lockstep with the chart used in
+# prod/dev. laptop-sized resources so the embedded KinD cluster can schedule it;
+# kube-pod:// transport needs no Service/TCP listener.
+FROM ${NODE_IMAGE} AS dagger-manifest
+RUN apk add --no-cache helm
+COPY helm/dagger-runtime /chart/dagger-runtime
+RUN helm template dagger-runtime /chart/dagger-runtime --namespace default \
+        --set networkPolicy.create=false \
+        --set dagger.engine.resources.requests.cpu=500m \
+        --set dagger.engine.resources.requests.memory=2Gi \
+        --set dagger.engine.resources.limits.memory=6Gi \
+        --set dagger.engine.statefulSet.persistentVolumeClaim.resources.requests.storage=20Gi \
+        > /dagger-engine.quickstart.yaml
+
 FROM ${NODE_IMAGE} AS base
 
 # Enable pnpm
@@ -312,9 +328,10 @@ COPY frontend/package.json frontend/
 COPY archestra-rs/sandbox-rs/package.json archestra-rs/sandbox-rs/
 COPY docker/scripts/docker-banner.sh /app/docker-banner.sh
 COPY docker/scripts/docker-entrypoint.sh /docker-entrypoint.sh
-# slim Dagger Engine manifest applied into the embedded KinD cluster in
-# quickstart mode; backs the skill sandbox / code runtime (archestra__run_python).
-COPY docker/k8s/dagger-engine.quickstart.yaml /app/dagger-engine.quickstart.yaml
+# slim Dagger Engine manifest (rendered in the dagger-manifest stage above)
+# applied into the embedded KinD cluster in quickstart mode; backs the skill
+# sandbox / code runtime (archestra__run_python).
+COPY --from=dagger-manifest /dagger-engine.quickstart.yaml /app/dagger-engine.quickstart.yaml
 COPY docker/supervisord/supervisord.conf /etc/supervisord.conf
 COPY docker/supervisord/postgres.conf /etc/supervisord.postgres.conf
 

@@ -375,17 +375,9 @@ export const RouteId = {
   // Connection Settings Routes (organization-level)
   UpdateConnectionSettings: "updateConnectionSettings",
 
-  // Preset Entity Name Routes (organization-level - configurable label for catalog presets)
-  UpdatePresetEntityName: "updatePresetEntityName",
-  UpdatePresetEntityDefaultLabel: "updatePresetEntityDefaultLabel",
-  UpdatePresetEntityDefaultValidationRegex:
-    "updatePresetEntityDefaultValidationRegex",
-
-  // Org-level preset entries (Production / Staging / Development buckets)
+  // Org-level preset entries (Production / Staging / Development buckets).
+  // Read-only: managed via existing data; the registry admin UI was removed.
   ListMcpPresetEntries: "listMcpPresetEntries",
-  CreateMcpPresetEntry: "createMcpPresetEntry",
-  UpdateMcpPresetEntry: "updateMcpPresetEntry",
-  DeleteMcpPresetEntry: "deleteMcpPresetEntry",
 
   // Org-level deployment environments
   ListEnvironments: "listEnvironments",

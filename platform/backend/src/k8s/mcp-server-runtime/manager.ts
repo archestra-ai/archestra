@@ -675,11 +675,18 @@ export class McpServerRuntimeManager {
    */
   async getOrLoadDeployment(
     mcpServerId: string,
+    opts?: { namespaceOverride?: string },
   ): Promise<K8sDeployment | undefined> {
-    // First check if already in memory
-    const existing = this.mcpServerIdToDeploymentMap.get(mcpServerId);
-    if (existing) {
-      return existing;
+    // An explicit namespace override (relocation teardown) bypasses the cache: a
+    // cached entry can hold a stale namespace, the one value we must not trust
+    // here. Build fresh, pinned to the given namespace; don't touch the cache.
+    const namespaceOverride = opts?.namespaceOverride;
+    if (!namespaceOverride) {
+      // First check if already in memory
+      const existing = this.mcpServerIdToDeploymentMap.get(mcpServerId);
+      if (existing) {
+        return existing;
+      }
     }
 
     // Not in memory - try to load from database
@@ -732,7 +739,9 @@ export class McpServerRuntimeManager {
         k8sCustomObjectsApi: this.k8sCustomObjectsApi,
         k8sAttach: this.k8sAttach,
         k8sLog: this.k8sLog,
-        namespace: await this.resolveNamespaceForCatalog(catalogItem),
+        namespace:
+          namespaceOverride ??
+          (await this.resolveNamespaceForCatalog(catalogItem)),
         catalogItem,
         effectiveNetworkPolicy: await this.resolveNetworkPolicyForDeployment({
           mcpServer,
@@ -743,6 +752,12 @@ export class McpServerRuntimeManager {
         ).networkPolicy,
         k8sExec: this.k8sExec,
       });
+
+      // Teardown path (explicit namespace): skip endpoint resolution and the
+      // cache so a torn-down deployment never overwrites a live cache entry.
+      if (namespaceOverride) {
+        return k8sDeployment;
+      }
 
       // Resolve HTTP endpoint URL (for streamable-http servers started by another replica)
       await k8sDeployment.resolveHttpEndpoint();
@@ -760,6 +775,45 @@ export class McpServerRuntimeManager {
       );
       return undefined;
     }
+  }
+
+  /**
+   * Tear down a local catalog's per-install deployments in the namespace
+   * resolved from the SUPPLIED catalog snapshot, bypassing the in-memory cache.
+   *
+   * During an environment reassignment, call this with the pre-update catalog
+   * item (which still holds the old environment) BEFORE recreating the
+   * deployment in the new namespace. Deriving the namespace from the snapshot —
+   * not the live row or a cached deployment — is what makes the teardown correct
+   * on a cache-cold or cache-stale replica, which would otherwise re-resolve the
+   * new namespace and orphan the old-namespace pod.
+   * @public — invoked from the internal-mcp-catalog PUT route
+   */
+  async tearDownOldNamespaceDeployments(
+    catalogSnapshot:
+      | Awaited<ReturnType<typeof InternalMcpCatalogModel.findById>>
+      | null
+      | undefined,
+  ): Promise<void> {
+    if (!this.isEnabled || !catalogSnapshot) {
+      return;
+    }
+    const namespace = await this.resolveNamespaceForCatalog(catalogSnapshot);
+    const installs = await McpServerModel.findByCatalogId(catalogSnapshot.id);
+    await Promise.all(
+      installs.map(async (mcpServer) => {
+        const deployment = await this.getOrLoadDeployment(mcpServer.id, {
+          namespaceOverride: namespace,
+        });
+        if (!deployment) {
+          return;
+        }
+        await deployment.removeDeployment();
+        // Drop any cached entry so the recreate path rebuilds against the new
+        // namespace instead of returning this torn-down, old-namespace object.
+        this.mcpServerIdToDeploymentMap.delete(mcpServer.id);
+      }),
+    );
   }
 
   /**

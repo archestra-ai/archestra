@@ -19578,6 +19578,7 @@ export type GetChatConversationsResponses = {
             name: string;
             systemPrompt: string | null;
             agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
+            toolExposureMode: 'full' | 'search_and_run_only';
             llmApiKeyId: string | null;
         } | null;
         share: {
@@ -19729,6 +19730,7 @@ export type CreateChatConversationResponses = {
             name: string;
             systemPrompt: string | null;
             agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
+            toolExposureMode: 'full' | 'search_and_run_only';
             llmApiKeyId: string | null;
         } | null;
         share: {
@@ -19962,6 +19964,7 @@ export type GetChatConversationResponses = {
             name: string;
             systemPrompt: string | null;
             agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
+            toolExposureMode: 'full' | 'search_and_run_only';
             llmApiKeyId: string | null;
         } | null;
         share: {
@@ -20117,6 +20120,7 @@ export type UpdateChatConversationResponses = {
             name: string;
             systemPrompt: string | null;
             agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
+            toolExposureMode: 'full' | 'search_and_run_only';
             llmApiKeyId: string | null;
         } | null;
         share: {
@@ -20432,6 +20436,7 @@ export type ForkChatConversationResponses = {
             name: string;
             systemPrompt: string | null;
             agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
+            toolExposureMode: 'full' | 'search_and_run_only';
             llmApiKeyId: string | null;
         } | null;
         share: {
@@ -20684,6 +20689,7 @@ export type CompactChatConversationResponses = {
                 name: string;
                 systemPrompt: string | null;
                 agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
+                toolExposureMode: 'full' | 'search_and_run_only';
                 llmApiKeyId: string | null;
             } | null;
             share: {
@@ -21106,6 +21112,7 @@ export type GetSharedConversationResponses = {
             name: string;
             systemPrompt: string | null;
             agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
+            toolExposureMode: 'full' | 'search_and_run_only';
             llmApiKeyId: string | null;
         } | null;
         share: {
@@ -21257,6 +21264,7 @@ export type ForkSharedConversationResponses = {
             name: string;
             systemPrompt: string | null;
             agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
+            toolExposureMode: 'full' | 'search_and_run_only';
             llmApiKeyId: string | null;
         } | null;
         share: {
@@ -21410,6 +21418,7 @@ export type GenerateChatConversationTitleResponses = {
             name: string;
             systemPrompt: string | null;
             agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
+            toolExposureMode: 'full' | 'search_and_run_only';
             llmApiKeyId: string | null;
         } | null;
         share: {
@@ -21562,6 +21571,7 @@ export type UpdateChatMessageResponses = {
             name: string;
             systemPrompt: string | null;
             agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
+            toolExposureMode: 'full' | 'search_and_run_only';
             llmApiKeyId: string | null;
         } | null;
         share: {
@@ -49340,6 +49350,7 @@ export type CreateScheduleTriggerRunConversationResponses = {
             name: string;
             systemPrompt: string | null;
             agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
+            toolExposureMode: 'full' | 'search_and_run_only';
             llmApiKeyId: string | null;
         } | null;
         share: {

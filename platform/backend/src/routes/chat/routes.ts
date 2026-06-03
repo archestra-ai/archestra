@@ -10,6 +10,8 @@ import {
   RouteId,
   type SupportedProvider,
   TimeInMs,
+  TOOL_RUN_TOOL_SHORT_NAME,
+  TOOL_SEARCH_TOOLS_SHORT_NAME,
   type TokenUsage,
 } from "@shared";
 import {
@@ -164,6 +166,17 @@ function getMinimalFrontendError(errorForFrontend: ChatErrorResponse) {
     ...(errorForFrontend.traceId ? { traceId: errorForFrontend.traceId } : {}),
     ...(errorForFrontend.spanId ? { spanId: errorForFrontend.spanId } : {}),
   };
+}
+
+function buildLoadToolsWhenNeededSystemPrompt(): string {
+  const searchToolsName = archestraMcpBranding.getToolName(
+    TOOL_SEARCH_TOOLS_SHORT_NAME,
+  );
+  const runToolName = archestraMcpBranding.getToolName(
+    TOOL_RUN_TOOL_SHORT_NAME,
+  );
+
+  return `Some available tools are not listed upfront. If the visible tools do not fit the task, use \`${searchToolsName}\` to find relevant tools, then call \`${runToolName}\` with the selected tool name and arguments. Do not guess hidden tool names without searching unless the exact tool name is already known from the conversation.`;
 }
 
 const UNAVAILABLE_TOOL_ERROR_MESSAGE =
@@ -404,8 +417,18 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         const toolDenialInstruction =
           "When a tool execution is not approved by the user, do not retry it. Explain what happened and ask the user what they'd like to do instead.";
 
+        const toolLoadingInstructions =
+          agent.toolExposureMode === "search_and_run_only"
+            ? buildLoadToolsWhenNeededSystemPrompt()
+            : "";
+
         systemPrompt =
-          [renderedPrompt, toolDenialInstruction, toolResultInstructions]
+          [
+            toolLoadingInstructions,
+            renderedPrompt,
+            toolDenialInstruction,
+            toolResultInstructions,
+          ]
             .filter(Boolean)
             .join("\n\n") || undefined;
 

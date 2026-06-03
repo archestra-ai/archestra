@@ -988,29 +988,13 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         });
       }
 
-      // On an environment reassignment of a local catalog, the teardown must
-      // target the OLD namespace. Both teardown paths resolve the namespace
-      // from the catalog row — reinstallSharedDeployment (multi-tenant) and the
-      // cascade's per-install restartServer→stopServer→getOrLoadDeployment
-      // (single-tenant) — and the update below rewrites that row to the new
-      // environment. Pre-load the existing deployments now, while the row still
-      // holds the old namespace, so they are cached against the old-namespace
-      // pod and the teardown deletes it. Without this warm-up, a cache-cold
-      // replica (any of several) re-derives the new namespace at teardown and
-      // orphans the old-namespace pod.
+      // Detect an environment reassignment of a local catalog — it relocates
+      // the pod to a different namespace.
       const relocatingLocalDeployment =
         "environmentId" in restBody &&
         restBody.environmentId !== originalCatalogItem.environmentId &&
         originalCatalogItem.serverType === "local" &&
         mcpServerRuntimeManager.isEnabled;
-      if (relocatingLocalDeployment) {
-        const installs = await McpServerModel.findByCatalogId(id);
-        await Promise.all(
-          installs.map((s) =>
-            mcpServerRuntimeManager.getOrLoadDeployment(s.id),
-          ),
-        );
-      }
 
       // Update the catalog item
       const catalogItem = await InternalMcpCatalogModel.update(id, restBody);
@@ -1019,15 +1003,41 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Catalog item not found");
       }
 
-      // A multi-tenant local catalog shares one K8s Deployment across all
-      // installs, and a per-install restart no-ops on it (the sibling guard in
-      // restartServer), so the shared Deployment must be relocated explicitly,
-      // mirroring the environment-namespace-edit route. Now that the row holds
-      // the new environment, recreate it in the new namespace — awaited before
-      // the cascade so its per-install tool sync runs against the relocated,
-      // ready pod rather than racing the recreate. Single-tenant installs
-      // relocate via the cascade's per-install restart below, using the
-      // deployments pre-loaded above.
+      // Only tear down the old-namespace deployment when it will actually be
+      // recreated. A single-tenant edit that ALSO requires new user input (e.g.
+      // a command or prompted-env-var change in the same PUT) makes the cascade
+      // mark the install reinstall-required WITHOUT recreating the pod — so
+      // tearing it down here would leave the install with no running pod until a
+      // manual reinstall. Multi-tenant always recreates via
+      // reinstallSharedDeployment below, so it's always safe there.
+      const recreatingRelocatedDeployment =
+        relocatingLocalDeployment &&
+        (originalCatalogItem.multitenant === true ||
+          !requiresNewUserInputForReinstall(
+            originalCatalogItemForGate,
+            catalogItem,
+          ));
+      if (recreatingRelocatedDeployment) {
+        // Remove the deployment(s) from the OLD namespace before recreating in
+        // the new one. The old namespace is derived from `originalCatalogItem`
+        // (captured before the update), so the teardown is correct even on a
+        // cache-cold or cache-stale replica — unlike the recreate paths below,
+        // which resolve the namespace from the now-updated row. Without this the
+        // old-namespace pod is orphaned: it keeps running in a namespace the
+        // catalog no longer points at, and the reconciler only scans the default
+        // namespace so it never reclaims it.
+        await mcpServerRuntimeManager.tearDownOldNamespaceDeployments(
+          originalCatalogItem,
+        );
+      }
+
+      // Recreate in the new namespace. A multi-tenant local catalog shares one
+      // K8s Deployment across all installs, and a per-install restart no-ops on
+      // it (the sibling guard in restartServer), so it must be recreated
+      // explicitly via reinstallSharedDeployment — awaited before the cascade so
+      // its per-install tool sync runs against the relocated, ready pod rather
+      // than racing the recreate. Single-tenant installs are recreated by the
+      // cascade's per-install restart below.
       if (
         relocatingLocalDeployment &&
         originalCatalogItem.multitenant === true

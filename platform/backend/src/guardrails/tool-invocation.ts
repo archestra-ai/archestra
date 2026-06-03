@@ -37,6 +37,7 @@ export async function evaluateSingleMcpToolInvocationPolicy(params: {
   organizationId?: string;
   contextIsTrusted: boolean;
   externalAgentId?: string;
+  enforceApprovalRequired?: boolean;
 }): Promise<PolicyBlockResult | null> {
   if (
     archestraMcpBranding.isToolName(params.toolName) ||
@@ -76,6 +77,10 @@ export async function evaluateSingleMcpToolInvocationPolicy(params: {
   );
   if (policyBlock) {
     return policyBlock;
+  }
+
+  if (params.enforceApprovalRequired === false) {
+    return null;
   }
 
   const requiresApproval =

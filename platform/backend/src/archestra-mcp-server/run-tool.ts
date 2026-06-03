@@ -98,6 +98,7 @@ const registry = defineArchestraTools([
         toolInput,
         organizationId: context.organizationId,
         contextIsTrusted: context.contextIsTrusted ?? true,
+        enforceApprovalRequired: !context.approvalRequiredPoliciesHandled,
       });
       if (policyBlock) {
         return errorResult(policyBlock.refusalMessage);

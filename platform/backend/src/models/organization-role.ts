@@ -17,6 +17,7 @@ import {
 import { and, eq, getTableColumns, ilike, sql } from "drizzle-orm";
 import { LRUCacheManager } from "@/cache-manager";
 import db, { schema } from "@/database";
+import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import logger from "@/logging";
 import type { OrganizationRole } from "@/types";
 
@@ -212,6 +213,7 @@ class OrganizationRoleModel {
         and(
           eq(schema.membersTable.organizationId, organizationId),
           eq(schema.membersTable.role, role.role),
+          notDeleted(schema.membersTable),
         ),
       )
       .limit(1);
@@ -236,6 +238,7 @@ class OrganizationRoleModel {
           eq(schema.invitationsTable.organizationId, organizationId),
           eq(schema.invitationsTable.role, role.role),
           eq(schema.invitationsTable.status, "pending"),
+          notDeleted(schema.invitationsTable),
         ),
       )
       .limit(1);
@@ -285,6 +288,7 @@ class OrganizationRoleModel {
         and(
           eq(schema.organizationRolesTable.role, identifier),
           eq(schema.organizationRolesTable.organizationId, organizationId),
+          notDeleted(schema.organizationRolesTable),
         ),
       )
       .limit(1);
@@ -338,6 +342,7 @@ class OrganizationRoleModel {
         and(
           eq(schema.organizationRolesTable.id, roleId),
           eq(schema.organizationRolesTable.organizationId, organizationId),
+          notDeleted(schema.organizationRolesTable),
         ),
       )
       .limit(1);
@@ -432,7 +437,10 @@ class OrganizationRoleModel {
         })
         .from(schema.organizationRolesTable)
         .where(
-          eq(schema.organizationRolesTable.organizationId, organizationId),
+          and(
+            eq(schema.organizationRolesTable.organizationId, organizationId),
+            notDeleted(schema.organizationRolesTable),
+          ),
         );
 
       logger.debug(
@@ -493,6 +501,7 @@ class OrganizationRoleModel {
 
     const customFilters = [
       eq(schema.organizationRolesTable.organizationId, organizationId),
+      notDeleted(schema.organizationRolesTable),
       ...(normalizedSearch
         ? [ilike(schema.organizationRolesTable.name, `%${normalizedSearch}%`)]
         : []),

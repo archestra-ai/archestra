@@ -51,7 +51,9 @@ import AgentSuggestedPromptModel from "./agent-suggested-prompt";
 import AgentTeamModel from "./agent-team";
 import AgentToolModel from "./agent-tool";
 import MemberModel from "./member";
+import OrganizationModel from "./organization";
 import ToolModel from "./tool";
+import UserModel from "./user";
 
 class AgentModel {
   static async findBasicByOrganizationIdAndIds(params: {
@@ -278,11 +280,7 @@ class AgentModel {
     // Auto-assign organizationId if not provided
     let organizationId = agent.organizationId;
     if (!organizationId) {
-      const [firstOrg] = await db
-        .select({ id: schema.organizationsTable.id })
-        .from(schema.organizationsTable)
-        .limit(1);
-      organizationId = firstOrg?.id || "";
+      organizationId = (await OrganizationModel.findFirstId()) ?? "";
     }
 
     // Dynamic tool access only works through the search/run dispatch surface, so
@@ -1737,11 +1735,7 @@ class AgentModel {
     // If organizationId not provided, use first organization
     let orgId = organizationId;
     if (!orgId) {
-      const [firstOrg] = await db
-        .select({ id: schema.organizationsTable.id })
-        .from(schema.organizationsTable)
-        .limit(1);
-      orgId = firstOrg?.id;
+      orgId = (await OrganizationModel.findFirstId()) ?? undefined;
     }
 
     return AgentModel.create({
@@ -2147,12 +2141,8 @@ class AgentModel {
     );
     if (existing) return existing;
 
-    const [userRow] = await db
-      .select({ name: schema.usersTable.name })
-      .from(schema.usersTable)
-      .where(eq(schema.usersTable.id, userId))
-      .limit(1);
-    const userPart = (userRow && urlSlugify(userRow.name)) || userId;
+    const userName = await UserModel.findNameById(userId);
+    const userPart = (userName && urlSlugify(userName)) || userId;
     const slug = `my-gateway-${userPart}-${crypto.randomUUID().slice(0, 6)}`;
 
     try {

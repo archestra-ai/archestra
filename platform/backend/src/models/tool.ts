@@ -2985,12 +2985,9 @@ class ToolModel {
   private static triggerAutoConfigureIfEnabled(toolIds: string[]) {
     if (toolIds.length === 0) return;
 
-    db.select({ id: schema.organizationsTable.id })
-      .from(schema.organizationsTable)
-      .limit(1)
-      .then(async (rows) => {
-        if (rows.length === 0) return;
-        const organizationId = rows[0].id;
+    OrganizationModel.findFirstId()
+      .then(async (organizationId) => {
+        if (!organizationId) return;
 
         const { policyConfigurationService } = await import(
           "@/agents/subagents/policy-configuration"

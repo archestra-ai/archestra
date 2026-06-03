@@ -982,6 +982,8 @@ class InternalMcpCatalogModel {
 
     if (authorIds.size === 0) return;
 
+    // soft-delete: include deleted users so the author name can still be
+    // shown for catalog items whose author was later removed.
     const users = await db
       .select({ id: schema.usersTable.id, name: schema.usersTable.name })
       .from(schema.usersTable)

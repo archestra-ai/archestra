@@ -176,4 +176,181 @@ describe("internal MCP catalog routes", () => {
     expect(response.statusCode).toBe(200);
     expect(response.json().clonedFrom).toBe(source.id);
   });
+
+  test("POST clone carries over the source's local-config secret as an independent copy", async () => {
+    const source = (
+      await app.inject({
+        method: "POST",
+        url: "/api/internal_mcp_catalog",
+        payload: {
+          name: "clone-secret-src-local",
+          serverType: "local",
+          scope: "org",
+          localConfig: {
+            command: "node",
+            arguments: ["server.js"],
+            environment: [
+              {
+                key: "QA_SECRET",
+                type: "secret",
+                value: "src-secret-value",
+                promptOnInstallation: false,
+              },
+            ],
+          },
+        },
+      })
+    ).json();
+    expect(source.localConfigSecretId).toBeTruthy();
+
+    // The clone form is seeded from the list endpoint, which does not expand
+    // secrets, so the clone payload carries the env var key but no value.
+    const clone = (
+      await app.inject({
+        method: "POST",
+        url: "/api/internal_mcp_catalog",
+        payload: {
+          name: "clone-secret-src-local-copy",
+          serverType: "local",
+          clonedFrom: source.id,
+          localConfig: {
+            command: "node",
+            arguments: ["server.js"],
+            environment: [
+              { key: "QA_SECRET", type: "secret", promptOnInstallation: false },
+            ],
+          },
+        },
+      })
+    ).json();
+    expect(clone.localConfigSecretId).toBeTruthy();
+    expect(clone.localConfigSecretId).not.toBe(source.localConfigSecretId);
+
+    // GET expands secrets: the cloned value resolves to the source's.
+    const full = (
+      await app.inject({
+        method: "GET",
+        url: `/api/internal_mcp_catalog/${clone.id}`,
+      })
+    ).json();
+    const envVar = full.localConfig.environment.find(
+      (e: { key: string }) => e.key === "QA_SECRET",
+    );
+    expect(envVar.value).toBe("src-secret-value");
+  });
+
+  test("POST clone keeps a secret value supplied in the clone payload over the source's", async () => {
+    const source = (
+      await app.inject({
+        method: "POST",
+        url: "/api/internal_mcp_catalog",
+        payload: {
+          name: "clone-secret-src-override",
+          serverType: "local",
+          scope: "org",
+          localConfig: {
+            command: "node",
+            arguments: ["server.js"],
+            environment: [
+              {
+                key: "QA_SECRET",
+                type: "secret",
+                value: "src-secret-value",
+                promptOnInstallation: false,
+              },
+            ],
+          },
+        },
+      })
+    ).json();
+
+    const clone = (
+      await app.inject({
+        method: "POST",
+        url: "/api/internal_mcp_catalog",
+        payload: {
+          name: "clone-secret-src-override-copy",
+          serverType: "local",
+          clonedFrom: source.id,
+          localConfig: {
+            command: "node",
+            arguments: ["server.js"],
+            environment: [
+              {
+                key: "QA_SECRET",
+                type: "secret",
+                value: "override-value",
+                promptOnInstallation: false,
+              },
+            ],
+          },
+        },
+      })
+    ).json();
+    expect(clone.localConfigSecretId).toBeTruthy();
+    expect(clone.localConfigSecretId).not.toBe(source.localConfigSecretId);
+
+    const full = (
+      await app.inject({
+        method: "GET",
+        url: `/api/internal_mcp_catalog/${clone.id}`,
+      })
+    ).json();
+    const envVar = full.localConfig.environment.find(
+      (e: { key: string }) => e.key === "QA_SECRET",
+    );
+    expect(envVar.value).toBe("override-value");
+  });
+
+  test("POST clone carries over the source's OAuth client secret as an independent copy", async () => {
+    const oauthConfig = {
+      name: "oauth",
+      server_url: "https://example.com",
+      client_id: "cid",
+      redirect_uris: [],
+      scopes: [],
+      default_scopes: [],
+      supports_resource_metadata: false,
+    };
+
+    const source = (
+      await app.inject({
+        method: "POST",
+        url: "/api/internal_mcp_catalog",
+        payload: {
+          name: "clone-secret-src-oauth",
+          serverType: "remote",
+          serverUrl: "https://example.com/mcp",
+          scope: "org",
+          oauthConfig: { ...oauthConfig, client_secret: "oauth-secret-value" },
+        },
+      })
+    ).json();
+    expect(source.clientSecretId).toBeTruthy();
+
+    // Clone payload omits client_secret (the list endpoint never exposed it).
+    const clone = (
+      await app.inject({
+        method: "POST",
+        url: "/api/internal_mcp_catalog",
+        payload: {
+          name: "clone-secret-src-oauth-copy",
+          serverType: "remote",
+          serverUrl: "https://example.com/mcp",
+          clonedFrom: source.id,
+          oauthConfig,
+        },
+      })
+    ).json();
+    expect(clone.clientSecretId).toBeTruthy();
+    expect(clone.clientSecretId).not.toBe(source.clientSecretId);
+
+    const full = (
+      await app.inject({
+        method: "GET",
+        url: `/api/internal_mcp_catalog/${clone.id}`,
+      })
+    ).json();
+    expect(full.oauthConfig.client_secret).toBe("oauth-secret-value");
+  });
 });

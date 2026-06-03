@@ -5,6 +5,7 @@ import {
   TOOL_RUN_TOOL_FULL_NAME,
   TOOL_SEARCH_TOOLS_FULL_NAME,
 } from "@shared";
+import { eq } from "drizzle-orm";
 import Fastify, { type FastifyInstance } from "fastify";
 import {
   serializerCompiler,
@@ -13,7 +14,8 @@ import {
 } from "fastify-type-provider-zod";
 import { type Mock, vi } from "vitest";
 import { hasPermission } from "@/auth";
-import { InternalMcpCatalogModel } from "@/models";
+import db, { schema } from "@/database";
+import { InternalMcpCatalogModel, SecretModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { ApiError, type User } from "@/types";
 import internalMcpCatalogRoutes from "./internal-mcp-catalog";
@@ -456,5 +458,65 @@ describe("internal MCP catalog routes", () => {
 
     // The inbound FK is dropped: no value was supplied, so no secret is linked.
     expect(created.localConfigSecretId).toBeNull();
+  });
+
+  test("POST clone duplicates an Archestra-managed Vault secret into a new entry", async () => {
+    const source = (
+      await app.inject({
+        method: "POST",
+        url: "/api/internal_mcp_catalog",
+        payload: {
+          name: "clone-secret-src-vault",
+          serverType: "local",
+          scope: "org",
+          localConfig: {
+            command: "node",
+            arguments: ["server.js"],
+            environment: [
+              {
+                key: "QA_SECRET",
+                type: "secret",
+                value: "vault-managed-value",
+                promptOnInstallation: false,
+              },
+            ],
+          },
+        },
+      })
+    ).json();
+    expect(source.localConfigSecretId).toBeTruthy();
+
+    // The unit harness runs DbSecretsManager, so route-created secrets are
+    // isVault=false. Flip the flag to drive the Vault branch of the clone's
+    // secret duplication (read via secretManager, write a new entry).
+    await db
+      .update(schema.secretsTable)
+      .set({ isVault: true })
+      .where(eq(schema.secretsTable.id, source.localConfigSecretId));
+
+    const clone = (
+      await app.inject({
+        method: "POST",
+        url: "/api/internal_mcp_catalog",
+        payload: {
+          name: "clone-secret-src-vault-copy",
+          serverType: "local",
+          clonedFrom: source.id,
+          localConfig: {
+            command: "node",
+            arguments: ["server.js"],
+            environment: [
+              { key: "QA_SECRET", type: "secret", promptOnInstallation: false },
+            ],
+          },
+        },
+      })
+    ).json();
+    expect(clone.localConfigSecretId).toBeTruthy();
+    expect(clone.localConfigSecretId).not.toBe(source.localConfigSecretId);
+
+    // Value carried into the clone's own secret, source untouched.
+    const copy = await SecretModel.findById(clone.localConfigSecretId);
+    expect(copy?.secret).toEqual({ QA_SECRET: "vault-managed-value" });
   });
 });

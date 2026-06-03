@@ -52,7 +52,18 @@ export function restoreRenderableAssistantParts(params: {
     };
   });
 
-  return changed ? restoredMessages : nextMessages;
+  if (!changed) {
+    return nextMessages;
+  }
+
+  // Restoration rebuilds the assistant tail from `previousMessages` on every
+  // call, so a persistent empty assistant message (e.g. a reload into an
+  // interrupted resume) produces a fresh array each render. Reuse the prior
+  // reference when the result is renderably identical, so consumers keyed on
+  // array identity don't re-render in an infinite loop.
+  return hasSameRenderableMessages(restoredMessages, previousMessages)
+    ? previousMessages
+    : restoredMessages;
 }
 
 /**
@@ -156,4 +167,23 @@ function restoreTruncatedAssistantTail(params: {
 
 function sameMessageIdentity(a: UIMessage, b: UIMessage | undefined): boolean {
   return !!b && a.id === b.id && a.role === b.role;
+}
+
+function hasSameRenderableMessages(
+  candidate: UIMessage[],
+  previous: UIMessage[],
+): boolean {
+  if (candidate === previous) {
+    return true;
+  }
+  if (candidate.length !== previous.length) {
+    return false;
+  }
+  return candidate.every((message, index) => {
+    const previousMessage = previous[index];
+    return (
+      sameMessageIdentity(message, previousMessage) &&
+      message.parts === previousMessage?.parts
+    );
+  });
 }

@@ -1,12 +1,12 @@
-# GENERATED — do not edit by hand.
-#
-# Slim Dagger Engine for the quickstart image: the same companion chart used in
-# production (helm/dagger-runtime) and dev (dev/Tiltfile.coderuntime), rendered
-# offline with laptop-sized resources so the embedded KinD cluster can schedule
-# it. The backend reaches it over kube-pod:// (kubectl exec + buildctl
+# Snapshot of the helm/dagger-runtime chart, rendered offline with laptop-sized
+# resources for the quickstart image — the same companion chart used in
+# production (helm/dagger-runtime) and dev (dev/Tiltfile.coderuntime). The
+# backend reaches the engine over kube-pod:// (kubectl exec + buildctl
 # dial-stdio), so no Service or TCP listener is rendered.
 #
-# Regenerate after bumping helm/dagger-runtime:
+# There is no automated generator/CI check behind this file; it is committed
+# directly. Hand-edits are fine for quickstart-only tweaks, but for anything
+# that should also hold in prod/dev, change helm/dagger-runtime and re-render:
 #   helm template dagger-runtime ./helm/dagger-runtime --namespace default \
 #     --set networkPolicy.create=false \
 #     --set dagger.engine.resources.requests.cpu=500m \

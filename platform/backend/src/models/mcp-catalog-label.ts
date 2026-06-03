@@ -1,5 +1,4 @@
 import { and, asc, eq, inArray, or } from "drizzle-orm";
-import { uniqBy } from "lodash-es";
 import db, { schema, withDbTransaction } from "@/database";
 import type { AgentLabelGetResponse, AgentLabelWithDetails } from "@/types";
 import AgentLabelModel from "./agent-label";
@@ -122,15 +121,7 @@ class McpCatalogLabelModel {
     catalogId: string,
     labels: AgentLabelWithDetails[],
   ): Promise<void> {
-    const _affectedPairs = await withDbTransaction(async (tx) => {
-      const previousLabels = await tx
-        .select({
-          keyId: schema.mcpCatalogLabelsTable.keyId,
-          valueId: schema.mcpCatalogLabelsTable.valueId,
-        })
-        .from(schema.mcpCatalogLabelsTable)
-        .where(eq(schema.mcpCatalogLabelsTable.catalogId, catalogId));
-
+    await withDbTransaction(async (tx) => {
       const insertedLabels: {
         catalogId: string;
         keyId: string;
@@ -153,12 +144,6 @@ class McpCatalogLabelModel {
 
         await tx.insert(schema.mcpCatalogLabelsTable).values(insertedLabels);
       }
-
-      // Return union of affected labels
-      return uniqBy(
-        [...previousLabels, ...insertedLabels],
-        (l) => `${l.keyId}-${l.valueId}`,
-      );
     });
 
     // Fire-and-forget pruning to avoid race conditions with concurrent operations

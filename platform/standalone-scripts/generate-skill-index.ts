@@ -1,6 +1,11 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  type ParsedSkill,
+  parseSkillManifest,
+  SkillParseError,
+} from "../backend/src/skills/parser";
 import { POPULAR_REPOS } from "../frontend/src/app/agents/skills/_parts/popular-repos";
 
 interface CrawledSkill {
@@ -56,12 +61,6 @@ interface GithubTreeResponse {
 interface GithubTreeItem {
   type?: string;
   path?: string;
-}
-
-interface ParsedManifest {
-  name: string;
-  description: string;
-  compatibility: string | null;
 }
 
 const GITHUB_API_URL = "https://api.github.com";
@@ -187,12 +186,19 @@ async function crawlRepo(repo: (typeof POPULAR_REPOS)[number]) {
           ref: defaultBranch,
           filePath: manifestPath,
         });
-        const manifest = parseSkillManifest(raw);
-        if (!manifest) {
+        let manifest: ParsedSkill;
+        try {
+          manifest = parseSkillManifest(raw);
+        } catch (error) {
+          // record skills the import flow itself would reject (missing or
+          // malformed frontmatter) and skip them, without failing the repo.
           errors.push({
             repo: repo.repo,
             path: manifestPath,
-            message: "SKILL.md frontmatter is missing name or description",
+            message:
+              error instanceof SkillParseError
+                ? error.message
+                : errorMessage(error),
           });
           return null;
         }
@@ -264,78 +270,6 @@ async function fetchRawFile(params: {
     );
   }
   return response.text();
-}
-
-function parseSkillManifest(raw: string): ParsedManifest | null {
-  const match = raw.match(/^---\r?\n([\s\S]*?)\r?\n---[ \t]*\r?\n?/);
-  if (!match) return null;
-
-  const fields = parseFrontmatterScalars(match[1]);
-  const name = fields.get("name")?.trim();
-  const description = fields.get("description")?.trim();
-  if (!name || !description) return null;
-
-  const compatibility = fields.get("compatibility")?.trim() || null;
-  return { name, description, compatibility };
-}
-
-function parseFrontmatterScalars(frontmatter: string): Map<string, string> {
-  const fields = new Map<string, string>();
-  const lines = frontmatter.replaceAll("\r\n", "\n").split("\n");
-
-  for (let index = 0; index < lines.length; index += 1) {
-    const line = lines[index];
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith("#")) continue;
-
-    const match = /^([A-Za-z0-9_-]+):(?:\s*(.*))?$/.exec(line);
-    if (!match) continue;
-
-    const key = match[1];
-    const value = match[2] ?? "";
-    if (value.startsWith("|") || value.startsWith(">")) {
-      const blockLines: string[] = [];
-      index += 1;
-      for (; index < lines.length; index += 1) {
-        const blockLine = lines[index];
-        if (/^[A-Za-z0-9_-]+:\s*/.test(blockLine)) {
-          index -= 1;
-          break;
-        }
-        blockLines.push(blockLine.replace(/^\s{2}/, ""));
-      }
-      fields.set(
-        key,
-        value.startsWith(">")
-          ? blockLines.join(" ").replace(/\s+/g, " ").trim()
-          : blockLines.join("\n").trim(),
-      );
-      continue;
-    }
-
-    fields.set(key, unquoteYamlScalar(value));
-  }
-
-  return fields;
-}
-
-function unquoteYamlScalar(value: string): string {
-  const trimmed = value.trim();
-  if (trimmed.length < 2) return trimmed;
-
-  if (trimmed.startsWith('"') && trimmed.endsWith('"')) {
-    try {
-      return JSON.parse(trimmed) as string;
-    } catch (_error) {
-      return trimmed.slice(1, -1);
-    }
-  }
-
-  if (trimmed.startsWith("'") && trimmed.endsWith("'")) {
-    return trimmed.slice(1, -1).replaceAll("''", "'");
-  }
-
-  return trimmed;
 }
 
 async function mapConcurrent<T, U>(

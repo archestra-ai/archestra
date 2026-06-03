@@ -9,6 +9,7 @@ use crate::{ArtifactBytes, CommandExecution, Limits, ReplayCommand, Result, Snap
 
 /// a materialise-and-run request handed to a backend. validated at the public
 /// core entry points before it reaches here.
+#[derive(Clone)]
 pub(crate) struct RunRequest {
     pub snapshots: Vec<SnapshotFile>,
     pub replay_commands: Vec<ReplayCommand>,
@@ -24,6 +25,7 @@ pub(crate) struct RunRequest {
 }
 
 /// an artifact-read request. the backend replays history, then exports `path`.
+#[derive(Clone)]
 pub(crate) struct ArtifactRequest {
     pub snapshots: Vec<SnapshotFile>,
     pub replay_commands: Vec<ReplayCommand>,

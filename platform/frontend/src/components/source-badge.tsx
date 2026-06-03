@@ -6,6 +6,7 @@ import {
   Mail,
   Minimize2,
   Route,
+  Sparkles,
   Type,
 } from "lucide-react";
 import Image from "next/image";
@@ -93,6 +94,7 @@ function getSourceIcon({
     model_router: <Route className="h-3 w-3 shrink-0" />,
     "chat:compaction": <Minimize2 className="h-3 w-3 shrink-0" />,
     "chat:title_generation": <Type className="h-3 w-3 shrink-0" />,
+    "skill:description_generation": <Sparkles className="h-3 w-3 shrink-0" />,
     "chatops:slack": (
       <Image
         src="/icons/slack.png"

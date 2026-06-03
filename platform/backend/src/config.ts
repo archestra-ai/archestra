@@ -790,8 +790,6 @@ const config = {
     endpoint: "/v2/a2a",
   },
   agents: {
-    advancedToolFeaturesEnabled:
-      process.env.ARCHESTRA_AGENTS_ADVANCED_TOOL_FEATURES_ENABLED === "true",
     skillsEnabled: process.env.ARCHESTRA_AGENTS_SKILLS_ENABLED === "true",
     incomingEmail: {
       provider: parseIncomingEmailProvider(),
@@ -1066,6 +1064,12 @@ const config = {
       clusterDomain:
         process.env.ARCHESTRA_ORCHESTRATOR_K8S_CLUSTER_DOMAIN ||
         "cluster.local",
+      // Namespaces the platform ServiceAccount is granted RBAC in (Helm
+      // rbac.environmentNamespaces). Surfaced to the UI so the environment
+      // editor can offer a namespace dropdown instead of free text.
+      environmentNamespaces: parseCommaSeparatedList(
+        process.env.ARCHESTRA_ORCHESTRATOR_ENVIRONMENT_NAMESPACES ?? "",
+      ),
     },
   },
   /**

@@ -18,6 +18,7 @@ import {
   parseFullToolName,
   TimeInMs,
   TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON,
+  TOOL_RUN_TOOL_SHORT_NAME,
 } from "@shared";
 import { type JSONSchema7, jsonSchema, type Tool } from "ai";
 import { evaluateToolExecutionContextTrust } from "@/agents/context-trust";
@@ -214,6 +215,7 @@ export const __test = {
   executeMcpTool,
   filterToolsByEnabledIds,
   pingClientWithTimeout,
+  resolveApprovalPolicyTarget,
   throwIfApprovalRequired,
 };
 
@@ -921,9 +923,13 @@ export async function getChatMcpTools({
           ...(!blockOnApprovalRequired
             ? {
                 needsApproval: async (args: unknown) => {
-                  return ToolInvocationPolicyModel.checkApprovalRequired(
+                  const approvalTarget = resolveApprovalPolicyTarget(
                     mcpTool.name,
-                    isRecord(args) ? args : {},
+                    args,
+                  );
+                  return ToolInvocationPolicyModel.checkApprovalRequired(
+                    approvalTarget.toolName,
+                    approvalTarget.toolInput,
                     {
                       teamIds: [],
                       externalAgentId: getChatExternalAgentId(),
@@ -933,7 +939,7 @@ export async function getChatMcpTools({
                 },
               }
             : {}),
-          execute: async (args: unknown) => {
+          execute: async (args: unknown, options) => {
             if (blockOnApprovalRequired) {
               await throwIfApprovalRequired(
                 mcpTool.name,
@@ -972,6 +978,18 @@ export async function getChatMcpTools({
                       },
                       "Executing archestra tool with context",
                     );
+                    const toolExecutionContext =
+                      await evaluateToolExecutionContextTrust({
+                        messages: options.messages,
+                        agentId,
+                        organizationId,
+                        userId,
+                        considerContextUntrusted,
+                        globalToolPolicy,
+                        policyContext: {
+                          externalAgentId: getChatExternalAgentId(),
+                        },
+                      });
                     const archestraResponse = await executeArchestraTool(
                       mcpTool.name,
                       toolArguments,
@@ -986,6 +1004,8 @@ export async function getChatMcpTools({
                         sessionId,
                         scheduleTriggerRunId,
                         abortSignal,
+                        contextIsTrusted: toolExecutionContext.contextIsTrusted,
+                        approvalRequiredPoliciesHandled: true,
                         tokenAuth: buildTokenAuthContext({
                           mcpGwToken,
                           organizationId,
@@ -1904,10 +1924,11 @@ async function throwIfApprovalRequired(
   args: unknown,
   globalToolPolicy: GlobalToolPolicy,
 ): Promise<void> {
+  const approvalTarget = resolveApprovalPolicyTarget(toolName, args);
   const requiresApproval =
     await ToolInvocationPolicyModel.checkApprovalRequired(
-      toolName,
-      isRecord(args) ? args : {},
+      approvalTarget.toolName,
+      approvalTarget.toolInput,
       {
         teamIds: [],
         externalAgentId: getChatExternalAgentId(),
@@ -1917,6 +1938,30 @@ async function throwIfApprovalRequired(
   if (requiresApproval) {
     throw new Error(TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON);
   }
+}
+
+function resolveApprovalPolicyTarget(
+  toolName: string,
+  args: unknown,
+): { toolName: string; toolInput: Record<string, unknown> } {
+  const toolInput = isRecord(args) ? args : {};
+  const shortName = archestraMcpBranding.getToolShortName(toolName);
+  if (shortName !== TOOL_RUN_TOOL_SHORT_NAME) {
+    return { toolName, toolInput };
+  }
+
+  const targetToolName = toolInput.tool_name;
+  if (typeof targetToolName !== "string" || targetToolName.length === 0) {
+    return { toolName, toolInput };
+  }
+
+  const targetToolInput = isRecord(toolInput.tool_args)
+    ? toolInput.tool_args
+    : {};
+  return {
+    toolName: targetToolName,
+    toolInput: targetToolInput,
+  };
 }
 
 function reportToolMetrics(params: {

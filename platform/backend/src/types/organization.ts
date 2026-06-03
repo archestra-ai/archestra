@@ -290,6 +290,9 @@ const extendedFields = {
   customFont: OrganizationCustomFontSchema,
   compressionScope: OrganizationCompressionScopeSchema,
   globalToolPolicy: GlobalToolPolicySchema,
+  analyticsInstanceId: z.string().uuid(),
+  analyticsInstanceStartedAt: z.date().nullable(),
+  analyticsInstanceLastHeartbeatAt: z.date().nullable(),
   embeddingModel: z.string().nullable(),
   embeddingDimensions: EmbeddingDimensionsSchema.nullable(),
   defaultLlmModel: z.string().nullable(),
@@ -319,10 +322,14 @@ const extendedFields = {
   presetEntityDefaultValidationRegex: z.string().nullable(),
 };
 
-export const SelectOrganizationSchema = createSelectSchema(
+const InternalSelectOrganizationSchema = createSelectSchema(
   schema.organizationsTable,
   extendedFields,
 );
+export const SelectOrganizationSchema = InternalSelectOrganizationSchema.omit({
+  analyticsInstanceStartedAt: true,
+  analyticsInstanceLastHeartbeatAt: true,
+});
 export const InsertOrganizationSchema = createInsertSchema(
   schema.organizationsTable,
   extendedFields,
@@ -446,6 +453,24 @@ export const UpdatePresetEntityDefaultValidationRegexSchema = z.object({
   presetEntityDefaultValidationRegex: ValidationRegexSchema.nullable(),
 });
 
+/**
+ * Clean API shape for configuring the implicit "default" environment. The
+ * handler maps these to the org columns (`defaultEnvironmentName`,
+ * `defaultEnvironmentNamespace`, `defaultEnvironmentRestricted`). Omitting a
+ * field leaves it unchanged; an explicit null clears the nullable ones.
+ */
+export const UpdateDefaultEnvironmentSchema = z.object({
+  name: z.string().trim().min(1).max(50).nullable().optional(),
+  description: z.string().trim().max(500).nullable().optional(),
+  namespace: z.string().trim().max(253).nullable().optional(),
+  networkPolicyId: z.string().uuid().nullable().optional(),
+  restricted: z.boolean().optional(),
+});
+
+export type UpdateDefaultEnvironment = z.infer<
+  typeof UpdateDefaultEnvironmentSchema
+>;
+
 export const CompleteOnboardingSchema = z.object({
   onboardingComplete: z.literal(true),
 });
@@ -455,6 +480,13 @@ export type OrganizationCompressionScope = z.infer<
 >;
 export type GlobalToolPolicy = z.infer<typeof GlobalToolPolicySchema>;
 export type Organization = z.infer<typeof SelectOrganizationSchema>;
+export type OrganizationAnalyticsState = Pick<
+  z.infer<typeof InternalSelectOrganizationSchema>,
+  | "id"
+  | "analyticsInstanceId"
+  | "analyticsInstanceStartedAt"
+  | "analyticsInstanceLastHeartbeatAt"
+>;
 export type InsertOrganization = z.infer<typeof InsertOrganizationSchema>;
 export type AppearanceSettings = z.infer<typeof AppearanceSettingsSchema>;
 export type OrganizationChatLink = z.infer<typeof OrganizationChatLinkSchema>;

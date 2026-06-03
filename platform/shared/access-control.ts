@@ -54,6 +54,8 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   mcpRegistry: ["read", "create", "update", "delete"],
   mcpServerInstallation: ["read", "create", "update", "delete", "admin"],
   mcpServerInstallationRequest: ["read", "create", "update", "delete", "admin"],
+  environment: ["admin", "deploy-to-restricted"],
+  networkPolicy: ["read", "create", "update", "delete"],
 
   // Knowledge
   knowledgeFile: ["read", "create", "update", "delete", "admin"],
@@ -114,6 +116,8 @@ export const editorPermissions: Record<Resource, Action[]> = {
   mcpRegistry: ["read", "create", "update", "delete"],
   mcpServerInstallation: ["read", "create", "update", "delete"],
   mcpServerInstallationRequest: ["read", "create", "update", "delete"],
+  environment: ["admin"],
+  networkPolicy: ["read", "create", "update", "delete"],
 
   // Knowledge
   knowledgeFile: ["read", "create", "update", "delete"],
@@ -174,6 +178,8 @@ export const memberPermissions: Record<Resource, Action[]> = {
   mcpRegistry: ["read"],
   mcpServerInstallation: ["read", "create", "delete"],
   mcpServerInstallationRequest: ["read", "create", "update"],
+  environment: [],
+  networkPolicy: ["read"],
 
   // Knowledge
   knowledgeFile: ["read"],
@@ -291,6 +297,14 @@ export const permissionDescriptions: Record<string, string> = {
   "mcpServerInstallationRequest:delete": "Delete installation requests",
   "mcpServerInstallationRequest:admin":
     "Approve or decline installation requests",
+  "environment:admin":
+    "Create, edit, and delete deployment environments (everyone can view them)",
+  "environment:deploy-to-restricted":
+    "Deploy catalog items to restricted environments",
+  "networkPolicy:read": "View network policies",
+  "networkPolicy:create": "Create network policies",
+  "networkPolicy:update": "Modify network policies",
+  "networkPolicy:delete": "Delete network policies",
 
   // LLM
   "llmProxy:read": "View and list LLM proxies",
@@ -964,6 +978,35 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.DeleteMcpPresetEntry]: {
     mcpServerInstallation: ["admin"],
   },
+  // Listing environments is available to any authenticated user (read is ungated).
+  [RouteId.ListEnvironments]: {},
+  [RouteId.CreateEnvironment]: {
+    environment: ["admin"],
+  },
+  [RouteId.UpdateEnvironment]: {
+    environment: ["admin"],
+  },
+  [RouteId.DeleteEnvironment]: {
+    environment: ["admin"],
+  },
+  [RouteId.UpdateDefaultEnvironment]: {
+    environment: ["admin"],
+  },
+  [RouteId.GetK8sCapabilities]: {
+    networkPolicy: ["read"],
+  },
+  [RouteId.ListNetworkPolicies]: {
+    networkPolicy: ["read"],
+  },
+  [RouteId.CreateNetworkPolicy]: {
+    networkPolicy: ["create"],
+  },
+  [RouteId.UpdateNetworkPolicy]: {
+    networkPolicy: ["update"],
+  },
+  [RouteId.DeleteNetworkPolicy]: {
+    networkPolicy: ["delete"],
+  },
   [RouteId.UpdateKnowledgeSettings]: {
     knowledgeSettings: ["update"],
   },
@@ -1182,9 +1225,18 @@ export const requiredEndpointPermissionsMap: Partial<
   // Agent Skill Routes - per-instance scope is enforced in the handlers
   [RouteId.GetSkills]: { skill: ["read"] },
   [RouteId.CreateSkill]: { skill: ["create"] },
+  [RouteId.ConvertAgentToSkill]: { skill: ["create"], agent: ["read"] },
+  // chat:read gates spending the agent's configured LLM key — the same gate
+  // every other resolveAgentLlmOrDefault path (chat, compaction) sits behind.
+  [RouteId.SuggestSkillDescription]: {
+    skill: ["create"],
+    agent: ["read"],
+    chat: ["read"],
+  },
   [RouteId.GetSkill]: { skill: ["read"] },
   [RouteId.UpdateSkill]: { skill: ["update"] },
   [RouteId.DeleteSkill]: { skill: ["delete"] },
+  [RouteId.ResetSkill]: { skill: ["update"] },
   [RouteId.DiscoverGithubSkills]: { skill: ["read"] },
   [RouteId.PreviewGithubSkill]: { skill: ["read"] },
   [RouteId.ImportGithubSkills]: { skill: ["create"] },

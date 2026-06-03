@@ -9,6 +9,9 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use base64::Engine;
+use dagger_sdk::core::gql_client::GraphQlExtension;
+use dagger_sdk::core::graphql_client::GraphQLError;
+use dagger_sdk::errors::DaggerError;
 use dagger_sdk::{
     Config, Container, ContainerWithExecOpts, ContainerWithNewFileOpts, DaggerConn, ReturnType,
     connect_opts,
@@ -25,7 +28,7 @@ use crate::validation::{
     SKILL_SANDBOX_HOME, SKILL_SANDBOX_ROOT, SKILL_SANDBOX_USER, format_artifact_error, shell_quote,
     skill_root_path, validate_artifact_path, validate_cwd, validate_snapshot_file_path,
 };
-use crate::{ArtifactBytes, CommandExecution, Result, SandboxError, SnapshotFile};
+use crate::{ArtifactBytes, CommandExecution, EngineFault, Result, SandboxError, SnapshotFile};
 
 /// debian + python + uv + node + npm + common cli, warmed once per process.
 /// override with `ARCHESTRA_DAGGER_RUNTIME_IMAGE` for a custom debian-based base.
@@ -52,6 +55,9 @@ const DEFAULT_VENV_PYTHON: &str = "/home/sandbox/.venv/bin/python";
 const DEFAULT_PYTHON_REQUIREMENTS: &[&str] = &["numpy", "pandas", "httpx"];
 
 const SESSION_READY_TIMEOUT: Duration = Duration::from_secs(60);
+/// the dagger SDK message emitted when the engine accepted `/query` but timed
+/// out waiting for this client's session attachables. see [`classify_engine_fault`].
+const SESSION_ATTACHABLES_WAIT_ERROR: &str = "waiting for client session attachables";
 
 const ARTIFACT_TOO_LARGE_EXIT_CODE: isize = 65;
 const ARTIFACT_NOT_FOUND_EXIT_CODE: isize = 66;
@@ -223,6 +229,7 @@ impl SandboxBackend for DaggerBackend {
         attach_trace(traceparent.as_deref());
         // ensure_warm covers the engine-reachable + base-image-buildable invariant.
         let _ = self.ensure_warm().await?;
+        self.client.version().await.map_err(from_sdk)?;
         Ok(())
     }
 
@@ -261,7 +268,12 @@ pub(crate) async fn spawn() -> Result<Arc<SessionHandle>> {
         if let Err(err) = result
             && let Some(tx) = fail_tx.take()
         {
-            let _ = tx.send(SandboxError::engine(err));
+            // a `ConnectError` is a connection/shutdown failure, never a
+            // per-session attachables timeout, so it is always plain unreachable.
+            let _ = tx.send(SandboxError::EngineUnreachable {
+                message: err.to_string(),
+                fault: EngineFault::Unreachable,
+            });
         }
     });
 
@@ -271,19 +283,22 @@ pub(crate) async fn spawn() -> Result<Arc<SessionHandle>> {
                 tracing::info!("dagger session ready");
                 Ok(Arc::new(SessionHandle::new(msg_tx)))
             }
-            Err(_) => Err(SandboxError::EngineUnreachable(
-                "the Dagger session task exited before reporting ready".to_string(),
-            )),
+            Err(_) => Err(SandboxError::EngineUnreachable {
+                message: "the Dagger session task exited before reporting ready".to_string(),
+                fault: EngineFault::Unreachable,
+            }),
         },
         failure = fail_rx => match failure {
             Ok(err) => Err(err),
-            Err(_) => Err(SandboxError::EngineUnreachable(
-                "the Dagger session failed without a diagnostic".to_string(),
-            )),
+            Err(_) => Err(SandboxError::EngineUnreachable {
+                message: "the Dagger session failed without a diagnostic".to_string(),
+                fault: EngineFault::Unreachable,
+            }),
         },
-        _ = tokio::time::sleep(SESSION_READY_TIMEOUT) => Err(SandboxError::EngineUnreachable(
-            format!("the Dagger session did not become ready within {}s", SESSION_READY_TIMEOUT.as_secs()),
-        )),
+        _ = tokio::time::sleep(SESSION_READY_TIMEOUT) => Err(SandboxError::EngineUnreachable {
+            message: format!("the Dagger session did not become ready within {}s", SESSION_READY_TIMEOUT.as_secs()),
+            fault: EngineFault::Unreachable,
+        }),
     }
 }
 
@@ -330,7 +345,7 @@ async fn build_warm_base(client: &DaggerConn) -> Result<Container> {
         .with_exec(vec!["sh".to_string(), "-c".to_string(), user_setup])
         .sync()
         .await
-        .map_err(SandboxError::engine)
+        .map_err(engine)
         .map(|id| client.load_container_from_id(id))
         .inspect(|_| tracing::info!("warm base image ready"))
         .inspect_err(|err| tracing::warn!(error = %err, "warm base image build failed"))
@@ -446,12 +461,62 @@ fn any_exit_opts<'a>() -> ContainerWithExecOpts<'a> {
 /// errors with an embedded `exit code: N` come from a container exec that
 /// returned non-zero (kill-by-signal counts here too); everything else is a
 /// real transport/engine failure.
-fn from_sdk(error: impl std::fmt::Display) -> SandboxError {
-    let message = error.to_string();
-    match parse_sdk_exit_code(&message) {
-        Some(exit_code) => SandboxError::CommandFailed { exit_code, message },
-        None => SandboxError::EngineUnreachable(message),
+/// categorise an error returned by the dagger SDK during exec evaluation. an
+/// exec that returned non-zero (kill-by-signal counts here too) becomes a
+/// `CommandFailed`; everything else is a real transport/engine failure, tagged
+/// with the specific fault so the session layer can pick a retry policy.
+fn from_sdk(err: DaggerError) -> SandboxError {
+    match exec_exit_code(&err) {
+        Some(exit_code) => SandboxError::CommandFailed {
+            exit_code,
+            message: err.to_string(),
+        },
+        None => SandboxError::EngineUnreachable {
+            fault: classify_engine_fault(&err),
+            message: err.to_string(),
+        },
     }
+}
+
+/// build an engine-unreachable error from a non-exec SDK failure (warm-base
+/// build), classifying the fault from the typed error.
+fn engine(err: DaggerError) -> SandboxError {
+    SandboxError::EngineUnreachable {
+        fault: classify_engine_fault(&err),
+        message: err.to_string(),
+    }
+}
+
+/// the engine reports a stale-attachables timeout as a GraphQL *domain* error:
+/// the query reached the engine but it gave up waiting for this client's
+/// attachables. dagger ships no machine-readable code for it, so the message
+/// substring is the only discriminator — but we consult it only on the typed
+/// domain-error path, never on transport/build/serialize errors.
+fn classify_engine_fault(err: &DaggerError) -> EngineFault {
+    match err {
+        DaggerError::Query(GraphQLError::DomainError { message, .. })
+            if message.contains(SESSION_ATTACHABLES_WAIT_ERROR) =>
+        {
+            EngineFault::StaleAttachables
+        }
+        _ => EngineFault::Unreachable,
+    }
+}
+
+/// pull a process exit code out of the engine's typed `EXEC_ERROR` extension.
+/// falls back to scraping the message because signal-killed execs (e.g. SIGXFSZ
+/// -> 153) can surface the code only in the message even under `ReturnType::Any`.
+fn exec_exit_code(err: &DaggerError) -> Option<i32> {
+    if let DaggerError::Query(GraphQLError::DomainError { fields, .. }) = err {
+        let typed = fields.iter().find_map(|field| match &field.extensions {
+            Some(GraphQlExtension::ExecError { exit_code, .. }) => Some(*exit_code),
+            _ => None,
+        });
+        if typed.is_some() {
+            return typed;
+        }
+    }
+    parse_sdk_exit_code(&err.to_string())
 }
 
 fn parse_sdk_exit_code(message: &str) -> Option<i32> {
@@ -467,17 +532,85 @@ fn parse_sdk_exit_code(message: &str) -> Option<i32> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use dagger_sdk::core::gql_client::GraphQLErrorMessage;
+
+    /// a GraphQL domain error carrying `message` and an optional typed extension.
+    fn domain_error(message: &str, extension: Option<GraphQlExtension>) -> DaggerError {
+        DaggerError::Query(GraphQLError::DomainError {
+            message: message.to_string(),
+            fields: extension
+                .map(|extension| GraphQLErrorMessage {
+                    message: message.to_string(),
+                    locations: None,
+                    extensions: Some(extension),
+                    path: None,
+                })
+                .into_iter()
+                .collect(),
+        })
+    }
+
+    fn exec_error(exit_code: i32, message: &str) -> DaggerError {
+        domain_error(
+            message,
+            Some(GraphQlExtension::ExecError {
+                cmd: Vec::new(),
+                exit_code,
+                stderr: String::new(),
+                stdout: String::new(),
+            }),
+        )
+    }
 
     #[test]
-    fn from_sdk_parses_exit_code_into_command_failed() {
-        let err =
-            from_sdk("process \"/.init bash -c …\" did not complete successfully: exit code: 153");
+    fn from_sdk_reads_exit_code_from_typed_extension() {
+        let err = exec_error(153, "process did not complete successfully");
         assert!(matches!(
-            err,
+            from_sdk(err),
             SandboxError::CommandFailed { exit_code: 153, .. }
         ));
-        // a plain transport error stays as EngineUnreachable
-        let err = from_sdk("connection refused");
-        assert!(matches!(err, SandboxError::EngineUnreachable(_)));
+    }
+
+    #[test]
+    fn from_sdk_falls_back_to_message_exit_code_without_extension() {
+        // signal-killed execs can omit the extension and only embed the code.
+        let err = domain_error(
+            "process \"/.init bash -c …\" did not complete successfully: exit code: 153",
+            None,
+        );
+        assert!(matches!(
+            from_sdk(err),
+            SandboxError::CommandFailed { exit_code: 153, .. }
+        ));
+    }
+
+    #[test]
+    fn from_sdk_keeps_transport_errors_as_generic_unreachable() {
+        let err = DaggerError::Query(GraphQLError::HttpError("connection refused".to_string()));
+        assert!(matches!(
+            from_sdk(err),
+            SandboxError::EngineUnreachable {
+                fault: EngineFault::Unreachable,
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn classify_engine_fault_flags_stale_attachables_only_on_domain_errors() {
+        let stale = domain_error(
+            "waiting for client session attachables: context deadline exceeded",
+            None,
+        );
+        assert_eq!(classify_engine_fault(&stale), EngineFault::StaleAttachables);
+
+        // the same phrase in a non-domain error is never treated as attachables.
+        let http = DaggerError::Query(GraphQLError::HttpError(
+            "waiting for client session attachables".to_string(),
+        ));
+        assert_eq!(classify_engine_fault(&http), EngineFault::Unreachable);
+
+        let generic = domain_error("connection reset", None);
+        assert_eq!(classify_engine_fault(&generic), EngineFault::Unreachable);
     }
 }

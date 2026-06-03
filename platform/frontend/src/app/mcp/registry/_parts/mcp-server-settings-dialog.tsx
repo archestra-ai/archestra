@@ -38,13 +38,11 @@ import {
   PresetSelector,
 } from "./mcp-logs-dialog";
 import type { CatalogItem } from "./mcp-server-card";
-import { PresetsSection } from "./presets-section";
 import { YamlConfigContent } from "./yaml-config-dialog";
 
 type SettingsPage =
   | "configuration"
   | "connections"
-  | "presets"
   | "debug-logs"
   | "debug-inspector"
   | "debug-shell"
@@ -90,6 +88,8 @@ interface McpServerSettingsDialogProps {
   needsReinstall?: boolean;
   // Delete
   onDelete?: () => void;
+  // Clone
+  onClone?: () => void;
 }
 
 export type { SettingsPage };
@@ -103,7 +103,6 @@ const DEBUG_TAB_MAP: Record<string, McpLogsTab> = {
 const PAGE_TITLES: Record<SettingsPage, string> = {
   configuration: "Configuration",
   connections: "Credentials",
-  presets: "Presets",
   "debug-logs": "Logs",
   "debug-inspector": "Inspector",
   "debug-shell": "Shell",
@@ -143,23 +142,17 @@ export function McpServerSettingsDialog({
   onConnect,
   needsReinstall,
   onDelete,
+  onClone,
 }: McpServerSettingsDialogProps) {
   const isBuiltin = variant === "builtin";
   const presetEntityName = usePresetEntityName();
   const { data: presets = [] } = useCatalogPresets(
     isBuiltin || !presetEntityName.configured ? null : item.id,
   );
-  const showPresets = !isBuiltin && presetEntityName.configured;
 
   const navItems: NavItemDef[] = [];
   if (!isBuiltin) {
     navItems.push({ id: "configuration", label: "Configuration" });
-  }
-  if (showPresets) {
-    navItems.push({
-      id: "presets",
-      label: presetEntityName.plural,
-    });
   }
   if (showConnections) {
     navItems.push({
@@ -198,11 +191,6 @@ export function McpServerSettingsDialog({
     : (navItems[0]?.id ?? "configuration");
 
   const isDebugPage = validPage.startsWith("debug-");
-
-  const pageTitles: Record<SettingsPage, string> = {
-    ...PAGE_TITLES,
-    presets: presetEntityName.plural,
-  };
 
   // Preset filter shown in the slim page header on Logs/Inspector/Shell and
   // Credentials. Drives both McpLogsContent (filters the pod selector) and
@@ -362,7 +350,7 @@ export function McpServerSettingsDialog({
             <div className="px-2 pb-3 flex flex-col gap-1.5">
               {!hasPersonalConnection && onConnect && (
                 <Button
-                  variant="outline"
+                  variant="ghost"
                   size="sm"
                   className="w-full justify-start"
                   onClick={() =>
@@ -385,6 +373,19 @@ export function McpServerSettingsDialog({
                   Reinstall
                 </Button>
               )}
+              {onClone && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="w-full justify-start"
+                  onClick={() => {
+                    handleClose();
+                    onClone();
+                  }}
+                >
+                  Clone
+                </Button>
+              )}
               {onDelete && (
                 <Button
                   variant="ghost"
@@ -405,7 +406,9 @@ export function McpServerSettingsDialog({
           <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
             {/* Content header */}
             <div className="flex min-h-[72px] shrink-0 items-center justify-between border-b px-4 py-4">
-              <h2 className="text-lg font-semibold">{pageTitles[validPage]}</h2>
+              <h2 className="text-lg font-semibold">
+                {PAGE_TITLES[validPage]}
+              </h2>
               <div className="flex items-center gap-2">
                 {presetSelectorVisible && (
                   <PresetSelector
@@ -443,15 +446,6 @@ export function McpServerSettingsDialog({
                   onDirtyChange={setIsConfigDirty}
                   submitRef={configSubmitRef}
                 />
-              )}
-
-              {validPage === "presets" && showPresets && (
-                <div className="flex-1 overflow-y-auto p-6">
-                  <PresetsSection
-                    cat={item}
-                    onGoToConfiguration={() => navigateTo("configuration")}
-                  />
-                </div>
               )}
 
               {validPage === "connections" && showConnections && (
@@ -542,7 +536,7 @@ export function McpServerSettingsDialog({
                       </EmptyMedia>
                       <EmptyDescription>
                         Install this server to open the{" "}
-                        {pageTitles[validPage].toLowerCase()}.
+                        {PAGE_TITLES[validPage].toLowerCase()}.
                       </EmptyDescription>
                     </EmptyHeader>
                     {onConnect && (

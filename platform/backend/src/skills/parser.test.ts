@@ -24,8 +24,37 @@ describe("parseSkillManifest", () => {
     expect(parsed.description).toBe("Extract text from PDF files.");
     expect(parsed.license).toBe("MIT");
     expect(parsed.compatibility).toBeNull();
+    expect(parsed.allowedTools).toBeNull();
     expect(parsed.content).toBe("# PDF Processing\nUse pdftotext.");
     expect(parsed.metadata).toEqual({});
+  });
+
+  test("normalizes allowed-tools from a string or a YAML sequence", () => {
+    const fromString = parseSkillManifest(
+      [
+        "---",
+        "name: git-helper",
+        "description: Runs git.",
+        "allowed-tools: Bash(git:*)  Read",
+        "---",
+        "Body.",
+      ].join("\n"),
+    );
+    expect(fromString.allowedTools).toBe("Bash(git:*) Read");
+
+    const fromList = parseSkillManifest(
+      [
+        "---",
+        "name: git-helper",
+        "description: Runs git.",
+        "allowed-tools:",
+        "  - slack__send",
+        "  - jira__create",
+        "---",
+        "Body.",
+      ].join("\n"),
+    );
+    expect(fromList.allowedTools).toBe("slack__send jira__create");
   });
 
   test("coerces the metadata map to string values", () => {
@@ -56,6 +85,18 @@ describe("parseSkillManifest", () => {
     ].join("\n");
 
     expect(parseSkillManifest(raw).compatibility).toBe("requires python3");
+  });
+
+  test("reads the templated flag from frontmatter, defaulting to false", () => {
+    const base = ["name: greeter", "description: Greets the user."];
+    const make = (extra: string[]) =>
+      ["---", ...base, ...extra, "---", "Hello {{user.name}}."].join("\n");
+
+    expect(parseSkillManifest(make([])).templated).toBe(false);
+    expect(parseSkillManifest(make(["templated: true"])).templated).toBe(true);
+    expect(parseSkillManifest(make(["templated: false"])).templated).toBe(
+      false,
+    );
   });
 
   test("throws when frontmatter is missing", () => {

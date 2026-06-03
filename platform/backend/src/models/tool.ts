@@ -368,6 +368,7 @@ class ToolModel {
         updatedAt: schema.toolsTable.updatedAt,
         delegateToAgentId: schema.toolsTable.delegateToAgentId,
         meta: schema.toolsTable.meta,
+        clonedPendingDiscovery: schema.toolsTable.clonedPendingDiscovery,
         policiesAutoConfiguredAt: schema.toolsTable.policiesAutoConfiguredAt,
         policiesAutoConfiguringStartedAt:
           schema.toolsTable.policiesAutoConfiguringStartedAt,
@@ -407,8 +408,17 @@ class ToolModel {
      */
     // TODO: this require a re-work.
     // findAll currently used only by the auto-policy configuration and it bypass access control checks.
+    // Chaining `.where()` twice on a dynamic Drizzle query replaces the prior
+    // clause rather than ANDing it, so combine both filters in a single call.
     if (userId && !isAgentAdmin) {
-      query = query.where(isNotNull(schema.toolsTable.catalogId));
+      query = query.where(
+        and(
+          isNotNull(schema.toolsTable.catalogId),
+          eq(schema.toolsTable.clonedPendingDiscovery, false),
+        ),
+      );
+    } else {
+      query = query.where(eq(schema.toolsTable.clonedPendingDiscovery, false));
     }
 
     const results = await query;
@@ -713,6 +723,160 @@ class ToolModel {
   }
 
   /**
+   * Copy a source catalog's tools and their guardrail policies into a target
+   * (clone) catalog as PROVISIONAL rows (clonedPendingDiscovery = true). Uses
+   * direct inserts — no default policies are created and the policy-configurator
+   * subagent is never triggered. No agent_tools rows are created. No-op if the
+   * source has no tools.
+   */
+  static async cloneToolsAndPoliciesFromCatalog(params: {
+    sourceCatalogId: string;
+    targetCatalogId: string;
+    targetCatalogName: string;
+  }): Promise<void> {
+    const { sourceCatalogId, targetCatalogId, targetCatalogName } = params;
+
+    const sourceTools = await db
+      .select()
+      .from(schema.toolsTable)
+      .where(eq(schema.toolsTable.catalogId, sourceCatalogId));
+    if (sourceTools.length === 0) return;
+
+    // Bulk-insert the cloned tools in one statement. The target name is
+    // deterministic and unique per source tool (the source's tool names are
+    // unique within its catalog, and re-slugifying the un-prefixed name is
+    // idempotent), so we use it to map each source tool to its clone.
+    const clonedNameBySourceId = new Map(
+      sourceTools.map((t) => [
+        t.id,
+        ToolModel.slugifyName(
+          targetCatalogName,
+          ToolModel.unslugifyName(t.name),
+        ),
+      ]),
+    );
+    const clonedTools = await db
+      .insert(schema.toolsTable)
+      .values(
+        sourceTools.map((t) => ({
+          catalogId: targetCatalogId,
+          name: clonedNameBySourceId.get(t.id) as string,
+          parameters: t.parameters,
+          description: t.description,
+          meta: t.meta,
+          clonedPendingDiscovery: true,
+        })),
+      )
+      .returning();
+    const clonedIdByName = new Map(clonedTools.map((t) => [t.name, t.id]));
+    const clonedIdBySourceId = new Map(
+      sourceTools.map((t) => [
+        t.id,
+        clonedIdByName.get(clonedNameBySourceId.get(t.id) as string) as string,
+      ]),
+    );
+
+    const sourceToolIds = sourceTools.map((t) => t.id);
+
+    // Copy both policy types with one bulk read + one bulk write each,
+    // remapping every policy's toolId from the source tool to its clone.
+    const invocationPolicies = await db
+      .select()
+      .from(schema.toolInvocationPoliciesTable)
+      .where(inArray(schema.toolInvocationPoliciesTable.toolId, sourceToolIds));
+    if (invocationPolicies.length > 0) {
+      await db.insert(schema.toolInvocationPoliciesTable).values(
+        invocationPolicies.map((p) => ({
+          toolId: clonedIdBySourceId.get(p.toolId) as string,
+          conditions: p.conditions,
+          action: p.action,
+          reason: p.reason,
+        })),
+      );
+    }
+
+    const trustedPolicies = await db
+      .select()
+      .from(schema.trustedDataPoliciesTable)
+      .where(inArray(schema.trustedDataPoliciesTable.toolId, sourceToolIds));
+    if (trustedPolicies.length > 0) {
+      await db.insert(schema.trustedDataPoliciesTable).values(
+        trustedPolicies.map((p) => ({
+          toolId: clonedIdBySourceId.get(p.toolId) as string,
+          conditions: p.conditions,
+          action: p.action,
+          description: p.description,
+        })),
+      );
+    }
+  }
+
+  /** Count provisional (cloned, unconfirmed) tools for a catalog. */
+  static async countProvisionalForCatalog(catalogId: string): Promise<number> {
+    const rows = await db
+      .select({ id: schema.toolsTable.id })
+      .from(schema.toolsTable)
+      .where(
+        and(
+          eq(schema.toolsTable.catalogId, catalogId),
+          eq(schema.toolsTable.clonedPendingDiscovery, true),
+        ),
+      );
+    return rows.length;
+  }
+
+  /**
+   * First-install reconciliation for a clone. For each provisional tool:
+   * confirm (clear the flag) if its slugified name was discovered, otherwise
+   * delete it (policies cascade). Matching is on the full slugified tool name
+   * (`slugifyName(catalogName, rawName)`) — the same slug used both for the
+   * provisional rows and the discovered set — so it is exact and lossless.
+   * Returns the ids of confirmed tools. Does NOT create tools or trigger the
+   * configurator — genuinely-new discovered tools are created by the normal
+   * bulkCreateToolsIfNotExists path.
+   */
+  static async reconcileClonedCatalogTools(params: {
+    catalogId: string;
+    discoveredToolNames: Set<string>;
+  }): Promise<{ confirmedToolIds: string[] }> {
+    const { catalogId, discoveredToolNames } = params;
+
+    const provisional = await db
+      .select()
+      .from(schema.toolsTable)
+      .where(
+        and(
+          eq(schema.toolsTable.catalogId, catalogId),
+          eq(schema.toolsTable.clonedPendingDiscovery, true),
+        ),
+      );
+
+    const confirmedToolIds: string[] = [];
+    const toDelete: string[] = [];
+    for (const tool of provisional) {
+      if (discoveredToolNames.has(tool.name)) {
+        confirmedToolIds.push(tool.id);
+      } else {
+        toDelete.push(tool.id);
+      }
+    }
+
+    if (confirmedToolIds.length > 0) {
+      await db
+        .update(schema.toolsTable)
+        .set({ clonedPendingDiscovery: false })
+        .where(inArray(schema.toolsTable.id, confirmedToolIds));
+    }
+    if (toDelete.length > 0) {
+      await db
+        .delete(schema.toolsTable)
+        .where(inArray(schema.toolsTable.id, toDelete));
+    }
+
+    return { confirmedToolIds };
+  }
+
+  /**
    * Seed Archestra built-in tools in the database.
    * Creates the Archestra catalog entry if it doesn't exist (for FK constraint),
    * then creates/updates tools with the catalog ID.
@@ -901,6 +1065,35 @@ class ToolModel {
       "Backfilled Agent Skill tools to org agents",
     );
     return agentIds.length;
+  }
+
+  /**
+   * One-time backfill triggered on startup: when a skill built-in tool is
+   * created for the first time on this seed run, assign the skill toolset to
+   * every agent in orgs that already opted in via `organization.skillToolsEnabled`.
+   *
+   * Newly created agents inherit skill tools via {@link assignSkillToolsToAgent},
+   * but agents that predate a tool's introduction would otherwise never receive
+   * it — leaving the documented MCP flow unreachable until someone re-runs the
+   * opt-in. Idempotent (delegates to {@link backfillSkillToolsToOrgAgents}).
+   *
+   * @param newlyCreatedToolNames names returned by {@link seedArchestraTools}.
+   */
+  static async backfillNewSkillToolsToEnabledOrgs(
+    newlyCreatedToolNames: string[],
+  ): Promise<void> {
+    const skillShortNames = new Set<string>(SKILL_ARCHESTRA_TOOL_SHORT_NAMES);
+    const hasNewSkillTool = newlyCreatedToolNames.some((name) => {
+      const shortName = extractArchestraBuiltInShortName(name);
+      return shortName !== null && skillShortNames.has(shortName);
+    });
+    if (!hasNewSkillTool) return;
+
+    const organizationIds =
+      await OrganizationModel.findIdsWithSkillToolsEnabled();
+    for (const organizationId of organizationIds) {
+      await ToolModel.backfillSkillToolsToOrgAgents(organizationId);
+    }
   }
 
   /**
@@ -1178,6 +1371,7 @@ class ToolModel {
       .where(
         and(
           eq(schema.toolsTable.catalogId, catalogId),
+          eq(schema.toolsTable.clonedPendingDiscovery, false),
           ...hiddenToolNames.map((toolName) =>
             ne(schema.toolsTable.name, toolName),
           ),

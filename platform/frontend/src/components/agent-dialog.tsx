@@ -2,7 +2,6 @@
 
 import {
   type AgentScope,
-  type AgentToolAssignmentMode,
   type AgentType,
   type archestraApiTypes,
   BLOCKED_PASSTHROUGH_HEADERS,
@@ -130,7 +129,6 @@ import {
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useIdentityProviders } from "@/lib/auth/identity-provider-read.query";
 import { useChatProfileMcpTools } from "@/lib/chat/chat.query";
-import { useFeature } from "@/lib/config/config.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useConnectors } from "@/lib/knowledge/connector.query";
@@ -650,8 +648,6 @@ export function AgentDialog({
     useState(false);
   const [dualLlmMaxRounds, setDualLlmMaxRounds] = useState("5");
   const [passthroughHeaders, setPassthroughHeaders] = useState<string[]>([]);
-  const [toolAssignmentMode, setToolAssignmentMode] =
-    useState<AgentToolAssignmentMode>("manual");
   const [toolExposureMode, setToolExposureMode] =
     useState<ToolExposureMode>("full");
   const [isSaving, setIsSaving] = useState(false);
@@ -669,26 +665,13 @@ export function AgentDialog({
   const _isDualLlmBuiltIn = isDualLlmMainBuiltIn || isDualLlmQuarantineBuiltIn;
   const supportsIdentityProvider =
     agentType === "mcp_gateway" || agentType === "llm_proxy";
-  const advancedToolFeaturesEnabled =
-    useFeature("advancedToolFeaturesEnabled") === true;
-  const supportsAutomaticToolAssignment =
-    advancedToolFeaturesEnabled &&
-    (agentType === "agent" || agentType === "mcp_gateway");
   const mcpAuthDocsUrl = getFrontendDocsUrl(DocsPage.McpAuthentication);
   const toolExposureDocsUrl = getDocsUrl(
     agentType === "mcp_gateway"
       ? DocsPage.PlatformMcpGateway
       : DocsPage.PlatformAgents,
-    "search-and-run-tool-mode",
+    "load-tools-when-needed",
   );
-  const toolAssignmentDocsUrl = supportsAutomaticToolAssignment
-    ? getDocsUrl(
-        agentType === "mcp_gateway"
-          ? DocsPage.PlatformMcpGateway
-          : DocsPage.PlatformAgents,
-        "tool-assignment-mode",
-      )
-    : null;
   const showPrimarySettingsCard =
     !isBuiltIn ||
     shouldShowDescriptionField({ agentType, isBuiltIn }) ||
@@ -729,7 +712,6 @@ export function AgentDialog({
         setKnowledgeBaseIds(agentData.knowledgeBaseIds);
         setConnectorIds(agentData.connectorIds);
         setPassthroughHeaders(agentData.passthroughHeaders ?? []);
-        setToolAssignmentMode(agentData.toolAssignmentMode);
         setToolExposureMode(agentData.toolExposureMode ?? "full");
         setScope(agentData.scope);
         setAutoConfigureOnToolDiscovery(
@@ -763,7 +745,6 @@ export function AgentDialog({
         setConnectorIds([]);
         setScope("personal");
         setPassthroughHeaders([]);
-        setToolAssignmentMode("manual");
         setToolExposureMode("full");
         setAutoConfigureOnToolDiscovery(false);
         setDualLlmMaxRounds("5");
@@ -979,9 +960,6 @@ export function AgentDialog({
             labels: updatedLabels,
             scope,
             ...(showSecurity && { considerContextUntrusted }),
-            ...(supportsAutomaticToolAssignment && {
-              toolAssignmentMode,
-            }),
             ...(agentType === "mcp_gateway" && {
               passthroughHeaders:
                 passthroughHeaders.length > 0 ? passthroughHeaders : null,
@@ -1019,9 +997,6 @@ export function AgentDialog({
           labels: updatedLabels,
           scope,
           ...(showSecurity && { considerContextUntrusted }),
-          ...(supportsAutomaticToolAssignment && {
-            toolAssignmentMode,
-          }),
           ...(agentType === "mcp_gateway" && {
             passthroughHeaders:
               passthroughHeaders.length > 0 ? passthroughHeaders : null,
@@ -1116,8 +1091,6 @@ export function AgentDialog({
     onOpenChange,
     supportsIdentityProvider,
     passthroughHeaders,
-    toolAssignmentMode,
-    supportsAutomaticToolAssignment,
     deleteAgent,
     toolExposureMode,
   ]);
@@ -1485,62 +1458,22 @@ export function AgentDialog({
                   {/* Tools */}
                   <div className="space-y-2">
                     <div className="flex items-center justify-between gap-2">
-                      <Label>
-                        Tools
-                        {(!supportsAutomaticToolAssignment ||
-                          toolAssignmentMode === "manual") &&
-                          ` (${selectedToolsCount})`}
-                      </Label>
-                      {supportsAutomaticToolAssignment && (
-                        <Select
-                          value={toolAssignmentMode}
-                          onValueChange={(value) =>
-                            setToolAssignmentMode(
-                              value as AgentToolAssignmentMode,
-                            )
-                          }
-                        >
-                          <SelectTrigger className="h-8 w-auto gap-2 text-xs">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="manual">Manual</SelectItem>
-                            <SelectItem value="automatic">
-                              Automatic (by labels)
-                            </SelectItem>
-                          </SelectContent>
-                        </Select>
-                      )}
+                      <Label>Tools ({selectedToolsCount})</Label>
                     </div>
-                    {supportsAutomaticToolAssignment &&
-                      toolAssignmentMode === "automatic" && (
-                        <p className="text-xs text-muted-foreground">
-                          Tools are auto-assigned from catalog entries that
-                          match this {agentTypeDisplayName[agentType]}'s labels.
-                          Switch to Manual to edit directly.
-                        </p>
-                      )}
-                    {!supportsAutomaticToolAssignment ||
-                    toolAssignmentMode === "manual" ? (
-                      <>
-                        {!agent && selectedToolsCount > 0 && (
-                          <p className="text-xs text-muted-foreground">
-                            Some recommended {appName} MCP tools are
-                            pre-selected for you
-                          </p>
-                        )}
-                        <AgentToolsEditor
-                          ref={agentToolsEditorRef}
-                          agentId={agent?.id}
-                          assignmentScope={scope}
-                          assignmentTeamIds={assignedTeamIds}
-                          onSelectedCountChange={setSelectedToolsCount}
-                          openComboboxOnMount={openToolsCombobox}
-                        />
-                      </>
-                    ) : agent ? (
-                      <AgentToolsList agentId={agent.id} />
-                    ) : null}
+                    {!agent && selectedToolsCount > 0 && (
+                      <p className="text-xs text-muted-foreground">
+                        Some recommended {appName} MCP tools are pre-selected
+                        for you
+                      </p>
+                    )}
+                    <AgentToolsEditor
+                      ref={agentToolsEditorRef}
+                      agentId={agent?.id}
+                      assignmentScope={scope}
+                      assignmentTeamIds={assignedTeamIds}
+                      onSelectedCountChange={setSelectedToolsCount}
+                      openComboboxOnMount={openToolsCombobox}
+                    />
                   </div>
 
                   {/* Subagents */}
@@ -1556,44 +1489,41 @@ export function AgentDialog({
                     />
                   </div>
 
-                  {advancedToolFeaturesEnabled && (
-                    <div className="rounded-md border p-3 space-y-2">
-                      <div className="flex items-start gap-3">
-                        <Checkbox
-                          id="search-and-run-tool-mode"
-                          checked={toolExposureMode === "search_and_run_only"}
-                          onCheckedChange={(checked) =>
-                            setToolExposureMode(
-                              checked ? "search_and_run_only" : "full",
-                            )
-                          }
-                          className="mt-0.5"
-                        />
-                        <div className="space-y-1">
-                          <Label
-                            htmlFor="search-and-run-tool-mode"
-                            className="font-medium"
+                  <div className="rounded-md border p-3 space-y-2">
+                    <div className="flex items-start gap-3">
+                      <Checkbox
+                        id="load-tools-when-needed"
+                        checked={toolExposureMode === "search_and_run_only"}
+                        onCheckedChange={(checked) =>
+                          setToolExposureMode(
+                            checked ? "search_and_run_only" : "full",
+                          )
+                        }
+                        className="mt-0.5"
+                      />
+                      <div className="space-y-1">
+                        <Label
+                          htmlFor="load-tools-when-needed"
+                          className="font-medium"
+                        >
+                          Load tools when needed
+                        </Label>
+                        <p className="text-xs text-muted-foreground">
+                          Keep the initial tool list small. Assigned tools can
+                          still be found with{" "}
+                          <code>{TOOL_SEARCH_TOOLS_SHORT_NAME}</code> and run
+                          with <code>{TOOL_RUN_TOOL_SHORT_NAME}</code>.{" "}
+                          <ExternalDocsLink
+                            href={toolExposureDocsUrl}
+                            className="underline"
+                            showIcon={false}
                           >
-                            Search-and-run tool mode
-                          </Label>
-                          <p className="text-xs text-muted-foreground">
-                            Expose only{" "}
-                            <code>{TOOL_SEARCH_TOOLS_SHORT_NAME}</code> and{" "}
-                            <code>{TOOL_RUN_TOOL_SHORT_NAME}</code> in MCP{" "}
-                            <code>tools/list</code>; assigned tools stay
-                            searchable and runnable.{" "}
-                            <ExternalDocsLink
-                              href={toolExposureDocsUrl}
-                              className="underline"
-                              showIcon={false}
-                            >
-                              Learn more
-                            </ExternalDocsLink>
-                          </p>
-                        </div>
+                            Learn more
+                          </ExternalDocsLink>
+                        </p>
                       </div>
                     </div>
-                  )}
+                  </div>
 
                   {/* Knowledge Sources */}
                   {(knowledgeBases.length > 0 || connectors.length > 0) && (
@@ -1893,21 +1823,7 @@ export function AgentDialog({
                           <div className="flex items-center justify-between gap-2">
                             <div className="flex items-center gap-2 flex-1 min-w-0">
                               <Label>Labels</Label>
-                              {supportsAutomaticToolAssignment && (
-                                <span className="text-xs font-normal text-muted-foreground">
-                                  Organize and drive automatic tool assignment
-                                </span>
-                              )}
                             </div>
-                            {toolAssignmentDocsUrl && (
-                              <ExternalDocsLink
-                                href={toolAssignmentDocsUrl}
-                                className="text-xs text-muted-foreground underline shrink-0"
-                                showIcon={false}
-                              >
-                                Learn more
-                              </ExternalDocsLink>
-                            )}
                           </div>
                           <ProfileLabels
                             ref={agentLabelsRef}
@@ -2083,21 +1999,7 @@ export function AgentDialog({
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-2 flex-1 min-w-0">
                         <Label>Labels</Label>
-                        {supportsAutomaticToolAssignment && (
-                          <span className="text-xs font-normal text-muted-foreground">
-                            Organize and drive automatic tool assignment
-                          </span>
-                        )}
                       </div>
-                      {toolAssignmentDocsUrl && (
-                        <ExternalDocsLink
-                          href={toolAssignmentDocsUrl}
-                          className="text-xs text-muted-foreground underline shrink-0"
-                          showIcon={false}
-                        >
-                          Learn more
-                        </ExternalDocsLink>
-                      )}
                     </div>
                     <ProfileLabels
                       ref={agentLabelsRef}

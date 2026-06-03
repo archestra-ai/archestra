@@ -341,4 +341,134 @@ describe("limits routes", () => {
       cleanupSpy.mockRestore();
     });
   });
+
+  describe("POST /api/limits", () => {
+    test("defaults new limits to calendar-month cleanup", async () => {
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/limits",
+        payload: {
+          entityType: "organization",
+          entityId: organizationId,
+          limitType: "token_cost",
+          limitValue: 1000,
+          model: ["gpt-4o"],
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({
+        cleanupInterval: "calendar_month",
+      });
+    });
+
+    test("creates a limit with a calendar-aligned cleanup interval", async () => {
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/limits",
+        payload: {
+          entityType: "organization",
+          entityId: organizationId,
+          limitType: "token_cost",
+          limitValue: 1000,
+          cleanupInterval: "calendar_month",
+          model: ["gpt-4o"],
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({
+        entityType: "organization",
+        entityId: organizationId,
+        limitType: "token_cost",
+        limitValue: 1000,
+        cleanupInterval: "calendar_month",
+        model: ["gpt-4o"],
+      });
+    });
+  });
+
+  describe("PATCH /api/limits/:id", () => {
+    test("resets usage when cleanup interval changes", async ({
+      makeAgent,
+    }) => {
+      const agent = await makeAgent({
+        name: "Interval Reset Agent",
+        organizationId,
+      });
+      const limit = await LimitModel.create({
+        entityType: "agent",
+        entityId: agent.id,
+        limitType: "token_cost",
+        limitValue: 1000000,
+        model: ["gpt-4o"],
+        cleanupInterval: "1w",
+      });
+      await LimitModel.updateTokenLimitUsage(
+        "agent",
+        agent.id,
+        "gpt-4o",
+        500,
+        700,
+      );
+
+      const response = await app.inject({
+        method: "PATCH",
+        url: `/api/limits/${limit.id}`,
+        payload: {
+          cleanupInterval: "calendar_month",
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({
+        cleanupInterval: "calendar_month",
+      });
+      const usage = await LimitModel.getRawModelUsage(limit.id);
+      expect(usage[0].currentUsageTokensIn).toBe(0);
+      expect(usage[0].currentUsageTokensOut).toBe(0);
+    });
+
+    test("does not reset usage when cleanup interval is unchanged", async ({
+      makeAgent,
+    }) => {
+      const agent = await makeAgent({
+        name: "Value Update Agent",
+        organizationId,
+      });
+      const limit = await LimitModel.create({
+        entityType: "agent",
+        entityId: agent.id,
+        limitType: "token_cost",
+        limitValue: 1000000,
+        model: ["gpt-4o"],
+        cleanupInterval: "1w",
+      });
+      await LimitModel.updateTokenLimitUsage(
+        "agent",
+        agent.id,
+        "gpt-4o",
+        500,
+        700,
+      );
+
+      const response = await app.inject({
+        method: "PATCH",
+        url: `/api/limits/${limit.id}`,
+        payload: {
+          limitValue: 2000000,
+          cleanupInterval: "1w",
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({
+        limitValue: 2000000,
+        cleanupInterval: "1w",
+      });
+      const usage = await LimitModel.getRawModelUsage(limit.id);
+      expect(usage[0].currentUsageTokensIn).toBe(500);
+      expect(usage[0].currentUsageTokensOut).toBe(700);
+    });
+  });
 });

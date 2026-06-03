@@ -1537,6 +1537,9 @@ function getChatMessageMetadata(
   return null;
 }
 
+// todo: migrate this tag-extract + correction-retry flow onto the shared
+// `generateTaggedText` (@/utils/generate-tagged-text); kept separate for now
+// because compaction also gates the retry on context headroom.
 function extractTaggedSummary(text: string): string | null {
   const startTag = `<${CONTEXT_COMPACTION_SUMMARY_TAG}>`;
   const endTag = `</${CONTEXT_COMPACTION_SUMMARY_TAG}>`;

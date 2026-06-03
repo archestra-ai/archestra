@@ -20,6 +20,9 @@ vi.mock("@kubernetes/client-node", () => {
     CoreV1Api: vi.fn(),
     AppsV1Api: vi.fn(),
     BatchV1Api: vi.fn(),
+    AuthorizationV1Api: vi.fn(),
+    NetworkingV1Api: vi.fn(),
+    CustomObjectsApi: vi.fn(),
     Attach: vi.fn(),
     Log: vi.fn(),
   };
@@ -349,6 +352,85 @@ describe("shared K8s utilities", () => {
         key: "a".repeat(100),
       });
       expect(result.key.length).toBeLessThanOrEqual(63);
+    });
+  });
+
+  describe("checkNamespaceDeployAccess", () => {
+    test("returns ok and checks the namespaced create-deployments permission", async () => {
+      const { checkNamespaceDeployAccess } = await import("./shared");
+      const createReview = vi
+        .fn()
+        .mockResolvedValue({ status: { allowed: true } });
+      const authApi = { createSelfSubjectAccessReview: createReview };
+
+      const result = await checkNamespaceDeployAccess(
+        "prod-ns",
+        authApi as unknown as Parameters<typeof checkNamespaceDeployAccess>[1],
+      );
+
+      expect(result).toEqual({ ok: true });
+      // It must probe create-deployments in the namespace — NOT read the
+      // namespace object (which would need cluster-scoped `get namespaces`).
+      expect(createReview).toHaveBeenCalledWith({
+        body: {
+          spec: {
+            resourceAttributes: {
+              namespace: "prod-ns",
+              verb: "create",
+              group: "apps",
+              resource: "deployments",
+            },
+          },
+        },
+      });
+    });
+
+    test("returns forbidden when the review denies access", async () => {
+      const { checkNamespaceDeployAccess } = await import("./shared");
+      const authApi = {
+        createSelfSubjectAccessReview: vi
+          .fn()
+          .mockResolvedValue({ status: { allowed: false } }),
+      };
+
+      const result = await checkNamespaceDeployAccess(
+        "prod-ns",
+        authApi as unknown as Parameters<typeof checkNamespaceDeployAccess>[1],
+      );
+
+      expect(result).toEqual({ ok: false, reason: "forbidden" });
+    });
+
+    test("returns unavailable when the review call throws", async () => {
+      const { checkNamespaceDeployAccess } = await import("./shared");
+      const authApi = {
+        createSelfSubjectAccessReview: vi
+          .fn()
+          .mockRejectedValue(new Error("network down")),
+      };
+
+      const result = await checkNamespaceDeployAccess(
+        "prod-ns",
+        authApi as unknown as Parameters<typeof checkNamespaceDeployAccess>[1],
+      );
+
+      expect(result).toEqual({ ok: false, reason: "unavailable" });
+    });
+  });
+
+  describe("namespaceAccessMessage", () => {
+    test("forbidden message names the namespace and points at the Helm value", async () => {
+      const { namespaceAccessMessage } = await import("./shared");
+      const msg = namespaceAccessMessage("prod-ns", "forbidden");
+      expect(msg).toContain("prod-ns");
+      expect(msg).toContain("environmentNamespaces");
+    });
+
+    test("unavailable message is generic", async () => {
+      const { namespaceAccessMessage } = await import("./shared");
+      expect(namespaceAccessMessage("prod-ns", "unavailable")).toBe(
+        "Could not reach the Kubernetes cluster.",
+      );
     });
   });
 });

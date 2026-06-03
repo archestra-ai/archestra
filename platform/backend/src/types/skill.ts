@@ -8,9 +8,11 @@ import { z } from "zod";
 import { schema } from "@/database";
 
 /**
- * How a skill entered the system.
+ * How a skill entered the system. `built_in` skills are shipped by Archestra
+ * and reconciled on startup; they are editable but can be reset to the shipped
+ * definition.
  */
-export const SkillSourceTypeSchema = z.enum(["manual", "github"]);
+export const SkillSourceTypeSchema = z.enum(["manual", "github", "built_in"]);
 export type SkillSourceType = z.infer<typeof SkillSourceTypeSchema>;
 
 /**
@@ -41,6 +43,7 @@ export const InsertSkillSchema = createInsertSchema(schema.skillsTable, {
   sourceType: SkillSourceTypeSchema.optional(),
   scope: ResourceVisibilityScopeSchema.optional(),
   metadata: SkillMetadataSchema.optional(),
+  templated: z.boolean().optional(),
 }).omit({
   id: true,
   createdAt: true,
@@ -51,6 +54,7 @@ export const UpdateSkillSchema = createUpdateSchema(schema.skillsTable, {
   sourceType: SkillSourceTypeSchema.optional(),
   scope: ResourceVisibilityScopeSchema.optional(),
   metadata: SkillMetadataSchema.optional(),
+  templated: z.boolean().optional(),
 }).omit({
   id: true,
   organizationId: true,

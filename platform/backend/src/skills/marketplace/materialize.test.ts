@@ -25,6 +25,8 @@ function makeSkill(
     content: "# PDF Helper\n\nDoes the thing.",
     license: null,
     compatibility: null,
+    allowedTools: null,
+    templated: false,
     metadata: {},
     updatedAt: new Date("2026-01-01T00:00:00.000Z"),
     files: [],

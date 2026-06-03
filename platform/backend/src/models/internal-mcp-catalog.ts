@@ -25,6 +25,7 @@ import McpCatalogLabelModel from "./mcp-catalog-label";
 import McpCatalogTeamModel from "./mcp-catalog-team";
 import McpServerModel from "./mcp-server";
 import SecretModel from "./secret";
+import ToolModel from "./tool";
 
 /**
  * Data-access layer for `internal_mcp_catalog` — the org's private registry
@@ -102,6 +103,15 @@ class InternalMcpCatalogModel {
     const itemTeams = await McpCatalogTeamModel.getTeamDetailsForCatalog(
       createdItem.id,
     );
+
+    // A clone copies the source's tools + guardrails as provisional rows.
+    if (createdItem.clonedFrom) {
+      await ToolModel.cloneToolsAndPoliciesFromCatalog({
+        sourceCatalogId: createdItem.clonedFrom,
+        targetCatalogId: createdItem.id,
+        targetCatalogName: createdItem.name,
+      });
+    }
 
     const result: InternalMcpCatalog = {
       ...createdItem,
@@ -338,6 +348,23 @@ class InternalMcpCatalogModel {
     ]);
 
     return catalogItem;
+  }
+
+  static async findByEnvironmentId(
+    environmentId: string,
+  ): Promise<{ id: string; multitenant: boolean }[]> {
+    return db
+      .select({
+        id: schema.internalMcpCatalogTable.id,
+        multitenant: schema.internalMcpCatalogTable.multitenant,
+      })
+      .from(schema.internalMcpCatalogTable)
+      .where(
+        and(
+          eq(schema.internalMcpCatalogTable.environmentId, environmentId),
+          eq(schema.internalMcpCatalogTable.serverType, "local"),
+        ),
+      );
   }
 
   /**

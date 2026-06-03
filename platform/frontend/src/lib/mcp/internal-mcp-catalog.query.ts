@@ -1,6 +1,7 @@
 import { archestraApiSdk, type archestraApiTypes } from "@shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { environmentKeys } from "@/lib/organization/environment.query";
 import { usePresetEntityName } from "@/lib/organization.query";
 
 const {
@@ -102,10 +103,9 @@ export function useUpdateInternalMcpCatalogItem() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["mcp-catalog"] });
-      // Also invalidate MCP servers to refresh reinstallRequired flags
       queryClient.invalidateQueries({ queryKey: ["mcp-servers"] });
-      // Invalidate all chat MCP tools (server config may have changed)
       queryClient.invalidateQueries({ queryKey: ["chat", "agents"] });
+      queryClient.invalidateQueries({ queryKey: environmentKeys.list() });
       toast.success("Catalog item updated successfully");
     },
     onError: (error) => {

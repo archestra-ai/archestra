@@ -22,7 +22,6 @@ function makePayload(
       icon: "🤖",
       scope: "org", // Should be overridden to personal
       considerContextUntrusted: false,
-      toolAssignmentMode: "manual",
       toolExposureMode: "full",
       incomingEmailEnabled: false,
       incomingEmailSecurityMode: "private",

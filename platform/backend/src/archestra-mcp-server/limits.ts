@@ -73,7 +73,7 @@ const CreateLimitToolArgsSchema = z
       .optional()
       .describe("Array of model names. Omit for all models."),
     cleanup_interval: LimitCleanupIntervalSchema.optional().describe(
-      "Optional cleanup interval for this limit. Omit to use the weekly default.",
+      "Optional cleanup interval for this limit. Omit to use the calendar-month default.",
     ),
     mcp_server_name: z
       .string()

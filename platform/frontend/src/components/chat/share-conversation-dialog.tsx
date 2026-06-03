@@ -1,8 +1,10 @@
 "use client";
 
 import type { archestraApiTypes } from "@shared";
-import { Globe, Link, Lock, UserRound, Users } from "lucide-react";
+import { Globe, Lock, UserRound, Users } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
+import { CopyableCode } from "@/components/copyable-code";
 import { FormDialog } from "@/components/form-dialog";
 import { AssignmentCombobox } from "@/components/ui/assignment-combobox";
 import { Badge } from "@/components/ui/badge";
@@ -50,11 +52,11 @@ export function ShareConversationDialog({
   const [visibility, setVisibility] = useState<ShareVisibility>("private");
   const [teamIds, setTeamIds] = useState<string[]>([]);
   const [userIds, setUserIds] = useState<string[]>([]);
-  const hasVisibleShareLink = !!share && visibility !== "private";
+  const [hasSavedVisibleShare, setHasSavedVisibleShare] = useState(false);
+  const hasVisibleShareLink =
+    (isShared || hasSavedVisibleShare) && visibility !== "private";
 
-  const shareLink = share
-    ? `${window.location.origin}/chat/${conversationId}`
-    : "";
+  const shareLink = `${window.location.origin}/chat/${conversationId}`;
 
   const availableMembers = useMemo(
     () => members.filter((member) => member.id !== currentUserId),
@@ -97,12 +99,14 @@ export function ShareConversationDialog({
       setVisibility("private");
       setTeamIds([]);
       setUserIds([]);
+      setHasSavedVisibleShare(false);
       return;
     }
 
     setVisibility(share.visibility);
     setTeamIds(share.teamIds);
     setUserIds(share.userIds);
+    setHasSavedVisibleShare(true);
   }, [open, share]);
 
   const visibilityOptions = useMemo<Array<VisibilityOption<ShareVisibility>>>(
@@ -167,34 +171,34 @@ export function ShareConversationDialog({
       return;
     }
 
-    await shareMutation.mutateAsync({
+    const savedShare = await shareMutation.mutateAsync({
       conversationId,
       visibility,
       teamIds: nextTeamIds,
       userIds: nextUserIds,
+      suppressSuccessToast: true,
     });
-    onOpenChange(false);
+
+    if (!savedShare) {
+      return;
+    }
+
+    setHasSavedVisibleShare(true);
+    await navigator.clipboard.writeText(shareLink);
+    toast.success("Chat visibility updated and share link copied");
   }, [
     conversationId,
     isLoading,
     isPending,
     isShared,
     onOpenChange,
+    shareLink,
     shareMutation,
     teamIds,
     unshareMutation,
     userIds,
     visibility,
   ]);
-
-  const handleCopyLinkAndClose = useCallback(async () => {
-    if (!shareLink) {
-      return;
-    }
-
-    await navigator.clipboard.writeText(shareLink);
-    onOpenChange(false);
-  }, [onOpenChange, shareLink]);
 
   return (
     <FormDialog
@@ -257,11 +261,11 @@ export function ShareConversationDialog({
         </VisibilitySelector>
 
         {hasVisibleShareLink && shareLink && (
-          <div className="flex min-w-0 items-center gap-2 overflow-hidden rounded-md border bg-muted/50 px-3 py-2">
-            <span className="min-w-0 flex-1 truncate font-mono text-sm text-muted-foreground">
-              {shareLink}
-            </span>
-          </div>
+          <CopyableCode
+            value={shareLink}
+            toastMessage="Share link copied"
+            className="border bg-muted/50"
+          />
         )}
       </DialogBody>
       <DialogStickyFooter className="mt-0">
@@ -283,15 +287,6 @@ export function ShareConversationDialog({
           }
         >
           Save
-        </Button>
-        <Button
-          variant="secondary"
-          className="w-full sm:w-auto"
-          onClick={handleCopyLinkAndClose}
-          disabled={isPending || !hasVisibleShareLink || !shareLink}
-        >
-          <Link className="mr-2 h-4 w-4" />
-          Copy Link
         </Button>
       </DialogStickyFooter>
     </FormDialog>

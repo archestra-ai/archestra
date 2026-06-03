@@ -399,6 +399,14 @@ class McpServerModel {
       .where(eq(schema.mcpServersTable.catalogId, catalogId));
   }
 
+  static async findByCatalogIds(catalogIds: string[]): Promise<McpServer[]> {
+    if (catalogIds.length === 0) return [];
+    return await db
+      .select()
+      .from(schema.mcpServersTable)
+      .where(inArray(schema.mcpServersTable.catalogId, catalogIds));
+  }
+
   static async findCustomServers(): Promise<McpServer[]> {
     // Find servers that don't have a catalogId (custom installations)
     return await db

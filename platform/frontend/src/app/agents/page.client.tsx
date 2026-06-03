@@ -45,6 +45,7 @@ import { useAppName } from "@/lib/hooks/use-app-name";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import { useTeams } from "@/lib/teams/team.query";
 import { AgentActions } from "./agent-actions";
+import { ConvertToSkillDialog } from "./convert-to-skill-dialog";
 
 type AgentsInitialData = {
   agents: archestraApiTypes.GetAgentsResponses["200"] | null;
@@ -210,6 +211,10 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
   const exportAgent = useExportAgent();
   const restoreAgent = useRestoreProfile();
+
+  const [convertingAgent, setConvertingAgent] = useState<AgentData | null>(
+    null,
+  );
 
   // Handle 'create' URL parameter to open the Create Agent dialog
   useEffect(() => {
@@ -473,6 +478,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
               });
             }}
             onClone={handleClone}
+            onConvertToSkill={setConvertingAgent}
             onExport={(agentData) => {
               exportAgent.mutate(agentData.id, {
                 onSuccess: (data) => {
@@ -621,6 +627,13 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
               open={isImportDialogOpen}
               onOpenChange={setIsImportDialogOpen}
               onSuccess={() => {}}
+            />
+
+            <ConvertToSkillDialog
+              agent={convertingAgent}
+              onOpenChange={(open) => {
+                if (!open) setConvertingAgent(null);
+              }}
             />
           </div>
         </div>

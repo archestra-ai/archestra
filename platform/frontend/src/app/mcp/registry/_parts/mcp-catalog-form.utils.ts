@@ -238,7 +238,21 @@ export function transformFormToApiData(
     data.teams = values.teams;
   }
 
+  // Deployment environment assignment (null = the default environment)
+  data.environmentId = values.environmentId ?? null;
+
   return data;
+}
+
+// Build create-form values from an existing catalog item for cloning. A clone
+// is a full copy of the source's configuration (secrets included); only the
+// name is suffixed with "-copy" so the create form is valid out of the box and
+// catalog name-uniqueness validation handles collisions on submit.
+export function buildCloneFormValues(
+  item: archestraApiTypes.GetInternalMcpCatalogResponses["200"][number],
+): McpCatalogFormValues {
+  const values = transformCatalogItemToFormValues(item);
+  return { ...values, name: `${values.name}-copy` };
 }
 
 // Transform catalog item to form values
@@ -479,6 +493,8 @@ export function transformCatalogItemToFormValues(
     scope: (item.scope as AgentScope) ?? "org",
     // Teams
     teams: item.teams?.map((t) => t.id) ?? [],
+    // Deployment environment (null = the default environment)
+    environmentId: item.environmentId ?? null,
   } as McpCatalogFormValues;
 }
 

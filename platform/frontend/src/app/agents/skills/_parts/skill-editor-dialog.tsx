@@ -1,6 +1,6 @@
 "use client";
 
-import type { ResourceVisibilityScope } from "@shared";
+import { DocsPage, type ResourceVisibilityScope } from "@shared";
 import {
   ChevronDown,
   ChevronRight,
@@ -13,6 +13,7 @@ import {
   X,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { ExternalDocsLink } from "@/components/external-docs-link";
 import { StandardDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,6 +24,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import {
   useCreateSkill,
   useSkill,
@@ -75,6 +77,8 @@ export interface SkillPreview {
   content: string;
   license: string | null;
   compatibility: string | null;
+  allowedTools: string | null;
+  templated: boolean;
   metadata: Record<string, string>;
   files: (ResourceFile & { kind?: "reference" | "script" | "asset" })[];
 }
@@ -552,6 +556,7 @@ export function SkillEditorDialog({
                   readOnly={isPreview}
                 />
               )}
+              {!openFile && parsed.templated && <TemplatedManifestHint />}
             </div>
           </div>
 
@@ -897,15 +902,56 @@ function buildTree(
   return { folders, folderNames: Object.keys(folders).sort(), rootFiles };
 }
 
+/** Shown when the manifest declares `templated: true`, mirroring the agent
+ * system-prompt hint: the body is rendered with Handlebars at activation. */
+function TemplatedManifestHint() {
+  const docsUrl = getFrontendDocsUrl(
+    DocsPage.PlatformAgents,
+    "system-prompt-templating",
+  );
+  return (
+    <p className="text-xs text-muted-foreground">
+      Templated skill — the body is rendered with{" "}
+      <a
+        href="https://handlebarsjs.com/"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="underline hover:text-foreground"
+      >
+        Handlebars
+      </a>{" "}
+      (e.g. <code className="font-mono">{"{{user.name}}"}</code>) at activation
+      {docsUrl ? (
+        <>
+          {" "}
+          — see{" "}
+          <ExternalDocsLink
+            href={docsUrl}
+            className="underline hover:text-foreground"
+            showIcon={false}
+          >
+            docs
+          </ExternalDocsLink>{" "}
+          for available variables.
+        </>
+      ) : (
+        "."
+      )}
+    </p>
+  );
+}
+
 function parseManifestFields(raw: string): {
   hasName: boolean;
   hasDescription: boolean;
+  templated: boolean;
 } {
   const match = raw.match(/^---\r?\n([\s\S]*?)\r?\n---/);
   const frontmatter = match?.[1] ?? "";
   return {
     hasName: /^name:\s*\S/m.test(frontmatter),
     hasDescription: /^description:\s*\S/m.test(frontmatter),
+    templated: /^templated:\s*true\s*$/m.test(frontmatter),
   };
 }
 
@@ -914,6 +960,8 @@ function composeManifest(skill: {
   description: string;
   license: string | null;
   compatibility: string | null;
+  allowedTools: string | null;
+  templated: boolean;
   metadata: Record<string, string>;
   content: string;
 }): string {
@@ -926,6 +974,10 @@ function composeManifest(skill: {
   if (skill.compatibility) {
     lines.push(`compatibility: ${yamlScalar(skill.compatibility)}`);
   }
+  if (skill.allowedTools) {
+    lines.push(`allowed-tools: ${yamlScalar(skill.allowedTools)}`);
+  }
+  if (skill.templated) lines.push("templated: true");
   const metadataEntries = Object.entries(skill.metadata ?? {});
   if (metadataEntries.length > 0) {
     lines.push("metadata:");

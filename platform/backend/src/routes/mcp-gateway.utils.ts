@@ -34,6 +34,7 @@ import { userHasPermission } from "@/auth/utils";
 import { LRUCacheManager } from "@/cache-manager";
 import mcpClient, { type TokenAuthContext } from "@/clients/mcp-client";
 import config from "@/config";
+import { evaluateSingleMcpToolInvocationPolicy } from "@/guardrails/tool-invocation";
 import logger from "@/logging";
 import {
   AgentConnectorAssignmentModel,
@@ -286,15 +287,15 @@ export async function createAgentServer(
   // SEP-1865: resources/list, resources/templates/list, prompts/list
   // Proxy to all upstream MCP servers connected to this agent and aggregate results.
   server.setRequestHandler(ListResourcesRequestSchema, async () => {
-    return mcpClient.listResources(agentId);
+    return mcpClient.listResources(agentId, tokenAuth);
   });
 
   server.setRequestHandler(ListResourceTemplatesRequestSchema, async () => {
-    return mcpClient.listResourceTemplates(agentId);
+    return mcpClient.listResourceTemplates(agentId, tokenAuth);
   });
 
   server.setRequestHandler(ListPromptsRequestSchema, async () => {
-    return mcpClient.listPrompts(agentId);
+    return mcpClient.listPrompts(agentId, tokenAuth);
   });
 
   server.setRequestHandler(
@@ -324,6 +325,21 @@ export async function createAgentServer(
         // Check if this is an Archestra tool or agent delegation tool
         const isArchestraTool = archestraMcpBranding.isToolName(name);
         const isAgentDelegationTool = isAgentTool(name);
+        const contextIsTrusted = !agent.considerContextUntrusted;
+
+        const policyBlock = await evaluateSingleMcpToolInvocationPolicy({
+          agentId: agent.id,
+          toolName: name,
+          toolInput: args ?? {},
+          organizationId: tokenAuth?.organizationId,
+          contextIsTrusted,
+        });
+        if (policyBlock) {
+          return {
+            content: [{ type: "text", text: policyBlock.refusalMessage }],
+            isError: true,
+          };
+        }
 
         if (isArchestraTool || isAgentDelegationTool) {
           logger.info(
@@ -355,6 +371,7 @@ export async function createAgentServer(
                 userId: tokenAuth?.userId,
                 organizationId: tokenAuth?.organizationId,
                 tokenAuth,
+                contextIsTrusted,
               });
               span.setAttribute(
                 ATTR_MCP_IS_ERROR_RESULT,
@@ -1019,12 +1036,6 @@ export async function validateExternalIdpToken(
     // Look up the agent to check if it has an identity provider configured
     const agent = await AgentModel.findById(profileId);
     if (!agent?.identityProviderId) {
-      // TEMPORARY [idp-diag] — pin which branch fails the flaky JWKS gateway
-      // e2e (mcp-gateway-jwks/.jwt-propagation). Remove once root cause known.
-      logger.info(
-        { profileId, hasAgent: !!agent },
-        "[idp-diag] null: agent missing identityProviderId",
-      );
       return null;
     }
 
@@ -1040,20 +1051,15 @@ export async function validateExternalIdpToken(
       return null;
     }
 
-    // Only OIDC providers support JWKS validation
     if (!idpProvider.oidcConfig) {
-      // TEMPORARY [idp-diag] — promoted from debug so it's visible in CI.
-      logger.info(
+      logger.warn(
         { profileId, identityProviderId: agent.identityProviderId },
-        "[idp-diag] null: identity provider has no OIDC config",
+        "validateExternalIdpToken: identity provider has no OIDC config",
       );
       return null;
     }
 
     const oidcConfig = idpProvider.oidcConfig;
-    if (!oidcConfig) {
-      return null;
-    }
 
     if (!oidcConfig.clientId) {
       logger.warn(
@@ -1087,13 +1093,6 @@ export async function validateExternalIdpToken(
     });
 
     if (!result) {
-      // TEMPORARY [idp-diag] — verify failed; the reason (no-matching-key /
-      // issuer / audience at warn; expired / signature at debug) is on the
-      // "JWKS JWT validation failed" line.
-      logger.info(
-        { profileId, issuer: idpProvider.issuer, jwksUrl },
-        "[idp-diag] null: jwksValidator.validateJwt returned null",
-      );
       return null;
     }
 
@@ -1177,11 +1176,10 @@ export async function validateExternalIdpToken(
       rawToken: tokenValue,
     };
   } catch (error) {
-    logger.debug(
-      {
-        profileId,
-        error: error instanceof Error ? error.message : String(error),
-      },
+    const message = error instanceof Error ? error.message : String(error);
+    const stack = error instanceof Error ? error.stack : undefined;
+    logger.warn(
+      { profileId, error: message, stack },
       "validateExternalIdpToken: unexpected error",
     );
     return null;

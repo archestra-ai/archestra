@@ -31,6 +31,19 @@ vi.mock("@/lib/auth/auth.query", () => ({
 
 vi.mock("@/lib/organization.query", () => ({
   usePresetEntityName: vi.fn(() => ({ singular: "Preset", plural: "Presets" })),
+  useDefaultEnvironment: vi.fn(() => ({
+    name: "Default",
+    namespace: null,
+    description: null,
+    networkPolicyId: null,
+    restricted: false,
+  })),
+}));
+
+vi.mock("@/lib/organization/environment.query", () => ({
+  useEnvironments: vi.fn(() => ({
+    data: { environments: [], defaultAssignedCatalogCount: 0 },
+  })),
 }));
 
 vi.mock("@/lib/auth/identity-provider-read.query", () => ({
@@ -243,31 +256,5 @@ describe("McpCatalogForm enterprise gating", () => {
       "autocomplete",
       "new-password",
     );
-  });
-
-  it("hides automatic tool assignment label copy when advanced tool features are disabled", () => {
-    render(<McpCatalogForm mode="create" onSubmit={vi.fn()} />);
-
-    expect(
-      screen.queryByText(
-        /Organize servers and drive automatic tool assignment/,
-      ),
-    ).not.toBeInTheDocument();
-  });
-
-  it("shows automatic tool assignment label copy when advanced tool features are enabled", () => {
-    vi.mocked(useFeature).mockImplementation((feature: string) => {
-      if (feature === "mcpServerBaseImage") return "";
-      if (feature === "orchestratorK8sRuntime") return true;
-      if (feature === "byosEnabled") return false;
-      if (feature === "advancedToolFeaturesEnabled") return true;
-      return undefined;
-    });
-
-    render(<McpCatalogForm mode="create" onSubmit={vi.fn()} />);
-
-    expect(
-      screen.getByText(/Organize servers and drive automatic tool assignment/),
-    ).toBeInTheDocument();
   });
 });

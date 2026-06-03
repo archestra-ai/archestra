@@ -23,6 +23,7 @@ export { default as ConversationChatErrorModel } from "./conversation-chat-error
 export { default as ConversationCompactionModel } from "./conversation-compaction";
 export { default as ConversationEnabledToolModel } from "./conversation-enabled-tool";
 export { default as ConversationShareModel } from "./conversation-share";
+export { default as EnvironmentModel } from "./environment";
 export { default as InteractionModel } from "./interaction";
 export { default as InternalMcpCatalogModel } from "./internal-mcp-catalog";
 export { default as InvitationModel } from "./invitation";
@@ -48,6 +49,7 @@ export { default as McpToolCallModel } from "./mcp-tool-call";
 export { default as MemberModel } from "./member";
 export { default as MessageModel } from "./message";
 export { default as ModelModel } from "./model";
+export { default as NetworkPolicyModel } from "./network-policy";
 export { default as OAuthAccessTokenModel } from "./oauth-access-token";
 export { default as OAuthClientModel } from "./oauth-client";
 export { default as OptimizationRuleModel } from "./optimization-rule";

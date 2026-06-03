@@ -17,6 +17,7 @@ import {
 import mcpServerRuntimeManager from "@/k8s/mcp-server-runtime/manager";
 import logger from "@/logging";
 import {
+  EnvironmentModel,
   InternalMcpCatalogModel,
   McpCatalogLabelModel,
   McpPresetEntryModel,
@@ -26,6 +27,7 @@ import {
   ToolModel,
 } from "@/models";
 import { isByosEnabled, secretManager } from "@/secrets-manager";
+import { assertCanAssignEnvironment } from "@/services/environments/environment";
 import {
   autoReinstallServer,
   localExecutionConfigChanged,
@@ -188,6 +190,17 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (restBody.scope !== "team") {
         delete restBody.teams;
       }
+
+      // Gate assigning a restricted environment. Requires
+      // environment:deploy-to-restricted (environment:admin implies it).
+      // Unrestricted and default (null) environments are open.
+      await assertCanAssignEnvironment({
+        environmentId: restBody.environmentId ?? null,
+        organizationId: request.organizationId,
+        canDeployToRestricted: await callerCanDeployToRestricted(
+          request.headers,
+        ),
+      });
 
       let clientSecretId: string | undefined;
       let localConfigSecretId: string | undefined;
@@ -381,6 +394,33 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         restBody.presetFieldValues = nonSecretFieldValues;
         if (presetSecretId) {
           (restBody as Record<string, unknown>).presetSecretId = presetSecretId;
+        }
+      }
+
+      if (restBody.environmentId != null) {
+        const targetEnv = await EnvironmentModel.findByIdForOrganization(
+          restBody.environmentId,
+          request.organizationId,
+        );
+        if (!targetEnv) {
+          throw new ApiError(400, "Environment not found");
+        }
+      }
+      // Clone source must resolve within the caller's org — `create` copies
+      // the source's tools + guardrail policies, so an unscoped `clonedFrom`
+      // would let a caller pull another org's catalog config into their own.
+      if (restBody.clonedFrom) {
+        const cloneSource = await InternalMcpCatalogModel.findById(
+          restBody.clonedFrom,
+          {
+            expandSecrets: false,
+            userId: request.user.id,
+            isAdmin: true,
+            organizationId: request.organizationId,
+          },
+        );
+        if (!cloneSource) {
+          throw new ApiError(400, "Clone source catalog item not found");
         }
       }
 
@@ -931,11 +971,68 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         if (repartitioned.bagValuesRotated) parentPresetBagRotated = true;
       }
 
+      // When the environment assignment changes, gate it the same way create
+      // does — the target must belong to this org, and a restricted environment
+      // (or restricted default) requires environment:deploy-to-restricted
+      // (environment:admin implies it).
+      if (
+        "environmentId" in restBody &&
+        restBody.environmentId !== originalCatalogItem.environmentId
+      ) {
+        await assertCanAssignEnvironment({
+          environmentId: restBody.environmentId ?? null,
+          organizationId: request.organizationId,
+          canDeployToRestricted: await callerCanDeployToRestricted(
+            request.headers,
+          ),
+        });
+      }
+
+      // On an environment reassignment of a local catalog, the teardown must
+      // target the OLD namespace. Both teardown paths resolve the namespace
+      // from the catalog row — reinstallSharedDeployment (multi-tenant) and the
+      // cascade's per-install restartServer→stopServer→getOrLoadDeployment
+      // (single-tenant) — and the update below rewrites that row to the new
+      // environment. Pre-load the existing deployments now, while the row still
+      // holds the old namespace, so they are cached against the old-namespace
+      // pod and the teardown deletes it. Without this warm-up, a cache-cold
+      // replica (any of several) re-derives the new namespace at teardown and
+      // orphans the old-namespace pod.
+      const relocatingLocalDeployment =
+        "environmentId" in restBody &&
+        restBody.environmentId !== originalCatalogItem.environmentId &&
+        originalCatalogItem.serverType === "local" &&
+        mcpServerRuntimeManager.isEnabled;
+      if (relocatingLocalDeployment) {
+        const installs = await McpServerModel.findByCatalogId(id);
+        await Promise.all(
+          installs.map((s) =>
+            mcpServerRuntimeManager.getOrLoadDeployment(s.id),
+          ),
+        );
+      }
+
       // Update the catalog item
       const catalogItem = await InternalMcpCatalogModel.update(id, restBody);
 
       if (!catalogItem) {
         throw new ApiError(404, "Catalog item not found");
+      }
+
+      // A multi-tenant local catalog shares one K8s Deployment across all
+      // installs, and a per-install restart no-ops on it (the sibling guard in
+      // restartServer), so the shared Deployment must be relocated explicitly,
+      // mirroring the environment-namespace-edit route. Now that the row holds
+      // the new environment, recreate it in the new namespace — awaited before
+      // the cascade so its per-install tool sync runs against the relocated,
+      // ready pod rather than racing the recreate. Single-tenant installs
+      // relocate via the cascade's per-install restart below, using the
+      // deployments pre-loaded above.
+      if (
+        relocatingLocalDeployment &&
+        originalCatalogItem.multitenant === true
+      ) {
+        await mcpServerRuntimeManager.reinstallSharedDeployment(id);
       }
 
       // Cascade reinstall for the parent's own installs. Use the
@@ -1691,6 +1788,21 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
  * Mirror catalog item permissions - preset scoped fields could be added or
  * edited by same person who can edit catalog item.
  */
+/**
+ * Whether the caller may deploy catalog items to restricted environments.
+ * Holding `environment:admin` (full environment management) implies the
+ * `environment:deploy-to-restricted` capability.
+ */
+async function callerCanDeployToRestricted(
+  headers: FastifyRequest["headers"],
+): Promise<boolean> {
+  const [{ success: hasAdmin }, { success: hasDeploy }] = await Promise.all([
+    hasPermission({ environment: ["admin"] }, headers),
+    hasPermission({ environment: ["deploy-to-restricted"] }, headers),
+  ]);
+  return hasAdmin || hasDeploy;
+}
+
 async function assertCanEditCatalogPresets(
   parent: InternalMcpCatalog,
   request: FastifyRequest,

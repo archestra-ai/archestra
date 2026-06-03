@@ -70,7 +70,6 @@ describe("Agent export/import routes", () => {
       icon: "🤖",
       scope: "org",
       considerContextUntrusted: false,
-      toolAssignmentMode: "manual",
       toolExposureMode: "full",
       llmModel: null,
       incomingEmailEnabled: false,

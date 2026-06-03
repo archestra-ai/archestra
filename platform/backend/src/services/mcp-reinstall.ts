@@ -219,6 +219,11 @@ export function onlyForwardCompatibleEnvDiff(
       authFields: cat.authFields ?? null,
       serverType: cat.serverType ?? "",
       multitenant: Boolean(cat.multitenant),
+      // Environment assignment determines the deployment namespace; a change
+      // must trigger the cascade so the pod relocates (single-tenant via the
+      // per-install restart below; multi-tenant via reinstallSharedDeployment
+      // in the catalog PUT route).
+      environmentId: cat.environmentId ?? null,
       serverUrl: cat.serverUrl ?? "",
       docsUrl: cat.docsUrl ?? "",
       icon: cat.icon ?? null,

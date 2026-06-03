@@ -2,6 +2,7 @@ import {
   MCP_APPS_EXTENSION_ID,
   MCP_ENTERPRISE_AUTH_EXTENSION_ID,
   TOOL_ARTIFACT_WRITE_FULL_NAME,
+  TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON,
   TOOL_RUN_TOOL_FULL_NAME,
   TOOL_SEARCH_TOOLS_FULL_NAME,
 } from "@shared";
@@ -25,6 +26,68 @@ function makeMcpHeaders(token: string): Record<string, string> {
     accept: "application/json, text/event-stream",
     authorization: `Bearer ${token}`,
   };
+}
+
+async function initializeMcpSession(params: {
+  app: FastifyInstance;
+  agentId: string;
+  token: string;
+}) {
+  const response = await params.app.inject({
+    method: "POST",
+    url: `/v1/mcp/${params.agentId}`,
+    headers: makeMcpHeaders(params.token),
+    payload: {
+      jsonrpc: "2.0",
+      method: "initialize",
+      params: {
+        protocolVersion: "2024-11-05",
+        capabilities: {},
+        clientInfo: { name: "test-client", version: "1.0.0" },
+      },
+      id: 1,
+    },
+  });
+
+  expect(response.statusCode).toBe(200);
+}
+
+async function callMcpTool(params: {
+  app: FastifyInstance;
+  agentId: string;
+  token: string;
+  name: string;
+  arguments: Record<string, unknown>;
+}) {
+  return params.app.inject({
+    method: "POST",
+    url: `/v1/mcp/${params.agentId}`,
+    headers: makeMcpHeaders(params.token),
+    payload: {
+      jsonrpc: "2.0",
+      method: "tools/call",
+      params: {
+        name: params.name,
+        arguments: params.arguments,
+      },
+      id: 2,
+    },
+  });
+}
+
+function getPolicyBlockedText(response: {
+  statusCode: number;
+  json(): {
+    result: {
+      isError?: boolean;
+      content: Array<{ type: string; text?: string }>;
+    };
+  };
+}): string {
+  expect(response.statusCode).toBe(200);
+  const body = response.json();
+  expect(body.result.isError).toBe(true);
+  return body.result.content.map((item) => item.text ?? "").join("\n");
 }
 
 describe("MCP Gateway (stateless mode)", () => {
@@ -482,6 +545,335 @@ describe("MCP Gateway (stateless mode)", () => {
         }),
       ]),
     );
+  });
+
+  test("direct tools/call applies target input-based invocation policies", async ({
+    makeAgent,
+    makeAgentTool,
+    makeInternalMcpCatalog,
+    makeOrganization,
+    makeTool,
+    makeToolPolicy,
+  }) => {
+    const org = await makeOrganization({ globalToolPolicy: "restrictive" });
+    const catalog = await makeInternalMcpCatalog({ organizationId: org.id });
+    const tool = await makeTool({
+      catalogId: catalog.id,
+      name: `policy_target_${crypto.randomUUID().slice(0, 8)}`,
+    });
+    const agent = await makeAgent({
+      organizationId: org.id,
+      agentType: "mcp_gateway",
+    });
+    await makeAgentTool(agent.id, tool.id);
+    await makeToolPolicy(tool.id, {
+      action: "block_always",
+      reason: "Blocked recipient",
+      conditions: [{ key: "recipient", operator: "equal", value: "external" }],
+    });
+
+    const { value: token } = await TeamTokenModel.create({
+      organizationId: org.id,
+      name: "Org Token",
+      teamId: null,
+      isOrganizationToken: true,
+    });
+    await initializeMcpSession({ app, agentId: agent.id, token });
+
+    const response = await callMcpTool({
+      app,
+      agentId: agent.id,
+      token,
+      name: tool.name,
+      arguments: { recipient: "external" },
+    });
+    const text = getPolicyBlockedText(response);
+    expect(text).toContain(tool.name);
+    expect(text).toContain("Blocked recipient");
+  });
+
+  test("run_tool applies target input-based invocation policies", async ({
+    makeAgent,
+    makeAgentTool,
+    makeInternalMcpCatalog,
+    makeOrganization,
+    makeTool,
+    makeToolPolicy,
+  }) => {
+    const org = await makeOrganization({ globalToolPolicy: "restrictive" });
+    const catalog = await makeInternalMcpCatalog({ organizationId: org.id });
+    const tool = await makeTool({
+      catalogId: catalog.id,
+      name: `run_policy_target_${crypto.randomUUID().slice(0, 8)}`,
+    });
+    const agent = await makeAgent({
+      organizationId: org.id,
+      agentType: "mcp_gateway",
+      toolExposureMode: "search_and_run_only",
+    });
+    await makeAgentTool(agent.id, tool.id);
+    await makeToolPolicy(tool.id, {
+      action: "block_always",
+      reason: "Blocked transfer",
+      conditions: [{ key: "action", operator: "equal", value: "wire" }],
+    });
+
+    const { value: token } = await TeamTokenModel.create({
+      organizationId: org.id,
+      name: "Org Token",
+      teamId: null,
+      isOrganizationToken: true,
+    });
+    await initializeMcpSession({ app, agentId: agent.id, token });
+
+    const response = await callMcpTool({
+      app,
+      agentId: agent.id,
+      token,
+      name: TOOL_RUN_TOOL_FULL_NAME,
+      arguments: {
+        tool_name: tool.name,
+        tool_args: { action: "wire" },
+      },
+    });
+    const text = getPolicyBlockedText(response);
+    expect(text).toContain(tool.name);
+    expect(text).toContain("Blocked transfer");
+  });
+
+  test("direct tools/call blocks target tools that require approval", async ({
+    makeAgent,
+    makeAgentTool,
+    makeInternalMcpCatalog,
+    makeOrganization,
+    makeTool,
+    makeToolPolicy,
+  }) => {
+    const org = await makeOrganization({ globalToolPolicy: "restrictive" });
+    const catalog = await makeInternalMcpCatalog({ organizationId: org.id });
+    const tool = await makeTool({
+      catalogId: catalog.id,
+      name: `approval_direct_${crypto.randomUUID().slice(0, 8)}`,
+    });
+    const agent = await makeAgent({
+      organizationId: org.id,
+      agentType: "mcp_gateway",
+    });
+    await makeAgentTool(agent.id, tool.id);
+    await makeToolPolicy(tool.id, {
+      action: "require_approval",
+      conditions: [],
+    });
+
+    const { value: token } = await TeamTokenModel.create({
+      organizationId: org.id,
+      name: "Org Token",
+      teamId: null,
+      isOrganizationToken: true,
+    });
+    await initializeMcpSession({ app, agentId: agent.id, token });
+
+    const response = await callMcpTool({
+      app,
+      agentId: agent.id,
+      token,
+      name: tool.name,
+      arguments: {},
+    });
+    const text = getPolicyBlockedText(response);
+    expect(text).toContain(tool.name);
+    expect(text).toContain(TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON);
+  });
+
+  test("run_tool blocks target tools that require approval", async ({
+    makeAgent,
+    makeAgentTool,
+    makeInternalMcpCatalog,
+    makeOrganization,
+    makeTool,
+    makeToolPolicy,
+  }) => {
+    const org = await makeOrganization({ globalToolPolicy: "restrictive" });
+    const catalog = await makeInternalMcpCatalog({ organizationId: org.id });
+    const tool = await makeTool({
+      catalogId: catalog.id,
+      name: `approval_run_${crypto.randomUUID().slice(0, 8)}`,
+    });
+    const agent = await makeAgent({
+      organizationId: org.id,
+      agentType: "mcp_gateway",
+      toolExposureMode: "search_and_run_only",
+    });
+    await makeAgentTool(agent.id, tool.id);
+    await makeToolPolicy(tool.id, {
+      action: "require_approval",
+      conditions: [],
+    });
+
+    const { value: token } = await TeamTokenModel.create({
+      organizationId: org.id,
+      name: "Org Token",
+      teamId: null,
+      isOrganizationToken: true,
+    });
+    await initializeMcpSession({ app, agentId: agent.id, token });
+
+    const response = await callMcpTool({
+      app,
+      agentId: agent.id,
+      token,
+      name: TOOL_RUN_TOOL_FULL_NAME,
+      arguments: {
+        tool_name: tool.name,
+        tool_args: {},
+      },
+    });
+    const text = getPolicyBlockedText(response);
+    expect(text).toContain(tool.name);
+    expect(text).toContain(TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON);
+  });
+
+  test("direct tools/call applies untrusted-context invocation policies", async ({
+    makeAgent,
+    makeAgentTool,
+    makeInternalMcpCatalog,
+    makeOrganization,
+    makeTool,
+  }) => {
+    const org = await makeOrganization({ globalToolPolicy: "restrictive" });
+    const catalog = await makeInternalMcpCatalog({ organizationId: org.id });
+    const tool = await makeTool({
+      catalogId: catalog.id,
+      name: `untrusted_direct_${crypto.randomUUID().slice(0, 8)}`,
+    });
+    const agent = await makeAgent({
+      organizationId: org.id,
+      agentType: "mcp_gateway",
+      considerContextUntrusted: true,
+    });
+    await makeAgentTool(agent.id, tool.id);
+
+    const { value: token } = await TeamTokenModel.create({
+      organizationId: org.id,
+      name: "Org Token",
+      teamId: null,
+      isOrganizationToken: true,
+    });
+    await initializeMcpSession({ app, agentId: agent.id, token });
+
+    const response = await callMcpTool({
+      app,
+      agentId: agent.id,
+      token,
+      name: tool.name,
+      arguments: {},
+    });
+    const text = getPolicyBlockedText(response);
+    expect(text).toContain(tool.name);
+    expect(text).toContain("untrusted");
+  });
+
+  test("run_tool applies untrusted-context invocation policies to the target tool", async ({
+    makeAgent,
+    makeAgentTool,
+    makeInternalMcpCatalog,
+    makeOrganization,
+    makeTool,
+  }) => {
+    const org = await makeOrganization({ globalToolPolicy: "restrictive" });
+    const catalog = await makeInternalMcpCatalog({ organizationId: org.id });
+    const tool = await makeTool({
+      catalogId: catalog.id,
+      name: `untrusted_run_${crypto.randomUUID().slice(0, 8)}`,
+    });
+    const agent = await makeAgent({
+      organizationId: org.id,
+      agentType: "mcp_gateway",
+      toolExposureMode: "search_and_run_only",
+      considerContextUntrusted: true,
+    });
+    await makeAgentTool(agent.id, tool.id);
+
+    const { value: token } = await TeamTokenModel.create({
+      organizationId: org.id,
+      name: "Org Token",
+      teamId: null,
+      isOrganizationToken: true,
+    });
+    await initializeMcpSession({ app, agentId: agent.id, token });
+
+    const response = await callMcpTool({
+      app,
+      agentId: agent.id,
+      token,
+      name: TOOL_RUN_TOOL_FULL_NAME,
+      arguments: {
+        tool_name: tool.name,
+        tool_args: {},
+      },
+    });
+    const text = getPolicyBlockedText(response);
+    expect(text).toContain(tool.name);
+    expect(text).toContain("untrusted");
+  });
+
+  test("run_tool applies target context-condition invocation policies", async ({
+    makeAgent,
+    makeAgentTool,
+    makeInternalMcpCatalog,
+    makeMember,
+    makeOrganization,
+    makeTeam,
+    makeTool,
+    makeToolPolicy,
+    makeUser,
+  }) => {
+    const org = await makeOrganization({ globalToolPolicy: "restrictive" });
+    const user = await makeUser();
+    await makeMember(user.id, org.id);
+    const team = await makeTeam(org.id, user.id);
+    const catalog = await makeInternalMcpCatalog({ organizationId: org.id });
+    const tool = await makeTool({
+      catalogId: catalog.id,
+      name: `team_policy_target_${crypto.randomUUID().slice(0, 8)}`,
+    });
+    const agent = await makeAgent({
+      organizationId: org.id,
+      agentType: "mcp_gateway",
+      scope: "team",
+      teams: [team.id],
+      toolExposureMode: "search_and_run_only",
+    });
+    await makeAgentTool(agent.id, tool.id);
+    await makeToolPolicy(tool.id, {
+      action: "block_always",
+      reason: "Blocked for this team",
+      conditions: [
+        { key: "context.teamIds", operator: "contains", value: team.id },
+      ],
+    });
+
+    const { value: token } = await TeamTokenModel.create({
+      organizationId: org.id,
+      name: "Org Token",
+      teamId: null,
+      isOrganizationToken: true,
+    });
+    await initializeMcpSession({ app, agentId: agent.id, token });
+
+    const response = await callMcpTool({
+      app,
+      agentId: agent.id,
+      token,
+      name: TOOL_RUN_TOOL_FULL_NAME,
+      arguments: {
+        tool_name: tool.name,
+        tool_args: {},
+      },
+    });
+    const text = getPolicyBlockedText(response);
+    expect(text).toContain(tool.name);
+    expect(text).toContain("Blocked for this team");
   });
 
   test("hides directly assigned tools from tools/list when toolExposureMode is search_and_run_only", async ({

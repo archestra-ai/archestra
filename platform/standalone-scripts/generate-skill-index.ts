@@ -3,16 +3,14 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { POPULAR_REPOS } from "../frontend/src/app/agents/skills/_parts/popular-repos";
 
-interface SkillIndexEntry {
+interface CrawledSkill {
   repo: string;
   repoDescription: string;
-  repoStars: number;
   skillPath: string;
   name: string;
   description: string;
   compatibility: string | null;
   fileCount: number;
-  sourceRef: string;
 }
 
 interface SkillIndexError {
@@ -21,13 +19,27 @@ interface SkillIndexError {
   message: string;
 }
 
+// repos are normalized out and skills are positional tuples to keep the shipped
+// artifact small; the frontend rehydrates via decodeSkillIndex in skill-index.ts.
+type CompactRepo = [repo: string, repoDescription: string];
+type CompactSkill = [
+  repoIndex: number,
+  skillPath: string,
+  name: string,
+  description: string,
+  compatibility: string | null,
+  fileCount: number,
+];
+
 interface GeneratedSkillIndex {
+  v: number;
   generatedAt: string;
   source: {
     type: "popular-repos";
     repoCount: number;
   };
-  skills: SkillIndexEntry[];
+  repos: CompactRepo[];
+  skills: CompactSkill[];
   errors: SkillIndexError[];
 }
 
@@ -74,20 +86,24 @@ async function main() {
     async (repo) => crawlRepo(repo),
   );
 
+  const crawled = results.flatMap((result) => result.skills);
+  crawled.sort(compareCrawledSkills);
+
+  const { repos, skills } = compact(crawled);
   const index: GeneratedSkillIndex = {
+    v: 1,
     generatedAt: new Date().toISOString(),
     source: {
       type: "popular-repos",
       repoCount: POPULAR_REPOS.length,
     },
-    skills: results.flatMap((result) => result.skills),
+    repos,
+    skills,
     errors: results.flatMap((result) => result.errors),
   };
 
-  index.skills.sort(compareSkillIndexEntries);
-
   await mkdir(path.dirname(outputPath), { recursive: true });
-  await writeFile(outputPath, `${JSON.stringify(index, null, 2)}\n`, "utf8");
+  await writeFile(outputPath, serializeIndex(index), "utf8");
 
   console.log(
     `Generated ${index.skills.length} skill index entries from ${POPULAR_REPOS.length} repositories.`,
@@ -135,7 +151,7 @@ async function crawlRepo(repo: (typeof POPULAR_REPOS)[number]) {
     const parsed = await mapConcurrent(
       manifestPaths,
       MANIFEST_CONCURRENCY,
-      async (manifestPath): Promise<SkillIndexEntry | null> => {
+      async (manifestPath): Promise<CrawledSkill | null> => {
         const raw = await fetchRawFile({
           repo: repo.repo,
           ref: defaultBranch,
@@ -163,13 +179,11 @@ async function crawlRepo(repo: (typeof POPULAR_REPOS)[number]) {
         return {
           repo: repo.repo,
           repoDescription: repo.description,
-          repoStars: repo.stars,
           skillPath,
           name: manifest.name,
           description: manifest.description,
           compatibility: manifest.compatibility,
           fileCount,
-          sourceRef: `${repo.repo}@${defaultBranch}:${skillPath}`,
         };
       },
     );
@@ -325,15 +339,54 @@ function githubHeaders(): HeadersInit {
   return headers;
 }
 
-function compareSkillIndexEntries(
-  left: SkillIndexEntry,
-  right: SkillIndexEntry,
-) {
-  if (left.repoStars !== right.repoStars)
-    return right.repoStars - left.repoStars;
+function compareCrawledSkills(left: CrawledSkill, right: CrawledSkill) {
   const repoComparison = left.repo.localeCompare(right.repo);
   if (repoComparison !== 0) return repoComparison;
   return left.skillPath.localeCompare(right.skillPath);
+}
+
+function compact(skills: CrawledSkill[]): {
+  repos: CompactRepo[];
+  skills: CompactSkill[];
+} {
+  const repos: CompactRepo[] = [];
+  const repoIndex = new Map<string, number>();
+  const compactSkills = skills.map((skill): CompactSkill => {
+    let index = repoIndex.get(skill.repo);
+    if (index === undefined) {
+      index = repos.length;
+      repoIndex.set(skill.repo, index);
+      repos.push([skill.repo, skill.repoDescription]);
+    }
+    return [
+      index,
+      skill.skillPath,
+      skill.name,
+      skill.description,
+      skill.compatibility,
+      skill.fileCount,
+    ];
+  });
+  return { repos, skills: compactSkills };
+}
+
+// one positional row per line keeps the generated artifact compact while still
+// producing readable git diffs.
+function serializeIndex(index: GeneratedSkillIndex): string {
+  const rows = (values: unknown[]) =>
+    values.length === 0
+      ? "[]"
+      : `[\n${values.map((value) => JSON.stringify(value)).join(",\n")}\n]`;
+  return `${[
+    "{",
+    `"v": ${JSON.stringify(index.v)},`,
+    `"generatedAt": ${JSON.stringify(index.generatedAt)},`,
+    `"source": ${JSON.stringify(index.source)},`,
+    `"repos": ${rows(index.repos)},`,
+    `"skills": ${rows(index.skills)},`,
+    `"errors": ${rows(index.errors)}`,
+    "}",
+  ].join("\n")}\n`;
 }
 
 function readPositiveInteger(name: string, fallback: number) {

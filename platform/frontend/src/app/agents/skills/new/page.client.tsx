@@ -3,7 +3,7 @@
 import { ArrowLeft, ArrowRight, FileText, Github } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { PageLayout } from "@/components/page-layout";
 import { SearchInput } from "@/components/search-input";
@@ -12,12 +12,16 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { ImportSkillsDialog } from "../_parts/import-skills-dialog";
+import {
+  ImportSkillsDialog,
+  type IndexedSkillSelection,
+} from "../_parts/import-skills-dialog";
 import { POPULAR_REPOS } from "../_parts/popular-repos";
 import { SkillEditorDialog } from "../_parts/skill-editor-dialog";
 import {
-  SKILL_INDEX_ENTRY_COUNT,
+  buildSkillIndex,
   type SkillIndexEntry,
+  type SkillSearchIndex,
   searchSkillIndex,
 } from "../_parts/skill-index";
 
@@ -36,7 +40,7 @@ function NewSkillChooser() {
   const [importState, setImportState] = useState<{
     repoUrl: string;
     autoDiscover: boolean;
-    initialSkillPath?: string;
+    initialSkill?: IndexedSkillSelection;
   } | null>(null);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -48,11 +52,17 @@ function NewSkillChooser() {
     setImportState({
       repoUrl: skill.repo,
       autoDiscover: true,
-      initialSkillPath: skill.skillPath,
+      initialSkill: {
+        skillPath: skill.skillPath,
+        name: skill.name,
+        description: skill.description,
+        compatibility: skill.compatibility,
+        fileCount: skill.fileCount,
+      },
     });
   const goToSkills = () => router.push("/agents/skills");
 
-  const skillResults = useMemo(() => searchSkillIndex(search), [search]);
+  const skillIndex = useSkillIndexSearch(search);
 
   const filteredRepos = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -104,7 +114,7 @@ function NewSkillChooser() {
                 </CardTitle>
                 <Badge variant="secondary" className="tabular-nums">
                   {isSearchingSkills
-                    ? `${skillResults.length} / ${SKILL_INDEX_ENTRY_COUNT}`
+                    ? `${skillIndex.results.length} / ${skillIndex.totalCount ?? "…"}`
                     : POPULAR_REPOS.length}
                 </Badge>
               </div>
@@ -118,13 +128,21 @@ function NewSkillChooser() {
             </CardHeader>
             <CardContent className="p-0">
               {isSearchingSkills ? (
-                skillResults.length === 0 ? (
+                skillIndex.isLoading ? (
+                  <div className="px-6 py-10 text-center text-sm text-muted-foreground">
+                    Loading skill index…
+                  </div>
+                ) : skillIndex.isError ? (
+                  <div className="px-6 py-10 text-center text-sm text-muted-foreground">
+                    Could not load the skill index. Try again.
+                  </div>
+                ) : skillIndex.results.length === 0 ? (
                   <div className="px-6 py-10 text-center text-sm text-muted-foreground">
                     No indexed skills match “{search}”.
                   </div>
                 ) : (
                   <ul>
-                    {skillResults.map((skill, idx) => (
+                    {skillIndex.results.map((skill, idx) => (
                       <li key={`${skill.repo}:${skill.skillPath}`}>
                         {idx > 0 && <Separator />}
                         <SkillIndexResult
@@ -183,7 +201,7 @@ function NewSkillChooser() {
       <ImportSkillsDialog
         open={importState !== null}
         initialRepoUrl={importState?.repoUrl ?? ""}
-        initialSkillPath={importState?.initialSkillPath}
+        initialSkill={importState?.initialSkill}
         autoDiscover={importState?.autoDiscover ?? false}
         onOpenChange={(open) => {
           if (!open) setImportState(null);
@@ -199,6 +217,60 @@ function NewSkillChooser() {
       />
     </>
   );
+}
+
+type SkillIndexState =
+  | { status: "idle" }
+  | { status: "loading" }
+  | { status: "ready"; entries: readonly SkillIndexEntry[]; count: number }
+  | { status: "error" };
+
+// loads the generated skill index lazily on the first non-empty search so the
+// large JSON never lands in the initial client bundle for the Add Skill page.
+function useSkillIndexSearch(query: string): {
+  results: SkillIndexEntry[];
+  totalCount: number | null;
+  isLoading: boolean;
+  isError: boolean;
+} {
+  const isSearching = query.trim().length > 0;
+  const [state, setState] = useState<SkillIndexState>({ status: "idle" });
+  const loadStartedRef = useRef(false);
+
+  useEffect(() => {
+    if (!isSearching || loadStartedRef.current) return;
+    loadStartedRef.current = true;
+    setState({ status: "loading" });
+    import("../_parts/skill-index-data")
+      .then((mod) =>
+        setState({
+          status: "ready",
+          entries: mod.SKILL_INDEX_ENTRIES,
+          count: mod.SKILL_INDEX_ENTRY_COUNT,
+        }),
+      )
+      .catch(() => setState({ status: "error" }));
+  }, [isSearching]);
+
+  // build the inverted index once when the data lands; re-querying on each
+  // keystroke is then a cheap lookup against the prebuilt index.
+  const index = useMemo<SkillSearchIndex | null>(
+    () => (state.status === "ready" ? buildSkillIndex(state.entries) : null),
+    [state],
+  );
+
+  const results = useMemo(
+    () => (index ? searchSkillIndex(index, query) : []),
+    [index, query],
+  );
+
+  return {
+    results,
+    totalCount: state.status === "ready" ? state.count : null,
+    isLoading:
+      isSearching && state.status !== "ready" && state.status !== "error",
+    isError: state.status === "error",
+  };
 }
 
 function SkillIndexResult({

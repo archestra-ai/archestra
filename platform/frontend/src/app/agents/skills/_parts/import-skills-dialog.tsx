@@ -44,19 +44,31 @@ import { SkillScopeSelector } from "./skill-scope-selector";
 type DiscoveredSkill =
   archestraApiTypes.DiscoverGithubSkillsResponses["200"]["skills"][number];
 
+/**
+ * Skill metadata already held from the local skill index — enough to render the
+ * confirm step without re-scanning the whole repository over the network.
+ */
+export interface IndexedSkillSelection {
+  skillPath: string;
+  name: string;
+  description: string;
+  compatibility: string | null;
+  fileCount: number;
+}
+
 export function ImportSkillsDialog({
   open,
   onOpenChange,
   onImported,
   initialRepoUrl = "",
-  initialSkillPath,
+  initialSkill,
   autoDiscover = false,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onImported?: () => void;
   initialRepoUrl?: string;
-  initialSkillPath?: string;
+  initialSkill?: IndexedSkillSelection;
   autoDiscover?: boolean;
 }) {
   const discover = useDiscoverGithubSkills();
@@ -119,17 +131,7 @@ export function ImportSkillsDialog({
     if (data) {
       setDiscovered(data.skills);
       const importableSkills = data.skills.filter((s) => !s.exists);
-      const hasInitialSkillPath = initialSkillPath !== undefined;
-      const initialSkill = hasInitialSkillPath
-        ? importableSkills.find((s) => s.skillPath === initialSkillPath)
-        : null;
-      if (hasInitialSkillPath) {
-        setSelected(
-          initialSkill ? new Set([initialSkill.skillPath]) : new Set(),
-        );
-      } else {
-        setSelected(new Set(importableSkills.map((s) => s.skillPath)));
-      }
+      setSelected(new Set(importableSkills.map((s) => s.skillPath)));
     } else if (errorMessage) {
       setDiscoverError(errorMessage);
     }
@@ -139,7 +141,13 @@ export function ImportSkillsDialog({
   useEffect(() => {
     if (!open) return;
     setRepoUrl(initialRepoUrl);
-    if (autoDiscover && initialRepoUrl) {
+    if (!autoDiscover) return;
+    if (initialSkill) {
+      // launched from the skill index: the exact skill is already known, so
+      // skip the repo-wide scan and go straight to the confirm step.
+      setDiscovered([{ ...initialSkill, exists: false }]);
+      setSelected(new Set([initialSkill.skillPath]));
+    } else if (initialRepoUrl) {
       handleDiscover(initialRepoUrl);
     }
   }, [open]);

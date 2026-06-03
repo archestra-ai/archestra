@@ -8,18 +8,15 @@ describe("searchSkillIndexEntries", () => {
         skill({
           name: "Workflow Builder",
           description: "Design policy workflows for agents.",
-          repoStars: 10_000,
         }),
         skill({
           name: "Policy Designer",
           description: "Write safe tool invocation rules.",
-          repoStars: 10,
         }),
         skill({
           repo: "acme/policy-tools",
           name: "Access Helper",
           description: "Map teams to agent tools.",
-          repoStars: 50_000,
         }),
       ],
       query: "policy",
@@ -49,19 +46,52 @@ describe("searchSkillIndexEntries", () => {
 
     expect(results.map((result) => result.name)).toEqual(["Workflow Builder"]);
   });
+
+  it("matches token prefixes", () => {
+    const results = searchSkillIndexEntries({
+      entries: [
+        skill({ name: "Workflow Builder" }),
+        skill({ name: "Policy Designer" }),
+      ],
+      query: "work",
+    });
+
+    expect(results.map((result) => result.name)).toEqual(["Workflow Builder"]);
+  });
+
+  it("ignores stop words in the query", () => {
+    const results = searchSkillIndexEntries({
+      entries: [
+        skill({
+          name: "Policy Designer",
+          description: "Write safe tool invocation rules.",
+        }),
+      ],
+      query: "the policy",
+    });
+
+    expect(results.map((result) => result.name)).toEqual(["Policy Designer"]);
+  });
+
+  it("returns nothing for an all-stop-word query", () => {
+    const results = searchSkillIndexEntries({
+      entries: [skill({ name: "Policy Designer" })],
+      query: "the and of",
+    });
+
+    expect(results).toEqual([]);
+  });
 });
 
 function skill(overrides: Partial<SkillIndexEntry>): SkillIndexEntry {
   return {
     repo: "acme/skills",
     repoDescription: "Example skill repository.",
-    repoStars: 1,
     skillPath: `skills/${overrides.name?.toLowerCase().replaceAll(" ", "-") ?? "test"}`,
     name: "Test Skill",
     description: "Example description.",
     compatibility: null,
     fileCount: 0,
-    sourceRef: "acme/skills@main:skills/test",
     ...overrides,
   };
 }

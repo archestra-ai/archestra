@@ -6,7 +6,7 @@ import NewSkillPage from "./page.client";
 interface MockImportSkillsDialogProps {
   open: boolean;
   initialRepoUrl?: string;
-  initialSkillPath?: string;
+  initialSkill?: { skillPath: string };
 }
 
 const mocks = vi.hoisted(() => ({
@@ -34,31 +34,28 @@ vi.mock("@/components/page-layout", () => ({
   ),
 }));
 
-vi.mock("../_parts/skill-index", () => ({
+// lazily loaded by the page on first search; the real search logic in
+// ../_parts/skill-index runs against these entries.
+vi.mock("../_parts/skill-index-data", () => ({
   SKILL_INDEX_ENTRY_COUNT: 1,
-  searchSkillIndex: (query: string) =>
-    query.trim()
-      ? [
-          {
-            repo: "acme/skills",
-            repoDescription: "Example skills.",
-            repoStars: 42,
-            skillPath: "skills/policy-designer",
-            name: "Policy Designer",
-            description: "Write tool invocation policies.",
-            compatibility: null,
-            fileCount: 3,
-            sourceRef: "acme/skills@main:skills/policy-designer",
-          },
-        ]
-      : [],
+  SKILL_INDEX_ENTRIES: [
+    {
+      repo: "acme/skills",
+      repoDescription: "Example skills.",
+      skillPath: "skills/policy-designer",
+      name: "Policy Designer",
+      description: "Write tool invocation policies.",
+      compatibility: null,
+      fileCount: 3,
+    },
+  ],
 }));
 
 vi.mock("../_parts/import-skills-dialog", () => ({
   ImportSkillsDialog: (props: MockImportSkillsDialogProps) =>
     props.open ? (
       <div data-testid="import-skills-dialog">
-        {props.initialRepoUrl}:{props.initialSkillPath}
+        {props.initialRepoUrl}:{props.initialSkill?.skillPath}
       </div>
     ) : null,
 }));

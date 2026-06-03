@@ -1,4 +1,5 @@
 import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ImportSkillsDialog } from "./import-skills-dialog";
 
@@ -49,13 +50,99 @@ describe("ImportSkillsDialog", () => {
     });
   });
 
-  it("preselects only the requested skill after auto-discovery", async () => {
+  it("shows the indexed skill on the confirm step without scanning the repo", async () => {
     render(
       <ImportSkillsDialog
         open
         onOpenChange={vi.fn()}
         initialRepoUrl="acme/skills"
-        initialSkillPath="skills/target"
+        initialSkill={{
+          skillPath: "skills/target",
+          name: "Target skill",
+          description: "Target skill description",
+          compatibility: null,
+          fileCount: 3,
+        }}
+        autoDiscover
+      />,
+    );
+
+    expect(
+      await screen.findByRole("button", { name: "Deselect Target skill" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("1 of 1 selected")).toBeInTheDocument();
+    expect(mocks.discoverGithubSkills).not.toHaveBeenCalled();
+  });
+
+  it("imports the indexed skill from the confirm step", async () => {
+    mocks.importGithubSkills.mockResolvedValue({
+      created: ["skills/target"],
+      skipped: [],
+    });
+    const onImported = vi.fn();
+
+    render(
+      <ImportSkillsDialog
+        open
+        onOpenChange={vi.fn()}
+        onImported={onImported}
+        initialRepoUrl="acme/skills"
+        initialSkill={{
+          skillPath: "skills/target",
+          name: "Target skill",
+          description: "Target skill description",
+          compatibility: null,
+          fileCount: 3,
+        }}
+        autoDiscover
+      />,
+    );
+
+    await userEvent.click(
+      await screen.findByRole("button", { name: /^Import/ }),
+    );
+
+    await waitFor(() => {
+      expect(mocks.importGithubSkills).toHaveBeenCalledWith(
+        expect.objectContaining({
+          repoUrl: "acme/skills",
+          skillPaths: ["skills/target"],
+        }),
+      );
+    });
+    expect(onImported).toHaveBeenCalled();
+  });
+
+  it("can show a repo-root indexed skill", async () => {
+    render(
+      <ImportSkillsDialog
+        open
+        onOpenChange={vi.fn()}
+        initialRepoUrl="acme/skills"
+        initialSkill={{
+          skillPath: "",
+          name: "Root skill",
+          description: "Root skill description",
+          compatibility: null,
+          fileCount: 0,
+        }}
+        autoDiscover
+      />,
+    );
+
+    expect(
+      await screen.findByRole("button", { name: "Deselect Root skill" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("1 of 1 selected")).toBeInTheDocument();
+    expect(mocks.discoverGithubSkills).not.toHaveBeenCalled();
+  });
+
+  it("scans the repo when no indexed skill is provided", async () => {
+    render(
+      <ImportSkillsDialog
+        open
+        onOpenChange={vi.fn()}
+        initialRepoUrl="acme/skills"
         autoDiscover
       />,
     );
@@ -70,81 +157,9 @@ describe("ImportSkillsDialog", () => {
       await screen.findByRole("button", { name: "Deselect Target skill" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Select Other skill" }),
+      screen.getByRole("button", { name: "Deselect Other skill" }),
     ).toBeInTheDocument();
-    expect(screen.getByText("1 of 2 selected")).toBeInTheDocument();
-  });
-
-  it("does not select the whole repo when the requested skill already exists", async () => {
-    mocks.discoverGithubSkills.mockResolvedValue({
-      data: {
-        repoUrl: "acme/skills",
-        ref: "main",
-        skills: [
-          discoveredSkill({
-            name: "Target skill",
-            skillPath: "skills/target",
-            exists: true,
-          }),
-          discoveredSkill({ name: "Other skill", skillPath: "skills/other" }),
-        ],
-      },
-      errorMessage: null,
-    });
-
-    render(
-      <ImportSkillsDialog
-        open
-        onOpenChange={vi.fn()}
-        initialRepoUrl="acme/skills"
-        initialSkillPath="skills/target"
-        autoDiscover
-      />,
-    );
-
-    expect(
-      await screen.findByRole("button", {
-        name: "Target skill (already imported)",
-      }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "Select Other skill" }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText("0 of 1 selected · 1 imported"),
-    ).toBeInTheDocument();
-  });
-
-  it("can preselect a repo-root skill", async () => {
-    mocks.discoverGithubSkills.mockResolvedValue({
-      data: {
-        repoUrl: "acme/skills",
-        ref: "main",
-        skills: [
-          discoveredSkill({ name: "Root skill", skillPath: "" }),
-          discoveredSkill({ name: "Other skill", skillPath: "skills/other" }),
-        ],
-      },
-      errorMessage: null,
-    });
-
-    render(
-      <ImportSkillsDialog
-        open
-        onOpenChange={vi.fn()}
-        initialRepoUrl="acme/skills"
-        initialSkillPath=""
-        autoDiscover
-      />,
-    );
-
-    expect(
-      await screen.findByRole("button", { name: "Deselect Root skill" }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "Select Other skill" }),
-    ).toBeInTheDocument();
-    expect(screen.getByText("1 of 2 selected")).toBeInTheDocument();
+    expect(screen.getByText("2 of 2 selected")).toBeInTheDocument();
   });
 });
 

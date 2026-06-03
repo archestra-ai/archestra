@@ -34,6 +34,7 @@ import { userHasPermission } from "@/auth/utils";
 import { LRUCacheManager } from "@/cache-manager";
 import mcpClient, { type TokenAuthContext } from "@/clients/mcp-client";
 import config from "@/config";
+import { evaluateSingleMcpToolInvocationPolicy } from "@/guardrails/tool-invocation";
 import logger from "@/logging";
 import {
   AgentConnectorAssignmentModel,
@@ -324,6 +325,21 @@ export async function createAgentServer(
         // Check if this is an Archestra tool or agent delegation tool
         const isArchestraTool = archestraMcpBranding.isToolName(name);
         const isAgentDelegationTool = isAgentTool(name);
+        const contextIsTrusted = !agent.considerContextUntrusted;
+
+        const policyBlock = await evaluateSingleMcpToolInvocationPolicy({
+          agentId: agent.id,
+          toolName: name,
+          toolInput: args ?? {},
+          organizationId: tokenAuth?.organizationId,
+          contextIsTrusted,
+        });
+        if (policyBlock) {
+          return {
+            content: [{ type: "text", text: policyBlock.refusalMessage }],
+            isError: true,
+          };
+        }
 
         if (isArchestraTool || isAgentDelegationTool) {
           logger.info(
@@ -355,6 +371,7 @@ export async function createAgentServer(
                 userId: tokenAuth?.userId,
                 organizationId: tokenAuth?.organizationId,
                 tokenAuth,
+                contextIsTrusted,
               });
               span.setAttribute(
                 ATTR_MCP_IS_ERROR_RESULT,

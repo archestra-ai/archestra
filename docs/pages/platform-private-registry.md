@@ -74,15 +74,13 @@ See [Credential Resolution](/docs/mcp-authentication#credential-resolution) for 
 
 ## Labels
 
-Registry entries can carry labels — key-value pairs set under **Labels** in the registry form. Labels organize the catalog and act as a selector for [MCP Gateways](/docs/platform-mcp-gateway#tool-assignment-mode) in **Automatic** tool assignment mode. A gateway in Automatic mode receives every tool from every registry entry that shares at least one `key: value` label pair with the gateway.
-
-For example, every catalog entry tagged `department: finance` is automatically wired into a gateway tagged `department: finance`. Adding or removing labels on a registry entry reconciles the affected gateways in sync.
+Registry entries can carry labels — key-value pairs set under **Labels** in the registry form. Labels organize the catalog and make registry entries easier to filter and manage.
 
 ## Environments
 
-An environment is an organization-level deployment target — for example `sandbox`, `staging`, or `production`. Admins manage the list of environments, and each carries a name, an optional Kubernetes namespace, and an optional default network policy.
+An environment is an organization-level deployment target — for example `sandbox`, `staging`, or `production`. Any member can view the list of environments; creating, editing, and deleting them requires the `environment:admin` permission. Each environment carries a name, an optional Kubernetes namespace, and an optional default network policy.
 
-An environment can be marked **restricted**. Only members with the `environment:admin` permission can assign catalog entries to a restricted environment. Unrestricted environments and Default stay open to anyone who can create MCP registry catalog entries.
+An environment can be marked **restricted**. Only members with the `environment:deploy-to-restricted` permission (or `environment:admin`, which implies it) can assign catalog entries to a restricted environment. Unrestricted environments and Default stay open to anyone who can create MCP registry catalog entries.
 
 ### Network Policies
 

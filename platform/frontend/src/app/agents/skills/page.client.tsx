@@ -5,6 +5,7 @@ import type { ColumnDef } from "@tanstack/react-table";
 import {
   AlertTriangle,
   BookOpen,
+  Braces,
   Pencil,
   Plus,
   RotateCcw,
@@ -155,6 +156,19 @@ function SkillsList() {
                 </div>
               )}
             </div>
+            {skill.templated && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Badge variant="outline" className="gap-1">
+                    <Braces className="h-3 w-3" />
+                    templated
+                  </Badge>
+                </TooltipTrigger>
+                <TooltipContent>
+                  Body is rendered with Handlebars at activation.
+                </TooltipContent>
+              </Tooltip>
+            )}
             {skill.compatibility && (
               <Tooltip>
                 <TooltipTrigger asChild>

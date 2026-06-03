@@ -4,7 +4,6 @@ import {
   AgentScopeSchema,
   PassthroughHeadersSchema,
   SelectAgentSchema,
-  ToolAssignmentModeSchema,
   ToolExposureModeSchema,
 } from "./agent";
 import { CredentialResolutionModeSchema } from "./enterprise-managed-credentials";
@@ -70,7 +69,6 @@ const ExportAgentConfigSchema = z.object({
     "Original scope; imports always default to personal",
   ),
   considerContextUntrusted: z.boolean(),
-  toolAssignmentMode: ToolAssignmentModeSchema,
   toolExposureMode: ToolExposureModeSchema,
   incomingEmailEnabled: z.boolean(),
   incomingEmailSecurityMode: IncomingEmailSecurityModeSchema,

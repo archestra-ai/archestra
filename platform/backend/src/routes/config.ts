@@ -54,7 +54,6 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
             features: z.strictObject({
               orchestratorK8sRuntime: z.boolean(),
               codeRuntime: z.boolean(),
-              advancedToolFeaturesEnabled: z.boolean(),
               agentSkillsEnabled: z.boolean(),
               byosEnabled: z.boolean(),
               byosVaultKvVersion: z.enum(["1", "2"]).nullable(),
@@ -101,8 +100,6 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
         features: {
           orchestratorK8sRuntime: McpServerRuntimeManager.isEnabled,
           codeRuntime: codeRuntimeService.isEnabled,
-          advancedToolFeaturesEnabled:
-            config.agents.advancedToolFeaturesEnabled,
           agentSkillsEnabled: config.agents.skillsEnabled,
           byosEnabled: isByosEnabled(),
           byosVaultKvVersion: getByosVaultKvVersion(),

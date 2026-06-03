@@ -3,7 +3,7 @@ title: Overview
 category: Agents
 order: 1
 description: Agent overview, invocation paths, knowledge sources, and prompt templating
-lastUpdated: 2026-06-01
+lastUpdated: 2026-06-03
 ---
 
 <!--
@@ -17,33 +17,24 @@ An agent can include:
 - a system prompt that defines behavior
 - suggested prompts for common tasks in chat
 - one or more assigned tools
-- optional automatic tool assignment from matching MCP catalog labels
-- an optional search-and-run tool mode for hiding most tools from MCP `tools/list`
+- optional **Load tools when needed** mode for keeping MCP `tools/list` small
 - optional delegation targets to other agents
 - one or more assigned knowledge sources
 
-## Tool Assignment Mode
-
-An agent has a tool assignment mode: **Manual** (default) or **Automatic**.
-
-In **Manual** mode, you pick each tool directly. In **Automatic** mode, the agent receives tools from MCP catalog entries that share at least one `key: value` label pair with the agent. For example, an agent labeled `department: finance` automatically receives tools from catalog items tagged `department: finance`.
-
-Use Automatic mode when labels already describe which MCP servers belong to a team, department, app, or environment and you want new matching catalog entries to be picked up without editing every agent.
-
-See [MCP Gateway - Tool Assignment Mode](/docs/platform-mcp-gateway#tool-assignment-mode) for the full behavior and constraints.
-
-## Search-and-Run Tool Mode
+## Load Tools When Needed
 
 By default, an agent exposes every assigned tool through MCP `tools/list`.
 
-For larger toolsets, you can switch the agent to **search-and-run tool mode**. In that mode, MCP clients only see the built-in [`search_tools`](/docs/platform-archestra-mcp-server#search_tools) and [`run_tool`](/docs/platform-archestra-mcp-server#run_tool) tools. Those two tools are enabled implicitly by the mode and do not need normal tool assignment.
+For larger toolsets, enable **Load tools when needed**. This keeps the initial tool list small. MCP clients see the built-in [`search_tools`](/docs/platform-archestra-mcp-server#search_tools) and [`run_tool`](/docs/platform-archestra-mcp-server#run_tool) tools first. Those two tools are enabled implicitly and do not need normal tool assignment.
 
 - `search_tools` can still discover them
 - `run_tool` can still execute them
 
 Use this when the full tool menu is too large to send to the model on every turn, but you still want the agent to keep access to the same assigned toolset.
 
-See [MCP Gateway - Search-and-Run Tool Mode](/docs/platform-mcp-gateway#search-and-run-tool-mode) for the MCP-client-facing behavior and the same mode on gateways.
+Tool call policies still apply to the target tool. If the model calls `run_tool` to execute `send_email`, Archestra evaluates policies for `send_email` with the same arguments and context it would use for a direct tool call. See [AI Tool Guardrails - Load Tools When Needed](/docs/platform-ai-tool-guardrails#load-tools-when-needed).
+
+See [MCP Gateway - Load Tools When Needed](/docs/platform-mcp-gateway#load-tools-when-needed) for the MCP-client-facing behavior and the same mode on gateways.
 
 ## Invocation Paths
 
@@ -77,14 +68,15 @@ An agent can be converted into an [Agent Skill](/docs/platform-agent-skills-shar
 The **Convert to skill** action on the agents page opens a confirmation dialog where you set the skill's description and choose whether to remove the source agent once the skill is created. The skill inherits the agent's scope. Conversion is lossy by nature: a skill carries instructions only, with no tools, model, or knowledge of its own. Each field is either carried over or annotated:
 
 - the system prompt becomes the skill body, and the scope carries over directly; the name is normalized into a slug (for example `Support Helper` → `support-helper`) so it works as a `/slash-command`
-- the description is required — the agent's own is prefilled, and you must supply one when the agent has none (an activating agent uses it to decide when to run the skill)
-- assigned tools are listed under a `Recommended tools` section so the activating agent knows what to enable; the default model and knowledge sources have no skill equivalent and are reported as not carried, without cluttering the skill body
+- the description is required — the agent's own is prefilled, and you must supply one when the agent has none (an activating agent uses it to decide when to run the skill); **Generate** drafts one from the agent's prompt, tools, and example prompts via a single LLM call when you need a starting point
+- if the system prompt uses [Handlebars templating](#system-prompt-templating), the skill is flagged `templated` so its body is re-rendered with the activating user's context at runtime — otherwise the slug would bake one author's `{{user.name}}` into instructions every agent shares
+- assigned tools are carried into the skill's [`allowed-tools`](https://agentskills.io/specification#allowed-tools-field) frontmatter (the skill-runtime tools are dropped as noise), so the activating agent knows which tools to enable; the default model and knowledge sources have no skill equivalent and are reported as not carried, without cluttering the skill body
 - suggested prompts, icon, and labels are folded into the body or metadata, and the origin agent is recorded in metadata so the skill stays linked back to it
 - removing the source agent is optional and off by default; it is a soft delete, so the agent can be restored later from the deleted-agents filter
 
 ## System Prompt Templating
 
-Agent system prompts support [Handlebars](https://handlebarsjs.com/) templating. Templates are rendered at runtime before the prompt is sent to the LLM, with the current user's context injected as variables.
+Agent system prompts support [Handlebars](https://handlebarsjs.com/) templating. Templates are rendered at runtime before the prompt is sent to the LLM, with the current user's context injected as variables. Agent Skills can opt into the same rendering with a `templated: true` frontmatter field (set automatically when converting a templated agent); their `SKILL.md` body is then rendered with the same variables and helpers each time the skill is loaded.
 
 ### Variables
 

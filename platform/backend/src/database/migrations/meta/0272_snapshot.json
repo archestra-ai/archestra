@@ -1,5 +1,5 @@
 {
-  "id": "db0a9ae2-3b7d-4478-a9d6-8edbb24e0610",
+  "id": "48abbf4c-654f-4e3e-98da-93eaac606951",
   "prevId": "9c2e122d-aba0-4c03-a3ee-8caed650f54e",
   "version": "7",
   "dialect": "postgresql",
@@ -5017,13 +5017,6 @@
           "primaryKey": false,
           "notNull": true,
           "default": "'pending'"
-        },
-        "embedding_error": {
-          "name": "embedding_error",
-          "type": "kb_document_embedding_error",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": false
         },
         "chunk_count": {
           "name": "chunk_count",
@@ -10810,6 +10803,19 @@
           "primaryKey": false,
           "notNull": false
         },
+        "allowed_tools": {
+          "name": "allowed_tools",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "templated": {
+          "name": "templated",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
         "metadata": {
           "name": "metadata",
           "type": "jsonb",
@@ -12655,18 +12661,6 @@
         "personal",
         "team",
         "org"
-      ]
-    },
-    "public.kb_document_embedding_error": {
-      "name": "kb_document_embedding_error",
-      "schema": "public",
-      "values": [
-        "rate_limit",
-        "auth_error",
-        "model_not_found",
-        "server_error",
-        "dimensions_mismatch",
-        "unknown"
       ]
     },
     "public.oauth_refresh_error_enum": {

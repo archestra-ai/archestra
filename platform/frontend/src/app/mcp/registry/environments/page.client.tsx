@@ -5,7 +5,7 @@ import { EnvironmentsSection } from "../_parts/environments-section";
 
 export default function EnvironmentsPageClient() {
   const { data: canEdit } = useHasPermissions({
-    environment: ["create", "update", "delete"],
+    environment: ["admin"],
   });
   const { data: canReadNetworkPolicies } = useHasPermissions({
     networkPolicy: ["read"],

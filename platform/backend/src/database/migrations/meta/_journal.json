@@ -1909,8 +1909,22 @@
     {
       "idx": 272,
       "version": "7",
-      "when": 1780452304410,
-      "tag": "0272_open_black_queen",
+      "when": 1780474421866,
+      "tag": "0272_narrow_mad_thinker",
+      "breakpoints": true
+    },
+    {
+      "idx": 273,
+      "version": "7",
+      "when": 1780487668988,
+      "tag": "0273_remarkable_punisher",
+      "breakpoints": true
+    },
+    {
+      "idx": 274,
+      "version": "7",
+      "when": 1780510188188,
+      "tag": "0274_aromatic_logan",
       "breakpoints": true
     }
   ]

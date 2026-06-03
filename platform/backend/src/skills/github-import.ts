@@ -60,6 +60,8 @@ interface DiscoveredSkill {
   name: string;
   description: string;
   compatibility: string | null;
+  allowedTools: string | null;
+  templated: boolean;
   /** Number of bundled resource files (excludes SKILL.md). */
   fileCount: number;
 }
@@ -166,6 +168,8 @@ export async function discoverSkills(params: {
       name: parsed.name,
       description: parsed.description,
       compatibility: parsed.compatibility,
+      allowedTools: parsed.allowedTools,
+      templated: parsed.templated,
       fileCount,
     });
   }

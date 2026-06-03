@@ -3,7 +3,9 @@
 import { type UIMessage, useChat } from "@ai-sdk/react";
 import {
   type ArchestraToolShortName,
+  CONTEXT_WINDOW_BREAKDOWN_EVENT,
   type ContextWindowBreakdown,
+  ContextWindowBreakdownSchema,
   type ContextWindowEstimate,
   EXTERNAL_AGENT_ID_HEADER,
   getArchestraToolShortName,
@@ -716,17 +718,24 @@ function ChatSessionHook({
       // Seed the indicator at turn start with the backend's estimate of the
       // outgoing prompt, on the same yardstick as auto-compaction. Per-step
       // data-token-usage events then refine it with the provider's real count.
+      // Also reset the breakdown: a new estimate means a new request is being
+      // assembled, so the previous breakdown is stale until the new one arrives.
       if (dataPart.type === "data-context-window-estimate") {
         const data = dataPart.data as ContextWindowEstimate;
         if (typeof data.estimatedTokens === "number") {
           setContextTokensUsed(data.estimatedTokens);
+          setContextWindow(null);
         }
       }
 
       // Per-category breakdown of the assembled request, powering the Context
       // Window Visualizer panel. Emitted once per turn after assembly.
-      if (dataPart.type === "data-context-window-breakdown") {
-        setContextWindow(dataPart.data as ContextWindowBreakdown);
+      if (dataPart.type === CONTEXT_WINDOW_BREAKDOWN_EVENT) {
+        const parsed = ContextWindowBreakdownSchema.safeParse(dataPart.data);
+        if (parsed.success) {
+          setContextWindow(parsed.data);
+        }
+        // Malformed payload: silently drop — never throw, never surface to the user.
       }
 
       if (dataPart.type === "data-context-compaction-start") {

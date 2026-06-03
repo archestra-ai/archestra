@@ -1,11 +1,4 @@
-/**
- * Derived hooks for the Context Window Visualizer.
- *
- * Builds on the raw session values in ChatSession so callers get a single,
- * stable object rather than stitching together three separate fields.
- */
-import type { ContextWindowBreakdown } from "@shared";
-import type { ChatSession } from "./global-chat.context";
+import type { ContextWindowBreakdown, TokenUsage } from "@shared";
 
 export type ContextWindowState = {
   /**
@@ -37,17 +30,13 @@ export type ContextWindowState = {
   breakdown: ContextWindowBreakdown | null;
 };
 
-/**
- * Derives the context window indicator state from the raw session values.
- *
- * Accepts the relevant slice of a `ChatSession` so it can be called from any
- * component that already holds the session (no extra hook subscription).
- *
- * Returns `null` when the session is not yet available.
- */
 export function deriveContextWindowState(
   session:
-    | Pick<ChatSession, "contextTokensUsed" | "tokenUsage" | "contextWindow">
+    | {
+        contextTokensUsed: number | null;
+        tokenUsage: TokenUsage | null;
+        contextWindow: ContextWindowBreakdown | null;
+      }
     | null
     | undefined,
 ): ContextWindowState {

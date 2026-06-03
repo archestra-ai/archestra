@@ -206,10 +206,7 @@ export function ContextWindowPanel({
           </div>
 
           {usedPercent != null && (
-            <div
-              className="flex shrink-0 flex-col items-end"
-              aria-label={`${Math.round(usedPercent)}% of context window used`}
-            >
+            <div className="flex shrink-0 flex-col items-end">
               <div className="flex items-baseline gap-0.5">
                 <span
                   className={cn(
@@ -255,9 +252,8 @@ export function ContextWindowPanel({
       </div>
 
       {/* ── Per-category gauges — scrolls when tall ─────────────────────── */}
-      <div
+      <ul
         className="flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto border-t border-border/60 px-5 py-4"
-        role="list"
         aria-label="Context window categories"
       >
         {segments.map((segment) => (
@@ -282,7 +278,7 @@ export function ContextWindowPanel({
             muted
           />
         )}
-      </div>
+      </ul>
 
       {/* ── Footnote — pinned ───────────────────────────────────────────── */}
       <p className="shrink-0 border-t border-border/60 px-5 py-3 text-[11px] leading-relaxed text-muted-foreground">
@@ -360,7 +356,7 @@ function GaugeRow({
   const hasItems = !!items && items.length > 0;
 
   const header = (
-    <div className="flex flex-col gap-1.5" role="listitem">
+    <div className="flex flex-col gap-1.5">
       <div className="flex items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-2">
           {hasItems ? (
@@ -414,45 +410,47 @@ function GaugeRow({
   );
 
   if (!hasItems) {
-    return header;
+    return <li>{header}</li>;
   }
 
   return (
-    <Collapsible open={open} onOpenChange={setOpen}>
-      <CollapsibleTrigger
-        className="w-full rounded-sm text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
-        aria-expanded={open}
-        aria-label={`${label}, ${formatTokens(tokens)}, expand to see top contributors`}
-      >
-        {header}
-      </CollapsibleTrigger>
-      <CollapsibleContent className="overflow-hidden data-[state=closed]:animate-out data-[state=open]:animate-in data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:slide-out-to-top-1 data-[state=open]:slide-in-from-top-1">
-        {hint && (
-          <p className="pb-1 pl-5 pt-2 text-[11px] italic text-muted-foreground">
-            {hint}
-          </p>
-        )}
-        <div className="flex flex-col gap-0.5 pl-5 pt-1">
-          {items.map((item, index) => (
-            <div
-              // biome-ignore lint/suspicious/noArrayIndexKey: label may repeat across categories; index is stable within this list
-              key={`${item.label}-${index}`}
-              className="flex items-center justify-between gap-2 py-0.5 text-xs"
-            >
-              <span
-                className="truncate text-muted-foreground"
-                title={item.label}
+    <li>
+      <Collapsible open={open} onOpenChange={setOpen}>
+        <CollapsibleTrigger
+          className="w-full rounded-sm text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
+          aria-expanded={open}
+          aria-label={`${label}, ${formatTokens(tokens)}, expand to see top contributors`}
+        >
+          {header}
+        </CollapsibleTrigger>
+        <CollapsibleContent className="overflow-hidden data-[state=closed]:animate-out data-[state=open]:animate-in data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:slide-out-to-top-1 data-[state=open]:slide-in-from-top-1">
+          {hint && (
+            <p className="pb-1 pl-5 pt-2 text-[11px] italic text-muted-foreground">
+              {hint}
+            </p>
+          )}
+          <div className="flex flex-col gap-0.5 pl-5 pt-1">
+            {items.map((item, index) => (
+              <div
+                // biome-ignore lint/suspicious/noArrayIndexKey: label may repeat across categories; index is stable within this list
+                key={`${item.label}-${index}`}
+                className="flex items-center justify-between gap-2 py-0.5 text-xs"
               >
-                {item.label}
-              </span>
-              <span className="shrink-0 tabular-nums text-muted-foreground">
-                {formatTokens(item.tokens)}
-              </span>
-            </div>
-          ))}
-        </div>
-      </CollapsibleContent>
-    </Collapsible>
+                <span
+                  className="truncate text-muted-foreground"
+                  title={item.label}
+                >
+                  {item.label}
+                </span>
+                <span className="shrink-0 tabular-nums text-muted-foreground">
+                  {formatTokens(item.tokens)}
+                </span>
+              </div>
+            ))}
+          </div>
+        </CollapsibleContent>
+      </Collapsible>
+    </li>
   );
 }
 

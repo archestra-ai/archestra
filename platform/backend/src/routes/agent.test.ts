@@ -202,7 +202,7 @@ describe("agent routes", () => {
       expect(response.statusCode).toBe(400);
     });
 
-    test("should create an agent with search-and-run tool exposure", async () => {
+    test("should create an agent with load-tools-when-needed exposure", async () => {
       const response = await app.inject({
         method: "POST",
         url: "/api/agents",

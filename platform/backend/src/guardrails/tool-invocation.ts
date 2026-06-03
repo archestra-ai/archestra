@@ -1,5 +1,7 @@
 import {
   buildArchestraToolRefusalMetadata,
+  isAgentTool,
+  TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON,
   TOOL_INVOCATION_DISABLED_FOR_CONVERSATION_REASON,
 } from "@shared";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
@@ -9,6 +11,7 @@ import {
   OrganizationModel,
   TeamModel,
   ToolInvocationPolicyModel,
+  ToolModel,
 } from "@/models";
 import type { PolicyEvaluationContext } from "@/models/tool-invocation-policy";
 import type { GlobalToolPolicy } from "@/types";
@@ -25,6 +28,72 @@ export interface PolicyBlockResult {
   blockedToolName: string;
   /** All tool call names in the batch (all are blocked when any one is) */
   allToolCallNames: string[];
+}
+
+export async function evaluateSingleMcpToolInvocationPolicy(params: {
+  agentId: string;
+  toolName: string;
+  toolInput: Record<string, unknown>;
+  organizationId?: string;
+  contextIsTrusted: boolean;
+  externalAgentId?: string;
+}): Promise<PolicyBlockResult | null> {
+  if (
+    archestraMcpBranding.isToolName(params.toolName) ||
+    isAgentTool(params.toolName)
+  ) {
+    return null;
+  }
+
+  const [teamIds, organizationPolicy, enabledTools] = await Promise.all([
+    AgentTeamModel.getTeamsForAgent(params.agentId),
+    params.organizationId
+      ? OrganizationModel.getById(params.organizationId).then(
+          (organization) => organization?.globalToolPolicy,
+        )
+      : Promise.resolve(undefined),
+    ToolModel.getMcpToolsByAgent(params.agentId),
+  ]);
+  const globalToolPolicy =
+    organizationPolicy ?? (await getGlobalToolPolicy(params.agentId));
+  const policyContext = {
+    teamIds,
+    externalAgentId: params.externalAgentId,
+  };
+
+  const policyBlock = await evaluatePolicies(
+    [
+      {
+        toolCallName: params.toolName,
+        toolCallArgs: JSON.stringify(params.toolInput),
+      },
+    ],
+    params.agentId,
+    policyContext,
+    params.contextIsTrusted,
+    new Set(enabledTools.map((tool) => tool.name)),
+    globalToolPolicy,
+  );
+  if (policyBlock) {
+    return policyBlock;
+  }
+
+  const requiresApproval =
+    await ToolInvocationPolicyModel.checkApprovalRequired(
+      params.toolName,
+      params.toolInput,
+      policyContext,
+      globalToolPolicy,
+    );
+  if (!requiresApproval) {
+    return null;
+  }
+
+  return buildSingleToolPolicyBlockResult({
+    toolName: params.toolName,
+    toolInput: params.toolInput,
+    reason: TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON,
+  });
 }
 
 /**
@@ -242,4 +311,33 @@ export async function getGlobalToolPolicy(
   );
 
   return firstOrg.globalToolPolicy;
+}
+
+function buildSingleToolPolicyBlockResult(params: {
+  toolName: string;
+  toolInput: Record<string, unknown>;
+  reason: string;
+}): PolicyBlockResult {
+  const toolArguments = JSON.stringify(params.toolInput);
+  const archestraMetadata = buildArchestraToolRefusalMetadata({
+    toolName: params.toolName,
+    toolArguments,
+    reason: params.reason,
+  });
+
+  const contentMessage = `
+I tried to invoke the ${params.toolName} tool with the following arguments: ${toolArguments}.
+
+However, I was denied by a tool invocation policy:
+
+${params.reason}`;
+
+  return {
+    refusalMessage: `${archestraMetadata}
+${contentMessage}`,
+    contentMessage,
+    reason: params.reason,
+    blockedToolName: params.toolName,
+    allToolCallNames: [params.toolName],
+  };
 }

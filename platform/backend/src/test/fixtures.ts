@@ -168,7 +168,9 @@ async function makeVirtualApiKey(
  * Creates a test organization in the database
  */
 async function makeOrganization(
-  overrides: Partial<Pick<InsertOrganization, "name" | "slug">> = {},
+  overrides: Partial<
+    Pick<InsertOrganization, "name" | "slug" | "globalToolPolicy">
+  > = {},
 ) {
   const orgId = crypto.randomUUID();
   const [org] = await db

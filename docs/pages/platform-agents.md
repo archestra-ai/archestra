@@ -3,7 +3,7 @@ title: Overview
 category: Agents
 order: 1
 description: Agent overview, invocation paths, knowledge sources, and prompt templating
-lastUpdated: 2026-06-01
+lastUpdated: 2026-06-03
 ---
 
 <!--
@@ -17,7 +17,7 @@ An agent can include:
 - a system prompt that defines behavior
 - suggested prompts for common tasks in chat
 - one or more assigned tools
-- an optional load-tools-when-needed mode for keeping MCP `tools/list` small
+- optional **Load tools when needed** mode for keeping MCP `tools/list` small
 - optional delegation targets to other agents
 - one or more assigned knowledge sources
 
@@ -31,6 +31,8 @@ For larger toolsets, enable **Load tools when needed**. This keeps the initial t
 - `run_tool` can still execute them
 
 Use this when the full tool menu is too large to send to the model on every turn, but you still want the agent to keep access to the same assigned toolset.
+
+Tool call policies still apply to the target tool. If the model calls `run_tool` to execute `send_email`, Archestra evaluates policies for `send_email` with the same arguments and context it would use for a direct tool call. See [AI Tool Guardrails - Load Tools When Needed](/docs/platform-ai-tool-guardrails#load-tools-when-needed).
 
 See [MCP Gateway - Load Tools When Needed](/docs/platform-mcp-gateway#load-tools-when-needed) for the MCP-client-facing behavior and the same mode on gateways.
 

@@ -933,7 +933,7 @@ export async function getChatMcpTools({
                 },
               }
             : {}),
-          execute: async (args: unknown) => {
+          execute: async (args: unknown, options) => {
             if (blockOnApprovalRequired) {
               await throwIfApprovalRequired(
                 mcpTool.name,
@@ -972,6 +972,18 @@ export async function getChatMcpTools({
                       },
                       "Executing archestra tool with context",
                     );
+                    const toolExecutionContext =
+                      await evaluateToolExecutionContextTrust({
+                        messages: options.messages,
+                        agentId,
+                        organizationId,
+                        userId,
+                        considerContextUntrusted,
+                        globalToolPolicy,
+                        policyContext: {
+                          externalAgentId: getChatExternalAgentId(),
+                        },
+                      });
                     const archestraResponse = await executeArchestraTool(
                       mcpTool.name,
                       toolArguments,
@@ -986,6 +998,7 @@ export async function getChatMcpTools({
                         sessionId,
                         scheduleTriggerRunId,
                         abortSignal,
+                        contextIsTrusted: toolExecutionContext.contextIsTrusted,
                         tokenAuth: buildTokenAuthContext({
                           mcpGwToken,
                           organizationId,

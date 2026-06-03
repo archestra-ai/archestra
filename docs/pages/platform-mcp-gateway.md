@@ -3,7 +3,7 @@ title: MCP Gateway
 category: MCP
 order: 1
 description: Unified access point for all MCP servers
-lastUpdated: 2026-04-23
+lastUpdated: 2026-06-03
 ---
 
 <!--
@@ -112,6 +112,8 @@ Those two tools are enabled implicitly and do not appear in the built-in tool pi
 - `run_tool` can execute them
 
 Use this when the full tool list is too large or noisy to send to the model on every turn, but the gateway still needs the same underlying tool access.
+
+Tool call policies still apply to the target tool. `run_tool` does not bypass input conditions, team conditions, untrusted-context rules, or approval-required rules.
 
 ## Custom Headers
 

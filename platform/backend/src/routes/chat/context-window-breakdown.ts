@@ -19,11 +19,23 @@ import {
 import { getTokenizer, type Tokenizer } from "@/tokenizers";
 import type { ChatMessage, ChatMessagePart } from "@/types";
 
-// Mirrors the heuristics in context-compaction's token estimate so the
-// visualizer's total stays consistent with what triggers auto-compaction.
-const CHARS_PER_TOKEN = 4;
-const PDF_BYTES_PER_TOKEN = 12;
-const BINARY_BYTES_PER_TOKEN = 4;
+// ---------------------------------------------------------------------------
+// Token-estimation constants — must stay in sync with context-compaction.ts.
+// Both files implement the same heuristic so the visualizer total matches what
+// triggers auto-compaction. Do not change one without changing the other.
+// ---------------------------------------------------------------------------
+
+/** Characters per token for text content (provider-independent approximation). */
+export const CHARS_PER_TOKEN = 4;
+/** Bytes per token for PDF binary payloads. */
+export const PDF_BYTES_PER_TOKEN = 12;
+/** Bytes per token for non-PDF, non-text binary payloads (images, audio, etc.). */
+export const BINARY_BYTES_PER_TOKEN = 4;
+/**
+ * Images are billed by dimensions, not byte size. Without this ceiling a
+ * multi-MB image would estimate at ~1 M tokens and spuriously inflate the bar.
+ */
+export const IMAGE_TOKEN_MAX_ESTIMATE = 1_600;
 
 // Keep the streamed payload bounded: ship the biggest contributors per category
 // and fold the rest into a single "Other" row so totals still reconcile.
@@ -82,14 +94,15 @@ export function buildContextWindowBreakdown(params: {
     params.contextLength && params.contextLength > 0
       ? params.contextLength
       : null;
-  const freeTokens =
-    contextLength !== null ? Math.max(contextLength - usedTokens, 0) : null;
+  // May be negative when the assembled request exceeds the model's context limit.
+  const freeTokens = contextLength !== null ? contextLength - usedTokens : null;
+  // Clamped to [0, 100]: values > 100 mean over-limit but must not break the bar.
   const usedPercent =
     contextLength !== null
       ? Math.min((usedTokens / contextLength) * 100, 100)
       : null;
   const estimatedInputCostUsd =
-    params.inputPricePerToken && params.inputPricePerToken > 0
+    params.inputPricePerToken != null && params.inputPricePerToken > 0
       ? usedTokens * params.inputPricePerToken
       : null;
 
@@ -103,6 +116,35 @@ export function buildContextWindowBreakdown(params: {
     estimatedInputCostUsd,
     segments,
   };
+}
+
+/**
+ * Effective input price per token (USD) for a model row, preferring the
+ * admin-set custom price over the synced models.dev price. Returns null when
+ * no price is configured — the cost row is hidden in that case.
+ */
+export function resolveInputPricePerToken(
+  model: {
+    promptPricePerToken: string | null;
+    customPricePerMillionInput: string | null;
+  } | null,
+): number | null {
+  if (!model) {
+    return null;
+  }
+  if (model.customPricePerMillionInput) {
+    const perMillion = Number(model.customPricePerMillionInput);
+    if (Number.isFinite(perMillion) && perMillion > 0) {
+      return perMillion / 1_000_000;
+    }
+  }
+  if (model.promptPricePerToken) {
+    const perToken = Number(model.promptPricePerToken);
+    if (Number.isFinite(perToken) && perToken > 0) {
+      return perToken;
+    }
+  }
+  return null;
 }
 
 // ============================================================================
@@ -168,7 +210,7 @@ function addItem(accumulator: CategoryAccumulator, item: ContextWindowItem) {
   accumulator.items.push(item);
 }
 
-/** Sort contributors descending and collapse the long tail into "Other". */
+/** Sort contributors descending and collapse the long tail into "Other (N)". */
 function finalizeItems(items: ContextWindowItem[]): ContextWindowItem[] {
   if (items.length === 0) {
     return [];
@@ -179,6 +221,7 @@ function finalizeItems(items: ContextWindowItem[]): ContextWindowItem[] {
   }
   const head = sorted.slice(0, MAX_ITEMS_PER_CATEGORY - 1);
   const tail = sorted.slice(MAX_ITEMS_PER_CATEGORY - 1);
+  // Sum conserves the category total: head tokens + otherTokens === accumulator.total.
   const otherTokens = tail.reduce((sum, item) => sum + item.tokens, 0);
   return [...head, { label: `Other (${tail.length})`, tokens: otherTokens }];
 }
@@ -234,23 +277,39 @@ function estimateFilePartTokens(part: ChatMessagePart): number {
     typeof part.mediaType === "string" && part.mediaType.length > 0
       ? part.mediaType
       : "application/octet-stream";
+
+  // Prefer the pre-computed byte size (set by extractInlineAttachments for
+  // attachment-ref URLs, or provided directly). Fall back to measuring the
+  // data URL payload when no explicit size is available.
   const byteLength =
     typeof part.fileSize === "number" && part.fileSize > 0
       ? part.fileSize
       : dataUrlByteLength(part.url);
+
   if (byteLength <= 0) {
     return 0;
   }
 
-  const bytesPerToken =
-    mediaType === "application/pdf"
-      ? PDF_BYTES_PER_TOKEN
-      : isTextLikeMediaType(mediaType)
-        ? CHARS_PER_TOKEN
-        : BINARY_BYTES_PER_TOKEN;
-  return Math.ceil(byteLength / bytesPerToken);
+  if (isTextLikeMediaType(mediaType)) {
+    return Math.ceil(byteLength / CHARS_PER_TOKEN);
+  }
+  if (mediaType === "application/pdf") {
+    return Math.ceil(byteLength / PDF_BYTES_PER_TOKEN);
+  }
+  // Images are billed by dimensions, not bytes; cap to avoid inflating the bar.
+  const estimate = Math.ceil(byteLength / BINARY_BYTES_PER_TOKEN);
+  if (mediaType.startsWith("image/")) {
+    return Math.min(estimate, IMAGE_TOKEN_MAX_ESTIMATE);
+  }
+  return estimate;
 }
 
+/**
+ * Returns the decoded byte length of a `data:` URL payload.
+ * - base64 payloads: reverses the 4-chars-per-3-bytes expansion.
+ * - plain (URL-encoded) payloads: length in chars approximates byte length.
+ * Returns 0 for non-data URLs (attachment refs use `fileSize` instead).
+ */
 function dataUrlByteLength(url: unknown): number {
   if (typeof url !== "string" || !url.startsWith("data:")) {
     return 0;
@@ -261,7 +320,6 @@ function dataUrlByteLength(url: unknown): number {
   }
   const meta = url.slice(5, commaIndex);
   const payload = url.slice(commaIndex + 1);
-  // base64 expands ~4 chars per 3 bytes; non-base64 payloads are URL-encoded text
   return meta.includes(";base64")
     ? Math.floor((payload.length * 3) / 4)
     : payload.length;

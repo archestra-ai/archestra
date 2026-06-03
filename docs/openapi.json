@@ -67775,6 +67775,13 @@
                               "agent"
                             ]
                           },
+                          "toolExposureMode": {
+                            "type": "string",
+                            "enum": [
+                              "full",
+                              "search_and_run_only"
+                            ]
+                          },
                           "llmApiKeyId": {
                             "nullable": true,
                             "type": "string"
@@ -67785,6 +67792,7 @@
                           "name",
                           "systemPrompt",
                           "agentType",
+                          "toolExposureMode",
                           "llmApiKeyId"
                         ],
                         "additionalProperties": false
@@ -68452,6 +68460,13 @@
                             "agent"
                           ]
                         },
+                        "toolExposureMode": {
+                          "type": "string",
+                          "enum": [
+                            "full",
+                            "search_and_run_only"
+                          ]
+                        },
                         "llmApiKeyId": {
                           "nullable": true,
                           "type": "string"
@@ -68462,6 +68477,7 @@
                         "name",
                         "systemPrompt",
                         "agentType",
+                        "toolExposureMode",
                         "llmApiKeyId"
                       ],
                       "additionalProperties": false
@@ -69106,6 +69122,13 @@
                             "agent"
                           ]
                         },
+                        "toolExposureMode": {
+                          "type": "string",
+                          "enum": [
+                            "full",
+                            "search_and_run_only"
+                          ]
+                        },
                         "llmApiKeyId": {
                           "nullable": true,
                           "type": "string"
@@ -69116,6 +69139,7 @@
                         "name",
                         "systemPrompt",
                         "agentType",
+                        "toolExposureMode",
                         "llmApiKeyId"
                       ],
                       "additionalProperties": false
@@ -69801,6 +69825,13 @@
                             "agent"
                           ]
                         },
+                        "toolExposureMode": {
+                          "type": "string",
+                          "enum": [
+                            "full",
+                            "search_and_run_only"
+                          ]
+                        },
                         "llmApiKeyId": {
                           "nullable": true,
                           "type": "string"
@@ -69811,6 +69842,7 @@
                         "name",
                         "systemPrompt",
                         "agentType",
+                        "toolExposureMode",
                         "llmApiKeyId"
                       ],
                       "additionalProperties": false
@@ -71333,6 +71365,13 @@
                             "agent"
                           ]
                         },
+                        "toolExposureMode": {
+                          "type": "string",
+                          "enum": [
+                            "full",
+                            "search_and_run_only"
+                          ]
+                        },
                         "llmApiKeyId": {
                           "nullable": true,
                           "type": "string"
@@ -71343,6 +71382,7 @@
                         "name",
                         "systemPrompt",
                         "agentType",
+                        "toolExposureMode",
                         "llmApiKeyId"
                       ],
                       "additionalProperties": false
@@ -72354,6 +72394,13 @@
                                 "agent"
                               ]
                             },
+                            "toolExposureMode": {
+                              "type": "string",
+                              "enum": [
+                                "full",
+                                "search_and_run_only"
+                              ]
+                            },
                             "llmApiKeyId": {
                               "nullable": true,
                               "type": "string"
@@ -72364,6 +72411,7 @@
                             "name",
                             "systemPrompt",
                             "agentType",
+                            "toolExposureMode",
                             "llmApiKeyId"
                           ],
                           "additionalProperties": false
@@ -73964,6 +74012,13 @@
                             "agent"
                           ]
                         },
+                        "toolExposureMode": {
+                          "type": "string",
+                          "enum": [
+                            "full",
+                            "search_and_run_only"
+                          ]
+                        },
                         "llmApiKeyId": {
                           "nullable": true,
                           "type": "string"
@@ -73974,6 +74029,7 @@
                         "name",
                         "systemPrompt",
                         "agentType",
+                        "toolExposureMode",
                         "llmApiKeyId"
                       ],
                       "additionalProperties": false
@@ -74642,6 +74698,13 @@
                             "agent"
                           ]
                         },
+                        "toolExposureMode": {
+                          "type": "string",
+                          "enum": [
+                            "full",
+                            "search_and_run_only"
+                          ]
+                        },
                         "llmApiKeyId": {
                           "nullable": true,
                           "type": "string"
@@ -74652,6 +74715,7 @@
                         "name",
                         "systemPrompt",
                         "agentType",
+                        "toolExposureMode",
                         "llmApiKeyId"
                       ],
                       "additionalProperties": false
@@ -75312,6 +75376,13 @@
                             "agent"
                           ]
                         },
+                        "toolExposureMode": {
+                          "type": "string",
+                          "enum": [
+                            "full",
+                            "search_and_run_only"
+                          ]
+                        },
                         "llmApiKeyId": {
                           "nullable": true,
                           "type": "string"
@@ -75322,6 +75393,7 @@
                         "name",
                         "systemPrompt",
                         "agentType",
+                        "toolExposureMode",
                         "llmApiKeyId"
                       ],
                       "additionalProperties": false
@@ -75992,6 +76064,13 @@
                             "agent"
                           ]
                         },
+                        "toolExposureMode": {
+                          "type": "string",
+                          "enum": [
+                            "full",
+                            "search_and_run_only"
+                          ]
+                        },
                         "llmApiKeyId": {
                           "nullable": true,
                           "type": "string"
@@ -76002,6 +76081,7 @@
                         "name",
                         "systemPrompt",
                         "agentType",
+                        "toolExposureMode",
                         "llmApiKeyId"
                       ],
                       "additionalProperties": false
@@ -188049,6 +188129,13 @@
                             "agent"
                           ]
                         },
+                        "toolExposureMode": {
+                          "type": "string",
+                          "enum": [
+                            "full",
+                            "search_and_run_only"
+                          ]
+                        },
                         "llmApiKeyId": {
                           "nullable": true,
                           "type": "string"
@@ -188059,6 +188146,7 @@
                         "name",
                         "systemPrompt",
                         "agentType",
+                        "toolExposureMode",
                         "llmApiKeyId"
                       ],
                       "additionalProperties": false

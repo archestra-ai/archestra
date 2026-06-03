@@ -375,7 +375,10 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // Build template context only when prompts use Handlebars syntax
         let promptContext: UserSystemPromptContext | null = null;
         if (promptNeedsRendering(agent.systemPrompt)) {
-          const userTeams = await TeamModel.getUserTeams(user.id);
+          const userTeams = await TeamModel.getUserTeamsForOrganization({
+            userId: user.id,
+            organizationId,
+          });
           promptContext = buildUserSystemPromptContext({
             userName: user.name,
             userEmail: user.email,

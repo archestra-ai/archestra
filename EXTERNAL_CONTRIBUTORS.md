@@ -534,3 +534,4 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @hashimusm786-dev
 - @laicaiqian004-rgb
 - @sevencat2004
+- @Adam-cyber-sys

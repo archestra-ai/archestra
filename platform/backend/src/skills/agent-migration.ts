@@ -1,4 +1,5 @@
 import { parseFullToolName, SKILL_ARCHESTRA_TOOL_SHORT_NAMES } from "@shared";
+import { promptNeedsRendering } from "@/templating";
 import type { ResourceVisibilityScope } from "@/types/visibility";
 
 /**
@@ -78,6 +79,10 @@ interface SkillDraft {
   content: string;
   license: string | null;
   compatibility: string | null;
+  /** Space-separated `allowed-tools`, carried from the agent's tools. */
+  allowedTools: string | null;
+  /** True when the prompt used Handlebars, so the body renders at activation. */
+  templated: boolean;
   metadata: Record<string, string>;
   scope: ResourceVisibilityScope;
 }
@@ -145,6 +150,21 @@ export function agentToSkill(
     carried,
     annotated,
   });
+  // The agent's tools have no native skill equivalent, but the spec's
+  // `allowed-tools` field is exactly the right home for them: it tells whatever
+  // agent activates the skill which tools to pre-approve.
+  const allowedTools = buildAllowedTools(agent, carried);
+  // A Handlebars-using prompt keeps its dynamic behavior only if the skill body
+  // is rendered at activation; flag it so it is, and report it so the carry is
+  // explicit rather than silent.
+  const templated = promptNeedsRendering(agent.systemPrompt);
+  if (templated) {
+    carried.push({
+      field: "templated",
+      detail: "prompt uses Handlebars; body is rendered at activation",
+    });
+  }
+
   const teamIds =
     agent.scope === "team" ? agent.teams.map((team) => team.id) : [];
 
@@ -161,6 +181,8 @@ export function agentToSkill(
       content,
       license: null,
       compatibility: null,
+      allowedTools,
+      templated,
       metadata,
       scope: agent.scope,
     },
@@ -277,9 +299,6 @@ function buildContent(params: {
     });
   }
 
-  const recommendedTools = buildRecommendedToolsSection(agent, carried);
-  if (recommendedTools) sections.push(recommendedTools);
-
   const examples = buildExamplesSection(agent, annotated);
   if (examples) sections.push(examples);
 
@@ -292,14 +311,12 @@ function buildContent(params: {
 }
 
 /**
- * List the agent's tools as a recommendation for whatever agent activates the
- * skill. Tools have no native skill equivalent, but their names are actionable
- * guidance — unlike the agent's model/knowledge bindings, which are noise to a
- * downstream agent and are reported out-of-band instead (see
- * {@link annotateUnmappedBindings}). No mention of the migration: the skill
- * stands on its own.
+ * Carry the agent's tools into the skill's `allowed-tools` field as a
+ * space-separated list. The skill-runtime/plumbing tools are dropped — every
+ * skill-enabled agent already has them, so listing them is circular noise.
+ * Returns `null` when nothing remains, so the field is omitted entirely.
  */
-function buildRecommendedToolsSection(
+function buildAllowedTools(
   agent: MigratableAgent,
   carried: MigrationField[],
 ): string | null {
@@ -308,13 +325,9 @@ function buildRecommendedToolsSection(
 
   carried.push({
     field: "tools",
-    detail: `${tools.length} tool(s) listed as recommended`,
+    detail: `${tools.length} tool(s) carried into allowed-tools`,
   });
-  return (
-    "## Recommended tools\n\n" +
-    "This skill works best with these tools available:\n\n" +
-    tools.map((tool) => `- ${tool.name}`).join("\n")
-  );
+  return tools.map((tool) => tool.name).join(" ");
 }
 
 /** True for an Archestra skill-runtime tool, regardless of its server prefix. */

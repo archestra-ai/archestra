@@ -524,6 +524,7 @@ export const RouteId = {
   GetSkills: "getSkills",
   CreateSkill: "createSkill",
   ConvertAgentToSkill: "convertAgentToSkill",
+  SuggestSkillDescription: "suggestSkillDescription",
   GetSkill: "getSkill",
   UpdateSkill: "updateSkill",
   DeleteSkill: "deleteSkill",

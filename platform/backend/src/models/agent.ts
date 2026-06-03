@@ -39,6 +39,7 @@ import type {
   AgentType,
   InsertAgent,
   SortingQuery,
+  ToolExposureMode,
   UpdateAgent,
 } from "@/types";
 import { isUniqueConstraintError } from "@/utils/db";
@@ -1373,6 +1374,18 @@ class AgentModel {
     AgentModel.filterUnavailableKnowledgeTools([result]);
 
     return result;
+  }
+
+  static async getToolExposureMode(
+    id: string,
+  ): Promise<ToolExposureMode | null> {
+    const [row] = await db
+      .select({ toolExposureMode: schema.agentsTable.toolExposureMode })
+      .from(schema.agentsTable)
+      .where(and(eq(schema.agentsTable.id, id), notDeleted(schema.agentsTable)))
+      .limit(1);
+
+    return row?.toolExposureMode ?? null;
   }
 
   static async findDeletedByIdForOrganization(

@@ -206,6 +206,7 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
   let app: FastifyInstanceWithZod;
   let user: User;
   let organizationId: string;
+  let agentId: string;
   let conversationId: string;
   let capturedInnerOnError: ((err: unknown) => string) | undefined;
   let capturedInnerOnFinish:
@@ -230,6 +231,7 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
         name: "Router Agent",
         systemPrompt: "",
       });
+      agentId = agent.id;
       const conversation = await makeConversation(agent.id, {
         userId: user.id,
         organizationId,
@@ -589,6 +591,111 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
     expect(mockStreamText).toHaveBeenCalledTimes(1);
     expect(mockStreamText.mock.calls[0]?.[0].messages).toEqual(
       compactedMessages,
+    );
+  });
+
+  test("prepends load-tools guidance when the agent loads tools when needed", async () => {
+    const { AgentModel } = await import("@/models");
+    await AgentModel.update(agentId, {
+      toolExposureMode: "search_and_run_only",
+      systemPrompt: "You are a careful analyst.",
+    });
+    mockStreamText.mockClear();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/chat",
+      payload: {
+        id: conversationId,
+        messages: [
+          {
+            id: "msg-1",
+            role: "user",
+            parts: [{ type: "text", text: "hello" }],
+          },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+
+    const systemPrompt = mockStreamText.mock.calls[0]?.[0].system;
+    expect(systemPrompt).toContain(
+      "Some available tools are not listed upfront",
+    );
+    expect(systemPrompt).toContain("use `search_tools` to find relevant tools");
+    expect(systemPrompt).toContain("then call `run_tool`");
+    expect(systemPrompt).toContain("You are a careful analyst.");
+    expect(systemPrompt?.indexOf("Some available tools")).toBeLessThan(
+      systemPrompt?.indexOf("You are a careful analyst.") ?? -1,
+    );
+  });
+
+  test("adds load-tools guidance when the agent has no authored prompt", async () => {
+    const { AgentModel } = await import("@/models");
+    await AgentModel.update(agentId, {
+      toolExposureMode: "search_and_run_only",
+      systemPrompt: null,
+    });
+    mockStreamText.mockClear();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/chat",
+      payload: {
+        id: conversationId,
+        messages: [
+          {
+            id: "msg-1",
+            role: "user",
+            parts: [{ type: "text", text: "hello" }],
+          },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+
+    const systemPrompt = mockStreamText.mock.calls[0]?.[0].system;
+    expect(systemPrompt).toContain(
+      "Some available tools are not listed upfront",
+    );
+    expect(systemPrompt).toContain("use `search_tools` to find relevant tools");
+    expect(systemPrompt).toContain("then call `run_tool`");
+  });
+
+  test("does not add load-tools guidance for fully exposed tools", async () => {
+    const { AgentModel } = await import("@/models");
+    await AgentModel.update(agentId, {
+      toolExposureMode: "full",
+      systemPrompt: "Use the normal tools.",
+    });
+    mockStreamText.mockClear();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/chat",
+      payload: {
+        id: conversationId,
+        messages: [
+          {
+            id: "msg-1",
+            role: "user",
+            parts: [{ type: "text", text: "hello" }],
+          },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+
+    const systemPrompt = mockStreamText.mock.calls[0]?.[0].system;
+    expect(systemPrompt).toContain("Use the normal tools.");
+    expect(systemPrompt).not.toContain(
+      "Some available tools are not listed upfront",
     );
   });
 

@@ -4,14 +4,20 @@ import {
   type Permissions,
   type PredefinedRoleName,
 } from "@archestra/shared";
-import { count, eq, getTableColumns, inArray } from "drizzle-orm";
+import { and, count, eq, getTableColumns, inArray } from "drizzle-orm";
 import { betterAuth } from "@/auth";
 import config from "@/config";
 import db, { schema, type Transaction } from "@/database";
+import { notDeleted } from "@/database/schemas/soft-deletable-table";
+import { hardDelete, softDelete } from "@/database/soft-delete";
 import logger from "@/logging";
 import type { UpdateUser } from "@/types";
+import AccountModel from "./account";
+import ApiKeyModel from "./api-key";
 import MemberModel from "./member";
 import OrganizationRoleModel from "./organization-role";
+import SessionModel from "./session";
+import UserTokenModel from "./user-token";
 
 class UserModel {
   static async createOrGetExistingDefaultAdminUser({
@@ -33,7 +39,12 @@ class UserModel {
       const existing = await db
         .select()
         .from(schema.usersTable)
-        .where(eq(schema.usersTable.email, email));
+        .where(
+          and(
+            eq(schema.usersTable.email, email),
+            notDeleted(schema.usersTable),
+          ),
+        );
       if (existing.length > 0) {
         logger.debug(
           { email },
@@ -56,7 +67,12 @@ class UserModel {
             role,
             emailVerified: true,
           })
-          .where(eq(schema.usersTable.email, email));
+          .where(
+            and(
+              eq(schema.usersTable.email, email),
+              notDeleted(schema.usersTable),
+            ),
+          );
 
         logger.debug(
           { email },
@@ -73,10 +89,14 @@ class UserModel {
   }
 
   /**
-   * Get a user by ID with their organization membership
+   * Get a user by ID with their organization membership.
    */
-  static async getById(id: string) {
+  static async getById(id: string, opts: { includeDeleted?: boolean } = {}) {
     logger.trace("UserModel.getById: fetching user");
+    const conditions = [eq(schema.usersTable.id, id)];
+    if (!opts.includeDeleted) {
+      conditions.push(notDeleted(schema.usersTable));
+    }
     const [user] = await db
       .select({
         ...getTableColumns(schema.usersTable),
@@ -87,7 +107,7 @@ class UserModel {
         schema.membersTable,
         eq(schema.usersTable.id, schema.membersTable.userId),
       )
-      .where(eq(schema.usersTable.id, id))
+      .where(and(...conditions))
       .limit(1);
     logger.trace({ found: !!user }, "UserModel.getById: completed");
     return user;
@@ -116,6 +136,16 @@ class UserModel {
     return new Map(rows.map((row) => [row.id, row.name]));
   }
 
+  /** Display name for a single user, or null if missing/deleted. */
+  static async findNameById(id: string): Promise<string | null> {
+    const [row] = await db
+      .select({ name: schema.usersTable.name })
+      .from(schema.usersTable)
+      .where(and(eq(schema.usersTable.id, id), notDeleted(schema.usersTable)))
+      .limit(1);
+    return row?.name ?? null;
+  }
+
   /**
    * Total number of user rows. Used by the enterprise-tier service to apply
    * the small-team free tier (every row counts, banned or not).
@@ -126,31 +156,33 @@ class UserModel {
   }
 
   /**
-   * Find a user by their email address
+   * Find a user by their email address.
    */
-  static async findByEmail(email: string) {
+  static async findByEmail(
+    email: string,
+    opts: { includeDeleted?: boolean } = {},
+  ) {
     logger.debug({ email }, "UserModel.findByEmail: fetching user");
+    const conditions = [eq(schema.usersTable.email, email)];
+    if (!opts.includeDeleted) {
+      conditions.push(notDeleted(schema.usersTable));
+    }
     const [user] = await db
       .select()
       .from(schema.usersTable)
-      .where(eq(schema.usersTable.email, email))
+      .where(and(...conditions))
       .limit(1);
     logger.debug({ email, found: !!user }, "UserModel.findByEmail: completed");
     return user;
   }
 
   /**
-   * Get all permissions for a user
+   * Get all permissions for a user.
    */
   static async getUserPermissions(
     userId: string,
     organizationId: string,
   ): Promise<Permissions> {
-    // logger.debug(
-    //   { userId, organizationId },
-    //   "UserModel.getUserPermissions: fetching permissions",
-    // );
-    // Get user's member record to find their role
     const memberRecord = await MemberModel.getByUserId(userId, organizationId);
 
     if (!memberRecord) {
@@ -165,15 +197,11 @@ class UserModel {
       memberRecord.role,
       organizationId,
     );
-    // logger.debug(
-    //   { userId, organizationId, role: memberRecord.role },
-    //   "UserModel.getUserPermissions: completed",
-    // );
     return permissions;
   }
 
   /**
-   * Get the default admin user by email
+   * Get the default admin user by email.
    */
   static async getUserWithByDefaultEmail() {
     logger.debug(
@@ -183,7 +211,12 @@ class UserModel {
     const [adminUser] = await db
       .select()
       .from(schema.usersTable)
-      .where(eq(schema.usersTable.email, DEFAULT_ADMIN_EMAIL))
+      .where(
+        and(
+          eq(schema.usersTable.email, DEFAULT_ADMIN_EMAIL),
+          notDeleted(schema.usersTable),
+        ),
+      )
       .limit(1);
     logger.debug(
       { found: !!adminUser },
@@ -193,32 +226,78 @@ class UserModel {
   }
 
   /**
-   * Update a user with partial data
+   * Update a user with partial data.
    */
   static async patch(userId: string, data: Partial<UpdateUser>) {
     logger.debug({ userId, data }, "UserModel.patch: updating user");
     const result = await db
       .update(schema.usersTable)
       .set(data)
-      .where(eq(schema.usersTable.id, userId));
+      .where(
+        and(eq(schema.usersTable.id, userId), notDeleted(schema.usersTable)),
+      );
     logger.debug({ userId }, "UserModel.patch: completed");
     return result;
   }
 
   /**
-   * Delete a user by ID
+   * Soft-delete a user and tombstone the email so the address is freed for
+   * re-registration without weakening the global uniqueness invariant on
+   * `user.email`. Auth-side records (sessions, accounts, two_factor, api
+   * keys, oauth tokens, oauth consents) are hard-deleted and personal user
+   * tokens are soft-deleted so the user cannot re-authenticate and
+   * downstream OAuth clients lose access.
    */
   static async delete(userId: string, tx?: Transaction): Promise<boolean> {
-    logger.debug("UserModel.delete: deleting user");
+    logger.debug("UserModel.delete: soft-deleting user");
     const dbOrTx = tx ?? db;
-    const result = await dbOrTx
-      .delete(schema.usersTable)
-      .where(eq(schema.usersTable.id, userId))
-      .returning();
-    const deleted = result.length > 0;
-    logger.debug({ deleted }, "UserModel.delete: completed");
-    return deleted;
+    await SessionModel.deleteAllByUserId(userId, tx);
+    await AccountModel.deleteAllByUserId(userId, tx);
+    await ApiKeyModel.deleteAllByUserId(userId, tx);
+    await UserTokenModel.deleteAllByUserId(userId, tx);
+    await dbOrTx
+      .delete(schema.twoFactorsTable)
+      .where(eq(schema.twoFactorsTable.userId, userId));
+    await dbOrTx
+      .delete(schema.oauthAccessTokensTable)
+      .where(eq(schema.oauthAccessTokensTable.userId, userId));
+    await dbOrTx
+      .delete(schema.oauthRefreshTokensTable)
+      .where(eq(schema.oauthRefreshTokensTable.userId, userId));
+    await dbOrTx
+      .delete(schema.oauthConsentsTable)
+      .where(eq(schema.oauthConsentsTable.userId, userId));
+    await dbOrTx
+      .update(schema.usersTable)
+      .set({ email: makeEmailTombstone() })
+      .where(
+        and(eq(schema.usersTable.id, userId), notDeleted(schema.usersTable)),
+      );
+    const count = await softDelete(
+      dbOrTx,
+      schema.usersTable,
+      eq(schema.usersTable.id, userId),
+    );
+    logger.debug({ deleted: count > 0 }, "UserModel.delete: completed");
+    return count > 0;
+  }
+
+  /**
+   * Physically remove a user row. Reserved for purge flows and test cleanup
+   * — application code should call `delete` instead.
+   */
+  static async hardDelete(userId: string, tx?: Transaction): Promise<boolean> {
+    const count = await hardDelete(
+      tx ?? db,
+      schema.usersTable,
+      eq(schema.usersTable.id, userId),
+    );
+    return count > 0;
   }
 }
 
 export default UserModel;
+
+function makeEmailTombstone(): string {
+  return `deleted-${crypto.randomUUID()}@archestra.invalid`;
+}

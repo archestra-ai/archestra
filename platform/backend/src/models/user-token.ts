@@ -1,7 +1,9 @@
 import { randomBytes } from "node:crypto";
 import { ARCHESTRA_TOKEN_PREFIX } from "@archestra/shared";
 import { and, eq } from "drizzle-orm";
-import db, { schema } from "@/database";
+import db, { schema, type Transaction } from "@/database";
+import { notDeleted } from "@/database/schemas/soft-deletable-table";
+import { hardDelete, softDelete } from "@/database/soft-delete";
 import logger from "@/logging";
 import { secretManager } from "@/secrets-manager";
 import type { SelectUserToken } from "@/types";
@@ -112,7 +114,12 @@ class UserTokenModel {
     const [token] = await db
       .select()
       .from(schema.userTokensTable)
-      .where(eq(schema.userTokensTable.id, id))
+      .where(
+        and(
+          eq(schema.userTokensTable.id, id),
+          notDeleted(schema.userTokensTable),
+        ),
+      )
       .limit(1);
 
     return token ?? null;
@@ -132,6 +139,7 @@ class UserTokenModel {
         and(
           eq(schema.userTokensTable.userId, userId),
           eq(schema.userTokensTable.organizationId, organizationId),
+          notDeleted(schema.userTokensTable),
         ),
       )
       .limit(1);
@@ -146,28 +154,55 @@ class UserTokenModel {
     await db
       .update(schema.userTokensTable)
       .set({ lastUsedAt: new Date() })
-      .where(eq(schema.userTokensTable.id, id));
+      .where(
+        and(
+          eq(schema.userTokensTable.id, id),
+          notDeleted(schema.userTokensTable),
+        ),
+      );
   }
 
   /**
-   * Delete a token and its associated secret
+   * Soft-delete a token. The backing secret is retained so the token can be
+   * restored; it is destroyed only on `hardDelete`. A soft-deleted token can no
+   * longer authenticate because `validateToken` filters out deleted rows.
    */
-  static async delete(id: string): Promise<boolean> {
-    const token = await UserTokenModel.findById(id);
-    if (!token) return false;
+  static async delete(id: string, tx?: Transaction): Promise<boolean> {
+    logger.debug({ tokenId: id }, "UserTokenModel.delete: soft-deleting token");
 
-    logger.debug({ tokenId: id }, "UserTokenModel.delete: deleting token");
+    const count = await softDelete(
+      tx ?? db,
+      schema.userTokensTable,
+      eq(schema.userTokensTable.id, id),
+    );
 
-    // Delete the token (secret will be cascade deleted)
-    await db
-      .delete(schema.userTokensTable)
-      .where(eq(schema.userTokensTable.id, id));
+    logger.info(
+      { tokenId: id, deleted: count > 0 },
+      "UserTokenModel.delete: completed",
+    );
 
-    // Also delete the secret explicitly
-    await secretManager().deleteSecret(token.secretId);
+    return count > 0;
+  }
 
-    logger.info({ tokenId: id }, "UserTokenModel.delete: token deleted");
+  /**
+   * Hard-delete a user token and destroy its backing secret. Reserved for purge
+   * flows. Operates regardless of soft-delete state.
+   */
+  static async hardDelete(id: string, tx?: Transaction): Promise<boolean> {
+    const dbOrTx = tx ?? db;
+    const [row] = await dbOrTx
+      .select({ secretId: schema.userTokensTable.secretId })
+      .from(schema.userTokensTable)
+      .where(eq(schema.userTokensTable.id, id))
+      .limit(1);
+    if (!row) return false;
 
+    await hardDelete(
+      dbOrTx,
+      schema.userTokensTable,
+      eq(schema.userTokensTable.id, id),
+    );
+    await secretManager().deleteSecret(row.secretId);
     return true;
   }
 
@@ -182,6 +217,23 @@ class UserTokenModel {
     if (!token) return false;
 
     return UserTokenModel.delete(token.id);
+  }
+
+  /**
+   * Soft-delete every token belonging to a user across all organizations. Used
+   * when a user is soft-deleted so any outstanding personal token can no longer
+   * authenticate (`validateToken` filters out deleted rows). Backing secrets are
+   * retained for potential restore and destroyed only on `hardDelete`.
+   */
+  static async deleteAllByUserId(
+    userId: string,
+    tx?: Transaction,
+  ): Promise<number> {
+    return softDelete(
+      tx ?? db,
+      schema.userTokensTable,
+      eq(schema.userTokensTable.userId, userId),
+    );
   }
 
   /**
@@ -207,7 +259,12 @@ class UserTokenModel {
     await db
       .update(schema.userTokensTable)
       .set({ tokenStart: newTokenStart })
-      .where(eq(schema.userTokensTable.id, id));
+      .where(
+        and(
+          eq(schema.userTokensTable.id, id),
+          notDeleted(schema.userTokensTable),
+        ),
+      );
 
     logger.info({ tokenId: id }, "UserTokenModel.rotate: token rotated");
 
@@ -228,7 +285,12 @@ class UserTokenModel {
     const candidates = await db
       .select()
       .from(schema.userTokensTable)
-      .where(eq(schema.userTokensTable.tokenStart, tokenStart));
+      .where(
+        and(
+          eq(schema.userTokensTable.tokenStart, tokenStart),
+          notDeleted(schema.userTokensTable),
+        ),
+      );
     if (candidates.length === 0) return null;
 
     const secretsById = new Map(

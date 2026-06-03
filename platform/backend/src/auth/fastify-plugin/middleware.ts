@@ -470,6 +470,7 @@ export class Authnz {
       banReason: null,
       banExpires: null,
       twoFactorEnabled: false,
+      deletedAt: null,
     };
     request.organizationId = serviceAccount.organizationId;
     request.serviceAccount = serviceAccount;

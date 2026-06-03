@@ -210,6 +210,18 @@ class AccountModel {
     return deleted.length;
   }
 
+  static async deleteAllByUserId(
+    userId: string,
+    tx?: Transaction,
+  ): Promise<number> {
+    const dbOrTx = tx ?? db;
+    const deleted = await dbOrTx
+      .delete(schema.accountsTable)
+      .where(eq(schema.accountsTable.userId, userId))
+      .returning({ id: schema.accountsTable.id });
+    return deleted.length;
+  }
+
   /**
    * Delete all accounts with a specific providerId.
    * This is used to clean up SSO accounts when an SSO provider is deleted,

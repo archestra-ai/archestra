@@ -94,7 +94,7 @@ export async function evaluateSingleMcpToolInvocationPolicy(params: {
     return null;
   }
 
-  return buildSingleToolPolicyBlockResult({
+  return buildToolInvocationPolicyBlockResult({
     toolName: params.toolName,
     toolInput: params.toolInput,
     reason: TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON,
@@ -215,37 +215,20 @@ export const evaluatePolicies = async (
   );
 
   if (!isAllowed && toolCallName) {
-    const toolInput = parsedToolCalls.find(
-      (tc) => tc.toolCallName === toolCallName,
-    )?.toolInput;
-
-    const archestraMetadata = buildArchestraToolRefusalMetadata({
-      toolName: toolCallName,
-      toolArguments: JSON.stringify(toolInput),
-      reason,
-    });
-
-    const contentMessage = `
-I tried to invoke the ${toolCallName} tool with the following arguments: ${JSON.stringify(toolInput)}.
-
-However, I was denied by a tool invocation policy:
-
-${reason}`;
-
-    const refusalMessage = `${archestraMetadata}
-${contentMessage}`;
+    const toolInput =
+      parsedToolCalls.find((tc) => tc.toolCallName === toolCallName)
+        ?.toolInput ?? {};
 
     logger.debug(
       { agentId, toolCallName, reason },
       "[toolInvocation] evaluatePolicies: tool invocation blocked",
     );
-    return {
-      refusalMessage,
-      contentMessage,
+    return buildToolInvocationPolicyBlockResult({
+      toolName: toolCallName,
+      toolInput,
       reason,
-      blockedToolName: toolCallName,
       allToolCallNames: filteredToolCalls.map((tc) => tc.toolCallName),
-    };
+    });
   }
 
   logger.debug(
@@ -318,10 +301,11 @@ export async function getGlobalToolPolicy(
   return firstOrg.globalToolPolicy;
 }
 
-function buildSingleToolPolicyBlockResult(params: {
+function buildToolInvocationPolicyBlockResult(params: {
   toolName: string;
   toolInput: Record<string, unknown>;
   reason: string;
+  allToolCallNames?: string[];
 }): PolicyBlockResult {
   const toolArguments = JSON.stringify(params.toolInput);
   const archestraMetadata = buildArchestraToolRefusalMetadata({
@@ -343,6 +327,6 @@ ${contentMessage}`,
     contentMessage,
     reason: params.reason,
     blockedToolName: params.toolName,
-    allToolCallNames: [params.toolName],
+    allToolCallNames: params.allToolCallNames ?? [params.toolName],
   };
 }

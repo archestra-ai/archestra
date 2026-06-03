@@ -208,12 +208,13 @@ async function crawlRepo(repo: (typeof POPULAR_REPOS)[number]) {
         }
 
         const skillPath = dirname(manifestPath);
+        // count every file the skill ships, including its own SKILL.md, so an
+        // instruction-only skill reads "1 file" rather than "0".
         const fileCount = treeItems.filter(
           (item) =>
             item.type === "blob" &&
             item.path !== undefined &&
-            isUnderSkillDir(item.path, skillPath) &&
-            basename(item.path) !== SKILL_MANIFEST_FILENAME,
+            isUnderSkillDir(item.path, skillPath),
         ).length;
 
         return {

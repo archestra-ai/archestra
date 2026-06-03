@@ -73,7 +73,6 @@ beforeAll(async () => {
   const snapshotPath = process.env[SNAPSHOT_PATH_ENV];
 
   if (snapshotPath && fs.existsSync(snapshotPath)) {
-    // Fast path: restore the prebuilt, fully-migrated database.
     const snapshot = new Blob([fs.readFileSync(snapshotPath)]);
     pgliteClient = new PGlite({
       loadDataDir: snapshot,
@@ -81,7 +80,6 @@ beforeAll(async () => {
     });
     testDb = drizzle({ client: pgliteClient });
   } else {
-    // Fallback: build a fresh in-memory database and replay all migrations.
     pgliteClient = new PGlite("memory://", { extensions: { vector } });
     testDb = drizzle({ client: pgliteClient });
     for (const migrationSql of getMigrationsSql()) {

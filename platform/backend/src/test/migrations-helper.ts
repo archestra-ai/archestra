@@ -27,7 +27,7 @@ export function getMigrationsSql(): string[] {
   const migrationFiles = fs
     .readdirSync(migrationsDir)
     .filter((file) => file.endsWith(".sql"))
-    .sort(); // Ensure consistent order
+    .sort();
 
   cachedMigrationsSql = migrationFiles.map((file) =>
     fs.readFileSync(path.join(migrationsDir, file), "utf8"),

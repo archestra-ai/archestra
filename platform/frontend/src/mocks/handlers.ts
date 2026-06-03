@@ -101,7 +101,6 @@ export const handlers: HttpHandler[] = [
       message: null,
     },
   }),
-  ...getJson("/api/network-policies", []),
 
   // Agents
   ...getJson("/api/agents", agentsSeed),

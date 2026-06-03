@@ -14,6 +14,7 @@ import {
 import { type Mock, vi } from "vitest";
 import { hasPermission } from "@/auth";
 import { InternalMcpCatalogModel } from "@/models";
+import { secretManager } from "@/secrets-manager";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { ApiError, type User } from "@/types";
 import internalMcpCatalogRoutes from "./internal-mcp-catalog";
@@ -175,5 +176,117 @@ describe("internal MCP catalog routes", () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json().clonedFrom).toBe(source.id);
+  });
+
+  test("POST /api/internal_mcp_catalog clones source secret bags when clone payload has no secret values", async ({
+    makeInternalMcpCatalog,
+    makeSecret,
+  }) => {
+    const clientSecret = await makeSecret({
+      name: "source-client-secret",
+      secret: { client_secret: "source-client-secret-value" },
+    });
+    const localConfigSecret = await makeSecret({
+      name: "source-local-config-secret",
+      secret: { API_KEY: "source-api-key" },
+    });
+    const presetSecret = await makeSecret({
+      name: "source-preset-secret",
+      secret: { token: "source-preset-token" },
+    });
+    const createdSource = await makeInternalMcpCatalog({
+      name: "secret-clone-source",
+      organizationId,
+      scope: "org",
+      serverType: "local",
+      oauthConfig: {
+        name: "secret-clone-source",
+        server_url: "https://example.com/mcp",
+        client_id: "client-id",
+        grant_type: "client_credentials",
+        redirect_uris: [],
+        scopes: [],
+        default_scopes: [],
+        supports_resource_metadata: true,
+      },
+      localConfig: {
+        command: "node",
+        arguments: [],
+        environment: [
+          {
+            key: "API_KEY",
+            type: "secret",
+            promptOnInstallation: false,
+          },
+        ],
+      },
+    });
+    const source = await InternalMcpCatalogModel.update(createdSource.id, {
+      clientSecretId: clientSecret.id,
+      localConfigSecretId: localConfigSecret.id,
+      presetSecretId: presetSecret.id,
+    });
+    if (!source) {
+      throw new Error("Expected source catalog to exist");
+    }
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/internal_mcp_catalog",
+      payload: {
+        name: "secret-clone-target",
+        serverType: "local",
+        clonedFrom: source.id,
+        oauthConfig: {
+          name: "secret-clone-target",
+          server_url: "https://example.com/mcp",
+          client_id: "client-id",
+          grant_type: "client_credentials",
+          redirect_uris: [],
+          scopes: [],
+          default_scopes: [],
+          supports_resource_metadata: true,
+        },
+        localConfig: {
+          command: "node",
+          arguments: [],
+          environment: [
+            {
+              key: "API_KEY",
+              type: "secret",
+              promptOnInstallation: false,
+            },
+          ],
+        },
+        presetFieldValues: {},
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const clone = await InternalMcpCatalogModel.findById(response.json().id, {
+      expandSecrets: false,
+    });
+    expect(clone?.clientSecretId).toBeTruthy();
+    expect(clone?.localConfigSecretId).toBeTruthy();
+    expect(clone?.presetSecretId).toBeTruthy();
+    expect(clone?.clientSecretId).not.toBe(source.clientSecretId);
+    expect(clone?.localConfigSecretId).not.toBe(source.localConfigSecretId);
+    expect(clone?.presetSecretId).not.toBe(source.presetSecretId);
+
+    await expect(
+      secretManager().getSecret(clone?.clientSecretId ?? ""),
+    ).resolves.toMatchObject({
+      secret: { client_secret: "source-client-secret-value" },
+    });
+    await expect(
+      secretManager().getSecret(clone?.localConfigSecretId ?? ""),
+    ).resolves.toMatchObject({
+      secret: { API_KEY: "source-api-key" },
+    });
+    await expect(
+      secretManager().getSecret(clone?.presetSecretId ?? ""),
+    ).resolves.toMatchObject({
+      secret: { token: "source-preset-token" },
+    });
   });
 });

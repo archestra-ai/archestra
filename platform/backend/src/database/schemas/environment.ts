@@ -2,13 +2,14 @@ import {
   boolean,
   index,
   integer,
+  jsonb,
   pgTable,
   text,
   timestamp,
   unique,
   uuid,
 } from "drizzle-orm/pg-core";
-import networkPoliciesTable from "./network-policy";
+import type { NetworkPolicy } from "@/types";
 import organizationsTable from "./organization";
 
 /**
@@ -33,10 +34,7 @@ const environmentsTable = pgTable(
      * not yet applied at deployment time. NULL means "unset".
      */
     namespace: text("namespace"),
-    networkPolicyId: uuid("network_policy_id").references(
-      () => networkPoliciesTable.id,
-      { onDelete: "set null" },
-    ),
+    networkPolicy: jsonb("network_policy").$type<NetworkPolicy | null>(),
     /**
      * When true, assigning a catalog item to this environment requires the
      * `environment:admin` permission. Unrestricted environments (and the
@@ -54,7 +52,6 @@ const environmentsTable = pgTable(
   (table) => [
     unique("environments_org_name_unique").on(table.organizationId, table.name),
     index("environments_org_idx").on(table.organizationId),
-    index("environments_network_policy_id_idx").on(table.networkPolicyId),
   ],
 );
 

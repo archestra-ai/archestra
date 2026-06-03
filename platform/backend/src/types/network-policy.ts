@@ -1,6 +1,4 @@
-import { createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
-import { schema } from "@/database";
 
 // === Public schemas & types ===
 
@@ -35,50 +33,26 @@ const NetworkPolicyCidrSchema = z
     "Must be a CIDR such as 203.0.113.0/24 or 2001:db8::/32",
   );
 
-export const SelectNetworkPolicySchema = createSelectSchema(
-  schema.networkPoliciesTable,
-).extend({
+export const NetworkPolicySchema = z.object({
   egressMode: NetworkPolicyEgressModeSchema,
   domainPreset: NetworkPolicyDomainPresetSchema,
   allowedDomains: z.array(z.string()),
   allowedCidrs: z.array(z.string()),
 });
 
-export const CreateNetworkPolicySchema = z
+export const NetworkPolicyInputSchema = z
   .object({
-    name: z.string().trim().min(1).max(80),
-    description: z.string().trim().max(500).nullable().optional(),
     egressMode: NetworkPolicyEgressModeSchema.optional(),
     domainPreset: NetworkPolicyDomainPresetSchema.optional(),
     allowedDomains: z.array(NetworkPolicyDomainSchema).max(500).optional(),
     allowedCidrs: z.array(NetworkPolicyCidrSchema).max(500).optional(),
   })
-  .superRefine(validateNetworkPolicyInput);
-
-export const UpdateNetworkPolicySchema = z
-  .object({
-    name: z.string().trim().min(1).max(80).optional(),
-    description: z.string().trim().max(500).nullable().optional(),
-    egressMode: NetworkPolicyEgressModeSchema.optional(),
-    domainPreset: NetworkPolicyDomainPresetSchema.optional(),
-    allowedDomains: z.array(NetworkPolicyDomainSchema).max(500).optional(),
-    allowedCidrs: z.array(NetworkPolicyCidrSchema).max(500).optional(),
-  })
-  .superRefine(validateNetworkPolicyInput);
-
-export const NetworkPolicyReferenceCountsSchema = z.object({
-  environments: z.number().int().nonnegative(),
-  defaultEnvironments: z.number().int().nonnegative(),
-});
-
-export const NetworkPolicyWithReferencesSchema =
-  SelectNetworkPolicySchema.extend({
-    references: NetworkPolicyReferenceCountsSchema,
-  });
+  .superRefine(validateNetworkPolicyInput)
+  .transform((policy) => normalizeNetworkPolicy(policy));
 
 export const EffectiveNetworkPolicySchema = z.object({
   source: z.enum(["environment", "organization_default", "built_in"]),
-  policy: SelectNetworkPolicySchema.nullable(),
+  policy: NetworkPolicySchema.nullable(),
 });
 
 export const K8sNetworkPolicyCapabilitiesSchema = z.object({
@@ -108,15 +82,8 @@ export type NetworkPolicyEgressMode = z.infer<
 export type NetworkPolicyDomainPreset = z.infer<
   typeof NetworkPolicyDomainPresetSchema
 >;
-export type NetworkPolicy = z.infer<typeof SelectNetworkPolicySchema>;
-export type CreateNetworkPolicy = z.infer<typeof CreateNetworkPolicySchema>;
-export type UpdateNetworkPolicy = z.infer<typeof UpdateNetworkPolicySchema>;
-export type NetworkPolicyReferenceCounts = z.infer<
-  typeof NetworkPolicyReferenceCountsSchema
->;
-export type NetworkPolicyWithReferences = z.infer<
-  typeof NetworkPolicyWithReferencesSchema
->;
+export type NetworkPolicy = z.infer<typeof NetworkPolicySchema>;
+export type NetworkPolicyInput = z.input<typeof NetworkPolicyInputSchema>;
 export type EffectiveNetworkPolicy = z.infer<
   typeof EffectiveNetworkPolicySchema
 >;
@@ -151,6 +118,23 @@ function validateNetworkPolicyInput(
       message: "Allowed CIDRs must be unique.",
     });
   }
+}
+
+function normalizeNetworkPolicy(value: {
+  egressMode?: NetworkPolicyEgressMode;
+  domainPreset?: NetworkPolicyDomainPreset;
+  allowedDomains?: string[];
+  allowedCidrs?: string[];
+}): NetworkPolicy {
+  const egressMode = value.egressMode ?? "restricted";
+  return {
+    egressMode,
+    domainPreset:
+      egressMode === "restricted" ? (value.domainPreset ?? "none") : "none",
+    allowedDomains:
+      egressMode === "restricted" ? (value.allowedDomains ?? []) : [],
+    allowedCidrs: egressMode === "restricted" ? (value.allowedCidrs ?? []) : [],
+  };
 }
 
 function isValidCidr(value: string): boolean {

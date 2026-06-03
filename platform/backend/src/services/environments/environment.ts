@@ -6,7 +6,6 @@ import {
   type EnvironmentList,
   type UpdateEnvironment,
 } from "@/types";
-import { assertNetworkPolicyBelongsToOrganization } from "./network-policy";
 
 // === Public API ===
 
@@ -29,16 +28,12 @@ export async function createEnvironment(params: {
   if (existing.some((e) => e.name === data.name)) {
     throw new ApiError(409, "An environment with this name already exists.");
   }
-  await assertNetworkPolicyBelongsToOrganization({
-    networkPolicyId: data.networkPolicyId,
-    organizationId,
-  });
   return EnvironmentModel.create({
     organizationId,
     name: data.name,
     description: data.description ?? null,
     namespace: data.namespace ?? null,
-    networkPolicyId: data.networkPolicyId ?? null,
+    networkPolicy: data.networkPolicy ?? null,
     restricted: data.restricted,
   });
 }
@@ -56,20 +51,13 @@ export async function updateEnvironment(params: {
       throw new ApiError(409, "An environment with this name already exists.");
     }
   }
-  if (data.networkPolicyId !== undefined) {
-    await assertNetworkPolicyBelongsToOrganization({
-      networkPolicyId: data.networkPolicyId,
-      organizationId,
-    });
-  }
-
   const updated = await EnvironmentModel.update({
     id,
     organizationId,
     name: data.name,
     description: data.description,
     namespace: data.namespace,
-    networkPolicyId: data.networkPolicyId,
+    networkPolicy: data.networkPolicy,
     restricted: data.restricted,
   });
   if (!updated) {

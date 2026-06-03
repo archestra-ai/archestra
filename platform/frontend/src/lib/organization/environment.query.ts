@@ -2,7 +2,6 @@ import { archestraApiSdk, type archestraApiTypes } from "@shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { handleApiError } from "@/lib/utils";
-import { networkPolicyKeys } from "./network-policy.query";
 
 export const environmentKeys = {
   all: ["environments"] as const,
@@ -51,7 +50,6 @@ export function useCreateEnvironment() {
     onSuccess: (environment) => {
       if (!environment) return;
       queryClient.invalidateQueries({ queryKey: environmentKeys.list() });
-      queryClient.invalidateQueries({ queryKey: networkPolicyKeys.list() });
       toast.success(`${environment.name} added`);
     },
   });
@@ -77,7 +75,6 @@ export function useUpdateEnvironment() {
     onSuccess: (environment) => {
       if (!environment) return;
       queryClient.invalidateQueries({ queryKey: environmentKeys.list() });
-      queryClient.invalidateQueries({ queryKey: networkPolicyKeys.list() });
       toast.success(`${environment.name} updated`);
     },
   });
@@ -98,7 +95,6 @@ export function useDeleteEnvironment() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: environmentKeys.list() });
-      queryClient.invalidateQueries({ queryKey: networkPolicyKeys.list() });
       // Catalog items assigned to the deleted environment fall back to the
       // virtual Default target (FK set null), so refresh catalog views too.
       queryClient.invalidateQueries({ queryKey: ["mcp-catalog"] });

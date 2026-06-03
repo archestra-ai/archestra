@@ -204,6 +204,9 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       let clientSecretId: string | undefined;
       let localConfigSecretId: string | undefined;
+      let cloneSource: Awaited<
+        ReturnType<typeof InternalMcpCatalogModel.findById>
+      > | null = null;
 
       // Handle OAuth client secret - either via BYOS or direct value
       if (oauthClientSecretVaultPath && oauthClientSecretVaultKey) {
@@ -410,7 +413,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // the source's tools + guardrail policies, so an unscoped `clonedFrom`
       // would let a caller pull another org's catalog config into their own.
       if (restBody.clonedFrom) {
-        const cloneSource = await InternalMcpCatalogModel.findById(
+        cloneSource = await InternalMcpCatalogModel.findById(
           restBody.clonedFrom,
           {
             expandSecrets: false,
@@ -421,6 +424,36 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
         if (!cloneSource) {
           throw new ApiError(400, "Clone source catalog item not found");
+        }
+
+        if (!restBody.clientSecretId && cloneSource.clientSecretId) {
+          const secret = await cloneSecretBag({
+            sourceSecretId: cloneSource.clientSecretId,
+            targetName: `${restBody.name}-client-secret`,
+          });
+          if (secret) {
+            restBody.clientSecretId = secret.id;
+          }
+        }
+
+        if (!restBody.localConfigSecretId && cloneSource.localConfigSecretId) {
+          const secret = await cloneSecretBag({
+            sourceSecretId: cloneSource.localConfigSecretId,
+            targetName: `${restBody.name}-local-config-env`,
+          });
+          if (secret) {
+            restBody.localConfigSecretId = secret.id;
+          }
+        }
+
+        if (!restBody.presetSecretId && cloneSource.presetSecretId) {
+          const secret = await cloneSecretBag({
+            sourceSecretId: cloneSource.presetSecretId,
+            targetName: `${restBody.name}-preset-fields`,
+          });
+          if (secret) {
+            restBody.presetSecretId = secret.id;
+          }
         }
       }
 
@@ -1811,6 +1844,18 @@ async function assertCanEditCatalogPresets(
       "You can only edit presets on your own personal catalog items",
     );
   }
+}
+
+async function cloneSecretBag(params: {
+  sourceSecretId: string;
+  targetName: string;
+}) {
+  const sourceSecret = await secretManager().getSecret(params.sourceSecretId);
+  if (!sourceSecret) {
+    return null;
+  }
+
+  return secretManager().createSecret(sourceSecret.secret, params.targetName);
 }
 
 async function upsertCatalogClientSecretValue(params: {

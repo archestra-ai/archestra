@@ -13,7 +13,6 @@ import {
   InternalMcpCatalogModel,
   McpHttpSessionModel,
   McpServerModel,
-  NetworkPolicyModel,
   OrganizationModel,
 } from "@/models";
 import { secretManager } from "@/secrets-manager";
@@ -36,13 +35,10 @@ import type {
 
 type CatalogItem = Awaited<ReturnType<typeof InternalMcpCatalogModel.findById>>;
 type EnvironmentRow = Awaited<ReturnType<typeof EnvironmentModel.findById>>;
+type OrganizationRow = Awaited<ReturnType<typeof OrganizationModel.getById>>;
 type NetworkPolicyResolutionCache = {
   environmentsById: Map<string, EnvironmentRow>;
-  defaultNetworkPolicyIdByOrgId: Map<string, string | null>;
-  networkPoliciesById: Map<
-    string,
-    NonNullable<EffectiveNetworkPolicy["policy"]>
-  >;
+  organizationsById: Map<string, OrganizationRow>;
 };
 
 /**
@@ -261,17 +257,15 @@ export class McpServerRuntimeManager {
       return { source: "built_in", policy: null };
     }
 
-    const defaultNetworkPolicyId = params.cache
-      ? params.cache.defaultNetworkPolicyIdByOrgId.get(organizationId)
-      : (await OrganizationModel.getById(organizationId))
-          ?.defaultNetworkPolicyId;
+    const organization = params.cache
+      ? params.cache.organizationsById.get(organizationId)
+      : await OrganizationModel.getById(organizationId);
 
     return resolveEffectiveNetworkPolicy({
       organizationId,
       environmentId: params.catalogItem?.environmentId,
-      environmentNetworkPolicyId: environment?.networkPolicyId,
-      defaultNetworkPolicyId,
-      networkPoliciesById: params.cache?.networkPoliciesById,
+      environmentNetworkPolicy: environment?.networkPolicy,
+      defaultNetworkPolicy: organization?.defaultNetworkPolicy,
     });
   }
 
@@ -302,34 +296,15 @@ export class McpServerRuntimeManager {
     const organizations = await Promise.all(
       organizationIds.map((id) => OrganizationModel.getById(id)),
     );
-    const defaultNetworkPolicyIdByOrgId = new Map<string, string | null>();
+    const organizationsById = new Map<string, OrganizationRow>();
     for (const organization of organizations) {
       if (!organization) continue;
-      defaultNetworkPolicyIdByOrgId.set(
-        organization.id,
-        organization.defaultNetworkPolicyId,
-      );
+      organizationsById.set(organization.id, organization);
     }
-
-    const networkPolicyIds = uniqueStrings([
-      ...environments
-        .map((environment) => environment?.networkPolicyId)
-        .filter((id): id is string => Boolean(id)),
-      ...organizations
-        .map((organization) => organization?.defaultNetworkPolicyId)
-        .filter((id): id is string => Boolean(id)),
-    ]);
-    const policies = await NetworkPolicyModel.listByIdsForOrganizations({
-      ids: networkPolicyIds,
-      organizationIds,
-    });
 
     return {
       environmentsById,
-      defaultNetworkPolicyIdByOrgId,
-      networkPoliciesById: new Map(
-        policies.map((policy) => [policy.id, policy]),
-      ),
+      organizationsById,
     };
   }
 

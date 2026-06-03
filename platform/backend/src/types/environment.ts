@@ -1,12 +1,18 @@
 import { createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
+import {
+  NetworkPolicyInputSchema,
+  NetworkPolicySchema,
+} from "./network-policy";
 
 // === Public schemas & types ===
 
 export const SelectEnvironmentSchema = createSelectSchema(
   schema.environmentsTable,
-);
+).extend({
+  networkPolicy: NetworkPolicySchema.nullable(),
+});
 
 /**
  * Listing response shape — row columns plus the number of catalog items
@@ -40,7 +46,7 @@ export const CreateEnvironmentSchema = z.object({
   name: z.string().trim().min(1).max(50),
   description: z.string().trim().max(500).nullable().optional(),
   namespace: KubernetesNamespaceSchema.nullable().optional(),
-  networkPolicyId: z.string().uuid().nullable().optional(),
+  networkPolicy: NetworkPolicyInputSchema.nullable().optional(),
   restricted: z.boolean().optional(),
 });
 
@@ -52,7 +58,7 @@ export const UpdateEnvironmentSchema = z.object({
   name: z.string().trim().min(1).max(50).optional(),
   description: z.string().trim().max(500).nullable().optional(),
   namespace: KubernetesNamespaceSchema.nullable().optional(),
-  networkPolicyId: z.string().uuid().nullable().optional(),
+  networkPolicy: NetworkPolicyInputSchema.nullable().optional(),
   restricted: z.boolean().optional(),
 });
 

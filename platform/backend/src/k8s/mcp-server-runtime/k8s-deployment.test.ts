@@ -3630,16 +3630,10 @@ describe("K8sDeployment.applyK8sNetworkPolicy", () => {
     return {
       source: "environment",
       policy: {
-        id: "network-policy-id",
-        organizationId: "organization-id",
-        name: "Restricted egress",
-        description: null,
         egressMode: "restricted",
         domainPreset: "none",
         allowedDomains: [],
         allowedCidrs: [],
-        createdAt: new Date(),
-        updatedAt: new Date(),
         ...overrides,
       },
     };

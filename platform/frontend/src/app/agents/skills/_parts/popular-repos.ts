@@ -34,6 +34,11 @@ export const POPULAR_REPOS: PopularRepo[] = [
     stars: 33_000,
   },
   {
+    repo: "anthropics/financial-services",
+    description: "Financial-services agent skills and domain patterns.",
+    stars: 29_646,
+  },
+  {
     repo: "vercel-labs/agent-skills",
     description: "React, composition patterns, and deployment from Vercel.",
     stars: 27_000,
@@ -47,6 +52,12 @@ export const POPULAR_REPOS: PopularRepo[] = [
     repo: "openai/skills",
     description: "Skills authored by OpenAI.",
     stars: 20_000,
+  },
+  {
+    repo: "anthropics/knowledge-work-plugins",
+    description:
+      "Knowledge-work plugins from Anthropic (docs, slides, sheets).",
+    stars: 18_950,
   },
   {
     repo: "huggingface/skills",

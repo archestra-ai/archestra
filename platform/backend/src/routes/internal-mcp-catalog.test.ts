@@ -353,4 +353,108 @@ describe("internal MCP catalog routes", () => {
     ).json();
     expect(full.oauthConfig.client_secret).toBe("oauth-secret-value");
   });
+
+  test("POST clone merges per key: overriding one secret keeps the inherited siblings", async () => {
+    const source = (
+      await app.inject({
+        method: "POST",
+        url: "/api/internal_mcp_catalog",
+        payload: {
+          name: "clone-secret-src-multikey",
+          serverType: "local",
+          scope: "org",
+          localConfig: {
+            command: "node",
+            arguments: ["server.js"],
+            environment: [
+              {
+                key: "KEY_A",
+                type: "secret",
+                value: "src-a",
+                promptOnInstallation: false,
+              },
+              {
+                key: "KEY_B",
+                type: "secret",
+                value: "src-b",
+                promptOnInstallation: false,
+              },
+            ],
+          },
+        },
+      })
+    ).json();
+
+    // Clone overrides only KEY_A; KEY_B is left blank and must still inherit.
+    const clone = (
+      await app.inject({
+        method: "POST",
+        url: "/api/internal_mcp_catalog",
+        payload: {
+          name: "clone-secret-src-multikey-copy",
+          serverType: "local",
+          clonedFrom: source.id,
+          localConfig: {
+            command: "node",
+            arguments: ["server.js"],
+            environment: [
+              {
+                key: "KEY_A",
+                type: "secret",
+                value: "override-a",
+                promptOnInstallation: false,
+              },
+              { key: "KEY_B", type: "secret", promptOnInstallation: false },
+            ],
+          },
+        },
+      })
+    ).json();
+
+    const env = (
+      await app.inject({
+        method: "GET",
+        url: `/api/internal_mcp_catalog/${clone.id}`,
+      })
+    ).json().localConfig.environment;
+    expect(env.find((e: { key: string }) => e.key === "KEY_A").value).toBe(
+      "override-a",
+    );
+    expect(env.find((e: { key: string }) => e.key === "KEY_B").value).toBe(
+      "src-b",
+    );
+  });
+
+  test("POST ignores a client-supplied secret FK in the body", async ({
+    makeSecret,
+  }) => {
+    // A secret the caller does not legitimately own via this request.
+    const foreignSecret = await makeSecret({
+      name: "foreign-secret",
+      secret: { API_KEY: "do-not-touch" },
+    });
+
+    const created = (
+      await app.inject({
+        method: "POST",
+        url: "/api/internal_mcp_catalog",
+        payload: {
+          name: "ignore-inbound-fk",
+          serverType: "local",
+          scope: "org",
+          localConfigSecretId: foreignSecret.id,
+          localConfig: {
+            command: "node",
+            arguments: ["server.js"],
+            environment: [
+              { key: "API_KEY", type: "secret", promptOnInstallation: false },
+            ],
+          },
+        },
+      })
+    ).json();
+
+    // The inbound FK is dropped: no value was supplied, so no secret is linked.
+    expect(created.localConfigSecretId).toBeNull();
+  });
 });

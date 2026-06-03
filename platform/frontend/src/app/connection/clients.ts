@@ -125,6 +125,7 @@ export interface ConnectClient {
   label: string;
   sub: string;
   svg?: string;
+  image?: string;
   iconColor?: string;
   tileBg?: string;
   iconOverride?: { bg: string; fg: string; glyph: string };
@@ -345,6 +346,72 @@ requires_openai_auth = true`,
             title: "Run Codex through it",
             language: "bash",
             code: `codex -c model_provider=${proxyName}`,
+          },
+        ],
+      }),
+    },
+  },
+  {
+    id: "copilot-cli",
+    label: "Copilot CLI",
+    sub: "GitHub coding CLI",
+    image: "https://img.icons8.com/fluent/1200/github-copilot.jpg",
+    tileBg: "#ffffff",
+    mcp: {
+      kind: "custom",
+      supportedAuth: "both",
+      preferredAuth: "oauth",
+      configFile: "terminal",
+      language: "bash",
+      steps: ({ token }) => [
+        {
+          title: "Add the gateway",
+          body: token
+            ? "Use the static token when you want Copilot to call the MCP gateway without an OAuth browser flow."
+            : "Copilot opens your browser when the gateway asks it to complete OAuth.",
+          terminalTitle: "terminal",
+          buildCommand: ({ url, serverName, token }) =>
+            token
+              ? `copilot mcp add --transport http --header "Authorization: Bearer ${token}" ${serverName} ${url}`
+              : `copilot mcp add --transport http ${serverName} ${url}`,
+        },
+        {
+          title: "Verify the server",
+          terminalTitle: "terminal",
+          buildCommand: ({ serverName }) => `copilot mcp get ${serverName}`,
+        },
+      ],
+    },
+    proxy: {
+      kind: "custom",
+      supportedProviders: [
+        "openai",
+        "azure",
+        "openrouter",
+        "vllm",
+        "ollama",
+        "groq",
+        "mistral",
+        "deepseek",
+        "xai",
+        "cerebras",
+      ],
+      build: ({ providerLabel, url }) => ({
+        kind: "steps",
+        steps: [
+          {
+            title: "Export Copilot provider settings",
+            body: `Use a virtual key mapped to ${providerLabel}. COPILOT_PROVIDER_TYPE stays "openai" because Copilot is speaking the OpenAI-compatible protocol; the Archestra base URL still needs the selected provider path.`,
+            language: "bash",
+            code: `export COPILOT_PROVIDER_TYPE="openai"
+export COPILOT_PROVIDER_BASE_URL="${url}"
+export COPILOT_PROVIDER_API_KEY="<your-archestra-virtual-key>"
+export COPILOT_MODEL="<model-name>"`,
+          },
+          {
+            title: "Verify the proxy",
+            language: "bash",
+            code: `copilot -p "Reply with exactly: archestra-copilot-cli-ok"`,
           },
         ],
       }),

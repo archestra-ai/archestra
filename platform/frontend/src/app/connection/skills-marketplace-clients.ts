@@ -11,7 +11,7 @@ export interface SkillMarketplaceInstallStep {
 }
 
 export interface SkillMarketplaceClient {
-  id: "claude-code" | "codex" | "cursor";
+  id: "claude-code" | "codex" | "cursor" | "copilot-cli";
   getInstallSteps: (
     params: SkillMarketplaceInstallParams,
   ) => SkillMarketplaceInstallStep[];
@@ -51,6 +51,22 @@ export const SKILL_MARKETPLACE_CLIENTS: SkillMarketplaceClient[] = [
         label: "Install the skill bundle",
         body: 'Run /plugins inside Codex and pick "Install Plugin" to install the bundled skills.',
         code: "/plugins",
+        language: "bash",
+      },
+    ],
+  },
+  {
+    id: "copilot-cli",
+    getInstallSteps: ({ cloneUrl, marketplaceName }) => [
+      {
+        label: "Register the marketplace",
+        code: `copilot plugin marketplace add ${cloneUrl}`,
+        language: "bash",
+      },
+      {
+        label: "Browse and install the skill bundle",
+        body: "Pick the shared plugin from the marketplace browser; Copilot installs the bundled skills from there.",
+        code: `copilot plugin marketplace browse ${marketplaceName}`,
         language: "bash",
       },
     ],

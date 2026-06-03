@@ -1,4 +1,5 @@
 import type { UIMessage } from "@ai-sdk/react";
+import { hasRenderableAssistantContent } from "@shared";
 
 /**
  * Preserves the last renderable assistant content when a live session update
@@ -55,10 +56,10 @@ export function restoreRenderableAssistantParts(params: {
 }
 
 /**
- * Drops a trailing assistant message left with no parts. Mirrors the backend's
- * persist behavior (an empty last message is not stored), keeping the live view
- * consistent with what a reload would show — used after stripping dangling tool
- * parts from a stopped turn.
+ * Drops a trailing assistant message left with no renderable content. Mirrors the
+ * backend's persist behavior (an empty last message is not stored), keeping the live
+ * view consistent with what a reload would show — used after stripping dangling tool
+ * parts from a stopped turn, which can leave only `step-start`/telemetry parts behind.
  */
 export function pruneEmptyTrailingAssistantMessage(
   messages: UIMessage[],
@@ -66,25 +67,17 @@ export function pruneEmptyTrailingAssistantMessage(
   const lastMessage = messages.at(-1);
   if (
     lastMessage?.role === "assistant" &&
-    (lastMessage.parts?.length ?? 0) === 0
+    !hasRenderableAssistantContent(lastMessage)
   ) {
     return messages.slice(0, -1);
   }
   return messages;
 }
 
-/**
- * Returns true when an assistant message still has content the chat UI can
- * actually render. Empty text parts do not count, but any non-text part does.
- */
+// shared with the backend persist path so the live view and what a reload shows
+// agree on what counts as renderable.
 function hasRenderableAssistantParts(message: UIMessage): boolean {
-  return (message.parts ?? []).some((part) => {
-    if (part.type === "text") {
-      return Boolean(part.text);
-    }
-
-    return true;
-  });
+  return hasRenderableAssistantContent(message);
 }
 
 function findPreviousRenderableAssistantMessage(params: {
@@ -127,9 +120,11 @@ function restoreTruncatedAssistantTail(params: {
     return nextMessages;
   }
 
+  const lastPreviousMessage = previousMessages.at(-1);
   if (
     nextMessages.length === 0 &&
-    previousMessages.at(-1)?.role === "assistant"
+    lastPreviousMessage?.role === "assistant" &&
+    hasRenderableAssistantContent(lastPreviousMessage)
   ) {
     return previousMessages;
   }
@@ -141,11 +136,17 @@ function restoreTruncatedAssistantTail(params: {
   const hasStablePrefix = nextMessages.every((message, index) =>
     sameMessageIdentity(message, previousMessages[index]),
   );
+  // only restore a tail that carries content worth keeping — restoring a
+  // non-renderable assistant (e.g. step-start/telemetry after a stopped turn)
+  // would resurrect the empty bubble the persist path just pruned away.
   const truncatedTail = previousMessages.slice(nextMessages.length);
   if (
     hasStablePrefix &&
     truncatedTail.length > 0 &&
-    truncatedTail.every((message) => message.role === "assistant")
+    truncatedTail.every(
+      (message) =>
+        message.role === "assistant" && hasRenderableAssistantContent(message),
+    )
   ) {
     return previousMessages;
   }

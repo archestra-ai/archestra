@@ -37,13 +37,13 @@ describe("InlineChatError", () => {
             }),
           )
         }
-        supportMessage="Contact support@example.com and include these IDs."
+        supportMessage="Contact your administrator and include these IDs."
         slimChatErrorUi
       />,
     );
 
     expect(
-      screen.getByText("Contact support@example.com and include these IDs."),
+      screen.getByText("Contact your administrator and include these IDs."),
     ).toBeInTheDocument();
     expect(screen.getByText("session-12345678")).toBeInTheDocument();
     expect(screen.getByText("trace-12345678")).toBeInTheDocument();

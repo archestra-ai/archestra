@@ -3,7 +3,11 @@ import { eq } from "drizzle-orm";
 import { CacheKey, cacheManager } from "@/cache-manager";
 import db, { schema } from "@/database";
 import logger from "@/logging";
-import type { AppearanceSettings, Organization } from "@/types";
+import type {
+  AppearanceSettings,
+  Organization,
+  OrganizationAnalyticsState,
+} from "@/types";
 
 class OrganizationModel {
   /**
@@ -57,6 +61,66 @@ class OrganizationModel {
       "OrganizationModel.getOrCreateDefaultOrganization: completed",
     );
     return createdOrg;
+  }
+
+  /**
+   * Get persistent analytics identity and event timestamps for this installation.
+   */
+  static async getAnalyticsState(): Promise<OrganizationAnalyticsState> {
+    const organization =
+      await OrganizationModel.getOrCreateDefaultOrganization();
+    const [state] = await db
+      .select({
+        id: schema.organizationsTable.id,
+        analyticsInstanceId: schema.organizationsTable.analyticsInstanceId,
+        analyticsInstanceStartedAt:
+          schema.organizationsTable.analyticsInstanceStartedAt,
+        analyticsInstanceLastHeartbeatAt:
+          schema.organizationsTable.analyticsInstanceLastHeartbeatAt,
+      })
+      .from(schema.organizationsTable)
+      .where(eq(schema.organizationsTable.id, organization.id))
+      .limit(1);
+
+    if (!state) {
+      throw new Error("Organization analytics state not found");
+    }
+    return state;
+  }
+
+  /**
+   * Update installation analytics timestamps after successful event capture.
+   */
+  static async updateAnalyticsState({
+    id,
+    analyticsInstanceStartedAt,
+    analyticsInstanceLastHeartbeatAt,
+  }: {
+    id: string;
+    analyticsInstanceStartedAt?: Date;
+    analyticsInstanceLastHeartbeatAt?: Date;
+  }): Promise<void> {
+    const values: Partial<
+      Pick<
+        OrganizationAnalyticsState,
+        "analyticsInstanceStartedAt" | "analyticsInstanceLastHeartbeatAt"
+      >
+    > = {};
+
+    if (analyticsInstanceStartedAt) {
+      values.analyticsInstanceStartedAt = analyticsInstanceStartedAt;
+    }
+    if (analyticsInstanceLastHeartbeatAt) {
+      values.analyticsInstanceLastHeartbeatAt =
+        analyticsInstanceLastHeartbeatAt;
+    }
+
+    if (Object.keys(values).length === 0) return;
+
+    await db
+      .update(schema.organizationsTable)
+      .set(values)
+      .where(eq(schema.organizationsTable.id, id));
   }
 
   /**

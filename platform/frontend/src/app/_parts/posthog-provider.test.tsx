@@ -4,16 +4,23 @@ import { useSession } from "@/lib/auth/auth.query";
 import { usePublicConfig } from "@/lib/config/config.query";
 import { PostHogProviderWrapper } from "./posthog-provider";
 
-const { mockIdentify, mockInit, mockReset } = vi.hoisted(() => ({
-  mockIdentify: vi.fn(),
-  mockInit: vi.fn(),
-  mockReset: vi.fn(),
-}));
+const DEFAULT_INSTANCE_ID = "00000000-0000-4000-8000-000000000001";
+
+const { mockGroup, mockIdentify, mockInit, mockRegister, mockReset } =
+  vi.hoisted(() => ({
+    mockGroup: vi.fn(),
+    mockIdentify: vi.fn(),
+    mockInit: vi.fn(),
+    mockRegister: vi.fn(),
+    mockReset: vi.fn(),
+  }));
 
 vi.mock("posthog-js", () => ({
   default: {
+    group: mockGroup,
     identify: mockIdentify,
     init: mockInit,
+    register: mockRegister,
     reset: mockReset,
   },
 }));
@@ -66,11 +73,13 @@ describe("PostHogProviderWrapper", () => {
     enabled,
     key,
     host,
+    instanceId = DEFAULT_INSTANCE_ID,
     isLoading = false,
   }: {
     enabled: boolean;
     key: string;
     host: string;
+    instanceId?: string | null;
     isLoading?: boolean;
   }) =>
     ({
@@ -81,6 +90,7 @@ describe("PostHogProviderWrapper", () => {
             disableInvitations: false,
             analytics: {
               enabled,
+              instanceId,
               posthog: {
                 key,
                 host,
@@ -122,8 +132,40 @@ describe("PostHogProviderWrapper", () => {
         email: "user@example.com",
         name: "Example User",
       });
+      expect(mockRegister).toHaveBeenCalledWith({
+        instance_id: DEFAULT_INSTANCE_ID,
+      });
+      expect(mockGroup).toHaveBeenCalledWith("instance", DEFAULT_INSTANCE_ID);
     });
     expect(mockReset).not.toHaveBeenCalled();
+  });
+
+  it("does not register the same instance again when config refreshes", async () => {
+    vi.mocked(useSession).mockReturnValue(
+      makeSessionResult({
+        data: null,
+      }),
+    );
+
+    const { rerender } = render(
+      <PostHogProviderWrapper>
+        <div>child</div>
+      </PostHogProviderWrapper>,
+    );
+
+    await waitFor(() => {
+      expect(mockRegister).toHaveBeenCalledTimes(1);
+      expect(mockGroup).toHaveBeenCalledTimes(1);
+    });
+
+    rerender(
+      <PostHogProviderWrapper>
+        <div>child</div>
+      </PostHogProviderWrapper>,
+    );
+
+    expect(mockRegister).toHaveBeenCalledTimes(1);
+    expect(mockGroup).toHaveBeenCalledTimes(1);
   });
 
   it("does not identify the same user again when session data refreshes", async () => {
@@ -284,6 +326,8 @@ describe("PostHogProviderWrapper", () => {
     await waitFor(() => {
       expect(mockReset).toHaveBeenCalledTimes(1);
     });
+    expect(mockRegister).toHaveBeenCalledTimes(2);
+    expect(mockGroup).toHaveBeenCalledTimes(2);
   });
 
   it("does nothing when analytics is disabled", async () => {
@@ -317,7 +361,9 @@ describe("PostHogProviderWrapper", () => {
     await waitFor(() => {
       expect(mockInit).not.toHaveBeenCalled();
     });
+    expect(mockGroup).not.toHaveBeenCalled();
     expect(mockIdentify).not.toHaveBeenCalled();
+    expect(mockRegister).not.toHaveBeenCalled();
     expect(mockReset).not.toHaveBeenCalled();
   });
 
@@ -352,7 +398,9 @@ describe("PostHogProviderWrapper", () => {
     await waitFor(() => {
       expect(mockInit).not.toHaveBeenCalled();
     });
+    expect(mockGroup).not.toHaveBeenCalled();
     expect(mockIdentify).not.toHaveBeenCalled();
+    expect(mockRegister).not.toHaveBeenCalled();
     expect(mockReset).not.toHaveBeenCalled();
   });
 

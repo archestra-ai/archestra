@@ -677,11 +677,9 @@ export class McpServerRuntimeManager {
     mcpServerId: string,
     opts?: { namespaceOverride?: string },
   ): Promise<K8sDeployment | undefined> {
-    // With an explicit namespace override (tearing down the OLD namespace during
-    // an environment relocation) the in-memory cache must be bypassed: a cached
-    // entry can hold a stale namespace, which is exactly the value we must not
-    // trust here. Build a fresh deployment pinned to the given namespace and do
-    // not read from or write to the cache.
+    // An explicit namespace override (relocation teardown) bypasses the cache: a
+    // cached entry can hold a stale namespace, the one value we must not trust
+    // here. Build fresh, pinned to the given namespace; don't touch the cache.
     const namespaceOverride = opts?.namespaceOverride;
     if (!namespaceOverride) {
       // First check if already in memory

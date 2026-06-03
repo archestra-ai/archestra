@@ -1003,7 +1003,21 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Catalog item not found");
       }
 
-      if (relocatingLocalDeployment) {
+      // Only tear down the old-namespace deployment when it will actually be
+      // recreated. A single-tenant edit that ALSO requires new user input (e.g.
+      // a command or prompted-env-var change in the same PUT) makes the cascade
+      // mark the install reinstall-required WITHOUT recreating the pod — so
+      // tearing it down here would leave the install with no running pod until a
+      // manual reinstall. Multi-tenant always recreates via
+      // reinstallSharedDeployment below, so it's always safe there.
+      const recreatingRelocatedDeployment =
+        relocatingLocalDeployment &&
+        (originalCatalogItem.multitenant === true ||
+          !requiresNewUserInputForReinstall(
+            originalCatalogItemForGate,
+            catalogItem,
+          ));
+      if (recreatingRelocatedDeployment) {
         // Remove the deployment(s) from the OLD namespace before recreating in
         // the new one. The old namespace is derived from `originalCatalogItem`
         // (captured before the update), so the teardown is correct even on a

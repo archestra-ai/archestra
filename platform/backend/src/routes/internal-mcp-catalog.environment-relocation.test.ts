@@ -230,6 +230,56 @@ describe("PUT /api/internal_mcp_catalog/:id — environment relocation", () => {
     expect(reinstallSpy).not.toHaveBeenCalled();
   });
 
+  test("single-tenant: combined environment + command change does NOT tear down (cascade defers recreate to manual reinstall)", async ({
+    makeMcpServer,
+  }) => {
+    const from = await createEnvironment({
+      organizationId,
+      data: { name: "Staging", restricted: false },
+    });
+    const to = await createEnvironment({
+      organizationId,
+      data: { name: "Prod", restricted: false },
+    });
+
+    const name = `st-combined-${crypto.randomUUID().slice(0, 8)}`;
+    const catalog = await InternalMcpCatalogModel.create(
+      {
+        name,
+        serverType: "local",
+        multitenant: false,
+        environmentId: from.id,
+        localConfig,
+        scope: "org",
+      },
+      { organizationId },
+    );
+    await makeMcpServer({ catalogId: catalog.id });
+
+    const response = await app.inject({
+      method: "PUT",
+      url: `/api/internal_mcp_catalog/${catalog.id}`,
+      payload: {
+        name,
+        serverType: "local" as const,
+        // Environment changes AND the command changes in the same edit →
+        // requiresNewUserInputForReinstall is true for single-tenant, so the
+        // cascade marks the install reinstall-required and does NOT recreate.
+        localConfig: { ...localConfig, command: "bun" },
+        environmentId: to.id,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().environmentId).toBe(to.id);
+    await drainCascade();
+    // Because the pod is NOT recreated (manual reinstall pending), the
+    // old-namespace deployment must NOT be torn down — doing so would leave the
+    // install with no running pod until the user reinstalls.
+    expect(tearDownSpy).not.toHaveBeenCalled();
+    expect(reinstallSpy).not.toHaveBeenCalled();
+  });
+
   test("multi-tenant: assigning from default (null) to an environment relocates the shared deployment", async ({
     makeMcpServer,
   }) => {

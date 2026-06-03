@@ -50,6 +50,7 @@ const uiTestMatch = [
   "**/identity-providers.ee.spec.ts",
   "**/invitation.spec.ts",
   "**/llm-provider-api-keys.spec.ts",
+  "**/mcp-catalog-clone.spec.ts",
   "**/mcp-install.spec.ts",
   "**/quickstart.spec.ts",
   "**/skill-share.spec.ts",

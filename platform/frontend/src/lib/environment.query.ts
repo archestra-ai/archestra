@@ -2,17 +2,19 @@ import { archestraApiSdk, type archestraApiTypes } from "@shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { handleApiError } from "@/lib/utils";
-import { networkPolicyKeys } from "./network-policy.query";
 
 export const environmentKeys = {
   all: ["environments"] as const,
   list: () => [...environmentKeys.all, "list"] as const,
+  k8sCapabilities: () => [...environmentKeys.all, "k8s-capabilities"] as const,
 };
 
 export type EnvironmentList =
   archestraApiTypes.ListEnvironmentsResponses["200"];
 export type EnvironmentWithAssignedCount =
   EnvironmentList["environments"][number];
+export type K8sCapabilities =
+  archestraApiTypes.GetK8sCapabilitiesResponses["200"];
 
 const EMPTY_ENVIRONMENT_LIST: EnvironmentList = {
   environments: [],
@@ -35,6 +37,22 @@ export function useEnvironments(enabled = true) {
   });
 }
 
+export function useK8sCapabilities(enabled = true) {
+  return useQuery({
+    queryKey: environmentKeys.k8sCapabilities(),
+    queryFn: async () => {
+      const { data, error } = await archestraApiSdk.getK8sCapabilities();
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data ?? null;
+    },
+    enabled,
+    staleTime: 60 * 1000,
+  });
+}
+
 export function useCreateEnvironment() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -51,7 +69,6 @@ export function useCreateEnvironment() {
     onSuccess: (environment) => {
       if (!environment) return;
       queryClient.invalidateQueries({ queryKey: environmentKeys.list() });
-      queryClient.invalidateQueries({ queryKey: networkPolicyKeys.list() });
       toast.success(`${environment.name} added`);
     },
   });
@@ -77,7 +94,6 @@ export function useUpdateEnvironment() {
     onSuccess: (environment) => {
       if (!environment) return;
       queryClient.invalidateQueries({ queryKey: environmentKeys.list() });
-      queryClient.invalidateQueries({ queryKey: networkPolicyKeys.list() });
       toast.success(`${environment.name} updated`);
     },
   });
@@ -98,7 +114,6 @@ export function useDeleteEnvironment() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: environmentKeys.list() });
-      queryClient.invalidateQueries({ queryKey: networkPolicyKeys.list() });
       // Catalog items assigned to the deleted environment fall back to the
       // virtual Default target (FK set null), so refresh catalog views too.
       queryClient.invalidateQueries({ queryKey: ["mcp-catalog"] });

@@ -50,7 +50,6 @@ export * from "./mcp-tool-call";
 export * from "./member";
 export * from "./message";
 export * from "./model";
-export * from "./network-policy";
 export * from "./oauth-client";
 export * from "./optimization-rule";
 export * from "./organization";

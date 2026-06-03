@@ -1,5 +1,5 @@
 {
-  "id": "5f6e7635-2ace-45dd-92d6-e0291b552de8",
+  "id": "9c3784cb-f102-4a39-bce7-bbd4825aff6a",
   "prevId": "8ab6cfc5-ff4e-426b-9bb1-250fde4e6f8d",
   "version": "7",
   "dialect": "postgresql",
@@ -3602,9 +3602,9 @@
           "primaryKey": false,
           "notNull": false
         },
-        "network_policy_id": {
-          "name": "network_policy_id",
-          "type": "uuid",
+        "network_policy": {
+          "name": "network_policy",
+          "type": "jsonb",
           "primaryKey": false,
           "notNull": false
         },
@@ -3652,21 +3652,6 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
-        },
-        "environments_network_policy_id_idx": {
-          "name": "environments_network_policy_id_idx",
-          "columns": [
-            {
-              "expression": "network_policy_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
         }
       },
       "foreignKeys": {
@@ -3681,19 +3666,6 @@
             "id"
           ],
           "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "environments_network_policy_id_network_policies_id_fk": {
-          "name": "environments_network_policy_id_network_policies_id_fk",
-          "tableFrom": "environments",
-          "tableTo": "network_policies",
-          "columnsFrom": [
-            "network_policy_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
           "onUpdate": "no action"
         }
       },
@@ -5010,13 +4982,6 @@
           "primaryKey": false,
           "notNull": true,
           "default": "'pending'"
-        },
-        "embedding_error": {
-          "name": "embedding_error",
-          "type": "kb_document_embedding_error",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": false
         },
         "chunk_count": {
           "name": "chunk_count",
@@ -7557,125 +7522,6 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.network_policies": {
-      "name": "network_policies",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "organization_id": {
-          "name": "organization_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "name": {
-          "name": "name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "description": {
-          "name": "description",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "egress_mode": {
-          "name": "egress_mode",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'restricted'"
-        },
-        "domain_preset": {
-          "name": "domain_preset",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'none'"
-        },
-        "allowed_domains": {
-          "name": "allowed_domains",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'[]'::jsonb"
-        },
-        "allowed_cidrs": {
-          "name": "allowed_cidrs",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'[]'::jsonb"
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "network_policy_org_idx": {
-          "name": "network_policy_org_idx",
-          "columns": [
-            {
-              "expression": "organization_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "network_policies_organization_id_organization_id_fk": {
-          "name": "network_policies_organization_id_organization_id_fk",
-          "tableFrom": "network_policies",
-          "tableTo": "organization",
-          "columnsFrom": [
-            "organization_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "network_policy_org_name_unique": {
-          "name": "network_policy_org_name_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "organization_id",
-            "name"
-          ]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
     "public.oauth_access_token": {
       "name": "oauth_access_token",
       "schema": "",
@@ -8763,9 +8609,9 @@
           "primaryKey": false,
           "notNull": false
         },
-        "default_network_policy_id": {
-          "name": "default_network_policy_id",
-          "type": "uuid",
+        "default_network_policy": {
+          "name": "default_network_policy",
+          "type": "jsonb",
           "primaryKey": false,
           "notNull": false
         },
@@ -8805,19 +8651,6 @@
           "tableTo": "models",
           "columnsFrom": [
             "default_model_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "organization_default_network_policy_id_network_policies_id_fk": {
-          "name": "organization_default_network_policy_id_network_policies_id_fk",
-          "tableFrom": "organization",
-          "tableTo": "network_policies",
-          "columnsFrom": [
-            "default_network_policy_id"
           ],
           "columnsTo": [
             "id"
@@ -12661,18 +12494,6 @@
         "personal",
         "team",
         "org"
-      ]
-    },
-    "public.kb_document_embedding_error": {
-      "name": "kb_document_embedding_error",
-      "schema": "public",
-      "values": [
-        "rate_limit",
-        "auth_error",
-        "model_not_found",
-        "server_error",
-        "dimensions_mismatch",
-        "unknown"
       ]
     },
     "public.oauth_refresh_error_enum": {

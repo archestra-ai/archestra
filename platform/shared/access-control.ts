@@ -55,7 +55,6 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   mcpServerInstallation: ["read", "create", "update", "delete", "admin"],
   mcpServerInstallationRequest: ["read", "create", "update", "delete", "admin"],
   environment: ["admin", "deploy-to-restricted"],
-  networkPolicy: ["read", "create", "update", "delete"],
 
   // Knowledge
   knowledgeFile: ["read", "create", "update", "delete", "admin"],
@@ -117,7 +116,6 @@ export const editorPermissions: Record<Resource, Action[]> = {
   mcpServerInstallation: ["read", "create", "update", "delete"],
   mcpServerInstallationRequest: ["read", "create", "update", "delete"],
   environment: ["admin"],
-  networkPolicy: ["read", "create", "update", "delete"],
 
   // Knowledge
   knowledgeFile: ["read", "create", "update", "delete"],
@@ -179,7 +177,6 @@ export const memberPermissions: Record<Resource, Action[]> = {
   mcpServerInstallation: ["read", "create", "delete"],
   mcpServerInstallationRequest: ["read", "create", "update"],
   environment: [],
-  networkPolicy: ["read"],
 
   // Knowledge
   knowledgeFile: ["read"],
@@ -301,10 +298,6 @@ export const permissionDescriptions: Record<string, string> = {
     "Create, edit, and delete deployment environments (everyone can view them)",
   "environment:deploy-to-restricted":
     "Deploy catalog items to restricted environments",
-  "networkPolicy:read": "View network policies",
-  "networkPolicy:create": "Create network policies",
-  "networkPolicy:update": "Modify network policies",
-  "networkPolicy:delete": "Delete network policies",
 
   // LLM
   "llmProxy:read": "View and list LLM proxies",
@@ -975,19 +968,7 @@ export const requiredEndpointPermissionsMap: Partial<
     environment: ["admin"],
   },
   [RouteId.GetK8sCapabilities]: {
-    networkPolicy: ["read"],
-  },
-  [RouteId.ListNetworkPolicies]: {
-    networkPolicy: ["read"],
-  },
-  [RouteId.CreateNetworkPolicy]: {
-    networkPolicy: ["create"],
-  },
-  [RouteId.UpdateNetworkPolicy]: {
-    networkPolicy: ["update"],
-  },
-  [RouteId.DeleteNetworkPolicy]: {
-    networkPolicy: ["delete"],
+    environment: ["admin"],
   },
   [RouteId.UpdateKnowledgeSettings]: {
     knowledgeSettings: ["update"],
@@ -1312,6 +1293,7 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/settings/service-accounts": { serviceAccount: ["read"] },
   "/settings/llm": { llmSettings: ["read"] },
   "/settings/agents": { agentSettings: ["read"] },
+  "/settings/environments": { environment: ["admin"] },
   "/settings/knowledge": { knowledgeSettings: ["read"] },
   "/settings/users": { member: ["read"] },
   "/settings/teams": { team: ["read"] },

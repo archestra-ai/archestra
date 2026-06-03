@@ -78,13 +78,13 @@ Registry entries can carry labels — key-value pairs set under **Labels** in th
 
 ## Environments
 
-An environment is an organization-level deployment target — for example `sandbox`, `staging`, or `production`. Any member can view the list of environments; creating, editing, and deleting them requires the `environment:admin` permission. Each environment carries a name, an optional Kubernetes namespace, and an optional default network policy.
+An environment is an organization-level deployment target — for example `sandbox`, `staging`, or `production`. Any member can view the list of environments; creating, editing, and deleting them requires the `environment:admin` permission. Admins manage environments in **Settings > Environments**. Each environment carries a name, an optional Kubernetes namespace, and an optional network egress policy.
 
 An environment can be marked **restricted**. Only members with the `environment:deploy-to-restricted` permission (or `environment:admin`, which implies it) can assign catalog entries to a restricted environment. Unrestricted environments and Default stay open to anyone who can create MCP registry catalog entries.
 
-### Network Policies
+### Network Egress Policies
 
-Network policies are reusable egress profiles. They can disable internet egress, allow all egress, or restrict egress to selected IP/CIDR ranges. Domain presets and custom domains require a supported FQDN policy provider; Kubernetes `NetworkPolicy` alone only enforces IP/CIDR rules.
+Network egress policies are configured directly on environments. They can disable internet egress, allow all egress, or restrict egress to selected IP/CIDR ranges. Domain presets and custom domains require a supported FQDN policy provider; Kubernetes `NetworkPolicy` alone only enforces IP/CIDR rules.
 
 When an MCP server runs in an environment, Archestra uses the environment's network policy, then the organization default network policy, then the built-in unrestricted policy.
 

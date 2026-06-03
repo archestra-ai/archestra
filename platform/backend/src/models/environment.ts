@@ -1,5 +1,6 @@
 import { and, asc, count, eq, isNull, ne, or, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
+import type { NetworkPolicy } from "@/types";
 
 // === Public API ===
 
@@ -9,7 +10,7 @@ interface EnvironmentWithAssignedCount {
   name: string;
   description: string | null;
   namespace: string | null;
-  networkPolicyId: string | null;
+  networkPolicy: NetworkPolicy | null;
   restricted: boolean;
   sortOrder: number;
   createdAt: Date;
@@ -28,7 +29,7 @@ class EnvironmentModel {
         name: schema.environmentsTable.name,
         description: schema.environmentsTable.description,
         namespace: schema.environmentsTable.namespace,
-        networkPolicyId: schema.environmentsTable.networkPolicyId,
+        networkPolicy: schema.environmentsTable.networkPolicy,
         restricted: schema.environmentsTable.restricted,
         sortOrder: schema.environmentsTable.sortOrder,
         createdAt: schema.environmentsTable.createdAt,
@@ -91,7 +92,7 @@ class EnvironmentModel {
     name: string;
     description?: string | null;
     namespace?: string | null;
-    networkPolicyId?: string | null;
+    networkPolicy?: NetworkPolicy | null;
     restricted?: boolean;
   }): Promise<typeof schema.environmentsTable.$inferSelect> {
     const {
@@ -99,7 +100,7 @@ class EnvironmentModel {
       name,
       description,
       namespace,
-      networkPolicyId,
+      networkPolicy,
       restricted,
     } = params;
     const [row] = await db
@@ -109,7 +110,7 @@ class EnvironmentModel {
         name,
         description: description ?? null,
         namespace: namespace ?? null,
-        networkPolicyId: networkPolicyId ?? null,
+        networkPolicy: networkPolicy ?? null,
         restricted: restricted ?? false,
         sortOrder: await EnvironmentModel.nextSortOrder(organizationId),
       })
@@ -123,7 +124,7 @@ class EnvironmentModel {
     name?: string;
     description?: string | null;
     namespace?: string | null;
-    networkPolicyId?: string | null;
+    networkPolicy?: NetworkPolicy | null;
     restricted?: boolean;
   }): Promise<typeof schema.environmentsTable.$inferSelect | null> {
     const {
@@ -132,14 +133,14 @@ class EnvironmentModel {
       name,
       description,
       namespace,
-      networkPolicyId,
+      networkPolicy,
       restricted,
     } = params;
     const patch: Record<string, unknown> = {};
     if (name !== undefined) patch.name = name;
     if (description !== undefined) patch.description = description;
     if (namespace !== undefined) patch.namespace = namespace;
-    if (networkPolicyId !== undefined) patch.networkPolicyId = networkPolicyId;
+    if (networkPolicy !== undefined) patch.networkPolicy = networkPolicy;
     if (restricted !== undefined) patch.restricted = restricted;
 
     const [row] = await db

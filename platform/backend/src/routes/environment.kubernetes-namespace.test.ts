@@ -54,7 +54,7 @@ describe("Environment kubernetes namespace", () => {
   test("creates an environment and namespace is null by default", async () => {
     const res = await app.inject({
       method: "POST",
-      url: "/api/organization/environments",
+      url: "/api/environments",
       payload: { name: "sandbox" },
     });
     expect(res.statusCode).toBe(200);
@@ -64,14 +64,14 @@ describe("Environment kubernetes namespace", () => {
   test("PATCH sets namespace", async () => {
     const create = await app.inject({
       method: "POST",
-      url: "/api/organization/environments",
+      url: "/api/environments",
       payload: { name: "production" },
     });
     const { id } = create.json();
 
     const patch = await app.inject({
       method: "PATCH",
-      url: `/api/organization/environments/${id}`,
+      url: `/api/environments/${id}`,
       payload: { namespace: "prod-ns" },
     });
     expect(patch.statusCode).toBe(200);
@@ -81,14 +81,14 @@ describe("Environment kubernetes namespace", () => {
   test("PATCH clears namespace with null", async () => {
     const create = await app.inject({
       method: "POST",
-      url: "/api/organization/environments",
+      url: "/api/environments",
       payload: { name: "dev", namespace: "dev-ns" },
     });
     const { id } = create.json();
 
     const clear = await app.inject({
       method: "PATCH",
-      url: `/api/organization/environments/${id}`,
+      url: `/api/environments/${id}`,
       payload: { namespace: null },
     });
     expect(clear.statusCode).toBe(200);
@@ -98,7 +98,7 @@ describe("Environment kubernetes namespace", () => {
   test("PATCH rejects invalid namespace names", async () => {
     const create = await app.inject({
       method: "POST",
-      url: "/api/organization/environments",
+      url: "/api/environments",
       payload: { name: "test" },
     });
     const { id } = create.json();
@@ -112,7 +112,7 @@ describe("Environment kubernetes namespace", () => {
     ]) {
       const res = await app.inject({
         method: "PATCH",
-        url: `/api/organization/environments/${id}`,
+        url: `/api/environments/${id}`,
         payload: { namespace: invalid },
       });
       expect(res.statusCode, `Expected 400 for "${invalid}"`).toBe(400);
@@ -122,13 +122,13 @@ describe("Environment kubernetes namespace", () => {
   test("GET list includes namespace field", async () => {
     await app.inject({
       method: "POST",
-      url: "/api/organization/environments",
+      url: "/api/environments",
       payload: { name: "list-test", namespace: "list-ns" },
     });
 
     const list = await app.inject({
       method: "GET",
-      url: "/api/organization/environments",
+      url: "/api/environments",
     });
     expect(list.statusCode).toBe(200);
     const { environments: entries } = list.json();

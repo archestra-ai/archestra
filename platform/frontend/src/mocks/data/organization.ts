@@ -63,7 +63,7 @@ export function makeOrganization(
     defaultEnvironmentName: null,
     defaultEnvironmentNamespace: null,
     defaultEnvironmentDescription: null,
-    defaultNetworkPolicyId: null,
+    defaultNetworkPolicy: null,
     defaultEnvironmentRestricted: false,
     ...overrides,
   };

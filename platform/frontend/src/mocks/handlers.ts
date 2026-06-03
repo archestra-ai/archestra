@@ -78,7 +78,7 @@ export const handlers: HttpHandler[] = [
   ...getJson("/api/organization/mcp-preset-entries", []),
   // Fetched by the catalog form's Environment selector (and the Environments
   // section). Empty list keeps the strict unhandled-request guard satisfied.
-  ...getJson("/api/organization/environments", {
+  ...getJson("/api/environments", {
     environments: [],
     defaultAssignedCatalogCount: 0,
   }),
@@ -101,7 +101,6 @@ export const handlers: HttpHandler[] = [
       message: null,
     },
   }),
-  ...getJson("/api/network-policies", []),
 
   // Agents
   ...getJson("/api/agents", agentsSeed),

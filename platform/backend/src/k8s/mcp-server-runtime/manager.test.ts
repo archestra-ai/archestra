@@ -107,11 +107,11 @@ vi.mock("@/models/organization", () => ({
   default: {
     getFirst: vi.fn().mockResolvedValue({
       id: "test-org",
-      defaultNetworkPolicyId: null,
+      defaultNetworkPolicy: null,
     }),
     getById: vi.fn().mockResolvedValue({
       id: "test-org",
-      defaultNetworkPolicyId: null,
+      defaultNetworkPolicy: null,
     }),
   },
 }));

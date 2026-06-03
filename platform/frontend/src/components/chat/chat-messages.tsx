@@ -2076,18 +2076,24 @@ function getApprovalToolDisplay({
   input: Record<string, unknown> | undefined;
 } {
   const displayInput = isPlainRecord(input) ? input : undefined;
+  const shortToolName =
+    getToolShortName(toolName) ?? parseFullToolName(toolName).toolName;
 
-  if (
-    !isApprovalRequested ||
-    getToolShortName(toolName) !== TOOL_RUN_TOOL_SHORT_NAME
-  ) {
+  if (!isApprovalRequested || shortToolName !== TOOL_RUN_TOOL_SHORT_NAME) {
     return {
       toolName,
       input: displayInput,
     };
   }
 
-  const targetToolName = displayInput?.tool_name;
+  if (!displayInput) {
+    return {
+      toolName,
+      input: undefined,
+    };
+  }
+
+  const targetToolName = displayInput.tool_name;
   if (typeof targetToolName !== "string" || targetToolName.length === 0) {
     return {
       toolName,

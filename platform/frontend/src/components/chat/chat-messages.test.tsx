@@ -1075,7 +1075,9 @@ describe("ChatMessages", () => {
     );
 
     expect(screen.getByText("Approval required")).toBeInTheDocument();
-    expect(screen.getByText("tool-workspace__export_records")).toBeInTheDocument();
+    expect(
+      screen.getByText("tool-workspace__export_records"),
+    ).toBeInTheDocument();
     expect(screen.queryByText("tool-sparky__run_tool")).not.toBeInTheDocument();
     expect(screen.getByText('{"destination":"external"}')).toBeInTheDocument();
     expect(screen.queryByText(/tool_name/)).not.toBeInTheDocument();
@@ -1086,6 +1088,42 @@ describe("ChatMessages", () => {
       approved: false,
       reason: "User denied",
     });
+  });
+
+  it("renders target approval details for a branded run_tool before identity data resolves", () => {
+    const messages = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-custom__run_tool",
+            toolCallId: "call-1",
+            state: "approval-requested",
+            input: {
+              tool_name: "workspace__export_records",
+              tool_args: { destination: "external" },
+            },
+            approval: { id: "approval-1" },
+          },
+        ],
+      },
+    ] as unknown as UIMessage[];
+
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        status="ready"
+        onToolApprovalResponse={() => undefined}
+      />,
+    );
+
+    expect(
+      screen.getByText("tool-workspace__export_records"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("tool-custom__run_tool")).not.toBeInTheDocument();
+    expect(screen.getByText('{"destination":"external"}')).toBeInTheDocument();
   });
 
   it("renders assistant expired-auth text as the inline reauth tool UI", () => {

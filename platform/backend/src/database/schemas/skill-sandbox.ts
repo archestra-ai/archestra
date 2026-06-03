@@ -1,4 +1,11 @@
-import { index, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import {
+  index,
+  integer,
+  pgTable,
+  text,
+  timestamp,
+  uuid,
+} from "drizzle-orm/pg-core";
 import agentsTable from "./agent";
 import conversationsTable from "./conversation";
 import skillsTable from "./skill";
@@ -39,6 +46,12 @@ const skillSandboxesTable = pgTable(
     }),
     /** Working directory used when a command does not provide an explicit cwd. */
     defaultCwd: text("default_cwd").notNull(),
+    /**
+     * Next replay sequence to allocate for this sandbox. Bumped atomically when
+     * a command or upload event is appended, giving every replay event a stable
+     * total order independent of clock skew or row-insert timing.
+     */
+    nextReplaySequence: integer("next_replay_sequence").notNull().default(0),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   },
   (table) => [

@@ -370,6 +370,14 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "child of sandbox; exported file bytes",
   },
+  skillSandboxUploadsTable: {
+    audited: false,
+    reason: "child of sandbox; uploaded input file bytes",
+  },
+  skillSandboxReplayEventsTable: {
+    audited: false,
+    reason: "child of sandbox; append-only ordered replay log",
+  },
   kbChunksTable: {
     audited: false,
     reason: "child of knowledge base; parent audited",

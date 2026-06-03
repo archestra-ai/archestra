@@ -39,6 +39,53 @@ pub(crate) fn validate_artifact_path(path: &str) -> Result<()> {
     Ok(())
 }
 
+/// validate an upload target path. uploaded files become part of the replay
+/// recipe and are written via a shell-quoted `bash -c`, so the path must be an
+/// absolute file under the sandbox roots, free of traversal, null bytes, and
+/// shell metacharacters (defense in depth on top of the single-quoting).
+pub(crate) fn validate_upload_path(path: &str) -> Result<()> {
+    if path.contains('\0') || path.split('/').any(|segment| segment == "..") {
+        return Err(SandboxError::InvalidInput(format!(
+            "invalid upload path: {path:?}"
+        )));
+    }
+    if path
+        .chars()
+        .any(|ch| matches!(ch, '"' | '$' | '`' | '\\' | '\n' | '\r'))
+    {
+        return Err(SandboxError::InvalidInput(format!(
+            "invalid upload path: {path:?}"
+        )));
+    }
+    if !path.starts_with('/') {
+        return Err(SandboxError::InvalidInput(format!(
+            "upload path must be an absolute path: {path:?}"
+        )));
+    }
+    if path.ends_with('/') {
+        return Err(SandboxError::InvalidInput(format!(
+            "upload path must be a file, not a directory: {path:?}"
+        )));
+    }
+    if !within_sandbox_roots(path) {
+        return Err(SandboxError::InvalidInput(format!(
+            "upload path must be under {SKILL_SANDBOX_ROOT} or {SKILL_SANDBOX_HOME}: {path:?}"
+        )));
+    }
+    Ok(())
+}
+
+/// uploads carry their bytes as either raw utf8 or base64; reject anything else
+/// before it reaches the materialize shell snippet.
+pub(crate) fn validate_file_encoding(encoding: &str) -> Result<()> {
+    match encoding {
+        "utf8" | "base64" => Ok(()),
+        other => Err(SandboxError::InvalidInput(format!(
+            "unsupported upload encoding: {other:?}"
+        ))),
+    }
+}
+
 pub(crate) fn validate_pythonpath(pythonpath: &str) -> Result<()> {
     // PYTHONPATH is passed straight to `with_env_variable`, but the model can
     // smuggle additional roots via `:` separators; bound each entry to the
@@ -155,6 +202,32 @@ mod tests {
         assert!(validate_pythonpath("/skills/../etc").is_err());
         assert!(validate_pythonpath("/skills/alpha:").is_err());
         assert!(validate_pythonpath("/skills/alpha:/etc").is_err());
+    }
+
+    #[test]
+    fn validate_upload_path_requires_absolute_file_under_roots() {
+        assert!(validate_upload_path("/home/sandbox/input.csv").is_ok());
+        assert!(validate_upload_path("/skills/alpha/data/in.bin").is_ok());
+        // not absolute
+        assert!(validate_upload_path("input.csv").is_err());
+        // outside roots
+        assert!(validate_upload_path("/etc/passwd").is_err());
+        // traversal
+        assert!(validate_upload_path("/home/sandbox/../etc/passwd").is_err());
+        // directory, not a file
+        assert!(validate_upload_path("/home/sandbox/").is_err());
+        // shell metacharacters / null
+        assert!(validate_upload_path("/home/sandbox/a$b").is_err());
+        assert!(validate_upload_path("/home/sandbox/a`b").is_err());
+        assert!(validate_upload_path("/home/sandbox/a\0b").is_err());
+    }
+
+    #[test]
+    fn validate_file_encoding_accepts_known_encodings_only() {
+        assert!(validate_file_encoding("utf8").is_ok());
+        assert!(validate_file_encoding("base64").is_ok());
+        assert!(validate_file_encoding("hex").is_err());
+        assert!(validate_file_encoding("").is_err());
     }
 
     #[test]

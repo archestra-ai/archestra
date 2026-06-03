@@ -4,13 +4,16 @@ import {
   TOOL_CREATE_SKILL_SANDBOX_FULL_NAME,
   TOOL_GET_SKILL_SANDBOX_ARTIFACT_FULL_NAME,
   TOOL_RUN_SKILL_COMMAND_FULL_NAME,
+  TOOL_UPLOAD_SKILL_SANDBOX_FILE_FULL_NAME,
 } from "@shared";
 import config from "@/config";
 import {
+  ConversationAttachmentModel,
   ConversationModel,
   SkillModel,
   SkillSandboxFileSnapshotModel,
   SkillSandboxModel,
+  SkillSandboxReplayEventModel,
 } from "@/models";
 import { skillSandboxRuntimeService } from "@/skills-sandbox/skill-sandbox-runtime-service";
 import { SkillSandboxError } from "@/skills-sandbox/types";
@@ -60,6 +63,7 @@ describe("skill sandbox tools (runtime disabled)", () => {
     expect(names).not.toContain(TOOL_CREATE_SKILL_SANDBOX_FULL_NAME);
     expect(names).not.toContain(TOOL_RUN_SKILL_COMMAND_FULL_NAME);
     expect(names).not.toContain(TOOL_GET_SKILL_SANDBOX_ARTIFACT_FULL_NAME);
+    expect(names).not.toContain(TOOL_UPLOAD_SKILL_SANDBOX_FILE_FULL_NAME);
   });
 
   test("all sandbox tools require the skill:execute permission", () => {
@@ -72,6 +76,10 @@ describe("skill sandbox tools (runtime disabled)", () => {
       action: "execute",
     });
     expect(TOOL_PERMISSIONS.get_skill_sandbox_artifact).toEqual({
+      resource: "skill",
+      action: "execute",
+    });
+    expect(TOOL_PERMISSIONS.upload_skill_sandbox_file).toEqual({
       resource: "skill",
       action: "execute",
     });
@@ -479,6 +487,187 @@ describe("skill sandbox tools (runtime enabled)", () => {
       // layer would JSON-stringify it into the LLM context.
       const contents = result.content as Array<{ type: string }>;
       expect(contents.map((c) => c.type)).toEqual(["text"]);
+    });
+  });
+
+  describe("upload_skill_sandbox_file", () => {
+    async function createSandbox(): Promise<string> {
+      await seedSkill();
+      const created = await executeArchestraTool(
+        TOOL_CREATE_SKILL_SANDBOX_FULL_NAME,
+        { skillNames: ["pdf-processing"] },
+        context,
+      );
+      return structuredOf<{ sandboxId: string }>(created).sandboxId;
+    }
+
+    test("delegates to the runtime service and returns upload metadata", async () => {
+      const sandboxId = await createSandbox();
+      const spy = vi
+        .spyOn(skillSandboxRuntimeService, "uploadFile")
+        .mockResolvedValue({
+          uploadId: "up-1",
+          sandboxId: sandboxId as any,
+          path: "/home/sandbox/data.csv",
+          mimeType: "text/csv",
+          sizeBytes: 5,
+        });
+
+      const result = await executeArchestraTool(
+        TOOL_UPLOAD_SKILL_SANDBOX_FILE_FULL_NAME,
+        {
+          sandboxId,
+          path: "data.csv",
+          source: {
+            type: "base64",
+            dataBase64: Buffer.from("a,b,c").toString("base64"),
+          },
+        },
+        context,
+      );
+
+      expect(result.isError).toBe(false);
+      expect(spy).toHaveBeenCalledOnce();
+      expect(structuredOf<{ uploadId: string }>(result).uploadId).toBe("up-1");
+    });
+
+    test("rejects a chat attachment from another conversation", async () => {
+      const sandboxId = await createSandbox();
+      const here = await ConversationModel.create({
+        userId,
+        organizationId,
+        agentId: agent.id,
+        title: "here",
+      });
+      const elsewhere = await ConversationModel.create({
+        userId,
+        organizationId,
+        agentId: agent.id,
+        title: "elsewhere",
+      });
+      const bytes = Buffer.from("secret", "utf8");
+      const attachment = await ConversationAttachmentModel.create({
+        organizationId,
+        conversationId: elsewhere.id,
+        uploadedByUserId: userId,
+        originalName: "secret.txt",
+        mimeType: "text/plain",
+        fileSize: bytes.byteLength,
+        contentHash: ConversationAttachmentModel.computeContentHash(bytes),
+        fileData: bytes,
+      });
+
+      const uploadSpy = vi.spyOn(skillSandboxRuntimeService, "uploadFile");
+      const result = await executeArchestraTool(
+        TOOL_UPLOAD_SKILL_SANDBOX_FILE_FULL_NAME,
+        {
+          sandboxId,
+          path: "secret.txt",
+          source: { type: "chat_attachment", attachmentId: attachment.id },
+        },
+        { ...context, conversationId: here.id },
+      );
+
+      expect(result.isError).toBe(true);
+      expect(textOf(result)).toContain("different conversation");
+      expect(uploadSpy).not.toHaveBeenCalled();
+    });
+
+    // uploadFile does no Dagger work, so enabling the runtime engine lets these
+    // exercise the real persistence + validation path against PGlite.
+    describe("with the runtime engine available", () => {
+      const originalDagger = config.daggerRuntime.enabled;
+      beforeAll(() => {
+        (config.daggerRuntime as { enabled: boolean }).enabled = true;
+      });
+      afterAll(() => {
+        (config.daggerRuntime as { enabled: boolean }).enabled = originalDagger;
+      });
+
+      test("persists uploaded bytes as an ordered replay event", async () => {
+        const sandboxId = await createSandbox();
+        const bytes = Buffer.from("col1,col2\n1,2\n", "utf8");
+        const result = await executeArchestraTool(
+          TOOL_UPLOAD_SKILL_SANDBOX_FILE_FULL_NAME,
+          {
+            sandboxId,
+            path: "data/input.csv",
+            source: {
+              type: "base64",
+              dataBase64: bytes.toString("base64"),
+              mimeType: "text/csv",
+              originalName: "input.csv",
+            },
+          },
+          context,
+        );
+
+        expect(result.isError).toBe(false);
+        const structured = structuredOf<{ path: string; sizeBytes: number }>(
+          result,
+        );
+        expect(structured.path).toBe("/skills/pdf-processing/data/input.csv");
+        expect(structured.sizeBytes).toBe(bytes.byteLength);
+
+        const log = await SkillSandboxReplayEventModel.listBySandbox(sandboxId);
+        const uploads = log.filter((e) => e.kind === "upload");
+        expect(uploads).toHaveLength(1);
+        const [only] = uploads;
+        if (only.kind !== "upload") throw new Error("expected an upload event");
+        expect(only.upload.data.toString("utf8")).toBe(bytes.toString("utf8"));
+        expect(only.upload.path).toBe("/skills/pdf-processing/data/input.csv");
+      });
+
+      test("rejects a path outside the sandbox roots", async () => {
+        const sandboxId = await createSandbox();
+        const result = await executeArchestraTool(
+          TOOL_UPLOAD_SKILL_SANDBOX_FILE_FULL_NAME,
+          {
+            sandboxId,
+            path: "/etc/passwd",
+            source: { type: "text", text: "x" },
+          },
+          context,
+        );
+        expect(result.isError).toBe(true);
+        expect(textOf(result)).toContain("must be under");
+      });
+
+      test("rejects an upload larger than the configured limit", async () => {
+        const sandboxId = await createSandbox();
+        const original = config.skillsSandbox.artifactBytesLimit;
+        (
+          config.skillsSandbox as { artifactBytesLimit: number }
+        ).artifactBytesLimit = 8;
+        try {
+          const result = await executeArchestraTool(
+            TOOL_UPLOAD_SKILL_SANDBOX_FILE_FULL_NAME,
+            {
+              sandboxId,
+              path: "big.txt",
+              source: { type: "text", text: "way too many bytes" },
+            },
+            context,
+          );
+          expect(result.isError).toBe(true);
+          expect(textOf(result)).toContain("too large");
+        } finally {
+          (
+            config.skillsSandbox as { artifactBytesLimit: number }
+          ).artifactBytesLimit = original;
+        }
+      });
+
+      test("rejects an empty upload", async () => {
+        const sandboxId = await createSandbox();
+        const result = await executeArchestraTool(
+          TOOL_UPLOAD_SKILL_SANDBOX_FILE_FULL_NAME,
+          { sandboxId, path: "empty.txt", source: { type: "text", text: "" } },
+          context,
+        );
+        expect(result.isError).toBe(true);
+        expect(textOf(result)).toContain("empty");
+      });
     });
   });
 });

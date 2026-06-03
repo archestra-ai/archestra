@@ -1,7 +1,13 @@
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
-import type { z } from "zod";
+import { z } from "zod";
 import { schema } from "@/database";
 import { SkillFileEncodingSchema } from "./skill";
+
+/** Discriminator for an ordered sandbox replay event. */
+export const SkillSandboxReplayEventKindSchema = z.enum(["command", "upload"]);
+export type SkillSandboxReplayEventKind = z.infer<
+  typeof SkillSandboxReplayEventKindSchema
+>;
 
 export const SelectSkillSandboxSchema = createSelectSchema(
   schema.skillSandboxesTable,
@@ -28,6 +34,28 @@ export const SelectSkillSandboxArtifactSchema = createSelectSchema(
 );
 export const InsertSkillSandboxArtifactSchema = createInsertSchema(
   schema.skillSandboxArtifactsTable,
+).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const SelectSkillSandboxUploadSchema = createSelectSchema(
+  schema.skillSandboxUploadsTable,
+);
+export const InsertSkillSandboxUploadSchema = createInsertSchema(
+  schema.skillSandboxUploadsTable,
+).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const SelectSkillSandboxReplayEventSchema = createSelectSchema(
+  schema.skillSandboxReplayEventsTable,
+  { kind: SkillSandboxReplayEventKindSchema },
+);
+export const InsertSkillSandboxReplayEventSchema = createInsertSchema(
+  schema.skillSandboxReplayEventsTable,
+  { kind: SkillSandboxReplayEventKindSchema },
 ).omit({
   id: true,
   createdAt: true,
@@ -64,6 +92,16 @@ export type SkillSandboxFileSnapshot = z.infer<
 >;
 export type InsertSkillSandboxFileSnapshot = z.infer<
   typeof InsertSkillSandboxFileSnapshotSchema
+>;
+export type SkillSandboxUpload = z.infer<typeof SelectSkillSandboxUploadSchema>;
+export type InsertSkillSandboxUpload = z.infer<
+  typeof InsertSkillSandboxUploadSchema
+>;
+export type SkillSandboxReplayEvent = z.infer<
+  typeof SelectSkillSandboxReplayEventSchema
+>;
+export type InsertSkillSandboxReplayEvent = z.infer<
+  typeof InsertSkillSandboxReplayEventSchema
 >;
 
 /**

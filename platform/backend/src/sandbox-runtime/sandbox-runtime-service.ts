@@ -1,4 +1,4 @@
-import type { ReplayCommand, SnapshotFile } from "@archestra/sandbox-rs";
+import type { ReplayEntry, SnapshotFile } from "@archestra/sandbox-rs";
 import {
   context as otelContext,
   propagation as otelPropagation,
@@ -55,7 +55,7 @@ interface RunCommandParams extends LimitOverrides {
   cwd: string;
   timeoutSeconds: number;
   snapshots?: SnapshotFile[];
-  replayCommands?: ReplayCommand[];
+  replayEntries?: ReplayEntry[];
   /** colon-joined absolute paths added to PYTHONPATH inside the container. */
   pythonpath?: string;
 }
@@ -78,7 +78,7 @@ interface ReadArtifactParams extends LimitOverrides {
    */
   defaultCwd: string;
   snapshots?: SnapshotFile[];
-  replayCommands?: ReplayCommand[];
+  replayEntries?: ReplayEntry[];
   /** mirrors `RunCommandParams.pythonpath`. */
   pythonpath?: string;
 }
@@ -154,7 +154,7 @@ class SandboxRuntimeService {
         runSandbox({
           traceparent: getTraceparent(),
           snapshots: params.snapshots ?? [],
-          replayCommands: params.replayCommands ?? [],
+          replayEntries: params.replayEntries ?? [],
           limits: this.limits(params),
           command: params.command,
           cwd: params.cwd,
@@ -178,7 +178,7 @@ class SandboxRuntimeService {
         readArtifact({
           traceparent: getTraceparent(),
           snapshots: params.snapshots ?? [],
-          replayCommands: params.replayCommands ?? [],
+          replayEntries: params.replayEntries ?? [],
           limits: this.limits(params),
           path: params.path,
           defaultCwd: params.defaultCwd,

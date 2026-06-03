@@ -125,7 +125,9 @@ export { default as skillSandboxesTable } from "./skill-sandbox";
 export { default as skillSandboxArtifactsTable } from "./skill-sandbox-artifact";
 export { default as skillSandboxCommandsTable } from "./skill-sandbox-command";
 export { default as skillSandboxFileSnapshotsTable } from "./skill-sandbox-file-snapshot";
+export { default as skillSandboxReplayEventsTable } from "./skill-sandbox-replay-event";
 export { default as skillSandboxSkillsTable } from "./skill-sandbox-skill";
+export { default as skillSandboxUploadsTable } from "./skill-sandbox-upload";
 export {
   default as skillShareLinksTable,
   skillShareLinkSkillsTable,

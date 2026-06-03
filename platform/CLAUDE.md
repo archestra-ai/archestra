@@ -403,10 +403,11 @@ pnpm rebuild <package-name>  # Enable scripts for specific package
 - DB-backed, Dagger-materialized execution sandbox for Agent Skills. Code lives in `backend/src/skills-sandbox/` (see its README for replay semantics and limits)
 - MCP tools exposed by `archestra-mcp-server/skill-sandbox.ts`:
   - `create_skill_sandbox` — snapshots one or more skills into a sandbox recipe; returns a stable sandbox id and per-skill root paths
-  - `run_skill_command` — materializes the recipe in a fresh Dagger container, replays the persisted command log, executes a new command, appends to the log
+  - `run_skill_command` — materializes the recipe in a fresh Dagger container, replays the persisted ordered replay log, executes a new command, appends to the log
   - `get_skill_sandbox_artifact` — exports a file from a materialized sandbox into `skill_sandbox_artifacts` (bytea) and returns a typed `ArtifactRef`
-- All three tools are gated by the `skill:execute` permission (`auth/skill-permissions.ts`). `create_skill_sandbox` also enforces `skill:read` per mounted skill
-- Source of truth is Postgres (`skill_sandboxes`, `skill_sandbox_skills`, `skill_sandbox_commands`, `skill_sandbox_artifacts`); Dagger owns ephemeral filesystem state with no retention guarantee
+  - `upload_skill_sandbox_file` — writes an input file (from a chat attachment, base64, or text) into the sandbox as an ordered replay event so it materializes on later runs; returns a typed `UploadRef`
+- All four tools are gated by the `skill:execute` permission (`auth/skill-permissions.ts`). `create_skill_sandbox` also enforces `skill:read` per mounted skill; `upload_skill_sandbox_file` with a chat-attachment source requires the attachment to be in the same org and conversation
+- Source of truth is Postgres (`skill_sandboxes`, `skill_sandbox_skills`, `skill_sandbox_commands`, `skill_sandbox_uploads`, `skill_sandbox_replay_events`, `skill_sandbox_artifacts`); Dagger owns ephemeral filesystem state with no retention guarantee. Ordering across commands + uploads is the `skill_sandbox_replay_events` log, sequenced via `skill_sandboxes.next_replay_sequence`
 - Activation prompt (`skills/skill-activation.ts`) tells the model to inspect files with `read_skill_file` and use the sandbox tools to execute scripts — commands run from the skill root so the Agent Skills spec's relative paths work as-is
 
 **Testing**:

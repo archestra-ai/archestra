@@ -10,7 +10,10 @@ pub mod telemetry;
 mod tracing_ctx;
 mod validation;
 
-use crate::validation::{validate_artifact_path, validate_cwd, validate_pythonpath};
+use crate::validation::{
+    validate_artifact_path, validate_cwd, validate_file_encoding, validate_pythonpath,
+    validate_upload_path,
+};
 
 pub use backends::dagger::{DEFAULT_APT_PACKAGES, DEFAULT_BASE_IMAGE};
 
@@ -112,6 +115,67 @@ pub struct ReplayCommand {
     pub timeout_seconds: u32,
 }
 
+/// a file written into the sandbox during replay. unlike [`SnapshotFile`]
+/// (relative to a skill root), `path` is absolute and bounded to the sandbox
+/// roots — uploads can target the home dir as well as a skill root.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "napi", napi_derive::napi(object))]
+#[serde(rename_all = "camelCase")]
+pub struct ReplayInputFile {
+    pub path: String,
+    pub encoding: String,
+    pub content: String,
+}
+
+/// a single ordered replay step crossing the NAPI boundary. exactly one of
+/// `command` / `file` is populated, keyed by `kind` (`"command"` | `"file"`);
+/// the core converts it into the internal [`ReplayStep`] enum at the entry
+/// point, where invalid combinations are rejected.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "napi", napi_derive::napi(object))]
+#[serde(rename_all = "camelCase")]
+pub struct ReplayEntry {
+    pub kind: String,
+    pub command: Option<ReplayCommand>,
+    pub file: Option<ReplayInputFile>,
+}
+
+/// internal, fully-typed replay step. constructed only via
+/// [`replay_entry_to_step`] so a `ReplayStep::File` always carries a validated
+/// path and encoding — the materialize layer can trust it without re-checking.
+#[derive(Clone, Debug)]
+pub(crate) enum ReplayStep {
+    Command(ReplayCommand),
+    File(ReplayInputFile),
+}
+
+fn replay_entries_to_steps(entries: Vec<ReplayEntry>) -> Result<Vec<ReplayStep>> {
+    entries.into_iter().map(replay_entry_to_step).collect()
+}
+
+fn replay_entry_to_step(entry: ReplayEntry) -> Result<ReplayStep> {
+    match entry.kind.as_str() {
+        "command" => entry.command.map(ReplayStep::Command).ok_or_else(|| {
+            SandboxError::InvalidInput(
+                "replay entry with kind=command is missing its command".to_string(),
+            )
+        }),
+        "file" => {
+            let file = entry.file.ok_or_else(|| {
+                SandboxError::InvalidInput(
+                    "replay entry with kind=file is missing its file".to_string(),
+                )
+            })?;
+            validate_upload_path(&file.path)?;
+            validate_file_encoding(&file.encoding)?;
+            Ok(ReplayStep::File(file))
+        }
+        other => Err(SandboxError::InvalidInput(format!(
+            "unknown replay entry kind: {other:?}"
+        ))),
+    }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "napi", napi_derive::napi(object))]
 #[serde(rename_all = "camelCase")]
@@ -139,8 +203,8 @@ pub struct CheckSessionInput {
 pub struct RunSandboxInput {
     pub traceparent: Option<String>,
     pub snapshots: Vec<SnapshotFile>,
-    #[cfg_attr(feature = "napi", napi(js_name = "replayCommands"))]
-    pub replay_commands: Vec<ReplayCommand>,
+    #[cfg_attr(feature = "napi", napi(js_name = "replayEntries"))]
+    pub replay_entries: Vec<ReplayEntry>,
     pub limits: Limits,
     pub command: String,
     pub cwd: String,
@@ -157,8 +221,8 @@ pub struct RunSandboxInput {
 pub struct ReadArtifactInput {
     pub traceparent: Option<String>,
     pub snapshots: Vec<SnapshotFile>,
-    #[cfg_attr(feature = "napi", napi(js_name = "replayCommands"))]
-    pub replay_commands: Vec<ReplayCommand>,
+    #[cfg_attr(feature = "napi", napi(js_name = "replayEntries"))]
+    pub replay_entries: Vec<ReplayEntry>,
     pub limits: Limits,
     pub path: String,
     /// the cwd a replayed entry with `cwd: None` should default to. matches
@@ -223,9 +287,10 @@ pub async fn run_sandbox(input: RunSandboxInput) -> Result<CommandExecution> {
     if let Some(pp) = input.pythonpath.as_deref() {
         validate_pythonpath(pp)?;
     }
+    let replay_steps = replay_entries_to_steps(input.replay_entries)?;
     let req = backend::RunRequest {
         snapshots: input.snapshots,
-        replay_commands: input.replay_commands,
+        replay_steps,
         limits: input.limits,
         command: input.command,
         cwd: input.cwd,
@@ -250,9 +315,10 @@ pub async fn read_artifact(input: ReadArtifactInput) -> Result<ArtifactBytes> {
     if let Some(pp) = input.pythonpath.as_deref() {
         validate_pythonpath(pp)?;
     }
+    let replay_steps = replay_entries_to_steps(input.replay_entries)?;
     let req = backend::ArtifactRequest {
         snapshots: input.snapshots,
-        replay_commands: input.replay_commands,
+        replay_steps,
         limits: input.limits,
         path: input.path,
         default_cwd: input.default_cwd,

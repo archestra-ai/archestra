@@ -1,11 +1,15 @@
-import type { ReplayCommand, SnapshotFile } from "@archestra/sandbox-rs";
+import type {
+  ReplayCommand,
+  ReplayEntry,
+  SnapshotFile,
+} from "@archestra/sandbox-rs";
 import config from "@/config";
 import logger from "@/logging";
 import {
   SkillSandboxArtifactModel,
-  SkillSandboxCommandModel,
   SkillSandboxFileSnapshotModel,
   SkillSandboxModel,
+  SkillSandboxReplayEventModel,
 } from "@/models";
 import {
   SandboxRuntimeError,
@@ -26,6 +30,8 @@ import {
   type RunCommandParams,
   SKILL_SANDBOX_LIMITS,
   SkillSandboxError,
+  type UploadFileParams,
+  type UploadRef,
 } from "./types";
 
 const CONSUMER_ID = "skill-sandbox";
@@ -82,7 +88,7 @@ class SkillSandboxRuntimeService {
     return this.runExclusive(params.sandboxId, async () => {
       const sandbox = await this.loadSandbox(params.sandboxId);
       const cwd = params.cwd ?? sandbox.defaultCwd;
-      const { snapshots, replayCommands, pythonpath } =
+      const { snapshots, replayEntries, pythonpath } =
         await this.buildContext(sandbox);
 
       let executed: Awaited<
@@ -94,7 +100,7 @@ class SkillSandboxRuntimeService {
           cwd,
           timeoutSeconds,
           snapshots,
-          replayCommands,
+          replayEntries,
           pythonpath,
           outputBytesLimit: config.skillsSandbox.outputBytesLimit,
           fileSizeLimitBytes: config.skillsSandbox.artifactBytesLimit,
@@ -118,9 +124,11 @@ class SkillSandboxRuntimeService {
         throw this.toSkillError(error);
       }
 
-      let row: Awaited<ReturnType<typeof SkillSandboxCommandModel.append>>;
+      let row: Awaited<
+        ReturnType<typeof SkillSandboxReplayEventModel.appendCommand>
+      >;
       try {
-        row = await SkillSandboxCommandModel.append({
+        row = await SkillSandboxReplayEventModel.appendCommand({
           sandboxId: params.sandboxId,
           organizationId: sandbox.organizationId,
           command: params.command,
@@ -161,7 +169,7 @@ class SkillSandboxRuntimeService {
         path: params.path,
         defaultCwd: sandbox.defaultCwd,
       });
-      const { snapshots, replayCommands, pythonpath } =
+      const { snapshots, replayEntries, pythonpath } =
         await this.buildContext(sandbox);
 
       let artifact: Awaited<
@@ -170,7 +178,7 @@ class SkillSandboxRuntimeService {
       try {
         artifact = await sandboxRuntimeService.readArtifact({
           snapshots,
-          replayCommands,
+          replayEntries,
           path: resolvedPath,
           defaultCwd: sandbox.defaultCwd,
           pythonpath,
@@ -217,6 +225,67 @@ class SkillSandboxRuntimeService {
     });
   }
 
+  /**
+   * Persist an uploaded file as an ordered replay event. No Dagger work happens
+   * here — the bytes become part of the recipe and are materialized on the next
+   * run/export. Serialized through `runExclusive` so the upload's sequence lands
+   * after any in-flight command's append and before the next run reads context;
+   * otherwise replay order could diverge from execution order.
+   */
+  async uploadFile(params: UploadFileParams): Promise<UploadRef> {
+    this.ensureEnabled();
+
+    return this.runExclusive(params.sandboxId, async () => {
+      const sandbox = await this.loadSandbox(params.sandboxId);
+      const resolvedPath = resolveArtifactPath({
+        path: params.path,
+        defaultCwd: sandbox.defaultCwd,
+      });
+
+      const limit = config.skillsSandbox.artifactBytesLimit;
+      if (params.data.byteLength > limit) {
+        throw new SkillSandboxError(
+          `uploaded file is too large (${params.data.byteLength} bytes > ${limit} byte limit)`,
+        );
+      }
+      if (params.data.byteLength === 0) {
+        throw new SkillSandboxError("uploaded file is empty");
+      }
+
+      const mimeType = resolveArtifactMime({
+        buffer: params.data,
+        claimed: params.mimeType,
+      });
+
+      let row: Awaited<
+        ReturnType<typeof SkillSandboxReplayEventModel.appendUpload>
+      >;
+      try {
+        row = await SkillSandboxReplayEventModel.appendUpload({
+          sandboxId: params.sandboxId,
+          organizationId: sandbox.organizationId,
+          path: resolvedPath,
+          mimeType,
+          originalName: params.originalName ?? null,
+          sizeBytes: params.data.byteLength,
+          data: params.data,
+        });
+      } catch (dbError) {
+        throw new SkillSandboxError(
+          `failed to persist upload: ${dbError instanceof Error ? dbError.message : String(dbError)}`,
+        );
+      }
+
+      return {
+        uploadId: row.id,
+        sandboxId: params.sandboxId,
+        path: row.path,
+        mimeType: row.mimeType,
+        sizeBytes: row.sizeBytes,
+      };
+    });
+  }
+
   // === private ===
 
   /**
@@ -234,7 +303,7 @@ class SkillSandboxRuntimeService {
     timeoutSeconds: number;
   }): Promise<void> {
     try {
-      await SkillSandboxCommandModel.append({
+      await SkillSandboxReplayEventModel.appendCommand({
         sandboxId: args.sandboxId,
         organizationId: args.organizationId,
         command: args.command,
@@ -281,12 +350,12 @@ class SkillSandboxRuntimeService {
 
   private async buildContext(sandbox: SkillSandbox): Promise<{
     snapshots: SnapshotFile[];
-    replayCommands: ReplayCommand[];
+    replayEntries: ReplayEntry[];
     pythonpath: string | undefined;
   }> {
     const [snapshotRows, log] = await Promise.all([
       SkillSandboxFileSnapshotModel.listBySandbox(sandbox.id),
-      SkillSandboxCommandModel.listBySandbox(sandbox.id),
+      SkillSandboxReplayEventModel.listBySandbox(sandbox.id),
     ]);
     if (snapshotRows.length === 0) {
       throw new SkillSandboxError(
@@ -302,21 +371,40 @@ class SkillSandboxRuntimeService {
           content: snapshot.content,
         }),
       ),
-      // uniform replay: every command (including the requirements-install
-      // setup steps written at create_skill_sandbox time) lives in the
-      // command log. no synthetic "auto-install" prepend here — that lived as
-      // its own code path and broke Dagger cache reuse on every config knob.
-      replayCommands: log.map(
-        (entry): ReplayCommand => ({
-          command: entry.command,
-          // pin replays to defaultCwd when the original entry has no stored
-          // cwd, so the Rust fallback doesn't pick up the live call's cwd
-          // (would break replay determinism and the runCommand↔exportArtifact
-          // cache).
-          cwd: entry.cwd ?? sandbox.defaultCwd,
-          timeoutSeconds: entry.timeoutSeconds,
-        }),
-      ),
+      // uniform, ordered replay: every command (including the requirements-
+      // install setup steps written at create time) and every uploaded file
+      // lives in one sequenced log. interleaving is preserved so a file
+      // uploaded between two commands is materialized at exactly that point.
+      replayEntries: log.map((entry): ReplayEntry => {
+        switch (entry.kind) {
+          case "command":
+            return {
+              kind: "command",
+              command: {
+                command: entry.command.command,
+                // pin replays to defaultCwd when the original entry has no
+                // stored cwd, so the Rust fallback doesn't pick up the live
+                // call's cwd (would break replay determinism and the
+                // runCommand↔exportArtifact cache).
+                cwd: entry.command.cwd ?? sandbox.defaultCwd,
+                timeoutSeconds: entry.command.timeoutSeconds,
+              },
+            };
+          case "upload":
+            return {
+              kind: "file",
+              file: {
+                path: entry.upload.path,
+                encoding: "base64",
+                content: entry.upload.data.toString("base64"),
+              },
+            };
+          default:
+            throw new SkillSandboxError(
+              `replay event for sandbox ${sandbox.id} has an unknown kind ${JSON.stringify(entry)}`,
+            );
+        }
+      }),
       pythonpath: pythonpathForSandbox(sandbox, snapshotRows),
     };
   }

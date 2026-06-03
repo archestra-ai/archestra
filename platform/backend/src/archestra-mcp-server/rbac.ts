@@ -143,6 +143,7 @@ export const TOOL_PERMISSIONS: Record<
   create_skill_sandbox: { resource: "skill", action: "execute" },
   run_skill_command: { resource: "skill", action: "execute" },
   get_skill_sandbox_artifact: { resource: "skill", action: "execute" },
+  upload_skill_sandbox_file: { resource: "skill", action: "execute" },
 };
 
 /**

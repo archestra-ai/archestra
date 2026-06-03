@@ -2,17 +2,19 @@ import {
   TOOL_CREATE_SKILL_SANDBOX_SHORT_NAME,
   TOOL_GET_SKILL_SANDBOX_ARTIFACT_SHORT_NAME,
   TOOL_RUN_SKILL_COMMAND_SHORT_NAME,
+  TOOL_UPLOAD_SKILL_SANDBOX_FILE_SHORT_NAME,
 } from "@shared";
 import { z } from "zod";
 import { getSkillPermissionChecker } from "@/auth/skill-permissions";
 import config from "@/config";
 import logger from "@/logging";
 import {
+  ConversationAttachmentModel,
   SkillInvalidFilePathError,
   SkillModel,
-  SkillSandboxCommandModel,
   SkillSandboxFileSnapshotModel,
   SkillSandboxModel,
+  SkillSandboxReplayEventModel,
   SkillTeamModel,
 } from "@/models";
 import {
@@ -206,6 +208,72 @@ const GetSkillSandboxArtifactOutputSchema = z.object({
   downloadUrl: z.string(),
 });
 
+const UploadSourceSchema = z.discriminatedUnion("type", [
+  z
+    .strictObject({
+      type: z.literal("chat_attachment"),
+      attachmentId: z
+        .string()
+        .min(1)
+        .describe(
+          "Id of an attachment in the CURRENT conversation. The bytes are " +
+            "read server-side; they never pass through the model context.",
+        ),
+    })
+    .describe("Copy bytes from a file the user attached to this conversation."),
+  z
+    .strictObject({
+      type: z.literal("base64"),
+      dataBase64: z.string().min(1).describe("Base64-encoded file bytes."),
+      mimeType: z.string().min(1).optional(),
+      originalName: z.string().min(1).optional(),
+    })
+    .describe("Upload raw bytes provided inline as base64."),
+  z
+    .strictObject({
+      type: z.literal("text"),
+      text: z.string().describe("UTF-8 text content of the file."),
+      mimeType: z.string().min(1).optional(),
+      originalName: z.string().min(1).optional(),
+    })
+    .describe("Upload a UTF-8 text file provided inline."),
+]);
+
+type UploadSource = z.infer<typeof UploadSourceSchema>;
+
+const UploadSkillSandboxFileSchema = z
+  .strictObject({
+    sandboxId: SandboxIdOrAliasSchema.optional().describe(
+      "Sandbox to upload the file into. Accepts the full UUID or the short " +
+        "alias (e.g. `s1`). When omitted, the most recent sandbox attached " +
+        "to the current conversation is used.",
+    ),
+    path: z
+      .string()
+      .min(1)
+      .describe(
+        "Destination path inside the container — absolute under /skills or " +
+          "/home/sandbox, or relative to the sandbox's default cwd.",
+      ),
+    source: UploadSourceSchema.describe(
+      "Where the file bytes come from: a chat attachment, inline base64, or " +
+        "inline text.",
+    ),
+  })
+  .describe(
+    "Upload a file into a skill sandbox. The bytes become part of the " +
+      "sandbox replay recipe, so the file is present on every subsequent " +
+      "run_skill_command and get_skill_sandbox_artifact call.",
+  );
+
+const UploadSkillSandboxFileOutputSchema = z.object({
+  uploadId: z.string(),
+  sandboxId: z.string(),
+  path: z.string(),
+  mimeType: z.string(),
+  sizeBytes: z.number(),
+});
+
 const registry = defineArchestraTools([
   defineArchestraTool({
     shortName: TOOL_CREATE_SKILL_SANDBOX_SHORT_NAME,
@@ -344,7 +412,7 @@ const registry = defineArchestraTools([
         snapshotRows,
       );
       for (const install of installs) {
-        await SkillSandboxCommandModel.append({
+        await SkillSandboxReplayEventModel.appendCommand({
           sandboxId: sandbox.id,
           organizationId: sandbox.organizationId,
           command: install.command,
@@ -570,6 +638,96 @@ const registry = defineArchestraTools([
       }
     },
   }),
+  defineArchestraTool({
+    shortName: TOOL_UPLOAD_SKILL_SANDBOX_FILE_SHORT_NAME,
+    title: "Upload Skill Sandbox File",
+    description:
+      "Upload a file into a skill sandbox from a chat attachment, inline " +
+      "base64, or inline text. The bytes are recorded as an ordered step in " +
+      "the sandbox replay recipe, so the file is present (at its sequence " +
+      "point) on every later run_skill_command and get_skill_sandbox_artifact " +
+      "call. Requires `skill:execute`.",
+    schema: UploadSkillSandboxFileSchema,
+    outputSchema: UploadSkillSandboxFileOutputSchema,
+    async handler({ args, context }) {
+      if (!config.skillsSandbox.enabled) {
+        return errorResult(
+          "Skill execution sandbox is not enabled on this deployment.",
+        );
+      }
+
+      const userCtx = requireUserContext(context);
+      if (!userCtx) {
+        return errorResult("This tool requires an authenticated user session.");
+      }
+
+      const checker = await getSkillPermissionChecker(userCtx);
+      if (!checker.canExecute) {
+        return errorResult(
+          "You do not have permission to perform this action (requires skill:execute).",
+        );
+      }
+
+      const resolved = await resolveSandboxId({
+        sandboxId: args.sandboxId,
+        userCtx,
+        conversationId: context.conversationId,
+      });
+      if ("error" in resolved) return errorResult(resolved.error);
+
+      const loaded = await loadUploadSource({
+        source: args.source,
+        userCtx,
+        conversationId: context.conversationId,
+      });
+      if ("error" in loaded) return errorResult(loaded.error);
+
+      try {
+        const result = await skillSandboxRuntimeService.uploadFile({
+          sandboxId: resolved.sandboxId,
+          path: args.path,
+          data: loaded.data,
+          mimeType: loaded.mimeType,
+          originalName: loaded.originalName,
+        });
+
+        logger.info(
+          {
+            sandboxId: resolved.sandboxId,
+            uploadId: result.uploadId,
+            sizeBytes: result.sizeBytes,
+            sourceType: args.source.type,
+          },
+          "[SkillSandbox] file uploaded",
+        );
+
+        const envTrailer = await renderCompactEnvTrailerFor(
+          resolved.sandboxId,
+          userCtx,
+        );
+        return structuredSuccessResult(
+          { ...result },
+          [
+            `Uploaded ${result.path} (${result.sizeBytes} bytes) as upload ${result.uploadId}.`,
+            "It is now part of the sandbox and visible to every subsequent command.",
+            "",
+            envTrailer,
+          ].join("\n"),
+        );
+      } catch (error) {
+        if (error instanceof SkillSandboxError) {
+          return errorResult(error.message);
+        }
+        logger.error(
+          { err: error, sandboxId: resolved.sandboxId },
+          "[SkillSandbox] upload_skill_sandbox_file failed unexpectedly",
+        );
+        return errorResult(
+          "Skill file upload failed due to an internal error.",
+        );
+      }
+    },
+  }),
 ] as const);
 
 export const toolEntries = registry.toolEntries;
@@ -589,6 +747,75 @@ function requireUserContext(context: ArchestraContext): UserContext | null {
 
 function dedupe(values: string[]): string[] {
   return [...new Set(values)];
+}
+
+// base64 alphabet plus padding and incidental whitespace.
+const BASE64_RE = /^[A-Za-z0-9+/\s]*={0,2}$/;
+
+interface LoadedUpload {
+  data: Buffer;
+  mimeType?: string;
+  originalName?: string;
+}
+
+/**
+ * Resolve upload source bytes. chat_attachment reads server-side and is scoped
+ * to the caller's org AND the current conversation — the bytes never enter the
+ * model context, and an attachment from another conversation is rejected to
+ * prevent cross-conversation exfiltration.
+ */
+async function loadUploadSource(params: {
+  source: UploadSource;
+  userCtx: UserContext;
+  conversationId: string | undefined;
+}): Promise<LoadedUpload | { error: string }> {
+  const { source, userCtx, conversationId } = params;
+  switch (source.type) {
+    case "base64": {
+      if (!BASE64_RE.test(source.dataBase64)) {
+        return { error: "source.dataBase64 is not valid base64." };
+      }
+      return {
+        data: Buffer.from(source.dataBase64, "base64"),
+        mimeType: source.mimeType,
+        originalName: source.originalName,
+      };
+    }
+    case "text": {
+      return {
+        data: Buffer.from(source.text, "utf8"),
+        mimeType: source.mimeType ?? "text/plain",
+        originalName: source.originalName,
+      };
+    }
+    case "chat_attachment": {
+      if (!conversationId) {
+        return {
+          error:
+            "chat_attachment uploads require a conversation context; use a base64 or text source instead.",
+        };
+      }
+      const attachment = await ConversationAttachmentModel.findByIdWithData(
+        source.attachmentId,
+      );
+      if (!attachment || attachment.organizationId !== userCtx.organizationId) {
+        return {
+          error: `No accessible attachment with id ${source.attachmentId} exists.`,
+        };
+      }
+      if (attachment.conversationId !== conversationId) {
+        return {
+          error:
+            "That attachment belongs to a different conversation and cannot be used here.",
+        };
+      }
+      return {
+        data: attachment.fileData,
+        mimeType: attachment.mimeType,
+        originalName: attachment.originalName,
+      };
+    }
+  }
 }
 
 /**

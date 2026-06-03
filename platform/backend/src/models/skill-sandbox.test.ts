@@ -4,6 +4,7 @@ import {
   SkillSandboxCommandModel,
   SkillSandboxFileSnapshotModel,
   SkillSandboxModel,
+  SkillSandboxReplayEventModel,
 } from "@/models";
 import { describe, expect, test } from "@/test";
 import type { Skill } from "@/types";
@@ -260,6 +261,79 @@ describe("SkillSandboxCommandModel", () => {
     const log = await SkillSandboxCommandModel.listBySandbox(sandbox.id);
     expect(log.map((r) => r.id)).toEqual([first.id, second.id]);
     expect(log[1].cwd).toBe("/skills/alpha/scripts");
+  });
+});
+
+describe("SkillSandboxReplayEventModel", () => {
+  test("interleaves command/upload events and replays them in sequence order", async ({
+    makeOrganization,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const skill = await seedSkill(org.id, "alpha");
+    const sandbox = await SkillSandboxModel.create({
+      sandbox: {
+        organizationId: org.id,
+        userId: user.id,
+        conversationId: null,
+        agentId: null,
+        primarySkillId: skill.id,
+        defaultCwd: "/skills/alpha",
+      },
+      skillIds: [skill.id],
+    });
+
+    const commandA = await SkillSandboxReplayEventModel.appendCommand({
+      sandboxId: sandbox.id,
+      organizationId: org.id,
+      command: "echo before",
+      cwd: null,
+      stdout: "",
+      stderr: "",
+      exitCode: 0,
+      durationMs: 1,
+      timeoutSeconds: 30,
+    });
+    const upload = await SkillSandboxReplayEventModel.appendUpload({
+      sandboxId: sandbox.id,
+      organizationId: org.id,
+      path: "/home/sandbox/input.csv",
+      mimeType: "text/csv",
+      originalName: "input.csv",
+      sizeBytes: 3,
+      data: Buffer.from("a,b", "utf8"),
+    });
+    const commandB = await SkillSandboxReplayEventModel.appendCommand({
+      sandboxId: sandbox.id,
+      organizationId: org.id,
+      command: "echo after",
+      cwd: null,
+      stdout: "",
+      stderr: "",
+      exitCode: 0,
+      durationMs: 1,
+      timeoutSeconds: 30,
+    });
+
+    const log = await SkillSandboxReplayEventModel.listBySandbox(sandbox.id);
+    expect(log.map((e) => e.kind)).toEqual(["command", "upload", "command"]);
+    expect(log.map((e) => e.sequence)).toEqual([0, 1, 2]);
+
+    const [a, u, b] = log;
+    if (a.kind !== "command" || u.kind !== "upload" || b.kind !== "command") {
+      throw new Error("unexpected replay event kinds");
+    }
+    expect(a.command.id).toBe(commandA.id);
+    expect(a.command.command).toBe("echo before");
+    expect(u.upload.id).toBe(upload.id);
+    expect(u.upload.path).toBe("/home/sandbox/input.csv");
+    expect(u.upload.data.toString("utf8")).toBe("a,b");
+    expect(b.command.id).toBe(commandB.id);
+
+    // the allocator advanced past every appended event.
+    const refreshed = await SkillSandboxModel.findById(sandbox.id);
+    expect(refreshed?.nextReplaySequence).toBe(3);
   });
 });
 

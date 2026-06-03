@@ -5,14 +5,14 @@
 //! every match site to handle it.
 
 use crate::backends::dagger::DaggerBackend;
-use crate::{ArtifactBytes, CommandExecution, Limits, ReplayCommand, Result, SnapshotFile};
+use crate::{ArtifactBytes, CommandExecution, Limits, ReplayStep, Result, SnapshotFile};
 
 /// a materialise-and-run request handed to a backend. validated at the public
 /// core entry points before it reaches here.
 #[derive(Clone)]
 pub(crate) struct RunRequest {
     pub snapshots: Vec<SnapshotFile>,
-    pub replay_commands: Vec<ReplayCommand>,
+    pub replay_steps: Vec<ReplayStep>,
     pub limits: Limits,
     pub command: String,
     pub cwd: String,
@@ -28,7 +28,7 @@ pub(crate) struct RunRequest {
 #[derive(Clone)]
 pub(crate) struct ArtifactRequest {
     pub snapshots: Vec<SnapshotFile>,
-    pub replay_commands: Vec<ReplayCommand>,
+    pub replay_steps: Vec<ReplayStep>,
     pub limits: Limits,
     pub path: String,
     pub default_cwd: String,

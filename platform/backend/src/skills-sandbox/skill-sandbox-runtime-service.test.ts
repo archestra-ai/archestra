@@ -258,6 +258,7 @@ function makeFakeSandbox(overrides: {
     agentId: null,
     primarySkillId: overrides.primarySkillId,
     defaultCwd: "/skills/skill-b",
+    nextReplaySequence: 0,
     createdAt: new Date(),
   };
 }

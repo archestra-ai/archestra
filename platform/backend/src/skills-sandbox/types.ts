@@ -48,6 +48,26 @@ export interface ArtifactRef {
   sizeBytes: number;
 }
 
+export interface UploadFileParams {
+  sandboxId: SandboxId;
+  /** Path inside the container, either absolute or relative to `defaultCwd`. */
+  path: string;
+  /** Raw file bytes to materialize into the sandbox replay recipe. */
+  data: Buffer;
+  /** Optional MIME type; sniffed from the bytes when omitted. */
+  mimeType?: string;
+  /** Optional source filename, recorded for provenance. */
+  originalName?: string;
+}
+
+export interface UploadRef {
+  uploadId: string;
+  sandboxId: SandboxId;
+  path: string;
+  mimeType: string;
+  sizeBytes: number;
+}
+
 /**
  * Raised when the runtime cannot execute the requested operation — engine
  * unreachable, sandbox missing, limits violated. A command that runs and exits

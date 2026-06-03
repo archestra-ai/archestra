@@ -28,7 +28,7 @@ export interface Limits {
 export interface ReadArtifactInput {
   traceparent?: string
   snapshots: Array<SnapshotFile>
-  replayCommands: Array<ReplayCommand>
+  replayEntries: Array<ReplayEntry>
   limits: Limits
   path: string
   /**
@@ -50,10 +50,33 @@ export interface ReplayCommand {
   timeoutSeconds: number
 }
 
+/**
+ * a single ordered replay step crossing the NAPI boundary. exactly one of
+ * `command` / `file` is populated, keyed by `kind` (`"command"` | `"file"`);
+ * the core converts it into the internal [`ReplayStep`] enum at the entry
+ * point, where invalid combinations are rejected.
+ */
+export interface ReplayEntry {
+  kind: string
+  command?: ReplayCommand
+  file?: ReplayInputFile
+}
+
+/**
+ * a file written into the sandbox during replay. unlike [`SnapshotFile`]
+ * (relative to a skill root), `path` is absolute and bounded to the sandbox
+ * roots — uploads can target the home dir as well as a skill root.
+ */
+export interface ReplayInputFile {
+  path: string
+  encoding: string
+  content: string
+}
+
 export interface RunSandboxInput {
   traceparent?: string
   snapshots: Array<SnapshotFile>
-  replayCommands: Array<ReplayCommand>
+  replayEntries: Array<ReplayEntry>
   limits: Limits
   command: string
   cwd: string

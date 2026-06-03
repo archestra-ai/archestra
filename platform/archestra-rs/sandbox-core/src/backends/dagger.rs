@@ -28,7 +28,10 @@ use crate::validation::{
     SKILL_SANDBOX_HOME, SKILL_SANDBOX_ROOT, SKILL_SANDBOX_USER, format_artifact_error, shell_quote,
     skill_root_path, validate_artifact_path, validate_cwd, validate_snapshot_file_path,
 };
-use crate::{ArtifactBytes, CommandExecution, EngineFault, Result, SandboxError, SnapshotFile};
+use crate::{
+    ArtifactBytes, CommandExecution, EngineFault, ReplayInputFile, ReplayStep, Result,
+    SandboxError, SnapshotFile,
+};
 
 /// debian + python + uv + node + npm + common cli, warmed once per process.
 /// override with `ARCHESTRA_DAGGER_RUNTIME_IMAGE` for a custom debian-based base.
@@ -96,7 +99,7 @@ impl SandboxBackend for DaggerBackend {
             cwd = %req.cwd,
             command.len = req.command.len(),
             snapshots = req.snapshots.len(),
-            replay.len = req.replay_commands.len(),
+            replay.len = req.replay_steps.len(),
             timeout_s = req.timeout_seconds,
             exit_code = tracing::field::Empty,
             duration_ms = tracing::field::Empty,
@@ -141,7 +144,7 @@ impl SandboxBackend for DaggerBackend {
         fields(
             path = %req.path,
             snapshots = req.snapshots.len(),
-            replay.len = req.replay_commands.len(),
+            replay.len = req.replay_steps.len(),
             size_bytes = tracing::field::Empty,
         )
     )]
@@ -157,7 +160,7 @@ impl SandboxBackend for DaggerBackend {
         // module search path as the live ones.
         let run = RunRequest {
             snapshots: req.snapshots,
-            replay_commands: req.replay_commands,
+            replay_steps: req.replay_steps,
             limits: req.limits.clone(),
             command: String::new(),
             cwd: req.default_cwd,
@@ -354,7 +357,7 @@ async fn build_warm_base(client: &DaggerConn) -> Result<Container> {
 #[tracing::instrument(
     name = "sandbox.materialize",
     skip_all,
-    fields(snapshots = req.snapshots.len(), replay.len = req.replay_commands.len())
+    fields(snapshots = req.snapshots.len(), replay.len = req.replay_steps.len())
 )]
 async fn materialize(warm: Container, req: &RunRequest) -> Result<Container> {
     let mut container = warm;
@@ -385,25 +388,73 @@ async fn materialize(warm: Container, req: &RunRequest) -> Result<Container> {
         container = container.with_env_variable("PYTHONPATH", pythonpath);
     }
 
-    // replay re-executes every prior command on each call: per-call cost is
-    // O(history). we lean on Dagger's content-addressed layer cache to keep
-    // the wall-clock cost near-zero when the prefix is unchanged. if cache
-    // misses become a real concern, key a per-sandbox materialised container
-    // off the log hash and replay only the new delta.
-    for entry in &req.replay_commands {
-        // replay cwds are historical data: they were validated when first
-        // accepted and trusting them here keeps pre-existing sandboxes with
-        // legacy cwds usable. Live `req.cwd` is validated at the entry points.
-        // each command is wrapped with its own `with_workdir` so cwd switches
-        // happen via Dagger's container layer (no shell `cd` needed).
-        let cwd = entry.cwd.as_deref().unwrap_or(&req.cwd);
-        let argv = supervised_argv(&entry.command, entry.timeout_seconds, &req.limits);
-        container = container
-            .with_workdir(cwd)
-            .with_exec_opts(argv, any_exit_opts());
+    // replay re-applies every prior step on each call (commands re-execute,
+    // uploads re-write their bytes): per-call cost is O(history). we lean on
+    // Dagger's content-addressed layer cache to keep the wall-clock cost
+    // near-zero when the prefix is unchanged. if cache misses become a real
+    // concern, key a per-sandbox materialised container off the log hash and
+    // replay only the new delta.
+    //
+    // replay steps are historical data, validated when first accepted; trusting
+    // them here keeps pre-existing sandboxes usable. Live `req.cwd` is validated
+    // at the entry points, and upload paths/encodings are re-validated when the
+    // entry is converted to a `ReplayStep`.
+    for step in &req.replay_steps {
+        match step {
+            ReplayStep::Command(entry) => {
+                // each command is wrapped with its own `with_workdir` so cwd
+                // switches happen via Dagger's container layer (no shell `cd`).
+                let cwd = entry.cwd.as_deref().unwrap_or(&req.cwd);
+                let argv = supervised_argv(&entry.command, entry.timeout_seconds, &req.limits);
+                container = container
+                    .with_workdir(cwd)
+                    .with_exec_opts(argv, any_exit_opts());
+            }
+            ReplayStep::File(file) => {
+                container = apply_upload_file(container, file)?;
+            }
+        }
     }
 
     Ok(container)
+}
+
+/// write an uploaded file at its absolute path. runs the decode as root so it
+/// works even when `mkdir -p` has to create fresh (root-owned) parents, then
+/// hands the file to the sandbox user and removes the staged bytes.
+fn apply_upload_file(container: Container, file: &ReplayInputFile) -> Result<Container> {
+    let parent = file
+        .path
+        .rsplit_once('/')
+        .map(|(parent, _)| parent)
+        .filter(|parent| !parent.is_empty())
+        .unwrap_or("/");
+    let temp_path = format!("{}.archestra-upload", file.path);
+    let materialize_bytes = match file.encoding.as_str() {
+        "base64" => format!(
+            "base64 -d {} > {}",
+            shell_quote(&temp_path),
+            shell_quote(&file.path),
+        ),
+        "utf8" => format!("cp {} {}", shell_quote(&temp_path), shell_quote(&file.path)),
+        other => {
+            return Err(SandboxError::InvalidInput(format!(
+                "unsupported upload encoding: {other}"
+            )));
+        }
+    };
+    let script = format!(
+        "mkdir -p {parent} && {materialize_bytes} && chown {user} {target} && rm -f {temp}",
+        parent = shell_quote(parent),
+        user = SKILL_SANDBOX_USER,
+        target = shell_quote(&file.path),
+        temp = shell_quote(&temp_path),
+    );
+    Ok(container
+        .with_user("root")
+        .with_new_file(&temp_path, &file.content)
+        .with_exec(vec!["bash".to_string(), "-c".to_string(), script])
+        .with_user(SKILL_SANDBOX_USER))
 }
 
 fn apply_snapshot_file(container: Container, root: &str, file: &SnapshotFile) -> Result<Container> {

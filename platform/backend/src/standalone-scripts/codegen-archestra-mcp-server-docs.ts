@@ -143,6 +143,7 @@ const toolGroups: Record<ArchestraToolShortName, ToolGroup> = {
   create_skill_sandbox: ToolGroup.SkillSandbox,
   run_skill_command: ToolGroup.SkillSandbox,
   get_skill_sandbox_artifact: ToolGroup.SkillSandbox,
+  upload_skill_sandbox_file: ToolGroup.SkillSandbox,
 };
 
 // === Script entry point ===

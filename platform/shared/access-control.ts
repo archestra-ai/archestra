@@ -54,7 +54,7 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   mcpRegistry: ["read", "create", "update", "delete"],
   mcpServerInstallation: ["read", "create", "update", "delete", "admin"],
   mcpServerInstallationRequest: ["read", "create", "update", "delete", "admin"],
-  environment: ["read", "create", "update", "delete", "admin"],
+  environment: ["admin", "deploy-to-restricted"],
   networkPolicy: ["read", "create", "update", "delete"],
 
   // Knowledge
@@ -116,7 +116,7 @@ export const editorPermissions: Record<Resource, Action[]> = {
   mcpRegistry: ["read", "create", "update", "delete"],
   mcpServerInstallation: ["read", "create", "update", "delete"],
   mcpServerInstallationRequest: ["read", "create", "update", "delete"],
-  environment: ["read", "create", "update", "delete"],
+  environment: ["admin"],
   networkPolicy: ["read", "create", "update", "delete"],
 
   // Knowledge
@@ -178,7 +178,7 @@ export const memberPermissions: Record<Resource, Action[]> = {
   mcpRegistry: ["read"],
   mcpServerInstallation: ["read", "create", "delete"],
   mcpServerInstallationRequest: ["read", "create", "update"],
-  environment: ["read"],
+  environment: [],
   networkPolicy: ["read"],
 
   // Knowledge
@@ -297,11 +297,10 @@ export const permissionDescriptions: Record<string, string> = {
   "mcpServerInstallationRequest:delete": "Delete installation requests",
   "mcpServerInstallationRequest:admin":
     "Approve or decline installation requests",
-  "environment:read": "View deployment environments",
-  "environment:create": "Create deployment environments",
-  "environment:update": "Modify deployment environment settings",
-  "environment:delete": "Delete deployment environments",
-  "environment:admin": "Assign catalog items to restricted environments",
+  "environment:admin":
+    "Create, edit, and delete deployment environments (everyone can view them)",
+  "environment:deploy-to-restricted":
+    "Deploy catalog items to restricted environments",
   "networkPolicy:read": "View network policies",
   "networkPolicy:create": "Create network policies",
   "networkPolicy:update": "Modify network policies",
@@ -979,23 +978,19 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.DeleteMcpPresetEntry]: {
     mcpServerInstallation: ["admin"],
   },
-  [RouteId.ListEnvironments]: {
-    environment: ["read"],
-  },
+  // Listing environments is available to any authenticated user (read is ungated).
+  [RouteId.ListEnvironments]: {},
   [RouteId.CreateEnvironment]: {
-    environment: ["create"],
+    environment: ["admin"],
   },
   [RouteId.UpdateEnvironment]: {
-    environment: ["update"],
+    environment: ["admin"],
   },
   [RouteId.DeleteEnvironment]: {
-    environment: ["delete"],
+    environment: ["admin"],
   },
   [RouteId.UpdateDefaultEnvironment]: {
-    environment: ["update"],
-  },
-  [RouteId.ValidateEnvironmentNamespace]: {
-    environment: ["read"],
+    environment: ["admin"],
   },
   [RouteId.GetK8sCapabilities]: {
     networkPolicy: ["read"],

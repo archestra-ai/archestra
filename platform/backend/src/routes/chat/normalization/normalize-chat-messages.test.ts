@@ -100,3 +100,177 @@ describe("normalizeChatMessages", () => {
     expect(result[0].parts).toHaveLength(2);
   });
 });
+
+describe("normalizeChatMessages empty-assistant dropping", () => {
+  test("drops an assistant turn left empty after a dangling tool call is stripped", () => {
+    // a stopped/interrupted turn whose only part is an unresolved tool call
+    const messages = [
+      {
+        id: "user1",
+        role: "user" as const,
+        parts: [{ type: "text", text: "go" }],
+      },
+      {
+        id: "assistant1",
+        role: "assistant" as const,
+        parts: [
+          {
+            type: "tool-archestra__create_agent",
+            toolCallId: "call_interrupted",
+            state: "input-available",
+            input: {},
+          },
+        ],
+      },
+    ];
+
+    const result = normalizeChatMessages(messages);
+
+    expect(result.map((m) => m.id)).toEqual(["user1"]);
+  });
+
+  test("keeps assistant turns that still render text or a completed tool result", () => {
+    const messages = [
+      {
+        id: "with-text",
+        role: "assistant" as const,
+        parts: [{ type: "text", text: "done" }],
+      },
+      {
+        id: "with-result",
+        role: "assistant" as const,
+        parts: [
+          {
+            type: "tool-archestra__create_agent",
+            toolCallId: "call_ok",
+            state: "output-available",
+            output: "created",
+          },
+        ],
+      },
+    ];
+
+    const result = normalizeChatMessages(messages);
+
+    expect(result.map((m) => m.id)).toEqual(["with-text", "with-result"]);
+  });
+
+  test("drops an assistant turn left with only a step-start after a dangling tool call is stripped", () => {
+    // AI SDK assistant messages open with step-start; an aborted turn that
+    // emitted only a tool call leaves [step-start] once the call is stripped.
+    const messages = [
+      {
+        id: "assistant1",
+        role: "assistant" as const,
+        parts: [
+          { type: "step-start" },
+          { type: "data-token-usage", data: { totalTokens: 10 } },
+          {
+            type: "tool-archestra__create_agent",
+            toolCallId: "call_interrupted",
+            state: "input-available",
+            input: {},
+          },
+        ],
+      },
+    ];
+
+    expect(normalizeChatMessages(messages)).toEqual([]);
+  });
+
+  test("keeps an MCP-app turn whose tool call completed", () => {
+    const messages = [
+      {
+        id: "assistant1",
+        role: "assistant" as const,
+        parts: [
+          { type: "step-start" },
+          {
+            type: "data-tool-ui-start",
+            data: { toolCallId: "call_ok", toolName: "render_chart" },
+          },
+          {
+            type: "tool-render_chart",
+            toolCallId: "call_ok",
+            state: "output-available",
+            output: "rendered",
+          },
+        ],
+      },
+    ];
+
+    expect(normalizeChatMessages(messages).map((m) => m.id)).toEqual([
+      "assistant1",
+    ]);
+  });
+
+  test("keeps an MCP-app turn whose tool call completed as a dynamic-tool", () => {
+    // MCP tools deserialize to `dynamic-tool`, not `tool-<name>`; the marker must
+    // still count as live so it survives persistence and renders as an MCP app.
+    const messages = [
+      {
+        id: "assistant1",
+        role: "assistant" as const,
+        parts: [
+          { type: "step-start" },
+          {
+            type: "data-tool-ui-start",
+            data: { toolCallId: "call_ok", toolName: "render_chart" },
+          },
+          {
+            type: "dynamic-tool",
+            toolName: "render_chart",
+            toolCallId: "call_ok",
+            state: "output-available",
+            output: "rendered",
+          },
+        ],
+      },
+    ];
+
+    const result = normalizeChatMessages(messages);
+
+    expect(result.map((m) => m.id)).toEqual(["assistant1"]);
+    expect(result[0].parts?.map((p) => p.type)).toEqual([
+      "step-start",
+      "data-tool-ui-start",
+      "dynamic-tool",
+    ]);
+  });
+
+  test("drops a stopped MCP-app turn left with an orphaned tool-ui-start", () => {
+    // abort after the MCP app started but before its tool call resolved:
+    // stripDanglingToolCalls removes the input-streaming tool, leaving the
+    // marker orphaned — the renderer would otherwise show a stuck running tool.
+    const messages = [
+      {
+        id: "assistant1",
+        role: "assistant" as const,
+        parts: [
+          { type: "step-start" },
+          {
+            type: "data-tool-ui-start",
+            data: { toolCallId: "call_interrupted", toolName: "render_chart" },
+          },
+          {
+            type: "tool-render_chart",
+            toolCallId: "call_interrupted",
+            state: "input-streaming",
+            input: {},
+          },
+        ],
+      },
+    ];
+
+    expect(normalizeChatMessages(messages)).toEqual([]);
+  });
+
+  test("leaves non-assistant messages untouched even when empty", () => {
+    const messages = [
+      { id: "u", role: "user" as const, parts: [] },
+      { id: "s", role: "system" as const, parts: [] },
+    ];
+
+    expect(normalizeChatMessages(messages)).toEqual(messages);
+  });
+});

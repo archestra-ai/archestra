@@ -9,6 +9,7 @@ export function makeOrganization(
     id: "test-org",
     name: "Test Org",
     slug: "test-org",
+    analyticsInstanceId: "00000000-0000-4000-8000-000000000001",
     logo: null,
     logoDark: null,
     createdAt: "2026-01-01T00:00:00.000Z",

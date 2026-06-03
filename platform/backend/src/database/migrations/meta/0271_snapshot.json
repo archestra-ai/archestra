@@ -1,5 +1,5 @@
 {
-  "id": "fd2d8615-a749-4c90-a53b-5abb994e79ff",
+  "id": "9c2e122d-aba0-4c03-a3ee-8caed650f54e",
   "prevId": "04a171f3-7434-4f0f-9435-4f61d3256c46",
   "version": "7",
   "dialect": "postgresql",
@@ -8433,6 +8433,25 @@
           "primaryKey": false,
           "notNull": true
         },
+        "analytics_instance_id": {
+          "name": "analytics_instance_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "analytics_instance_started_at": {
+          "name": "analytics_instance_started_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "analytics_instance_last_heartbeat_at": {
+          "name": "analytics_instance_last_heartbeat_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
         "logo": {
           "name": "logo",
           "type": "text",
@@ -10783,19 +10802,6 @@
           "type": "text",
           "primaryKey": false,
           "notNull": false
-        },
-        "allowed_tools": {
-          "name": "allowed_tools",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "templated": {
-          "name": "templated",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
         },
         "metadata": {
           "name": "metadata",

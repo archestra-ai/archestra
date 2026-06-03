@@ -229,7 +229,7 @@ describe("environment routes", () => {
     expect(response.json().error.message).toBe("Network policy not found");
   });
 
-  test("member without environment:create is forbidden", async ({
+  test("member without environment:admin is forbidden from creating", async ({
     makeUser,
     makeOrganization,
   }) => {

@@ -127,8 +127,11 @@ else:
   # silently hitting the real backend.
   local_resource(
     dev_resource_name + '-frontend-int-tests',
-    serve_cmd='trap "pkill -TERM -P $$" EXIT INT TERM; cd ../frontend && pnpm exec next dev -H 127.0.0.1 -p ' + frontend_int_tests_port + ' & wait $!',
-    serve_cmd_bat='cd ..\\frontend && pnpm exec next dev -H 127.0.0.1 -p ' + frontend_int_tests_port,
+    # --webpack mirrors the main frontend workaround for the next@16.2.6 turbopack
+    # idle-CPU bug (vercel/next.js#92055); see the "//dev" comment in frontend/package.json.
+    # `pnpm exec next dev` bypasses that package.json script, so the flag must be set here too.
+    serve_cmd='trap "pkill -TERM -P $$" EXIT INT TERM; cd ../frontend && pnpm exec next dev --webpack -H 127.0.0.1 -p ' + frontend_int_tests_port + ' & wait $!',
+    serve_cmd_bat='cd ..\\frontend && pnpm exec next dev --webpack -H 127.0.0.1 -p ' + frontend_int_tests_port,
     labels=['dev'],
     deps=['../.env'],
     serve_env={

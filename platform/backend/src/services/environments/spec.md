@@ -5,17 +5,17 @@
 An **Environment** is a deployment target that controls *where* MCP
 servers run and *who* is allowed to deploy into it. An environment 
 is a property of a catalog item: each catalog item belongs to exactly one
-environment. Each environment defines
+environment. Each environment defines:
 
 
-1. **Deployment Isolation** — different namespaces for MCP pods, so a sandbox mcp can't reac production resource. It's implemented via k8s namespace optionally defined to each environmnt
+1. **Deployment Isolation** — different namespaces for MCP pods, so a sandbox MCP can't reach production resources. It's implemented via a k8s namespace optionally defined for each environment.
 
-2. **Network Isolation** - UI to edit a k8s NetworkPolicy for the environment. E
+2. **Network Isolation** — UI to edit a k8s NetworkPolicy for the environment.
 
-3. **RBAC for deployment** — Each environment coould be marked as `restricted`. Only users holding `environment:admin`  or `environment:deploy-to-restricted` an assign catalog items to a
-   `restricted` environment 
+3. **RBAC for deployment** — Each environment could be marked as `restricted`. Only users holding `environment:admin` or `environment:deploy-to-restricted` can assign catalog items to a
+   `restricted` environment.
 
-4. **Vaildation** - a **validation rule** (regex) applied to user-supplied configuration values — identical
+4. **Validation** — a **validation rule** (regex) applied to user-supplied configuration values — identical
   semantics to today's preset `validation_regex`.
 
 5. **Promotion** — a path to move a server up through environments (sandbox → staging →

@@ -27,40 +27,34 @@ function main(): void {
 }
 
 function getChangedMigrationFiles(baseRef: string): string[] {
-  try {
-    const migrationsPathspec = path.relative(GIT_ROOT, MIGRATIONS_DIR);
-    const changedOutput = execFileSync(
-      "git",
-      [
-        "diff",
-        "--name-only",
-        "--diff-filter=ACMR",
-        baseRef,
-        "--",
-        migrationsPathspec,
-      ],
-      { encoding: "utf8", cwd: GIT_ROOT },
-    );
-    const untrackedOutput = execFileSync(
-      "git",
-      ["ls-files", "--others", "--exclude-standard", "--", migrationsPathspec],
-      { encoding: "utf8", cwd: GIT_ROOT },
-    );
+  const resolvedBaseRef = ensureGitRefAvailable(baseRef);
+  const migrationsPathspec = path.relative(GIT_ROOT, MIGRATIONS_DIR);
+  const changedOutput = execFileSync(
+    "git",
+    [
+      "diff",
+      "--name-only",
+      "--diff-filter=ACMR",
+      resolvedBaseRef,
+      "--",
+      migrationsPathspec,
+    ],
+    { encoding: "utf8", cwd: GIT_ROOT },
+  );
+  const untrackedOutput = execFileSync(
+    "git",
+    ["ls-files", "--others", "--exclude-standard", "--", migrationsPathspec],
+    { encoding: "utf8", cwd: GIT_ROOT },
+  );
 
-    return `${changedOutput}\n${untrackedOutput}`
-      .split("\n")
-      .map((file) => file.trim())
-      .filter((file) => file.endsWith(".sql"))
-      .filter((file) => !file.includes("/meta/"))
-      .map((file) => path.resolve(GIT_ROOT, file))
-      .filter((file, index, files) => files.indexOf(file) === index)
-      .sort();
-  } catch {
-    process.stderr.write(
-      `Skipping Drizzle migration linter because base ref ${baseRef} is not available.\n`,
-    );
-    return [];
-  }
+  return `${changedOutput}\n${untrackedOutput}`
+    .split("\n")
+    .map((file) => file.trim())
+    .filter((file) => file.endsWith(".sql"))
+    .filter((file) => !file.includes("/meta/"))
+    .map((file) => path.resolve(GIT_ROOT, file))
+    .filter((file, index, files) => files.indexOf(file) === index)
+    .sort();
 }
 
 function printResults(
@@ -100,6 +94,67 @@ function printResults(
   process.stdout.write(
     `Drizzle migration linter found ${summary.errors} error${summary.errors === 1 ? "" : "s"} and ${summary.warnings} warning${summary.warnings === 1 ? "" : "s"}.\n`,
   );
+}
+
+function ensureGitRefAvailable(baseRef: string): string {
+  if (canResolveGitRef(baseRef)) {
+    return baseRef;
+  }
+
+  const remoteRef = parseRemoteRef(baseRef);
+  if (remoteRef) {
+    const { remote, branch } = remoteRef;
+    process.stderr.write(
+      `Drizzle migration linter base ref ${baseRef} is not available locally; fetching ${remote} ${branch}.\n`,
+    );
+    execFileSync(
+      "git",
+      [
+        "fetch",
+        "--depth=1",
+        remote,
+        `${branch}:refs/remotes/${remote}/${branch}`,
+      ],
+      { cwd: GIT_ROOT, stdio: "inherit" },
+    );
+    return baseRef;
+  }
+
+  const originRef = `origin/${baseRef}`;
+  process.stderr.write(
+    `Drizzle migration linter base ref ${baseRef} is not available locally; fetching origin ${baseRef}.\n`,
+  );
+  execFileSync(
+    "git",
+    [
+      "fetch",
+      "--depth=1",
+      "origin",
+      `${baseRef}:refs/remotes/origin/${baseRef}`,
+    ],
+    { cwd: GIT_ROOT, stdio: "inherit" },
+  );
+  return originRef;
+}
+
+function canResolveGitRef(ref: string): boolean {
+  try {
+    execFileSync("git", ["rev-parse", "--verify", `${ref}^{commit}`], {
+      cwd: GIT_ROOT,
+      stdio: "ignore",
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function parseRemoteRef(
+  ref: string,
+): { remote: string; branch: string } | null {
+  const [remote, ...branchParts] = ref.split("/");
+  if (!remote || branchParts.length === 0) return null;
+  return { remote, branch: branchParts.join("/") };
 }
 
 main();

@@ -544,3 +544,4 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @839194950
 - @Ashlok2003
 - @jstortoise
+- @samuelsattler

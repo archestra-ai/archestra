@@ -51,7 +51,7 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   // MCP
   mcpGateway: ["read", "create", "update", "delete", "team-admin", "admin"],
   toolPolicy: ["read", "create", "update", "delete"],
-  mcpRegistry: ["read", "create", "update", "delete"],
+  mcpRegistry: ["read", "create", "update", "delete", "team-admin"],
   mcpServerInstallation: ["read", "create", "update", "delete", "admin"],
   mcpServerInstallationRequest: ["read", "create", "update", "delete", "admin"],
   environment: ["admin", "deploy-to-restricted"],
@@ -112,7 +112,7 @@ export const editorPermissions: Record<Resource, Action[]> = {
   // MCP
   mcpGateway: ["read", "create", "update", "delete", "team-admin"],
   toolPolicy: ["read", "create", "update", "delete"],
-  mcpRegistry: ["read", "create", "update", "delete"],
+  mcpRegistry: ["read", "create", "update", "delete", "team-admin"],
   mcpServerInstallation: ["read", "create", "update", "delete"],
   mcpServerInstallationRequest: ["read", "create", "update", "delete"],
   environment: ["admin"],
@@ -281,6 +281,7 @@ export const permissionDescriptions: Record<string, string> = {
   "mcpRegistry:create": "Add servers to the MCP registry",
   "mcpRegistry:update": "Modify MCP registry entries",
   "mcpRegistry:delete": "Remove servers from the MCP registry",
+  "mcpRegistry:team-admin": "Manage team assignments for MCP registry entries",
   "mcpServerInstallation:read": "View installed MCP servers and their status",
   "mcpServerInstallation:create": "Install MCP servers from the registry",
   "mcpServerInstallation:update": "Modify installed MCP server configuration",

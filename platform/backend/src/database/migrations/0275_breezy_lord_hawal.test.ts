@@ -4,10 +4,12 @@ import { eq, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { expect, test } from "@/test";
 
-const migrationSql = fs.readFileSync(
-  path.join(__dirname, "0276_backfill_github_app_configs.sql"),
-  "utf-8",
-);
+// the migration's schema DDL is already applied by the test DB setup, so we run
+// only the trailing data-backfill statement (the DO block after the last break).
+const migrationSql = fs
+  .readFileSync(path.join(__dirname, "0275_breezy_lord_hawal.sql"), "utf-8")
+  .split("--> statement-breakpoint")
+  .at(-1) as string;
 
 const PEM = "-----BEGIN PRIVATE KEY-----\nMIIB\n-----END PRIVATE KEY-----";
 

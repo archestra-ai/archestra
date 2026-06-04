@@ -108,6 +108,9 @@ export function InternalMCPCatalog({
   const [installingServerIds, setInstallingServerIds] = useState<Set<string>>(
     new Set(),
   );
+  const [restartingServerIds, setRestartingServerIds] = useState<Set<string>>(
+    new Set(),
+  );
   // Track server IDs that are first-time installations (for auto-opening assignments dialog)
   const [firstInstallationServerIds, setFirstInstallationServerIds] = useState<
     Set<string>
@@ -250,7 +253,9 @@ export function InternalMCPCatalog({
           const server = installedServers.find((s) => s.id === serverId);
           if (server) {
             if (server.localInstallationStatus === "success") {
-              toast.success(`Successfully installed ${server.name}`);
+              if (!restartingServerIds.has(serverId)) {
+                toast.success(`Successfully installed ${server.name}`);
+              }
               // Force immediate deployment status refresh via WebSocket
               websocketService.send({
                 type: "subscribe_mcp_deployment_statuses",
@@ -280,6 +285,17 @@ export function InternalMCPCatalog({
                 }
               }
             }
+            if (
+              restartingServerIds.has(serverId) &&
+              (server.localInstallationStatus === "success" ||
+                server.localInstallationStatus === "error")
+            ) {
+              setRestartingServerIds((prev) => {
+                const newSet = new Set(prev);
+                newSet.delete(serverId);
+                return newSet;
+              });
+            }
             // Note: No error toast - the error banner on the card provides feedback
           }
         });
@@ -288,6 +304,7 @@ export function InternalMCPCatalog({
   }, [
     installedServers,
     installingServerIds,
+    restartingServerIds,
     queryClient,
     firstInstallationServerIds,
   ]);
@@ -1179,6 +1196,28 @@ export function InternalMCPCatalog({
     });
   };
 
+  const handleRestartPodsStarted = (serverIds: string[]) => {
+    if (serverIds.length === 0) return;
+    setRestartingServerIds((prev) => {
+      const next = new Set(prev);
+      for (const serverId of serverIds) {
+        next.add(serverId);
+      }
+      return next;
+    });
+  };
+
+  const handleRestartPodsFailed = (serverIds: string[]) => {
+    if (serverIds.length === 0) return;
+    setRestartingServerIds((prev) => {
+      const next = new Set(prev);
+      for (const serverId of serverIds) {
+        next.delete(serverId);
+      }
+      return next;
+    });
+  };
+
   // Capture connected catalog IDs on first load to keep sort order stable.
   // Only update when the set of catalog IDs changes (new item added/removed),
   // not when connection status changes (which would cause items to jump around).
@@ -1372,6 +1411,8 @@ export function InternalMCPCatalog({
                     }}
                     onDelete={() => setDeletingItem(item)}
                     onClone={() => handleClone(item)}
+                    onRestartPodsStarted={handleRestartPodsStarted}
+                    onRestartPodsFailed={handleRestartPodsFailed}
                     onCancelInstallation={handleCancelInstallation}
                     onAddPersonalConnection={(presetCatalogId) =>
                       handleAddPersonalConnection(item, presetCatalogId)
@@ -1435,6 +1476,8 @@ export function InternalMCPCatalog({
                     }}
                     onDelete={() => setDeletingItem(item)}
                     onClone={() => handleClone(item)}
+                    onRestartPodsStarted={handleRestartPodsStarted}
+                    onRestartPodsFailed={handleRestartPodsFailed}
                     onCancelInstallation={handleCancelInstallation}
                     onAddPersonalConnection={(presetCatalogId) =>
                       handleAddPersonalConnection(item, presetCatalogId)

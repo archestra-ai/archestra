@@ -77,6 +77,7 @@ function findClient(id: string) {
 
 const anyClient = findClient("generic");
 const claudeClient = findClient("claude-code");
+const copilotClient = findClient("copilot-cli");
 
 const ACTIVE_LINK = {
   id: "link-1",
@@ -247,6 +248,45 @@ describe("SkillsMarketplaceStep", () => {
     );
     expect(
       screen.queryByTestId("skills-marketplace-snippets-codex"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("renders Copilot CLI skill marketplace commands", async () => {
+    listLinksMock.mockReturnValue({
+      data: { links: [] },
+      isPending: false,
+    });
+    createLinkMock.mockResolvedValue(CREATE_RESPONSE);
+
+    renderWithClient(
+      <SkillsMarketplaceStep
+        client={copilotClient}
+        expanded
+        onToggle={() => {}}
+      />,
+    );
+
+    await userEvent.click(
+      await screen.findByTestId("skills-marketplace-create"),
+    );
+
+    await waitFor(() =>
+      expect(
+        screen.getByTestId("skills-marketplace-snippets-copilot-cli"),
+      ).toBeInTheDocument(),
+    );
+    expect(
+      screen.getByText(
+        `copilot plugin marketplace add ${CREATE_RESPONSE.cloneUrl}`,
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        `copilot plugin marketplace browse ${CREATE_RESPONSE.marketplaceName}`,
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("skills-marketplace-snippets-claude-code"),
     ).not.toBeInTheDocument();
   });
 

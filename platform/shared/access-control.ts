@@ -566,6 +566,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.ReinstallInternalMcpCatalogItem]: {
     mcpRegistry: ["update"],
   },
+  [RouteId.RefreshInternalMcpCatalogImage]: {
+    mcpRegistry: ["update"],
+  },
   [RouteId.DeleteInternalMcpCatalogItem]: {
     mcpRegistry: ["delete"],
   },

@@ -57,6 +57,7 @@ import { useEnvironments } from "@/lib/environment.query";
 import {
   fetchCatalogTools,
   useCatalogPresets,
+  useRefreshInternalMcpCatalogImage,
   useReinstallInternalMcpCatalogItem,
 } from "@/lib/mcp/internal-mcp-catalog.query";
 import { useMcpServers } from "@/lib/mcp/mcp-server.query";
@@ -127,6 +128,8 @@ export type McpServerCardProps = {
   onDelete: () => void;
   /** Clone this catalog item into the create form. Omit to hide the button. */
   onClone?: () => void;
+  onRestartPodsStarted?: (serverIds: string[]) => void;
+  onRestartPodsFailed?: (serverIds: string[]) => void;
   onCancelInstallation?: (serverId: string) => void;
   /**
    * Called when user wants to add a personal connection from manage dialog.
@@ -162,6 +165,8 @@ export function McpServerCard({
   onEdit: _onEdit,
   onDelete,
   onClone,
+  onRestartPodsStarted,
+  onRestartPodsFailed,
   onCancelInstallation,
   onAddPersonalConnection,
   onAddSharedConnection,
@@ -542,6 +547,20 @@ export function McpServerCard({
   const reinstallCatalogMutation = useReinstallInternalMcpCatalogItem();
   const triggerCatalogReinstall = () =>
     reinstallCatalogMutation.mutate(item.id);
+  const refreshImageMutation = useRefreshInternalMcpCatalogImage();
+  const showRefreshImage =
+    variant === "local" &&
+    allServersAcrossPresets.some((server) => server.serverType === "local") &&
+    canEditCatalog;
+  const triggerRefreshImage = () => {
+    const restartServerIds = allServersAcrossPresets
+      .filter((server) => server.serverType === "local")
+      .map((server) => server.id);
+    onRestartPodsStarted?.(restartServerIds);
+    refreshImageMutation.mutate(item.id, {
+      onError: () => onRestartPodsFailed?.(restartServerIds),
+    });
+  };
 
   // Show ONE Reinstall button. For admins on a multi-tenant local catalog,
   // a single click drives both the per-install input collection (existing
@@ -1066,6 +1085,10 @@ export function McpServerCard({
         onClone={
           userCanCreateCatalogItem && !isPlaywrightVariant ? onClone : undefined
         }
+        onRestartPods={
+          showRefreshImage && !isInstalling ? triggerRefreshImage : undefined
+        }
+        isRestartingPods={refreshImageMutation.isPending}
       />
 
       <Dialog

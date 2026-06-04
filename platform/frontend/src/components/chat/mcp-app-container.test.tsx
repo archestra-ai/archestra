@@ -122,6 +122,37 @@ describe("McpAppSection", () => {
 
     expect(screen.queryByText("Loading...")).not.toBeInTheDocument();
   });
+
+  it("does not reserve a canvas panel for empty static app HTML", async () => {
+    await act(async () => {
+      render(
+        <McpAppSection
+          {...defaultProps}
+          preloadedResource={{
+            html: "<!doctype html><html><body></body></html>",
+          }}
+        />,
+      );
+    });
+
+    expect(document.querySelector("iframe")).not.toBeInTheDocument();
+    expect(screen.queryByText("Loading...")).not.toBeInTheDocument();
+  });
+
+  it("keeps script-driven app HTML because it may render after initialization", async () => {
+    await act(async () => {
+      render(
+        <McpAppSection
+          {...defaultProps}
+          preloadedResource={{
+            html: "<!doctype html><html><body><script>document.body.textContent = 'loaded'</script></body></html>",
+          }}
+        />,
+      );
+    });
+
+    expect(document.querySelector("iframe")).toBeInTheDocument();
+  });
 });
 
 describe("McpAppContainer (via McpAppSection)", () => {

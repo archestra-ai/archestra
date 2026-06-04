@@ -529,6 +529,7 @@ describe("K8sDeployment.generateDeploymentSpec", () => {
     const container = templateSpec?.containers[0];
     expect(container?.name).toBe("mcp-server");
     expect(container?.image).toBe(dockerImage);
+    expect(container?.imagePullPolicy).toBe("Never");
     expect(container?.command).toEqual(["node"]);
     expect(container?.args).toEqual(["server.js"]);
     expect(container?.stdin).toBe(true);
@@ -744,6 +745,7 @@ describe("K8sDeployment.generateDeploymentSpec", () => {
 
     const container = deploymentSpec.spec?.template.spec?.containers[0];
     expect(container?.image).toBe("ghcr.io/my-org/custom-mcp-server:v2.1.0");
+    expect(container?.imagePullPolicy).toBe("Always");
   });
 
   test("generates deploymentSpec with empty arguments array when not provided", () => {

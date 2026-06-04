@@ -7,6 +7,7 @@ import {
   getMediaType,
   getSupportedFileTypesDescription,
   hasPersistableAssistantContent,
+  hasRenderableAssistantContent,
   INPUT_MODALITY_OPTIONS,
   OUTPUT_MODALITY_OPTIONS,
   supportsFileUploads,
@@ -264,5 +265,58 @@ describe("hasPersistableAssistantContent", () => {
         ),
       ).toBe(false);
     }
+  });
+});
+
+describe("hasRenderableAssistantContent", () => {
+  test("returns true when a non-empty text part is present", () => {
+    expect(
+      hasRenderableAssistantContent({ parts: [{ type: "text", text: "hi" }] }),
+    ).toBe(true);
+  });
+
+  test("returns false for an empty text part alone", () => {
+    expect(
+      hasRenderableAssistantContent({ parts: [{ type: "text", text: "" }] }),
+    ).toBe(false);
+  });
+
+  test("returns false for a breakdown-only assistant turn", () => {
+    // data-context-window-breakdown must be in NON_RENDERABLE so a turn that
+    // contains only that telemetry part does not produce an empty assistant bubble.
+    expect(
+      hasRenderableAssistantContent({
+        parts: [{ type: "data-context-window-breakdown" }],
+      }),
+    ).toBe(false);
+  });
+
+  test("returns false when all parts are non-renderable telemetry", () => {
+    expect(
+      hasRenderableAssistantContent({
+        parts: [
+          { type: "step-start" },
+          { type: "data-token-usage" },
+          { type: "data-context-window-breakdown" },
+          { type: "data-context-window-estimate" },
+        ],
+      }),
+    ).toBe(false);
+  });
+
+  test("returns true when a renderable part accompanies telemetry parts", () => {
+    expect(
+      hasRenderableAssistantContent({
+        parts: [
+          { type: "data-context-window-breakdown" },
+          { type: "text", text: "Here is the answer." },
+        ],
+      }),
+    ).toBe(true);
+  });
+
+  test("returns false for no parts", () => {
+    expect(hasRenderableAssistantContent({ parts: [] })).toBe(false);
+    expect(hasRenderableAssistantContent({})).toBe(false);
   });
 });

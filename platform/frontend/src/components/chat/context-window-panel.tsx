@@ -241,7 +241,10 @@ export function ContextWindowPanel({
               aria-hidden
             />
             <span>
-              Auto-compaction summarized earlier turns and freed{" "}
+              {lastCompaction?.trigger === "manual"
+                ? "Compaction"
+                : "Auto-compaction"}{" "}
+              summarized earlier turns and freed{" "}
               <span className="font-medium text-foreground">
                 {formatTokens(compactionSaved)} tokens
               </span>{" "}

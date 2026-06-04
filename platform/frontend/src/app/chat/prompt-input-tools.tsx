@@ -273,11 +273,26 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
                     <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">
                       Context
                     </p>
-                    <ContextIndicator
+                    <ContextWindowDialog
+                      breakdown={contextWindow ?? null}
                       tokensUsed={tokensUsed}
                       maxTokens={maxContextLength}
-                      size="sm"
-                    />
+                      lastCompaction={lastCompaction}
+                    >
+                      <button
+                        type="button"
+                        aria-label="Context usage"
+                        data-testid={E2eTestId.ChatContextUsageTrigger}
+                        className="inline-flex items-center justify-center rounded-full outline-none transition-opacity hover:opacity-80 focus-visible:ring-2 focus-visible:ring-ring"
+                      >
+                        <ContextIndicator
+                          tokensUsed={tokensUsed}
+                          maxTokens={maxContextLength}
+                          size="sm"
+                          hideTooltip
+                        />
+                      </button>
+                    </ContextWindowDialog>
                   </div>
                 )}
               </div>

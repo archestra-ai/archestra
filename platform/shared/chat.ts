@@ -172,6 +172,7 @@ const NON_RENDERABLE_ASSISTANT_PART_TYPES: ReadonlySet<string> = new Set([
   "data-token-usage",
   "data-heartbeat",
   "data-context-window-estimate",
+  "data-context-window-breakdown",
   "data-context-compaction-start",
   "data-context-compaction-finish",
 ]);

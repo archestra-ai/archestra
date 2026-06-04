@@ -6,6 +6,7 @@ import {
   CHARS_PER_TOKEN,
   IMAGE_TOKEN_MAX_ESTIMATE,
   PDF_BYTES_PER_TOKEN,
+  refreshBreakdownUsedTokens,
   resolveInputPricePerToken,
 } from "./context-window-breakdown";
 
@@ -621,5 +622,125 @@ describe("resolveInputPricePerToken", () => {
         promptPricePerToken: "also-bad",
       }),
     ).toBeNull();
+  });
+});
+
+// ============================================================================
+// refreshBreakdownUsedTokens
+// ============================================================================
+
+describe("refreshBreakdownUsedTokens", () => {
+  const baseBreakdown = buildContextWindowBreakdown({
+    provider: "anthropic",
+    model: "claude-sonnet-4-6",
+    contextLength: 200_000,
+    inputPricePerToken: 0.000003,
+    systemPrompt: "You are a helpful assistant.",
+    messages: [
+      {
+        id: "m1",
+        role: "user",
+        parts: [{ type: "text", text: "Hello, world!" }],
+      },
+    ],
+  });
+
+  it("updates usedTokens to the provider-exact value", () => {
+    const refreshed = refreshBreakdownUsedTokens(
+      baseBreakdown,
+      15_000,
+      0.000003,
+    );
+    expect(refreshed.usedTokens).toBe(15_000);
+  });
+
+  it("recalculates freeTokens from the new usedTokens", () => {
+    const refreshed = refreshBreakdownUsedTokens(
+      baseBreakdown,
+      15_000,
+      0.000003,
+    );
+    // contextLength 200_000 - 15_000 = 185_000
+    expect(refreshed.freeTokens).toBe(185_000);
+  });
+
+  it("recalculates usedPercent clamped to [0, 100]", () => {
+    const refreshed = refreshBreakdownUsedTokens(
+      baseBreakdown,
+      15_000,
+      0.000003,
+    );
+    expect(refreshed.usedPercent).toBeCloseTo(7.5);
+  });
+
+  it("clamps usedPercent to 100 when over context limit", () => {
+    const refreshed = refreshBreakdownUsedTokens(
+      baseBreakdown,
+      250_000,
+      0.000003,
+    );
+    expect(refreshed.usedPercent).toBe(100);
+  });
+
+  it("recalculates estimatedInputCostUsd with the new token count", () => {
+    const refreshed = refreshBreakdownUsedTokens(
+      baseBreakdown,
+      10_000,
+      0.000003,
+    );
+    expect(refreshed.estimatedInputCostUsd).toBeCloseTo(0.03);
+  });
+
+  it("sets estimatedInputCostUsd to null when no price provided", () => {
+    const refreshed = refreshBreakdownUsedTokens(baseBreakdown, 10_000, null);
+    expect(refreshed.estimatedInputCostUsd).toBeNull();
+  });
+
+  it("preserves provider, model, and contextLength unchanged", () => {
+    const refreshed = refreshBreakdownUsedTokens(
+      baseBreakdown,
+      10_000,
+      0.000003,
+    );
+    expect(refreshed.provider).toBe(baseBreakdown.provider);
+    expect(refreshed.model).toBe(baseBreakdown.model);
+    expect(refreshed.contextLength).toBe(baseBreakdown.contextLength);
+  });
+
+  it("scales segment tokens proportionally so they sum to approximately usedTokens", () => {
+    const refreshed = refreshBreakdownUsedTokens(
+      baseBreakdown,
+      20_000,
+      0.000003,
+    );
+    const segmentSum = refreshed.segments.reduce((sum, s) => sum + s.tokens, 0);
+    // Scaled via rounding, sum should be close but may differ by a few tokens.
+    expect(segmentSum).toBeGreaterThan(0);
+    expect(Math.abs(segmentSum - 20_000)).toBeLessThanOrEqual(
+      refreshed.segments.length,
+    );
+  });
+
+  it("handles null contextLength gracefully", () => {
+    const noContextBreakdown = buildContextWindowBreakdown({
+      provider: "anthropic",
+      model: "claude-sonnet-4-6",
+      contextLength: null,
+      messages: [
+        {
+          id: "m1",
+          role: "user",
+          parts: [{ type: "text", text: "Hello" }],
+        },
+      ],
+    });
+    const refreshed = refreshBreakdownUsedTokens(
+      noContextBreakdown,
+      5_000,
+      null,
+    );
+    expect(refreshed.usedTokens).toBe(5_000);
+    expect(refreshed.freeTokens).toBeNull();
+    expect(refreshed.usedPercent).toBeNull();
   });
 });

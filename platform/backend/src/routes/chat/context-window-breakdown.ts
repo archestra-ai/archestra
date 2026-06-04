@@ -119,6 +119,54 @@ export function buildContextWindowBreakdown(params: {
 }
 
 /**
+ * Rebuilds the derived fields of an existing breakdown using a provider-exact
+ * `inputTokens` count instead of the heuristic estimate. Called after each
+ * tool-call step so the visualizer headline stays accurate across multi-step
+ * turns while the category proportions keep their initial estimates.
+ */
+export function refreshBreakdownUsedTokens(
+  breakdown: ContextWindowBreakdown,
+  inputTokens: number,
+  inputPricePerToken: number | null,
+): ContextWindowBreakdown {
+  const { contextLength, segments } = breakdown;
+  const freeTokens =
+    contextLength !== null ? contextLength - inputTokens : null;
+  const usedPercent =
+    contextLength !== null
+      ? Math.min((inputTokens / contextLength) * 100, 100)
+      : null;
+  const estimatedInputCostUsd =
+    inputPricePerToken != null && inputPricePerToken > 0
+      ? inputTokens * inputPricePerToken
+      : null;
+
+  // Scale each segment's token count proportionally so Σsegments ≈ inputTokens
+  // and the bar stays visually consistent with the updated total.
+  const originalTotal = segments.reduce((sum, s) => sum + s.tokens, 0);
+  const scaledSegments =
+    originalTotal > 0
+      ? segments.map((s) => ({
+          ...s,
+          tokens: Math.round((s.tokens / originalTotal) * inputTokens),
+          items: s.items?.map((item) => ({
+            ...item,
+            tokens: Math.round((item.tokens / originalTotal) * inputTokens),
+          })),
+        }))
+      : segments;
+
+  return {
+    ...breakdown,
+    usedTokens: inputTokens,
+    freeTokens,
+    usedPercent,
+    estimatedInputCostUsd,
+    segments: scaledSegments,
+  };
+}
+
+/**
  * Effective input price per token (USD) for a model row, preferring the
  * admin-set custom price over the synced models.dev price. Returns null when
  * no price is configured — the cost row is hidden in that case.

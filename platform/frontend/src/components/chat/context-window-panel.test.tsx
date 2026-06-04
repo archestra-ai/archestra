@@ -118,7 +118,7 @@ describe("ContextWindowPanel", () => {
     expect(screen.queryByText("used")).not.toBeInTheDocument();
   });
 
-  it("shows the compaction note when tokens were freed", () => {
+  it("shows 'Auto-compaction' note when trigger is 'auto'", () => {
     render(
       <ContextWindowPanel
         breakdown={makeBreakdown()}
@@ -131,8 +131,41 @@ describe("ContextWindowPanel", () => {
     );
 
     expect(screen.getByText(/Auto-compaction/)).toBeInTheDocument();
+    expect(screen.queryByText(/^Compaction /)).not.toBeInTheDocument();
     // 50_000 - 12_000 = 38_000 → "38.0k"
     expect(screen.getByText(/38\.0k tokens/)).toBeInTheDocument();
+  });
+
+  it("shows 'Compaction' (not 'Auto-compaction') note when trigger is 'manual'", () => {
+    render(
+      <ContextWindowPanel
+        breakdown={makeBreakdown()}
+        lastCompaction={{
+          originalTokenEstimate: 50_000,
+          compactedTokenEstimate: 12_000,
+          trigger: "manual",
+        }}
+      />,
+    );
+
+    // Must start with "Compaction" not "Auto-compaction"
+    expect(screen.getByText(/^Compaction /)).toBeInTheDocument();
+    expect(screen.queryByText(/Auto-compaction/)).not.toBeInTheDocument();
+    expect(screen.getByText(/38\.0k tokens/)).toBeInTheDocument();
+  });
+
+  it("defaults to 'Auto-compaction' copy when trigger is undefined", () => {
+    render(
+      <ContextWindowPanel
+        breakdown={makeBreakdown()}
+        lastCompaction={{
+          originalTokenEstimate: 50_000,
+          compactedTokenEstimate: 12_000,
+        }}
+      />,
+    );
+
+    expect(screen.getByText(/Auto-compaction/)).toBeInTheDocument();
   });
 
   it("hides the compaction note when no tokens were freed", () => {
@@ -140,6 +173,7 @@ describe("ContextWindowPanel", () => {
       <ContextWindowPanel breakdown={makeBreakdown()} lastCompaction={null} />,
     );
     expect(screen.queryByText(/Auto-compaction/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/^Compaction /)).not.toBeInTheDocument();
   });
 
   it("hides the compaction note when compacted estimate equals original", () => {
@@ -153,6 +187,7 @@ describe("ContextWindowPanel", () => {
       />,
     );
     expect(screen.queryByText(/Auto-compaction/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/^Compaction /)).not.toBeInTheDocument();
   });
 
   it("renders the estimate footnote", () => {

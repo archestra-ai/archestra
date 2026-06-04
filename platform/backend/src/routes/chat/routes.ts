@@ -114,6 +114,7 @@ import {
 } from "./context-trimming";
 import {
   buildContextWindowBreakdown,
+  refreshBreakdownUsedTokens,
   resolveInputPricePerToken,
 } from "./context-window-breakdown";
 import {
@@ -750,23 +751,32 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 // Per-category breakdown of the same assembled request, powering
                 // the Context Window Visualizer. Computed from the post-compaction
                 // messages so it reflects exactly what is sent this turn.
+                //
+                // After tool-call steps we re-emit an updated breakdown using the
+                // provider's exact inputTokens so the visualizer headline stays
+                // accurate across multi-step turns. The category estimates stay
+                // proportional to the initial build; the ring and totals track
+                // the real prompt size.
+                let latestBreakdown: ContextWindowBreakdown | null = null;
+                let breakdownPricePerToken: number | null = null;
                 try {
                   const modelRow = await ModelModel.findByProviderAndModelId(
                     provider,
                     selectedModel,
                   );
-                  const breakdown = buildContextWindowBreakdown({
+                  breakdownPricePerToken = resolveInputPricePerToken(modelRow);
+                  latestBreakdown = buildContextWindowBreakdown({
                     provider,
                     model: selectedModel,
                     contextLength: modelRow?.contextLength ?? null,
-                    inputPricePerToken: resolveInputPricePerToken(modelRow),
+                    inputPricePerToken: breakdownPricePerToken,
                     systemPrompt,
                     tools: supportsToolCalling ? mcpTools : undefined,
                     messages: compactionResult.messages,
                   });
                   writer.write({
                     type: CONTEXT_WINDOW_BREAKDOWN_EVENT,
-                    data: breakdown satisfies ContextWindowBreakdown,
+                    data: latestBreakdown satisfies ContextWindowBreakdown,
                   });
                 } catch (error) {
                   // The visualizer is non-essential; never let it break a chat turn.
@@ -790,7 +800,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   // Emit per-step usage so the context indicator tracks the
                   // prompt growing across tool round-trips, instead of jumping
                   // only once when the whole turn finishes.
-                  onStepFinish: ({ usage }) => {
+                  onStepFinish: ({ usage, finishReason }) => {
                     writer.write({
                       type: "data-token-usage",
                       data: {
@@ -799,6 +809,38 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                         totalTokens: usage.totalTokens,
                       } satisfies TokenUsage,
                     });
+
+                    // After a tool-call step the next model call will receive a
+                    // larger prompt (tool results appended). Re-emit the breakdown
+                    // with the provider's exact input-token count so the panel
+                    // headline stays accurate between steps. Category proportions
+                    // are kept from the initial estimate — they are still the best
+                    // available approximation of where tokens went.
+                    if (
+                      finishReason === "tool-calls" &&
+                      latestBreakdown !== null &&
+                      usage.inputTokens != null &&
+                      usage.inputTokens > 0
+                    ) {
+                      try {
+                        const inputTokens = usage.inputTokens;
+                        const updatedBreakdown = refreshBreakdownUsedTokens(
+                          latestBreakdown,
+                          inputTokens,
+                          breakdownPricePerToken,
+                        );
+                        latestBreakdown = updatedBreakdown;
+                        writer.write({
+                          type: CONTEXT_WINDOW_BREAKDOWN_EVENT,
+                          data: updatedBreakdown satisfies ContextWindowBreakdown,
+                        });
+                      } catch (error) {
+                        logger.warn(
+                          { error, conversationId },
+                          "[ContextWindow] failed to refresh breakdown after tool step",
+                        );
+                      }
+                    }
                   },
                   onFinish: async ({ usage, finishReason }) => {
                     // abort listeners are removed in the toUIMessageStream

@@ -1078,6 +1078,7 @@ export function ChatPageContent({
             compactionId: result.compaction.id,
             originalTokenEstimate: result.compaction.originalTokenEstimate,
             compactedTokenEstimate: result.compaction.compactedTokenEstimate,
+            trigger: "manual",
           });
         }
 
@@ -1090,6 +1091,7 @@ export function ChatPageContent({
             compactionId: result.compaction.id,
             originalTokenEstimate: result.compaction.originalTokenEstimate,
             compactedTokenEstimate: result.compaction.compactedTokenEstimate,
+            trigger: "manual",
           });
         }
 

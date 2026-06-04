@@ -1206,7 +1206,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.RefreshInternalMcpCatalogImage,
         description:
-          "Restart all local MCP server pods for a catalog so Kubernetes pulls the current configured image.",
+          "Restart all local MCP server pods for a catalog so Kubernetes pulls the current configured image. Fan-out restarts are best effort: the request succeeds when at least one target restarts successfully, while failed installs are marked with their own error status.",
         tags: ["MCP Catalog"],
         params: z.object({
           id: UuidIdSchema,

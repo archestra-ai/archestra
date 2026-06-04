@@ -117270,7 +117270,7 @@
         "tags": [
           "MCP Catalog"
         ],
-        "description": "Restart all local MCP server pods for a catalog so Kubernetes pulls the current configured image.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`mcpRegistry:update`: Modify MCP registry entries",
+        "description": "Restart all local MCP server pods for a catalog so Kubernetes pulls the current configured image. Fan-out restarts are best effort: the request succeeds when at least one target restarts successfully, while failed installs are marked with their own error status.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`mcpRegistry:update`: Modify MCP registry entries",
         "parameters": [
           {
             "schema": {

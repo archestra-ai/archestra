@@ -31,6 +31,11 @@ BEGIN
     FROM knowledge_base_connectors
     WHERE connector_type = 'github'
       AND config->>'authMethod' = 'github_app'
+      -- skip incomplete rows so we never mint an unusable config: only backfill
+      -- connectors carrying the full inline App credential set
+      AND config ? 'githubAppId'
+      AND config ? 'githubAppInstallationId'
+      AND secret_id IS NOT NULL
   LOOP
     INSERT INTO github_app_configs (
       organization_id,

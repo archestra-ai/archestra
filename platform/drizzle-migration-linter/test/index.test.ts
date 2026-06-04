@@ -160,6 +160,21 @@ describe("lintMigrationSql", () => {
     ]);
   });
 
+  test("allow-breaking reason cannot be only whitespace", () => {
+    const result = lintMigrationSql(`
+      -- drizzle-migration-linter: allow-breaking
+      -- drizzle-migration-linter: reason=${" ".repeat(4)}
+      ALTER TABLE "agents" DROP COLUMN "legacy_name";
+    `);
+
+    expect(result.issues).toMatchObject([
+      {
+        code: "allow-breaking-missing-reason",
+        severity: "error",
+      },
+    ]);
+  });
+
   test("strips malformed block comments without regex backtracking", () => {
     const result = lintMigrationSql(
       `/*${"*".repeat(20_000)}\nALTER TABLE "agents" DROP COLUMN "legacy_name";`,

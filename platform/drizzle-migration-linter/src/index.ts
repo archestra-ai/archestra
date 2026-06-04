@@ -36,7 +36,7 @@ type Rule = {
 const ALLOW_BREAKING_PATTERN =
   /--[ \t]*drizzle-migration-linter:[ \t]*allow-breaking\b/i;
 const ALLOW_BREAKING_REASON_PATTERN =
-  /--[ \t]*drizzle-migration-linter:[ \t]*reason[ \t]*=[ \t]*(?<reason>.+)$/im;
+  /--[ \t]*drizzle-migration-linter:[ \t]*reason[ \t]*=[ \t]*(?<reason>\S.*)$/im;
 
 export function lintMigrationSql(
   sql: string,

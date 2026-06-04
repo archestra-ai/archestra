@@ -314,6 +314,11 @@ archestra:
   # Runs `pnpm db:migrate` as a Helm pre-upgrade hook so the target version's
   # schema is applied before web and worker Deployments roll. Disable this if
   # migrations are applied by an external deployment pipeline.
+  #
+  # Most external Postgres deployments should not need any migrationJob env
+  # settings. Prefer setting postgresql.external_database_url to a complete
+  # connection string; the chart stores it in a Secret and passes it to the
+  # migration Job automatically.
   migrationJob:
     enabled: true
     # Number of retries before the Job is marked failed and aborts the upgrade.
@@ -323,11 +328,16 @@ archestra:
     # Resource requests/limits for the migration container.
     # If not set, inherits from archestra.resources.
     resources: {}
-    # Extra environment variables rendered before the shared platform env.
-    # Use this for hook-only credentials such as PGPASSWORD when
-    # ARCHESTRA_DATABASE_URL contains Kubernetes $(VAR) references.
+    # Extra environment variables rendered before the shared platform env. Use
+    # this only when ARCHESTRA_DATABASE_URL contains Kubernetes $(VAR)
+    # references, such as $(PGPASSWORD), that the hook must expand.
     env: {}
-    # Extra secret-backed environment variables rendered before shared env.
+    # Extra secret-backed environment variables rendered before shared env. This
+    # is the recommended hook-only option when ARCHESTRA_DATABASE_URL contains
+    # $(PGPASSWORD):
+    #   - name: PGPASSWORD
+    #     secretName: my-db-secret
+    #     secretKey: password
     envFromSecrets: []
     # Extra valueFrom environment variables rendered before shared env.
     envWithValueFrom: []

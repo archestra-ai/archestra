@@ -129,6 +129,7 @@ export type McpServerCardProps = {
   /** Clone this catalog item into the create form. Omit to hide the button. */
   onClone?: () => void;
   onRestartPodsStarted?: (serverIds: string[]) => void;
+  onRestartPodsFailed?: (serverIds: string[]) => void;
   onCancelInstallation?: (serverId: string) => void;
   /**
    * Called when user wants to add a personal connection from manage dialog.
@@ -165,6 +166,7 @@ export function McpServerCard({
   onDelete,
   onClone,
   onRestartPodsStarted,
+  onRestartPodsFailed,
   onCancelInstallation,
   onAddPersonalConnection,
   onAddSharedConnection,
@@ -551,12 +553,13 @@ export function McpServerCard({
     allServersAcrossPresets.some((server) => server.serverType === "local") &&
     canEditCatalog;
   const triggerRefreshImage = () => {
-    onRestartPodsStarted?.(
-      allServersAcrossPresets
-        .filter((server) => server.serverType === "local")
-        .map((server) => server.id),
-    );
-    refreshImageMutation.mutate(item.id);
+    const restartServerIds = allServersAcrossPresets
+      .filter((server) => server.serverType === "local")
+      .map((server) => server.id);
+    onRestartPodsStarted?.(restartServerIds);
+    refreshImageMutation.mutate(item.id, {
+      onError: () => onRestartPodsFailed?.(restartServerIds),
+    });
   };
 
   // Show ONE Reinstall button. For admins on a multi-tenant local catalog,

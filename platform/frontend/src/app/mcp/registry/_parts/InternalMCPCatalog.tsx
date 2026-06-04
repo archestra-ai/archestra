@@ -1207,6 +1207,17 @@ export function InternalMCPCatalog({
     });
   };
 
+  const handleRestartPodsFailed = (serverIds: string[]) => {
+    if (serverIds.length === 0) return;
+    setRestartingServerIds((prev) => {
+      const next = new Set(prev);
+      for (const serverId of serverIds) {
+        next.delete(serverId);
+      }
+      return next;
+    });
+  };
+
   // Capture connected catalog IDs on first load to keep sort order stable.
   // Only update when the set of catalog IDs changes (new item added/removed),
   // not when connection status changes (which would cause items to jump around).
@@ -1401,6 +1412,7 @@ export function InternalMCPCatalog({
                     onDelete={() => setDeletingItem(item)}
                     onClone={() => handleClone(item)}
                     onRestartPodsStarted={handleRestartPodsStarted}
+                    onRestartPodsFailed={handleRestartPodsFailed}
                     onCancelInstallation={handleCancelInstallation}
                     onAddPersonalConnection={(presetCatalogId) =>
                       handleAddPersonalConnection(item, presetCatalogId)
@@ -1465,6 +1477,7 @@ export function InternalMCPCatalog({
                     onDelete={() => setDeletingItem(item)}
                     onClone={() => handleClone(item)}
                     onRestartPodsStarted={handleRestartPodsStarted}
+                    onRestartPodsFailed={handleRestartPodsFailed}
                     onCancelInstallation={handleCancelInstallation}
                     onAddPersonalConnection={(presetCatalogId) =>
                       handleAddPersonalConnection(item, presetCatalogId)

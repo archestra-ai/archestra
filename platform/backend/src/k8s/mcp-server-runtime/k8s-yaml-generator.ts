@@ -5,6 +5,7 @@ import {
 } from "@shared";
 import * as yaml from "js-yaml";
 import type { z } from "zod";
+import { getMcpImagePullPolicy } from "./image-pull-policy";
 
 // Helper to create placeholder strings without triggering noTemplateCurlyInString lint rule
 const placeholder = (type: string, key: string) => `\${${type}.${key}}`;
@@ -195,15 +196,6 @@ export function generateDeploymentYamlTemplate(
   });
 
   return yamlString;
-}
-
-function getMcpImagePullPolicy(
-  dockerImage: string,
-): k8s.V1Container["imagePullPolicy"] {
-  const isBareLocalImage =
-    !dockerImage.includes("/") && !dockerImage.includes(".");
-
-  return isBareLocalImage ? "Never" : "Always";
 }
 
 /**

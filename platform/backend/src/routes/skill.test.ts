@@ -1,5 +1,6 @@
 import { ADMIN_ROLE_NAME, EDITOR_ROLE_NAME, MEMBER_ROLE_NAME } from "@shared";
-import { SkillModel, SkillTeamModel } from "@/models";
+import { GithubAppConfigModel, SkillModel, SkillTeamModel } from "@/models";
+import { secretManager } from "@/secrets-manager";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { MAX_SKILL_FILE_BYTES } from "@/skills/github-import";
@@ -176,7 +177,7 @@ describe("skill routes", () => {
   });
 
   describe("GET /api/skills", () => {
-    test("lists skills with a resource file count", async () => {
+    test("lists skills with a file count that includes SKILL.md", async () => {
       await app.inject({
         method: "POST",
         url: "/api/skills",
@@ -191,7 +192,8 @@ describe("skill routes", () => {
       expect(response.statusCode).toBe(200);
       const body = response.json();
       expect(body.data).toHaveLength(1);
-      expect(body.data[0].fileCount).toBe(1);
+      // one bundled resource (references/FORMS.md) plus the SKILL.md manifest.
+      expect(body.data[0].fileCount).toBe(2);
     });
   });
 
@@ -688,6 +690,93 @@ describe("skill routes", () => {
       });
 
       expect(response.statusCode).toBe(403);
+    });
+  });
+
+  describe("GitHub App auth for imports", () => {
+    test("rejects supplying both githubToken and githubAppConfigId", async () => {
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/skills/github/discover",
+        payload: {
+          repoUrl: "github.com/example/skills",
+          githubToken: "ghp_token",
+          githubAppConfigId: "some-id",
+        },
+      });
+      expect(response.statusCode).toBe(400);
+    });
+
+    test("rejects a malformed githubAppConfigId before it reaches the database", async ({
+      makeMember,
+    }) => {
+      await makeMember(user.id, organizationId, { role: EDITOR_ROLE_NAME });
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/skills/github/discover",
+        payload: {
+          repoUrl: "github.com/example/skills",
+          githubAppConfigId: "not-a-uuid",
+        },
+      });
+      expect(response.statusCode).toBe(400);
+    });
+
+    test("403 when the user cannot read GitHub App configs", async () => {
+      // the default test user has no githubAppConfig:read permission
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/skills/github/discover",
+        payload: {
+          repoUrl: "github.com/example/skills",
+          githubAppConfigId: "00000000-0000-0000-0000-000000000000",
+        },
+      });
+      expect(response.statusCode).toBe(403);
+    });
+
+    test("404 when the referenced GitHub App config does not exist", async ({
+      makeMember,
+    }) => {
+      // editors (not default members) hold githubAppConfig:read
+      await makeMember(user.id, organizationId, { role: EDITOR_ROLE_NAME });
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/skills/github/discover",
+        payload: {
+          repoUrl: "github.com/example/skills",
+          githubAppConfigId: "00000000-0000-0000-0000-000000000000",
+        },
+      });
+      expect(response.statusCode).toBe(404);
+    });
+
+    test("400 when the GitHub App config targets GitHub Enterprise", async ({
+      makeMember,
+    }) => {
+      await makeMember(user.id, organizationId, { role: EDITOR_ROLE_NAME });
+      const secret = await secretManager().createSecret(
+        { apiToken: "pem" },
+        "ghes-app",
+      );
+      const appConfig = await GithubAppConfigModel.create({
+        organizationId,
+        name: "GHES App",
+        githubUrl: "https://github.acme.com/api/v3",
+        appId: "1",
+        installationId: "1",
+        secretId: secret.id,
+      });
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/skills/github/discover",
+        payload: {
+          repoUrl: "github.com/example/skills",
+          githubAppConfigId: appConfig.id,
+        },
+      });
+      expect(response.statusCode).toBe(400);
     });
   });
 });

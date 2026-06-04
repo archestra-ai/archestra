@@ -5,6 +5,7 @@ import AgentToolModel from "@/models/agent-tool";
 import ApiKeyModel from "@/models/api-key";
 import ChatOpsChannelBindingModel from "@/models/chatops-channel-binding";
 import EnvironmentModel from "@/models/environment";
+import GithubAppConfigModel from "@/models/github-app-config";
 import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
 import KnowledgeBaseModel from "@/models/knowledge-base";
 import KnowledgeBaseConnectorModel from "@/models/knowledge-base-connector";
@@ -84,6 +85,7 @@ export const AUDIT_DECISIONS = {
     model: ChatOpsChannelBindingModel,
   },
   environmentsTable: { audited: true, model: EnvironmentModel },
+  githubAppConfigsTable: { audited: true, model: GithubAppConfigModel },
   internalMcpCatalogTable: { audited: true, model: InternalMcpCatalogModel },
   knowledgeBasesTable: { audited: true, model: KnowledgeBaseModel },
   knowledgeBaseConnectorsTable: {

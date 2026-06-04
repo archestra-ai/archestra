@@ -8,6 +8,13 @@ import type { FastifyRequest } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { hasPermission } from "@/auth";
+import {
+  assertMcpCatalogTeams,
+  authorizeMcpCatalogScope,
+  getMcpCatalogPermissionChecker,
+  requireMcpCatalogModifyPermission,
+  withCatalogTeamFkErrorMapped,
+} from "@/auth/mcp-catalog-permissions";
 import config from "@/config";
 import {
   generateDeploymentYamlTemplate,
@@ -131,22 +138,38 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       restBody.clientSecretId = undefined;
       restBody.localConfigSecretId = undefined;
 
-      // Enforce scope restrictions
-      const { success: isAdmin } = await hasPermission(
-        { mcpServerInstallation: ["admin"] },
-        request.headers,
-      );
+      // Enforce scope restrictions (3-tier model shared with agents/skills):
+      // org → admin only; team → mcpRegistry:team-admin + membership in the
+      // assigned teams; personal → the author.
+      const checker = await getMcpCatalogPermissionChecker({
+        userId: request.user.id,
+        organizationId: request.organizationId,
+      });
 
       restBody.scope = restBody.scope ?? "personal";
-      if (!isAdmin && restBody.scope === "org") {
-        throw new ApiError(
-          403,
-          "Only admins can create org-scoped catalog items",
-        );
-      }
+      const requestedTeamIds =
+        restBody.scope === "team" ? dedupeTeamIds(restBody.teams ?? []) : [];
+      const userTeamIds = checker.isAdmin
+        ? []
+        : await TeamModel.getUserTeamIds(request.user.id);
+      authorizeMcpCatalogScope({
+        checker,
+        scope: restBody.scope,
+        authorId: request.user.id,
+        requestedTeamIds,
+        userTeamIds,
+        userId: request.user.id,
+      });
       if (restBody.scope !== "team") {
         delete restBody.teams;
+      } else {
+        restBody.teams = requestedTeamIds;
       }
+      await assertMcpCatalogTeams({
+        scope: restBody.scope,
+        teamIds: requestedTeamIds,
+        organizationId: request.organizationId,
+      });
 
       // Gate assigning a restricted environment. Requires
       // environment:deploy-to-restricted (environment:admin implies it).
@@ -340,10 +363,12 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
-      const catalogItem = await InternalMcpCatalogModel.create(restBody, {
-        organizationId: request.organizationId,
-        authorId: request.user.id,
-      });
+      const catalogItem = await withCatalogTeamFkErrorMapped(() =>
+        InternalMcpCatalogModel.create(restBody, {
+          organizationId: request.organizationId,
+          authorId: request.user.id,
+        }),
+      );
       return reply.send(catalogItem);
     },
   );
@@ -474,10 +499,11 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       restBody.clientSecretId = undefined;
       restBody.localConfigSecretId = undefined;
 
-      const { success: isAdmin } = await hasPermission(
-        { mcpServerInstallation: ["admin"] },
-        request.headers,
-      );
+      const checker = await getMcpCatalogPermissionChecker({
+        userId: request.user.id,
+        organizationId: request.organizationId,
+      });
+      const isAdmin = checker.isAdmin;
 
       // Get the original catalog item to check if name or serverUrl changed
       const originalCatalogItem = await InternalMcpCatalogModel.findById(id, {
@@ -513,29 +539,58 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Catalog item not found");
       }
 
-      if (!isAdmin) {
-        // Non-admins can only edit their own personal items
-        if (
-          originalCatalogItem.scope !== "personal" ||
-          originalCatalogItem.authorId !== request.user.id
-        ) {
-          throw new ApiError(
-            403,
-            "You can only edit your own personal catalog items",
-          );
-        }
-        // Non-admins cannot set scope to "org"
-        if (restBody.scope === "org") {
-          throw new ApiError(
-            403,
-            "Only admins can set catalog items to org scope",
-          );
-        }
+      const userTeamIds = checker.isAdmin
+        ? []
+        : await TeamModel.getUserTeamIds(request.user.id);
+      const existingTeamIds = originalCatalogItem.teams.map((t) => t.id);
+
+      // Gate the right to modify this item at its CURRENT scope. This both lets
+      // a team-admin member edit a team-scoped item and still blocks editing
+      // someone else's personal item.
+      requireMcpCatalogModifyPermission({
+        checker,
+        scope: originalCatalogItem.scope,
+        authorId: originalCatalogItem.authorId,
+        catalogTeamIds: existingTeamIds,
+        userTeamIds,
+        userId: request.user.id,
+      });
+
+      // Re-authorize and re-sync teams only when scope or team assignments
+      // actually change. A content-only edit that echoes the existing teams
+      // must not 403 a non-admin author/team-admin or needlessly rewrite rows.
+      const newScope = restBody.scope ?? originalCatalogItem.scope;
+      // Shared items are one-way: demoting team/org back to personal would yank
+      // the item from everyone it was shared with. Mirrors the agent route.
+      if (newScope === "personal" && originalCatalogItem.scope !== "personal") {
+        throw new ApiError(400, "Shared catalog items cannot be made personal");
+      }
+      const newTeamIds =
+        newScope === "team"
+          ? dedupeTeamIds(restBody.teams ?? existingTeamIds)
+          : [];
+      const scopeChanged = newScope !== originalCatalogItem.scope;
+      const teamsChanged =
+        newScope === "team" && !sameTeamSet(newTeamIds, existingTeamIds);
+      if (scopeChanged || teamsChanged) {
+        authorizeMcpCatalogScope({
+          checker,
+          scope: newScope,
+          authorId: originalCatalogItem.authorId,
+          requestedTeamIds: newTeamIds,
+          userTeamIds,
+          userId: request.user.id,
+        });
+        await assertMcpCatalogTeams({
+          scope: newScope,
+          teamIds: newTeamIds,
+          organizationId: request.organizationId,
+        });
       }
 
-      if (restBody.scope && restBody.scope !== "team") {
-        delete restBody.teams;
-      }
+      // Only rewrite team assignments when scope/teams actually change;
+      // undefined leaves the existing rows untouched.
+      restBody.teams = scopeChanged || teamsChanged ? newTeamIds : undefined;
 
       let clientSecretId = originalCatalogItem.clientSecretId;
       let localConfigSecretId = originalCatalogItem.localConfigSecretId;
@@ -821,7 +876,9 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         mcpServerRuntimeManager.isEnabled;
 
       // Update the catalog item
-      const catalogItem = await InternalMcpCatalogModel.update(id, restBody);
+      const catalogItem = await withCatalogTeamFkErrorMapped(() =>
+        InternalMcpCatalogModel.update(id, restBody),
+      );
 
       if (!catalogItem) {
         throw new ApiError(404, "Catalog item not found");
@@ -909,14 +966,14 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async (request, reply) => {
       const { id } = request.params;
 
-      const { success: isAdmin } = await hasPermission(
-        { mcpServerInstallation: ["admin"] },
-        request.headers,
-      );
+      const checker = await getMcpCatalogPermissionChecker({
+        userId: request.user.id,
+        organizationId: request.organizationId,
+      });
 
       const catalogItem = await InternalMcpCatalogModel.findById(id, {
         userId: request.user.id,
-        isAdmin,
+        isAdmin: checker.isAdmin,
         organizationId: request.organizationId,
         expandSecrets: false,
       });
@@ -940,18 +997,18 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       // Mirror the catalog-edit ownership check: only users who could have
-      // edited the catalog (admins, or the personal-scope owner) can
-      // trigger the reinstall.
-      if (
-        !isAdmin &&
-        (catalogItem.scope !== "personal" ||
-          catalogItem.authorId !== request.user.id)
-      ) {
-        throw new ApiError(
-          403,
-          "Only catalog editors can reinstall this catalog",
-        );
-      }
+      // edited the catalog (admins, the personal-scope owner, or a team-admin
+      // member of the item's teams) can trigger the reinstall.
+      requireMcpCatalogModifyPermission({
+        checker,
+        scope: catalogItem.scope,
+        authorId: catalogItem.authorId,
+        catalogTeamIds: catalogItem.teams.map((t) => t.id),
+        userTeamIds: checker.isAdmin
+          ? []
+          : await TeamModel.getUserTeamIds(request.user.id),
+        userId: request.user.id,
+      });
 
       try {
         await reinstallMultitenantCatalog(catalogItem);
@@ -982,14 +1039,14 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async (request, reply) => {
       const { id } = request.params;
 
-      const { success: isAdmin } = await hasPermission(
-        { mcpServerInstallation: ["admin"] },
-        request.headers,
-      );
+      const checker = await getMcpCatalogPermissionChecker({
+        userId: request.user.id,
+        organizationId: request.organizationId,
+      });
 
       const catalogItem = await InternalMcpCatalogModel.findById(id, {
         userId: request.user.id,
-        isAdmin,
+        isAdmin: checker.isAdmin,
         organizationId: request.organizationId,
         expandSecrets: false,
       });
@@ -997,16 +1054,16 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Catalog item not found");
       }
 
-      if (
-        !isAdmin &&
-        (catalogItem.scope !== "personal" ||
-          catalogItem.authorId !== request.user.id)
-      ) {
-        throw new ApiError(
-          403,
-          "Only catalog editors can restart this catalog's pods",
-        );
-      }
+      requireMcpCatalogModifyPermission({
+        checker,
+        scope: catalogItem.scope,
+        authorId: catalogItem.authorId,
+        catalogTeamIds: catalogItem.teams.map((t) => t.id),
+        userTeamIds: checker.isAdmin
+          ? []
+          : await TeamModel.getUserTeamIds(request.user.id),
+        userId: request.user.id,
+      });
 
       const targetCatalogItems = [catalogItem].filter(
         (item) => item.serverType === "local",
@@ -1453,6 +1510,17 @@ async function getCatalogClientSecretValues(
       String(value),
     ]),
   );
+}
+
+function dedupeTeamIds(values: string[]): string[] {
+  return [...new Set(values)];
+}
+
+/** Whether two team-id lists contain the same set of ids. */
+function sameTeamSet(a: string[], b: string[]): boolean {
+  if (a.length !== b.length) return false;
+  const setB = new Set(b);
+  return a.every((id) => setB.has(id));
 }
 
 async function cascadeReinstallForCatalog(

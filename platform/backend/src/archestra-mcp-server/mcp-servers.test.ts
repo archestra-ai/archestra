@@ -785,3 +785,115 @@ describe("create_mcp_server restricted environment guard", () => {
     expect(created?.environmentId).toBe(restricted.id);
   });
 });
+
+describe("mcp-server tools — team-scope RBAC", () => {
+  let ctx: ArchestraContext;
+  let organizationId: string;
+
+  const CREATE = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_mcp_server`;
+  const EDIT_DESC = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}edit_mcp_description`;
+
+  beforeEach(async ({ makeAgent, makeOrganization, makeUser, makeMember }) => {
+    const org = await makeOrganization();
+    organizationId = org.id;
+    // editor holds mcpRegistry create/update/team-admin (not installation admin)
+    const editor = await makeUser();
+    await makeMember(editor.id, org.id, { role: "editor" });
+    const agent = await makeAgent({ organizationId: org.id });
+    ctx = {
+      agent: { id: agent.id, name: agent.name },
+      userId: editor.id,
+      organizationId: org.id,
+    };
+  });
+
+  function remoteArgs(overrides: Record<string, unknown> = {}) {
+    return {
+      name: `srv-${crypto.randomUUID().slice(0, 8)}`,
+      serverType: "remote",
+      serverUrl: "https://example.test/mcp",
+      ...overrides,
+    };
+  }
+
+  function bodyText(result: { content: unknown[] }): string {
+    return (result.content[0] as any).text as string;
+  }
+
+  test("editor creates a team-scoped server for a team they belong to", async ({
+    makeTeam,
+    makeTeamMember,
+  }) => {
+    const team = await makeTeam(organizationId, ctx.userId as string);
+    await makeTeamMember(team.id, ctx.userId as string);
+
+    const result = await executeArchestraTool(
+      CREATE,
+      remoteArgs({ scope: "team", teams: [team.id] }),
+      ctx,
+    );
+    expect(result.isError).toBe(false);
+    expect(bodyText(result)).toContain("Successfully created");
+  });
+
+  test("editor cannot create a team server for a team they are not in", async ({
+    makeTeam,
+  }) => {
+    const team = await makeTeam(organizationId, ctx.userId as string);
+
+    const result = await executeArchestraTool(
+      CREATE,
+      remoteArgs({ scope: "team", teams: [team.id] }),
+      ctx,
+    );
+    expect(result.isError).toBe(true);
+    expect(bodyText(result)).toMatch(/teams you are a member of/i);
+  });
+
+  test("editor cannot create an org-scoped server", async () => {
+    const result = await executeArchestraTool(
+      CREATE,
+      remoteArgs({ scope: "org" }),
+      ctx,
+    );
+    expect(result.isError).toBe(true);
+  });
+
+  test("editor promotes their own personal server to a member team via edit", async ({
+    makeTeam,
+    makeTeamMember,
+  }) => {
+    const team = await makeTeam(organizationId, ctx.userId as string);
+    await makeTeamMember(team.id, ctx.userId as string);
+
+    const created = await executeArchestraTool(CREATE, remoteArgs(), ctx);
+    expect(created.isError).toBe(false);
+    const id = bodyText(created).match(/ID: ([0-9a-f-]+)/i)?.[1];
+    expect(id).toBeDefined();
+
+    const promoted = await executeArchestraTool(
+      EDIT_DESC,
+      { id, scope: "team", teams: [team.id] },
+      ctx,
+    );
+    expect(promoted.isError).toBe(false);
+    expect(bodyText(promoted)).toContain("Scope: team");
+  });
+
+  test("editor cannot edit-promote to a team they are not in", async ({
+    makeTeam,
+  }) => {
+    const team = await makeTeam(organizationId, ctx.userId as string);
+
+    const created = await executeArchestraTool(CREATE, remoteArgs(), ctx);
+    const id = bodyText(created).match(/ID: ([0-9a-f-]+)/i)?.[1];
+
+    const denied = await executeArchestraTool(
+      EDIT_DESC,
+      { id, scope: "team", teams: [team.id] },
+      ctx,
+    );
+    expect(denied.isError).toBe(true);
+    expect(bodyText(denied)).toMatch(/teams you are a member of/i);
+  });
+});

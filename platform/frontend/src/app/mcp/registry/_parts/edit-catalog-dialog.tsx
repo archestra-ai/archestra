@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/dialog";
 import { useUpdateInternalMcpCatalogItem } from "@/lib/mcp/internal-mcp-catalog.query";
 import { useMcpServers } from "@/lib/mcp/mcp-server.query";
-import { useCanEditCatalogItem } from "./catalog-edit-access";
+import { useCanModifyCatalogItem } from "./catalog-edit-access";
 import { McpCatalogForm } from "./mcp-catalog-form";
 import type { McpCatalogFormValues } from "./mcp-catalog-form.types";
 import { transformFormToApiData } from "./mcp-catalog-form.utils";
@@ -75,9 +75,11 @@ export function EditCatalogContent({
 }: EditCatalogContentProps) {
   // Authorization gate for the edit form itself — covers every entry point
   // (the settings dialog's Configuration page, a shared `?edit=<id>` deep link,
-  // or the legacy EditCatalogDialog). Mirrors the backend edit authorization:
-  // an admin, or the author of a personal item.
-  const { canEdit, isLoading: canEditLoading } = useCanEditCatalogItem(item);
+  // or the legacy EditCatalogDialog). Mirrors the backend item-modify rule: an
+  // admin, a team-admin member of the item's teams, or the author of a personal
+  // item.
+  const { canModify: canEdit, isLoading: canEditLoading } =
+    useCanModifyCatalogItem(item);
   const updateMutation = useUpdateInternalMcpCatalogItem();
 
   const { data: servers = [] } = useMcpServers();

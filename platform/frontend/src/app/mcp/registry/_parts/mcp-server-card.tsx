@@ -62,7 +62,7 @@ import {
 import { useMcpServers } from "@/lib/mcp/mcp-server.query";
 import { useDefaultEnvironment } from "@/lib/organization.query";
 import { useTeams } from "@/lib/teams/team.query";
-import { useCanEditCatalogItem } from "./catalog-edit-access";
+import { useCanModifyCatalogItem } from "./catalog-edit-access";
 import {
   clearCatalogEditParam,
   setCatalogEditParam,
@@ -170,9 +170,6 @@ export function McpServerCard({
   const isByosEnabled = useFeature("byosEnabled");
   const { data: session } = useSession();
   const currentUserId = session?.user?.id;
-  const { data: userIsMcpServerAdmin } = useHasPermissions({
-    mcpServerInstallation: ["admin"],
-  });
   // Cloning creates a new registry entry, so it's gated on the same permission
   // the create-catalog endpoint requires (mcpRegistry:create), not the broader
   // mcpServerInstallation:admin.
@@ -197,10 +194,11 @@ export function McpServerCard({
           defaultEnvironmentName: defaultEnvironment.name,
         });
 
-  // Whether the current user can edit this catalog item (admin or personal
-  // author) — gates the inline edit form opened via the `?edit=<id>` deep link.
-  const { canEdit: canEditItem, isLoading: canEditItemLoading } =
-    useCanEditCatalogItem(variant !== "builtin" ? item : null);
+  // Whether the current user can edit this catalog item: an admin, a team-admin
+  // member of the item's teams, or the author of a personal item. Gates the
+  // inline edit form opened via the `?edit=<id>` deep link.
+  const { canModify: canEditCatalog, isLoading: canEditCatalogLoading } =
+    useCanModifyCatalogItem(variant !== "builtin" ? item : null);
 
   // Fetch all MCP servers to get installations for logs dropdown
   const { data: allMcpServers } = useMcpServers();
@@ -289,19 +287,19 @@ export function McpServerCard({
   // is resolved at most once, so a client-side change of `?edit` to a different
   // id without a remount won't re-trigger it. Runs only after the edit-
   // permission check resolves so non-editors aren't briefly shown the form.
-  // Builtin items aren't editable, so canEditItem is false for them.
+  // Builtin items aren't editable, so canEditCatalog is false for them.
   useEffect(() => {
     if (deepLinkHandledRef.current) return;
-    if (canEditItemLoading) return;
+    if (canEditCatalogLoading) return;
     if (editParam !== item.id) return;
     deepLinkHandledRef.current = true;
-    if (canEditItem) {
+    if (canEditCatalog) {
       setSettingsInitialPage("configuration");
       setSettingsDialogOpen(true);
     } else {
       setEditNoAccessOpen(true);
     }
-  }, [editParam, item.id, canEditItem, canEditItemLoading]);
+  }, [editParam, item.id, canEditCatalog, canEditCatalogLoading]);
 
   const handleChatWithMcpServer = async () => {
     setIsChatCreating(true);
@@ -462,13 +460,10 @@ export function McpServerCard({
 
   // Catalog-scope reinstall: surfaces a banner + button on multi-tenant
   // local catalogs whose execution config (image, command, args, transport)
-  // was edited. One click recreates the shared pod for everyone and
-  // cascades tool sync. Visibility mirrors the catalog edit predicate
-  // (admin OR personal-scope owner) since only those users can apply
-  // catalog-scope changes.
-  const canEditCatalog =
-    userIsMcpServerAdmin ||
-    (item.scope === "personal" && item.authorId === currentUserId);
+  // was edited. One click recreates the shared pod for everyone and cascades
+  // tool sync. Gated by `canEditCatalog` (admin, a team-admin member of the
+  // item's teams, or the personal-scope owner) since only those users can
+  // apply catalog-scope changes.
   const needsCatalogReinstall =
     variant === "local" &&
     item.multitenant === true &&
@@ -1051,9 +1046,7 @@ export function McpServerCard({
               </p>
             )}
           </div>
-          {(userIsMcpServerAdmin ||
-            (item.scope === "personal" && item.authorId === currentUserId)) &&
-            settingsButton}
+          {canEditCatalog && settingsButton}
         </div>
       </CardHeader>
       <CardContent className="flex flex-col gap-4 flex-grow">

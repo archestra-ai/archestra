@@ -62,7 +62,7 @@ interface DiscoveredSkill {
   compatibility: string | null;
   allowedTools: string | null;
   templated: boolean;
-  /** Number of bundled resource files (excludes SKILL.md). */
+  /** Total files the skill ships, including its own SKILL.md. */
   fileCount: number;
 }
 
@@ -155,12 +155,13 @@ export async function discoverSkills(params: {
       snapshot.manifests.set(manifestPath, parsed);
     }
 
+    // count every file the skill ships, including its own SKILL.md, so an
+    // instruction-only skill reads "1 file" rather than "0".
     const fileCount = snapshot.tree.filter(
       (item) =>
         item.type === "blob" &&
         !!item.path &&
-        isUnderSkillDir(item.path, skillPath) &&
-        basename(item.path) !== SKILL_MANIFEST_FILENAME,
+        isUnderSkillDir(item.path, skillPath),
     ).length;
 
     skills.push({

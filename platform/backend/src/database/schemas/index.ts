@@ -72,6 +72,7 @@ export {
   default as conversationSharesTable,
 } from "./conversation-share";
 export { default as environmentsTable } from "./environment";
+export { default as githubAppConfigsTable } from "./github-app-config";
 export { default as identityProvidersTable } from "./identity-provider";
 export { default as incomingEmailSubscriptionsTable } from "./incoming-email-subscription";
 export { default as interactionsTable } from "./interaction";

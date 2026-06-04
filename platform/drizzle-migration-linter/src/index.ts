@@ -34,9 +34,9 @@ type Rule = {
 };
 
 const ALLOW_BREAKING_PATTERN =
-  /--\s*drizzle-migration-linter:\s*allow-breaking\b/i;
+  /--[ \t]*drizzle-migration-linter:[ \t]*allow-breaking\b/i;
 const ALLOW_BREAKING_REASON_PATTERN =
-  /--\s*drizzle-migration-linter:\s*reason\s*=\s*(?<reason>.+)$/im;
+  /--[ \t]*drizzle-migration-linter:[ \t]*reason[ \t]*=[ \t]*(?<reason>.+)$/im;
 
 export function lintMigrationSql(
   sql: string,
@@ -152,6 +152,13 @@ export function summarizeIssues(results: LintMigrationResult[]): {
   }
 
   return { errors, warnings };
+}
+
+export function isMigrationSqlFile(filePath: string): boolean {
+  return (
+    filePath.endsWith(".sql") &&
+    !filePath.includes(`${path.sep}meta${path.sep}`)
+  );
 }
 
 // ============================================================
@@ -306,9 +313,41 @@ function splitStatements(sql: string): string[] {
 }
 
 function stripSqlComments(sql: string): string {
-  return sql
-    .replace(/\/\*[^*]*(?:\*+[^/][^*]*)*\*+\//g, " ")
-    .replace(/--.*$/gm, " ");
+  let stripped = "";
+  let index = 0;
+
+  while (index < sql.length) {
+    const current = sql[index];
+    const next = sql[index + 1];
+
+    if (current === "/" && next === "*") {
+      stripped += " ";
+      index += 2;
+      while (
+        index < sql.length &&
+        !(sql[index] === "*" && sql[index + 1] === "/")
+      ) {
+        if (sql[index] === "\n") stripped += "\n";
+        index += 1;
+      }
+      index = index < sql.length ? index + 2 : index;
+      continue;
+    }
+
+    if (current === "-" && next === "-") {
+      stripped += " ";
+      index += 2;
+      while (index < sql.length && sql[index] !== "\n") {
+        index += 1;
+      }
+      continue;
+    }
+
+    stripped += current;
+    index += 1;
+  }
+
+  return stripped;
 }
 
 function normalizeSql(sql: string): string {
@@ -341,6 +380,8 @@ function ensureGitRefAvailable(params: {
   cwd: string;
 }): string {
   const { baseRef, cwd } = params;
+  assertSafeGitFetchRef(baseRef);
+
   if (canResolveGitRef({ ref: baseRef, cwd })) {
     return baseRef;
   }
@@ -398,12 +439,17 @@ function parseRemoteRef(
 ): { remote: string; branch: string } | null {
   const [remote, ...branchParts] = ref.split("/");
   if (!remote || branchParts.length === 0) return null;
-  return { remote, branch: branchParts.join("/") };
+  if (remote.startsWith("-")) {
+    throw new Error(`Invalid base ref: ${ref}`);
+  }
+
+  const branch = branchParts.join("/");
+  assertSafeGitFetchRef(branch);
+  return { remote, branch };
 }
 
-function isMigrationSqlFile(filePath: string): boolean {
-  return (
-    filePath.endsWith(".sql") &&
-    !filePath.includes(`${path.sep}meta${path.sep}`)
-  );
+function assertSafeGitFetchRef(ref: string): void {
+  if (ref.startsWith("-")) {
+    throw new Error(`Invalid base ref: ${ref}`);
+  }
 }

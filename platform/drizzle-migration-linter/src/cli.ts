@@ -3,6 +3,7 @@ import path from "node:path";
 import {
   findChangedMigrationFiles,
   findMigrationFiles,
+  isMigrationSqlFile,
   type LintMigrationResult,
   lintMigrationFile,
   summarizeIssues,
@@ -100,7 +101,9 @@ function parseArgs(args: string[]): CliOptions {
 
 function resolveFiles(options: CliOptions): string[] {
   if (options.files.length > 0) {
-    return options.files.map((file) => path.resolve(file)).filter(isSqlFile);
+    return options.files
+      .map((file) => path.resolve(file))
+      .filter(isMigrationSqlFile);
   }
 
   const migrationsDir = path.resolve(options.migrationsDir);
@@ -180,13 +183,6 @@ function requireValue(args: string[], index: number, option: string): string {
     throw new Error(`${option} requires a value.`);
   }
   return value;
-}
-
-function isSqlFile(filePath: string): boolean {
-  return (
-    filePath.endsWith(".sql") &&
-    !filePath.includes(`${path.sep}meta${path.sep}`)
-  );
 }
 
 function formatLocation(issue: { filePath?: string; line?: number }): string {

@@ -136,6 +136,16 @@ describe("lintMigrationSql", () => {
     ]);
   });
 
+  test("allow-breaking marker accepts horizontal spacing only", () => {
+    const result = lintMigrationSql(`
+      --\tdrizzle-migration-linter:\tallow-breaking
+      -- drizzle-migration-linter:\treason\t=\told column has been unused for two releases
+      ALTER TABLE "agents" DROP COLUMN "legacy_name";
+    `);
+
+    expect(result.issues).toEqual([]);
+  });
+
   test("allow-breaking marker requires a reason", () => {
     const result = lintMigrationSql(`
       -- drizzle-migration-linter: allow-breaking
@@ -148,6 +158,14 @@ describe("lintMigrationSql", () => {
         severity: "error",
       },
     ]);
+  });
+
+  test("strips malformed block comments without regex backtracking", () => {
+    const result = lintMigrationSql(
+      `/*${"*".repeat(20_000)}\nALTER TABLE "agents" DROP COLUMN "legacy_name";`,
+    );
+
+    expect(result.issues).toEqual([]);
   });
 });
 

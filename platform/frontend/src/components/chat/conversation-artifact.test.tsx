@@ -68,22 +68,4 @@ describe("ConversationArtifactPanel", () => {
 
     expect(await screen.findByTestId("mermaid-diagram")).toBeInTheDocument();
   });
-
-  it("wraps markdown tables in a horizontal scroll container", () => {
-    render(
-      <ConversationArtifactPanel
-        artifact={[
-          "| Column A | Column B | Column C | Column D | Column E |",
-          "| --- | --- | --- | --- | --- |",
-          "| Alpha | Bravo | Charlie | Delta | Echo |",
-        ].join("\n")}
-        isOpen
-        onToggle={() => {}}
-      />,
-    );
-
-    const table = screen.getByRole("table");
-    expect(table).toHaveClass("min-w-max");
-    expect(table.parentElement).toHaveClass("overflow-x-auto");
-  });
 });

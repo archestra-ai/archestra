@@ -49,18 +49,26 @@ tests:
       - hasDocuments:
           count: 0
 
-  - it: uses a complete external database URL from the chart-managed auth secret
+  - it: uses a complete external database URL from the hook auth secret
     set:
       postgresql.enabled: false
       postgresql.external_database_url: postgresql://external:pass@external-host:5432/externaldb
     asserts:
+      - contains:
+          path: spec.template.spec.initContainers[0].env
+          content:
+            name: ARCHESTRA_DATABASE_URL
+            valueFrom:
+              secretKeyRef:
+                name: RELEASE-NAME-archestra-platform-migrate-auth
+                key: database-url
       - contains:
           path: spec.template.spec.containers[0].env
           content:
             name: ARCHESTRA_DATABASE_URL
             valueFrom:
               secretKeyRef:
-                name: RELEASE-NAME-archestra-platform-auth
+                name: RELEASE-NAME-archestra-platform-migrate-auth
                 key: database-url
 
   - it: prepends migration-job env before shared env for Kubernetes variable expansion

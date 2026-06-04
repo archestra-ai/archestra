@@ -67,28 +67,15 @@ false
 {{/*
 Environment variables for the Archestra Platform container
 */}}
-{{- define "archestra-platform.env" -}}
-{{/*
-List of sensitive environment variables that should be stored in the Secret
-and referenced via secretKeyRef instead of being exposed as plaintext in Pod specs.
-This must match the list in secret.yaml.
-Additionally, any env var matching ARCHESTRA_CHAT_*_API_KEY is treated as sensitive.
-*/}}
-{{- $sensitiveEnvVars := list
-  "ARCHESTRA_AUTH_SECRET"
-  "ARCHESTRA_AUTH_ADMIN_PASSWORD"
-  "ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_PASSWORD"
-  "ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_BEARER"
-  "ARCHESTRA_METRICS_SECRET"
-  "ARCHESTRA_HASHICORP_VAULT_TOKEN"
-}}
+{{- define "archestra-platform.databaseEnv" -}}
+{{- $databaseSecretName := .migrationDatabaseSecretNameOverride | default (include "archestra-platform.authSecretName" .) -}}
 {{- if eq (toString .Values.postgresql.external_database_url) "from_vault" }}
 {{/* Database URL provided by vault-secrets init container — no env var generated */}}
 {{- else if .Values.postgresql.external_database_url }}
 - name: ARCHESTRA_DATABASE_URL
   valueFrom:
     secretKeyRef:
-      name: {{ include "archestra-platform.authSecretName" . }}
+      name: {{ $databaseSecretName }}
       key: database-url
 {{- else if .Values.postgresql.enabled }}
 {{/*
@@ -104,6 +91,24 @@ The Bitnami chart auto-generates a strong password and persists it across helm u
 - name: ARCHESTRA_DATABASE_URL
   value: postgresql://{{ .Values.postgresql.auth.username }}:$(PGPASSWORD)@{{ include "archestra-platform.fullname" . }}-postgresql:5432/{{ .Values.postgresql.auth.database }}
 {{- end }}
+{{- end }}
+
+{{- define "archestra-platform.env" -}}
+{{/*
+List of sensitive environment variables that should be stored in the Secret
+and referenced via secretKeyRef instead of being exposed as plaintext in Pod specs.
+This must match the list in secret.yaml.
+Additionally, any env var matching ARCHESTRA_CHAT_*_API_KEY is treated as sensitive.
+*/}}
+{{- $sensitiveEnvVars := list
+  "ARCHESTRA_AUTH_SECRET"
+  "ARCHESTRA_AUTH_ADMIN_PASSWORD"
+  "ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_PASSWORD"
+  "ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_BEARER"
+  "ARCHESTRA_METRICS_SECRET"
+  "ARCHESTRA_HASHICORP_VAULT_TOKEN"
+}}
+{{- include "archestra-platform.databaseEnv" . }}
 {{/*
 When both external_database_url is null and postgresql.enabled is false,
 ARCHESTRA_DATABASE_URL is not set here. Use archestra.envFromSecrets to inject it from a pre-existing K8s secret.
@@ -252,6 +257,13 @@ Auth secret name for the Archestra Platform
 */}}
 {{- define "archestra-platform.authSecretName" -}}
 {{- default (printf "%s-auth" (include "archestra-platform.fullname" .)) .Values.archestra.authSecret.existingSecretName -}}
+{{- end }}
+
+{{/*
+Hook-only auth secret name for the database migration Job.
+*/}}
+{{- define "archestra-platform.migrationJobAuthSecretName" -}}
+{{- printf "%s-migrate-auth" (include "archestra-platform.fullname" .) -}}
 {{- end }}
 
 {{/*

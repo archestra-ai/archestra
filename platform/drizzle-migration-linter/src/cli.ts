@@ -1,8 +1,7 @@
 #!/usr/bin/env node
-import { execFileSync } from "node:child_process";
-import fs from "node:fs";
 import path from "node:path";
 import {
+  findChangedMigrationFiles,
   findMigrationFiles,
   type LintMigrationResult,
   lintMigrationFile,
@@ -110,36 +109,10 @@ function resolveFiles(options: CliOptions): string[] {
   }
 
   try {
-    const gitCwd = fs.realpathSync(process.cwd());
-    const pathspec =
-      path.relative(gitCwd, fs.realpathSync(migrationsDir)) || ".";
-    const resolvedBaseRef = ensureGitRefAvailable(options.changedBase, gitCwd);
-    const changedOutput = execFileSync(
-      "git",
-      [
-        "diff",
-        "--name-only",
-        "--diff-filter=ACMR",
-        resolvedBaseRef,
-        "--",
-        pathspec,
-      ],
-      { encoding: "utf8", cwd: gitCwd },
-    );
-    const untrackedOutput = execFileSync(
-      "git",
-      ["ls-files", "--others", "--exclude-standard", "--", pathspec],
-      { encoding: "utf8", cwd: gitCwd },
-    );
-
-    return `${changedOutput}\n${untrackedOutput}`
-      .split("\n")
-      .map((file) => file.trim())
-      .filter(Boolean)
-      .map((file) => path.resolve(gitCwd, file))
-      .filter(isSqlFile)
-      .filter((file, index, files) => files.indexOf(file) === index)
-      .sort();
+    return findChangedMigrationFiles({
+      migrationsDir,
+      baseRef: options.changedBase,
+    });
   } catch (error) {
     if (options.allowMissingBase) {
       process.stderr.write(
@@ -149,67 +122,6 @@ function resolveFiles(options: CliOptions): string[] {
     }
     throw error;
   }
-}
-
-function ensureGitRefAvailable(baseRef: string, cwd: string): string {
-  if (canResolveGitRef({ ref: baseRef, cwd })) {
-    return baseRef;
-  }
-
-  const remoteRef = parseRemoteRef(baseRef);
-  if (remoteRef) {
-    const { remote, branch } = remoteRef;
-    process.stderr.write(
-      `Drizzle migration linter base ref ${baseRef} is not available locally; fetching ${remote} ${branch}.\n`,
-    );
-    execFileSync(
-      "git",
-      [
-        "fetch",
-        "--depth=1",
-        remote,
-        `${branch}:refs/remotes/${remote}/${branch}`,
-      ],
-      { cwd, stdio: "inherit" },
-    );
-    return baseRef;
-  }
-
-  const originRef = `origin/${baseRef}`;
-  process.stderr.write(
-    `Drizzle migration linter base ref ${baseRef} is not available locally; fetching origin ${baseRef}.\n`,
-  );
-  execFileSync(
-    "git",
-    [
-      "fetch",
-      "--depth=1",
-      "origin",
-      `${baseRef}:refs/remotes/origin/${baseRef}`,
-    ],
-    { cwd, stdio: "inherit" },
-  );
-  return originRef;
-}
-
-function canResolveGitRef(params: { ref: string; cwd: string }): boolean {
-  try {
-    execFileSync("git", ["rev-parse", "--verify", `${params.ref}^{commit}`], {
-      cwd: params.cwd,
-      stdio: "ignore",
-    });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function parseRemoteRef(
-  ref: string,
-): { remote: string; branch: string } | null {
-  const [remote, ...branchParts] = ref.split("/");
-  if (!remote || branchParts.length === 0) return null;
-  return { remote, branch: branchParts.join("/") };
 }
 
 function printPrettyResults(

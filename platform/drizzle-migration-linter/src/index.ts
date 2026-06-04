@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -21,6 +22,10 @@ export type LintMigrationResult = {
   issues: MigrationLintIssue[];
 };
 
+export type FindChangedMigrationFilesOptions = {
+  cwd?: string;
+};
+
 type Rule = {
   code: string;
   severity: LintSeverity;
@@ -31,7 +36,7 @@ type Rule = {
 const ALLOW_BREAKING_PATTERN =
   /--\s*drizzle-migration-linter:\s*allow-breaking\b/i;
 const ALLOW_BREAKING_REASON_PATTERN =
-  /--\s*drizzle-migration-linter:\s*reason\s*=\s*(?<reason>.+)\s*$/im;
+  /--\s*drizzle-migration-linter:\s*reason\s*=\s*(?<reason>.+)$/im;
 
 export function lintMigrationSql(
   sql: string,
@@ -88,6 +93,48 @@ export function findMigrationFiles(migrationsDir: string): string[] {
     .filter((file) => file.endsWith(".sql"))
     .map((file) => path.join(migrationsDir, file))
     .sort();
+}
+
+export function findChangedMigrationFiles(params: {
+  migrationsDir: string;
+  baseRef: string;
+  options?: FindChangedMigrationFilesOptions;
+}): string[] {
+  const cwd = fs.realpathSync(params.options?.cwd ?? process.cwd());
+  const migrationsDir = fs.realpathSync(path.resolve(params.migrationsDir));
+  const pathspec = path.relative(cwd, migrationsDir) || ".";
+  const resolvedBaseRef = ensureGitRefAvailable({
+    baseRef: params.baseRef,
+    cwd,
+  });
+  const changedOutput = execFileSync(
+    "git",
+    [
+      "diff",
+      "--name-only",
+      "--diff-filter=ACMR",
+      resolvedBaseRef,
+      "--",
+      pathspec,
+    ],
+    { encoding: "utf8", cwd },
+  );
+  const untrackedOutput = execFileSync(
+    "git",
+    ["ls-files", "--others", "--exclude-standard", "--", pathspec],
+    { encoding: "utf8", cwd },
+  );
+
+  return [
+    ...new Set(
+      `${changedOutput}\n${untrackedOutput}`
+        .split("\n")
+        .map((file) => file.trim())
+        .filter(Boolean)
+        .map((file) => path.resolve(cwd, file))
+        .filter(isMigrationSqlFile),
+    ),
+  ].sort();
 }
 
 export function summarizeIssues(results: LintMigrationResult[]): {
@@ -248,6 +295,9 @@ const RULES: Rule[] = [
 ];
 
 function splitStatements(sql: string): string[] {
+  // Drizzle separates generated statements with statement-breakpoint comments.
+  // The semicolon fallback is intentionally simple and does not understand
+  // dollar-quoted SQL bodies; use statement breakpoints for custom procedural SQL.
   return sql
     .split(/-->\s*statement-breakpoint|;/i)
     .map((statement) => statement.trim())
@@ -255,7 +305,9 @@ function splitStatements(sql: string): string[] {
 }
 
 function stripSqlComments(sql: string): string {
-  return sql.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/--.*$/gm, " ");
+  return sql
+    .replace(/\/\*[^*]*(?:\*+[^/][^*]*)*\*+\//g, " ")
+    .replace(/--.*$/gm, " ");
 }
 
 function normalizeSql(sql: string): string {
@@ -281,4 +333,76 @@ function findAllowBreakingMarkerLine(sql: string): number {
   const match = sql.match(ALLOW_BREAKING_PATTERN);
   if (!match || match.index === undefined) return 1;
   return sql.slice(0, match.index).split("\n").length;
+}
+
+function ensureGitRefAvailable(params: {
+  baseRef: string;
+  cwd: string;
+}): string {
+  const { baseRef, cwd } = params;
+  if (canResolveGitRef({ ref: baseRef, cwd })) {
+    return baseRef;
+  }
+
+  const remoteRef = parseRemoteRef(baseRef);
+  if (remoteRef) {
+    const { remote, branch } = remoteRef;
+    process.stderr.write(
+      `Drizzle migration linter base ref ${baseRef} is not available locally; fetching ${remote} ${branch}.\n`,
+    );
+    execFileSync(
+      "git",
+      [
+        "fetch",
+        "--depth=1",
+        remote,
+        `${branch}:refs/remotes/${remote}/${branch}`,
+      ],
+      { cwd, stdio: "inherit" },
+    );
+    return baseRef;
+  }
+
+  const originRef = `origin/${baseRef}`;
+  process.stderr.write(
+    `Drizzle migration linter base ref ${baseRef} is not available locally; fetching origin ${baseRef}.\n`,
+  );
+  execFileSync(
+    "git",
+    [
+      "fetch",
+      "--depth=1",
+      "origin",
+      `${baseRef}:refs/remotes/origin/${baseRef}`,
+    ],
+    { cwd, stdio: "inherit" },
+  );
+  return originRef;
+}
+
+function canResolveGitRef(params: { ref: string; cwd: string }): boolean {
+  try {
+    execFileSync("git", ["rev-parse", "--verify", `${params.ref}^{commit}`], {
+      cwd: params.cwd,
+      stdio: "ignore",
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function parseRemoteRef(
+  ref: string,
+): { remote: string; branch: string } | null {
+  const [remote, ...branchParts] = ref.split("/");
+  if (!remote || branchParts.length === 0) return null;
+  return { remote, branch: branchParts.join("/") };
+}
+
+function isMigrationSqlFile(filePath: string): boolean {
+  return (
+    filePath.endsWith(".sql") &&
+    !filePath.includes(`${path.sep}meta${path.sep}`)
+  );
 }

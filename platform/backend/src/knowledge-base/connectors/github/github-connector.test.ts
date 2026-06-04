@@ -227,7 +227,7 @@ describe("GithubConnector", () => {
           config: {
             ...validConfig,
             authMethod: "github_app",
-            githubAppConfigId: "cfg-1",
+            githubAppConfigId: "00000000-0000-4000-8000-000000000001",
           },
           credentials: {
             apiToken: [
@@ -273,7 +273,7 @@ describe("GithubConnector", () => {
           config: {
             ...validConfig,
             authMethod: "github_app",
-            githubAppConfigId: "cfg-2",
+            githubAppConfigId: "00000000-0000-4000-8000-000000000002",
           },
           credentials: {
             apiToken: [
@@ -310,7 +310,7 @@ describe("GithubConnector", () => {
       const config = {
         ...validConfig,
         authMethod: "github_app",
-        githubAppConfigId: "cfg-3",
+        githubAppConfigId: "00000000-0000-4000-8000-000000000003",
       };
       const appCredentials = {
         apiToken: [
@@ -427,7 +427,7 @@ describe("GithubConnector", () => {
             githubUrl: "https://api.github.com",
             owner: "test-org",
             authMethod: "github_app",
-            githubAppConfigId: "cfg-4",
+            githubAppConfigId: "00000000-0000-4000-8000-000000000004",
           },
           credentials: {
             apiToken: [

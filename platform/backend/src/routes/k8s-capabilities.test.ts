@@ -96,7 +96,7 @@ describe("k8s capabilities routes", () => {
     });
   });
 
-  test("requires networkPolicy read permission", async ({
+  test("requires environment admin permission", async ({
     makeOrganization,
     makeUser,
   }) => {
@@ -116,7 +116,7 @@ describe("k8s capabilities routes", () => {
 
     expect(response.statusCode).toBe(403);
     expect(mockHasPermission).toHaveBeenCalledWith(
-      { networkPolicy: ["read"] },
+      { environment: ["admin"] },
       expect.any(Object),
     );
   });

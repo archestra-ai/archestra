@@ -15,7 +15,6 @@ import McpServerModel from "@/models/mcp-server";
 import McpServerInstallationRequestModel from "@/models/mcp-server-installation-request";
 import MemberModel from "@/models/member";
 import ModelModel from "@/models/model";
-import NetworkPolicyModel from "@/models/network-policy";
 import OptimizationRuleModel from "@/models/optimization-rule";
 import OrganizationModel from "@/models/organization";
 import OrganizationRoleModel from "@/models/organization-role";
@@ -358,24 +357,15 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
       MemberModel.findByUserIdForAudit(userId, orgId),
   },
 
-  // Deployment environments and network policies
-  "/api/organization/environments": {
+  // Deployment environments
+  "/api/environments": {
     resourceType: "environment",
     fetchById: (id, orgId) => EnvironmentModel.findByIdForAudit(id, orgId),
   },
-  "/api/organization/environments/:id": {
+  "/api/environments/:id": {
     resourceType: "environment",
     fetchById: (id, orgId) => EnvironmentModel.findByIdForAudit(id, orgId),
   },
-  "/api/network-policies": {
-    resourceType: "networkPolicy",
-    fetchById: (id, orgId) => NetworkPolicyModel.findByIdForAudit(id, orgId),
-  },
-  "/api/network-policies/:id": {
-    resourceType: "networkPolicy",
-    fetchById: (id, orgId) => NetworkPolicyModel.findByIdForAudit(id, orgId),
-  },
-
   // Team / org tokens — rotation is semantically distinct from a generic update.
   "/api/tokens/:tokenId/rotate": {
     resourceType: "teamToken",

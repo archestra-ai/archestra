@@ -13,7 +13,6 @@ import {
   InternalMcpCatalogModel,
   McpHttpSessionModel,
   McpServerModel,
-  NetworkPolicyModel,
   OrganizationModel,
 } from "@/models";
 import { secretManager } from "@/secrets-manager";
@@ -36,13 +35,10 @@ import type {
 
 type CatalogItem = Awaited<ReturnType<typeof InternalMcpCatalogModel.findById>>;
 type EnvironmentRow = Awaited<ReturnType<typeof EnvironmentModel.findById>>;
+type OrganizationRow = Awaited<ReturnType<typeof OrganizationModel.getById>>;
 type NetworkPolicyResolutionCache = {
   environmentsById: Map<string, EnvironmentRow>;
-  defaultNetworkPolicyIdByOrgId: Map<string, string | null>;
-  networkPoliciesById: Map<
-    string,
-    NonNullable<EffectiveNetworkPolicy["policy"]>
-  >;
+  organizationsById: Map<string, OrganizationRow>;
 };
 
 /**
@@ -261,17 +257,15 @@ export class McpServerRuntimeManager {
       return { source: "built_in", policy: null };
     }
 
-    const defaultNetworkPolicyId = params.cache
-      ? params.cache.defaultNetworkPolicyIdByOrgId.get(organizationId)
-      : (await OrganizationModel.getById(organizationId))
-          ?.defaultNetworkPolicyId;
+    const organization = params.cache
+      ? params.cache.organizationsById.get(organizationId)
+      : await OrganizationModel.getById(organizationId);
 
     return resolveEffectiveNetworkPolicy({
       organizationId,
       environmentId: params.catalogItem?.environmentId,
-      environmentNetworkPolicyId: environment?.networkPolicyId,
-      defaultNetworkPolicyId,
-      networkPoliciesById: params.cache?.networkPoliciesById,
+      environmentNetworkPolicy: environment?.networkPolicy,
+      defaultNetworkPolicy: organization?.defaultNetworkPolicy,
     });
   }
 
@@ -302,34 +296,15 @@ export class McpServerRuntimeManager {
     const organizations = await Promise.all(
       organizationIds.map((id) => OrganizationModel.getById(id)),
     );
-    const defaultNetworkPolicyIdByOrgId = new Map<string, string | null>();
+    const organizationsById = new Map<string, OrganizationRow>();
     for (const organization of organizations) {
       if (!organization) continue;
-      defaultNetworkPolicyIdByOrgId.set(
-        organization.id,
-        organization.defaultNetworkPolicyId,
-      );
+      organizationsById.set(organization.id, organization);
     }
-
-    const networkPolicyIds = uniqueStrings([
-      ...environments
-        .map((environment) => environment?.networkPolicyId)
-        .filter((id): id is string => Boolean(id)),
-      ...organizations
-        .map((organization) => organization?.defaultNetworkPolicyId)
-        .filter((id): id is string => Boolean(id)),
-    ]);
-    const policies = await NetworkPolicyModel.listByIdsForOrganizations({
-      ids: networkPolicyIds,
-      organizationIds,
-    });
 
     return {
       environmentsById,
-      defaultNetworkPolicyIdByOrgId,
-      networkPoliciesById: new Map(
-        policies.map((policy) => [policy.id, policy]),
-      ),
+      organizationsById,
     };
   }
 
@@ -675,11 +650,18 @@ export class McpServerRuntimeManager {
    */
   async getOrLoadDeployment(
     mcpServerId: string,
+    opts?: { namespaceOverride?: string },
   ): Promise<K8sDeployment | undefined> {
-    // First check if already in memory
-    const existing = this.mcpServerIdToDeploymentMap.get(mcpServerId);
-    if (existing) {
-      return existing;
+    // An explicit namespace override (relocation teardown) bypasses the cache: a
+    // cached entry can hold a stale namespace, the one value we must not trust
+    // here. Build fresh, pinned to the given namespace; don't touch the cache.
+    const namespaceOverride = opts?.namespaceOverride;
+    if (!namespaceOverride) {
+      // First check if already in memory
+      const existing = this.mcpServerIdToDeploymentMap.get(mcpServerId);
+      if (existing) {
+        return existing;
+      }
     }
 
     // Not in memory - try to load from database
@@ -732,7 +714,9 @@ export class McpServerRuntimeManager {
         k8sCustomObjectsApi: this.k8sCustomObjectsApi,
         k8sAttach: this.k8sAttach,
         k8sLog: this.k8sLog,
-        namespace: await this.resolveNamespaceForCatalog(catalogItem),
+        namespace:
+          namespaceOverride ??
+          (await this.resolveNamespaceForCatalog(catalogItem)),
         catalogItem,
         effectiveNetworkPolicy: await this.resolveNetworkPolicyForDeployment({
           mcpServer,
@@ -743,6 +727,12 @@ export class McpServerRuntimeManager {
         ).networkPolicy,
         k8sExec: this.k8sExec,
       });
+
+      // Teardown path (explicit namespace): skip endpoint resolution and the
+      // cache so a torn-down deployment never overwrites a live cache entry.
+      if (namespaceOverride) {
+        return k8sDeployment;
+      }
 
       // Resolve HTTP endpoint URL (for streamable-http servers started by another replica)
       await k8sDeployment.resolveHttpEndpoint();
@@ -760,6 +750,45 @@ export class McpServerRuntimeManager {
       );
       return undefined;
     }
+  }
+
+  /**
+   * Tear down a local catalog's per-install deployments in the namespace
+   * resolved from the SUPPLIED catalog snapshot, bypassing the in-memory cache.
+   *
+   * During an environment reassignment, call this with the pre-update catalog
+   * item (which still holds the old environment) BEFORE recreating the
+   * deployment in the new namespace. Deriving the namespace from the snapshot —
+   * not the live row or a cached deployment — is what makes the teardown correct
+   * on a cache-cold or cache-stale replica, which would otherwise re-resolve the
+   * new namespace and orphan the old-namespace pod.
+   * @public — invoked from the internal-mcp-catalog PUT route
+   */
+  async tearDownOldNamespaceDeployments(
+    catalogSnapshot:
+      | Awaited<ReturnType<typeof InternalMcpCatalogModel.findById>>
+      | null
+      | undefined,
+  ): Promise<void> {
+    if (!this.isEnabled || !catalogSnapshot) {
+      return;
+    }
+    const namespace = await this.resolveNamespaceForCatalog(catalogSnapshot);
+    const installs = await McpServerModel.findByCatalogId(catalogSnapshot.id);
+    await Promise.all(
+      installs.map(async (mcpServer) => {
+        const deployment = await this.getOrLoadDeployment(mcpServer.id, {
+          namespaceOverride: namespace,
+        });
+        if (!deployment) {
+          return;
+        }
+        await deployment.removeDeployment();
+        // Drop any cached entry so the recreate path rebuilds against the new
+        // namespace instead of returning this torn-down, old-namespace object.
+        this.mcpServerIdToDeploymentMap.delete(mcpServer.id);
+      }),
+    );
   }
 
   /**

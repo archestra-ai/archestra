@@ -55,7 +55,6 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   mcpServerInstallation: ["read", "create", "update", "delete", "admin"],
   mcpServerInstallationRequest: ["read", "create", "update", "delete", "admin"],
   environment: ["admin", "deploy-to-restricted"],
-  networkPolicy: ["read", "create", "update", "delete"],
 
   // Knowledge
   knowledgeFile: ["read", "create", "update", "delete", "admin"],
@@ -117,7 +116,6 @@ export const editorPermissions: Record<Resource, Action[]> = {
   mcpServerInstallation: ["read", "create", "update", "delete"],
   mcpServerInstallationRequest: ["read", "create", "update", "delete"],
   environment: ["admin"],
-  networkPolicy: ["read", "create", "update", "delete"],
 
   // Knowledge
   knowledgeFile: ["read", "create", "update", "delete"],
@@ -179,7 +177,6 @@ export const memberPermissions: Record<Resource, Action[]> = {
   mcpServerInstallation: ["read", "create", "delete"],
   mcpServerInstallationRequest: ["read", "create", "update"],
   environment: [],
-  networkPolicy: ["read"],
 
   // Knowledge
   knowledgeFile: ["read"],
@@ -301,10 +298,6 @@ export const permissionDescriptions: Record<string, string> = {
     "Create, edit, and delete deployment environments (everyone can view them)",
   "environment:deploy-to-restricted":
     "Deploy catalog items to restricted environments",
-  "networkPolicy:read": "View network policies",
-  "networkPolicy:create": "Create network policies",
-  "networkPolicy:update": "Modify network policies",
-  "networkPolicy:delete": "Delete network policies",
 
   // LLM
   "llmProxy:read": "View and list LLM proxies",
@@ -571,6 +564,9 @@ export const requiredEndpointPermissionsMap: Partial<
     mcpRegistry: ["update"],
   },
   [RouteId.ReinstallInternalMcpCatalogItem]: {
+    mcpRegistry: ["update"],
+  },
+  [RouteId.RefreshInternalMcpCatalogImage]: {
     mcpRegistry: ["update"],
   },
   [RouteId.DeleteInternalMcpCatalogItem]: {
@@ -957,26 +953,8 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.UpdateConnectionSettings]: {
     organizationSettings: ["update"],
   },
-  [RouteId.UpdatePresetEntityName]: {
-    mcpServerInstallation: ["admin"],
-  },
-  [RouteId.UpdatePresetEntityDefaultLabel]: {
-    mcpServerInstallation: ["admin"],
-  },
-  [RouteId.UpdatePresetEntityDefaultValidationRegex]: {
-    mcpServerInstallation: ["admin"],
-  },
   [RouteId.ListMcpPresetEntries]: {
     mcpRegistry: ["read"],
-  },
-  [RouteId.CreateMcpPresetEntry]: {
-    mcpServerInstallation: ["admin"],
-  },
-  [RouteId.UpdateMcpPresetEntry]: {
-    mcpServerInstallation: ["admin"],
-  },
-  [RouteId.DeleteMcpPresetEntry]: {
-    mcpServerInstallation: ["admin"],
   },
   // Listing environments is available to any authenticated user (read is ungated).
   [RouteId.ListEnvironments]: {},
@@ -993,19 +971,7 @@ export const requiredEndpointPermissionsMap: Partial<
     environment: ["admin"],
   },
   [RouteId.GetK8sCapabilities]: {
-    networkPolicy: ["read"],
-  },
-  [RouteId.ListNetworkPolicies]: {
-    networkPolicy: ["read"],
-  },
-  [RouteId.CreateNetworkPolicy]: {
-    networkPolicy: ["create"],
-  },
-  [RouteId.UpdateNetworkPolicy]: {
-    networkPolicy: ["update"],
-  },
-  [RouteId.DeleteNetworkPolicy]: {
-    networkPolicy: ["delete"],
+    environment: ["admin"],
   },
   [RouteId.UpdateKnowledgeSettings]: {
     knowledgeSettings: ["update"],
@@ -1238,6 +1204,7 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.DeleteSkill]: { skill: ["delete"] },
   [RouteId.ResetSkill]: { skill: ["update"] },
   [RouteId.DiscoverGithubSkills]: { skill: ["read"] },
+  [RouteId.SearchSkillCatalog]: { skill: ["read"] },
   [RouteId.PreviewGithubSkill]: { skill: ["read"] },
   [RouteId.ImportGithubSkills]: { skill: ["create"] },
   [RouteId.GetSkillSourceRepos]: { skill: ["read"] },
@@ -1329,6 +1296,7 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/settings/service-accounts": { serviceAccount: ["read"] },
   "/settings/llm": { llmSettings: ["read"] },
   "/settings/agents": { agentSettings: ["read"] },
+  "/settings/environments": { environment: ["admin"] },
   "/settings/knowledge": { knowledgeSettings: ["read"] },
   "/settings/users": { member: ["read"] },
   "/settings/teams": { team: ["read"] },

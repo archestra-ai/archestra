@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - main
+    paths:
+      - ".github/**"
+      - "platform/**"
   # Allow manual triggering of the workflow
   workflow_dispatch:
 

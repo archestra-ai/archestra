@@ -1,7 +1,14 @@
 "use client";
 
 import { E2eTestId, type McpDeploymentStatusEntry } from "@shared";
-import { AlertCircle, PlugZap, RefreshCw, XIcon } from "lucide-react";
+import {
+  AlertCircle,
+  Copy,
+  PlugZap,
+  RefreshCw,
+  Trash2,
+  XIcon,
+} from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { Button } from "@/components/ui/button";
@@ -86,6 +93,9 @@ interface McpServerSettingsDialogProps {
   onConnect?: () => void;
   // Reinstall
   needsReinstall?: boolean;
+  // Restart pods
+  onRestartPods?: () => void | Promise<void>;
+  isRestartingPods?: boolean;
   // Delete
   onDelete?: () => void;
   // Clone
@@ -141,6 +151,8 @@ export function McpServerSettingsDialog({
   hasPersonalConnection,
   onConnect,
   needsReinstall,
+  onRestartPods,
+  isRestartingPods = false,
   onDelete,
   onClone,
 }: McpServerSettingsDialogProps) {
@@ -347,7 +359,7 @@ export function McpServerSettingsDialog({
             </div>
 
             {/* Footer actions */}
-            <div className="px-2 pb-3 flex flex-col gap-1.5">
+            <div className="border-t px-2 pt-3 pb-3 flex flex-col gap-1.5">
               {!hasPersonalConnection && onConnect && (
                 <Button
                   variant="ghost"
@@ -373,16 +385,39 @@ export function McpServerSettingsDialog({
                   Reinstall
                 </Button>
               )}
+              {onRestartPods && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="w-full justify-start gap-2"
+                  disabled={isRestartingPods}
+                  onClick={() =>
+                    guardDirty(() => {
+                      onOpenChange(false);
+                      onRestartPods();
+                    })
+                  }
+                >
+                  <RefreshCw
+                    className={cn(
+                      "h-4 w-4",
+                      isRestartingPods && "animate-spin",
+                    )}
+                  />
+                  Restart pods
+                </Button>
+              )}
               {onClone && (
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="w-full justify-start"
+                  className="w-full justify-start gap-2"
                   onClick={() => {
                     handleClose();
                     onClone();
                   }}
                 >
+                  <Copy className="h-4 w-4" />
                   Clone
                 </Button>
               )}
@@ -396,6 +431,7 @@ export function McpServerSettingsDialog({
                     onDelete();
                   }}
                 >
+                  <Trash2 className="h-4 w-4" />
                   Delete
                 </Button>
               )}

@@ -1,143 +1,58 @@
 import { describe, expect } from "vitest";
-import { OrganizationModel } from "@/models";
-import {
-  createEnvironment,
-  updateEnvironment,
-} from "@/services/environments/environment";
-import {
-  createNetworkPolicy,
-  deleteNetworkPolicy,
-  listNetworkPolicies,
-  resolveEffectiveNetworkPolicy,
-  updateNetworkPolicy,
-} from "@/services/environments/network-policy";
+import { createEnvironment } from "@/services/environments/environment";
+import { resolveEffectiveNetworkPolicy } from "@/services/environments/network-policy";
 import { test } from "@/test";
+import type { NetworkPolicy } from "@/types";
 
-const MISSING_ID = "00000000-0000-0000-0000-000000000000";
+const ENVIRONMENT_POLICY: NetworkPolicy = {
+  egressMode: "restricted",
+  domainPreset: "package_managers",
+  allowedDomains: ["registry.npmjs.org"],
+  allowedCidrs: ["203.0.113.0/24"],
+};
+
+const DEFAULT_POLICY: NetworkPolicy = {
+  egressMode: "off",
+  domainPreset: "none",
+  allowedDomains: [],
+  allowedCidrs: [],
+};
 
 describe("NetworkPolicyService", () => {
-  test("creates, lists, and updates a network policy", async ({
+  test("resolveEffectiveNetworkPolicy prefers environment policy over default policy", async ({
     makeOrganization,
   }) => {
     const org = await makeOrganization();
-    const created = await createNetworkPolicy({
-      organizationId: org.id,
-      data: {
-        name: "Package installs",
-        egressMode: "restricted",
-        domainPreset: "package_managers",
-        allowedDomains: ["api.example.com", "*.example.org"],
-      },
-    });
-
-    expect(created.name).toBe("Package installs");
-    expect(created.allowedDomains).toEqual([
-      "api.example.com",
-      "*.example.org",
-    ]);
-
-    const updated = await updateNetworkPolicy({
-      id: created.id,
-      organizationId: org.id,
-      data: { name: "Dependency installs" },
-    });
-    expect(updated.name).toBe("Dependency installs");
-
-    const listed = await listNetworkPolicies(org.id);
-    expect(listed).toHaveLength(1);
-    expect(listed[0]?.references.environments).toBe(0);
-  });
-
-  test("rejects duplicate policy names within an organization", async ({
-    makeOrganization,
-  }) => {
-    const org = await makeOrganization();
-    await createNetworkPolicy({ organizationId: org.id, data: { name: "A" } });
-
-    await expect(
-      createNetworkPolicy({ organizationId: org.id, data: { name: "A" } }),
-    ).rejects.toMatchObject({ statusCode: 409 });
-  });
-
-  test("delete rejects a referenced policy", async ({ makeOrganization }) => {
-    const org = await makeOrganization();
-    const policy = await createNetworkPolicy({
-      organizationId: org.id,
-      data: { name: "Sandbox egress" },
-    });
-    await createEnvironment({
-      organizationId: org.id,
-      data: { name: "Sandbox", networkPolicyId: policy.id },
-    });
-
-    await expect(
-      deleteNetworkPolicy({ id: policy.id, organizationId: org.id }),
-    ).rejects.toMatchObject({ statusCode: 409 });
-  });
-
-  test("delete succeeds after references are cleared", async ({
-    makeOrganization,
-  }) => {
-    const org = await makeOrganization();
-    const policy = await createNetworkPolicy({
-      organizationId: org.id,
-      data: { name: "Sandbox egress" },
-    });
     const env = await createEnvironment({
       organizationId: org.id,
-      data: { name: "Sandbox", networkPolicyId: policy.id },
-    });
-    await updateEnvironment({
-      id: env.id,
-      organizationId: org.id,
-      data: { networkPolicyId: null },
-    });
-
-    await expect(
-      deleteNetworkPolicy({ id: policy.id, organizationId: org.id }),
-    ).resolves.toBeUndefined();
-  });
-
-  test("resolveEffectiveNetworkPolicy prefers environment, then default", async ({
-    makeOrganization,
-  }) => {
-    const org = await makeOrganization();
-    const defaultPolicy = await createNetworkPolicy({
-      organizationId: org.id,
-      data: { name: "Default" },
-    });
-    const envPolicy = await createNetworkPolicy({
-      organizationId: org.id,
-      data: { name: "Environment" },
-    });
-
-    await OrganizationModel.patch(org.id, {
-      defaultNetworkPolicyId: defaultPolicy.id,
-    });
-    const env = await createEnvironment({
-      organizationId: org.id,
-      data: { name: "Prod", networkPolicyId: envPolicy.id },
+      data: { name: "Prod", networkPolicy: ENVIRONMENT_POLICY },
     });
 
     await expect(
       resolveEffectiveNetworkPolicy({
         organizationId: org.id,
         environmentId: env.id,
-        defaultNetworkPolicyId: defaultPolicy.id,
+        defaultNetworkPolicy: DEFAULT_POLICY,
       }),
-    ).resolves.toMatchObject({
+    ).resolves.toEqual({
       source: "environment",
-      policy: { id: envPolicy.id },
+      policy: ENVIRONMENT_POLICY,
     });
+  });
+
+  test("resolveEffectiveNetworkPolicy uses the organization default when environment has none", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
 
     await expect(
       resolveEffectiveNetworkPolicy({
         organizationId: org.id,
-        defaultNetworkPolicyId: defaultPolicy.id,
+        defaultNetworkPolicy: DEFAULT_POLICY,
       }),
-    ).resolves.toMatchObject({
+    ).resolves.toEqual({
       source: "organization_default",
-      policy: { id: defaultPolicy.id },
+      policy: DEFAULT_POLICY,
     });
   });
 
@@ -151,7 +66,7 @@ describe("NetworkPolicyService", () => {
     ).resolves.toEqual({ source: "built_in", policy: null });
   });
 
-  test("throws 404 when resolving an unknown policy id", async ({
+  test("resolveEffectiveNetworkPolicy throws when the environment is missing", async ({
     makeOrganization,
   }) => {
     const org = await makeOrganization();
@@ -159,7 +74,7 @@ describe("NetworkPolicyService", () => {
     await expect(
       resolveEffectiveNetworkPolicy({
         organizationId: org.id,
-        defaultNetworkPolicyId: MISSING_ID,
+        environmentId: "00000000-0000-0000-0000-000000000000",
       }),
     ).rejects.toMatchObject({ statusCode: 404 });
   });

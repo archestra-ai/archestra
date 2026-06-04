@@ -5,7 +5,6 @@ import { usePathname } from "next/navigation";
 import { createContext, useContext, useMemo, useState } from "react";
 import { PageLayout } from "@/components/page-layout";
 import { PermissionButton } from "@/components/ui/permission-button";
-import { useHasPermissions } from "@/lib/auth/auth.query";
 
 type McpRegistryLayoutContextType = {
   setActionButton: (button: React.ReactNode) => void;
@@ -27,30 +26,6 @@ export default function McpCatalogLayout({
   const pathname = usePathname();
   const isRegistryPage = pathname === "/mcp/registry";
   const [pageActionButton, setActionButton] = useState<React.ReactNode>(null);
-  const { data: canManageEnvironments } = useHasPermissions({
-    environment: ["admin"],
-  });
-  const { data: canReadNetworkPolicies } = useHasPermissions({
-    networkPolicy: ["read"],
-  });
-
-  const tabs = [
-    { label: "Catalog", href: "/mcp/registry" },
-    // The Environments tab leads to environment management — gate it on
-    // environment:admin. (Listing environments via the API stays ungated so the
-    // catalog deploy-selector works for everyone.)
-    ...(canManageEnvironments
-      ? [{ label: "Environments", href: "/mcp/registry/environments" }]
-      : []),
-    ...(canReadNetworkPolicies
-      ? [
-          {
-            label: "Network Policies",
-            href: "/mcp/registry/network-policies",
-          },
-        ]
-      : []),
-  ];
   const contextValue = useMemo(() => ({ setActionButton }), []);
   const registryActionButton = isRegistryPage ? (
     <PermissionButton
@@ -74,7 +49,6 @@ export default function McpCatalogLayout({
             servers and make them available to your agents.
           </>
         }
-        tabs={tabs}
         actionButton={registryActionButton ?? pageActionButton}
       >
         {children}

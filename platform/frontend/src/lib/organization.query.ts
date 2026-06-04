@@ -9,8 +9,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { useSession } from "@/lib/auth/auth.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
-import { environmentKeys } from "./organization/environment.query";
-import { networkPolicyKeys } from "./organization/network-policy.query";
+import { environmentKeys } from "./environment.query";
 import { handleApiError } from "./utils";
 
 export const appearanceKeys = {
@@ -476,101 +475,6 @@ export function useUpdateConnectionSettings(
 }
 
 /**
- * Update the org-wide custom label for catalog presets (internally "preset").
- * Pass both singular and plural together, or both null to reset.
- */
-export function useUpdatePresetEntityName(
-  onSuccessMessage: string,
-  onErrorMessage: string,
-) {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async (
-      data: archestraApiTypes.UpdatePresetEntityNameData["body"],
-    ) => {
-      const { data: updatedOrganization, error } =
-        await archestraApiSdk.updatePresetEntityName({ body: data });
-
-      if (error) {
-        toast.error(onErrorMessage);
-        return null;
-      }
-
-      return updatedOrganization;
-    },
-    onSuccess: (updatedOrganization) => {
-      if (!updatedOrganization) return;
-      queryClient.setQueryData(organizationKeys.details(), updatedOrganization);
-      toast.success(onSuccessMessage);
-    },
-  });
-}
-
-/**
- * Update the org-wide custom label for the implicit "default" preset row.
- * Pass null to reset to the built-in "Default" label.
- */
-export function useUpdatePresetEntityDefaultLabel(
-  onSuccessMessage: string,
-  onErrorMessage: string,
-) {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async (
-      data: archestraApiTypes.UpdatePresetEntityDefaultLabelData["body"],
-    ) => {
-      const { data: updatedOrganization, error } =
-        await archestraApiSdk.updatePresetEntityDefaultLabel({ body: data });
-
-      if (error) {
-        toast.error(onErrorMessage);
-        return null;
-      }
-
-      return updatedOrganization;
-    },
-    onSuccess: (updatedOrganization) => {
-      if (!updatedOrganization) return;
-      queryClient.setQueryData(organizationKeys.details(), updatedOrganization);
-      toast.success(onSuccessMessage);
-    },
-  });
-}
-
-/**
- * Update the validation regex for the implicit "default" preset row. Pass null
- * to disable.
- */
-export function useUpdatePresetEntityDefaultValidationRegex(
-  onSuccessMessage: string,
-  onErrorMessage: string,
-) {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async (
-      data: archestraApiTypes.UpdatePresetEntityDefaultValidationRegexData["body"],
-    ) => {
-      const { data: updatedOrganization, error } =
-        await archestraApiSdk.updatePresetEntityDefaultValidationRegex({
-          body: data,
-        });
-
-      if (error) {
-        toast.error(onErrorMessage);
-        return null;
-      }
-
-      return updatedOrganization;
-    },
-    onSuccess: (updatedOrganization) => {
-      if (!updatedOrganization) return;
-      queryClient.setQueryData(organizationKeys.details(), updatedOrganization);
-      toast.success(onSuccessMessage);
-    },
-  });
-}
-
-/**
  * Returns the org-configured display label for catalog presets.
  * When unconfigured, `configured` is false and `singular`/`plural` fall back to
  * "Preset"/"Presets" — callers should use `configured` to gate UI that should
@@ -621,16 +525,15 @@ export function useUpdateDefaultEnvironment(
       if (!updatedOrganization) return;
       queryClient.setQueryData(organizationKeys.details(), updatedOrganization);
       queryClient.invalidateQueries({ queryKey: environmentKeys.list() });
-      queryClient.invalidateQueries({ queryKey: networkPolicyKeys.list() });
       toast.success(onSuccessMessage);
     },
   });
 }
 
 /**
- * Returns the org-configured default environment (name + namespace +
- * restricted). When unconfigured, `name` falls back to "Default", `namespace`
- * to null, and `restricted` to false.
+ * Returns the org-configured default environment fields. When unconfigured,
+ * `name` falls back to "Default", nullable fields fall back to null, and
+ * `restricted` falls back to false.
  */
 export function useDefaultEnvironment() {
   const { data: organization } = useOrganization();
@@ -638,7 +541,7 @@ export function useDefaultEnvironment() {
     name: organization?.defaultEnvironmentName ?? "Default",
     namespace: organization?.defaultEnvironmentNamespace ?? null,
     description: organization?.defaultEnvironmentDescription ?? null,
-    networkPolicyId: organization?.defaultNetworkPolicyId ?? null,
+    networkPolicy: organization?.defaultNetworkPolicy ?? null,
     restricted: organization?.defaultEnvironmentRestricted ?? false,
   };
 }

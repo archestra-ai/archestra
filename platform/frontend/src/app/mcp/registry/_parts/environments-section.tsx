@@ -1,26 +1,26 @@
 "use client";
 
+import { DocsPage, getDocsUrl } from "@shared";
 import type { ColumnDef } from "@tanstack/react-table";
-import { Info, Pencil, Plus, Trash2 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { Info, Pencil, Trash2 } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { ExternalDocsLink } from "@/components/external-docs-link";
+import { FormDialog } from "@/components/form-dialog";
 import { ReinstallConfirmBar } from "@/components/reinstall-confirm-bar";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
-import {
-  Dialog,
-  DialogBody,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { DialogBody, DialogStickyFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import {
   Select,
   SelectContent,
@@ -36,16 +36,26 @@ import {
   useCreateEnvironment,
   useDeleteEnvironment,
   useEnvironments,
+  useK8sCapabilities,
   useUpdateEnvironment,
-} from "@/lib/organization/environment.query";
-import { useNetworkPolicies } from "@/lib/organization/network-policy.query";
+} from "@/lib/environment.query";
 import {
   useDefaultEnvironment,
   useUpdateDefaultEnvironment,
 } from "@/lib/organization.query";
-import { useSetMcpRegistryAction } from "../layout";
 
-const NETWORK_POLICY_DEFAULT_VALUE = "__default_network_policy__";
+const NETWORK_POLICY_DOCS_URL = getDocsUrl(
+  DocsPage.PlatformPrivateRegistry,
+  "network-policies",
+);
+const DOMAIN_PRESETS_DOCS_URL = getDocsUrl(
+  DocsPage.PlatformPrivateRegistry,
+  "domain-presets",
+);
+
+type NetworkPolicy = NonNullable<EnvironmentWithAssignedCount["networkPolicy"]>;
+type EgressMode = NetworkPolicy["egressMode"];
+type DomainPreset = NetworkPolicy["domainPreset"];
 
 type EnvironmentTableRow =
   | {
@@ -54,7 +64,7 @@ type EnvironmentTableRow =
       name: string;
       namespace: string | null;
       description: string | null;
-      networkPolicyId: string | null;
+      networkPolicy: NetworkPolicy | null;
       restricted: boolean;
       assignedCatalogCount: number;
     }
@@ -62,41 +72,24 @@ type EnvironmentTableRow =
 
 export function EnvironmentsSection({
   canEdit,
-  canReadNetworkPolicies,
+  createOpen,
+  onCreateOpenChange,
 }: {
   canEdit: boolean;
-  canReadNetworkPolicies: boolean;
+  createOpen: boolean;
+  onCreateOpenChange: (open: boolean) => void;
 }) {
-  const setActionButton = useSetMcpRegistryAction();
   const { data: environmentList, isLoading } = useEnvironments();
   const environments = environmentList?.environments ?? [];
   const defaultAssignedCatalogCount =
     environmentList?.defaultAssignedCatalogCount ?? 0;
-  const { data: networkPolicies = [] } = useNetworkPolicies(
-    canReadNetworkPolicies,
-  );
+  const { data: capabilities } = useK8sCapabilities(canEdit);
   const defaultEnvironment = useDefaultEnvironment();
-  const [createOpen, setCreateOpen] = useState(false);
   const [editDefaultOpen, setEditDefaultOpen] = useState(false);
   const [editTarget, setEditTarget] =
     useState<EnvironmentWithAssignedCount | null>(null);
   const [deleteTarget, setDeleteTarget] =
     useState<EnvironmentWithAssignedCount | null>(null);
-
-  useEffect(() => {
-    setActionButton(
-      <Button
-        className="h-9 shrink-0 px-3 text-sm"
-        disabled={!canEdit}
-        onClick={() => setCreateOpen(true)}
-      >
-        <Plus className="h-4 w-4" />
-        Add Environment
-      </Button>,
-    );
-
-    return () => setActionButton(null);
-  }, [canEdit, setActionButton]);
 
   const rows: EnvironmentTableRow[] = useMemo(
     () => [
@@ -106,7 +99,7 @@ export function EnvironmentsSection({
         name: defaultEnvironment.name,
         namespace: defaultEnvironment.namespace,
         description: defaultEnvironment.description,
-        networkPolicyId: defaultEnvironment.networkPolicyId,
+        networkPolicy: defaultEnvironment.networkPolicy,
         restricted: defaultEnvironment.restricted,
         assignedCatalogCount: defaultAssignedCatalogCount,
       },
@@ -141,17 +134,10 @@ export function EnvironmentsSection({
         cell: ({ row }) => <NamespaceCell namespace={row.original.namespace} />,
       },
       {
-        accessorKey: "networkPolicyId",
-        header: "Network Policy",
+        accessorKey: "networkPolicy",
+        header: "Network Egress",
         cell: ({ row }) => (
-          <NetworkPolicyCell
-            policyId={row.original.networkPolicyId}
-            policies={networkPolicies}
-            canReadNetworkPolicies={canReadNetworkPolicies}
-            emptyLabel={
-              row.original.kind === "default" ? "None" : "Use default"
-            }
-          />
+          <NetworkPolicyCell policy={row.original.networkPolicy} />
         ),
       },
       {
@@ -216,7 +202,7 @@ export function EnvironmentsSection({
         },
       },
     ],
-    [canEdit, networkPolicies, canReadNetworkPolicies],
+    [canEdit],
   );
 
   return (
@@ -232,10 +218,9 @@ export function EnvironmentsSection({
       <EnvironmentEditorDialog
         mode="create"
         open={createOpen}
-        onOpenChange={setCreateOpen}
+        onOpenChange={onCreateOpenChange}
         environment={null}
-        networkPolicies={networkPolicies}
-        canReadNetworkPolicies={canReadNetworkPolicies}
+        capabilities={capabilities}
       />
 
       <EnvironmentEditorDialog
@@ -243,8 +228,7 @@ export function EnvironmentsSection({
         open={editTarget !== null}
         onOpenChange={(v) => !v && setEditTarget(null)}
         environment={editTarget}
-        networkPolicies={networkPolicies}
-        canReadNetworkPolicies={canReadNetworkPolicies}
+        capabilities={capabilities}
       />
 
       <EnvironmentEditorDialog
@@ -253,8 +237,7 @@ export function EnvironmentsSection({
         onOpenChange={setEditDefaultOpen}
         environment={null}
         defaultEnvironment={defaultEnvironment}
-        networkPolicies={networkPolicies}
-        canReadNetworkPolicies={canReadNetworkPolicies}
+        capabilities={capabilities}
       />
 
       <DeleteEnvironmentDialog
@@ -296,36 +279,31 @@ function NamespaceCell({ namespace }: { namespace: string | null }) {
   return <span className="text-muted-foreground">—</span>;
 }
 
-function NetworkPolicyCell({
-  policyId,
-  policies,
-  canReadNetworkPolicies,
-  emptyLabel,
-}: {
-  policyId: string | null;
-  policies: Array<{ id: string; name: string }>;
-  canReadNetworkPolicies: boolean;
-  emptyLabel: string;
-}) {
-  if (!policyId) {
-    return <span className="text-muted-foreground">{emptyLabel}</span>;
+function NetworkPolicyCell({ policy }: { policy: NetworkPolicy | null }) {
+  if (!policy) {
+    return <span className="text-muted-foreground">Built-in</span>;
   }
 
-  if (!canReadNetworkPolicies) {
-    return (
-      <span className="text-muted-foreground">
-        Requires network policy read
+  return (
+    <div className="flex flex-col">
+      <span className="text-sm">{formatEgressMode(policy.egressMode)}</span>
+      <span className="text-xs text-muted-foreground">
+        {formatPolicySummary(policy)}
       </span>
-    );
-  }
-
-  const policy = policies.find((p) => p.id === policyId);
-  return <span className="text-sm">{policy?.name ?? "Unknown policy"}</span>;
+    </div>
+  );
 }
 
 // Sentinel for the "use default" namespace option (maps to a null namespace —
 // the environment inherits the org default). shadcn Select can't use "".
 const NAMESPACE_DEFAULT_VALUE = "__default_namespace__";
+
+const EMPTY_NETWORK_POLICY: NetworkPolicy = {
+  egressMode: "restricted",
+  domainPreset: "none",
+  allowedDomains: [],
+  allowedCidrs: [],
+};
 
 function EnvironmentEditorDialog({
   mode,
@@ -333,8 +311,7 @@ function EnvironmentEditorDialog({
   onOpenChange,
   environment,
   defaultEnvironment,
-  networkPolicies,
-  canReadNetworkPolicies,
+  capabilities,
 }: {
   // "default" edits the org-level default environment; "create"/"edit" manage
   // real environments. Name, description, namespace, and restricted are all
@@ -347,15 +324,10 @@ function EnvironmentEditorDialog({
     name: string;
     namespace: string | null;
     description: string | null;
-    networkPolicyId: string | null;
+    networkPolicy: NetworkPolicy | null;
     restricted: boolean;
   };
-  networkPolicies: Array<{
-    id: string;
-    name: string;
-    description: string | null;
-  }>;
-  canReadNetworkPolicies: boolean;
+  capabilities: ReturnType<typeof useK8sCapabilities>["data"];
 }) {
   const createMutation = useCreateEnvironment();
   const updateMutation = useUpdateEnvironment();
@@ -373,9 +345,20 @@ function EnvironmentEditorDialog({
   const [name, setName] = useState("");
   const [namespace, setNamespace] = useState("");
   const [description, setDescription] = useState("");
-  const [networkPolicyId, setNetworkPolicyId] = useState<string | null>(null);
+  const [egressMode, setEgressMode] = useState<EgressMode>("restricted");
+  const [domainPreset, setDomainPreset] = useState<DomainPreset>("none");
+  const [allowedDomainsText, setAllowedDomainsText] = useState("");
+  const [allowedCidrsText, setAllowedCidrsText] = useState("");
   const [restricted, setRestricted] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
+  const syncNetworkPolicyDraft = useCallback((policy: NetworkPolicy | null) => {
+    const nextPolicy = policy ?? EMPTY_NETWORK_POLICY;
+    setEgressMode(nextPolicy.egressMode);
+    setDomainPreset(nextPolicy.domainPreset);
+    setAllowedDomainsText(nextPolicy.allowedDomains.join("\n"));
+    setAllowedCidrsText(nextPolicy.allowedCidrs.join("\n"));
+  }, []);
+
   // Sync drafts whenever the dialog (re)opens for a target.
   useEffect(() => {
     if (open) {
@@ -384,17 +367,17 @@ function EnvironmentEditorDialog({
         setName(defaultEnvironment?.name ?? "");
         setNamespace(defaultEnvironment?.namespace ?? "");
         setDescription(defaultEnvironment?.description ?? "");
-        setNetworkPolicyId(defaultEnvironment?.networkPolicyId ?? null);
+        syncNetworkPolicyDraft(defaultEnvironment?.networkPolicy ?? null);
         setRestricted(defaultEnvironment?.restricted ?? false);
       } else {
         setName(environment?.name ?? "");
         setNamespace(environment?.namespace ?? "");
         setDescription(environment?.description ?? "");
-        setNetworkPolicyId(environment?.networkPolicyId ?? null);
+        syncNetworkPolicyDraft(environment?.networkPolicy ?? null);
         setRestricted(environment?.restricted ?? false);
       }
     }
-  }, [open, mode, environment, defaultEnvironment]);
+  }, [open, mode, environment, defaultEnvironment, syncNetworkPolicyDraft]);
 
   const isPending =
     createMutation.isPending ||
@@ -404,6 +387,18 @@ function EnvironmentEditorDialog({
   const trimmedNamespace = namespace.trim();
   const trimmedDescription = description.trim();
   const canSave = trimmedName.length > 0;
+  const supportsFqdn = capabilities?.networkPolicy.supportsFqdn === true;
+  const networkPolicy = {
+    egressMode,
+    domainPreset:
+      egressMode === "restricted" && supportsFqdn ? domainPreset : "none",
+    allowedDomains:
+      egressMode === "restricted" && supportsFqdn
+        ? splitPolicyList(allowedDomainsText)
+        : [],
+    allowedCidrs:
+      egressMode === "restricted" ? splitPolicyList(allowedCidrsText) : [],
+  };
 
   // The current value is included so editing an environment whose namespace
   // predates the configured list never silently drops it.
@@ -429,7 +424,7 @@ function EnvironmentEditorDialog({
           name: trimmedName,
           namespace: namespaceValue,
           description: descriptionValue,
-          networkPolicyId,
+          networkPolicy,
           restricted,
         },
         { onSuccess: (created) => created && onOpenChange(false) },
@@ -440,7 +435,7 @@ function EnvironmentEditorDialog({
           name: trimmedName,
           namespace: namespaceValue,
           description: descriptionValue,
-          networkPolicyId,
+          networkPolicy,
           restricted,
         },
         { onSuccess: (updated) => updated && onOpenChange(false) },
@@ -453,7 +448,7 @@ function EnvironmentEditorDialog({
             name: trimmedName,
             namespace: namespaceValue,
             description: descriptionValue,
-            networkPolicyId,
+            networkPolicy,
             restricted,
           },
         },
@@ -470,169 +465,367 @@ function EnvironmentEditorDialog({
     }
   };
 
+  const title =
+    mode === "create"
+      ? "Add environment"
+      : mode === "default"
+        ? "Edit default environment"
+        : "Edit environment";
+  const dialogDescription =
+    mode === "create"
+      ? "Create an org-level deployment environment."
+      : mode === "default"
+        ? "Update the default environment."
+        : "Update this environment.";
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg max-h-[85vh] overflow-hidden">
-        <DialogHeader>
-          <DialogTitle>
-            {mode === "create"
-              ? "Add environment"
-              : mode === "default"
-                ? "Edit default environment"
-                : "Edit environment"}
-          </DialogTitle>
-          <DialogDescription>
-            {mode === "create"
-              ? "Create an org-level deployment environment."
-              : mode === "default"
-                ? "Update the default environment."
-                : "Update this environment."}
-          </DialogDescription>
-        </DialogHeader>
-        <DialogBody className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="environment-name">
-              Name <span className="text-destructive">*</span>
-            </Label>
-            <Input
-              id="environment-name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. Production"
-              maxLength={50}
-              disabled={isPending}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="environment-description">Description</Label>
-            <Textarea
-              id="environment-description"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              maxLength={500}
-              className="min-h-20"
-              disabled={isPending}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="environment-namespace">Namespace</Label>
-            <Select
-              value={
-                trimmedNamespace === ""
-                  ? NAMESPACE_DEFAULT_VALUE
-                  : trimmedNamespace
-              }
-              onValueChange={(value) => {
-                setNamespace(value === NAMESPACE_DEFAULT_VALUE ? "" : value);
-                setShowConfirm(false);
-              }}
-              disabled={isPending}
-            >
-              <SelectTrigger id="environment-namespace" className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={NAMESPACE_DEFAULT_VALUE}>
-                  {runtimeEnabled && orchestratorNamespace
-                    ? `Use default (${orchestratorNamespace})`
-                    : "Use default"}
-                </SelectItem>
-                {namespaceOptions.map((ns) => (
-                  <SelectItem key={ns} value={ns}>
-                    {ns}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-2">
-            <Label>Network Policy</Label>
-            {canReadNetworkPolicies ? (
-              <Select
-                value={networkPolicyId ?? NETWORK_POLICY_DEFAULT_VALUE}
-                onValueChange={(value) =>
-                  setNetworkPolicyId(
-                    value === NETWORK_POLICY_DEFAULT_VALUE ? null : value,
-                  )
-                }
-                disabled={isPending}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={NETWORK_POLICY_DEFAULT_VALUE}>
-                    {mode === "default" ? "None" : "Use default policy"}
-                  </SelectItem>
-                  {networkPolicies.map((policy) => (
-                    <SelectItem
-                      key={policy.id}
-                      value={policy.id}
-                      description={policy.description ?? undefined}
-                    >
-                      {policy.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            ) : (
-              <Alert variant="info">
-                <Info className="h-4 w-4" />
-                <AlertTitle>Network policies hidden</AlertTitle>
-                <AlertDescription>
-                  You can edit environments, but need the{" "}
-                  <code className="rounded bg-muted px-1 py-0.5 font-mono">
-                    networkPolicy:read
-                  </code>{" "}
-                  permission to view or change the assigned policy.
-                </AlertDescription>
-              </Alert>
-            )}
-          </div>
-          <div className="flex items-start justify-between gap-4">
-            <div className="space-y-1">
-              <Label htmlFor="environment-restricted">Restricted</Label>
-              <p className="text-xs text-muted-foreground">
-                Only users who hold the{" "}
-                <code className="rounded bg-muted px-1 py-0.5 font-mono">
-                  environment:admin
-                </code>{" "}
-                permission are allowed to deploy in this environment.
-              </p>
-            </div>
-            <Switch
-              id="environment-restricted"
-              checked={restricted}
-              onCheckedChange={setRestricted}
-              disabled={isPending}
-            />
-          </div>
-        </DialogBody>
-        {showConfirm ? (
-          <ReinstallConfirmBar
-            mode="auto"
-            affectedServerCount={environment?.assignedCatalogCount ?? 0}
-            isSubmitting={isPending}
-            onCancel={() => setShowConfirm(false)}
-            onConfirm={doSave}
+    <FormDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title={title}
+      description={dialogDescription}
+      size="medium"
+      className="sm:max-w-3xl h-[88vh]"
+    >
+      <DialogBody className="space-y-4">
+        <div className="space-y-2">
+          <Label htmlFor="environment-name">
+            Name <span className="text-destructive">*</span>
+          </Label>
+          <Input
+            id="environment-name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="e.g. Production"
+            maxLength={50}
+            disabled={isPending}
           />
-        ) : (
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => onOpenChange(false)}
-              disabled={isPending}
-            >
-              Cancel
-            </Button>
-            <Button onClick={handleSave} disabled={!canSave || isPending}>
-              {isPending ? "Saving…" : "Save"}
-            </Button>
-          </DialogFooter>
-        )}
-      </DialogContent>
-    </Dialog>
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="environment-description">Description</Label>
+          <Textarea
+            id="environment-description"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            maxLength={500}
+            className="min-h-20"
+            disabled={isPending}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="environment-namespace">Namespace</Label>
+          <Select
+            value={
+              trimmedNamespace === ""
+                ? NAMESPACE_DEFAULT_VALUE
+                : trimmedNamespace
+            }
+            onValueChange={(value) => {
+              setNamespace(value === NAMESPACE_DEFAULT_VALUE ? "" : value);
+              setShowConfirm(false);
+            }}
+            disabled={isPending}
+          >
+            <SelectTrigger id="environment-namespace" className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={NAMESPACE_DEFAULT_VALUE}>
+                {runtimeEnabled && orchestratorNamespace
+                  ? `Use default (${orchestratorNamespace})`
+                  : "Use default"}
+              </SelectItem>
+              {namespaceOptions.map((ns) => (
+                <SelectItem key={ns} value={ns}>
+                  {ns}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex items-start justify-between gap-4">
+          <div className="space-y-1">
+            <Label htmlFor="environment-restricted">Restricted</Label>
+            <p className="text-xs text-muted-foreground">
+              Only users who hold the{" "}
+              <code className="rounded bg-muted px-1 py-0.5 font-mono">
+                environment:deploy-to-restricted
+              </code>{" "}
+              permission are allowed to deploy in this environment.
+            </p>
+          </div>
+          <Switch
+            id="environment-restricted"
+            checked={restricted}
+            onCheckedChange={setRestricted}
+            disabled={isPending}
+          />
+        </div>
+        <section className="space-y-4 border-t pt-4">
+          <div className="space-y-1">
+            <h3 className="font-medium text-sm">Network Egress Policy</h3>
+            <p className="text-xs text-muted-foreground">
+              Configure outbound network access for MCP workloads in this
+              environment.{" "}
+              <ExternalDocsLink href={NETWORK_POLICY_DOCS_URL}>
+                View docs
+              </ExternalDocsLink>
+            </p>
+          </div>
+
+          <NetworkPolicyFields
+            egressMode={egressMode}
+            setEgressMode={setEgressMode}
+            domainPreset={domainPreset}
+            setDomainPreset={setDomainPreset}
+            allowedDomainsText={allowedDomainsText}
+            setAllowedDomainsText={setAllowedDomainsText}
+            allowedCidrsText={allowedCidrsText}
+            setAllowedCidrsText={setAllowedCidrsText}
+            supportsFqdn={supportsFqdn}
+            provider={capabilities?.networkPolicy.provider ?? null}
+            disabled={isPending}
+          />
+        </section>
+      </DialogBody>
+      {showConfirm ? (
+        <ReinstallConfirmBar
+          mode="auto"
+          affectedServerCount={environment?.assignedCatalogCount ?? 0}
+          isSubmitting={isPending}
+          onCancel={() => setShowConfirm(false)}
+          onConfirm={doSave}
+        />
+      ) : (
+        <DialogStickyFooter>
+          <Button
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+            disabled={isPending}
+          >
+            Cancel
+          </Button>
+          <Button onClick={handleSave} disabled={!canSave || isPending}>
+            {isPending ? "Saving…" : "Save"}
+          </Button>
+        </DialogStickyFooter>
+      )}
+    </FormDialog>
   );
+}
+
+function NetworkPolicyFields({
+  egressMode,
+  setEgressMode,
+  domainPreset,
+  setDomainPreset,
+  allowedDomainsText,
+  setAllowedDomainsText,
+  allowedCidrsText,
+  setAllowedCidrsText,
+  supportsFqdn,
+  provider,
+  disabled,
+}: {
+  egressMode: EgressMode;
+  setEgressMode: (value: EgressMode) => void;
+  domainPreset: DomainPreset;
+  setDomainPreset: (value: DomainPreset) => void;
+  allowedDomainsText: string;
+  setAllowedDomainsText: (value: string) => void;
+  allowedCidrsText: string;
+  setAllowedCidrsText: (value: string) => void;
+  supportsFqdn: boolean;
+  provider: string | null;
+  disabled: boolean;
+}) {
+  return (
+    <div className="space-y-4">
+      {provider === "none" ? (
+        <Alert variant="info">
+          <Info className="h-4 w-4" />
+          <AlertTitle>Network policy enforcement unavailable</AlertTitle>
+          <AlertDescription className="block leading-6">
+            Kubernetes access is not configured, or network policy capabilities
+            could not be inspected. Enable a Kubernetes network policy provider
+            before relying on these policies.
+          </AlertDescription>
+        </Alert>
+      ) : !supportsFqdn ? (
+        <Alert variant="info">
+          <Info className="h-4 w-4" />
+          <AlertTitle>Domain allowlists unavailable</AlertTitle>
+          <AlertDescription className="block leading-6">
+            Standard Kubernetes{" "}
+            <code className="inline rounded bg-muted px-1 py-0.5 font-mono text-[0.85em]">
+              NetworkPolicy
+            </code>{" "}
+            supports IP/CIDR rules only. Domain allowlists require a supported
+            FQDN policy provider.{" "}
+            <ExternalDocsLink href={NETWORK_POLICY_DOCS_URL}>
+              View docs
+            </ExternalDocsLink>
+          </AlertDescription>
+        </Alert>
+      ) : null}
+
+      <div className="space-y-2">
+        <FieldLabel
+          label="Egress"
+          description="Controls outbound internet access. Off blocks egress, Restricted allows only the CIDR/domain rules below, and Unrestricted allows all egress."
+        />
+        <Select
+          value={egressMode}
+          onValueChange={(value) => setEgressMode(value as EgressMode)}
+          disabled={disabled}
+        >
+          <SelectTrigger className="w-full">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="off">Off</SelectItem>
+            <SelectItem value="restricted">Restricted</SelectItem>
+            <SelectItem value="unrestricted">Unrestricted</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="space-y-2">
+        <FieldLabel
+          label="Domain preset"
+          description={
+            <>
+              Adds a maintained domain allowlist for common dependency or
+              package manager traffic. Requires a supported FQDN policy
+              provider.{" "}
+              <ExternalDocsLink href={DOMAIN_PRESETS_DOCS_URL}>
+                View presets
+              </ExternalDocsLink>
+            </>
+          }
+        />
+        <Select
+          value={domainPreset}
+          onValueChange={(value) => setDomainPreset(value as DomainPreset)}
+          disabled={disabled || egressMode !== "restricted" || !supportsFqdn}
+        >
+          <SelectTrigger className="w-full">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="none">None</SelectItem>
+            <SelectItem value="common_dependencies">
+              Common dependencies
+            </SelectItem>
+            <SelectItem value="package_managers">Package managers</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="space-y-2">
+        <FieldLabel
+          htmlFor="network-policy-cidrs"
+          label="Allowed CIDRs"
+          description="IPv4 or IPv6 CIDR ranges that restricted workloads may reach. These rules are enforced by standard Kubernetes NetworkPolicy."
+        />
+        <Textarea
+          id="network-policy-cidrs"
+          value={allowedCidrsText}
+          onChange={(e) => setAllowedCidrsText(e.target.value)}
+          placeholder={"203.0.113.0/24\n2001:db8::/32"}
+          className="min-h-20 font-mono text-sm"
+          disabled={disabled || egressMode !== "restricted"}
+        />
+      </div>
+
+      <div className="space-y-2">
+        <FieldLabel
+          htmlFor="network-policy-domains"
+          label="Allowed domains"
+          description="Domain names or wildcard domains that restricted workloads may reach. Requires a supported FQDN policy provider."
+        />
+        <Textarea
+          id="network-policy-domains"
+          value={allowedDomainsText}
+          onChange={(e) => setAllowedDomainsText(e.target.value)}
+          placeholder={"api.example.com\n*.registry.example.com"}
+          className="min-h-20 font-mono text-sm"
+          disabled={disabled || egressMode !== "restricted" || !supportsFqdn}
+        />
+      </div>
+    </div>
+  );
+}
+
+function FieldLabel({
+  htmlFor,
+  label,
+  description,
+}: {
+  htmlFor?: string;
+  label: string;
+  description: React.ReactNode;
+}) {
+  return (
+    <div className="flex items-center gap-1.5">
+      <Label htmlFor={htmlFor}>{label}</Label>
+      <Popover>
+        <PopoverTrigger asChild>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            className="h-5 w-5 text-muted-foreground hover:text-foreground"
+            aria-label={`${label} help`}
+          >
+            <Info className="h-3.5 w-3.5" />
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent align="start" className="w-80 text-sm">
+          {description}
+        </PopoverContent>
+      </Popover>
+    </div>
+  );
+}
+
+function splitPolicyList(value: string): string[] {
+  return value
+    .split(/\r?\n|,/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function formatEgressMode(mode: EgressMode) {
+  switch (mode) {
+    case "off":
+      return "Off";
+    case "restricted":
+      return "Restricted";
+    case "unrestricted":
+      return "Unrestricted";
+  }
+}
+
+function formatPolicySummary(policy: NetworkPolicy) {
+  if (policy.egressMode === "off") return "No outbound egress";
+  if (policy.egressMode === "unrestricted") return "All outbound egress";
+
+  const parts: string[] = [];
+  if (policy.domainPreset !== "none") {
+    parts.push(
+      policy.domainPreset === "common_dependencies"
+        ? "Common dependencies"
+        : "Package managers",
+    );
+  }
+  if (policy.allowedDomains.length > 0) {
+    parts.push(`${policy.allowedDomains.length} domain rules`);
+  }
+  if (policy.allowedCidrs.length > 0) {
+    parts.push(`${policy.allowedCidrs.length} CIDR rules`);
+  }
+  return parts.length > 0 ? parts.join(", ") : "No egress rules";
 }
 
 function DeleteEnvironmentDialog({

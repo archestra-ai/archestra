@@ -3,7 +3,7 @@ title: "Access Control"
 category: Administration
 description: "Role-based access control (RBAC) system for managing user permissions in Archestra"
 order: 1
-lastUpdated: 2026-06-02
+lastUpdated: 2026-06-03
 ---
 <!--
 Check ../docs_writer_prompt.md before changing this file.
@@ -54,7 +54,6 @@ Full access to core resources and settings, but cannot manage users, roles, or i
 | MCP Server Installations | `read`, `create`, `update`, `delete` |
 | MCP Server Installation Requests | `read`, `create`, `update`, `delete` |
 | Environments | `admin` |
-| Network Policies | `read`, `create`, `update`, `delete` |
 | Knowledge Files | `read`, `create`, `update`, `delete` |
 | Knowledge Sources | `read`, `create`, `update`, `delete`, `query` |
 | Chats | `read`, `create`, `update`, `delete` |
@@ -93,7 +92,6 @@ Can manage agents, tools, and chat, with read-only access to most other resource
 | MCP Registry | `read` |
 | MCP Server Installations | `read`, `create`, `delete` |
 | MCP Server Installation Requests | `read`, `create`, `update` |
-| Network Policies | `read` |
 | Knowledge Files | `read` |
 | Knowledge Sources | `read`, `query` |
 | Chats | `read`, `create`, `update`, `delete` |
@@ -219,10 +217,6 @@ The following table lists all available permissions that can be assigned to cust
 | `member:create` | Add new members to the organization |
 | `member:update` | Change member roles and settings |
 | `member:delete` | Remove members from the organization |
-| `networkPolicy:read` | View network policies |
-| `networkPolicy:create` | Create network policies |
-| `networkPolicy:update` | Modify network policies |
-| `networkPolicy:delete` | Delete network policies |
 | `optimizationRule:read` | View optimization rules |
 | `optimizationRule:create` | Create new optimization rules |
 | `optimizationRule:update` | Modify optimization rules |

@@ -16,6 +16,7 @@ pnpm codegen:api-client
 pnpm type-check
 pnpm lint
 pnpm test
+pnpm knip   # flags unused exports; part of frontend check:ci
 ```
 
 ## Data fetching

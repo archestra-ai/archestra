@@ -10,12 +10,13 @@ vi.mock("@/auth", () => ({
 }));
 
 // Force the K8s runtime ON so the route's relocation branch is exercised, and
-// stub the cluster calls. restartServer/getOrLoadDeployment are no-ops here; we
-// only assert which relocation primitive the route picks.
+// stub the cluster calls. The teardown/recreate primitives are no-ops here; we
+// only assert which the route picks and what it's called with.
 vi.mock("@/k8s/mcp-server-runtime/manager", () => ({
   default: {
     isEnabled: true,
     getOrLoadDeployment: vi.fn().mockResolvedValue(undefined),
+    tearDownOldNamespaceDeployments: vi.fn().mockResolvedValue(undefined),
     reinstallSharedDeployment: vi.fn().mockResolvedValue(undefined),
     restartServer: vi.fn().mockResolvedValue(undefined),
     validateNamespace: vi.fn().mockResolvedValue(undefined),
@@ -28,7 +29,8 @@ import { createEnvironment } from "@/services/environments/environment";
 
 const mockHasPermission = hasPermission as Mock;
 const reinstallSpy = mcpServerRuntimeManager.reinstallSharedDeployment as Mock;
-const getOrLoadSpy = mcpServerRuntimeManager.getOrLoadDeployment as Mock;
+const tearDownSpy =
+  mcpServerRuntimeManager.tearDownOldNamespaceDeployments as Mock;
 
 // The cascade runs in `setImmediate` after the response; drain real ticks so it
 // settles before the app closes (its per-install tool sync errors harmlessly
@@ -126,12 +128,15 @@ describe("PUT /api/internal_mcp_catalog/:id — environment relocation", () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json().environmentId).toBe(to.id);
-    // Shared deployment relocated via the catalog-level primitive...
+    // Shared deployment recreated in the new namespace via the catalog-level
+    // primitive...
     expect(reinstallSpy).toHaveBeenCalledWith(catalog.id);
-    // ...and pre-loaded while the row still held the old namespace, i.e. the
-    // pre-load runs BEFORE the relocation so teardown targets the old ns.
-    expect(getOrLoadSpy).toHaveBeenCalled();
-    expect(getOrLoadSpy.mock.invocationCallOrder[0]).toBeLessThan(
+    // ...and the OLD-namespace deployment was torn down first, using the
+    // pre-update snapshot (still carrying the old environment) so the teardown
+    // resolves the old namespace — and BEFORE the recreate.
+    expect(tearDownSpy).toHaveBeenCalled();
+    expect(tearDownSpy.mock.calls[0][0]?.environmentId).toBe(from.id);
+    expect(tearDownSpy.mock.invocationCallOrder[0]).toBeLessThan(
       reinstallSpy.mock.invocationCallOrder[0],
     );
   });
@@ -160,7 +165,7 @@ describe("PUT /api/internal_mcp_catalog/:id — environment relocation", () => {
       },
       { organizationId },
     );
-    const server = await makeMcpServer({ catalogId: catalog.id });
+    await makeMcpServer({ catalogId: catalog.id });
 
     const response = await app.inject({
       method: "PUT",
@@ -170,22 +175,20 @@ describe("PUT /api/internal_mcp_catalog/:id — environment relocation", () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json().environmentId).toBe(to.id);
-    // The install's deployment is pre-loaded synchronously in the handler,
-    // while the catalog row still holds the OLD namespace — BEFORE the deferred
-    // cascade runs its per-install restartServer→stopServer teardown (which
-    // re-derives the namespace from the now-updated row). Asserting it here,
-    // before draining the cascade, proves the pre-load ran in-handler ahead of
-    // any teardown. Without it the teardown targets the new namespace and
-    // orphans the old-namespace pod on a cache-cold replica.
-    expect(getOrLoadSpy).toHaveBeenCalledWith(server.id);
+    // The OLD-namespace deployment is torn down explicitly, using the pre-update
+    // snapshot (still carrying the old environment) so the teardown resolves the
+    // OLD namespace — not the now-updated row, which a cache-stale replica would
+    // otherwise re-resolve to the new namespace, orphaning the old pod.
+    expect(tearDownSpy).toHaveBeenCalled();
+    expect(tearDownSpy.mock.calls[0][0]?.environmentId).toBe(from.id);
 
     await drainCascade();
-    // Single-tenant relocates via the cascade's per-install restart, never the
+    // Single-tenant recreates via the cascade's per-install restart, never the
     // shared-deployment primitive (that path no-ops on a shared deployment).
     expect(reinstallSpy).not.toHaveBeenCalled();
   });
 
-  test("single-tenant: reassignment back to default (null) still pre-loads the deployment", async ({
+  test("single-tenant: reassignment back to default (null) tears down the old env namespace", async ({
     makeMcpServer,
   }) => {
     const from = await createEnvironment({
@@ -205,7 +208,7 @@ describe("PUT /api/internal_mcp_catalog/:id — environment relocation", () => {
       },
       { organizationId },
     );
-    const server = await makeMcpServer({ catalogId: catalog.id });
+    await makeMcpServer({ catalogId: catalog.id });
 
     const response = await app.inject({
       method: "PUT",
@@ -216,12 +219,64 @@ describe("PUT /api/internal_mcp_catalog/:id — environment relocation", () => {
     expect(response.statusCode).toBe(200);
     expect(response.json().environmentId).toBeNull();
     // Prod→Default is the direction observed orphaning a pod in the previous
-    // environment's namespace. The pre-load must still run (in-handler, before
-    // the deferred cascade) so the teardown targets that namespace rather than
-    // the resolved default.
-    expect(getOrLoadSpy).toHaveBeenCalledWith(server.id);
+    // environment's namespace. The teardown must use the pre-update snapshot
+    // (environmentId = the Prod env) so it removes the pod from THAT namespace —
+    // not the default it's moving to. Passing the new (null) env here is exactly
+    // the bug: it would resolve to the default namespace and orphan the old pod.
+    expect(tearDownSpy).toHaveBeenCalled();
+    expect(tearDownSpy.mock.calls[0][0]?.environmentId).toBe(from.id);
 
     await drainCascade();
+    expect(reinstallSpy).not.toHaveBeenCalled();
+  });
+
+  test("single-tenant: combined environment + command change does NOT tear down (cascade defers recreate to manual reinstall)", async ({
+    makeMcpServer,
+  }) => {
+    const from = await createEnvironment({
+      organizationId,
+      data: { name: "Staging", restricted: false },
+    });
+    const to = await createEnvironment({
+      organizationId,
+      data: { name: "Prod", restricted: false },
+    });
+
+    const name = `st-combined-${crypto.randomUUID().slice(0, 8)}`;
+    const catalog = await InternalMcpCatalogModel.create(
+      {
+        name,
+        serverType: "local",
+        multitenant: false,
+        environmentId: from.id,
+        localConfig,
+        scope: "org",
+      },
+      { organizationId },
+    );
+    await makeMcpServer({ catalogId: catalog.id });
+
+    const response = await app.inject({
+      method: "PUT",
+      url: `/api/internal_mcp_catalog/${catalog.id}`,
+      payload: {
+        name,
+        serverType: "local" as const,
+        // Environment changes AND the command changes in the same edit →
+        // requiresNewUserInputForReinstall is true for single-tenant, so the
+        // cascade marks the install reinstall-required and does NOT recreate.
+        localConfig: { ...localConfig, command: "bun" },
+        environmentId: to.id,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().environmentId).toBe(to.id);
+    await drainCascade();
+    // Because the pod is NOT recreated (manual reinstall pending), the
+    // old-namespace deployment must NOT be torn down — doing so would leave the
+    // install with no running pod until the user reinstalls.
+    expect(tearDownSpy).not.toHaveBeenCalled();
     expect(reinstallSpy).not.toHaveBeenCalled();
   });
 

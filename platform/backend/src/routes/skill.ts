@@ -48,6 +48,7 @@ import {
   parseSkillManifest,
   SkillParseError,
 } from "@/skills/parser";
+import { skillCatalog } from "@/skills/skill-catalog";
 import { suggestSkillDescription } from "@/skills/skill-description";
 import {
   isSkillNameConflict,
@@ -78,6 +79,16 @@ const SkillListItemSchema = SelectSkillSchema.extend({
 /** A skill with its resource files and team assignments. */
 const SkillDetailSchema = SkillWithFilesSchema.extend({
   teams: z.array(SkillTeamSchema),
+});
+
+/** One crawled public-GitHub skill returned by a catalog search. */
+const SkillCatalogResultSchema = z.object({
+  repo: z.string(),
+  skillPath: z.string(),
+  name: z.string(),
+  description: z.string(),
+  compatibility: z.string().nullable(),
+  fileCount: z.number(),
 });
 
 /** One source-agent field and how the conversion preserved it. */
@@ -861,6 +872,42 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         "[Skills] Enabled skill tool defaults and backfilled existing agents",
       );
       return reply.send({ enabled: true, agentsBackfilled });
+    },
+  );
+
+  fastify.get(
+    "/api/skills/catalog/search",
+    {
+      schema: {
+        operationId: RouteId.SearchSkillCatalog,
+        description:
+          "Search the crawled public-GitHub skill catalog by name, repo, path, or description. Backed by an in-memory token index; returns ranked candidates to import via the GitHub import endpoints.",
+        tags: ["Skills"],
+        querystring: z.object({
+          q: z.string().default(""),
+          limit: z.coerce.number().int().min(1).max(100).default(50),
+        }),
+        response: constructResponseSchema(
+          z.object({
+            results: z.array(SkillCatalogResultSchema),
+            totalCount: z.number(),
+          }),
+        ),
+      },
+    },
+    async ({ query: { q, limit } }, reply) => {
+      const results = skillCatalog.search({ query: q, limit });
+      return reply.send({
+        results: results.map((entry) => ({
+          repo: entry.repo,
+          skillPath: entry.skillPath,
+          name: entry.name,
+          description: entry.description,
+          compatibility: entry.compatibility,
+          fileCount: entry.fileCount,
+        })),
+        totalCount: skillCatalog.size,
+      });
     },
   );
 

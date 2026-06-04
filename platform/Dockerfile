@@ -192,7 +192,17 @@ FROM builder-base AS builder
 #
 # https://docs.docker.com/build/building/secrets/#using-build-secrets
 # https://docs.docker.com/build/building/secrets/#target
-RUN --mount=type=secret,id=turbo_team,env=TURBO_TEAM \
+# Cache cargo registry/git, the Rust workspace target dir, turbo's local cache,
+# and Next.js's build cache so a cold `pnpm build` (which recompiles the Rust
+# N-API addon and builds the frontend) reuses prior work on subsequent builds.
+# The cargo targets match the sandbox-rs-musl-smoke stage above, so that stage
+# warms the registry for this one; cargo isolates artifacts by target triple.
+RUN --mount=type=cache,target=/root/.cargo/registry \
+    --mount=type=cache,target=/root/.cargo/git \
+    --mount=type=cache,target=/app/archestra-rs/target \
+    --mount=type=cache,target=/app/.turbo \
+    --mount=type=cache,target=/app/frontend/.next/cache \
+    --mount=type=secret,id=turbo_team,env=TURBO_TEAM \
     --mount=type=secret,id=turbo_token,env=TURBO_TOKEN \
     --mount=type=secret,id=sentry_auth_token,env=SENTRY_AUTH_TOKEN \
     SENTRY_URL=https://de.sentry.io/ \

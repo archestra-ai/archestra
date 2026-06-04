@@ -56508,6 +56508,10 @@ export type GetIdentityProviderLatestIdTokenClaimsResponses = {
         claims: {
             [key: string]: unknown;
         } | null;
+        accessTokenClaims: {
+            [key: string]: unknown;
+        } | null;
+        accessTokenExpiresAt: string | null;
         updatedAt: string | null;
     };
 };

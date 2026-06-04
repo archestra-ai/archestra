@@ -212344,7 +212344,7 @@
         "tags": [
           "Identity Providers"
         ],
-        "description": "Get decoded claims from the current user's latest ID token for an identity provider\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`identityProvider:read`: View identity provider configurations (SSO)",
+        "description": "Get decoded claims from the current user's latest identity-provider tokens\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`identityProvider:read`: View identity provider configurations (SSO)",
         "parameters": [
           {
             "schema": {
@@ -212371,6 +212371,16 @@
                       "type": "object",
                       "additionalProperties": {}
                     },
+                    "accessTokenClaims": {
+                      "nullable": true,
+                      "type": "object",
+                      "additionalProperties": {}
+                    },
+                    "accessTokenExpiresAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
+                    },
                     "updatedAt": {
                       "nullable": true,
                       "type": "string",
@@ -212380,6 +212390,8 @@
                   "required": [
                     "providerId",
                     "claims",
+                    "accessTokenClaims",
+                    "accessTokenExpiresAt",
                     "updatedAt"
                   ],
                   "additionalProperties": false

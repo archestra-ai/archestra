@@ -1854,7 +1854,7 @@ export function McpCatalogForm({
                                   render={({ field }) => (
                                     <FormItem>
                                       <FormLabel>
-                                        Redirect URIs{" "}
+                                        MCP OAuth callback URIs{" "}
                                         <span className="text-destructive">
                                           *
                                         </span>
@@ -1867,8 +1867,30 @@ export function McpCatalogForm({
                                         />
                                       </FormControl>
                                       <FormDescription>
-                                        Comma-separated list of redirect URIs
+                                        Use {appName}'s MCP install callback,
+                                        usually{" "}
+                                        <code>
+                                          {typeof window !== "undefined"
+                                            ? `${window.location.origin}/oauth-callback`
+                                            : "https://app.example.com/oauth-callback"}
+                                        </code>
+                                        . Do not use the SSO callback URL under{" "}
+                                        <code>/api/auth/sso/callback</code>.
                                       </FormDescription>
+                                      {typeof window !== "undefined" && (
+                                        <Button
+                                          type="button"
+                                          size="sm"
+                                          variant="secondary"
+                                          onClick={() =>
+                                            field.onChange(
+                                              `${window.location.origin}/oauth-callback`,
+                                            )
+                                          }
+                                        >
+                                          Use current origin
+                                        </Button>
+                                      )}
                                       <FormMessage />
                                     </FormItem>
                                   )}

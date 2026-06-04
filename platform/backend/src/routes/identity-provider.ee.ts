@@ -93,7 +93,7 @@ const identityProviderRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.GetIdentityProviderLatestIdTokenClaims,
         description:
-          "Get decoded claims from the current user's latest ID token for an identity provider",
+          "Get decoded claims from the current user's latest identity-provider tokens",
         tags: ["Identity Providers"],
         params: z.object({
           id: z.string(),
@@ -114,31 +114,33 @@ const identityProviderRoutes: FastifyPluginAsyncZod = async (fastify) => {
           user.id,
           provider.providerId,
         );
-      if (!account?.idToken) {
+      if (!account) {
         return reply.send({
           providerId: provider.providerId,
           claims: null,
-          updatedAt: account?.updatedAt ?? null,
+          accessTokenClaims: null,
+          accessTokenExpiresAt: null,
+          updatedAt: null,
         });
       }
 
-      try {
-        return reply.send({
+      return reply.send({
+        providerId: provider.providerId,
+        claims: decodeStoredTokenClaims({
+          rawToken: account.idToken,
+          tokenName: "id_token",
           providerId: provider.providerId,
-          claims: jwtDecode<Record<string, unknown>>(account.idToken),
-          updatedAt: account.updatedAt,
-        });
-      } catch (error) {
-        logger.warn(
-          { err: error, providerId: provider.providerId, userId: user.id },
-          "Failed to decode latest IdP id_token claims",
-        );
-        return reply.send({
+          userId: user.id,
+        }),
+        accessTokenClaims: decodeStoredTokenClaims({
+          rawToken: account.accessToken,
+          tokenName: "access_token",
           providerId: provider.providerId,
-          claims: null,
-          updatedAt: account.updatedAt,
-        });
-      }
+          userId: user.id,
+        }),
+        accessTokenExpiresAt: account.accessTokenExpiresAt ?? null,
+        updatedAt: account.updatedAt,
+      });
     },
   );
 
@@ -313,4 +315,30 @@ export async function getIdpLogoutUrl(userId: string): Promise<string | null> {
     );
   }
   return logoutUrl.toString();
+}
+
+function decodeStoredTokenClaims(params: {
+  rawToken: string | null;
+  tokenName: "access_token" | "id_token";
+  providerId: string;
+  userId: string;
+}): Record<string, unknown> | null {
+  if (!params.rawToken) {
+    return null;
+  }
+
+  try {
+    return jwtDecode<Record<string, unknown>>(params.rawToken);
+  } catch (error) {
+    logger.warn(
+      {
+        err: error,
+        providerId: params.providerId,
+        tokenName: params.tokenName,
+        userId: params.userId,
+      },
+      "Failed to decode latest IdP token claims",
+    );
+    return null;
+  }
 }

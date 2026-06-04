@@ -121,7 +121,7 @@ describe("RoleMappingForm", () => {
     expect(screen.getByText(/admin@example.com/i)).toBeInTheDocument();
     expect(screen.getByText(/app-admin/i)).toBeInTheDocument();
     expect(
-      screen.getByText(/raw signed token is never shown/i),
+      screen.getByText(/raw signed tokens are never shown/i),
     ).toBeInTheDocument();
   });
 

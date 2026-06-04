@@ -2,6 +2,7 @@ import { LocalConfigFormSchema } from "@shared";
 import { z } from "zod";
 
 const HEADER_NAME_REGEX = /^[A-Za-z0-9-]+$/;
+const SSO_CALLBACK_PATH = "/api/auth/sso/callback";
 
 const headerNameSchema = z
   .string()
@@ -140,6 +141,20 @@ export const oauthConfigSchema = z
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         message: "At least one redirect URI is required",
+        path: ["redirect_uris"],
+      });
+    }
+
+    if (
+      value.grantType === "authorization_code" &&
+      value.redirect_uris
+        ?.split(",")
+        .some((uri) => uri.trim().includes(SSO_CALLBACK_PATH))
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          "MCP OAuth redirect URIs must use /oauth-callback, not the SSO callback URL",
         path: ["redirect_uris"],
       });
     }

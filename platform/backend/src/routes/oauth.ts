@@ -708,6 +708,12 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Use the redirect URI stored in the catalog (set by frontend based on window.location.origin)
       // This ensures the redirect URI matches where the user initiated the OAuth flow from
       const redirectUri = oauthConfig.redirect_uris[0];
+      if (isSsoCallbackRedirectUri(redirectUri)) {
+        throw new ApiError(
+          400,
+          "MCP OAuth redirect URI must use /oauth-callback, not the SSO callback URL.",
+        );
+      }
 
       let clientId = oauthConfig.client_id;
       let clientSecret = oauthConfig.client_secret;
@@ -1083,6 +1089,18 @@ function getExplicitOAuthEndpoints(oauthConfig: {
     authorizationEndpoint: oauthConfig.authorization_endpoint,
     tokenEndpoint: oauthConfig.token_endpoint,
   };
+}
+
+function isSsoCallbackRedirectUri(redirectUri: string | undefined): boolean {
+  if (!redirectUri) {
+    return false;
+  }
+
+  try {
+    return new URL(redirectUri).pathname.startsWith("/api/auth/sso/callback");
+  } catch {
+    return redirectUri.includes("/api/auth/sso/callback");
+  }
 }
 
 export default oauthRoutes;

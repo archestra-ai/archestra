@@ -5743,7 +5743,7 @@ export const createIdentityProvider = <ThrowOnError extends boolean = false>(opt
 export const getIdentityProviderIdpLogoutUrl = <ThrowOnError extends boolean = false>(options?: Options<GetIdentityProviderIdpLogoutUrlData, ThrowOnError>) => (options?.client ?? client).get<GetIdentityProviderIdpLogoutUrlResponses, GetIdentityProviderIdpLogoutUrlErrors, ThrowOnError>({ url: '/api/identity-providers/idp-logout-url', ...options });
 
 /**
- * Get decoded claims from the current user's latest ID token for an identity provider
+ * Get decoded claims from the current user's latest identity-provider tokens
  *
  * Authentication:
  *

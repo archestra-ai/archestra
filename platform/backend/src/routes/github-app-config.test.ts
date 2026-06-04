@@ -166,6 +166,30 @@ describe("github app config routes", () => {
     ]);
   });
 
+  test("rejects a non-HTTP githubUrl", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+  }) => {
+    const user = await makeUser();
+    const organization = await makeOrganization();
+    await makeMember(user.id, organization.id, { role: ADMIN_ROLE_NAME });
+    app = await buildApp(user, organization.id);
+
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/github-app-configs",
+      payload: {
+        name: "Bad URL app",
+        githubUrl: "ftp://github.example.com",
+        appId: "12345",
+        installationId: "67890",
+        privateKey: PEM,
+      },
+    });
+    expect(created.statusCode).toBe(400);
+  });
+
   test("default members cannot manage GitHub App configs", async ({
     makeOrganization,
     makeUser,

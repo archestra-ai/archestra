@@ -33,9 +33,18 @@ const PrivateKeySchema = z
   .min(1)
   .describe("GitHub App private key PEM");
 
+// the stored value becomes the API base URL for token exchange and syncs, so it
+// must be HTTP(S) — z.string().url() alone would let ftp:// etc. through
+const GithubApiUrlSchema = z
+  .string()
+  .url()
+  .refine((value) => /^https?:\/\//.test(value), {
+    message: "githubUrl must be an HTTP(S) URL",
+  });
+
 export const CreateGithubAppConfigRequestSchema = z.object({
   name: z.string().min(1),
-  githubUrl: z.string().url().optional(),
+  githubUrl: GithubApiUrlSchema.optional(),
   appId: z.string().min(1),
   installationId: z.string().min(1),
   privateKey: PrivateKeySchema,
@@ -43,7 +52,7 @@ export const CreateGithubAppConfigRequestSchema = z.object({
 
 export const UpdateGithubAppConfigRequestSchema = z.object({
   name: z.string().min(1).optional(),
-  githubUrl: z.string().url().optional(),
+  githubUrl: GithubApiUrlSchema.optional(),
   appId: z.string().min(1).optional(),
   installationId: z.string().min(1).optional(),
   privateKey: PrivateKeySchema.optional(),

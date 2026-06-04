@@ -59,6 +59,7 @@ export const RouteId = {
   GetInternalMcpCatalogTools: "getInternalMcpCatalogTools",
   UpdateInternalMcpCatalogItem: "updateInternalMcpCatalogItem",
   ReinstallInternalMcpCatalogItem: "reinstallInternalMcpCatalogItem",
+  RefreshInternalMcpCatalogImage: "refreshInternalMcpCatalogImage",
   DeleteInternalMcpCatalogItem: "deleteInternalMcpCatalogItem",
   DeleteInternalMcpCatalogItemByName: "deleteInternalMcpCatalogItemByName",
   GetInternalMcpCatalogLabelKeys: "getInternalMcpCatalogLabelKeys",
@@ -375,17 +376,9 @@ export const RouteId = {
   // Connection Settings Routes (organization-level)
   UpdateConnectionSettings: "updateConnectionSettings",
 
-  // Preset Entity Name Routes (organization-level - configurable label for catalog presets)
-  UpdatePresetEntityName: "updatePresetEntityName",
-  UpdatePresetEntityDefaultLabel: "updatePresetEntityDefaultLabel",
-  UpdatePresetEntityDefaultValidationRegex:
-    "updatePresetEntityDefaultValidationRegex",
-
-  // Org-level preset entries (Production / Staging / Development buckets)
+  // Org-level preset entries (Production / Staging / Development buckets).
+  // Read-only: managed via existing data; the registry admin UI was removed.
   ListMcpPresetEntries: "listMcpPresetEntries",
-  CreateMcpPresetEntry: "createMcpPresetEntry",
-  UpdateMcpPresetEntry: "updateMcpPresetEntry",
-  DeleteMcpPresetEntry: "deleteMcpPresetEntry",
 
   // Org-level deployment environments
   ListEnvironments: "listEnvironments",
@@ -394,10 +387,6 @@ export const RouteId = {
   DeleteEnvironment: "deleteEnvironment",
   UpdateDefaultEnvironment: "updateDefaultEnvironment",
   GetK8sCapabilities: "getK8sCapabilities",
-  ListNetworkPolicies: "listNetworkPolicies",
-  CreateNetworkPolicy: "createNetworkPolicy",
-  UpdateNetworkPolicy: "updateNetworkPolicy",
-  DeleteNetworkPolicy: "deleteNetworkPolicy",
 
   // Knowledge Settings Routes (organization-level)
   UpdateKnowledgeSettings: "updateKnowledgeSettings",
@@ -524,11 +513,13 @@ export const RouteId = {
   GetSkills: "getSkills",
   CreateSkill: "createSkill",
   ConvertAgentToSkill: "convertAgentToSkill",
+  SuggestSkillDescription: "suggestSkillDescription",
   GetSkill: "getSkill",
   UpdateSkill: "updateSkill",
   DeleteSkill: "deleteSkill",
   ResetSkill: "resetSkill",
   DiscoverGithubSkills: "discoverGithubSkills",
+  SearchSkillCatalog: "searchSkillCatalog",
   PreviewGithubSkill: "previewGithubSkill",
   ImportGithubSkills: "importGithubSkills",
   GetSkillSourceRepos: "getSkillSourceRepos",

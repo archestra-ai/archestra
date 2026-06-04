@@ -52,6 +52,26 @@ describe("agentToSkill", () => {
     expect(report.annotated.map((field) => field.field)).not.toContain("scope");
   });
 
+  it("leaves a plain prompt non-templated", () => {
+    const { draft, report } = agentToSkill(makeMigratableAgent());
+
+    expect(draft.templated).toBe(false);
+    expect(report.carried.map((field) => field.field)).not.toContain(
+      "templated",
+    );
+  });
+
+  it("flags a Handlebars prompt as templated and reports it carried", () => {
+    const { draft, report } = agentToSkill(
+      makeMigratableAgent({
+        systemPrompt: "You help {{user.name}} with support.",
+      }),
+    );
+
+    expect(draft.templated).toBe(true);
+    expect(report.carried.map((field) => field.field)).toContain("templated");
+  });
+
   it("records provenance in metadata", () => {
     const { draft } = agentToSkill(makeMigratableAgent({ id: "abc-123" }));
 
@@ -95,7 +115,7 @@ describe("agentToSkill", () => {
     );
   });
 
-  it("lists tools as recommended and reports model/knowledge as not carried", () => {
+  it("carries tools into allowed-tools and reports model/knowledge as not carried", () => {
     const { draft, report } = agentToSkill(
       makeMigratableAgent({
         tools: [{ name: "slack__send" }, { name: "github__pr" }],
@@ -105,9 +125,9 @@ describe("agentToSkill", () => {
       }),
     );
 
-    expect(draft.content).toContain("## Recommended tools");
-    expect(draft.content).toContain("- slack__send");
-    expect(draft.content).toContain("- github__pr");
+    expect(draft.allowedTools).toBe("slack__send github__pr");
+    // tools live in the structured field, not the body.
+    expect(draft.content).not.toContain("slack__send");
     // the migration is never mentioned in the body; downstream agents don't care.
     expect(draft.content).not.toContain("Migrated");
     expect(draft.content).not.toContain("## Requirements");
@@ -120,12 +140,12 @@ describe("agentToSkill", () => {
     );
   });
 
-  it("omits the Recommended tools section when the agent has no tools", () => {
+  it("leaves allowed-tools null when the agent has no tools", () => {
     const { draft } = agentToSkill(makeMigratableAgent());
-    expect(draft.content).not.toContain("## Recommended tools");
+    expect(draft.allowedTools).toBeNull();
   });
 
-  it("excludes the whole skill toolset from the recommended list", () => {
+  it("excludes the whole skill toolset from allowed-tools", () => {
     const skillTools = [
       TOOL_ACTIVATE_SKILL_FULL_NAME,
       TOOL_READ_SKILL_FILE_FULL_NAME,
@@ -142,9 +162,9 @@ describe("agentToSkill", () => {
       }),
     );
 
-    expect(draft.content).toContain("- slack__send");
+    expect(draft.allowedTools).toBe("slack__send");
     for (const name of skillTools) {
-      expect(draft.content).not.toContain(name);
+      expect(draft.allowedTools).not.toContain(name);
     }
   });
 
@@ -157,11 +177,11 @@ describe("agentToSkill", () => {
       }),
     );
 
-    expect(draft.content).toContain("- slack__send");
-    expect(draft.content).not.toContain("mycorp__create_skill");
+    expect(draft.allowedTools).toBe("slack__send");
+    expect(draft.allowedTools).not.toContain("mycorp__create_skill");
   });
 
-  it("omits the Recommended tools section when only skill-runtime tools are present", () => {
+  it("leaves allowed-tools null when only skill-runtime tools are present", () => {
     const { draft } = agentToSkill(
       makeMigratableAgent({
         tools: [
@@ -170,7 +190,7 @@ describe("agentToSkill", () => {
         ],
       }),
     );
-    expect(draft.content).not.toContain("## Recommended tools");
+    expect(draft.allowedTools).toBeNull();
   });
 
   it("lists suggested prompts as examples", () => {

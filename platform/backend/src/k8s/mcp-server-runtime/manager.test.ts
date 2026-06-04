@@ -107,11 +107,11 @@ vi.mock("@/models/organization", () => ({
   default: {
     getFirst: vi.fn().mockResolvedValue({
       id: "test-org",
-      defaultNetworkPolicyId: null,
+      defaultNetworkPolicy: null,
     }),
     getById: vi.fn().mockResolvedValue({
       id: "test-org",
-      defaultNetworkPolicyId: null,
+      defaultNetworkPolicy: null,
     }),
   },
 }));
@@ -546,6 +546,93 @@ describe("McpServerRuntimeManager", () => {
           supportsFqdn: false,
         },
       });
+
+      mockLoadFromDefault.mockRestore();
+      mockMakeApiClient.mockRestore();
+    });
+
+    test("getOrLoadDeployment with namespaceOverride bypasses the cache and builds in the override namespace", async () => {
+      const mockLoadFromDefault = vi
+        .spyOn(k8s.KubeConfig.prototype, "loadFromDefault")
+        .mockImplementation(() => {});
+      const mockK8sClient = {
+        getAPIResources: vi.fn().mockResolvedValue({ resources: [] }),
+      };
+      const mockMakeApiClient = vi
+        .spyOn(k8s.KubeConfig.prototype, "makeApiClient")
+        .mockReturnValue(mockK8sClient as unknown as k8s.CoreV1Api);
+
+      const McpServerModel = (await import("@/models/mcp-server")).default;
+      const InternalMcpCatalogModel = (
+        await import("@/models/internal-mcp-catalog")
+      ).default;
+      const staleServer = {
+        id: "stale-server",
+        name: "stale-server",
+        catalogId: "stale-catalog",
+      } as Awaited<ReturnType<typeof McpServerModel.findById>>;
+      // No environmentId → resolves to the manager's default namespace.
+      const staleCatalog = {
+        id: "stale-catalog",
+        serverType: "local",
+        environmentId: null,
+        localConfig: null,
+      } as unknown as Awaited<
+        ReturnType<typeof InternalMcpCatalogModel.findById>
+      >;
+      // Two loads (normal + override) look these up once each. Use *Once so the
+      // mock reverts to its default afterward and never leaks into other tests —
+      // the suite runs in a shuffled order.
+      vi.mocked(McpServerModel.findById)
+        .mockResolvedValueOnce(staleServer)
+        .mockResolvedValueOnce(staleServer);
+      vi.mocked(InternalMcpCatalogModel.findById)
+        .mockResolvedValueOnce(staleCatalog)
+        .mockResolvedValueOnce(staleCatalog);
+
+      const { McpServerRuntimeManager } = await import("./manager");
+      const manager = new McpServerRuntimeManager();
+      const managerAny = manager as unknown as {
+        k8sApi: unknown;
+        k8sAppsApi: unknown;
+        k8sNetworkingApi: unknown;
+        k8sCustomObjectsApi: unknown;
+        k8sAttach: unknown;
+        k8sLog: unknown;
+        k8sExec: unknown;
+      };
+      managerAny.k8sApi = mockK8sClient;
+      managerAny.k8sAppsApi = mockK8sClient;
+      managerAny.k8sNetworkingApi = mockK8sClient;
+      managerAny.k8sCustomObjectsApi = mockK8sClient;
+      managerAny.k8sAttach = {};
+      managerAny.k8sLog = {};
+      managerAny.k8sExec = {};
+
+      // A normal load caches the deployment against the manager's default namespace.
+      await manager.getOrLoadDeployment("stale-server");
+      const cachedNamespace =
+        mockK8sDeploymentInstances.at(-1)?.options.namespace;
+      const builtBeforeOverride = mockK8sDeploymentInstances.length;
+
+      // The override load must IGNORE that cached entry and build a fresh
+      // deployment pinned to the supplied namespace. This is the staleness
+      // bypass the relocation teardown relies on: a cached entry can point at a
+      // now-wrong namespace, so trusting it would delete the wrong namespace and
+      // orphan the old-namespace pod.
+      const overridden = await manager.getOrLoadDeployment("stale-server", {
+        namespaceOverride: "old-env-namespace",
+      });
+      const overrideNamespace =
+        mockK8sDeploymentInstances.at(-1)?.options.namespace;
+
+      expect(cachedNamespace).not.toBe("old-env-namespace");
+      expect(overrideNamespace).toBe("old-env-namespace");
+      // A NEW deployment object was constructed for the override (cache not reused)...
+      expect(mockK8sDeploymentInstances.length).toBe(builtBeforeOverride + 1);
+      expect(overridden).toBeDefined();
+      // ...and the override (teardown-only) path skips serving-endpoint resolution.
+      expect(mockResolveHttpEndpoint).toHaveBeenCalledTimes(1);
 
       mockLoadFromDefault.mockRestore();
       mockMakeApiClient.mockRestore();

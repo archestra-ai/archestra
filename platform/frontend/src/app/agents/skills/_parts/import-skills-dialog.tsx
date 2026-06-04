@@ -44,17 +44,31 @@ import { SkillScopeSelector } from "./skill-scope-selector";
 type DiscoveredSkill =
   archestraApiTypes.DiscoverGithubSkillsResponses["200"]["skills"][number];
 
+/**
+ * Skill metadata already held from the local skill index — enough to render the
+ * confirm step without re-scanning the whole repository over the network.
+ */
+export interface IndexedSkillSelection {
+  skillPath: string;
+  name: string;
+  description: string;
+  compatibility: string | null;
+  fileCount: number;
+}
+
 export function ImportSkillsDialog({
   open,
   onOpenChange,
   onImported,
   initialRepoUrl = "",
+  initialSkill,
   autoDiscover = false,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onImported?: () => void;
   initialRepoUrl?: string;
+  initialSkill?: IndexedSkillSelection;
   autoDiscover?: boolean;
 }) {
   const discover = useDiscoverGithubSkills();
@@ -116,9 +130,8 @@ export function ImportSkillsDialog({
     });
     if (data) {
       setDiscovered(data.skills);
-      setSelected(
-        new Set(data.skills.filter((s) => !s.exists).map((s) => s.skillPath)),
-      );
+      const importableSkills = data.skills.filter((s) => !s.exists);
+      setSelected(new Set(importableSkills.map((s) => s.skillPath)));
     } else if (errorMessage) {
       setDiscoverError(errorMessage);
     }
@@ -128,7 +141,22 @@ export function ImportSkillsDialog({
   useEffect(() => {
     if (!open) return;
     setRepoUrl(initialRepoUrl);
-    if (autoDiscover && initialRepoUrl) {
+    if (!autoDiscover) return;
+    if (initialSkill) {
+      // launched from the skill index: the exact skill is already known, so
+      // skip the repo-wide scan and go straight to the confirm step. the index
+      // doesn't carry allowedTools/templated (the server reads them from the
+      // manifest at import time), so default them for the preview row.
+      setDiscovered([
+        {
+          ...initialSkill,
+          allowedTools: null,
+          templated: false,
+          exists: false,
+        },
+      ]);
+      setSelected(new Set([initialSkill.skillPath]));
+    } else if (initialRepoUrl) {
       handleDiscover(initialRepoUrl);
     }
   }, [open]);
@@ -142,7 +170,10 @@ export function ImportSkillsDialog({
       scope,
       teamIds: scope === "team" ? teamIds : [],
     });
-    if (result) {
+    // only navigate away when something was actually created; if every selected
+    // skill was already in the org (created: [], skipped: [...]) the import was
+    // a no-op, so keep the dialog open — the mutation's toast reports the skip.
+    if (result && result.created.length > 0) {
       handleClose(false);
       onImported?.();
     }

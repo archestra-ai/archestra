@@ -6,6 +6,7 @@ import {
 } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
+import { ToolExposureModeSchema } from "./agent";
 import { SelectConversationChatErrorSchema } from "./conversation-chat-error";
 import { SelectConversationCompactionSchema } from "./conversation-compaction";
 import { ConversationShareVisibilitySchema } from "./conversation-share";
@@ -38,6 +39,7 @@ export const SelectConversationSchema = createSelectSchema(
       name: z.string(),
       systemPrompt: z.string().nullable(),
       agentType: z.enum(["profile", "mcp_gateway", "llm_proxy", "agent"]),
+      toolExposureMode: ToolExposureModeSchema,
       llmApiKeyId: z.string().nullable(),
     })
     .nullable(),

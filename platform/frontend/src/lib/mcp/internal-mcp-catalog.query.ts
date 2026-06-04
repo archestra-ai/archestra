@@ -1,7 +1,7 @@
 import { archestraApiSdk, type archestraApiTypes } from "@shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { environmentKeys } from "@/lib/organization/environment.query";
+import { environmentKeys } from "@/lib/environment.query";
 import { usePresetEntityName } from "@/lib/organization.query";
 
 const {
@@ -15,6 +15,7 @@ const {
   getInternalMcpCatalogLabelValues,
   getInternalMcpCatalogTools,
   getK8sImagePullSecrets,
+  refreshInternalMcpCatalogImage,
   reinstallInternalMcpCatalogItem,
   resetDeploymentYaml,
   updateCatalogChild,
@@ -139,6 +140,30 @@ export function useReinstallInternalMcpCatalogItem() {
     onError: (error) => {
       console.error("Catalog reinstall error:", error);
       toast.error("Failed to reinstall catalog");
+    },
+  });
+}
+
+export function useRefreshInternalMcpCatalogImage() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const response = await refreshInternalMcpCatalogImage({
+        path: { id },
+      });
+      return response.data;
+    },
+    onMutate: () => {
+      toast.info("Starting pod restart");
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["mcp-catalog"] });
+      queryClient.invalidateQueries({ queryKey: ["mcp-servers"] });
+      queryClient.invalidateQueries({ queryKey: ["chat", "agents"] });
+    },
+    onError: (error) => {
+      console.error("Pod restart error:", error);
+      toast.error("Failed to start pod restart");
     },
   });
 }

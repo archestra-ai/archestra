@@ -28,7 +28,6 @@ archestra:
   # instead of API keys for authentication
   env:
     ARCHESTRA_ANALYTICS: disabled
-    ARCHESTRA_AGENTS_ADVANCED_TOOL_FEATURES_ENABLED: "true"
     ARCHESTRA_AGENTS_SKILLS_ENABLED: "true"
     ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED: "true"
     ARCHESTRA_ENTERPRISE_LICENSE_FULL_WHITE_LABELING: "true"
@@ -120,4 +119,3 @@ archestra:
           - path: /
             port: 9000
             pathType: Prefix
-

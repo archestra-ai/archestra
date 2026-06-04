@@ -202,7 +202,7 @@ describe("agent routes", () => {
       expect(response.statusCode).toBe(400);
     });
 
-    test("should create an agent with tool modes", async () => {
+    test("should create an agent with load-tools-when-needed exposure", async () => {
       const response = await app.inject({
         method: "POST",
         url: "/api/agents",
@@ -212,14 +212,12 @@ describe("agent routes", () => {
           scope: "personal",
           teams: [],
           toolExposureMode: "search_and_run_only",
-          toolAssignmentMode: "automatic",
         },
       });
 
       expect(response.statusCode).toBe(200);
       const agent = response.json();
       expect(agent.toolExposureMode).toBe("search_and_run_only");
-      expect(agent.toolAssignmentMode).toBe("automatic");
     });
   });
 
@@ -457,7 +455,6 @@ describe("agent routes", () => {
         url: `/api/agents/${created.id}`,
         payload: {
           toolExposureMode: "search_and_run_only",
-          toolAssignmentMode: "automatic",
         },
       });
 
@@ -465,7 +462,6 @@ describe("agent routes", () => {
       expect(updateResponse.json().toolExposureMode).toBe(
         "search_and_run_only",
       );
-      expect(updateResponse.json().toolAssignmentMode).toBe("automatic");
 
       const getResponse = await app.inject({
         method: "GET",
@@ -474,7 +470,6 @@ describe("agent routes", () => {
 
       expect(getResponse.statusCode).toBe(200);
       expect(getResponse.json().toolExposureMode).toBe("search_and_run_only");
-      expect(getResponse.json().toolAssignmentMode).toBe("automatic");
     });
   });
 
@@ -1460,7 +1455,6 @@ describe("agent routes", () => {
         icon: null,
         scope: "personal",
         considerContextUntrusted: false,
-        toolAssignmentMode: "manual",
         toolExposureMode: "full",
         llmModel: null,
         incomingEmailEnabled: false,

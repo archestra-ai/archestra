@@ -10,8 +10,8 @@ import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
 import { sanitizeSvg } from "@/utils/sanitize-svg";
+import { NetworkPolicyInputSchema, NetworkPolicySchema } from "./environment";
 import { LimitCleanupIntervalSchema } from "./limit";
-import { ValidationRegexSchema } from "./mcp-preset-entry";
 
 const DATA_URI_PREFIX = "data:image/png;base64,";
 const GIF_DATA_URI_PREFIX = "data:image/gif;base64,";
@@ -320,6 +320,7 @@ const extendedFields = {
   presetEntityNamePlural: z.string().nullable(),
   presetEntityDefaultLabel: z.string().nullable(),
   presetEntityDefaultValidationRegex: z.string().nullable(),
+  defaultNetworkPolicy: NetworkPolicySchema.nullable(),
 };
 
 const InternalSelectOrganizationSchema = createSelectSchema(
@@ -428,31 +429,6 @@ export const UpdateConnectionSettingsSchema = z.object({
     }),
 });
 
-export const UpdatePresetEntityNameSchema = z
-  .object({
-    presetEntityName: z.string().trim().min(1).max(50).nullable(),
-    presetEntityNamePlural: z.string().trim().min(1).max(50).nullable(),
-  })
-  .superRefine((value, ctx) => {
-    const singularSet = value.presetEntityName !== null;
-    const pluralSet = value.presetEntityNamePlural !== null;
-    if (singularSet !== pluralSet) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message:
-          "Both presetEntityName and presetEntityNamePlural must be set together (or both null to reset).",
-      });
-    }
-  });
-
-export const UpdatePresetEntityDefaultLabelSchema = z.object({
-  presetEntityDefaultLabel: z.string().trim().min(1).max(50).nullable(),
-});
-
-export const UpdatePresetEntityDefaultValidationRegexSchema = z.object({
-  presetEntityDefaultValidationRegex: ValidationRegexSchema.nullable(),
-});
-
 /**
  * Clean API shape for configuring the implicit "default" environment. The
  * handler maps these to the org columns (`defaultEnvironmentName`,
@@ -463,7 +439,7 @@ export const UpdateDefaultEnvironmentSchema = z.object({
   name: z.string().trim().min(1).max(50).nullable().optional(),
   description: z.string().trim().max(500).nullable().optional(),
   namespace: z.string().trim().max(253).nullable().optional(),
-  networkPolicyId: z.string().uuid().nullable().optional(),
+  networkPolicy: NetworkPolicyInputSchema.nullable().optional(),
   restricted: z.boolean().optional(),
 });
 

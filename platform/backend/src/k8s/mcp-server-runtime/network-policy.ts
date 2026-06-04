@@ -42,7 +42,7 @@ export function buildManagedNetworkPolicy(params: {
     app: "mcp-server",
     "app.kubernetes.io/managed-by": "archestra",
     "archestra.io/resource": "mcp-network-policy",
-    "archestra.io/network-policy-id": policy.id,
+    "archestra.io/network-policy-source": params.effectivePolicy.source,
   });
 
   return {
@@ -84,7 +84,7 @@ export function buildManagedCiliumNetworkPolicy(params: {
     app: "mcp-server",
     "app.kubernetes.io/managed-by": "archestra",
     "archestra.io/resource": "mcp-network-policy",
-    "archestra.io/network-policy-id": policy.id,
+    "archestra.io/network-policy-source": params.effectivePolicy.source,
   });
 
   return {
@@ -124,7 +124,7 @@ export function buildManagedGkeFqdnNetworkPolicy(params: {
     app: "mcp-server",
     "app.kubernetes.io/managed-by": "archestra",
     "archestra.io/resource": "mcp-network-policy",
-    "archestra.io/network-policy-id": policy.id,
+    "archestra.io/network-policy-source": params.effectivePolicy.source,
   });
 
   return {
@@ -168,7 +168,7 @@ export function buildManagedAwsApplicationNetworkPolicy(params: {
     app: "mcp-server",
     "app.kubernetes.io/managed-by": "archestra",
     "archestra.io/resource": "mcp-network-policy",
-    "archestra.io/network-policy-id": policy.id,
+    "archestra.io/network-policy-source": params.effectivePolicy.source,
   });
 
   return {
@@ -382,7 +382,6 @@ function buildPolicyAnnotations(
 
   return {
     "archestra.io/network-policy-source": effectivePolicy.source,
-    "archestra.io/network-policy-id": policy.id,
     "archestra.io/network-policy-egress-mode": policy.egressMode,
     "archestra.io/network-policy-domain-preset": policy.domainPreset,
     "archestra.io/network-policy-allowed-domains": summarizeAnnotationList(

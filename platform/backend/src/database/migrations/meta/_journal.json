@@ -1905,6 +1905,27 @@
       "when": 1780434112833,
       "tag": "0271_odd_sleepwalker",
       "breakpoints": true
+    },
+    {
+      "idx": 272,
+      "version": "7",
+      "when": 1780474421866,
+      "tag": "0272_narrow_mad_thinker",
+      "breakpoints": true
+    },
+    {
+      "idx": 273,
+      "version": "7",
+      "when": 1780487668988,
+      "tag": "0273_remarkable_punisher",
+      "breakpoints": true
+    },
+    {
+      "idx": 274,
+      "version": "7",
+      "when": 1780493123672,
+      "tag": "0274_futuristic_madelyne_pryor",
+      "breakpoints": true
     }
   ]
 }

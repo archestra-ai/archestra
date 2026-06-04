@@ -776,9 +776,7 @@ describe("clone agent route", () => {
     expect(response.statusCode).toBe(404);
   });
 
-  test("preserves toolExposureMode and toolAssignmentMode in clone", async ({
-    makeInternalAgent,
-  }) => {
+  test("preserves toolExposureMode in clone", async ({ makeInternalAgent }) => {
     const sourceAgent = await makeInternalAgent({
       organizationId,
       name: "Search-Only Agent",
@@ -788,7 +786,6 @@ describe("clone agent route", () => {
       knowledgeBaseIds: [],
       connectorIds: [],
       toolExposureMode: "search_and_run_only",
-      toolAssignmentMode: "automatic",
     });
 
     const response = await app.inject({
@@ -800,6 +797,5 @@ describe("clone agent route", () => {
     const cloned = response.json() as Agent;
 
     expect(cloned.toolExposureMode).toBe("search_and_run_only");
-    expect(cloned.toolAssignmentMode).toBe("automatic");
   });
 });

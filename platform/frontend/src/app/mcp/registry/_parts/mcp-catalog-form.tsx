@@ -75,13 +75,13 @@ import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useIdentityProviders } from "@/lib/auth/identity-provider-read.query";
 import { useEnterpriseFeature, useFeature } from "@/lib/config/config.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
+import { useEnvironments } from "@/lib/environment.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useK8sImagePullSecrets } from "@/lib/mcp/internal-mcp-catalog.query";
 import {
   MCP_CONFIG_AUTOCOMPLETE,
   MCP_SECRET_AUTOCOMPLETE,
 } from "@/lib/mcp/mcp-form-autocomplete";
-import { useEnvironments } from "@/lib/organization/environment.query";
 import { useDefaultEnvironment } from "@/lib/organization.query";
 import { useGetSecret } from "@/lib/secrets.query";
 import { useTeams } from "@/lib/teams/team.query";
@@ -171,17 +171,11 @@ export function McpCatalogForm({
   const mcpServerBaseImage = useFeature("mcpServerBaseImage") ?? "";
 
   const isLocalMcpEnabled = useFeature("orchestratorK8sRuntime");
-  const advancedToolFeaturesEnabled =
-    useFeature("advancedToolFeaturesEnabled") === true;
   const isEnterpriseCoreEnabled = useEnterpriseFeature("core");
   const appName = useAppName();
   const mcpAuthDocsUrl = getFrontendDocsUrl(
     DocsPage.McpAuthentication,
     "upstream-mcp-server-authentication",
-  );
-  const gatewayLabelsDocsUrl = getFrontendDocsUrl(
-    DocsPage.PlatformMcpGateway,
-    "tool-assignment-mode",
   );
   const mcpAuthTokenExchangeDocsUrl = getFrontendDocsUrl(
     DocsPage.McpAuthentication,
@@ -539,13 +533,12 @@ export function McpCatalogForm({
     (hasEnvAdmin ?? false) || (hasDeployToRestricted ?? false);
   const defaultEnvironment = useDefaultEnvironment();
   // Environments the user can deploy to. Restricted environments the user can't
-  // deploy to are hidden entirely. The default is always available, so with no
-  // accessible custom environments there's only one option and the selector is
-  // hidden.
+  // deploy to are hidden entirely. The default is always available.
   const accessibleEnvironments = (environments ?? []).filter(
     (e) => !e.restricted || canDeployRestricted,
   );
-  const showEnvironmentSelector = accessibleEnvironments.length > 0;
+  const hasCustomEnvironmentOptions = accessibleEnvironments.length > 0;
+  const canManageEnvironments = hasEnvAdmin ?? false;
   const currentScope = form.watch("scope");
   const enterpriseAuthDisabledReason: ReactNode | null =
     !isEnterpriseCoreEnabled
@@ -891,70 +884,82 @@ export function McpCatalogForm({
                   </FormItem>
                 )}
               />
-              {showEnvironmentSelector && (
-                <FormField
-                  control={form.control}
-                  name="environmentId"
-                  render={({ field }) => {
-                    const environmentOptions = [
-                      {
-                        value: ENVIRONMENT_DEFAULT_VALUE,
-                        label: defaultEnvironment.name,
-                        description: defaultEnvironment.description ?? "",
-                      },
-                      ...accessibleEnvironments.map((environment) => ({
-                        value: environment.id,
-                        label: environment.name,
-                        description: environment.description ?? "",
-                      })),
-                    ];
-                    const selectedValue =
-                      field.value ?? ENVIRONMENT_DEFAULT_VALUE;
-                    const selectedDescription = environmentOptions.find(
-                      (option) => option.value === selectedValue,
-                    )?.description;
+              <FormField
+                control={form.control}
+                name="environmentId"
+                render={({ field }) => {
+                  const environmentOptions = [
+                    {
+                      value: ENVIRONMENT_DEFAULT_VALUE,
+                      label: defaultEnvironment.name,
+                      description: defaultEnvironment.description ?? "",
+                    },
+                    ...accessibleEnvironments.map((environment) => ({
+                      value: environment.id,
+                      label: environment.name,
+                      description: environment.description ?? "",
+                    })),
+                  ];
+                  const selectedValue =
+                    field.value ?? ENVIRONMENT_DEFAULT_VALUE;
+                  const selectedDescription = environmentOptions.find(
+                    (option) => option.value === selectedValue,
+                  )?.description;
 
-                    return (
-                      <FormItem className="space-y-2">
-                        <Label>Environment</Label>
-                        <FormControl>
-                          <Select
-                            value={selectedValue}
-                            onValueChange={(value) =>
-                              field.onChange(
-                                value === ENVIRONMENT_DEFAULT_VALUE
-                                  ? null
-                                  : value,
-                              )
-                            }
-                          >
-                            <SelectTrigger className="w-full">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent position="popper">
-                              {environmentOptions.map((option) => (
-                                <SelectItem
-                                  key={option.value}
-                                  value={option.value}
-                                  description={option.description || undefined}
-                                >
-                                  {option.label}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </FormControl>
-                        {selectedDescription ? (
-                          <p className="text-xs text-muted-foreground">
-                            {selectedDescription}
-                          </p>
-                        ) : null}
-                        <FormMessage />
-                      </FormItem>
-                    );
-                  }}
-                />
-              )}
+                  return (
+                    <FormItem className="space-y-2">
+                      <Label>Environment</Label>
+                      <FormControl>
+                        <Select
+                          value={selectedValue}
+                          disabled={!hasCustomEnvironmentOptions}
+                          onValueChange={(value) =>
+                            field.onChange(
+                              value === ENVIRONMENT_DEFAULT_VALUE
+                                ? null
+                                : value,
+                            )
+                          }
+                        >
+                          <SelectTrigger className="w-full">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent position="popper">
+                            {environmentOptions.map((option) => (
+                              <SelectItem
+                                key={option.value}
+                                value={option.value}
+                                description={option.description || undefined}
+                              >
+                                {option.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </FormControl>
+                      {selectedDescription ? (
+                        <p className="text-xs text-muted-foreground">
+                          {selectedDescription}
+                        </p>
+                      ) : null}
+                      {!hasCustomEnvironmentOptions ? (
+                        <FormDescription>
+                          Only the default environment is available.{" "}
+                          {canManageEnvironments ? (
+                            <Link
+                              href="/settings/environments"
+                              className="underline underline-offset-2"
+                            >
+                              Manage environments
+                            </Link>
+                          ) : null}
+                        </FormDescription>
+                      ) : null}
+                      <FormMessage />
+                    </FormItem>
+                  );
+                }}
+              />
               {mode === "create" && (
                 <div className="space-y-2">
                   <Label>Server Type</Label>
@@ -2263,23 +2268,6 @@ export function McpCatalogForm({
                     </span>
                   )}
                 </div>
-                {advancedToolFeaturesEnabled && (
-                  <p className="text-sm text-muted-foreground">
-                    Organize servers and drive automatic tool assignment.
-                    {gatewayLabelsDocsUrl && (
-                      <>
-                        {" "}
-                        <ExternalDocsLink
-                          href={gatewayLabelsDocsUrl}
-                          className="underline"
-                          showIcon={false}
-                        >
-                          Learn more
-                        </ExternalDocsLink>
-                      </>
-                    )}
-                  </p>
-                )}
               </div>
               <div className="pt-4">
                 <ProfileLabels

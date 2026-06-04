@@ -49,7 +49,6 @@ export { default as McpToolCallModel } from "./mcp-tool-call";
 export { default as MemberModel } from "./member";
 export { default as MessageModel } from "./message";
 export { default as ModelModel } from "./model";
-export { default as NetworkPolicyModel } from "./network-policy";
 export { default as OAuthAccessTokenModel } from "./oauth-access-token";
 export { default as OAuthClientModel } from "./oauth-client";
 export { default as OptimizationRuleModel } from "./optimization-rule";

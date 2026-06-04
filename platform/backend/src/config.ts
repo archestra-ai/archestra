@@ -790,8 +790,6 @@ const config = {
     endpoint: "/v2/a2a",
   },
   agents: {
-    advancedToolFeaturesEnabled:
-      process.env.ARCHESTRA_AGENTS_ADVANCED_TOOL_FEATURES_ENABLED === "true",
     skillsEnabled: process.env.ARCHESTRA_AGENTS_SKILLS_ENABLED === "true",
     incomingEmail: {
       provider: parseIncomingEmailProvider(),

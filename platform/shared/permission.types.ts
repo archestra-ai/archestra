@@ -38,7 +38,6 @@ export const resources = [
   "knowledgeSettings",
   "mcpServerInstallationRequest",
   "environment",
-  "networkPolicy",
   "chat",
   "llmCost",
   "llmLimit",
@@ -100,7 +99,6 @@ export const resourceLabels: Record<Resource, string> = {
   knowledgeSettings: "Knowledge Settings",
   mcpServerInstallationRequest: "MCP Server Installation Requests",
   environment: "Environments",
-  networkPolicy: "Network Policies",
   team: "Teams",
   ac: "Roles",
   chat: "Chats",
@@ -151,7 +149,6 @@ export const resourceDescriptions: Record<Resource, string> = {
   knowledgeFile: "Uploaded files available for knowledge retrieval",
   mcpServerInstallationRequest: "Requests for new MCP server installations",
   environment: "Deployment environments (namespace) for catalog items",
-  networkPolicy: "Reusable network egress policies for deployment environments",
   optimizationRule: "LLM optimization rules for routing to cheaper models",
   member: "Users and role assignments",
   ac: "Custom RBAC roles",
@@ -198,7 +195,6 @@ export const resourceCategories: Record<string, Resource[]> = {
     "mcpServerInstallation",
     "mcpServerInstallationRequest",
     "environment",
-    "networkPolicy",
   ],
   LLM: [
     "llmProxy",
@@ -250,9 +246,6 @@ export type AgentType = "profile" | "mcp_gateway" | "llm_proxy" | "agent";
 
 /** Database-level agent scope values */
 export type AgentScope = "personal" | "team" | "org";
-
-/** Database-level agent tool assignment mode values */
-export type AgentToolAssignmentMode = "manual" | "automatic";
 
 /**
  * Maps an agent's `agentType` to the corresponding RBAC resource.

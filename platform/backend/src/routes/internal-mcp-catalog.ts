@@ -103,10 +103,6 @@ const ToolWithAssignedAgentCountSchema = z.object({
     }),
   ),
 });
-const SuccessResponseSchema = z.object({
-  success: z.boolean(),
-});
-
 const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(
     "/api/internal_mcp_catalog",
@@ -1142,7 +1138,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: z.object({
           id: UuidIdSchema,
         }),
-        response: constructResponseSchema(SuccessResponseSchema),
+        response: constructResponseSchema(DeleteObjectResponseSchema),
       },
     },
     async (request, reply) => {
@@ -1215,7 +1211,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: z.object({
           id: UuidIdSchema,
         }),
-        response: constructResponseSchema(SuccessResponseSchema),
+        response: constructResponseSchema(DeleteObjectResponseSchema),
       },
     },
     async (request, reply) => {

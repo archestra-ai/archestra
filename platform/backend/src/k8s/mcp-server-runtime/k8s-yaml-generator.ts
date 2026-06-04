@@ -79,6 +79,7 @@ export function generateDeploymentYamlTemplate(
   context: DeploymentYamlContext,
 ): string {
   const {
+    dockerImage,
     environment = [],
     transportType = "stdio",
     httpPort = 8080,
@@ -118,7 +119,7 @@ export function generateDeploymentYamlTemplate(
   const containerSpec: Record<string, unknown> = {
     name: "mcp-server",
     image: placeholder("archestra", "docker_image"),
-    imagePullPolicy: "Always",
+    imagePullPolicy: getMcpImagePullPolicy(dockerImage),
     // command and args come from basic config
     ...(envSection.length > 0 ? { env: envSection } : {}),
     resources: {
@@ -194,6 +195,15 @@ export function generateDeploymentYamlTemplate(
   });
 
   return yamlString;
+}
+
+function getMcpImagePullPolicy(
+  dockerImage: string,
+): k8s.V1Container["imagePullPolicy"] {
+  const isBareLocalImage =
+    !dockerImage.includes("/") && !dockerImage.includes(".");
+
+  return isBareLocalImage ? "Never" : "Always";
 }
 
 /**

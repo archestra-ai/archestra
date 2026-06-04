@@ -1207,7 +1207,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.RefreshInternalMcpCatalogImage,
         description:
-          "Refresh the configured Docker image by restarting all local MCP server pods for a catalog.",
+          "Restart all local MCP server pods for a catalog so Kubernetes pulls the current configured image.",
         tags: ["MCP Catalog"],
         params: z.object({
           id: UuidIdSchema,
@@ -1240,7 +1240,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       ) {
         throw new ApiError(
           403,
-          "Only catalog editors can refresh this catalog image",
+          "Only catalog editors can restart this catalog's pods",
         );
       }
 
@@ -1249,13 +1249,13 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
           ? await InternalMcpCatalogModel.findChildren(id)
           : [];
       const targetCatalogItems = [catalogItem, ...children].filter(
-        (item) => item.serverType === "local" && item.localConfig?.dockerImage,
+        (item) => item.serverType === "local",
       );
 
       if (targetCatalogItems.length === 0) {
         throw new ApiError(
           400,
-          "Image refresh is only supported for local catalogs with a Docker image",
+          "Pod restart is only supported for local catalogs",
         );
       }
 
@@ -2380,7 +2380,7 @@ async function refreshCatalogImage(catalogItem: InternalMcpCatalog) {
           error instanceof Error ? error.message : "Unknown error";
         logger.error(
           { err: error, serverId: server.id, catalogId: catalogItem.id },
-          "Image refresh failed for MCP server install",
+          "Pod restart failed for MCP server install",
         );
         await McpServerModel.update(server.id, {
           localInstallationStatus: "error",

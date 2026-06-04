@@ -118,6 +118,7 @@ export function generateDeploymentYamlTemplate(
   const containerSpec: Record<string, unknown> = {
     name: "mcp-server",
     image: placeholder("archestra", "docker_image"),
+    imagePullPolicy: "Always",
     // command and args come from basic config
     ...(envSection.length > 0 ? { env: envSection } : {}),
     resources: {

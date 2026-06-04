@@ -128,6 +128,7 @@ export type McpServerCardProps = {
   onDelete: () => void;
   /** Clone this catalog item into the create form. Omit to hide the button. */
   onClone?: () => void;
+  onRestartPodsStarted?: (serverIds: string[]) => void;
   onCancelInstallation?: (serverId: string) => void;
   /**
    * Called when user wants to add a personal connection from manage dialog.
@@ -163,6 +164,7 @@ export function McpServerCard({
   onEdit: _onEdit,
   onDelete,
   onClone,
+  onRestartPodsStarted,
   onCancelInstallation,
   onAddPersonalConnection,
   onAddSharedConnection,
@@ -544,13 +546,18 @@ export function McpServerCard({
   const triggerCatalogReinstall = () =>
     reinstallCatalogMutation.mutate(item.id);
   const refreshImageMutation = useRefreshInternalMcpCatalogImage();
-  const hasDockerImage = Boolean(item.localConfig?.dockerImage);
   const showRefreshImage =
     variant === "local" &&
-    hasDockerImage &&
     allServersAcrossPresets.some((server) => server.serverType === "local") &&
     canEditCatalog;
-  const triggerRefreshImage = () => refreshImageMutation.mutate(item.id);
+  const triggerRefreshImage = () => {
+    onRestartPodsStarted?.(
+      allServersAcrossPresets
+        .filter((server) => server.serverType === "local")
+        .map((server) => server.id),
+    );
+    refreshImageMutation.mutate(item.id);
+  };
 
   // Show ONE Reinstall button. For admins on a multi-tenant local catalog,
   // a single click drives both the per-install input collection (existing
@@ -992,32 +999,6 @@ export function McpServerCard({
             Reinstall
           </PermissionButton>
         )}
-        {!isInstalling && showRefreshImage && (
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <PermissionButton
-                  permissions={{ mcpRegistry: ["update"] }}
-                  onClick={triggerRefreshImage}
-                  disabled={refreshImageMutation.isPending}
-                  size="sm"
-                  variant="outline"
-                  className="flex-1"
-                >
-                  <RefreshCw
-                    className={`h-4 w-4 ${
-                      refreshImageMutation.isPending ? "animate-spin" : ""
-                    }`}
-                  />
-                  Refresh image
-                </PermissionButton>
-              </TooltipTrigger>
-              <TooltipContent side="bottom">
-                <p>Pull the current tag again and restart pods.</p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-        )}
         {!isInstalling && (
           <>
             {uninstallButton}
@@ -1101,6 +1082,10 @@ export function McpServerCard({
         onClone={
           userCanCreateCatalogItem && !isPlaywrightVariant ? onClone : undefined
         }
+        onRestartPods={
+          showRefreshImage && !isInstalling ? triggerRefreshImage : undefined
+        }
+        isRestartingPods={refreshImageMutation.isPending}
       />
 
       <Dialog

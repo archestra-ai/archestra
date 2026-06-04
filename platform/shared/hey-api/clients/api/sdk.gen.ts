@@ -2203,7 +2203,7 @@ export const getInternalMcpCatalogTools = <ThrowOnError extends boolean = false>
 export const reinstallInternalMcpCatalogItem = <ThrowOnError extends boolean = false>(options: Options<ReinstallInternalMcpCatalogItemData, ThrowOnError>) => (options.client ?? client).post<ReinstallInternalMcpCatalogItemResponses, ReinstallInternalMcpCatalogItemErrors, ThrowOnError>({ url: '/api/internal_mcp_catalog/{id}/reinstall', ...options });
 
 /**
- * Refresh the configured Docker image by restarting all local MCP server pods for a catalog.
+ * Restart all local MCP server pods for a catalog so Kubernetes pulls the current configured image.
  *
  * Authentication:
  *

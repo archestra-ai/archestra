@@ -153,15 +153,17 @@ export function useRefreshInternalMcpCatalogImage() {
       });
       return response.data;
     },
+    onMutate: () => {
+      toast.success("Starting pod restart");
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["mcp-catalog"] });
       queryClient.invalidateQueries({ queryKey: ["mcp-servers"] });
       queryClient.invalidateQueries({ queryKey: ["chat", "agents"] });
-      toast.success("Image refresh started");
     },
     onError: (error) => {
-      console.error("Image refresh error:", error);
-      toast.error("Failed to refresh image");
+      console.error("Pod restart error:", error);
+      toast.error("Failed to start pod restart");
     },
   });
 }

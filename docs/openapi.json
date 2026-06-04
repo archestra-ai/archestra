@@ -117270,7 +117270,7 @@
         "tags": [
           "MCP Catalog"
         ],
-        "description": "Refresh the configured Docker image by restarting all local MCP server pods for a catalog.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`mcpRegistry:update`: Modify MCP registry entries",
+        "description": "Restart all local MCP server pods for a catalog so Kubernetes pulls the current configured image.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`mcpRegistry:update`: Modify MCP registry entries",
         "parameters": [
           {
             "schema": {

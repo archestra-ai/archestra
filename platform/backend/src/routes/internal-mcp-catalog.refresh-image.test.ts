@@ -77,10 +77,10 @@ describe("POST /api/internal_mcp_catalog/:id/refresh-image", () => {
     await app.close();
   });
 
-  test("refreshes a Docker image without a pending catalog reinstall", async () => {
+  test("restarts pods without a pending catalog reinstall", async () => {
     const catalog = await InternalMcpCatalogModel.create(
       {
-        name: "refreshable-image",
+        name: "restartable-pods",
         serverType: "local",
         scope: "org",
         multitenant: true,
@@ -107,10 +107,10 @@ describe("POST /api/internal_mcp_catalog/:id/refresh-image", () => {
     );
   });
 
-  test("rejects local catalogs without a Docker image", async () => {
+  test("restarts pods for local catalogs that use the default image", async () => {
     const catalog = await InternalMcpCatalogModel.create(
       {
-        name: "no-image",
+        name: "default-image",
         serverType: "local",
         scope: "org",
         multitenant: true,
@@ -127,9 +127,34 @@ describe("POST /api/internal_mcp_catalog/:id/refresh-image", () => {
       url: `/api/internal_mcp_catalog/${catalog.id}/refresh-image`,
     });
 
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ success: true });
+    expect(mockReinstallMultitenantCatalog).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: catalog.id,
+      }),
+    );
+  });
+
+  test("rejects non-local catalogs", async () => {
+    const catalog = await InternalMcpCatalogModel.create(
+      {
+        name: "remote-server",
+        serverType: "remote",
+        scope: "org",
+        serverUrl: "https://example.com/mcp",
+      },
+      { organizationId, authorId: user.id },
+    );
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/internal_mcp_catalog/${catalog.id}/refresh-image`,
+    });
+
     expect(response.statusCode).toBe(400);
     expect(response.json().error.message).toBe(
-      "Image refresh is only supported for local catalogs with a Docker image",
+      "Pod restart is only supported for local catalogs",
     );
     expect(mockReinstallMultitenantCatalog).not.toHaveBeenCalled();
   });

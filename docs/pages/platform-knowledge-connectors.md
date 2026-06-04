@@ -68,13 +68,14 @@ Sync issues, pull request discussions, and repository files from GitHub.
 
 **Indexed:** issues, pull requests, comments, and selected text files from GitHub.com or GitHub Enterprise Server. Repository file indexing defaults to Markdown and YAML files.
 
-**Authentication:** a [personal access token](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens) or a GitHub App installation. For GitHub App auth, enter the App ID and installation ID, then paste the app private key in the credential field.
+**Authentication:** a [personal access token](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens) or a GitHub App. GitHub App credentials (App ID, installation ID, and private key) are stored once as an organization-level configuration under **Settings -> GitHub Apps**; the connector references a saved configuration instead of holding its own credentials, so one App can back many connectors and skill imports.
 
 | Field                 | Description                                                                                     |
 | --------------------- | ----------------------------------------------------------------------------------------------- |
 | GitHub API URL        | API endpoint (e.g., `https://api.github.com` for GitHub.com, or your GHE API URL)               |
 | Owner                 | GitHub organization or username that owns the repositories                                      |
 | Authentication Method | Personal access token or GitHub App                                                            |
+| GitHub App Configuration | Saved configuration to authenticate with when using GitHub App auth (managed in **Settings -> GitHub Apps**) |
 | Repositories          | Comma-separated repository names to sync (optional -- leave blank to sync all org repositories) |
 | Include Issues        | Toggle to sync issues and their comments (default: on)                                          |
 | Include Pull Requests | Toggle to sync pull requests and their comments (default: on)                                   |

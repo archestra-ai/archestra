@@ -7,7 +7,10 @@ import {
 } from "@drizzle-migration-linter";
 
 const MIGRATIONS_DIR = path.resolve(process.cwd(), "src/database/migrations");
-const PLATFORM_ROOT = path.resolve(process.cwd(), "..");
+const GIT_ROOT = execFileSync("git", ["rev-parse", "--show-toplevel"], {
+  encoding: "utf8",
+  cwd: process.cwd(),
+}).trim();
 
 function main(): void {
   const baseRef =
@@ -25,7 +28,7 @@ function main(): void {
 
 function getChangedMigrationFiles(baseRef: string): string[] {
   try {
-    const migrationsPathspec = path.relative(PLATFORM_ROOT, MIGRATIONS_DIR);
+    const migrationsPathspec = path.relative(GIT_ROOT, MIGRATIONS_DIR);
     const changedOutput = execFileSync(
       "git",
       [
@@ -36,12 +39,12 @@ function getChangedMigrationFiles(baseRef: string): string[] {
         "--",
         migrationsPathspec,
       ],
-      { encoding: "utf8", cwd: PLATFORM_ROOT },
+      { encoding: "utf8", cwd: GIT_ROOT },
     );
     const untrackedOutput = execFileSync(
       "git",
       ["ls-files", "--others", "--exclude-standard", "--", migrationsPathspec],
-      { encoding: "utf8", cwd: PLATFORM_ROOT },
+      { encoding: "utf8", cwd: GIT_ROOT },
     );
 
     return `${changedOutput}\n${untrackedOutput}`
@@ -49,7 +52,7 @@ function getChangedMigrationFiles(baseRef: string): string[] {
       .map((file) => file.trim())
       .filter((file) => file.endsWith(".sql"))
       .filter((file) => !file.includes("/meta/"))
-      .map((file) => path.resolve(PLATFORM_ROOT, file))
+      .map((file) => path.resolve(GIT_ROOT, file))
       .filter((file, index, files) => files.indexOf(file) === index)
       .sort();
   } catch {

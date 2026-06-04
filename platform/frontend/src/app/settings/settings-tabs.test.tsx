@@ -256,6 +256,32 @@ describe("useSettingsTabs", () => {
     });
   });
 
+  it("shows Integrations tab when user has githubAppConfig:read permission", async () => {
+    mockPermissions = { githubAppConfig: ["read"] };
+
+    const { result } = renderHook(() => useSettingsTabs(), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => {
+      const labels = getTabLabels(result.current);
+      expect(labels).toContain("Integrations");
+    });
+  });
+
+  it("hides Integrations tab when user lacks githubAppConfig:read permission", async () => {
+    mockPermissions = {};
+
+    const { result } = renderHook(() => useSettingsTabs(), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => {
+      const labels = getTabLabels(result.current);
+      expect(labels).not.toContain("Integrations");
+    });
+  });
+
   it("maintains correct tab order", async () => {
     mockEnterpriseFeatures = true;
     mockSecretsType = "Vault";
@@ -263,6 +289,7 @@ describe("useSettingsTabs", () => {
       member: ["read"],
       team: ["read"],
       ac: ["read"],
+      githubAppConfig: ["read"],
       identityProvider: ["read"],
       secret: ["read"],
       organizationSettings: ["read"],
@@ -287,6 +314,7 @@ describe("useSettingsTabs", () => {
         "Users",
         "Teams",
         "Roles",
+        "Integrations",
         "Identity Providers",
         "Secrets",
         "Organization",

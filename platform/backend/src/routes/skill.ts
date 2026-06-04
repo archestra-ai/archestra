@@ -17,10 +17,13 @@ import {
   requireSkillModifyPermission,
   type SkillPermissionChecker,
 } from "@/auth/skill-permissions";
+import { userHasPermission } from "@/auth/utils";
 import { withDbTransaction } from "@/database";
+import { resolveInstallationToken } from "@/integrations/github/app-auth";
 import logger from "@/logging";
 import {
   AgentModel,
+  GithubAppConfigModel,
   MemberModel,
   OrganizationModel,
   SkillFileModel,
@@ -30,6 +33,7 @@ import {
   ToolModel,
   UserModel,
 } from "@/models";
+import { secretManager } from "@/secrets-manager";
 import { agentToSkill, SCOPE_FIELD } from "@/skills/agent-migration";
 import {
   builtInSkillVersion,
@@ -65,6 +69,34 @@ import {
   UuidIdSchema,
 } from "@/types";
 import { isForeignKeyConstraintError } from "@/utils/db";
+
+/**
+ * Shared fields identifying a GitHub skill source. Authentication is optional
+ * and at most one method may be supplied: a transient PAT (`githubToken`, never
+ * stored) or a reference to a stored GitHub App config (`githubAppConfigId`).
+ */
+const githubSkillSourceShape = {
+  repoUrl: z.string().min(1),
+  path: z.string().optional(),
+  githubToken: z.string().optional(),
+  githubAppConfigId: z.string().uuid().optional(),
+};
+
+function hasSingleGithubAuth(source: {
+  githubToken?: string;
+  githubAppConfigId?: string;
+}): boolean {
+  return !(source.githubToken && source.githubAppConfigId);
+}
+
+const singleGithubAuthError = {
+  message: "Provide either githubToken or githubAppConfigId, not both",
+  path: ["githubAppConfigId"],
+};
+
+const GithubSkillSourceSchema = z
+  .object(githubSkillSourceShape)
+  .refine(hasSingleGithubAuth, singleGithubAuthError);
 
 /** A team a skill is assigned to (for `scope = 'team'` skills). */
 const SkillTeamSchema = z.object({ id: z.string(), name: z.string() });
@@ -239,7 +271,9 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       return reply.send({
         data: skills.map((skill) => ({
           ...skill,
-          fileCount: fileCounts.get(skill.id) ?? 0,
+          // skill_files holds only bundled resources; +1 for the mandatory
+          // SKILL.md (stored in the skills row) so the count matches the catalog.
+          fileCount: (fileCounts.get(skill.id) ?? 0) + 1,
           teams: teamsBySkill.get(skill.id) ?? [],
           authorName: skill.authorId
             ? (authorNames.get(skill.authorId) ?? null)
@@ -918,11 +952,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.DiscoverGithubSkills,
         description: "Discover skills in a GitHub repository",
         tags: ["Skills"],
-        body: z.object({
-          repoUrl: z.string().min(1),
-          path: z.string().optional(),
-          githubToken: z.string().optional(),
-        }),
+        body: GithubSkillSourceSchema,
         response: constructResponseSchema(
           z.object({
             repoUrl: z.string(),
@@ -935,11 +965,17 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ body, organizationId, user }, reply) => {
+      const githubToken = await resolveGithubImportToken({
+        githubToken: body.githubToken,
+        githubAppConfigId: body.githubAppConfigId,
+        organizationId,
+        userId: user.id,
+      });
       const result = await runImport(() =>
         discoverSkills({
           repoUrl: body.repoUrl,
           path: body.path,
-          githubToken: body.githubToken,
+          githubToken,
         }),
       );
 
@@ -972,12 +1008,9 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description:
           "Fetch a single skill's manifest and files from GitHub without persisting it.",
         tags: ["Skills"],
-        body: z.object({
-          repoUrl: z.string().min(1),
-          path: z.string().optional(),
-          githubToken: z.string().optional(),
-          skillPath: z.string(),
-        }),
+        body: z
+          .object({ ...githubSkillSourceShape, skillPath: z.string() })
+          .refine(hasSingleGithubAuth, singleGithubAuthError),
         response: constructResponseSchema(
           z.object({
             name: z.string(),
@@ -1002,12 +1035,18 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ),
       },
     },
-    async ({ body }, reply) => {
+    async ({ body, organizationId, user }, reply) => {
+      const githubToken = await resolveGithubImportToken({
+        githubToken: body.githubToken,
+        githubAppConfigId: body.githubAppConfigId,
+        organizationId,
+        userId: user.id,
+      });
       const [item] = await runImport(() =>
         importSkills({
           repoUrl: body.repoUrl,
           path: body.path,
-          githubToken: body.githubToken,
+          githubToken,
           skillPaths: [body.skillPath],
         }),
       );
@@ -1030,14 +1069,14 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.ImportGithubSkills,
         description: "Import selected skills from a GitHub repository",
         tags: ["Skills"],
-        body: z.object({
-          repoUrl: z.string().min(1),
-          path: z.string().optional(),
-          githubToken: z.string().optional(),
-          skillPaths: z.array(z.string()).min(1),
-          scope: ResourceVisibilityScopeSchema.optional(),
-          teamIds: z.array(z.string()).optional(),
-        }),
+        body: z
+          .object({
+            ...githubSkillSourceShape,
+            skillPaths: z.array(z.string()).min(1),
+            scope: ResourceVisibilityScopeSchema.optional(),
+            teamIds: z.array(z.string()).optional(),
+          })
+          .refine(hasSingleGithubAuth, singleGithubAuthError),
         response: constructResponseSchema(
           z.object({
             created: z.array(SelectSkillSchema),
@@ -1071,11 +1110,17 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       });
       await assertSkillTeams({ scope, teamIds, organizationId });
 
+      const githubToken = await resolveGithubImportToken({
+        githubToken: body.githubToken,
+        githubAppConfigId: body.githubAppConfigId,
+        organizationId,
+        userId: user.id,
+      });
       const imported = await runImport(() =>
         importSkills({
           repoUrl: body.repoUrl,
           path: body.path,
-          githubToken: body.githubToken,
+          githubToken,
           skillPaths: body.skillPaths,
         }),
       );
@@ -1130,6 +1175,79 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
 };
 
 // ===== Internal helpers =====
+
+/**
+ * Resolve the token a GitHub skill import authenticates with. A stored GitHub
+ * App config (org-scoped, github.com only) is exchanged for a short-lived
+ * installation token; otherwise the transient PAT (if any) is passed through.
+ */
+async function resolveGithubImportToken(params: {
+  githubToken?: string;
+  githubAppConfigId?: string;
+  organizationId: string;
+  userId: string;
+}): Promise<string | undefined> {
+  const { githubToken, githubAppConfigId, organizationId, userId } = params;
+  if (!githubAppConfigId) {
+    return githubToken;
+  }
+
+  // using a stored App config requires read access to GitHub App configs
+  const allowed = await userHasPermission(
+    userId,
+    organizationId,
+    "githubAppConfig",
+    "read",
+  );
+  if (!allowed) {
+    throw new ApiError(
+      403,
+      "You do not have access to GitHub App configurations",
+    );
+  }
+
+  const appConfig = await GithubAppConfigModel.findByIdForOrganization({
+    id: githubAppConfigId,
+    organizationId,
+  });
+  if (!appConfig) {
+    throw new ApiError(404, "GitHub App configuration not found");
+  }
+  if (!isGithubDotComUrl(appConfig.githubUrl)) {
+    throw new ApiError(
+      400,
+      "Skill import via GitHub App is only supported for github.com",
+    );
+  }
+
+  if (!appConfig.secretId) {
+    throw new ApiError(
+      400,
+      "GitHub App configuration has no stored private key",
+    );
+  }
+  const secret = await secretManager().getSecret(appConfig.secretId);
+  if (!secret) {
+    throw new ApiError(404, "GitHub App private key not found");
+  }
+  const privateKey =
+    ((secret.secret as Record<string, unknown>).apiToken as string) || "";
+
+  return resolveInstallationToken({
+    githubUrl: appConfig.githubUrl,
+    appId: appConfig.appId,
+    installationId: appConfig.installationId,
+    privateKey,
+  });
+}
+
+function isGithubDotComUrl(url: string): boolean {
+  try {
+    return new URL(url).host === "api.github.com";
+  } catch {
+    return false;
+  }
+}
 
 async function findSkillOrThrow(id: string, organizationId: string) {
   const skill = await SkillModel.findById(id);

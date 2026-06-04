@@ -132,6 +132,8 @@ export const PERPLEXITY_MODELS = [
  * @see https://platform.minimax.io/docs/guides/models-intro
  */
 export const MINIMAX_MODELS = [
+  { id: "MiniMax-M3", displayName: "MiniMax-M3" },
+  { id: "MiniMax-M3-highspeed", displayName: "MiniMax-M3-highspeed" },
   { id: "MiniMax-M2.7", displayName: "MiniMax-M2.7" },
   { id: "MiniMax-M2.7-highspeed", displayName: "MiniMax-M2.7-highspeed" },
   { id: "MiniMax-M2.5", displayName: "MiniMax-M2.5" },
@@ -190,7 +192,7 @@ export const OPENROUTER_LATEST_ALIAS_PREFIX = "~";
  * More specific patterns should come before general ones.
  */
 export const MODEL_MARKER_PATTERNS: Record<SupportedProvider, string[]> = {
-  anthropic: ["opus-4-7"],
+  anthropic: ["opus-4-8", "opus-4-7"],
   openai: ["gpt-5.5-pro", "gpt-5.5"],
   gemini: ["gemini-3.1-pro-preview", "gemini-2.5-pro"],
   cerebras: ["zai-glm-4.7"],
@@ -200,6 +202,7 @@ export const MODEL_MARKER_PATTERNS: Record<SupportedProvider, string[]> = {
   groq: ["openai/gpt-oss-120b"],
   xai: ["grok-4.3"],
   openrouter: [
+    "anthropic/claude-opus-4.8",
     "anthropic/claude-opus-4.7",
     "openai/gpt-5.5-pro",
     "openai/gpt-5.5",
@@ -211,9 +214,9 @@ export const MODEL_MARKER_PATTERNS: Record<SupportedProvider, string[]> = {
   vllm: ["gpt-oss-120b", "llama-4-maverick", "llama-4-scout", "qwen3-235b"],
   zhipuai: ["glm-5.1"],
   deepseek: ["deepseek-v4-pro"],
-  minimax: ["minimax-m2.7"],
+  minimax: ["minimax-m3", "minimax-m2.7"],
   azure: ["gpt-5.5"],
-  bedrock: ["anthropic.claude-opus-4-7"],
+  bedrock: ["anthropic.claude-opus-4-8", "anthropic.claude-opus-4-7"],
 };
 
 /**
@@ -221,10 +224,10 @@ export const MODEL_MARKER_PATTERNS: Record<SupportedProvider, string[]> = {
  * Using Record<SupportedProvider, string> ensures a compile-time error when a new provider is added.
  */
 export const DEFAULT_MODELS: Record<SupportedProvider, string> = {
-  anthropic: "claude-opus-4-7",
+  anthropic: "claude-opus-4-8",
   openai: "gpt-5.5",
   openrouter: "openrouter/auto",
-  gemini: "gemini-3.1-pro-preview",
+  gemini: "gemini-3.5-flash",
   cohere: "command-a-plus-05-2026",
   groq: "openai/gpt-oss-120b",
   xai: "grok-4.3",
@@ -235,8 +238,8 @@ export const DEFAULT_MODELS: Record<SupportedProvider, string> = {
   perplexity: "sonar-pro",
   zhipuai: "glm-5.1",
   deepseek: "deepseek-v4-pro",
-  bedrock: "anthropic.claude-opus-4-7",
-  minimax: "MiniMax-M2.7",
+  bedrock: "anthropic.claude-opus-4-8",
+  minimax: "MiniMax-M3",
   azure: "gpt-5.5",
 };
 /**

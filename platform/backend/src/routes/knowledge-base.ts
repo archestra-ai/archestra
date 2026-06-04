@@ -14,6 +14,7 @@ import {
   isTeamScopedWithoutTeams,
   knowledgeSourceAccessControlService,
 } from "@/knowledge-base";
+import { resolveConnectorCredentials } from "@/knowledge-base/connector-credentials";
 import { getConnector } from "@/knowledge-base/connectors/registry";
 import { getBlobStorageProvider } from "@/knowledge-base/file-upload/blob-storage-providers";
 import { fileUploadManager } from "@/knowledge-base/file-upload/file-upload-manager";
@@ -23,6 +24,7 @@ import {
   AgentKnowledgeBaseModel,
   AgentModel,
   ConnectorRunModel,
+  GithubAppConfigModel,
   KbDocumentModel,
   KbUploadedFileModel,
   KnowledgeBaseConnectorModel,
@@ -34,8 +36,8 @@ import { secretManager } from "@/secrets-manager";
 import { taskQueueService } from "@/task-queue";
 import {
   ApiError,
+  type ConnectorConfig,
   ConnectorConfigSchema,
-  type ConnectorCredentials,
   ConnectorCredentialsSchema,
   type ConnectorType,
   ConnectorTypeSchema,
@@ -487,7 +489,9 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
           teamIds: z.array(z.string()).optional(),
           connectorType: ConnectorTypeSchema,
           config: ConnectorConfigSchema,
-          credentials: ConnectorCredentialsSchema,
+          // optional: GitHub App connectors authenticate via a referenced
+          // github_app_configs row instead of an inline secret
+          credentials: ConnectorCredentialsSchema.optional(),
           schedule: z.string().optional(),
           enabled: z.boolean().optional(),
           knowledgeBaseIds: z.array(z.string()).optional(),
@@ -543,11 +547,41 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
-      // Store credentials as a secret
-      const secret = await secretManager().createSecret(
-        body.credentials,
-        `connector-${body.name}`,
-      );
+      // GitHub App connectors reference a github_app_configs row for their
+      // credentials; everything else stores an inline secret.
+      const appConfigRef = await resolveGithubAppConfigReference({
+        config: body.config,
+        organizationId,
+        userId: user.id,
+      });
+      const usesGithubAppConfig = appConfigRef !== null;
+      if (appConfigRef && body.config.type === "github") {
+        // the App config owns the host the installation token is minted against,
+        // so it is the single source of truth for the connector's API host
+        body.config.githubUrl = appConfigRef.githubUrl;
+      }
+
+      let secretId: string | null = null;
+      if (usesGithubAppConfig) {
+        if (body.credentials) {
+          throw new ApiError(
+            400,
+            "GitHub App connectors must not include inline credentials",
+          );
+        }
+      } else {
+        if (!body.credentials) {
+          throw new ApiError(
+            400,
+            "Credentials are required for this connector",
+          );
+        }
+        const secret = await secretManager().createSecret(
+          body.credentials,
+          `connector-${body.name}`,
+        );
+        secretId = secret.id;
+      }
 
       // Create the connector
       const connector = await KnowledgeBaseConnectorModel.create({
@@ -558,7 +592,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         teamIds: body.teamIds,
         connectorType: body.connectorType,
         config: body.config,
-        secretId: secret.id,
+        secretId,
         schedule: body.schedule,
         enabled: body.enabled,
       });
@@ -757,18 +791,27 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
       });
 
-      // Update credentials secret if provided
-      if (body.credentials && connector.secretId) {
-        await secretManager().updateSecret(
-          connector.secretId,
-          body.credentials,
-        );
+      // resolve the connector's auth shape after this update so credential
+      // storage stays consistent across App <-> inline-secret transitions
+      const nextConfig = body.config ?? connector.config;
+      const appConfigRef = await resolveGithubAppConfigReference({
+        config: nextConfig,
+        organizationId,
+        userId: user.id,
+      });
+      const usesGithubAppConfig = appConfigRef !== null;
+      if (appConfigRef && body.config?.type === "github") {
+        // the App config owns the host the installation token is minted against
+        body.config.githubUrl = appConfigRef.githubUrl;
       }
 
       const { credentials: _, ...updateData } = body;
       const nextVisibility = updateData.visibility ?? connector.visibility;
       const nextTeamIds = updateData.teamIds ?? connector.teamIds;
 
+      // validate everything that can reject the request BEFORE touching any
+      // secret, so a rejected update never leaves the connector with a
+      // deleted or replaced credential
       if (
         isTeamScopedWithoutTeams({
           visibility: nextVisibility,
@@ -790,15 +833,66 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "Team-scoped connectors require an enterprise license",
         );
       }
+      if (usesGithubAppConfig && body.credentials) {
+        throw new ApiError(
+          400,
+          "GitHub App connectors must not include inline credentials",
+        );
+      }
+      const wasGithubApp =
+        connector.config.type === "github" &&
+        connector.config.authMethod === "github_app";
+      if (
+        wasGithubApp &&
+        !usesGithubAppConfig &&
+        !body.credentials &&
+        !connector.secretId
+      ) {
+        // leaving App auth means the connector has no inline secret yet, so a
+        // new credential must be supplied with the switch
+        throw new ApiError(
+          400,
+          "Credentials are required when switching this connector to token authentication",
+        );
+      }
+
+      let nextSecretId = connector.secretId;
+      let secretToDeleteAfterUpdate: string | null = null;
+      if (usesGithubAppConfig) {
+        // defer dropping the connector's own inline secret until the update has
+        // been persisted, so a later failure can't orphan the connector
+        if (connector.secretId) {
+          secretToDeleteAfterUpdate = connector.secretId;
+          nextSecretId = null;
+        }
+      } else if (body.credentials) {
+        if (connector.secretId) {
+          await secretManager().updateSecret(
+            connector.secretId,
+            body.credentials,
+          );
+        } else {
+          const secret = await secretManager().createSecret(
+            body.credentials,
+            `connector-${body.name ?? connector.name}`,
+          );
+          nextSecretId = secret.id;
+        }
+      }
 
       // Reset checkpoint when config changes to force a full re-sync
       // (filters, queries, inclusion/exclusion criteria affect which items get synced)
       const updated = await KnowledgeBaseConnectorModel.update(id, {
         ...updateData,
+        secretId: nextSecretId,
         ...(updateData.config ? { checkpoint: null } : {}),
       });
       if (!updated) {
         throw new ApiError(404, "Connector not found");
+      }
+
+      if (secretToDeleteAfterUpdate) {
+        await secretManager().deleteSecret(secretToDeleteAfterUpdate);
       }
 
       if (
@@ -990,8 +1084,8 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
       });
 
-      // Load credentials
-      const credentials = await loadConnectorCredentials(connector.secretId);
+      // Load credentials (resolves github_app_configs references when needed)
+      const credentials = await resolveConnectorCredentials(connector);
 
       // Get the connector implementation and test
       const connectorImpl = getConnector(connector.connectorType);
@@ -1671,21 +1765,50 @@ async function enrichKnowledgeFiles(params: {
   }));
 }
 
-async function loadConnectorCredentials(
-  secretId: string | null,
-): Promise<ConnectorCredentials> {
-  if (!secretId) {
-    throw new ApiError(400, "Connector has no associated credentials");
+/**
+ * Validate a connector's GitHub App reference. Returns the referenced
+ * github_app_configs id when the connector uses GitHub App auth (after
+ * confirming it belongs to the organization), or null otherwise.
+ */
+async function resolveGithubAppConfigReference(params: {
+  config: ConnectorConfig;
+  organizationId: string;
+  userId: string;
+}): Promise<{ id: string; githubUrl: string } | null> {
+  const { config, organizationId, userId } = params;
+  if (config.type !== "github" || config.authMethod !== "github_app") {
+    return null;
   }
-
-  const secret = await secretManager().getSecret(secretId);
-  if (!secret) {
-    throw new ApiError(404, "Connector credentials not found");
+  if (!config.githubAppConfigId) {
+    throw new ApiError(
+      400,
+      "GitHub App authentication requires githubAppConfigId",
+    );
   }
-
-  const data = secret.secret as Record<string, unknown>;
-  return {
-    email: (data.email as string) || "",
-    apiToken: (data.apiToken as string) || "",
-  };
+  // referencing a stored App credential lets the connector mint installation
+  // tokens, so it requires the dedicated githubAppConfig:read permission on top
+  // of the connector permission the route already enforces
+  const canUseAppConfig = await userHasPermission(
+    userId,
+    organizationId,
+    "githubAppConfig",
+    "read",
+  );
+  if (!canUseAppConfig) {
+    throw new ApiError(
+      403,
+      "You do not have permission to use GitHub App configurations",
+    );
+  }
+  const appConfig = await GithubAppConfigModel.findByIdForOrganization({
+    id: config.githubAppConfigId,
+    organizationId,
+  });
+  if (!appConfig) {
+    throw new ApiError(
+      400,
+      "Referenced GitHub App configuration was not found",
+    );
+  }
+  return { id: appConfig.id, githubUrl: appConfig.githubUrl };
 }

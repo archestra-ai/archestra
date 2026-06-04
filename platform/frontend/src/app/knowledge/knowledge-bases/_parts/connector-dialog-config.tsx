@@ -350,7 +350,9 @@ export function getConnectorCredentialConfig(params: {
     outline: "API Key",
     jira: jiraConfluenceApiTokenLabel,
     confluence: jiraConfluenceApiTokenLabel,
-    github: githubUsesApp ? "Private Key" : "Personal Access Token",
+    // App auth stores credentials in a github_app_configs row, so there is no
+    // inline token field — the config is chosen via the dropdown instead
+    github: githubUsesApp ? undefined : "Personal Access Token",
     gitlab: "Personal Access Token",
     linear: "Personal Access Token",
     asana: "Personal Access Token",

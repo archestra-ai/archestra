@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import type { UseFormReturn } from "react-hook-form";
 import {
   FormControl,
@@ -18,6 +19,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { useGithubAppConfigs } from "@/lib/github-app-config.query";
 
 interface GithubConfigFieldsProps {
   // biome-ignore lint/suspicious/noExplicitAny: form type is generic across different form schemas
@@ -42,6 +44,7 @@ export function GithubConfigFields({
     `${prefix}.includeRepositoryFiles`,
   ) as boolean | undefined;
   const usesGithubApp = authMethod === "github_app";
+  const { data: githubAppConfigs = [] } = useGithubAppConfigs();
 
   return (
     <div className="space-y-4">
@@ -118,37 +121,47 @@ export function GithubConfigFields({
           />
 
           {usesGithubApp && (
-            <>
-              <FormField
-                control={form.control}
-                name={`${prefix}.githubAppId`}
-                rules={{ required: "GitHub App ID is required" }}
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>GitHub App ID</FormLabel>
-                    <FormControl>
-                      <Input placeholder="123456" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name={`${prefix}.githubAppInstallationId`}
-                rules={{ required: "Installation ID is required" }}
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Installation ID</FormLabel>
-                    <FormControl>
-                      <Input placeholder="98765432" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </>
+            <FormField
+              control={form.control}
+              name={`${prefix}.githubAppConfigId`}
+              rules={{ required: "Select a GitHub App configuration" }}
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>GitHub App Configuration</FormLabel>
+                  {githubAppConfigs.length > 0 ? (
+                    <Select
+                      onValueChange={field.onChange}
+                      value={(field.value as string | undefined) ?? ""}
+                    >
+                      <FormControl>
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="Select a configuration" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {githubAppConfigs.map((appConfig) => (
+                          <SelectItem key={appConfig.id} value={appConfig.id}>
+                            {appConfig.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <FormDescription>
+                      No GitHub App configurations exist yet. Create one under{" "}
+                      <Link
+                        href="/settings/integrations/github-apps"
+                        className="font-medium text-primary underline-offset-4 hover:underline"
+                      >
+                        Settings → Integrations → GitHub Apps
+                      </Link>
+                      .
+                    </FormDescription>
+                  )}
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
           )}
         </>
       )}

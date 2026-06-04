@@ -20,6 +20,10 @@ vi.mock("@/lib/skills/skill.query", () => ({
   usePreviewGithubSkill: () => ({ data: null, isPending: false }),
 }));
 
+vi.mock("@/lib/github-app-config.query", () => ({
+  useGithubAppConfigs: () => ({ data: [], isPending: false }),
+}));
+
 vi.mock("next/navigation", () => ({
   usePathname: () => "/agents/skills/new",
   useRouter: () => ({ push: vi.fn() }),

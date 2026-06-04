@@ -54,6 +54,15 @@ export type ConnectorSyncStatus = z.infer<typeof ConnectorSyncStatusSchema>;
 export const ConnectorCredentialsSchema = z.object({
   email: z.string().optional(),
   apiToken: z.string(),
+  // resolved GitHub App metadata (paired with the App private key in apiToken)
+  // when a connector authenticates via a github_app_configs reference
+  githubApp: z
+    .object({
+      githubUrl: z.string(),
+      appId: z.string(),
+      installationId: z.string(),
+    })
+    .optional(),
 });
 export type ConnectorCredentials = z.infer<typeof ConnectorCredentialsSchema>;
 
@@ -118,8 +127,8 @@ export const GithubConfigSchema = z.object({
   githubUrl: connectorUrlSchema,
   owner: z.string(),
   authMethod: z.enum(["pat", "github_app"]).optional(),
-  githubAppId: z.string().optional(),
-  githubAppInstallationId: z.string().optional(),
+  // references a github_app_configs row that holds the App credentials
+  githubAppConfigId: z.string().uuid().optional(),
   repos: z.array(z.string()).optional(),
   includeIssues: z.boolean().optional(),
   includePullRequests: z.boolean().optional(),

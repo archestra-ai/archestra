@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.2.57](https://github.com/archestra-ai/archestra/compare/platform-v1.2.56...platform-v1.2.57) (2026-06-04)
+
+
+### Features
+
+* **github:** GitHub App auth for skill imports and KB connectors ([#5293](https://github.com/archestra-ai/archestra/issues/5293)) ([06d8091](https://github.com/archestra-ai/archestra/commit/06d8091fa1c0345e07c68436c45b6162ef70b996))
+* **mcp-catalog:** let team-admins scope catalog items to their teams ([#5298](https://github.com/archestra-ai/archestra/issues/5298)) ([d3e3f8d](https://github.com/archestra-ai/archestra/commit/d3e3f8d21e1381be94c650899910ad553d1b2acb))
+
+
+### Code Refactoring
+
+* **mcp-registry:** remove catalog preset feature ([#5290](https://github.com/archestra-ai/archestra/issues/5290)) ([ae539b4](https://github.com/archestra-ai/archestra/commit/ae539b4a846a864294d082c44780f0db3ddee24e))
+
+
+### Miscellaneous Chores
+
+* bump default LLM models ([#5297](https://github.com/archestra-ai/archestra/issues/5297)) ([0fb1206](https://github.com/archestra-ai/archestra/commit/0fb1206d6b8f9d0e4acbfc3ef30af43135220aa9))
+
 ## [1.2.56](https://github.com/archestra-ai/archestra/compare/platform-v1.2.55...platform-v1.2.56) (2026-06-04)
 
 

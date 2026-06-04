@@ -1,11 +1,14 @@
+import { ADMIN_ROLE_NAME } from "@shared";
 import config from "@/config";
 import { knowledgeSourceAccessControlService } from "@/knowledge-base";
 import {
+  GithubAppConfigModel,
   KbChunkModel,
   KbDocumentModel,
   KnowledgeBaseConnectorModel,
   KnowledgeBaseModel,
 } from "@/models";
+import { secretManager } from "@/secrets-manager";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test, vi } from "@/test";
@@ -861,6 +864,278 @@ describe("knowledge base routes", () => {
 
       expect(getResponse.statusCode).toBe(200);
       expect(getResponse.json().name).toBe("Persisted Name");
+    });
+
+    test("switching a GitHub App connector to PAT creates an inline secret", async () => {
+      const appSecret = await secretManager().createSecret(
+        { apiToken: "-----BEGIN PRIVATE KEY-----" },
+        "app",
+      );
+      const appConfig = await GithubAppConfigModel.create({
+        organizationId,
+        name: "App",
+        appId: "1",
+        installationId: "1",
+        secretId: appSecret.id,
+      });
+      // App connectors hold no inline secret — credentials live in the config row
+      const connector = await KnowledgeBaseConnectorModel.create({
+        organizationId,
+        name: "App Connector",
+        connectorType: "github",
+        config: {
+          type: "github",
+          githubUrl: "https://api.github.com",
+          owner: "test-org",
+          authMethod: "github_app",
+          githubAppConfigId: appConfig.id,
+        },
+        secretId: null,
+      });
+
+      const response = await app.inject({
+        method: "PUT",
+        url: `/api/connectors/${connector.id}`,
+        payload: {
+          config: {
+            type: "github",
+            githubUrl: "https://api.github.com",
+            owner: "test-org",
+            authMethod: "pat",
+          },
+          credentials: { apiToken: "ghp_token" },
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const newSecretId = response.json().secretId;
+      expect(newSecretId).toBeTruthy();
+      const secret = await secretManager().getSecret(newSecretId);
+      expect((secret?.secret as { apiToken?: string })?.apiToken).toBe(
+        "ghp_token",
+      );
+    });
+
+    test("rejects inline credentials on a GitHub App connector update", async ({
+      makeMember,
+    }) => {
+      await makeMember(user.id, organizationId, { role: ADMIN_ROLE_NAME });
+      const appConfig = await GithubAppConfigModel.create({
+        organizationId,
+        name: "App",
+        appId: "1",
+        installationId: "1",
+      });
+      const connector = await KnowledgeBaseConnectorModel.create({
+        organizationId,
+        name: "App Connector",
+        connectorType: "github",
+        config: {
+          type: "github",
+          githubUrl: "https://api.github.com",
+          owner: "test-org",
+          authMethod: "github_app",
+          githubAppConfigId: appConfig.id,
+        },
+        secretId: null,
+      });
+
+      const response = await app.inject({
+        method: "PUT",
+        url: `/api/connectors/${connector.id}`,
+        payload: { credentials: { apiToken: "ghp_token" } },
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
+
+    test("switching a GitHub App connector to PAT without credentials is rejected", async ({
+      makeMember,
+    }) => {
+      await makeMember(user.id, organizationId, { role: ADMIN_ROLE_NAME });
+      const appConfig = await GithubAppConfigModel.create({
+        organizationId,
+        name: "App",
+        appId: "1",
+        installationId: "1",
+      });
+      const connector = await KnowledgeBaseConnectorModel.create({
+        organizationId,
+        name: "App Connector",
+        connectorType: "github",
+        config: {
+          type: "github",
+          githubUrl: "https://api.github.com",
+          owner: "test-org",
+          authMethod: "github_app",
+          githubAppConfigId: appConfig.id,
+        },
+        secretId: null,
+      });
+
+      const response = await app.inject({
+        method: "PUT",
+        url: `/api/connectors/${connector.id}`,
+        payload: {
+          config: {
+            type: "github",
+            githubUrl: "https://api.github.com",
+            owner: "test-org",
+            authMethod: "pat",
+          },
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
+
+    test("a rejected App switch does not drop the connector's existing secret", async ({
+      makeMember,
+    }) => {
+      await makeMember(user.id, organizationId, { role: ADMIN_ROLE_NAME });
+      const appConfig = await GithubAppConfigModel.create({
+        organizationId,
+        name: "App",
+        appId: "1",
+        installationId: "1",
+      });
+      const secret = await secretManager().createSecret(
+        { apiToken: "ghp_existing" },
+        "pat-connector",
+      );
+      const connector = await KnowledgeBaseConnectorModel.create({
+        organizationId,
+        name: "PAT Connector",
+        connectorType: "github",
+        visibility: "org-wide",
+        teamIds: [],
+        config: {
+          type: "github",
+          githubUrl: "https://api.github.com",
+          owner: "test-org",
+          authMethod: "pat",
+        },
+        secretId: secret.id,
+      });
+
+      // switch to App auth while tripping the team-scoped validation; the
+      // request must fail without having deleted the original secret first
+      const response = await app.inject({
+        method: "PUT",
+        url: `/api/connectors/${connector.id}`,
+        payload: {
+          visibility: "team-scoped",
+          teamIds: [],
+          config: {
+            type: "github",
+            githubUrl: "https://api.github.com",
+            owner: "test-org",
+            authMethod: "github_app",
+            githubAppConfigId: appConfig.id,
+          },
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const stored = await KnowledgeBaseConnectorModel.findById(connector.id);
+      expect(stored?.secretId).toBe(secret.id);
+      expect(await secretManager().getSecret(secret.id)).not.toBeNull();
+    });
+
+    test("a GitHub App connector adopts the App config's host", async ({
+      makeMember,
+    }) => {
+      await makeMember(user.id, organizationId, { role: ADMIN_ROLE_NAME });
+      const appConfig = await GithubAppConfigModel.create({
+        organizationId,
+        name: "GHES App",
+        githubUrl: "https://ghe.example.com/api/v3",
+        appId: "1",
+        installationId: "1",
+      });
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/connectors",
+        payload: {
+          name: "GHES Connector",
+          visibility: "org-wide",
+          teamIds: [],
+          connectorType: "github",
+          // the form may leave the default github.com host; the saved connector
+          // must inherit the App config's host so the minted token matches
+          config: {
+            type: "github",
+            githubUrl: "https://api.github.com",
+            owner: "test-org",
+            authMethod: "github_app",
+            githubAppConfigId: appConfig.id,
+          },
+          schedule: "0 */6 * * *",
+          enabled: true,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().config.githubUrl).toBe(
+        "https://ghe.example.com/api/v3",
+      );
+    });
+
+    test("creating a GitHub App connector requires githubAppConfig:read", async () => {
+      // the default test user has no githubAppConfig permission
+      const appConfig = await GithubAppConfigModel.create({
+        organizationId,
+        name: "App",
+        appId: "1",
+        installationId: "1",
+      });
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/connectors",
+        payload: {
+          name: "App Connector",
+          visibility: "org-wide",
+          teamIds: [],
+          connectorType: "github",
+          config: {
+            type: "github",
+            githubUrl: "https://api.github.com",
+            owner: "test-org",
+            authMethod: "github_app",
+            githubAppConfigId: appConfig.id,
+          },
+          schedule: "0 */6 * * *",
+          enabled: true,
+        },
+      });
+
+      expect(response.statusCode).toBe(403);
+    });
+
+    test("rejects a malformed githubAppConfigId before it reaches the database", async () => {
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/connectors",
+        payload: {
+          name: "App Connector",
+          visibility: "org-wide",
+          teamIds: [],
+          connectorType: "github",
+          config: {
+            type: "github",
+            githubUrl: "https://api.github.com",
+            owner: "test-org",
+            authMethod: "github_app",
+            githubAppConfigId: "not-a-uuid",
+          },
+          schedule: "0 */6 * * *",
+          enabled: true,
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
     });
 
     test("does not refresh ACLs when visibility inputs are unchanged", async () => {

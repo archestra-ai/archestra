@@ -154,7 +154,7 @@ export function useRefreshInternalMcpCatalogImage() {
       return response.data;
     },
     onMutate: () => {
-      toast.success("Starting pod restart");
+      toast.info("Starting pod restart");
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["mcp-catalog"] });

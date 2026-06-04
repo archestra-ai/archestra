@@ -6,8 +6,11 @@ import {
 } from "fastify-type-provider-zod";
 import { type Mock, vi } from "vitest";
 import { hasPermission } from "@/auth";
-import { InternalMcpCatalogModel } from "@/models";
-import { reinstallMultitenantCatalog } from "@/services/mcp-reinstall";
+import { InternalMcpCatalogModel, McpServerModel } from "@/models";
+import {
+  autoReinstallServer,
+  reinstallMultitenantCatalog,
+} from "@/services/mcp-reinstall";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { ApiError, type User } from "@/types";
 import internalMcpCatalogRoutes from "./internal-mcp-catalog";
@@ -21,11 +24,13 @@ vi.mock("@/services/mcp-reinstall", async (importOriginal) => {
     await importOriginal<typeof import("@/services/mcp-reinstall")>();
   return {
     ...original,
+    autoReinstallServer: vi.fn(),
     reinstallMultitenantCatalog: vi.fn(),
   };
 });
 
 const mockHasPermission = hasPermission as Mock;
+const mockAutoReinstallServer = autoReinstallServer as Mock;
 const mockReinstallMultitenantCatalog = reinstallMultitenantCatalog as Mock;
 
 describe("POST /api/internal_mcp_catalog/:id/refresh-image", () => {
@@ -36,6 +41,7 @@ describe("POST /api/internal_mcp_catalog/:id/refresh-image", () => {
   beforeEach(async ({ makeMember, makeOrganization, makeUser }) => {
     vi.clearAllMocks();
     mockHasPermission.mockResolvedValue({ success: true, error: null });
+    mockAutoReinstallServer.mockResolvedValue(undefined);
     mockReinstallMultitenantCatalog.mockResolvedValue(undefined);
 
     const organization = await makeOrganization();
@@ -157,5 +163,136 @@ describe("POST /api/internal_mcp_catalog/:id/refresh-image", () => {
       "Pod restart is only supported for local catalogs",
     );
     expect(mockReinstallMultitenantCatalog).not.toHaveBeenCalled();
+  });
+
+  test("returns 404 when the catalog does not exist", async () => {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/internal_mcp_catalog/00000000-0000-4000-8000-000000000000/refresh-image",
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(response.json().error.message).toBe("Catalog item not found");
+    expect(mockReinstallMultitenantCatalog).not.toHaveBeenCalled();
+  });
+
+  test("rejects non-editors for shared catalogs", async () => {
+    mockHasPermission.mockResolvedValue({ success: false, error: null });
+    const catalog = await InternalMcpCatalogModel.create(
+      {
+        name: "shared-local-server",
+        serverType: "local",
+        scope: "org",
+        multitenant: true,
+        localConfig: {
+          dockerImage: "registry.example.com/mcp:latest",
+        },
+      },
+      { organizationId, authorId: user.id },
+    );
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/internal_mcp_catalog/${catalog.id}/refresh-image`,
+    });
+
+    expect(response.statusCode).toBe(403);
+    expect(response.json().error.message).toBe(
+      "Only catalog editors can restart this catalog's pods",
+    );
+    expect(mockReinstallMultitenantCatalog).not.toHaveBeenCalled();
+  });
+
+  test("restarts local child catalogs with the parent catalog", async () => {
+    const parent = await InternalMcpCatalogModel.create(
+      {
+        name: "parent-local-server",
+        serverType: "local",
+        scope: "org",
+        multitenant: true,
+        localConfig: {
+          dockerImage: "registry.example.com/mcp:latest",
+        },
+      },
+      { organizationId, authorId: user.id },
+    );
+    const childA = await InternalMcpCatalogModel.create(
+      {
+        name: "child-a-ignored",
+        childName: "child-a",
+        parentCatalogItemId: parent.id,
+        serverType: "local",
+        scope: "org",
+        multitenant: true,
+        localConfig: {
+          dockerImage: "registry.example.com/mcp:latest",
+        },
+      },
+      { organizationId, authorId: user.id },
+    );
+    const childB = await InternalMcpCatalogModel.create(
+      {
+        name: "child-b-ignored",
+        childName: "child-b",
+        parentCatalogItemId: parent.id,
+        serverType: "local",
+        scope: "org",
+        multitenant: true,
+        localConfig: {
+          dockerImage: "registry.example.com/mcp:latest",
+        },
+      },
+      { organizationId, authorId: user.id },
+    );
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/internal_mcp_catalog/${parent.id}/refresh-image`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(mockReinstallMultitenantCatalog).toHaveBeenCalledTimes(3);
+    expect(
+      mockReinstallMultitenantCatalog.mock.calls.map(([catalog]) => catalog.id),
+    ).toEqual([parent.id, childA.id, childB.id]);
+  });
+
+  test("does not fail the request when one single-tenant install restart succeeds", async () => {
+    const catalog = await InternalMcpCatalogModel.create(
+      {
+        name: "single-tenant-local-server",
+        serverType: "local",
+        scope: "org",
+        multitenant: false,
+        localConfig: {
+          dockerImage: "registry.example.com/mcp:latest",
+        },
+      },
+      { organizationId, authorId: user.id },
+    );
+    await McpServerModel.create({
+      name: "single-tenant-local-server-a",
+      catalogId: catalog.id,
+      serverType: "local",
+      scope: "org",
+    });
+    await McpServerModel.create({
+      name: "single-tenant-local-server-b",
+      catalogId: catalog.id,
+      serverType: "local",
+      scope: "org",
+    });
+    mockAutoReinstallServer
+      .mockRejectedValueOnce(new Error("restart failed"))
+      .mockResolvedValueOnce(undefined);
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/internal_mcp_catalog/${catalog.id}/refresh-image`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ success: true });
+    expect(mockAutoReinstallServer).toHaveBeenCalledTimes(2);
   });
 });

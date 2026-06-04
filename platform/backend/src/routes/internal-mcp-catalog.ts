@@ -103,6 +103,9 @@ const ToolWithAssignedAgentCountSchema = z.object({
     }),
   ),
 });
+const SuccessResponseSchema = z.object({
+  success: z.boolean(),
+});
 
 const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(
@@ -1139,7 +1142,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: z.object({
           id: UuidIdSchema,
         }),
-        response: constructResponseSchema(DeleteObjectResponseSchema),
+        response: constructResponseSchema(SuccessResponseSchema),
       },
     },
     async (request, reply) => {
@@ -1212,7 +1215,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: z.object({
           id: UuidIdSchema,
         }),
-        response: constructResponseSchema(DeleteObjectResponseSchema),
+        response: constructResponseSchema(SuccessResponseSchema),
       },
     },
     async (request, reply) => {
@@ -1259,12 +1262,15 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
 
-      try {
-        await Promise.all(targetCatalogItems.map(refreshCatalogImage));
-      } catch (error) {
-        const errorMessage =
-          error instanceof Error ? error.message : "Unknown error";
-        throw new ApiError(500, errorMessage);
+      const restartResults = await Promise.allSettled(
+        targetCatalogItems.map(refreshCatalogImage),
+      );
+      const failures = restartResults.filter(
+        (result): result is PromiseRejectedResult =>
+          result.status === "rejected",
+      );
+      if (failures.length === restartResults.length) {
+        throw new ApiError(500, getSettledErrorMessage(failures[0]));
       }
 
       return reply.send({ success: true });
@@ -2360,7 +2366,7 @@ async function refreshCatalogImage(catalogItem: InternalMcpCatalog) {
   }
 
   const installs = await McpServerModel.findByCatalogId(catalogItem.id);
-  await Promise.all(
+  const restartResults = await Promise.allSettled(
     installs.map(async (server) => {
       await McpServerModel.update(server.id, {
         localInstallationStatus: "pending",
@@ -2391,6 +2397,18 @@ async function refreshCatalogImage(catalogItem: InternalMcpCatalog) {
       }
     }),
   );
+  const failures = restartResults.filter(
+    (result): result is PromiseRejectedResult => result.status === "rejected",
+  );
+  if (failures.length > 0 && failures.length === restartResults.length) {
+    throw new Error(getSettledErrorMessage(failures[0]));
+  }
+}
+
+function getSettledErrorMessage(result: PromiseRejectedResult): string {
+  return result.reason instanceof Error
+    ? result.reason.message
+    : "Unknown error";
 }
 
 /**

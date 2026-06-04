@@ -78,6 +78,7 @@ import {
 } from "@/lib/llm-models.query";
 import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import { formatContextLength } from "@/lib/utils";
+import { useOrganization } from "../../../../lib/organization.query";
 import { useSetModelProvidersAction } from "../layout";
 import {
   canFilterFreeModelsForApiKey,
@@ -542,12 +543,18 @@ function EditModelDialog({
   const [inputModalityToAdd, setInputModalityToAdd] = useState("");
   const [outputModalityToAdd, setOutputModalityToAdd] = useState("");
   const updateModel = useUpdateModel();
+  const { data: organization } = useOrganization();
   const providerConfig = PROVIDER_CONFIG[model.provider];
   const fallbackPricing = getFallbackPricing(model);
   const form = useForm<EditModelFormValues>({
     defaultValues: getDefaults(model),
   });
   const selectedEmbeddingDimensions = form.watch("embeddingDimensions");
+
+  const serverEmbeddingKeyId = organization?.embeddingChatApiKeyId ?? null;
+  const serverEmbeddingModel = serverEmbeddingKeyId
+    ? (organization?.embeddingModel ?? null)
+    : null;
 
   useEffect(() => {
     if (open) {
@@ -833,10 +840,12 @@ function EditModelDialog({
             <FormField
               control={form.control}
               name="embeddingDimensions"
+              disabled={model.modelId === serverEmbeddingModel}
               render={({ field }) => (
                 <FormItem>
                   <Select
                     value={field.value || NOT_EMBEDDING_MODEL_VALUE}
+                    disabled={field.disabled}
                     onValueChange={(value) =>
                       field.onChange(
                         value === NOT_EMBEDDING_MODEL_VALUE ? "" : value,

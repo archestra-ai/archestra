@@ -685,6 +685,11 @@ async function handleEditMcpDescription(
 
     const existingTeamIds = existing.teams.map((t) => t.id);
     const newScope = args.scope ?? existing.scope;
+    // Shared items are one-way: demoting back to personal would yank the item
+    // from everyone it was shared with (mirrors the REST route).
+    if (newScope === "personal" && existing.scope !== "personal") {
+      return errorResult("Shared MCP servers cannot be made personal.");
+    }
     const newTeamIds =
       newScope === "team" ? [...new Set(args.teams ?? existingTeamIds)] : [];
     const scopeChanged = newScope !== existing.scope;

@@ -303,4 +303,31 @@ describe("internal MCP catalog — team-scope RBAC", () => {
     expect(res.statusCode).toBe(400);
     expect(res.json().error.message).toMatch(/at least one team/i);
   });
+
+  test("a shared (team) item cannot be demoted back to personal", async ({
+    makeUser,
+    makeMember,
+    makeTeam,
+    makeTeamMember,
+  }) => {
+    const editor = await makeUser();
+    await makeMember(editor.id, organizationId, { role: EDITOR_ROLE_NAME });
+    const team = await makeTeam(organizationId, editor.id);
+    await makeTeamMember(team.id, editor.id);
+
+    currentUser = editor;
+    const created = await post(remotePayload());
+    await put(created.json().id, {
+      ...remotePayload({ name: created.json().name }),
+      scope: "team",
+      teams: [team.id],
+    });
+
+    const res = await put(created.json().id, {
+      ...remotePayload({ name: created.json().name }),
+      scope: "personal",
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error.message).toMatch(/cannot be made personal/i);
+  });
 });

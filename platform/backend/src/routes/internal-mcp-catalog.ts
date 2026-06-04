@@ -651,6 +651,11 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // actually change. A content-only edit that echoes the existing teams
       // must not 403 a non-admin author/team-admin or needlessly rewrite rows.
       const newScope = restBody.scope ?? originalCatalogItem.scope;
+      // Shared items are one-way: demoting team/org back to personal would yank
+      // the item from everyone it was shared with. Mirrors the agent route.
+      if (newScope === "personal" && originalCatalogItem.scope !== "personal") {
+        throw new ApiError(400, "Shared catalog items cannot be made personal");
+      }
       const newTeamIds =
         newScope === "team"
           ? dedupeTeamIds(restBody.teams ?? existingTeamIds)

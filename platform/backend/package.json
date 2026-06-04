@@ -21,7 +21,7 @@
     "knip:dev": "knip",
     "knip:production": "knip --production",
     "type-check": "tsgo --noEmit",
-    "check:migrations": "tsx --tsconfig standalone-scripts.tsconfig.json src/standalone-scripts/check-drizzle-migration-journal.ts",
+    "check:migrations": "tsx --tsconfig standalone-scripts.tsconfig.json src/standalone-scripts/check-drizzle-migration-journal.ts && tsx --tsconfig standalone-scripts.tsconfig.json src/standalone-scripts/lint-drizzle-migrations.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio",

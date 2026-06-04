@@ -1,5 +1,6 @@
 packages:
   - "backend"
+  - "drizzle-migration-linter"
   - "frontend"
   - "shared"
   - "archestra-rs/sandbox-rs"

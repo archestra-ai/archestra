@@ -84,6 +84,7 @@ import {
 import {
   presetHasUnfilledFields,
   useCanEditCatalogPresets,
+  useCanModifyCatalogItem,
 } from "./preset-helpers";
 import {
   UninstallServerDialog,
@@ -187,9 +188,6 @@ export function McpServerCard({
   const isByosEnabled = useFeature("byosEnabled");
   const { data: session } = useSession();
   const currentUserId = session?.user?.id;
-  const { data: userIsMcpServerAdmin } = useHasPermissions({
-    mcpServerInstallation: ["admin"],
-  });
   // Cloning creates a new registry entry, so it's gated on the same permission
   // the create-catalog endpoint requires (mcpRegistry:create), not the broader
   // mcpServerInstallation:admin.
@@ -219,8 +217,11 @@ export function McpServerCard({
   // edit them — clicking Install would land on Step 1 and 403 on save.
   const { singular: presetSingular, defaultLabel } = usePresetEntityName();
   const presetSingularLower = presetSingular.toLowerCase();
-  const { canEdit: canEditPresets, isLoading: canEditPresetsLoading } =
-    useCanEditCatalogPresets(variant !== "builtin" ? item : null);
+  const { canEdit: canEditPresets } = useCanEditCatalogPresets(
+    variant !== "builtin" ? item : null,
+  );
+  const { canModify: canEditCatalog, isLoading: canEditCatalogLoading } =
+    useCanModifyCatalogItem(variant !== "builtin" ? item : null);
   const defaultPresetNeedsFill =
     variant !== "builtin" && presetHasUnfilledFields(item, item);
   const installBlockedByPresetFill = defaultPresetNeedsFill && !canEditPresets;
@@ -313,19 +314,19 @@ export function McpServerCard({
   // is resolved at most once, so a client-side change of `?edit` to a different
   // id without a remount won't re-trigger it. Runs only after the edit-
   // permission check resolves so non-editors aren't briefly shown the form.
-  // Builtin items aren't editable, so canEditPresets is false for them.
+  // Builtin items aren't editable, so canEditCatalog is false for them.
   useEffect(() => {
     if (deepLinkHandledRef.current) return;
-    if (canEditPresetsLoading) return;
+    if (canEditCatalogLoading) return;
     if (editParam !== item.id) return;
     deepLinkHandledRef.current = true;
-    if (canEditPresets) {
+    if (canEditCatalog) {
       setSettingsInitialPage("configuration");
       setSettingsDialogOpen(true);
     } else {
       setEditNoAccessOpen(true);
     }
-  }, [editParam, item.id, canEditPresets, canEditPresetsLoading]);
+  }, [editParam, item.id, canEditCatalog, canEditCatalogLoading]);
 
   const handleChatWithMcpServer = async () => {
     setIsChatCreating(true);
@@ -533,13 +534,10 @@ export function McpServerCard({
 
   // Catalog-scope reinstall: surfaces a banner + button on multi-tenant
   // local catalogs whose execution config (image, command, args, transport)
-  // was edited. One click recreates the shared pod for everyone and
-  // cascades tool sync. Visibility mirrors the catalog edit predicate
-  // (admin OR personal-scope owner) since only those users can apply
-  // catalog-scope changes.
-  const canEditCatalog =
-    userIsMcpServerAdmin ||
-    (item.scope === "personal" && item.authorId === currentUserId);
+  // was edited. One click recreates the shared pod for everyone and cascades
+  // tool sync. Gated by `canEditCatalog` (admin, a team-admin member of the
+  // item's teams, or the personal-scope owner) since only those users can
+  // apply catalog-scope changes.
   const needsCatalogReinstall =
     variant === "local" &&
     item.multitenant === true &&
@@ -1149,9 +1147,7 @@ export function McpServerCard({
               </p>
             )}
           </div>
-          {(userIsMcpServerAdmin ||
-            (item.scope === "personal" && item.authorId === currentUserId)) &&
-            settingsButton}
+          {canEditCatalog && settingsButton}
         </div>
       </CardHeader>
       <CardContent className="flex flex-col gap-4 flex-grow">

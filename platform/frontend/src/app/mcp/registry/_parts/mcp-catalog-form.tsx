@@ -520,6 +520,12 @@ export function McpCatalogForm({
   const { data: isAdmin } = useHasPermissions({
     mcpServerInstallation: ["admin"],
   });
+  // Sharing to teams needs mcpRegistry:team-admin (admins bypass) plus team:read
+  // to populate the picker. Mirrors the agent/skill visibility gating.
+  const { data: isTeamAdmin } = useHasPermissions({
+    mcpRegistry: ["team-admin"],
+  });
+  const { data: canReadTeams } = useHasPermissions({ team: ["read"] });
   const { data: teams } = useTeams();
   const { data: environmentList } = useEnvironments();
   const environments = environmentList?.environments;
@@ -540,6 +546,10 @@ export function McpCatalogForm({
   const hasCustomEnvironmentOptions = accessibleEnvironments.length > 0;
   const canManageEnvironments = hasEnvAdmin ?? false;
   const currentScope = form.watch("scope");
+  const canShareWithTeams = (isAdmin ?? false) || (isTeamAdmin ?? false);
+  // Shared items are one-way: an item that is already team/org-scoped cannot be
+  // demoted back to personal (mirrors the agent dialog).
+  const initialScope = initialValues?.scope;
   const enterpriseAuthDisabledReason: ReactNode | null =
     !isEnterpriseCoreEnabled
       ? "Available with the Enterprise Core license."
@@ -573,16 +583,20 @@ export function McpCatalogForm({
         label: "Personal",
         description: "Only you can access this MCP server.",
         icon: Lock,
+        disabled: initialScope != null && initialScope !== "personal",
+        disabledReason: "Shared MCP servers cannot be made personal.",
       },
       {
         value: "team",
         label: "Teams",
         description: "Share this MCP server with selected teams.",
         icon: Users,
-        disabled: !isAdmin || !teams?.length,
-        disabledReason: !isAdmin
-          ? "Only admins can assign MCP servers to teams."
-          : "Create a team first to share this MCP server.",
+        disabled: !canShareWithTeams || !canReadTeams || !teams?.length,
+        disabledReason: !canReadTeams
+          ? "Team sharing is unavailable without team:read permission."
+          : !canShareWithTeams
+            ? "You need mcpRegistry:team-admin permission to share with teams."
+            : "Create a team first to share this MCP server.",
       },
       {
         value: "org",
@@ -593,7 +607,7 @@ export function McpCatalogForm({
         disabledReason: "Only admins can make MCP servers organization-wide.",
       },
     ],
-    [isAdmin, teams],
+    [isAdmin, canShareWithTeams, canReadTeams, teams, initialScope],
   );
 
   // Check if BYOS feature is available (enterprise license)

@@ -3,7 +3,7 @@ title: "Access Control"
 category: Administration
 description: "Role-based access control (RBAC) system for managing user permissions in Archestra"
 order: 1
-lastUpdated: 2026-06-03
+lastUpdated: 2026-06-04
 ---
 <!--
 Check ../docs_writer_prompt.md before changing this file.
@@ -50,7 +50,7 @@ Full access to core resources and settings, but cannot manage users, roles, or i
 | LLM Costs | `read` |
 | MCP Gateways | `read`, `create`, `update`, `delete`, `team-admin` |
 | Tools & Policies | `read`, `create`, `update`, `delete` |
-| MCP Registry | `read`, `create`, `update`, `delete` |
+| MCP Registry | `read`, `create`, `update`, `delete`, `team-admin` |
 | MCP Server Installations | `read`, `create`, `update`, `delete` |
 | MCP Server Installation Requests | `read`, `create`, `update`, `delete` |
 | Environments | `admin` |
@@ -203,6 +203,7 @@ The following table lists all available permissions that can be assigned to cust
 | `mcpRegistry:create` | Add servers to the MCP registry |
 | `mcpRegistry:update` | Modify MCP registry entries |
 | `mcpRegistry:delete` | Remove servers from the MCP registry |
+| `mcpRegistry:team-admin` | Manage team assignments for MCP registry entries |
 | `mcpServerInstallation:read` | View installed MCP servers and their status |
 | `mcpServerInstallation:create` | Install MCP servers from the registry |
 | `mcpServerInstallation:update` | Modify installed MCP server configuration |

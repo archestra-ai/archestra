@@ -2,9 +2,11 @@
 
 import type { archestraApiTypes } from "@shared";
 import { Building2 } from "lucide-react";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { StandardFormDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
+import { useCatalogPresets } from "@/lib/mcp/internal-mcp-catalog.query";
+import { InstallPresetPicker } from "./install-preset-picker";
 import {
   type McpServerInstallScope,
   SelectMcpServerCredentialTypeAndTeams,
@@ -14,7 +16,7 @@ type CatalogItem =
   archestraApiTypes.GetInternalMcpCatalogResponses["200"][number];
 
 export interface NoAuthInstallResult {
-  /** Catalog id to install from. */
+  /** Catalog id to install from — parent or selected preset. */
   catalogId: string;
   /** Installation scope (personal, team, org) */
   scope: McpServerInstallScope;
@@ -30,6 +32,11 @@ interface NoAuthInstallDialogProps {
   isInstalling: boolean;
   /** Pre-select a specific team in the credential type selector */
   preselectedTeamId?: string | null;
+  /**
+   * Pre-select a preset (child catalog) in the InstallPresetPicker when the
+   * dialog opens. Falls back to the parent's id when unset.
+   */
+  preselectedCatalogId?: string | null;
   /** When true, only personal installation is allowed */
   personalOnly?: boolean;
   /** When true, only organization-wide installation is allowed */
@@ -43,6 +50,7 @@ export function NoAuthInstallDialog({
   catalogItem,
   isInstalling,
   preselectedTeamId,
+  preselectedCatalogId,
   personalOnly = false,
   orgOnly = false,
 }: NoAuthInstallDialogProps) {
@@ -53,15 +61,26 @@ export function NoAuthInstallDialog({
     preselectedTeamId ?? null,
   );
   const [canInstall, setCanInstall] = useState(true);
+  const [selectedCatalogId, setSelectedCatalogId] = useState<string>(
+    preselectedCatalogId ?? catalogItem?.id ?? "",
+  );
+  const { data: presets = [] } = useCatalogPresets(catalogItem?.id ?? null);
+  const hasPresets = presets.length > 0;
+
+  useEffect(() => {
+    if (isOpen && catalogItem) {
+      setSelectedCatalogId(preselectedCatalogId ?? catalogItem.id);
+    }
+  }, [isOpen, catalogItem, preselectedCatalogId]);
 
   const handleInstall = useCallback(async () => {
-    if (!catalogItem) return;
+    if (!selectedCatalogId) return;
     await onInstall({
-      catalogId: catalogItem.id,
+      catalogId: selectedCatalogId,
       scope,
       teamId: selectedTeamId,
     });
-  }, [onInstall, scope, selectedTeamId, catalogItem]);
+  }, [onInstall, scope, selectedTeamId, selectedCatalogId]);
 
   const handleClose = useCallback(() => {
     setSelectedTeamId(null);
@@ -113,6 +132,16 @@ export function NoAuthInstallDialog({
         preselectedTeamId={preselectedTeamId}
         personalOnly={personalOnly}
         orgOnly={orgOnly}
+        hasPresets={hasPresets}
+        presetPicker={
+          hasPresets ? (
+            <InstallPresetPicker
+              parent={catalogItem}
+              value={selectedCatalogId}
+              onChange={setSelectedCatalogId}
+            />
+          ) : undefined
+        }
       />
     </StandardFormDialog>
   );

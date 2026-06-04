@@ -454,6 +454,7 @@ describe("transformFormToApiData", () => {
         fieldName: "header_x_tenant_id",
         headerName: "x-tenant-id",
         promptOnInstallation: false,
+        promptOnPreset: false,
         required: false,
         value: "tenant-42",
         description: "Tenant ID",
@@ -808,10 +809,48 @@ describe("transformFormToApiData", () => {
       return first;
     }
 
+    it("preserves sensitive=true on a preset-scoped header", () => {
+      const result = roundTrip({
+        headerName: "x-auth",
+        promptOnInstallation: false,
+        promptOnPreset: true,
+        required: false,
+        value: "",
+        description: "",
+        includeBearerPrefix: false,
+        sensitive: true,
+      });
+      expect(result).toMatchObject({
+        headerName: "x-auth",
+        promptOnPreset: true,
+        promptOnInstallation: false,
+        sensitive: true,
+      });
+    });
+
+    it("preserves sensitive=false on a preset-scoped header", () => {
+      const result = roundTrip({
+        headerName: "x-region",
+        promptOnInstallation: false,
+        promptOnPreset: true,
+        required: false,
+        value: "",
+        description: "",
+        includeBearerPrefix: false,
+        sensitive: false,
+      });
+      expect(result).toMatchObject({
+        headerName: "x-region",
+        promptOnPreset: true,
+        sensitive: false,
+      });
+    });
+
     it("preserves sensitive=true on an installation-scoped header", () => {
       const result = roundTrip({
         headerName: "x-tenant-token",
         promptOnInstallation: true,
+        promptOnPreset: false,
         required: true,
         value: "",
         description: "",
@@ -831,6 +870,7 @@ describe("transformFormToApiData", () => {
       const result = roundTrip({
         headerName: "x-static",
         promptOnInstallation: false,
+        promptOnPreset: false,
         required: false,
         value: "fixed-value",
         description: "",
@@ -840,6 +880,7 @@ describe("transformFormToApiData", () => {
       expect(result).toMatchObject({
         headerName: "x-static",
         promptOnInstallation: false,
+        promptOnPreset: false,
         value: "fixed-value",
         sensitive: false,
       });

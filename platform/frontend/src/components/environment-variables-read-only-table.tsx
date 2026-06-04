@@ -10,6 +10,7 @@ import type {
 } from "react-hook-form";
 import type { FieldScopeValue } from "@/components/field-scope-select";
 import { Button } from "@/components/ui/button";
+import { usePresetEntityName } from "@/lib/organization.query";
 
 interface EnvironmentVariablesReadOnlyTableProps<
   TFieldValues extends FieldValues,
@@ -86,9 +87,16 @@ export function EnvironmentVariablesReadOnlyTable<
             `${fieldNamePrefix}.${index}.promptOnInstallation` as FieldPath<TFieldValues>,
           ),
         );
+        const promptOnPreset = Boolean(
+          form.watch(
+            `${fieldNamePrefix}.${index}.promptOnPreset` as FieldPath<TFieldValues>,
+          ),
+        );
         const scope: FieldScopeValue = promptOnInstallation
           ? "installation"
-          : "static";
+          : promptOnPreset
+            ? "preset"
+            : "static";
         const value = form.watch(
           `${fieldNamePrefix}.${index}.value` as FieldPath<TFieldValues>,
         ) as string | undefined;
@@ -177,8 +185,12 @@ function ValueCell({
   hasStoredSecret: boolean;
   useExternalSecretsManager: boolean;
 }) {
+  const { singular } = usePresetEntityName();
   if (scope === "installation") {
     return <span className="text-muted-foreground">per-installation</span>;
+  }
+  if (scope === "preset") {
+    return <span className="text-muted-foreground">per-{singular}</span>;
   }
 
   if (useExternalSecretsManager && type === "secret" && value) {

@@ -7,12 +7,15 @@ import {
   DialogFooter,
   DialogStickyFooter,
 } from "@/components/ui/dialog";
-import { useUpdateInternalMcpCatalogItem } from "@/lib/mcp/internal-mcp-catalog.query";
+import {
+  useCatalogPresets,
+  useUpdateInternalMcpCatalogItem,
+} from "@/lib/mcp/internal-mcp-catalog.query";
 import { useMcpServers } from "@/lib/mcp/mcp-server.query";
-import { useCanEditCatalogItem } from "./catalog-edit-access";
 import { McpCatalogForm } from "./mcp-catalog-form";
 import type { McpCatalogFormValues } from "./mcp-catalog-form.types";
 import { transformFormToApiData } from "./mcp-catalog-form.utils";
+import { useCanEditCatalogPresets } from "./preset-helpers";
 
 interface EditCatalogDialogProps {
   item: archestraApiTypes.GetInternalMcpCatalogResponses["200"][number] | null;
@@ -75,14 +78,16 @@ export function EditCatalogContent({
 }: EditCatalogContentProps) {
   // Authorization gate for the edit form itself — covers every entry point
   // (the settings dialog's Configuration page, a shared `?edit=<id>` deep link,
-  // or the legacy EditCatalogDialog). Mirrors the backend edit authorization:
-  // an admin, or the author of a personal item.
-  const { canEdit, isLoading: canEditLoading } = useCanEditCatalogItem(item);
+  // or the legacy EditCatalogDialog). Mirrors the backend
+  // `assertCanEditCatalogPresets`: an admin, or the author of a personal item.
+  const { canEdit, isLoading: canEditLoading } = useCanEditCatalogPresets(item);
   const updateMutation = useUpdateInternalMcpCatalogItem();
 
+  const { data: presets = [] } = useCatalogPresets(item.id);
   const { data: servers = [] } = useMcpServers();
-  const affectedServerCount = servers.filter(
-    (s) => s.catalogId === item.id,
+  const affectedCatalogIds = new Set([item.id, ...presets.map((p) => p.id)]);
+  const affectedServerCount = servers.filter((s) =>
+    s.catalogId ? affectedCatalogIds.has(s.catalogId) : false,
   ).length;
 
   const onSubmit = async (values: McpCatalogFormValues) => {

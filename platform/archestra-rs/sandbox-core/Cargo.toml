@@ -24,7 +24,7 @@ futures-util = "0.3"
 napi = { version = "3", optional = true }
 napi-derive = { version = "3", optional = true }
 opentelemetry = "0.27"
-opentelemetry_sdk = "0.27"
+opentelemetry_sdk = "0.32"
 # http/protobuf OTLP over rustls (musl-friendly, no system openssl), aimed at
 # the same collector the node SDK uses (port 4318).
 opentelemetry-otlp = { version = "0.27", default-features = false, features = [

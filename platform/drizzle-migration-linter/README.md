@@ -4,9 +4,10 @@
 migration SQL for changes that are unsafe during rolling deploys.
 
 The goal is the same deployment discipline as tools like
-`django-migration-linter`: catch schema changes that can break an older app
-version while new pods are rolling out, and require an explicit review marker
-for rare contract migrations.
+[`django-migration-linter`](https://github.com/3YOURMIND/django-migration-linter):
+catch schema changes that can break an older app version while new pods are
+rolling out, and require an explicit review marker for rare contract
+migrations.
 
 This package is local to the Archestra workspace. It is structured as a normal
 pnpm workspace package so it can be tested and evolved independently.

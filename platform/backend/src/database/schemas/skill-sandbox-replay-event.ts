@@ -1,4 +1,6 @@
+import { sql } from "drizzle-orm";
 import {
+  check,
   index,
   integer,
   pgTable,
@@ -10,16 +12,20 @@ import {
 import type { SkillSandboxReplayEventKind } from "@/types/skill-sandbox";
 import skillSandboxesTable from "./skill-sandbox";
 import skillSandboxCommandsTable from "./skill-sandbox-command";
+import skillSandboxSkillMountsTable from "./skill-sandbox-skill-mount";
 import skillSandboxUploadsTable from "./skill-sandbox-upload";
 
 /**
- * Ordered replay log for a sandbox. Each event is either a command execution or
- * a file upload; replaying events in `sequence` order reproduces the exact
- * filesystem + command history. This interleaving is what makes an upload
+ * Ordered replay log for a sandbox. Each event is a command execution, a file
+ * upload, or a skill mount; replaying events in `sequence` order reproduces the
+ * exact filesystem + command history. This interleaving is what makes an upload
  * between command A and command B invisible during A's replay — a plain command
- * log could not express that ordering.
+ * log could not express that ordering. Skill mounts are append-only: an
+ * activation always lands at the current sequence, so prior command/upload
+ * layers keep their parent chain and stay cache-hot.
  *
- * Exactly one of `commandId` / `uploadId` is set per row, keyed by `kind`.
+ * Exactly one of `commandId` / `uploadId` / `skillMountId` is set per row, keyed
+ * by `kind` and enforced by a DB-level check constraint.
  */
 const skillSandboxReplayEventsTable = pgTable(
   "skill_sandbox_replay_events",
@@ -40,6 +46,10 @@ const skillSandboxReplayEventsTable = pgTable(
     uploadId: uuid("upload_id").references(() => skillSandboxUploadsTable.id, {
       onDelete: "cascade",
     }),
+    skillMountId: uuid("skill_mount_id").references(
+      () => skillSandboxSkillMountsTable.id,
+      { onDelete: "cascade" },
+    ),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   },
   (table) => [
@@ -47,6 +57,16 @@ const skillSandboxReplayEventsTable = pgTable(
     uniqueIndex("skill_sandbox_replay_events_sandbox_sequence_uidx").on(
       table.sandboxId,
       table.sequence,
+    ),
+    // exactly one payload fk is set — a malformed row would be a latent replay
+    // failure, so reject it at write time rather than at materialize time.
+    check(
+      "skill_sandbox_replay_events_one_payload_chk",
+      sql`(
+        (${table.commandId} IS NOT NULL)::int
+        + (${table.uploadId} IS NOT NULL)::int
+        + (${table.skillMountId} IS NOT NULL)::int
+      ) = 1`,
     ),
   ],
 );

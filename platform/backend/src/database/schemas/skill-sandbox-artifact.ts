@@ -16,7 +16,7 @@ const bytea = customType<{ data: Buffer; driverParam: Buffer }>({
 });
 
 /**
- * Files exported out of a sandbox via `get_skill_sandbox_artifact`. The raw
+ * Files exported out of a sandbox via `download_file`. The raw
  * bytes are stored inline as `bytea` — there is no external object store in
  * v1. Sandboxes are ephemeral, so artifacts are how generated files survive a
  * Dagger cache flush.

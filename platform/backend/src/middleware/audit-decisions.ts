@@ -354,9 +354,9 @@ export const AUDIT_DECISIONS = {
     reason:
       "ephemeral execution sandbox state; runtime artifact, no admin signal",
   },
-  skillSandboxSkillsTable: {
+  skillSandboxSkillMountsTable: {
     audited: false,
-    reason: "join: sandbox × skill; parent (sandbox) is ephemeral",
+    reason: "child of sandbox; ordered skill mount, parent is ephemeral",
   },
   skillSandboxFileSnapshotsTable: {
     audited: false,

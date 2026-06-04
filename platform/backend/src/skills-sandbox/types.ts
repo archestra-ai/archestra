@@ -1,4 +1,5 @@
 import type { SandboxId } from "@/types";
+import type { SkillFileEncoding } from "@/types/skill";
 
 /**
  * Fixed limits exposed to tool-layer schemas and per-sandbox queueing.
@@ -66,6 +67,33 @@ export interface UploadRef {
   path: string;
   mimeType: string;
   sizeBytes: number;
+}
+
+/** One skill file snapshotted into a mount; `path` is relative to the skill root. */
+export interface SkillMountFile {
+  path: string;
+  encoding: SkillFileEncoding;
+  content: string;
+}
+
+/** A skill's content + files, as fetched from the live skill tables at mount time. */
+export interface SkillMountInput {
+  skillId: string;
+  skillName: string;
+  /** SKILL.md content, stored at relative path "SKILL.md". */
+  content: string;
+  files: SkillMountFile[];
+}
+
+export interface MountSkillParams {
+  sandboxId: SandboxId;
+  skill: SkillMountInput;
+}
+
+export interface MountRef {
+  mountId: string;
+  sandboxId: SandboxId;
+  skillName: string;
 }
 
 /**

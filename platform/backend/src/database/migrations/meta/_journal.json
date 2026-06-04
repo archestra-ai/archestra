@@ -1933,6 +1933,13 @@
       "when": 1780571335736,
       "tag": "0275_breezy_lord_hawal",
       "breakpoints": true
+    },
+    {
+      "idx": 273,
+      "version": "7",
+      "when": 1780598677816,
+      "tag": "0273_sandbox_skill_mounts",
+      "breakpoints": true
     }
   ]
 }

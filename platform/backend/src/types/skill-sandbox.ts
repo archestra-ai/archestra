@@ -4,7 +4,11 @@ import { schema } from "@/database";
 import { SkillFileEncodingSchema } from "./skill";
 
 /** Discriminator for an ordered sandbox replay event. */
-export const SkillSandboxReplayEventKindSchema = z.enum(["command", "upload"]);
+export const SkillSandboxReplayEventKindSchema = z.enum([
+  "command",
+  "upload",
+  "skill_mount",
+]);
 export type SkillSandboxReplayEventKind = z.infer<
   typeof SkillSandboxReplayEventKindSchema
 >;
@@ -73,6 +77,16 @@ export const InsertSkillSandboxFileSnapshotSchema = createInsertSchema(
   createdAt: true,
 });
 
+export const SelectSkillSandboxSkillMountSchema = createSelectSchema(
+  schema.skillSandboxSkillMountsTable,
+);
+export const InsertSkillSandboxSkillMountSchema = createInsertSchema(
+  schema.skillSandboxSkillMountsTable,
+).omit({
+  id: true,
+  createdAt: true,
+});
+
 export type SkillSandbox = z.infer<typeof SelectSkillSandboxSchema>;
 export type InsertSkillSandbox = z.infer<typeof InsertSkillSandboxSchema>;
 export type SkillSandboxCommand = z.infer<
@@ -102,6 +116,12 @@ export type SkillSandboxReplayEvent = z.infer<
 >;
 export type InsertSkillSandboxReplayEvent = z.infer<
   typeof InsertSkillSandboxReplayEventSchema
+>;
+export type SkillSandboxSkillMount = z.infer<
+  typeof SelectSkillSandboxSkillMountSchema
+>;
+export type InsertSkillSandboxSkillMount = z.infer<
+  typeof InsertSkillSandboxSkillMountSchema
 >;
 
 /**

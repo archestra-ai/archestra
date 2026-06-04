@@ -86,38 +86,6 @@ pub(crate) fn validate_file_encoding(encoding: &str) -> Result<()> {
     }
 }
 
-pub(crate) fn validate_pythonpath(pythonpath: &str) -> Result<()> {
-    // PYTHONPATH is passed straight to `with_env_variable`, but the model can
-    // smuggle additional roots via `:` separators; bound each entry to the
-    // sandbox-allowed roots so it can't escape into `/etc` etc.
-    if pythonpath.is_empty() {
-        return Err(SandboxError::InvalidInput(
-            "pythonpath must not be empty".to_string(),
-        ));
-    }
-    for entry in pythonpath.split(':') {
-        if entry.is_empty()
-            || entry.contains('\0')
-            || entry.split('/').any(|segment| segment == "..")
-        {
-            return Err(SandboxError::InvalidInput(format!(
-                "invalid pythonpath entry: {entry:?}"
-            )));
-        }
-        if !entry.starts_with('/') {
-            return Err(SandboxError::InvalidInput(format!(
-                "pythonpath entries must be absolute: {entry:?}"
-            )));
-        }
-        if !within_sandbox_roots(entry) {
-            return Err(SandboxError::InvalidInput(format!(
-                "pythonpath entries must be under {SKILL_SANDBOX_ROOT} or {SKILL_SANDBOX_HOME}: {entry:?}"
-            )));
-        }
-    }
-    Ok(())
-}
-
 pub(crate) fn validate_cwd(cwd: &str) -> Result<()> {
     if cwd.contains('\0') || cwd.split('/').any(|segment| segment == "..") {
         return Err(SandboxError::InvalidInput(format!("invalid cwd: {cwd:?}")));
@@ -189,19 +157,6 @@ mod tests {
         assert!(validate_artifact_path("/skills/alpha/foo`bar").is_err());
         assert!(validate_artifact_path("/skills/alpha/foo\\bar").is_err());
         assert!(validate_artifact_path("/skills/alpha/foo\nbar").is_err());
-    }
-
-    #[test]
-    fn validate_pythonpath_enforces_sandbox_roots() {
-        assert!(validate_pythonpath("/skills/alpha").is_ok());
-        assert!(validate_pythonpath("/skills/alpha:/home/sandbox/lib").is_ok());
-        assert!(validate_pythonpath("/home/sandbox").is_ok());
-        assert!(validate_pythonpath("").is_err());
-        assert!(validate_pythonpath("/etc").is_err());
-        assert!(validate_pythonpath("relative/path").is_err());
-        assert!(validate_pythonpath("/skills/../etc").is_err());
-        assert!(validate_pythonpath("/skills/alpha:").is_err());
-        assert!(validate_pythonpath("/skills/alpha:/etc").is_err());
     }
 
     #[test]

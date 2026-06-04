@@ -97,7 +97,8 @@ export async function injectSkillActivation({
       skill,
       files,
       canRunSandbox: await isSkillSandboxAvailableForAgent({
-        checker,
+        userId,
+        organizationId,
         agentId,
       }),
       promptContext: skill.templated

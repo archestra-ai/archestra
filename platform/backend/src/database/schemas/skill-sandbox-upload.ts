@@ -16,7 +16,7 @@ const bytea = customType<{ data: Buffer; driverParam: Buffer }>({
 });
 
 /**
- * Files uploaded into a sandbox via `upload_skill_sandbox_file`. Unlike
+ * Files uploaded into a sandbox via `upload_file`. Unlike
  * artifacts (output bytes copied out of a materialized container), uploads are
  * inputs: their raw bytes become part of the sandbox replay recipe. Each upload
  * is referenced from exactly one ordered `skill_sandbox_replay_events` row, so a

@@ -50,11 +50,10 @@ export function formatSkillActivation({
       ? (renderSystemPrompt(skill.content, promptContext) ?? skill.content)
       : skill.content;
   const sandboxHint = canRunSandbox
-    ? " To execute a script or shell command from this skill, call " +
-      "create_skill_sandbox with this skill's name, then run_skill_command — " +
-      "commands run from the skill root so relative paths from the spec " +
-      "resolve correctly. Use get_skill_sandbox_artifact to retrieve " +
-      "generated files."
+    ? " This skill is now mounted in your sandbox under /skills/" +
+      `${escapeXmlText(skill.name)}. To execute a script or shell command from ` +
+      "it, call run_command (its modules are importable). Use download_file to " +
+      "retrieve generated files, upload_file to add inputs."
     : "";
   const resources =
     files.length > 0

@@ -2,7 +2,6 @@
 //! session, and materialises each request into a content-addressed container
 //! chain. all `dagger_sdk` usage is contained in this module.
 
-use std::collections::BTreeMap;
 use std::env;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -98,7 +97,6 @@ impl SandboxBackend for DaggerBackend {
         fields(
             cwd = %req.cwd,
             command.len = req.command.len(),
-            snapshots = req.snapshots.len(),
             replay.len = req.replay_steps.len(),
             timeout_s = req.timeout_seconds,
             exit_code = tracing::field::Empty,
@@ -143,7 +141,6 @@ impl SandboxBackend for DaggerBackend {
         skip_all,
         fields(
             path = %req.path,
-            snapshots = req.snapshots.len(),
             replay.len = req.replay_steps.len(),
             size_bytes = tracing::field::Empty,
         )
@@ -155,18 +152,16 @@ impl SandboxBackend for DaggerBackend {
         let warm = self.ensure_warm().await?;
         // replay must use the same cwd as the original run, otherwise commands
         // recorded with `cwd: None` materialise in the wrong directory and
-        // subsequent artifact reads can't find their files. pythonpath forwards
-        // for the same reason: replayed `python` invocations need the same
-        // module search path as the live ones.
+        // subsequent artifact reads can't find their files. skill mounts in the
+        // replay log re-apply their files and re-extend PYTHONPATH at their
+        // sequence point, so module imports resolve identically to the live run.
         let run = RunRequest {
-            snapshots: req.snapshots,
             replay_steps: req.replay_steps,
             limits: req.limits.clone(),
             command: String::new(),
             cwd: req.default_cwd,
             timeout_seconds: 0,
             traceparent: None,
-            pythonpath: req.pythonpath,
         };
         let materialized = materialize(warm, &run).await?;
         let bytes_limit = u64::from(req.limits.file_size_limit_bytes);
@@ -357,48 +352,23 @@ async fn build_warm_base(client: &DaggerConn) -> Result<Container> {
 #[tracing::instrument(
     name = "sandbox.materialize",
     skip_all,
-    fields(snapshots = req.snapshots.len(), replay.len = req.replay_steps.len())
+    fields(replay.len = req.replay_steps.len())
 )]
 async fn materialize(warm: Container, req: &RunRequest) -> Result<Container> {
     let mut container = warm;
 
-    if !req.snapshots.is_empty() {
-        let mut by_skill: BTreeMap<String, Vec<&SnapshotFile>> = BTreeMap::new();
-        for f in &req.snapshots {
-            by_skill.entry(f.skill_name.clone()).or_default().push(f);
-        }
-        for (skill_name, files) in by_skill {
-            let root = skill_root_path(&skill_name)?;
-            for f in files {
-                container = apply_snapshot_file(container, &root, f)?;
-            }
-        }
-        // re-chown skill files; with_new_file writes as root.
-        container = container
-            .with_user("root")
-            .with_exec(vec![
-                "sh".to_string(),
-                "-c".to_string(),
-                format!("chown -R {SKILL_SANDBOX_USER} {SKILL_SANDBOX_ROOT}"),
-            ])
-            .with_user(SKILL_SANDBOX_USER);
-    }
-
-    if let Some(pythonpath) = &req.pythonpath {
-        container = container.with_env_variable("PYTHONPATH", pythonpath);
-    }
-
     // replay re-applies every prior step on each call (commands re-execute,
-    // uploads re-write their bytes): per-call cost is O(history). we lean on
-    // Dagger's content-addressed layer cache to keep the wall-clock cost
-    // near-zero when the prefix is unchanged. if cache misses become a real
-    // concern, key a per-sandbox materialised container off the log hash and
-    // replay only the new delta.
+    // uploads re-write their bytes, skill mounts re-write their files and extend
+    // PYTHONPATH): per-call cost is O(history). we lean on Dagger's
+    // content-addressed layer cache to keep the wall-clock cost near-zero when
+    // the prefix is unchanged. mounts are append-only, so activating a skill
+    // mid-conversation never changes a prior layer's parent — the cache holds.
     //
     // replay steps are historical data, validated when first accepted; trusting
-    // them here keeps pre-existing sandboxes usable. Live `req.cwd` is validated
-    // at the entry points, and upload paths/encodings are re-validated when the
+    // them here keeps the log replayable. Live `req.cwd` is validated at the
+    // entry points; upload/mount paths and encodings are re-validated when the
     // entry is converted to a `ReplayStep`.
+    let mut pythonpath_entries: Vec<String> = Vec::new();
     for (index, step) in req.replay_steps.iter().enumerate() {
         match step {
             ReplayStep::Command(entry) => {
@@ -412,6 +382,29 @@ async fn materialize(warm: Container, req: &RunRequest) -> Result<Container> {
             }
             ReplayStep::File(file) => {
                 container = apply_upload_file(container, index, file)?;
+            }
+            ReplayStep::SkillMount(mount) => {
+                let root = skill_root_path(&mount.skill_name)?;
+                for file in &mount.files {
+                    container = apply_snapshot_file(container, &root, file)?;
+                }
+                // chown this skill's tree; with_new_file writes as root.
+                container = container
+                    .with_user("root")
+                    .with_exec(vec![
+                        "sh".to_string(),
+                        "-c".to_string(),
+                        format!("chown -R {SKILL_SANDBOX_USER} {}", shell_quote(&root)),
+                    ])
+                    .with_user(SKILL_SANDBOX_USER);
+                // extend PYTHONPATH as a layer at this sequence point so commands
+                // after the mount can import the skill. commands before it are
+                // byte-identical to before this mount existed -> cache holds.
+                if !pythonpath_entries.iter().any(|e| e == &root) {
+                    pythonpath_entries.push(root);
+                    container =
+                        container.with_env_variable("PYTHONPATH", pythonpath_entries.join(":"));
+                }
             }
         }
     }

@@ -1,13 +1,8 @@
-import type {
-  ReplayCommand,
-  ReplayEntry,
-  SnapshotFile,
-} from "@archestra/sandbox-rs";
+import type { ReplayEntry } from "@archestra/sandbox-rs";
 import config from "@/config";
 import logger from "@/logging";
 import {
   SkillSandboxArtifactModel,
-  SkillSandboxFileSnapshotModel,
   SkillSandboxModel,
   SkillSandboxReplayEventModel,
 } from "@/models";
@@ -15,7 +10,7 @@ import {
   SandboxRuntimeError,
   sandboxRuntimeService,
 } from "@/sandbox-runtime/sandbox-runtime-service";
-import type { SkillSandbox, SkillSandboxFileSnapshot } from "@/types";
+import type { SkillSandbox } from "@/types";
 import { asSandboxId, type SandboxId } from "@/types";
 import { resolveArtifactMime } from "./mime-sniff";
 import {
@@ -27,6 +22,8 @@ import {
   type ArtifactRef,
   type CommandResult,
   type ExportArtifactParams,
+  type MountRef,
+  type MountSkillParams,
   type RunCommandParams,
   SKILL_SANDBOX_LIMITS,
   SkillSandboxError,
@@ -88,8 +85,7 @@ class SkillSandboxRuntimeService {
     return this.runExclusive(params.sandboxId, async () => {
       const sandbox = await this.loadSandbox(params.sandboxId);
       const cwd = params.cwd ?? sandbox.defaultCwd;
-      const { snapshots, replayEntries, pythonpath } =
-        await this.buildContext(sandbox);
+      const { replayEntries } = await this.buildContext(sandbox);
 
       let executed: Awaited<
         ReturnType<typeof sandboxRuntimeService.runCommand>
@@ -99,9 +95,7 @@ class SkillSandboxRuntimeService {
           command: params.command,
           cwd,
           timeoutSeconds,
-          snapshots,
           replayEntries,
-          pythonpath,
           outputBytesLimit: config.skillsSandbox.outputBytesLimit,
           fileSizeLimitBytes: config.skillsSandbox.artifactBytesLimit,
           cpuSeconds: config.skillsSandbox.cpuLimit,
@@ -169,19 +163,16 @@ class SkillSandboxRuntimeService {
         path: params.path,
         defaultCwd: sandbox.defaultCwd,
       });
-      const { snapshots, replayEntries, pythonpath } =
-        await this.buildContext(sandbox);
+      const { replayEntries } = await this.buildContext(sandbox);
 
       let artifact: Awaited<
         ReturnType<typeof sandboxRuntimeService.readArtifact>
       >;
       try {
         artifact = await sandboxRuntimeService.readArtifact({
-          snapshots,
           replayEntries,
           path: resolvedPath,
           defaultCwd: sandbox.defaultCwd,
-          pythonpath,
           // must match runCommand's limit: the command supervisor takes
           // `--out-cap <outputBytesLimit>` in each replayed exec, so a mismatch
           // here invalidates Dagger's per-replay layer cache.
@@ -289,6 +280,67 @@ class SkillSandboxRuntimeService {
     });
   }
 
+  /**
+   * Mount a skill into a sandbox: append a `skill_mount` replay event carrying
+   * the skill's snapshotted files and — if the skill ships a `requirements.txt`
+   * — a `uv pip install` command right after it, both in one transaction so the
+   * deps can never be lost. No Dagger work happens here; the mount becomes part
+   * of the recipe and materializes on the next run/export.
+   *
+   * Idempotent and serialized through `runExclusive`: the "already mounted?"
+   * check runs inside the per-sandbox queue, so concurrent activations of the
+   * same skill cannot both append a mount. Returns null when the skill was
+   * already mounted.
+   */
+  async mountSkill(params: MountSkillParams): Promise<MountRef | null> {
+    this.ensureEnabled();
+
+    return this.runExclusive(params.sandboxId, async () => {
+      const sandbox = await this.loadSandbox(params.sandboxId);
+
+      const alreadyMounted = await SkillSandboxModel.listMountedSkillIds(
+        params.sandboxId,
+      );
+      if (alreadyMounted.includes(params.skill.skillId)) return null;
+
+      // install the skill's requirements into the shared venv as a replay
+      // command right after the mount, mirroring how user commands replay.
+      const installCommand = params.skill.files.some(
+        (f) => f.path === REQUIREMENTS_FILE,
+      )
+        ? {
+            command: `uv pip install --python ${VENV_PYTHON} --quiet -r ${shellQuote(
+              `${skillRootPath(params.skill.skillName)}/${REQUIREMENTS_FILE}`,
+            )}`,
+            cwd: SKILL_SANDBOX_HOME,
+            timeoutSeconds: REQUIREMENTS_INSTALL_TIMEOUT_SECONDS,
+          }
+        : undefined;
+
+      let mount: Awaited<
+        ReturnType<typeof SkillSandboxReplayEventModel.appendSkillMount>
+      >;
+      try {
+        mount = await SkillSandboxReplayEventModel.appendSkillMount({
+          sandboxId: params.sandboxId,
+          organizationId: sandbox.organizationId,
+          skill: params.skill,
+          installCommand,
+        });
+      } catch (dbError) {
+        throw new SkillSandboxError(
+          `failed to mount skill: ${dbError instanceof Error ? dbError.message : String(dbError)}`,
+        );
+      }
+
+      return {
+        mountId: mount.id,
+        sandboxId: params.sandboxId,
+        skillName: params.skill.skillName,
+      };
+    });
+  }
+
   // === private ===
 
   /**
@@ -352,32 +404,15 @@ class SkillSandboxRuntimeService {
   }
 
   private async buildContext(sandbox: SkillSandbox): Promise<{
-    snapshots: SnapshotFile[];
     replayEntries: ReplayEntry[];
-    pythonpath: string | undefined;
   }> {
-    const [snapshotRows, log] = await Promise.all([
-      SkillSandboxFileSnapshotModel.listBySandbox(sandbox.id),
-      SkillSandboxReplayEventModel.listBySandbox(sandbox.id),
-    ]);
-    if (snapshotRows.length === 0) {
-      throw new SkillSandboxError(
-        `sandbox ${sandbox.id} has no file snapshots — recreate the sandbox`,
-      );
-    }
+    const log = await SkillSandboxReplayEventModel.listBySandbox(sandbox.id);
     return {
-      snapshots: snapshotRows.map(
-        (snapshot): SnapshotFile => ({
-          skillName: snapshot.skillName,
-          path: snapshot.path,
-          encoding: snapshot.encoding,
-          content: snapshot.content,
-        }),
-      ),
-      // uniform, ordered replay: every command (including the requirements-
-      // install setup steps written at create time) and every uploaded file
-      // lives in one sequenced log. interleaving is preserved so a file
-      // uploaded between two commands is materialized at exactly that point.
+      // uniform, ordered replay: every command (including per-skill
+      // requirements-install steps), every uploaded file, and every skill mount
+      // lives in one sequenced log. interleaving is preserved so each step
+      // materializes at exactly its sequence point. an empty log is valid — a
+      // freshly-created default sandbox is just a plain shell.
       replayEntries: log.map((entry): ReplayEntry => {
         switch (entry.kind) {
           case "command":
@@ -402,13 +437,25 @@ class SkillSandboxRuntimeService {
                 content: entry.upload.data.toString("base64"),
               },
             };
+          case "skill_mount":
+            return {
+              kind: "skill_mount",
+              skillMount: {
+                skillName: entry.mount.skillName,
+                files: entry.files.map((file) => ({
+                  skillName: file.skillName,
+                  path: file.path,
+                  encoding: file.encoding,
+                  content: file.content,
+                })),
+              },
+            };
           default:
             throw new SkillSandboxError(
               `replay event for sandbox ${sandbox.id} has an unknown kind ${JSON.stringify(entry)}`,
             );
         }
       }),
-      pythonpath: pythonpathForSandbox(sandbox, snapshotRows),
     };
   }
 
@@ -525,73 +572,8 @@ function validateCommand(command: string): void {
   }
 }
 
-/**
- * Order skill names primary-first, then the rest alphabetically — so the
- * primary skill's modules and requirements take precedence over same-named
- * ones in secondary skills.
- */
-function orderPrimaryFirst(
-  names: Iterable<string>,
-  primary: string | undefined,
-): string[] {
-  const rest = [...new Set(names)].filter((name) => name !== primary).sort();
-  return primary ? [primary, ...rest] : rest;
-}
-
-function autoInstallCommands(
-  sandbox: SkillSandbox,
-  snapshotRows: SkillSandboxFileSnapshot[],
-): ReplayCommand[] {
-  const namesWithReqs = new Set<string>();
-  let primary: string | undefined;
-  for (const row of snapshotRows) {
-    if (row.path === REQUIREMENTS_FILE) {
-      namesWithReqs.add(row.skillName);
-      if (sandbox.primarySkillId && row.skillId === sandbox.primarySkillId) {
-        primary = row.skillName;
-      }
-    }
-  }
-  if (namesWithReqs.size === 0) return [];
-  return orderPrimaryFirst(namesWithReqs, primary).map(
-    (name): ReplayCommand => {
-      // shell-quote the path: skill names become path segments and may contain
-      // spaces, which would otherwise word-split the `-r` argument.
-      const reqPath = shellQuote(`${skillRootPath(name)}/${REQUIREMENTS_FILE}`);
-      return {
-        command: `uv pip install --python ${VENV_PYTHON} --quiet -r ${reqPath}`,
-        cwd: SKILL_SANDBOX_HOME,
-        timeoutSeconds: REQUIREMENTS_INSTALL_TIMEOUT_SECONDS,
-      };
-    },
-  );
-}
-
 function shellQuote(value: string): string {
   return `'${value.replace(/'/g, "'\\''")}'`;
-}
-
-/**
- * Build the PYTHONPATH for a sandbox: every mounted skill's root, primary
- * first so `import core...` resolves there before any same-named module in a
- * secondary skill. Falls back to the union of snapshot skill names when the
- * primary FK is null (skill was deleted after sandbox creation).
- */
-function pythonpathForSandbox(
-  sandbox: SkillSandbox,
-  snapshotRows: SkillSandboxFileSnapshot[],
-): string | undefined {
-  const skillNames = new Set<string>();
-  let primary: string | undefined;
-  for (const row of snapshotRows) {
-    skillNames.add(row.skillName);
-    if (sandbox.primarySkillId && row.skillId === sandbox.primarySkillId) {
-      primary = row.skillName;
-    }
-  }
-  if (skillNames.size === 0) return undefined;
-  const ordered = orderPrimaryFirst(skillNames, primary);
-  return ordered.map((name) => skillRootPath(name)).join(":");
 }
 
 function resolveArtifactPath(params: {
@@ -648,6 +630,4 @@ function validateUploadPath(path: string): void {
 export const __internals = {
   resolveArtifactPath,
   asSandboxId,
-  pythonpathForSandbox,
-  autoInstallCommands,
 };

@@ -14,6 +14,7 @@ import logger from "@/logging";
 import {
   SkillFileModel,
   SkillModel,
+  SkillSandboxModel,
   SkillTeamModel,
   TeamModel,
 } from "@/models";
@@ -38,7 +39,15 @@ import {
   isSkillNameConflict,
   refineUniqueFilePaths,
 } from "@/skills/validation";
-import { ApiError, type Skill, SkillFileEncodingSchema } from "@/types";
+import { SKILL_SANDBOX_HOME } from "@/skills-sandbox/runtime-image";
+import { skillSandboxRuntimeService } from "@/skills-sandbox/skill-sandbox-runtime-service";
+import {
+  ApiError,
+  asSandboxId,
+  type Skill,
+  type SkillFile,
+  SkillFileEncodingSchema,
+} from "@/types";
 import {
   defineArchestraTool,
   defineArchestraTools,
@@ -53,11 +62,10 @@ import type { ArchestraContext } from "./types";
  * `list_skills`, `activate_skill`, and `read_skill_file` implement the
  * progressive-disclosure tiers of the Agent Skills spec: `list_skills` returns
  * the catalog, `activate_skill` returns a named skill's SKILL.md body, and
- * bundled resource files are fetched individually via `read_skill_file`. To
- * execute a skill's scripts or shell commands, the sandbox tools
- * (`create_skill_sandbox`, `run_skill_command`, `get_skill_sandbox_artifact`)
- * materialize the selected skills into an isolated container and run commands
- * from the skill root.
+ * bundled resource files are fetched individually via `read_skill_file`.
+ * Activating a skill also mounts it into the conversation's code sandbox (when
+ * the sandbox feature + `sandbox:execute` are present), so its scripts become
+ * runnable under `/skills` via `run_command`.
  *
  * `create_skill` and `update_skill` let an agent author skills during a
  * conversation. Chat-authored skills are always `personal` to their author;
@@ -214,11 +222,27 @@ const registry = defineArchestraTools([
         "[Skills] Skill activated",
       );
 
+      const canRunSandbox = await canRunSkillSandbox(ctx, context.agent.id);
+
+      // activating a skill mounts it into the conversation's default sandbox so
+      // it becomes runnable under /skills with no extra step. requires an
+      // authenticated user + conversation; idempotent per skill per sandbox.
+      if (canRunSandbox && ctx.userId && context.conversationId) {
+        await mountSkillIntoDefaultSandbox({
+          organizationId: ctx.organizationId,
+          userId: ctx.userId,
+          conversationId: context.conversationId,
+          agentId: context.agent.id ?? null,
+          skill,
+          files,
+        });
+      }
+
       return successResult(
         formatSkillActivation({
           skill,
           files,
-          canRunSandbox: await canRunSkillSandbox(ctx, context.agent.id),
+          canRunSandbox,
           promptContext: skill.templated
             ? await buildSkillActivationPromptContext({
                 userId: ctx.userId,
@@ -236,7 +260,7 @@ const registry = defineArchestraTools([
       "Read a bundled resource file from a skill. Paths come from the " +
       "<skill_resources> list returned by activate_skill. This returns file " +
       "text for inspection only — to execute a script or run shell commands, " +
-      "create a sandbox with create_skill_sandbox and call run_skill_command.",
+      "use run_command (activated skills are available under /skills).",
     schema: ReadSkillFileSchema,
     async handler({ args, context }) {
       const ctx = requireOrgContext(context);
@@ -425,12 +449,56 @@ async function canRunSkillSandbox(
   ctx: SkillReadContext,
   agentId: string | undefined,
 ): Promise<boolean> {
-  if (ctx.userId === undefined) return false;
-  const checker = await getSkillPermissionChecker({
+  return isSkillSandboxAvailableForAgent({
     userId: ctx.userId,
     organizationId: ctx.organizationId,
+    agentId,
   });
-  return isSkillSandboxAvailableForAgent({ checker, agentId });
+}
+
+/**
+ * Mount an activated skill into the conversation's default sandbox so it becomes
+ * runnable under `/skills`. Idempotent per skill per sandbox. A mount failure is
+ * logged and swallowed — activation still returns the skill instructions; the
+ * skill just won't be runnable until re-activated.
+ */
+async function mountSkillIntoDefaultSandbox(params: {
+  organizationId: string;
+  userId: string;
+  conversationId: string;
+  agentId: string | null;
+  skill: Skill;
+  files: SkillFile[];
+}): Promise<void> {
+  try {
+    const sandbox = await SkillSandboxModel.findOrCreateDefault({
+      organizationId: params.organizationId,
+      userId: params.userId,
+      conversationId: params.conversationId,
+      agentId: params.agentId,
+      defaultCwd: SKILL_SANDBOX_HOME,
+    });
+    // mountSkill is idempotent + serialized per sandbox, so a re-activation or a
+    // concurrent activation of the same skill is a safe no-op.
+    await skillSandboxRuntimeService.mountSkill({
+      sandboxId: asSandboxId(sandbox.id),
+      skill: {
+        skillId: params.skill.id,
+        skillName: params.skill.name,
+        content: params.skill.content,
+        files: params.files.map((file) => ({
+          path: file.path,
+          encoding: file.encoding,
+          content: file.content,
+        })),
+      },
+    });
+  } catch (error) {
+    logger.error(
+      { err: error, skillId: params.skill.id },
+      "[Skills] failed to mount activated skill into sandbox",
+    );
+  }
 }
 
 /**
@@ -584,15 +652,16 @@ async function listSkillCatalog(
     .join("\n");
 
   // only advertise the sandbox path when it would actually work: the feature
-  // is enabled, the caller can execute skills, and the sandbox tools are
+  // is enabled, the caller has sandbox:execute, and the sandbox tools are
   // assigned to this agent (so they appear in its tools/list).
   const instructions = (await isSkillSandboxAvailableForAgent({
-    checker,
+    userId: ctx.userId,
+    organizationId: ctx.organizationId,
     agentId,
   }))
     ? "Call activate_skill with one of these names to load its instructions. " +
-      "To run a skill's scripts or shell commands, create_skill_sandbox with " +
-      "the skill name, then run_skill_command."
+      "Activating a skill mounts it in your sandbox under /skills, so you can " +
+      "then run its scripts or shell commands with run_command."
     : "Call activate_skill with one of these names to load its instructions.";
 
   return successResult(

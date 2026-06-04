@@ -1,12 +1,17 @@
 import { index, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import type { SkillFileEncoding } from "@/types/skill";
 import skillSandboxesTable from "./skill-sandbox";
+import skillSandboxSkillMountsTable from "./skill-sandbox-skill-mount";
 
 /**
- * Immutable snapshot of a skill's files captured at sandbox creation time.
- * One row per file per skill per sandbox (SKILL.md is stored at path "SKILL.md").
- * Using snapshotted content rather than live skill rows ensures sandbox replay
- * is deterministic even if the source skill is later updated or deleted.
+ * Immutable snapshot of a skill's files captured at mount (activation) time.
+ * One row per file per mount (SKILL.md is stored at path "SKILL.md"). Using
+ * snapshotted content rather than live skill rows ensures sandbox replay is
+ * deterministic even if the source skill is later updated or deleted.
+ *
+ * Rows are grouped by `skillMountId`: a `skill_mount` replay event references
+ * the mount, and replay serializes that mount's snapshot rows into the
+ * container at the event's sequence point.
  */
 const skillSandboxFileSnapshotsTable = pgTable(
   "skill_sandbox_file_snapshots",
@@ -15,6 +20,12 @@ const skillSandboxFileSnapshotsTable = pgTable(
     sandboxId: uuid("sandbox_id")
       .notNull()
       .references(() => skillSandboxesTable.id, { onDelete: "cascade" }),
+    /** Mount these bytes belong to; the ordered `skill_mount` event groups them. */
+    skillMountId: uuid("skill_mount_id")
+      .notNull()
+      .references(() => skillSandboxSkillMountsTable.id, {
+        onDelete: "cascade",
+      }),
     /** Denormalized owning org, copied from the parent sandbox at insert time. */
     organizationId: text("organization_id").notNull(),
     /** Original skill id — kept for reference but not used for replay. */
@@ -31,6 +42,9 @@ const skillSandboxFileSnapshotsTable = pgTable(
   },
   (table) => [
     index("skill_sandbox_file_snapshots_sandbox_id_idx").on(table.sandboxId),
+    index("skill_sandbox_file_snapshots_skill_mount_id_idx").on(
+      table.skillMountId,
+    ),
   ],
 );
 

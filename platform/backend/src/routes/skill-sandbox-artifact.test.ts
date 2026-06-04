@@ -11,15 +11,11 @@ const PNG_FAKE = Buffer.concat([PNG_HEADER, Buffer.alloc(64, 0xab)]);
 
 async function seedSandbox(params: { organizationId: string; userId: string }) {
   return await SkillSandboxModel.create({
-    sandbox: {
-      organizationId: params.organizationId,
-      userId: params.userId,
-      conversationId: null,
-      defaultCwd: "/sandbox/skills/example",
-      primarySkillId: null,
-      agentId: null,
-    },
-    skillIds: [],
+    organizationId: params.organizationId,
+    userId: params.userId,
+    conversationId: null,
+    defaultCwd: "/sandbox/skills/example",
+    agentId: null,
   });
 }
 

@@ -1877,20 +1877,6 @@ export function McpCatalogForm({
                                         . Do not use the SSO callback URL under{" "}
                                         <code>/api/auth/sso/callback</code>.
                                       </FormDescription>
-                                      {typeof window !== "undefined" && (
-                                        <Button
-                                          type="button"
-                                          size="sm"
-                                          variant="secondary"
-                                          onClick={() =>
-                                            field.onChange(
-                                              `${window.location.origin}/oauth-callback`,
-                                            )
-                                          }
-                                        >
-                                          Use current origin
-                                        </Button>
-                                      )}
                                       <FormMessage />
                                     </FormItem>
                                   )}

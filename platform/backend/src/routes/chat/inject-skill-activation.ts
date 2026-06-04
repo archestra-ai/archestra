@@ -5,12 +5,13 @@ import {
 } from "@shared";
 import { getSkillPermissionChecker } from "@/auth/skill-permissions";
 import logger from "@/logging";
-import { SkillFileModel, SkillModel, SkillTeamModel } from "@/models";
+import { SkillModel, SkillTeamModel, SkillVersionModel } from "@/models";
 import {
   buildSkillActivationPromptContext,
   formatSkillActivation,
 } from "@/skills/skill-activation";
 import { isSkillSandboxAvailableForAgent } from "@/skills/skill-sandbox-availability";
+import { resolveActivationVersion } from "@/skills/skill-version-resolution";
 
 /**
  * When the last user message was sent via a skill slash command, prepend the
@@ -28,12 +29,15 @@ export async function injectSkillActivation({
   organizationId,
   userId,
   agentId,
+  conversationId,
 }: {
   messages: ChatMessage[];
   organizationId: string;
   userId: string;
   /** The conversation's agent — gates the sandbox hint on tool assignment. */
   agentId: string | undefined;
+  /** Conversation the skill is activated in — pins/reads the mounted version. */
+  conversationId: string | undefined;
 }): Promise<ChatMessage[]> {
   const lastUserIndex = messages.findLastIndex(
     (message) => message.role === "user",
@@ -84,9 +88,35 @@ export async function injectSkillActivation({
     return messages;
   }
 
-  const files = await SkillFileModel.findBySkillId(skill.id);
+  const canRunSandbox = await isSkillSandboxAvailableForAgent({
+    userId,
+    organizationId,
+    agentId,
+  });
+
+  // resolve the effective version and pin it by mounting (shared with
+  // activate_skill), so the injected block, the mounted bytes, and a later
+  // read_skill_file all expose the same version.
+  const version = await resolveActivationVersion({
+    skill,
+    organizationId,
+    userId,
+    conversationId,
+    agentId: agentId ?? null,
+    canRunSandbox,
+  });
+  if (!version) {
+    return messages;
+  }
+  const files = await SkillVersionModel.findFiles(version.id);
+
   logger.info(
-    { organizationId, skillName: skill.name, fileCount: files.length },
+    {
+      organizationId,
+      skillName: skill.name,
+      version: version.version,
+      fileCount: files.length,
+    },
     "[Skills] Skill activated via slash command",
   );
 
@@ -94,13 +124,13 @@ export async function injectSkillActivation({
   next[lastUserIndex] = prependText(
     userMessage,
     formatSkillActivation({
-      skill,
+      skill: {
+        name: skill.name,
+        content: version.content,
+        compatibility: skill.compatibility,
+      },
       files,
-      canRunSandbox: await isSkillSandboxAvailableForAgent({
-        userId,
-        organizationId,
-        agentId,
-      }),
+      canRunSandbox,
       promptContext: skill.templated
         ? await buildSkillActivationPromptContext({ userId, organizationId })
         : null,

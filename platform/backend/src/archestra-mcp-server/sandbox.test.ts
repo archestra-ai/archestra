@@ -9,8 +9,10 @@ import config from "@/config";
 import {
   ConversationAttachmentModel,
   ConversationModel,
+  SkillModel,
   SkillSandboxModel,
   SkillSandboxReplayEventModel,
+  SkillVersionModel,
 } from "@/models";
 import { skillSandboxRuntimeService } from "@/skills-sandbox/skill-sandbox-runtime-service";
 import { SkillSandboxError } from "@/skills-sandbox/types";
@@ -176,6 +178,7 @@ describe("sandbox tools (runtime enabled)", () => {
       // ...and the command was delegated to it.
       expect(runSpy).toHaveBeenCalledWith({
         sandboxId: sandboxes[0].id,
+        caller: { organizationId, userId },
         command: "echo hi",
         cwd: undefined,
         timeoutSeconds: undefined,
@@ -547,6 +550,67 @@ describe("sandbox tools (runtime enabled)", () => {
           );
           expect(log.filter((e) => e.kind === "upload")).toHaveLength(0);
         }
+      });
+    });
+
+    // the real runtime is enabled here (no runCommand mock) so the revocation
+    // gate runs; a deleted skill must fail the call before any container build.
+    describe("revocation gate", () => {
+      const originalDagger = config.daggerRuntime.enabled;
+      beforeAll(() => {
+        (config.daggerRuntime as { enabled: boolean }).enabled = true;
+      });
+      afterAll(() => {
+        (config.daggerRuntime as { enabled: boolean }).enabled = originalDagger;
+      });
+
+      test("run_command fails before materialize when a mounted skill was deleted", async () => {
+        const ctx = await makeConversationCtx();
+        const skill = await SkillModel.createWithFiles({
+          skill: {
+            organizationId,
+            authorId: null,
+            name: "doomed",
+            description: "desc",
+            content: "# doomed",
+            metadata: {},
+            sourceType: "manual",
+            scope: "org",
+          },
+          files: [],
+        });
+        if (!skill) throw new Error("skill seed failed");
+        const v1 = await SkillVersionModel.findBySkillAndVersion(skill.id, 1);
+        if (!v1) throw new Error("missing v1");
+
+        const sandbox = await SkillSandboxModel.findOrCreateDefault({
+          organizationId,
+          userId,
+          conversationId: ctx.conversationId as string,
+          agentId: agent.id,
+          defaultCwd: "/home/sandbox",
+        });
+        await SkillSandboxReplayEventModel.appendSkillMount({
+          sandboxId: sandbox.id,
+          organizationId,
+          mount: {
+            skillId: skill.id,
+            skillName: skill.name,
+            skillVersionId: v1.id,
+          },
+        });
+
+        // revoke by deleting the source skill; the mount's durable skillId
+        // no longer resolves, so the gate fails closed.
+        await SkillModel.delete(skill.id);
+
+        const result = await executeArchestraTool(
+          TOOL_RUN_COMMAND_FULL_NAME,
+          { command: "echo hi" },
+          ctx,
+        );
+        expect(result.isError).toBe(true);
+        expect(textOf(result)).toContain("no longer exists");
       });
     });
   });

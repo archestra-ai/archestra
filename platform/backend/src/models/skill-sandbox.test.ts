@@ -1,14 +1,20 @@
+import { eq } from "drizzle-orm";
+import db, { schema } from "@/database";
 import {
   SkillModel,
-  SkillSandboxArtifactModel,
+  SkillSandboxFileModel,
   SkillSandboxModel,
   SkillSandboxReplayEventModel,
+  SkillVersionModel,
 } from "@/models";
-import type { SkillMountInput } from "@/skills-sandbox/types";
 import { describe, expect, test } from "@/test";
 import type { Skill } from "@/types";
 
-async function seedSkill(organizationId: string, name: string): Promise<Skill> {
+async function seedSkill(
+  organizationId: string,
+  name: string,
+  files: { path: string; content: string; kind: "reference" | "script" }[] = [],
+): Promise<Skill> {
   const skill = await SkillModel.createWithFiles({
     skill: {
       organizationId,
@@ -20,18 +26,27 @@ async function seedSkill(organizationId: string, name: string): Promise<Skill> {
       sourceType: "manual",
       scope: "org",
     },
-    files: [],
+    files,
   });
   if (!skill) throw new Error("failed to seed skill");
   return skill;
 }
 
-function mountInput(skill: Skill, files: SkillMountInput["files"] = []) {
+/** Resolve a seeded skill's version-1 id, the head a mount would pin. */
+async function latestVersionId(skill: Skill): Promise<string> {
+  const version = await SkillVersionModel.findBySkillAndVersion(
+    skill.id,
+    skill.latestVersion,
+  );
+  if (!version) throw new Error("skill has no version");
+  return version.id;
+}
+
+function mountRef(skill: Skill, skillVersionId: string) {
   return {
     skillId: skill.id,
     skillName: skill.name,
-    content: skill.content,
-    files,
+    skillVersionId,
   };
 }
 
@@ -84,6 +99,13 @@ describe("SkillSandboxModel", () => {
 
     expect(first.isDefault).toBe(true);
     expect(second.id).toBe(first.id);
+    // findDefault sees the same row without creating one.
+    const found = await SkillSandboxModel.findDefault({
+      organizationId: org.id,
+      userId: user.id,
+      conversationId: conversation.id,
+    });
+    expect(found?.id).toBe(first.id);
   });
 
   test("findById returns the sandbox or null", async ({
@@ -106,55 +128,6 @@ describe("SkillSandboxModel", () => {
     expect(await SkillSandboxModel.findById(crypto.randomUUID())).toBeNull();
   });
 
-  test("listForConversation returns all sandboxes newest first", async ({
-    makeOrganization,
-    makeUser,
-    makeAgent,
-    makeConversation,
-  }) => {
-    const org = await makeOrganization();
-    const user = await makeUser();
-    const agent = await makeAgent({ organizationId: org.id });
-    const conversation = await makeConversation(agent.id, {
-      userId: user.id,
-      organizationId: org.id,
-    });
-    if (!conversation) throw new Error("conversation seed failed");
-
-    const base = {
-      organizationId: org.id,
-      userId: user.id,
-      conversationId: conversation.id,
-      agentId: agent.id,
-      defaultCwd: "/home/sandbox",
-    };
-    const first = await SkillSandboxModel.create(base);
-    // ensure deterministic ordering despite identical timestamps in pglite
-    await new Promise((r) => setTimeout(r, 5));
-    const second = await SkillSandboxModel.create(base);
-
-    const found = await SkillSandboxModel.listForConversation({
-      conversationId: conversation.id,
-      organizationId: org.id,
-    });
-    expect(found.map((s) => s.id)).toEqual([second.id, first.id]);
-
-    expect(
-      await SkillSandboxModel.listForConversation({
-        conversationId: crypto.randomUUID(),
-        organizationId: org.id,
-      }),
-    ).toHaveLength(0);
-
-    // a sandbox in this conversation but a different org must not leak.
-    expect(
-      await SkillSandboxModel.listForConversation({
-        conversationId: conversation.id,
-        organizationId: crypto.randomUUID(),
-      }),
-    ).toHaveLength(0);
-  });
-
   test("listMountedSkillIds reflects mounted skills, deduped", async ({
     makeOrganization,
     makeUser,
@@ -175,12 +148,12 @@ describe("SkillSandboxModel", () => {
     await SkillSandboxReplayEventModel.appendSkillMount({
       sandboxId: sandbox.id,
       organizationId: org.id,
-      skill: mountInput(skillA),
+      mount: mountRef(skillA, await latestVersionId(skillA)),
     });
     await SkillSandboxReplayEventModel.appendSkillMount({
       sandboxId: sandbox.id,
       organizationId: org.id,
-      skill: mountInput(skillB),
+      mount: mountRef(skillB, await latestVersionId(skillB)),
     });
 
     expect(
@@ -196,7 +169,9 @@ describe("SkillSandboxReplayEventModel", () => {
   }) => {
     const org = await makeOrganization();
     const user = await makeUser();
-    const skill = await seedSkill(org.id, "alpha");
+    const skill = await seedSkill(org.id, "alpha", [
+      { path: "requirements.txt", content: "httpx\n", kind: "reference" },
+    ]);
     const sandbox = await SkillSandboxModel.create({
       organizationId: org.id,
       userId: user.id,
@@ -230,9 +205,7 @@ describe("SkillSandboxReplayEventModel", () => {
     await SkillSandboxReplayEventModel.appendSkillMount({
       sandboxId: sandbox.id,
       organizationId: org.id,
-      skill: mountInput(skill, [
-        { path: "requirements.txt", encoding: "utf8", content: "httpx\n" },
-      ]),
+      mount: mountRef(skill, await latestVersionId(skill)),
       installCommand: {
         command: "uv pip install -r /skills/alpha/requirements.txt",
         cwd: "/home/sandbox",
@@ -262,11 +235,9 @@ describe("SkillSandboxReplayEventModel", () => {
     expect(u.upload.id).toBe(upload.id);
     expect(u.upload.data.toString("utf8")).toBe("a,b");
     expect(m.mount.skillName).toBe("alpha");
-    // SKILL.md + requirements.txt snapshotted under the mount.
-    expect(m.files.map((f) => f.path).sort()).toEqual([
-      "SKILL.md",
-      "requirements.txt",
-    ]);
+    // SKILL.md is carried as the version body; requirements.txt as a version file.
+    expect(m.content).toBe("# alpha");
+    expect(m.files.map((f) => f.path)).toEqual(["requirements.txt"]);
     expect(install.command.command).toContain("uv pip install");
 
     // the allocator advanced past every appended event.
@@ -274,13 +245,14 @@ describe("SkillSandboxReplayEventModel", () => {
     expect(refreshed?.nextReplaySequence).toBe(4);
   });
 
-  test("appendSkillMount rejects skill files with traversal/absolute paths", async ({
+  test("appendSkillMount is idempotent under the per-skill unique constraint", async ({
     makeOrganization,
     makeUser,
   }) => {
     const org = await makeOrganization();
     const user = await makeUser();
     const skill = await seedSkill(org.id, "alpha");
+    const versionId = await latestVersionId(skill);
     const sandbox = await SkillSandboxModel.create({
       organizationId: org.id,
       userId: user.id,
@@ -289,20 +261,63 @@ describe("SkillSandboxReplayEventModel", () => {
       defaultCwd: "/home/sandbox",
     });
 
+    const first = await SkillSandboxReplayEventModel.appendSkillMount({
+      sandboxId: sandbox.id,
+      organizationId: org.id,
+      mount: mountRef(skill, versionId),
+    });
+    const second = await SkillSandboxReplayEventModel.appendSkillMount({
+      sandboxId: sandbox.id,
+      organizationId: org.id,
+      mount: mountRef(skill, versionId),
+    });
+
+    expect(first).not.toBeNull();
+    // re-activation is a no-op: ON CONFLICT (sandbox_id, skill_id) DO NOTHING.
+    expect(second).toBeNull();
+    const log = await SkillSandboxReplayEventModel.listBySandbox(sandbox.id);
+    expect(log.filter((e) => e.kind === "skill_mount")).toHaveLength(1);
+  });
+
+  test("a replay event cannot reference an artifact file (composite FK)", async ({
+    makeOrganization,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const sandbox = await SkillSandboxModel.create({
+      organizationId: org.id,
+      userId: user.id,
+      conversationId: null,
+      agentId: null,
+      defaultCwd: "/home/sandbox",
+    });
+    const artifact = await SkillSandboxFileModel.createArtifact({
+      sandboxId: sandbox.id,
+      organizationId: org.id,
+      path: "out/report.txt",
+      mimeType: "text/plain",
+      originalName: null,
+      sizeBytes: 1,
+      data: Buffer.from("a"),
+    });
+
+    // file_kind is generated as 'upload', so pointing file_id at an artifact row
+    // violates the (file_id, file_kind) -> (id, kind) composite FK.
     await expect(
-      SkillSandboxReplayEventModel.appendSkillMount({
+      db.insert(schema.skillSandboxReplayEventsTable).values({
         sandboxId: sandbox.id,
         organizationId: org.id,
-        skill: mountInput(skill, [
-          { path: "../escape.py", encoding: "utf8", content: "x" },
-        ]),
+        sequence: 0,
+        kind: "upload",
+        fileId: artifact.id,
       }),
-    ).rejects.toThrow("invalid file path");
+    ).rejects.toThrow();
   });
 });
 
-describe("SkillSandboxArtifactModel", () => {
-  test("create stores raw bytes and findById round-trips", async ({
+describe("SkillSandboxFileModel (artifacts)", () => {
+  test("createArtifact stores raw bytes and findArtifactById round-trips", async ({
     makeOrganization,
     makeUser,
   }) => {
@@ -317,22 +332,51 @@ describe("SkillSandboxArtifactModel", () => {
     });
 
     const payload = Buffer.from("hello, world", "utf8");
-    const artifact = await SkillSandboxArtifactModel.create({
+    const artifact = await SkillSandboxFileModel.createArtifact({
       sandboxId: sandbox.id,
       organizationId: org.id,
       path: "out/report.txt",
       mimeType: "text/plain",
+      originalName: null,
       sizeBytes: payload.byteLength,
       data: payload,
     });
 
-    const fetched = await SkillSandboxArtifactModel.findById(artifact.id);
+    const fetched = await SkillSandboxFileModel.findArtifactById(artifact.id);
     if (!fetched) throw new Error("artifact not found");
+    expect(fetched.kind).toBe("artifact");
     expect(fetched.path).toBe("out/report.txt");
     expect(Buffer.from(fetched.data).toString("utf8")).toBe("hello, world");
   });
 
-  test("listBySandbox returns most-recent first", async ({
+  test("findArtifactById ignores upload-kind rows", async ({
+    makeOrganization,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const sandbox = await SkillSandboxModel.create({
+      organizationId: org.id,
+      userId: user.id,
+      conversationId: null,
+      agentId: null,
+      defaultCwd: "/home/sandbox",
+    });
+    const upload = await SkillSandboxReplayEventModel.appendUpload({
+      sandboxId: sandbox.id,
+      organizationId: org.id,
+      path: "/home/sandbox/in.csv",
+      mimeType: "text/csv",
+      originalName: null,
+      sizeBytes: 1,
+      data: Buffer.from("a"),
+    });
+
+    // an upload is a file row too, but the artifact lookup is kind-scoped.
+    expect(await SkillSandboxFileModel.findArtifactById(upload.id)).toBeNull();
+  });
+
+  test("listArtifactsBySandbox returns most-recent first", async ({
     makeOrganization,
     makeUser,
   }) => {
@@ -346,31 +390,33 @@ describe("SkillSandboxArtifactModel", () => {
       defaultCwd: "/home/sandbox",
     });
 
-    const a = await SkillSandboxArtifactModel.create({
+    const a = await SkillSandboxFileModel.createArtifact({
       sandboxId: sandbox.id,
       organizationId: org.id,
       path: "out/a.txt",
       mimeType: "text/plain",
+      originalName: null,
       sizeBytes: 1,
       data: Buffer.from("a"),
     });
     await new Promise((r) => setTimeout(r, 5));
-    const b = await SkillSandboxArtifactModel.create({
+    const b = await SkillSandboxFileModel.createArtifact({
       sandboxId: sandbox.id,
       organizationId: org.id,
       path: "out/b.txt",
       mimeType: "text/plain",
+      originalName: null,
       sizeBytes: 1,
       data: Buffer.from("b"),
     });
 
-    const rows = await SkillSandboxArtifactModel.listBySandbox(sandbox.id);
+    const rows = await SkillSandboxFileModel.listArtifactsBySandbox(sandbox.id);
     expect(rows.map((r) => r.id)).toEqual([b.id, a.id]);
   });
 });
 
 describe("Cascade behavior", () => {
-  test("deleting a sandbox removes its replay log, mounts, snapshots, and artifacts", async ({
+  test("deleting a sandbox removes its replay log, mounts, files, and artifacts", async ({
     makeOrganization,
     makeUser,
   }) => {
@@ -400,19 +446,18 @@ describe("Cascade behavior", () => {
     await SkillSandboxReplayEventModel.appendSkillMount({
       sandboxId: sandbox.id,
       organizationId: org.id,
-      skill: mountInput(skill),
+      mount: mountRef(skill, await latestVersionId(skill)),
     });
-    await SkillSandboxArtifactModel.create({
+    await SkillSandboxFileModel.createArtifact({
       sandboxId: sandbox.id,
       organizationId: org.id,
       path: "out/a.txt",
       mimeType: "text/plain",
+      originalName: null,
       sizeBytes: 1,
       data: Buffer.from("a"),
     });
 
-    const { default: db, schema } = await import("@/database");
-    const { eq } = await import("drizzle-orm");
     await db
       .delete(schema.skillSandboxesTable)
       .where(eq(schema.skillSandboxesTable.id, sandbox.id));
@@ -425,7 +470,12 @@ describe("Cascade behavior", () => {
       await SkillSandboxModel.listMountedSkillIds(sandbox.id),
     ).toHaveLength(0);
     expect(
-      await SkillSandboxArtifactModel.listBySandbox(sandbox.id),
+      await SkillSandboxFileModel.listArtifactsBySandbox(sandbox.id),
     ).toHaveLength(0);
+    // the pinned version survives (RESTRICT would block deleting it, not the
+    // sandbox); the mount row is gone via cascade.
+    expect(
+      await SkillVersionModel.findBySkillAndVersion(skill.id, 1),
+    ).not.toBeNull();
   });
 });

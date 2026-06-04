@@ -1,7 +1,7 @@
 import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { SkillSandboxArtifactModel, SkillSandboxModel } from "@/models";
+import { SkillSandboxFileModel, SkillSandboxModel } from "@/models";
 import { isInlineSafeImageMime } from "@/skills-sandbox/mime-sniff";
 import { ApiError } from "@/types";
 
@@ -39,7 +39,7 @@ const skillSandboxArtifactRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { artifactId }, organizationId, user }, reply) => {
-      const artifact = await SkillSandboxArtifactModel.findById(artifactId);
+      const artifact = await SkillSandboxFileModel.findArtifactById(artifactId);
       if (!artifact) {
         throw new ApiError(404, "Artifact not found");
       }

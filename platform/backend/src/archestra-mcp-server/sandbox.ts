@@ -244,6 +244,7 @@ const registry = defineArchestraTools([
       try {
         const result = await skillSandboxRuntimeService.runCommand({
           sandboxId: resolved.sandboxId,
+          caller: guard.userCtx,
           command: args.command,
           cwd: args.cwd,
           timeoutSeconds: args.timeoutSeconds,
@@ -293,6 +294,7 @@ const registry = defineArchestraTools([
       try {
         const result = await skillSandboxRuntimeService.exportArtifact({
           sandboxId: resolved.sandboxId,
+          caller: guard.userCtx,
           path: args.path,
           mimeType: args.mimeType,
         });

@@ -1940,6 +1940,13 @@
       "when": 1780598677816,
       "tag": "0273_sandbox_skill_mounts",
       "breakpoints": true
+    },
+    {
+      "idx": 274,
+      "version": "7",
+      "when": 1780609286895,
+      "tag": "0274_many_chat",
+      "breakpoints": true
     }
   ]
 }

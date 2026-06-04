@@ -19,6 +19,7 @@ describe("skillSandboxRuntimeService", () => {
     await expect(
       skillSandboxRuntimeService.runCommand({
         sandboxId: __internals.asSandboxId(crypto.randomUUID()),
+        caller: { userId: "u", organizationId: "o" },
         command: "echo hi",
       }),
     ).rejects.toBeInstanceOf(SkillSandboxError);
@@ -28,6 +29,7 @@ describe("skillSandboxRuntimeService", () => {
     await expect(
       skillSandboxRuntimeService.exportArtifact({
         sandboxId: __internals.asSandboxId(crypto.randomUUID()),
+        caller: { userId: "u", organizationId: "o" },
         path: "out/report.txt",
       }),
     ).rejects.toBeInstanceOf(SkillSandboxError);
@@ -53,6 +55,7 @@ describe("skillSandboxRuntimeService", () => {
     await expect(
       enabled.runCommand({
         sandboxId: __internals.asSandboxId(crypto.randomUUID()),
+        caller: { userId: "u", organizationId: "o" },
         command: "echo hi",
         timeoutSeconds,
       }),
@@ -74,6 +77,7 @@ describe("skillSandboxRuntimeService", () => {
     await expect(
       enabled.runCommand({
         sandboxId: __internals.asSandboxId(crypto.randomUUID()),
+        caller: { userId: "u", organizationId: "o" },
         command: "   ",
       }),
     ).rejects.toThrow("command must be a non-empty string");
@@ -98,7 +102,12 @@ describe("skillSandboxRuntimeService", () => {
     // (N+1)th is rejected immediately by the queue-length guard before any await.
     const calls = Array.from(
       { length: SKILL_SANDBOX_LIMITS.maxSandboxQueueLength + 1 },
-      () => enabled.runCommand({ sandboxId, command: "echo hi" }),
+      () =>
+        enabled.runCommand({
+          sandboxId,
+          caller: { userId: "u", organizationId: "o" },
+          command: "echo hi",
+        }),
     );
     const results = await Promise.allSettled(calls);
     // use message check rather than instanceof: vi.resetModules creates a fresh

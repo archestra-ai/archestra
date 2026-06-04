@@ -2,14 +2,17 @@ import type { ReplayEntry } from "@archestra/sandbox-rs";
 import config from "@/config";
 import logger from "@/logging";
 import {
-  SkillSandboxArtifactModel,
+  SkillInvalidFilePathError,
+  SkillSandboxFileModel,
   SkillSandboxModel,
   SkillSandboxReplayEventModel,
+  SkillVersionModel,
 } from "@/models";
 import {
   SandboxRuntimeError,
   sandboxRuntimeService,
 } from "@/sandbox-runtime/sandbox-runtime-service";
+import { assertMountedSkillsReadable } from "@/skills/assert-mounted-skills-readable";
 import type { SkillSandbox } from "@/types";
 import { asSandboxId, type SandboxId } from "@/types";
 import { resolveArtifactMime } from "./mime-sniff";
@@ -84,6 +87,7 @@ class SkillSandboxRuntimeService {
 
     return this.runExclusive(params.sandboxId, async () => {
       const sandbox = await this.loadSandbox(params.sandboxId);
+      await this.assertMountsReadable(params.sandboxId, params.caller);
       const cwd = params.cwd ?? sandbox.defaultCwd;
       const { replayEntries } = await this.buildContext(sandbox);
 
@@ -159,6 +163,7 @@ class SkillSandboxRuntimeService {
 
     return this.runExclusive(params.sandboxId, async () => {
       const sandbox = await this.loadSandbox(params.sandboxId);
+      await this.assertMountsReadable(params.sandboxId, params.caller);
       const resolvedPath = resolveArtifactPath({
         path: params.path,
         defaultCwd: sandbox.defaultCwd,
@@ -190,13 +195,14 @@ class SkillSandboxRuntimeService {
         buffer: data,
         claimed: params.mimeType,
       });
-      let row: Awaited<ReturnType<typeof SkillSandboxArtifactModel.create>>;
+      let row: Awaited<ReturnType<typeof SkillSandboxFileModel.createArtifact>>;
       try {
-        row = await SkillSandboxArtifactModel.create({
+        row = await SkillSandboxFileModel.createArtifact({
           sandboxId: params.sandboxId,
           organizationId: sandbox.organizationId,
           path: resolvedPath,
           mimeType,
+          originalName: null,
           sizeBytes: data.byteLength,
           data,
         });
@@ -281,16 +287,17 @@ class SkillSandboxRuntimeService {
   }
 
   /**
-   * Mount a skill into a sandbox: append a `skill_mount` replay event carrying
-   * the skill's snapshotted files and — if the skill ships a `requirements.txt`
-   * — a `uv pip install` command right after it, both in one transaction so the
-   * deps can never be lost. No Dagger work happens here; the mount becomes part
-   * of the recipe and materializes on the next run/export.
+   * Mount an immutable skill version into a sandbox: append a `skill_mount`
+   * replay event pinning the version and — if the version ships a
+   * `requirements.txt` — a `uv pip install` command right after it, both in one
+   * transaction so the deps can never be lost. No Dagger work happens here; the
+   * mount becomes part of the recipe and materializes on the next run/export.
    *
-   * Idempotent and serialized through `runExclusive`: the "already mounted?"
-   * check runs inside the per-sandbox queue, so concurrent activations of the
-   * same skill cannot both append a mount. Returns null when the skill was
-   * already mounted.
+   * Idempotent and race-safe: `appendSkillMount` inserts under a
+   * `(sandbox_id, skill_id)` unique constraint, so a concurrent or repeated
+   * activation of the same skill is a no-op that returns null. The version's
+   * files are read here to detect requirements and to reject any path that the
+   * Rust replay validator would later refuse.
    */
   async mountSkill(params: MountSkillParams): Promise<MountRef | null> {
     this.ensureEnabled();
@@ -298,16 +305,25 @@ class SkillSandboxRuntimeService {
     return this.runExclusive(params.sandboxId, async () => {
       const sandbox = await this.loadSandbox(params.sandboxId);
 
-      const alreadyMounted = await SkillSandboxModel.listMountedSkillIds(
-        params.sandboxId,
+      const files = await SkillVersionModel.findFiles(
+        params.skill.skillVersionId,
       );
-      if (alreadyMounted.includes(params.skill.skillId)) return null;
+      for (const file of files) {
+        if (
+          file.path.startsWith("/") ||
+          file.path.split("/").some((s) => s === "..") ||
+          file.path === "SKILL.md"
+        ) {
+          throw new SkillInvalidFilePathError(
+            params.skill.skillName,
+            file.path,
+          );
+        }
+      }
 
       // install the skill's requirements into the shared venv as a replay
       // command right after the mount, mirroring how user commands replay.
-      const installCommand = params.skill.files.some(
-        (f) => f.path === REQUIREMENTS_FILE,
-      )
+      const installCommand = files.some((f) => f.path === REQUIREMENTS_FILE)
         ? {
             command: `uv pip install --python ${VENV_PYTHON} --quiet -r ${shellQuote(
               `${skillRootPath(params.skill.skillName)}/${REQUIREMENTS_FILE}`,
@@ -324,7 +340,11 @@ class SkillSandboxRuntimeService {
         mount = await SkillSandboxReplayEventModel.appendSkillMount({
           sandboxId: params.sandboxId,
           organizationId: sandbox.organizationId,
-          skill: params.skill,
+          mount: {
+            skillId: params.skill.skillId,
+            skillName: params.skill.skillName,
+            skillVersionId: params.skill.skillVersionId,
+          },
           installCommand,
         });
       } catch (dbError) {
@@ -332,6 +352,8 @@ class SkillSandboxRuntimeService {
           `failed to mount skill: ${dbError instanceof Error ? dbError.message : String(dbError)}`,
         );
       }
+      // already mounted: ON CONFLICT made the insert a no-op.
+      if (!mount) return null;
 
       return {
         mountId: mount.id,
@@ -391,6 +413,25 @@ class SkillSandboxRuntimeService {
     return sandbox;
   }
 
+  /**
+   * Fail-closed before materializing: every mounted skill must still be readable
+   * by the caller. A revoked or deleted skill stops the run before any bytes
+   * execute (see {@link assertMountedSkillsReadable}).
+   */
+  private async assertMountsReadable(
+    sandboxId: SandboxId,
+    caller: { userId: string; organizationId: string },
+  ): Promise<void> {
+    const result = await assertMountedSkillsReadable({
+      sandboxId,
+      userId: caller.userId,
+      organizationId: caller.organizationId,
+    });
+    if (!result.ok) {
+      throw new SkillSandboxError(result.reason);
+    }
+  }
+
   private resolveTimeout(requested: number | undefined): number {
     const max = config.skillsSandbox.wallClockSeconds;
     if (requested === undefined) return max;
@@ -442,12 +483,24 @@ class SkillSandboxRuntimeService {
               kind: "skill_mount",
               skillMount: {
                 skillName: entry.mount.skillName,
-                files: entry.files.map((file) => ({
-                  skillName: file.skillName,
-                  path: file.path,
-                  encoding: file.encoding,
-                  content: file.content,
-                })),
+                // synthesize the skill dir from the pinned version: SKILL.md
+                // from the version body, plus one entry per version file. The
+                // per-file `skillName` is the mount's name (version files are
+                // skill-agnostic), so paths land under /skills/<skillName>.
+                files: [
+                  {
+                    skillName: entry.mount.skillName,
+                    path: "SKILL.md",
+                    encoding: "utf8" as const,
+                    content: entry.content,
+                  },
+                  ...entry.files.map((file) => ({
+                    skillName: entry.mount.skillName,
+                    path: file.path,
+                    encoding: file.encoding,
+                    content: file.content,
+                  })),
+                ],
               },
             };
           default:

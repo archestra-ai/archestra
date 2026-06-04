@@ -1,6 +1,7 @@
-import { sql } from "drizzle-orm";
+import { type SQL, sql } from "drizzle-orm";
 import {
   check,
+  foreignKey,
   index,
   integer,
   pgTable,
@@ -12,8 +13,8 @@ import {
 import type { SkillSandboxReplayEventKind } from "@/types/skill-sandbox";
 import skillSandboxesTable from "./skill-sandbox";
 import skillSandboxCommandsTable from "./skill-sandbox-command";
+import skillSandboxFilesTable from "./skill-sandbox-file";
 import skillSandboxSkillMountsTable from "./skill-sandbox-skill-mount";
-import skillSandboxUploadsTable from "./skill-sandbox-upload";
 
 /**
  * Ordered replay log for a sandbox. Each event is a command execution, a file
@@ -24,8 +25,12 @@ import skillSandboxUploadsTable from "./skill-sandbox-upload";
  * activation always lands at the current sequence, so prior command/upload
  * layers keep their parent chain and stay cache-hot.
  *
- * Exactly one of `commandId` / `uploadId` / `skillMountId` is set per row, keyed
- * by `kind` and enforced by a DB-level check constraint.
+ * Exactly one of `commandId` / `fileId` / `skillMountId` is set per row, keyed
+ * by `kind` and enforced by a DB-level check constraint. `fileId` may only point
+ * at an `upload` file: `fileKind` is generated as the constant `'upload'`, and
+ * the composite FK `(file_id, file_kind) -> skill_sandbox_files(id, kind)`
+ * rejects a reference to an `artifact` row at write time (Postgres skips the FK
+ * when `file_id` is null, so command/mount rows are unaffected).
  */
 const skillSandboxReplayEventsTable = pgTable(
   "skill_sandbox_replay_events",
@@ -43,9 +48,10 @@ const skillSandboxReplayEventsTable = pgTable(
       () => skillSandboxCommandsTable.id,
       { onDelete: "cascade" },
     ),
-    uploadId: uuid("upload_id").references(() => skillSandboxUploadsTable.id, {
-      onDelete: "cascade",
-    }),
+    /** The uploaded input file this event materializes (FK constrained to uploads). */
+    fileId: uuid("file_id"),
+    /** Always `'upload'`; pins the composite FK below to upload-kind files only. */
+    fileKind: text("file_kind").generatedAlwaysAs((): SQL => sql`'upload'`),
     skillMountId: uuid("skill_mount_id").references(
       () => skillSandboxSkillMountsTable.id,
       { onDelete: "cascade" },
@@ -58,13 +64,18 @@ const skillSandboxReplayEventsTable = pgTable(
       table.sandboxId,
       table.sequence,
     ),
+    foreignKey({
+      columns: [table.fileId, table.fileKind],
+      foreignColumns: [skillSandboxFilesTable.id, skillSandboxFilesTable.kind],
+      name: "skill_sandbox_replay_events_file_fk",
+    }).onDelete("cascade"),
     // exactly one payload fk is set — a malformed row would be a latent replay
     // failure, so reject it at write time rather than at materialize time.
     check(
       "skill_sandbox_replay_events_one_payload_chk",
       sql`(
         (${table.commandId} IS NOT NULL)::int
-        + (${table.uploadId} IS NOT NULL)::int
+        + (${table.fileId} IS NOT NULL)::int
         + (${table.skillMountId} IS NOT NULL)::int
       ) = 1`,
     ),

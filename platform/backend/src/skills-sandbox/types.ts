@@ -1,5 +1,4 @@
 import type { SandboxId } from "@/types";
-import type { SkillFileEncoding } from "@/types/skill";
 
 /**
  * Fixed limits exposed to tool-layer schemas and per-sandbox queueing.
@@ -10,8 +9,19 @@ export const SKILL_SANDBOX_LIMITS = {
   maxCommandBytes: 16 * 1024,
 } as const;
 
+/**
+ * Caller identity threaded into the materializing tools so the revocation gate
+ * can re-check the caller's `skill:read` on every mounted skill before a
+ * container is built.
+ */
+export interface SandboxCaller {
+  userId: string;
+  organizationId: string;
+}
+
 export interface RunCommandParams {
   sandboxId: SandboxId;
+  caller: SandboxCaller;
   command: string;
   /** Absolute path inside the container; defaults to the sandbox's `defaultCwd`. */
   cwd?: string;
@@ -36,6 +46,7 @@ export interface CommandResult {
 
 export interface ExportArtifactParams {
   sandboxId: SandboxId;
+  caller: SandboxCaller;
   /** Path inside the container, either absolute or relative to `defaultCwd`. */
   path: string;
   mimeType?: string;
@@ -69,20 +80,12 @@ export interface UploadRef {
   sizeBytes: number;
 }
 
-/** One skill file snapshotted into a mount; `path` is relative to the skill root. */
-export interface SkillMountFile {
-  path: string;
-  encoding: SkillFileEncoding;
-  content: string;
-}
-
-/** A skill's content + files, as fetched from the live skill tables at mount time. */
+/** Identity of the immutable skill version to mount into a sandbox. */
 export interface SkillMountInput {
   skillId: string;
   skillName: string;
-  /** SKILL.md content, stored at relative path "SKILL.md". */
-  content: string;
-  files: SkillMountFile[];
+  /** The `skill_versions` row whose bytes the mount pins. */
+  skillVersionId: string;
 }
 
 export interface MountSkillParams {

@@ -1,6 +1,10 @@
 import { and, desc, eq } from "drizzle-orm";
 import db, { schema } from "@/database";
-import type { InsertSkillSandbox, SkillSandbox } from "@/types";
+import type {
+  InsertSkillSandbox,
+  SkillSandbox,
+  SkillSandboxSkillMount,
+} from "@/types";
 
 /**
  * Thrown when a skill file has a path that would escape the skill root (absolute
@@ -80,6 +84,26 @@ class SkillSandboxModel {
     return row;
   }
 
+  /** The conversation's default sandbox, if one has been created. */
+  static async findDefault(params: {
+    organizationId: string;
+    userId: string;
+    conversationId: string;
+  }): Promise<SkillSandbox | null> {
+    const [row] = await db
+      .select()
+      .from(schema.skillSandboxesTable)
+      .where(
+        and(
+          eq(schema.skillSandboxesTable.organizationId, params.organizationId),
+          eq(schema.skillSandboxesTable.userId, params.userId),
+          eq(schema.skillSandboxesTable.conversationId, params.conversationId),
+          eq(schema.skillSandboxesTable.isDefault, true),
+        ),
+      );
+    return row ?? null;
+  }
+
   static async findById(id: string): Promise<SkillSandbox | null> {
     const [result] = await db
       .select()
@@ -116,6 +140,23 @@ class SkillSandboxModel {
       .from(schema.skillSandboxSkillMountsTable)
       .where(eq(schema.skillSandboxSkillMountsTable.sandboxId, sandboxId));
     return rows.map((r) => r.skillId);
+  }
+
+  /** The mount pinning a given skill in a sandbox, if the skill is mounted. */
+  static async findMountBySkill(params: {
+    sandboxId: string;
+    skillId: string;
+  }): Promise<SkillSandboxSkillMount | null> {
+    const [row] = await db
+      .select()
+      .from(schema.skillSandboxSkillMountsTable)
+      .where(
+        and(
+          eq(schema.skillSandboxSkillMountsTable.sandboxId, params.sandboxId),
+          eq(schema.skillSandboxSkillMountsTable.skillId, params.skillId),
+        ),
+      );
+    return row ?? null;
   }
 }
 

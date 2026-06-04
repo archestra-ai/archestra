@@ -358,25 +358,25 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "child of sandbox; ordered skill mount, parent is ephemeral",
   },
-  skillSandboxFileSnapshotsTable: {
-    audited: false,
-    reason: "child of sandbox; per-sandbox file snapshot",
-  },
   skillSandboxCommandsTable: {
     audited: false,
     reason: "child of sandbox; append-only command replay log",
   },
-  skillSandboxArtifactsTable: {
+  skillSandboxFilesTable: {
     audited: false,
-    reason: "child of sandbox; exported file bytes",
-  },
-  skillSandboxUploadsTable: {
-    audited: false,
-    reason: "child of sandbox; uploaded input file bytes",
+    reason: "child of sandbox; uploaded input + exported artifact file bytes",
   },
   skillSandboxReplayEventsTable: {
     audited: false,
     reason: "child of sandbox; append-only ordered replay log",
+  },
+  skillVersionsTable: {
+    audited: false,
+    reason: "child of skill; immutable version snapshot, parent audited",
+  },
+  skillVersionFilesTable: {
+    audited: false,
+    reason: "child of skill version; immutable file snapshot",
   },
   kbChunksTable: {
     audited: false,

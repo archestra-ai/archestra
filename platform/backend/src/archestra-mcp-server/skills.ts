@@ -12,10 +12,9 @@ import {
 } from "@/auth/skill-permissions";
 import logger from "@/logging";
 import {
-  SkillFileModel,
   SkillModel,
-  SkillSandboxModel,
   SkillTeamModel,
+  SkillVersionModel,
   TeamModel,
 } from "@/models";
 import {
@@ -36,18 +35,14 @@ import {
 } from "@/skills/skill-activation";
 import { isSkillSandboxAvailableForAgent } from "@/skills/skill-sandbox-availability";
 import {
+  resolveActivationVersion,
+  resolveEffectiveSkillVersion,
+} from "@/skills/skill-version-resolution";
+import {
   isSkillNameConflict,
   refineUniqueFilePaths,
 } from "@/skills/validation";
-import { SKILL_SANDBOX_HOME } from "@/skills-sandbox/runtime-image";
-import { skillSandboxRuntimeService } from "@/skills-sandbox/skill-sandbox-runtime-service";
-import {
-  ApiError,
-  asSandboxId,
-  type Skill,
-  type SkillFile,
-  SkillFileEncodingSchema,
-} from "@/types";
+import { ApiError, type Skill, SkillFileEncodingSchema } from "@/types";
 import {
   defineArchestraTool,
   defineArchestraTools,
@@ -212,35 +207,42 @@ const registry = defineArchestraTools([
         );
       }
 
-      const files = await SkillFileModel.findBySkillId(skill.id);
+      const canRunSandbox = await canRunSkillSandbox(ctx, context.agent.id);
+
+      // resolve the effective version and, when the sandbox is usable, pin it by
+      // mounting it under /skills. The same version drives the response and the
+      // mount, so the model never sees bytes that differ from what run_command
+      // will execute. Idempotent per skill per sandbox.
+      const version = await resolveActivationVersion({
+        skill,
+        organizationId: ctx.organizationId,
+        userId: ctx.userId,
+        conversationId: context.conversationId,
+        agentId: context.agent.id ?? null,
+        canRunSandbox,
+      });
+      if (!version) {
+        return errorResult(`Skill "${skill.name}" has no readable version.`);
+      }
+      const files = await SkillVersionModel.findFiles(version.id);
+
       logger.info(
         {
           organizationId: ctx.organizationId,
           skillName: skill.name,
+          version: version.version,
           fileCount: files.length,
         },
         "[Skills] Skill activated",
       );
 
-      const canRunSandbox = await canRunSkillSandbox(ctx, context.agent.id);
-
-      // activating a skill mounts it into the conversation's default sandbox so
-      // it becomes runnable under /skills with no extra step. requires an
-      // authenticated user + conversation; idempotent per skill per sandbox.
-      if (canRunSandbox && ctx.userId && context.conversationId) {
-        await mountSkillIntoDefaultSandbox({
-          organizationId: ctx.organizationId,
-          userId: ctx.userId,
-          conversationId: context.conversationId,
-          agentId: context.agent.id ?? null,
-          skill,
-          files,
-        });
-      }
-
       return successResult(
         formatSkillActivation({
-          skill,
+          skill: {
+            name: skill.name,
+            content: version.content,
+            compatibility: skill.compatibility,
+          },
           files,
           canRunSandbox,
           promptContext: skill.templated
@@ -273,7 +275,18 @@ const registry = defineArchestraTools([
         return errorResult(`No skill named "${args.skill}" exists.`);
       }
 
-      const file = await SkillFileModel.findBySkillAndPath(skill.id, args.path);
+      // read from the effective version (the mounted one if mounted, else
+      // latest) so read_skill_file shows the same bytes as activation + the
+      // sandbox.
+      const version = await resolveEffectiveSkillVersion({
+        skill,
+        organizationId: ctx.organizationId,
+        userId: ctx.userId,
+        conversationId: context.conversationId,
+      });
+      const file = version
+        ? await SkillVersionModel.findFileByPath(version.id, args.path)
+        : null;
       if (!file) {
         return errorResult(
           `Skill "${args.skill}" has no file at "${args.path}".`,
@@ -454,51 +467,6 @@ async function canRunSkillSandbox(
     organizationId: ctx.organizationId,
     agentId,
   });
-}
-
-/**
- * Mount an activated skill into the conversation's default sandbox so it becomes
- * runnable under `/skills`. Idempotent per skill per sandbox. A mount failure is
- * logged and swallowed — activation still returns the skill instructions; the
- * skill just won't be runnable until re-activated.
- */
-async function mountSkillIntoDefaultSandbox(params: {
-  organizationId: string;
-  userId: string;
-  conversationId: string;
-  agentId: string | null;
-  skill: Skill;
-  files: SkillFile[];
-}): Promise<void> {
-  try {
-    const sandbox = await SkillSandboxModel.findOrCreateDefault({
-      organizationId: params.organizationId,
-      userId: params.userId,
-      conversationId: params.conversationId,
-      agentId: params.agentId,
-      defaultCwd: SKILL_SANDBOX_HOME,
-    });
-    // mountSkill is idempotent + serialized per sandbox, so a re-activation or a
-    // concurrent activation of the same skill is a safe no-op.
-    await skillSandboxRuntimeService.mountSkill({
-      sandboxId: asSandboxId(sandbox.id),
-      skill: {
-        skillId: params.skill.id,
-        skillName: params.skill.name,
-        content: params.skill.content,
-        files: params.files.map((file) => ({
-          path: file.path,
-          encoding: file.encoding,
-          content: file.content,
-        })),
-      },
-    });
-  } catch (error) {
-    logger.error(
-      { err: error, skillId: params.skill.id },
-      "[Skills] failed to mount activated skill into sandbox",
-    );
-  }
 }
 
 /**

@@ -17,7 +17,14 @@ import {
 import { PanelRightOpen } from "lucide-react";
 import { useTheme } from "next-themes";
 import type React from "react";
-import { Component, useEffect, useMemo, useRef, useState } from "react";
+import {
+  Component,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { createPortal } from "react-dom";
 import { usePinnedCanvas } from "@/components/chat/pinned-canvas-context";
 import { Button } from "@/components/ui/button";
@@ -285,10 +292,24 @@ export function McpAppSection({
   /** Called when the MCP App sends a ui/message request to inject a user message into the conversation */
   onSendMessage?: (text: string) => void;
 }) {
+  const resourceKey = `${agentId}:${uiResourceUri}`;
   const [displayMode, setDisplayMode] = useState<McpUiDisplayMode>("inline");
   const [size, setSize] = useState<{ width: number; height: number } | null>(
     null,
   );
+  const [resourceState, setResourceState] = useState<{
+    key: string;
+    state: "unknown" | "renderable" | "empty";
+  }>(() => ({
+    key: resourceKey,
+    state: preloadedResource
+      ? isRenderableMcpAppHtml(preloadedResource.html)
+        ? "renderable"
+        : "empty"
+      : "unknown",
+  }));
+  const effectiveResourceState =
+    resourceState.key === resourceKey ? resourceState.state : "unknown";
 
   const { selectedCanvasId, select, showInSidebar, portalTarget } =
     usePinnedCanvas();
@@ -325,6 +346,17 @@ export function McpAppSection({
     showInSidebar(toolCallId);
   };
 
+  const handleResourceStateChange = useCallback(
+    (state: "renderable" | "empty") => {
+      setResourceState({ key: resourceKey, state });
+    },
+    [resourceKey],
+  );
+
+  if (effectiveResourceState === "empty") {
+    return null;
+  }
+
   const canvas = (
     <McpAppErrorBoundary>
       <McpAppContainer
@@ -346,6 +378,7 @@ export function McpAppSection({
           toolInput={toolInput}
           toolResult={toolResult}
           preloadedResource={preloadedResource}
+          onResourceStateChange={handleResourceStateChange}
           onSendMessage={onSendMessage}
         />
       </McpAppContainer>
@@ -780,6 +813,7 @@ const McpAppView = function McpAppView({
   onError,
   onSendMessage,
   preloadedResource,
+  onResourceStateChange,
 }: {
   toolResourceUri: string;
   agentId: string;
@@ -795,6 +829,7 @@ const McpAppView = function McpAppView({
   onSendMessage?: (text: string) => void;
   /** HTML pre-fetched by the backend — skips the in-browser HTTP fetch to avoid SSE deadlock */
   preloadedResource?: AppResourceMeta;
+  onResourceStateChange: (state: "renderable" | "empty") => void;
 }) {
   const { resolvedTheme } = useTheme();
   const [bridge, setBridge] = useState<AppBridge | null>(null);
@@ -816,6 +851,8 @@ const McpAppView = function McpAppView({
   onSizeChangeRef.current = onSizeChange;
   const onSendMessageRef = useRef(onSendMessage);
   onSendMessageRef.current = onSendMessage;
+  const onResourceStateChangeRef = useRef(onResourceStateChange);
+  onResourceStateChangeRef.current = onResourceStateChange;
   // Ref to the latest bridge for teardown — avoids capturing a stale closure
   const latestBridgeRef = useRef<AppBridge | null>(null);
   // Monotonic counter for JSON-RPC IDs to avoid collisions from Date.now() in rapid calls.
@@ -996,7 +1033,14 @@ const McpAppView = function McpAppView({
 
     // Skip HTTP fetch when the backend already sent the HTML via SSE.
     if (preloadedResource) {
-      if (!cancelled) setAppResource(preloadedResource);
+      if (!cancelled) {
+        setAppResource(preloadedResource);
+        onResourceStateChangeRef.current(
+          isRenderableMcpAppHtml(preloadedResource.html)
+            ? "renderable"
+            : "empty",
+        );
+      }
       return () => {
         cancelled = true;
         appBridge.teardownResource({}).catch(() => {});
@@ -1032,11 +1076,15 @@ const McpAppView = function McpAppView({
 
         if (!cancelled && !fetchCancelledRef.current) {
           setAppResource({ html, csp, permissions });
+          onResourceStateChangeRef.current(
+            isRenderableMcpAppHtml(html) ? "renderable" : "empty",
+          );
         }
       } catch (err) {
         if (!cancelled && !fetchCancelledRef.current) {
           const error = err instanceof Error ? err : new Error(String(err));
           setLoadError(error.message);
+          onResourceStateChangeRef.current("renderable");
           onErrorRef.current?.(error);
         }
       }
@@ -1057,6 +1105,9 @@ const McpAppView = function McpAppView({
     if (preloadedResource && !appResource && !loadError) {
       fetchCancelledRef.current = true;
       setAppResource(preloadedResource);
+      onResourceStateChangeRef.current(
+        isRenderableMcpAppHtml(preloadedResource.html) ? "renderable" : "empty",
+      );
     }
   }, [preloadedResource, appResource, loadError]);
 
@@ -1174,3 +1225,50 @@ const McpAppView = function McpAppView({
     </div>
   );
 };
+
+/**
+ * Detects MCP App resources that would create an empty iframe/canvas panel.
+ * Tool results can mark a UI resource even when that resource has no visible
+ * body content; rendering it reserves a blank chat panel before the next
+ * message or sensitive-context divider. Keep resources that can still render
+ * later through scripts or visual/interactive elements.
+ */
+function isRenderableMcpAppHtml(html: string): boolean {
+  const trimmedHtml = html.trim();
+  if (!trimmedHtml) {
+    return false;
+  }
+
+  const parser = new DOMParser();
+  const document = parser.parseFromString(trimmedHtml, "text/html");
+  const body = document.body;
+
+  if (body.textContent?.trim()) {
+    return true;
+  }
+
+  return Boolean(
+    body.querySelector(
+      [
+        "script",
+        "canvas",
+        "svg",
+        "img",
+        "picture",
+        "video",
+        "audio",
+        "iframe",
+        "object",
+        "embed",
+        "table",
+        "form",
+        "input",
+        "textarea",
+        "select",
+        "button",
+        "[role]",
+        "[aria-label]",
+      ].join(","),
+    ),
+  );
+}

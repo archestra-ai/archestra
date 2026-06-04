@@ -1,7 +1,6 @@
 import { eq } from "drizzle-orm";
 import { type Mock, vi } from "vitest";
 import db, { schema } from "@/database";
-import { McpPresetEntryModel } from "@/models";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -16,16 +15,18 @@ import { hasPermission } from "@/auth";
 const mockHasPermission = hasPermission as Mock;
 
 /**
- * Deleting a parent catalog item when one of its children has an installed
- * mcp_server must succeed.
+ * The preset feature is removed, but legacy child rows (non-NULL
+ * `parentCatalogItemId`) may still exist in the DB. Deleting a parent catalog
+ * item when one of those legacy children has an installed mcp_server must
+ * still succeed and tear the child subtree down.
  *
  * Trap: `mcp_server.catalog_id` is `NOT NULL` but its FK declares
  * `ON DELETE SET NULL`. The parent's DB cascade tries to clear the column on
  * the child's server rows and aborts the whole DELETE with a NOT NULL
  * violation. The model must therefore remove servers for the WHOLE subtree
- * (parent + every descendant) before issuing the catalog DELETE.
+ * (parent + every legacy descendant) before issuing the catalog DELETE.
  */
-describe("DELETE /api/internal_mcp_catalog/:id — parent with installed child", () => {
+describe("DELETE /api/internal_mcp_catalog/:id — parent with installed legacy child", () => {
   let app: FastifyInstanceWithZod;
   let user: User;
   let organizationId: string;
@@ -54,7 +55,7 @@ describe("DELETE /api/internal_mcp_catalog/:id — parent with installed child",
     await app.close();
   });
 
-  test("succeeds when a child has an installed mcp_server", async ({
+  test("succeeds when a legacy child has an installed mcp_server", async ({
     makeMcpServer,
   }) => {
     const parent = await createCatalog({
@@ -63,21 +64,11 @@ describe("DELETE /api/internal_mcp_catalog/:id — parent with installed child",
       localConfig: {
         command: "node",
         arguments: ["server.js"],
-        environment: [
-          {
-            key: "PRESET_PASSWORD",
-            type: "secret",
-            promptOnInstallation: false,
-            promptOnPreset: true,
-          },
-        ],
+        environment: [],
       },
     });
 
-    const child = await createChild(parent.id, {
-      childName: "prod",
-      presetFieldValues: { PRESET_PASSWORD: "child-secret" },
-    });
+    const child = await seedLegacyChild(parent.id);
 
     const installedServer = await makeMcpServer({
       catalogId: child.id,
@@ -127,27 +118,23 @@ describe("DELETE /api/internal_mcp_catalog/:id — parent with installed child",
     return response.json();
   }
 
-  async function createChild(
-    parentId: string,
-    body: { childName: string; presetFieldValues: Record<string, unknown> },
-  ): Promise<{ id: string }> {
-    const entry = await McpPresetEntryModel.create({
-      organizationId,
-      name: body.childName,
-    });
-    const response = await app.inject({
-      method: "POST",
-      url: `/api/internal_mcp_catalog/${parentId}/children`,
-      payload: {
-        presetEntryId: entry.id,
-        presetFieldValues: body.presetFieldValues,
-      },
-    });
-    if (response.statusCode !== 200) {
-      throw new Error(
-        `createChild failed: ${response.statusCode} ${response.body}`,
-      );
-    }
-    return response.json();
+  // The preset CRUD routes are gone, so seed the legacy child row straight
+  // into the table by cloning the parent and pointing it at the parent.
+  async function seedLegacyChild(parentId: string): Promise<{ id: string }> {
+    const [parentRow] = await db
+      .select()
+      .from(schema.internalMcpCatalogTable)
+      .where(eq(schema.internalMcpCatalogTable.id, parentId));
+    const { id: _id, createdAt: _c, updatedAt: _u, ...rest } = parentRow;
+    const [child] = await db
+      .insert(schema.internalMcpCatalogTable)
+      .values({
+        ...rest,
+        name: `${parentRow.name}-prod`,
+        childName: "prod",
+        parentCatalogItemId: parentId,
+      })
+      .returning({ id: schema.internalMcpCatalogTable.id });
+    return child;
   }
 });

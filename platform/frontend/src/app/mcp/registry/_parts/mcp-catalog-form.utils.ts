@@ -454,7 +454,6 @@ export function transformCatalogItemToFormValues(
       fieldName,
       headerName: config.headerName,
       promptOnInstallation: config.promptOnInstallation ?? true,
-      promptOnPreset: config.promptOnPreset ?? false,
       required: config.required ?? false,
       value: typeof config.default === "string" ? config.default : undefined,
       description: config.description ?? "",
@@ -739,7 +738,6 @@ export function transformExternalCatalogToFormValues(
         fieldName,
         headerName: config.headerName,
         promptOnInstallation: config.promptOnInstallation ?? true,
-        promptOnPreset: config.promptOnPreset ?? false,
         required: config.required ?? false,
         value: typeof config.default === "string" ? config.default : undefined,
         description: config.description ?? "",
@@ -814,13 +812,11 @@ function buildStaticHeaderUserConfig(
     // the combination, because `default` lives in plaintext jsonb on the
     // catalog row). Fall back to non-sensitive for static regardless of
     // what the form carries.
-    const isStaticHeader =
-      !header.promptOnInstallation && !header.promptOnPreset;
+    const isStaticHeader = !header.promptOnInstallation;
     userConfig[fieldName] = {
       type: "string",
       title: header.headerName,
       promptOnInstallation: header.promptOnInstallation,
-      promptOnPreset: header.promptOnPreset || undefined,
       required: header.promptOnInstallation ? header.required : false,
       default:
         !header.promptOnInstallation && header.value ? header.value : undefined,
@@ -875,7 +871,6 @@ function getHeaderMappedUserConfigEntries(
     fieldName: string;
     headerName: string;
     promptOnInstallation?: boolean;
-    promptOnPreset?: boolean;
     required?: boolean;
     default?: string | number | boolean | Array<string>;
     description?: string;
@@ -895,7 +890,6 @@ function getHeaderMappedUserConfigEntries(
         const userConfigField = config as {
           headerName: string;
           promptOnInstallation?: boolean;
-          promptOnPreset?: boolean;
           required?: boolean;
           default?: string | number | boolean | Array<string>;
           description?: string;
@@ -908,7 +902,6 @@ function getHeaderMappedUserConfigEntries(
             fieldName,
             headerName: userConfigField.headerName,
             promptOnInstallation: userConfigField.promptOnInstallation,
-            promptOnPreset: userConfigField.promptOnPreset,
             required: userConfigField.required,
             default: userConfigField.default,
             description: userConfigField.description,

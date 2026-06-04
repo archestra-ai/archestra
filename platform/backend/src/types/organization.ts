@@ -316,10 +316,6 @@ const extendedFields = {
   showTwoFactor: z.boolean(),
   oauthAccessTokenLifetimeSeconds: OAuthAccessTokenLifetimeSecondsSchema,
   connectionBaseUrls: z.array(ConnectionBaseUrlSchema).nullable(),
-  presetEntityName: z.string().nullable(),
-  presetEntityNamePlural: z.string().nullable(),
-  presetEntityDefaultLabel: z.string().nullable(),
-  presetEntityDefaultValidationRegex: z.string().nullable(),
   defaultNetworkPolicy: NetworkPolicySchema.nullable(),
 };
 
@@ -330,6 +326,12 @@ const InternalSelectOrganizationSchema = createSelectSchema(
 export const SelectOrganizationSchema = InternalSelectOrganizationSchema.omit({
   analyticsInstanceStartedAt: true,
   analyticsInstanceLastHeartbeatAt: true,
+  // Preset feature removed; columns retained in DB (non-destructive) but no
+  // longer exposed via the API.
+  presetEntityName: true,
+  presetEntityNamePlural: true,
+  presetEntityDefaultLabel: true,
+  presetEntityDefaultValidationRegex: true,
 });
 export const InsertOrganizationSchema = createInsertSchema(
   schema.organizationsTable,

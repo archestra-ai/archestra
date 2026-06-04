@@ -3,10 +3,7 @@
 import type { archestraApiTypes } from "@shared";
 import { AlertTriangle, Info, ShieldCheck, User } from "lucide-react";
 import { lazy, Suspense, useEffect, useState } from "react";
-import {
-  StandardDialog,
-  StandardFormDialog,
-} from "@/components/standard-dialog";
+import { StandardFormDialog } from "@/components/standard-dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -22,16 +19,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useFeature } from "@/lib/config/config.query";
-import { useCatalogPresets } from "@/lib/mcp/internal-mcp-catalog.query";
-import { useMcpPresetEntries } from "@/lib/mcp/mcp-preset-entry.query";
-import { usePresetEntityName } from "@/lib/organization.query";
 import { useTeamsWithVaultFolders } from "@/lib/teams/team.query";
-import { InstallPresetPicker } from "./install-preset-picker";
-import { FillPresetFieldsStep } from "./preset-fallback-fields";
-import {
-  compileValidationRegex,
-  presetHasUnfilledFields,
-} from "./preset-helpers";
 import {
   type McpServerInstallScope,
   SelectMcpServerCredentialTypeAndTeams,
@@ -52,7 +40,6 @@ type UserConfigType = Record<
     title: string;
     description: string;
     promptOnInstallation?: boolean;
-    promptOnPreset?: boolean;
     required?: boolean;
     default?: string | number | boolean | Array<string>;
     multiple?: boolean;
@@ -63,7 +50,7 @@ type UserConfigType = Record<
 >;
 
 export interface RemoteServerInstallResult {
-  /** Catalog id to install from — parent or selected preset. */
+  /** Catalog id to install from. */
   catalogId: string;
   metadata: Record<string, unknown>;
   /** Installation scope (personal, team, org) */
@@ -97,11 +84,6 @@ interface RemoteServerInstallDialogProps {
   existingTeamId?: string | null;
   /** Pre-select a specific team in the credential type selector */
   preselectedTeamId?: string | null;
-  /**
-   * Pre-select a preset (child catalog) in the InstallPresetPicker when the
-   * dialog opens. Falls back to the parent's id when unset.
-   */
-  preselectedCatalogId?: string | null;
   /** When true, only personal installation is allowed */
   personalOnly?: boolean;
   /** When true, only organization-wide installation is allowed */
@@ -119,7 +101,6 @@ export function RemoteServerInstallDialog({
   existingScope,
   existingTeamId,
   preselectedTeamId,
-  preselectedCatalogId,
   personalOnly = false,
   orgOnly = false,
 }: RemoteServerInstallDialogProps) {
@@ -131,55 +112,6 @@ export function RemoteServerInstallDialog({
     orgOnly ? "org" : "personal",
   );
   const [canInstall, setCanInstall] = useState(true);
-  const [selectedCatalogId, setSelectedCatalogId] = useState<string>(
-    preselectedCatalogId ?? catalogItem?.id ?? "",
-  );
-  const { data: presets = [] } = useCatalogPresets(catalogItem?.id ?? null);
-  const { data: presetEntries = [] } = useMcpPresetEntries();
-  const { singular, defaultValidationRegex } = usePresetEntityName();
-  const hasPresets = presets.length > 0;
-
-  // Compile the regex once per selected preset. Uses the preset entry's
-  // regex for child installs; for the implicit default row (no entry) falls
-  // back to the org-wide default validation regex.
-  const selectedChild =
-    catalogItem && selectedCatalogId && selectedCatalogId !== catalogItem.id
-      ? presets.find((p) => p.id === selectedCatalogId)
-      : null;
-  const presetValidationRegex = (() => {
-    const entryId = selectedChild?.presetEntryId ?? null;
-    if (!entryId) return compileValidationRegex(defaultValidationRegex);
-    const entry = presetEntries.find((e) => e.id === entryId);
-    return compileValidationRegex(entry?.validationRegex);
-  })();
-
-  // Step 1 ("fill-preset") asks the caller to fill in any preset-scoped fields
-  // the selected preset doesn't have values for, persists them onto the preset
-  // row, then transitions to Step 2 ("install"). When the preset is already
-  // filled (or we're in reauth mode), we start directly at Step 2.
-  const selectedPreset =
-    selectedCatalogId === catalogItem?.id
-      ? catalogItem
-      : (presets.find((p) => p.id === selectedCatalogId) ?? null);
-  const needsFillStep =
-    !isReauth &&
-    !isReinstall &&
-    !!catalogItem &&
-    presetHasUnfilledFields(catalogItem, selectedPreset);
-  const [step, setStep] = useState<"fill-preset" | "install">(
-    needsFillStep ? "fill-preset" : "install",
-  );
-
-  useEffect(() => {
-    if (isOpen && catalogItem) {
-      setSelectedCatalogId(preselectedCatalogId ?? catalogItem.id);
-    }
-  }, [isOpen, catalogItem, preselectedCatalogId]);
-
-  useEffect(() => {
-    if (!isOpen) return;
-    setStep(needsFillStep ? "fill-preset" : "install");
-  }, [isOpen, needsFillStep]);
 
   // Vault team selection (separate from install team for personal + BYOS)
   const [vaultTeamId, setVaultTeamId] = useState<string | null>(null);
@@ -195,10 +127,7 @@ export function RemoteServerInstallDialog({
   const userConfig =
     (catalogItem?.userConfig as UserConfigType | null | undefined) || {};
   const hasPromptSensitiveFields = Object.values(userConfig).some(
-    (config) =>
-      config.sensitive &&
-      config.promptOnInstallation !== false &&
-      !config.promptOnPreset,
+    (config) => config.sensitive && config.promptOnInstallation !== false,
   );
 
   // Helper to update vault secret for a specific field
@@ -237,7 +166,7 @@ export function RemoteServerInstallDialog({
   const useVaultSecrets = byosEnabled && hasPromptSensitiveFields;
 
   const handleConfirm = async () => {
-    if (!catalogItem || step !== "install") {
+    if (!catalogItem) {
       return;
     }
 
@@ -245,10 +174,7 @@ export function RemoteServerInstallDialog({
       const metadata: Record<string, unknown> = {};
 
       for (const [fieldName, fieldConfig] of Object.entries(userConfig)) {
-        if (
-          fieldConfig.promptOnInstallation === false ||
-          fieldConfig.promptOnPreset
-        ) {
+        if (fieldConfig.promptOnInstallation === false) {
           continue;
         }
 
@@ -278,7 +204,7 @@ export function RemoteServerInstallDialog({
       }
 
       await onConfirm(catalogItem, {
-        catalogId: selectedCatalogId || catalogItem.id,
+        catalogId: catalogItem.id,
         metadata,
         scope,
         teamId: selectedTeamId,
@@ -310,10 +236,7 @@ export function RemoteServerInstallDialog({
 
   const promptableUserConfig = Object.fromEntries(
     Object.entries(userConfig).filter(([_fieldName, fieldConfig]) => {
-      return (
-        fieldConfig.promptOnInstallation !== false &&
-        !fieldConfig.promptOnPreset
-      );
+      return fieldConfig.promptOnInstallation !== false;
     }),
   );
   const hasConfig = Object.keys(promptableUserConfig).length > 0;
@@ -346,63 +269,7 @@ export function RemoteServerInstallDialog({
         configValues[fieldName]?.trim(),
       );
 
-  // Run the preset regex against every prompted-string user field. Skips
-  // numbers, booleans, empty values, and BYOS vault-backed sensitive fields
-  // (whose value isn't a free-text string).
-  const fieldRegexErrors: Record<string, string | null> = {};
-  if (presetValidationRegex) {
-    for (const [fieldName, fieldConfig] of Object.entries(
-      promptableUserConfig,
-    )) {
-      if (
-        fieldConfig.type !== "string" &&
-        fieldConfig.type !== "directory" &&
-        fieldConfig.type !== "file"
-      ) {
-        continue;
-      }
-      if (useVaultSecrets && fieldConfig.sensitive) continue;
-      const v = configValues[fieldName] ?? "";
-      if (!v) continue;
-      fieldRegexErrors[fieldName] = presetValidationRegex.test(v)
-        ? null
-        : `Value does not match the ${singular} Validation Rule`;
-    }
-  }
-  const hasRegexErrors = Object.values(fieldRegexErrors).some((e) => !!e);
-
-  const isValid =
-    (!hasConfig || (isNonSensitiveValid && isSensitiveValid)) &&
-    !hasRegexErrors;
-
-  if (step === "fill-preset") {
-    return (
-      <StandardDialog
-        open={isOpen}
-        onOpenChange={handleClose}
-        title={
-          <div className="flex items-end gap-2">
-            <User className="h-5 w-5" />
-            <span>
-              Install Server
-              <span className="text-muted-foreground ml-2 font-normal">
-                {catalogItem.name}
-              </span>
-            </span>
-          </div>
-        }
-        size="medium"
-        bodyClassName="grid gap-6"
-      >
-        <FillPresetFieldsStep
-          catalog={catalogItem}
-          selectedPresetId={selectedCatalogId || catalogItem.id}
-          onSaved={() => setStep("install")}
-          onCancel={handleClose}
-        />
-      </StandardDialog>
-    );
-  }
+  const isValid = !hasConfig || (isNonSensitiveValid && isSensitiveValid);
 
   return (
     <StandardFormDialog
@@ -486,7 +353,7 @@ export function RemoteServerInstallDialog({
 
       <SelectMcpServerCredentialTypeAndTeams
         onTeamChange={setSelectedTeamId}
-        catalogId={selectedCatalogId || catalogItem?.id}
+        catalogId={catalogItem?.id}
         onScopeChange={setScope}
         onCanInstallChange={setCanInstall}
         isReinstall={isReinstall}
@@ -495,16 +362,6 @@ export function RemoteServerInstallDialog({
         preselectedTeamId={preselectedTeamId}
         personalOnly={personalOnly}
         orgOnly={orgOnly}
-        hasPresets={hasPresets && !isReauth && !isReinstall}
-        presetPicker={
-          !isReauth && !isReinstall && catalogItem && hasPresets ? (
-            <InstallPresetPicker
-              parent={catalogItem}
-              value={selectedCatalogId}
-              onChange={setSelectedCatalogId}
-            />
-          ) : null
-        }
       />
 
       {useVaultSecrets && scope !== "team" && (
@@ -620,39 +477,28 @@ export function RemoteServerInstallDialog({
                     />
                   </Suspense>
                 ) : (
-                  <>
-                    <Input
-                      id={fieldName}
-                      type={
-                        fieldConfig.sensitive
-                          ? "password"
-                          : fieldConfig.type === "number"
-                            ? "number"
-                            : "text"
-                      }
-                      placeholder={
-                        fieldConfig.default?.toString() ||
-                        fieldConfig.description
-                      }
-                      value={configValues[fieldName] || ""}
-                      onChange={(e) =>
-                        setConfigValues((prev) => ({
-                          ...prev,
-                          [fieldName]: e.target.value,
-                        }))
-                      }
-                      min={fieldConfig.min}
-                      max={fieldConfig.max}
-                      aria-invalid={
-                        fieldRegexErrors[fieldName] ? true : undefined
-                      }
-                    />
-                    {fieldRegexErrors[fieldName] && (
-                      <p className="text-xs text-destructive">
-                        {fieldRegexErrors[fieldName]}
-                      </p>
-                    )}
-                  </>
+                  <Input
+                    id={fieldName}
+                    type={
+                      fieldConfig.sensitive
+                        ? "password"
+                        : fieldConfig.type === "number"
+                          ? "number"
+                          : "text"
+                    }
+                    placeholder={
+                      fieldConfig.default?.toString() || fieldConfig.description
+                    }
+                    value={configValues[fieldName] || ""}
+                    onChange={(e) =>
+                      setConfigValues((prev) => ({
+                        ...prev,
+                        [fieldName]: e.target.value,
+                      }))
+                    }
+                    min={fieldConfig.min}
+                    max={fieldConfig.max}
+                  />
                 )}
               </div>
             ),

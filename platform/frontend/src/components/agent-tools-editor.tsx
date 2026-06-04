@@ -141,13 +141,8 @@ const AgentToolsEditorContent = forwardRef<
   const assignTool = useAssignTool();
   const unassignTool = useUnassignTool();
 
-  // Fetch catalog items (MCP servers in registry). includeChildren so that
-  // each child preset row appears as its own selectable entry alongside the
-  // parent — agents bind tools per catalogId, and child presets carry their
-  // own `<preset>__<tool>` rows in the tools table.
-  const { data: catalogItems = [], isPending } = useInternalMcpCatalog({
-    includeChildren: true,
-  });
+  // Fetch catalog items (MCP servers in registry).
+  const { data: catalogItems = [], isPending } = useInternalMcpCatalog();
 
   // Fetch all credentials grouped by catalog (for default credential on toggle)
   const allCredentials = useMcpServersGroupedByCatalog({

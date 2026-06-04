@@ -68,10 +68,6 @@ export const RouteId = {
   ValidateDeploymentYaml: "validateDeploymentYaml",
   ResetDeploymentYaml: "resetDeploymentYaml",
   GetK8sImagePullSecrets: "getK8sImagePullSecrets",
-  // MCP Catalog Children (UI-named "presets") Routes
-  GetCatalogChildren: "getCatalogChildren",
-  CreateCatalogChild: "createCatalogChild",
-  UpdateCatalogChild: "updateCatalogChild",
 
   // MCP Server Routes
   GetMcpServers: "getMcpServers",
@@ -375,10 +371,6 @@ export const RouteId = {
 
   // Connection Settings Routes (organization-level)
   UpdateConnectionSettings: "updateConnectionSettings",
-
-  // Org-level preset entries (Production / Staging / Development buckets).
-  // Read-only: managed via existing data; the registry admin UI was removed.
-  ListMcpPresetEntries: "listMcpPresetEntries",
 
   // Org-level deployment environments
   ListEnvironments: "listEnvironments",

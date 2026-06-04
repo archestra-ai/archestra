@@ -2,7 +2,6 @@
 
 import { E2eTestId } from "@shared";
 import { AlertTriangle, Globe, Lock, Users } from "lucide-react";
-import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Label } from "@/components/ui/label";
@@ -19,7 +18,6 @@ import {
 } from "@/components/visibility-selector";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useMcpServers } from "@/lib/mcp/mcp-server.query";
-import { usePresetEntityName } from "@/lib/organization.query";
 import { useTeams } from "@/lib/teams/team.query";
 
 export type McpServerInstallScope = "personal" | "team" | "org";
@@ -53,11 +51,6 @@ interface SelectMcpServerCredentialTypeAndTeamsProps {
   onCanInstallChange?: (canInstall: boolean) => void;
   /** Pre-select a specific team (used when adding shared connection from manage dialog) */
   preselectedTeamId?: string | null;
-  /** Optional node rendered on the same row as the "Install for" select (left column). */
-  presetPicker?: ReactNode;
-  /** Whether the catalog item has presets — when false, render the legacy
-   * VisibilitySelector with icons + descriptions instead of the compact grid. */
-  hasPresets?: boolean;
 }
 
 export function SelectMcpServerCredentialTypeAndTeams({
@@ -72,13 +65,10 @@ export function SelectMcpServerCredentialTypeAndTeams({
   orgOnly = false,
   onCanInstallChange,
   preselectedTeamId,
-  presetPicker,
-  hasPresets = false,
 }: SelectMcpServerCredentialTypeAndTeamsProps) {
   const { data: teams, isLoading: isLoadingTeams } = useTeams();
   const { data: installedServers } = useMcpServers();
   const { data: session } = useSession();
-  const { singular } = usePresetEntityName();
   const currentUserId = session?.user?.id;
 
   // WHY: Check mcpServer:update permission to determine if user can create team installations
@@ -329,28 +319,23 @@ export function SelectMcpServerCredentialTypeAndTeams({
 
   if (!canInstall) {
     return (
-      <>
-        {presetPicker}
-        <Alert>
-          <AlertTriangle className="!text-amber-500 h-4 w-4" />
-          <AlertDescription>
-            <span className="font-semibold">Already installed</span>
-            <p className="mt-1">
-              This MCP server is already installed everywhere you have
-              permission to install it
-              {presetPicker ? ` for the selected ${singular}` : ""}.
-            </p>
-          </AlertDescription>
-        </Alert>
-      </>
+      <Alert>
+        <AlertTriangle className="!text-amber-500 h-4 w-4" />
+        <AlertDescription>
+          <span className="font-semibold">Already installed</span>
+          <p className="mt-1">
+            This MCP server is already installed everywhere you have permission
+            to install it.
+          </p>
+        </AlertDescription>
+      </Alert>
     );
   }
 
   // When personalOnly, orgOnly, or preselectedTeamId, skip the scope selector
-  // entirely — scope is fixed. Still render the preset picker (if provided)
-  // so the install dialog can pick a preset.
+  // entirely — scope is fixed.
   if (personalOnly || orgOnly || preselectedTeamId) {
-    return presetPicker ? presetPicker : null;
+    return null;
   }
 
   const hideSelector = isReinstall || visibilityOptions.length <= 1;
@@ -360,7 +345,6 @@ export function SelectMcpServerCredentialTypeAndTeams({
       className="space-y-4"
       data-testid={E2eTestId.SelectCredentialTypeTeamDropdown}
     >
-      {hasPresets && presetPicker}
       {!hideSelector && (
         <VisibilitySelector
           label="Install for"

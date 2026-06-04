@@ -2,13 +2,10 @@ import { archestraApiSdk, type archestraApiTypes } from "@shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { environmentKeys } from "@/lib/environment.query";
-import { usePresetEntityName } from "@/lib/organization.query";
 
 const {
-  createCatalogChild,
   createInternalMcpCatalogItem,
   deleteInternalMcpCatalogItem,
-  getCatalogChildren,
   getDeploymentYamlPreview,
   getInternalMcpCatalog,
   getInternalMcpCatalogLabelKeys,
@@ -18,7 +15,6 @@ const {
   refreshInternalMcpCatalogImage,
   reinstallInternalMcpCatalogItem,
   resetDeploymentYaml,
-  updateCatalogChild,
   updateInternalMcpCatalogItem,
   validateDeploymentYaml,
 } = archestraApiSdk;
@@ -26,8 +22,6 @@ const {
 type InternalMcpCatalogParams = {
   initialData?: archestraApiTypes.GetInternalMcpCatalogResponses["200"];
   enabled?: boolean;
-  /** When true, include child preset rows (parentCatalogItemId IS NOT NULL) in the response. */
-  includeChildren?: boolean;
 };
 type McpCatalogLabelValuesQuery = NonNullable<
   archestraApiTypes.GetInternalMcpCatalogLabelValuesData["query"]
@@ -38,15 +32,9 @@ type UpdateInternalMcpCatalogItemParams =
   };
 
 export function useInternalMcpCatalog(params?: InternalMcpCatalogParams) {
-  const includeChildren = params?.includeChildren ?? false;
   return useQuery({
-    queryKey: ["mcp-catalog", { includeChildren }],
-    queryFn: async () =>
-      (
-        await getInternalMcpCatalog(
-          includeChildren ? { query: { includeChildren: true } } : {},
-        )
-      ).data ?? [],
+    queryKey: ["mcp-catalog"],
+    queryFn: async () => (await getInternalMcpCatalog()).data ?? [],
     initialData: params?.initialData,
     enabled: params?.enabled,
   });
@@ -288,80 +276,6 @@ export function useK8sImagePullSecrets() {
     queryFn: async () => {
       const response = await getK8sImagePullSecrets();
       return response.data ?? [];
-    },
-  });
-}
-
-/**
- * A "preset" in the UI is a child catalog item — a row in
- * internal_mcp_catalog with `parentCatalogItemId` set to the parent's id.
- * The parent itself acts as the default preset and is NOT returned here.
- */
-export type CatalogPreset =
-  archestraApiTypes.GetCatalogChildrenResponses["200"][number];
-
-export function useCatalogPresets(catalogId: string | null) {
-  return useQuery({
-    queryKey: ["mcp-catalog", catalogId, "presets"],
-    queryFn: async () => {
-      if (!catalogId) return [];
-      const response = await getCatalogChildren({ path: { catalogId } });
-      return response.data ?? [];
-    },
-    enabled: !!catalogId,
-  });
-}
-
-export function useCreateCatalogPreset(catalogId: string) {
-  const queryClient = useQueryClient();
-  const { singular } = usePresetEntityName();
-  return useMutation({
-    mutationFn: async (
-      data: archestraApiTypes.CreateCatalogChildData["body"],
-    ) => {
-      const response = await createCatalogChild({
-        path: { catalogId },
-        body: data,
-      });
-      return response.data;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({
-        queryKey: ["mcp-catalog", catalogId, "presets"],
-      });
-      toast.success(`${singular} created`);
-    },
-    onError: (error) => {
-      console.error("Create preset error:", error);
-      toast.error(`Failed to create ${singular}`);
-    },
-  });
-}
-
-export function useUpdateCatalogPreset(catalogId: string) {
-  const queryClient = useQueryClient();
-  const { singular } = usePresetEntityName();
-  return useMutation({
-    mutationFn: async (params: {
-      presetId: string;
-      data: archestraApiTypes.UpdateCatalogChildData["body"];
-    }) => {
-      const response = await updateCatalogChild({
-        path: { catalogId, childId: params.presetId },
-        body: params.data,
-      });
-      return response.data;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({
-        queryKey: ["mcp-catalog", catalogId, "presets"],
-      });
-      queryClient.invalidateQueries({ queryKey: ["mcp-servers"] });
-      toast.success(`${singular} updated`);
-    },
-    onError: (error) => {
-      console.error("Update preset error:", error);
-      toast.error(`Failed to update ${singular}`);
     },
   });
 }

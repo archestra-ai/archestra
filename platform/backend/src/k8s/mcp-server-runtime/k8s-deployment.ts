@@ -912,18 +912,6 @@ export default class K8sDeployment {
       this.mcpServer.catalogId,
     );
 
-    // Child catalog items (presets) don't carry their own localConfig — they
-    // inherit it from the parent. Fall back to the parent so the deployment
-    // builder can read command, args, image, environment schema, etc.
-    if (item && !item.localConfig && item.parentCatalogItemId) {
-      const parent = await InternalMcpCatalogModel.findById(
-        item.parentCatalogItemId,
-      );
-      if (parent?.localConfig) {
-        item.localConfig = parent.localConfig;
-      }
-    }
-
     this.catalogItem = item;
     return this.catalogItem;
   }
@@ -1897,10 +1885,9 @@ export default class K8sDeployment {
         // Add env var value to envMap based on prompting behavior
         // Note: Values may be booleans/numbers at runtime despite type annotations, so we convert to string
         let value: string | undefined;
-        if (envDef.promptOnInstallation || envDef.promptOnPreset) {
-          // Value supplied via the install request (either install-time
-          // input or preset overlay merged in by the install route) — read
-          // from environmentValues.
+        if (envDef.promptOnInstallation) {
+          // Value supplied via the install request (install-time input) —
+          // read from environmentValues.
           const rawValue = this.environmentValues?.[envDef.key];
           value = rawValue != null ? String(rawValue) : undefined;
         } else {

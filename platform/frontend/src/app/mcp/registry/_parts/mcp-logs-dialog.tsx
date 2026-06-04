@@ -18,7 +18,7 @@ import {
   RefreshCw,
   Terminal,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -40,7 +40,6 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useAnimatedDots } from "@/lib/hooks/use-animated-dots";
-import { usePresetEntityName } from "@/lib/organization.query";
 import websocketService from "@/lib/websocket/websocket";
 import {
   type DeploymentState,
@@ -60,7 +59,6 @@ interface McpLogsDialogProps {
     ownerEmail?: string | null;
     teamDetails?: { teamId: string; name: string } | null;
     scope?: ResourceVisibilityScope | null;
-    presetLabel?: string | null;
   }[];
   deploymentStatuses: Record<string, McpDeploymentStatusEntry>;
   /** Hide the installation dropdown selector */
@@ -122,13 +120,6 @@ interface McpLogsContentProps {
   controlledTab?: McpLogsTab;
   /** When true, hides the tab bar (use with controlledTab) */
   hideTabBar?: boolean;
-  /**
-   * Externally-controlled preset filter. When provided, takes ownership of
-   * the preset state from this component (used by the settings dialog so the
-   * selector can live in its page header).
-   */
-  controlledSelectedPreset?: string | null;
-  onSelectedPresetChange?: (preset: string) => void;
   onReinstall?: (serverId: string) => void | Promise<void>;
   initialServerId?: string | null;
 }
@@ -142,12 +133,9 @@ export function McpLogsContent({
   hideHeader = false,
   controlledTab,
   hideTabBar = false,
-  controlledSelectedPreset,
-  onSelectedPresetChange,
   onReinstall,
   initialServerId = null,
 }: McpLogsContentProps) {
-  const isPresetControlled = controlledSelectedPreset !== undefined;
   const [internalTab, setInternalTab] = useState<McpLogsTab>("logs");
   const activeTab = controlledTab ?? internalTab;
   const setActiveTab = (tab: McpLogsTab) => {
@@ -174,88 +162,24 @@ export function McpLogsContent({
 
   // State for selected installation
   const [serverId, setServerId] = useState<string | null>(null);
-  // State for selected preset (used to filter installs across all tabs).
-  // When `controlledSelectedPreset` is provided, the parent owns this state.
-  const [internalSelectedPreset, setInternalSelectedPreset] = useState<
-    string | null
-  >(null);
-  const selectedPreset = isPresetControlled
-    ? (controlledSelectedPreset ?? null)
-    : internalSelectedPreset;
-  const setSelectedPreset = isPresetControlled
-    ? (next: string) => onSelectedPresetChange?.(next)
-    : setInternalSelectedPreset;
-
-  // Distinct preset labels represented across the installs we received.
-  const distinctPresets = useMemo(() => {
-    const ordered: string[] = [];
-    const seen = new Set<string>();
-    for (const i of installs) {
-      const label = i.presetLabel ?? "default";
-      if (!seen.has(label)) {
-        seen.add(label);
-        ordered.push(label);
-      }
-    }
-    return ordered;
-  }, [installs]);
-
-  // Preset of the install we were asked to open with; falls back to first.
-  const initialPreset = useMemo(() => {
-    if (initialServerId) {
-      const found = installs.find((i) => i.id === initialServerId);
-      if (found) return found.presetLabel ?? "default";
-    }
-    return installs[0]?.presetLabel ?? "default";
-  }, [installs, initialServerId]);
 
   // Reset when dialog closes so the next open picks up a fresh initialServerId.
-  // Only resets internal preset state — the parent owns it when controlled.
   useEffect(() => {
     if (!isActive) {
       setServerId(null);
-      if (!isPresetControlled) setInternalSelectedPreset(null);
     }
-  }, [isActive, isPresetControlled]);
+  }, [isActive]);
 
-  // Default the preset selector when the dialog opens. Skipped when the
-  // parent controls the preset value.
+  // Default to initialServerId or first installation when dialog opens.
   useEffect(() => {
-    if (isPresetControlled) return;
-    if (isActive && !selectedPreset && distinctPresets.length > 0) {
-      setSelectedPreset(initialPreset);
-    }
-  }, [
-    isActive,
-    isPresetControlled,
-    selectedPreset,
-    distinctPresets,
-    initialPreset,
-    setSelectedPreset,
-  ]);
-
-  // Filter installs by selected preset. Until selectedPreset is set (one tick
-  // on first open) we show everything to avoid a flash of "no installs".
-  // The literal "All" is the no-filter sentinel used by the settings dialog
-  // when "All" is picked in the page header.
-  const filteredInstalls = useMemo(() => {
-    if (!selectedPreset || selectedPreset === "All") return installs;
-    return installs.filter(
-      (i) => (i.presetLabel ?? "default") === selectedPreset,
-    );
-  }, [installs, selectedPreset]);
-
-  // Default to initialServerId or first installation when dialog opens, and
-  // re-pick when the preset filter changes the visible set.
-  useEffect(() => {
-    if (!isActive || filteredInstalls.length === 0) return;
-    if (serverId && filteredInstalls.some((i) => i.id === serverId)) return;
+    if (!isActive || installs.length === 0) return;
+    if (serverId && installs.some((i) => i.id === serverId)) return;
     const initial =
-      initialServerId && filteredInstalls.some((i) => i.id === initialServerId)
+      initialServerId && installs.some((i) => i.id === initialServerId)
         ? initialServerId
-        : filteredInstalls[0].id;
+        : installs[0].id;
     setServerId(initial);
-  }, [isActive, filteredInstalls, serverId, initialServerId]);
+  }, [isActive, installs, serverId, initialServerId]);
 
   const currentDeploymentStatus = serverId
     ? deploymentStatuses[serverId]
@@ -519,21 +443,14 @@ export function McpLogsContent({
               <Terminal className="h-5 w-5 flex-shrink-0" />
               <span className="truncate">{serverName}</span>
             </DialogTitle>
-            {distinctPresets.length > 1 && selectedPreset && (
-              <PresetSelector
-                presets={distinctPresets}
-                selectedPreset={selectedPreset}
-                setSelectedPreset={setSelectedPreset}
-              />
-            )}
           </div>
         </DialogHeader>
       )}
 
       {/* Pod selector */}
-      {!hideInstallationSelector && filteredInstalls.length >= 1 && (
+      {!hideInstallationSelector && installs.length >= 1 && (
         <InstanceSelector
-          installs={filteredInstalls}
+          installs={installs}
           deploymentStatuses={deploymentStatuses}
           serverId={serverId}
           setServerId={setServerId}
@@ -769,54 +686,6 @@ export function McpLogsContent({
   );
 }
 
-interface PresetSelectorProps {
-  presets: string[];
-  selectedPreset: string;
-  setSelectedPreset: (label: string) => void;
-}
-
-export function PresetSelector({
-  presets,
-  selectedPreset,
-  setSelectedPreset,
-}: PresetSelectorProps) {
-  const [open, setOpen] = useState(false);
-  const { singular } = usePresetEntityName();
-  return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <Button
-          variant="outline"
-          size="sm"
-          className="h-7 flex-shrink-0 gap-1.5 text-xs font-normal"
-        >
-          <span className="text-muted-foreground">{singular}:</span>
-          <span className="truncate max-w-[10rem]">{selectedPreset}</span>
-          <ChevronsUpDown className="h-3 w-3 opacity-50" />
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent align="end" className="w-48 p-1">
-        <div className="flex flex-col">
-          {presets.map((label) => (
-            <button
-              key={label}
-              type="button"
-              className="flex items-center justify-between rounded-sm px-2 py-1.5 text-sm text-left hover:bg-accent"
-              onClick={() => {
-                setSelectedPreset(label);
-                setOpen(false);
-              }}
-            >
-              <span className="truncate">{label}</span>
-              {label === selectedPreset && <Check className="h-4 w-4" />}
-            </button>
-          ))}
-        </div>
-      </PopoverContent>
-    </Popover>
-  );
-}
-
 interface InstanceSelectorProps {
   installs: McpLogsContentProps["installs"];
   deploymentStatuses: Record<string, McpDeploymentStatusEntry>;
@@ -895,11 +764,6 @@ function InstanceSelector({
           <DeploymentStatusDot state={dotState} />
           <div className="flex flex-col min-w-0">
             <div className="flex items-center gap-2 min-w-0">
-              {selected?.presetLabel && (
-                <span className="rounded-sm bg-accent text-accent-foreground text-[10px] font-medium px-1.5 py-0.5 leading-none">
-                  {selected.presetLabel}
-                </span>
-              )}
               <span className="font-mono text-sm font-medium truncate leading-tight">
                 {selected?.name ?? "—"}
               </span>
@@ -1035,11 +899,6 @@ function InstanceSelector({
                   <DeploymentStatusDot state={d} />
                   <div className="flex flex-col min-w-0 flex-1">
                     <div className="flex items-center gap-2 min-w-0">
-                      {install.presetLabel && (
-                        <span className="rounded-sm bg-accent text-accent-foreground text-[10px] font-medium px-1.5 py-0.5 leading-none flex-shrink-0">
-                          {install.presetLabel}
-                        </span>
-                      )}
                       <span className="font-mono text-xs font-medium truncate">
                         {install.name}
                       </span>

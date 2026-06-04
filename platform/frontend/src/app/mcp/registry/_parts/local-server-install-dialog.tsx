@@ -14,10 +14,7 @@ import type { Components } from "react-markdown";
 import ReactMarkdown from "react-markdown";
 import remarkBreaks from "remark-breaks";
 import remarkGfm from "remark-gfm";
-import {
-  StandardDialog,
-  StandardFormDialog,
-} from "@/components/standard-dialog";
+import { StandardFormDialog } from "@/components/standard-dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -33,16 +30,7 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import { useFeature } from "@/lib/config/config.query";
-import { useCatalogPresets } from "@/lib/mcp/internal-mcp-catalog.query";
-import { useMcpPresetEntries } from "@/lib/mcp/mcp-preset-entry.query";
-import { usePresetEntityName } from "@/lib/organization.query";
 import { useTeamsWithVaultFolders } from "@/lib/teams/team.query";
-import { InstallPresetPicker } from "./install-preset-picker";
-import { FillPresetFieldsStep } from "./preset-fallback-fields";
-import {
-  compileValidationRegex,
-  presetHasUnfilledFields,
-} from "./preset-helpers";
 import {
   type McpServerInstallScope,
   SelectMcpServerCredentialTypeAndTeams,
@@ -84,7 +72,7 @@ const markdownComponents: Components = {
 };
 
 export interface LocalServerInstallResult {
-  /** Catalog id to install from — parent or selected preset. */
+  /** Catalog id to install from. */
   catalogId: string;
   environmentValues: Record<string, string>;
   userConfigValues?: Record<string, string>;
@@ -114,12 +102,6 @@ interface LocalServerInstallDialogProps {
   isReauth?: boolean;
   /** Pre-select a specific team in the credential type selector */
   preselectedTeamId?: string | null;
-  /**
-   * Pre-select a preset (child catalog) in the InstallPresetPicker when the
-   * dialog opens. Used when launching install from a specific preset card on
-   * the Credentials page. Falls back to the parent's id when unset.
-   */
-  preselectedCatalogId?: string | null;
   /** When true, only personal installation is allowed */
   personalOnly?: boolean;
   /** When true, only organization-wide installation is allowed */
@@ -137,7 +119,6 @@ export function LocalServerInstallDialog({
   existingScope,
   isReauth = false,
   preselectedTeamId,
-  preselectedCatalogId,
   personalOnly: personalOnlyProp = false,
   orgOnly = false,
 }: LocalServerInstallDialogProps) {
@@ -155,71 +136,20 @@ export function LocalServerInstallDialog({
   const [serviceAccount, setServiceAccount] = useState<string | undefined>(
     catalogItem?.localConfig?.serviceAccount,
   );
-  const [selectedCatalogId, setSelectedCatalogId] = useState<string>(
-    preselectedCatalogId ?? catalogItem?.id ?? "",
-  );
-  const { data: presets = [] } = useCatalogPresets(catalogItem?.id ?? null);
-  const { data: presetEntries = [] } = useMcpPresetEntries();
-  const { singular, defaultValidationRegex } = usePresetEntityName();
-  const hasPresets = presets.length > 0;
-
-  // Compile the preset entry's validation regex for child installs; for the
-  // implicit default row (no entry) fall back to the org-wide default regex.
-  const _selectedChildPreset =
-    catalogItem && selectedCatalogId && selectedCatalogId !== catalogItem.id
-      ? presets.find((p) => p.id === selectedCatalogId)
-      : null;
-  const presetValidationRegex = (() => {
-    const entryId = _selectedChildPreset?.presetEntryId ?? null;
-    if (!entryId) return compileValidationRegex(defaultValidationRegex);
-    const entry = presetEntries.find((e) => e.id === entryId);
-    return compileValidationRegex(entry?.validationRegex);
-  })();
-
-  // Step 1 ("fill-preset") asks the caller to fill in any preset-scoped fields
-  // the selected preset doesn't have values for, persists them onto the preset
-  // row, then transitions to Step 2 ("install"). Skipped for reinstall/reauth.
-  const selectedPreset =
-    selectedCatalogId === catalogItem?.id
-      ? catalogItem
-      : (presets.find((p) => p.id === selectedCatalogId) ?? null);
-  const needsFillStep =
-    !isReinstall &&
-    !isReauth &&
-    !!catalogItem &&
-    presetHasUnfilledFields(catalogItem, selectedPreset);
-  const [step, setStep] = useState<"fill-preset" | "install">(
-    needsFillStep ? "fill-preset" : "install",
-  );
-
-  useEffect(() => {
-    if (isOpen && catalogItem) {
-      setSelectedCatalogId(preselectedCatalogId ?? catalogItem.id);
-    }
-  }, [isOpen, catalogItem, preselectedCatalogId]);
-
-  useEffect(() => {
-    if (!isOpen) return;
-    setStep(needsFillStep ? "fill-preset" : "install");
-  }, [isOpen, needsFillStep]);
   const userConfig =
     (catalogItem?.userConfig as UserConfigType | null | undefined) || {};
   const promptableUserConfig = Object.fromEntries(
     Object.entries(userConfig).filter(([_fieldName, fieldConfig]) => {
-      return (
-        fieldConfig.promptOnInstallation !== false &&
-        !fieldConfig.promptOnPreset
-      );
+      return fieldConfig.promptOnInstallation !== false;
     }),
   );
   // Extract environment variables that need prompting during installation.
   // Multi-tenant catalogs share one deployment, so env vars are catalog-level
   // (set once by an admin). Per-caller install never prompts for env values.
-  // Preset-scoped env vars are admin-set per preset and never prompted.
   const promptedEnvVars = catalogItem?.multitenant
     ? []
     : catalogItem?.localConfig?.environment?.filter(
-        (env) => env.promptOnInstallation !== false && !env.promptOnPreset,
+        (env) => env.promptOnInstallation !== false,
       ) || [];
 
   // Separate secret vs non-secret env vars
@@ -337,7 +267,7 @@ export function LocalServerInstallDialog({
   };
 
   const handleInstall = async () => {
-    if (!catalogItem || step !== "install") return;
+    if (!catalogItem) return;
 
     const finalEnvironmentValues: Record<string, string> = {};
     const finalUserConfigValues: Record<string, string> = {};
@@ -399,7 +329,7 @@ export function LocalServerInstallDialog({
     }
 
     await onConfirm({
-      catalogId: selectedCatalogId || catalogItem?.id || "",
+      catalogId: catalogItem.id,
       environmentValues: finalEnvironmentValues,
       userConfigValues: finalUserConfigValues,
       scope,
@@ -487,49 +417,7 @@ export function LocalServerInstallDialog({
           return !!value?.trim();
         }));
 
-  // Apply the preset entry's validation regex to all prompted free-text user
-  // values: non-secret env vars + non-sensitive userConfig fields. Skipped
-  // for booleans, numbers, and (in vault mode) for sensitive fields whose
-  // value is a vault reference rather than a free-text string.
-  const envRegexErrors: Record<string, string | null> = {};
-  const userConfigRegexErrors: Record<string, string | null> = {};
-  if (presetValidationRegex) {
-    for (const env of nonSecretEnvVars) {
-      if (env.type === "boolean" || env.type === "number") continue;
-      const v = environmentValues[env.key] ?? "";
-      if (!v) continue;
-      envRegexErrors[env.key] = presetValidationRegex.test(v)
-        ? null
-        : `Value does not match the ${singular} Validation Rule`;
-    }
-    if (!useVaultSecrets) {
-      for (const env of allSecrets) {
-        const v = environmentValues[env.key] ?? "";
-        if (!v) continue;
-        envRegexErrors[env.key] = presetValidationRegex.test(v)
-          ? null
-          : `Value does not match the ${singular} Validation Rule`;
-      }
-    }
-    for (const [fieldName, fieldConfig] of Object.entries(
-      promptableUserConfig,
-    )) {
-      if (fieldConfig.type === "boolean" || fieldConfig.type === "number") {
-        continue;
-      }
-      if (useVaultSecrets && fieldConfig.sensitive) continue;
-      const v = userConfigValues[fieldName] ?? "";
-      if (!v) continue;
-      userConfigRegexErrors[fieldName] = presetValidationRegex.test(v)
-        ? null
-        : `Value does not match the ${singular} Validation Rule`;
-    }
-  }
-  const hasRegexErrors =
-    Object.values(envRegexErrors).some((e) => !!e) ||
-    Object.values(userConfigRegexErrors).some((e) => !!e);
-
-  const isValid = isNonSecretValid && isSecretsValid && !hasRegexErrors;
+  const isValid = isNonSecretValid && isSecretsValid;
   const sensitiveRequiredUserConfig = Object.entries(
     promptableUserConfig,
   ).filter(([_, cfg]) => cfg.required && cfg.sensitive);
@@ -557,26 +445,6 @@ export function LocalServerInstallDialog({
   const hasPromptedUserConfig = Object.keys(promptableUserConfig).length > 0;
   const isUserConfigValid =
     isNonSensitiveUserConfigValid && isSensitiveUserConfigValid;
-
-  if (step === "fill-preset" && catalogItem) {
-    return (
-      <StandardDialog
-        open={isOpen}
-        onOpenChange={handleClose}
-        title={<span>Install - {catalogItem.name}</span>}
-        size="medium"
-        className="max-w-2xl max-h-[80vh]"
-        bodyClassName="space-y-6 px-6"
-      >
-        <FillPresetFieldsStep
-          catalog={catalogItem}
-          selectedPresetId={selectedCatalogId || catalogItem.id}
-          onSaved={() => setStep("install")}
-          onCancel={handleClose}
-        />
-      </StandardDialog>
-    );
-  }
 
   return (
     <StandardFormDialog
@@ -648,9 +516,7 @@ export function LocalServerInstallDialog({
 
       <SelectMcpServerCredentialTypeAndTeams
         onTeamChange={setSelectedTeamId}
-        catalogId={
-          isReinstall ? undefined : selectedCatalogId || catalogItem?.id
-        }
+        catalogId={isReinstall ? undefined : catalogItem?.id}
         onScopeChange={setScope}
         onCanInstallChange={setCanInstall}
         isReinstall={isReinstall}
@@ -662,16 +528,6 @@ export function LocalServerInstallDialog({
         }
         orgOnly={orgOnly}
         preselectedTeamId={preselectedTeamId}
-        hasPresets={hasPresets && !isReinstall && !isReauth}
-        presetPicker={
-          !isReinstall && !isReauth && catalogItem && hasPresets ? (
-            <InstallPresetPicker
-              parent={catalogItem}
-              value={selectedCatalogId}
-              onChange={setSelectedCatalogId}
-            />
-          ) : null
-        }
       />
 
       {useVaultSecrets && scope !== "team" && (
@@ -781,13 +637,7 @@ export function LocalServerInstallDialog({
                       placeholder={`Enter value for ${env.key}`}
                       className="font-mono"
                       disabled={isInstalling}
-                      aria-invalid={envRegexErrors[env.key] ? true : undefined}
                     />
-                  )}
-                  {envRegexErrors[env.key] && (
-                    <p className="text-xs text-destructive">
-                      {envRegexErrors[env.key]}
-                    </p>
                   )}
                 </div>
               ))}
@@ -869,15 +719,7 @@ export function LocalServerInstallDialog({
                             placeholder={`Enter value for ${env.key}`}
                             className="font-mono"
                             disabled={isInstalling}
-                            aria-invalid={
-                              envRegexErrors[env.key] ? true : undefined
-                            }
                           />
-                        )}
-                        {envRegexErrors[env.key] && (
-                          <p className="text-xs text-destructive">
-                            {envRegexErrors[env.key]}
-                          </p>
                         )}
                       </div>
                     ))}
@@ -1081,9 +923,6 @@ export function LocalServerInstallDialog({
                           placeholder={`Enter value for ${fieldConfig.title || fieldName}`}
                           className="font-mono"
                           disabled={isInstalling}
-                          aria-invalid={
-                            userConfigRegexErrors[fieldName] ? true : undefined
-                          }
                         />
                       ) : (
                         <Input
@@ -1096,15 +935,7 @@ export function LocalServerInstallDialog({
                           placeholder={`Enter value for ${fieldConfig.title || fieldName}`}
                           className="font-mono"
                           disabled={isInstalling}
-                          aria-invalid={
-                            userConfigRegexErrors[fieldName] ? true : undefined
-                          }
                         />
-                      )}
-                      {userConfigRegexErrors[fieldName] && (
-                        <p className="text-xs text-destructive">
-                          {userConfigRegexErrors[fieldName]}
-                        </p>
                       )}
                     </div>
                   ),

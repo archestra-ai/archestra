@@ -36,38 +36,20 @@ export const UserConfigFieldDefaultSchema = z.union([
   z.array(z.string()),
 ]);
 
-export const UserConfigFieldSchema = z
-  .object({
-    type: z.enum(["string", "number", "boolean", "directory", "file"]),
-    title: z.string(),
-    description: z.string(),
-    promptOnInstallation: z.boolean().optional(),
-    /**
-     * When true, the value is set per preset (catalog row's
-     * preset_field_values: parent row carries default-preset values, child
-     * rows carry their own overlay). Mutually exclusive with
-     * promptOnInstallation.
-     */
-    promptOnPreset: z.boolean().optional(),
-    required: z.boolean().optional(),
-    default: UserConfigFieldDefaultSchema.optional(),
-    multiple: z.boolean().optional(),
-    sensitive: z.boolean().optional(),
-    min: z.number().optional(),
-    max: z.number().optional(),
-    headerName: z.string().optional(),
-    valuePrefix: z.string().optional(),
-  })
-  .superRefine((value, ctx) => {
-    if (value.promptOnInstallation && value.promptOnPreset) {
-      ctx.addIssue({
-        code: "custom",
-        path: ["promptOnPreset"],
-        message:
-          "promptOnInstallation and promptOnPreset are mutually exclusive",
-      });
-    }
-  });
+export const UserConfigFieldSchema = z.object({
+  type: z.enum(["string", "number", "boolean", "directory", "file"]),
+  title: z.string(),
+  description: z.string(),
+  promptOnInstallation: z.boolean().optional(),
+  required: z.boolean().optional(),
+  default: UserConfigFieldDefaultSchema.optional(),
+  multiple: z.boolean().optional(),
+  sensitive: z.boolean().optional(),
+  min: z.number().optional(),
+  max: z.number().optional(),
+  headerName: z.string().optional(),
+  valuePrefix: z.string().optional(),
+});
 
 // Define a version of LocalConfigSchema for SELECT operations
 // where required and description fields are optional (database may not have them)
@@ -82,7 +64,6 @@ const LocalConfigSelectSchema = z.object({
         type: z.enum(["plain_text", "secret", "boolean", "number"]),
         value: z.string().optional(),
         promptOnInstallation: z.boolean(),
-        promptOnPreset: z.boolean().optional(),
         required: z.boolean().optional(), // Optional in database
         description: z.string().optional(), // Optional in database
         default: LocalConfigEnvironmentDefaultSchema.optional(), // Default value for installation dialog
@@ -118,29 +99,35 @@ const CatalogLabelSchema = z.object({
   value: z.string().min(1),
 });
 
-export const PresetFieldValuesSchema = z.record(
-  z.string(),
-  UserConfigFieldDefaultSchema,
-);
+// The preset feature is removed. Its columns remain on the Drizzle table
+// (non-destructive — see database/schemas/internal-mcp-catalog.ts) but are no
+// longer exposed by the API, so they are omitted from the derived schemas.
+const PRESET_COLUMNS_OMIT = {
+  parentCatalogItemId: true,
+  childName: true,
+  presetEntryId: true,
+  presetFieldValues: true,
+  presetSecretId: true,
+} as const;
 
 export const SelectInternalMcpCatalogSchema = createSelectSchema(
   schema.internalMcpCatalogTable,
-).extend({
-  serverType: InternalMcpCatalogServerTypeSchema,
-  authFields: z.array(AuthFieldSchema).nullable(),
-  userConfig: z.record(z.string(), UserConfigFieldSchema).nullable(),
-  oauthConfig: OAuthConfigSchema.nullable(),
-  enterpriseManagedConfig: EnterpriseManagedCredentialConfigSchema.nullable(),
-  localConfig: LocalConfigSelectSchema.nullable(),
-  parentCatalogItemId: z.string().uuid().nullable(),
-  clonedFrom: z.string().uuid().nullable(),
-  presetFieldValues: PresetFieldValuesSchema.default({}),
-  // Labels are loaded from the junction table, not from the DB row
-  labels: z.array(CatalogLabelSchema).default([]),
-  // Teams are loaded from the junction table, not from the DB row
-  teams: z.array(z.object({ id: z.string(), name: z.string() })).default([]),
-  authorName: z.string().nullable().optional(),
-});
+)
+  .omit(PRESET_COLUMNS_OMIT)
+  .extend({
+    serverType: InternalMcpCatalogServerTypeSchema,
+    authFields: z.array(AuthFieldSchema).nullable(),
+    userConfig: z.record(z.string(), UserConfigFieldSchema).nullable(),
+    oauthConfig: OAuthConfigSchema.nullable(),
+    enterpriseManagedConfig: EnterpriseManagedCredentialConfigSchema.nullable(),
+    localConfig: LocalConfigSelectSchema.nullable(),
+    clonedFrom: z.string().uuid().nullable(),
+    // Labels are loaded from the junction table, not from the DB row
+    labels: z.array(CatalogLabelSchema).default([]),
+    // Teams are loaded from the junction table, not from the DB row
+    teams: z.array(z.object({ id: z.string(), name: z.string() })).default([]),
+    authorName: z.string().nullable().optional(),
+  });
 
 export const ListInternalMcpCatalogSchema =
   SelectInternalMcpCatalogSchema.extend({
@@ -164,8 +151,6 @@ const InsertInternalMcpCatalogSchemaBase = createInsertSchema(
     enterpriseManagedConfig:
       EnterpriseManagedCredentialConfigSchema.nullable().optional(),
     localConfig: LocalConfigSchema.nullable().optional(),
-    presetFieldValues: PresetFieldValuesSchema.optional(),
-    parentCatalogItemId: z.string().uuid().nullable().optional(),
     clonedFrom: z.string().uuid().nullable().optional(),
     // Labels are synced separately via McpCatalogLabelModel
     labels: z.array(CatalogLabelSchema).optional(),
@@ -177,6 +162,7 @@ const InsertInternalMcpCatalogSchemaBase = createInsertSchema(
     updatedAt: true,
     organizationId: true,
     authorId: true,
+    ...PRESET_COLUMNS_OMIT,
   });
 
 export const InsertInternalMcpCatalogSchema =
@@ -197,7 +183,6 @@ const UpdateInternalMcpCatalogSchemaBase = createUpdateSchema(
     enterpriseManagedConfig:
       EnterpriseManagedCredentialConfigSchema.nullable().optional(),
     localConfig: LocalConfigSchema.nullable().optional(),
-    presetFieldValues: PresetFieldValuesSchema.optional(),
     // Labels are synced separately via McpCatalogLabelModel
     labels: z.array(CatalogLabelSchema).optional(),
     // Team IDs for team scope (synced separately)
@@ -211,10 +196,9 @@ const UpdateInternalMcpCatalogSchemaBase = createUpdateSchema(
     authorId: true,
     // Tenancy is locked after creation
     multitenant: true,
-    // Parent link is locked after creation
-    parentCatalogItemId: true,
     // Clone lineage is locked after creation
     clonedFrom: true,
+    ...PRESET_COLUMNS_OMIT,
   });
 
 export const UpdateInternalMcpCatalogSchema =
@@ -224,20 +208,6 @@ export const PartialUpdateInternalMcpCatalogSchema =
   UpdateInternalMcpCatalogSchemaBase.partial().superRefine(
     validateInternalMcpCatalog,
   );
-
-export const CreateChildCatalogSchema = z.object({
-  /**
-   * The org-level preset entry (from /mcp/registry/org-structure) being
-   * configured for this catalog. The server derives the child's name from
-   * the entry.
-   */
-  presetEntryId: z.string().uuid(),
-  presetFieldValues: PresetFieldValuesSchema.optional(),
-});
-
-export const UpdateChildCatalogSchema = z.object({
-  presetFieldValues: PresetFieldValuesSchema.optional(),
-});
 
 export type InternalMcpCatalogServerType = z.infer<
   typeof InternalMcpCatalogServerTypeSchema
@@ -264,9 +234,6 @@ export type InsertInternalMcpCatalog = z.infer<
 export type UpdateInternalMcpCatalog = z.infer<
   typeof UpdateInternalMcpCatalogSchema
 >;
-export type PresetFieldValues = z.infer<typeof PresetFieldValuesSchema>;
-export type CreateChildCatalog = z.infer<typeof CreateChildCatalogSchema>;
-export type UpdateChildCatalog = z.infer<typeof UpdateChildCatalogSchema>;
 
 function validateEnterpriseManagedTransportConfig(
   value: {
@@ -332,13 +299,9 @@ function validateHeaderMappedUserConfig(
     normalizedHeaderNames.set(normalizedHeaderName, fieldName);
 
     // A header value is "static" (= persisted in plaintext at
-    // `userConfig[field].default` on the catalog row) only when neither
-    // prompt flag is set. Preset-scoped fields (`promptOnPreset: true`)
-    // route sensitive values to `preset_secret_id`'s bag, so they're
-    // allowed to be sensitive even though `promptOnInstallation` is false.
-    const isStaticHeader =
-      fieldConfig.promptOnInstallation === false &&
-      fieldConfig.promptOnPreset !== true;
+    // `userConfig[field].default` on the catalog row) when it is not
+    // install-prompted.
+    const isStaticHeader = fieldConfig.promptOnInstallation === false;
     if (fieldConfig.sensitive === true && isStaticHeader) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
@@ -349,10 +312,8 @@ function validateHeaderMappedUserConfig(
     }
 
     // Sensitive header-mapped fields must not carry a plaintext `default`.
-    // `default` is persisted as-is in the catalog row's userConfig jsonb;
-    // applyPresetHeaderMappings falls back to it whenever a preset row's
-    // overlay lacks the key, so a sensitive default would land in plaintext
-    // on the row AND be sent verbatim on every empty-overlay request.
+    // `default` is persisted as-is in the catalog row's userConfig jsonb, so
+    // a sensitive default would land in plaintext on the row.
     if (
       fieldConfig.sensitive === true &&
       fieldConfig.default !== undefined &&
@@ -362,7 +323,7 @@ function validateHeaderMappedUserConfig(
         code: z.ZodIssueCode.custom,
         path: ["userConfig", fieldName, "default"],
         message:
-          "Sensitive header-mapped userConfig fields cannot carry a plaintext default. Supply the value via preset_secret_id (for preset scope) or the per-install Secret bag (for installation scope) instead.",
+          "Sensitive header-mapped userConfig fields cannot carry a plaintext default. Supply the value via the per-install Secret bag (installation scope) instead.",
       });
     }
   }

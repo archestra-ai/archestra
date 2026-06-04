@@ -356,26 +356,11 @@ export class McpServerRuntimeManager {
 
     try {
       // Fetch catalog item (needed for conditional env var logic).
-      // Child catalog items (preset rows) carry no localConfig of their own —
-      // they inherit it from the parent. Resolve the parent here so the
-      // K8sDeployment constructor receives a fully-populated catalogItem.
       let catalogItem = null;
       if (mcpServer.catalogId) {
         catalogItem = await InternalMcpCatalogModel.findById(
           mcpServer.catalogId,
         );
-        if (
-          catalogItem &&
-          !catalogItem.localConfig &&
-          catalogItem.parentCatalogItemId
-        ) {
-          const parent = await InternalMcpCatalogModel.findById(
-            catalogItem.parentCatalogItemId,
-          );
-          if (parent?.localConfig) {
-            catalogItem = { ...catalogItem, localConfig: parent.localConfig };
-          }
-        }
       }
 
       if (!this.k8sAttach || !this.k8sLog || !this.k8sExec) {
@@ -442,38 +427,6 @@ export class McpServerRuntimeManager {
               effectiveEnvironmentValues = {};
             }
             effectiveEnvironmentValues[envDef.key] = envDef.value;
-          }
-        }
-      }
-
-      // Plain (non-secret) preset env values live on the catalog row's
-      // `presetFieldValues` jsonb — they have no per-install persistence
-      // layer because they're authoritative on the catalog itself. The
-      // install route reads them at install time and merges into
-      // `environmentValues`, but on restart that map is undefined; without
-      // overlaying them here the deployment env builder would emit no value
-      // for these env vars (only the secret-typed ones survive via the
-      // install Secret bag). Result: every cascade reinstall (admin edit
-      // OR child preset PATCH) silently drops plain preset env values
-      // from the rebuilt pod spec.
-      //
-      // Re-overlaying from the catalog row on every restart also means
-      // edits to the preset (or admin edits to default-preset values on
-      // the parent) propagate naturally on the next restart — no manual
-      // reinstall needed.
-      if (
-        catalogItem?.localConfig?.environment &&
-        catalogItem.presetFieldValues
-      ) {
-        for (const envDef of catalogItem.localConfig.environment) {
-          if (envDef.promptOnPreset && envDef.type !== "secret") {
-            const presetValue = catalogItem.presetFieldValues[envDef.key];
-            if (presetValue != null) {
-              if (!effectiveEnvironmentValues) {
-                effectiveEnvironmentValues = {};
-              }
-              effectiveEnvironmentValues[envDef.key] = String(presetValue);
-            }
           }
         }
       }

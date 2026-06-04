@@ -1,9 +1,9 @@
 #!/usr/bin/env node
-import { execFileSync } from "node:child_process";
-import fs from "node:fs";
 import path from "node:path";
 import {
+  findChangedMigrationFiles,
   findMigrationFiles,
+  isMigrationSqlFile,
   type LintMigrationResult,
   lintMigrationFile,
   summarizeIssues,
@@ -101,7 +101,9 @@ function parseArgs(args: string[]): CliOptions {
 
 function resolveFiles(options: CliOptions): string[] {
   if (options.files.length > 0) {
-    return options.files.map((file) => path.resolve(file)).filter(isSqlFile);
+    return options.files
+      .map((file) => path.resolve(file))
+      .filter(isMigrationSqlFile);
   }
 
   const migrationsDir = path.resolve(options.migrationsDir);
@@ -110,35 +112,10 @@ function resolveFiles(options: CliOptions): string[] {
   }
 
   try {
-    const gitCwd = fs.realpathSync(process.cwd());
-    const pathspec =
-      path.relative(gitCwd, fs.realpathSync(migrationsDir)) || ".";
-    const changedOutput = execFileSync(
-      "git",
-      [
-        "diff",
-        "--name-only",
-        "--diff-filter=ACMR",
-        options.changedBase,
-        "--",
-        pathspec,
-      ],
-      { encoding: "utf8", cwd: gitCwd },
-    );
-    const untrackedOutput = execFileSync(
-      "git",
-      ["ls-files", "--others", "--exclude-standard", "--", pathspec],
-      { encoding: "utf8", cwd: gitCwd },
-    );
-
-    return `${changedOutput}\n${untrackedOutput}`
-      .split("\n")
-      .map((file) => file.trim())
-      .filter(Boolean)
-      .map((file) => path.resolve(gitCwd, file))
-      .filter(isSqlFile)
-      .filter((file, index, files) => files.indexOf(file) === index)
-      .sort();
+    return findChangedMigrationFiles({
+      migrationsDir,
+      baseRef: options.changedBase,
+    });
   } catch (error) {
     if (options.allowMissingBase) {
       process.stderr.write(
@@ -206,13 +183,6 @@ function requireValue(args: string[], index: number, option: string): string {
     throw new Error(`${option} requires a value.`);
   }
   return value;
-}
-
-function isSqlFile(filePath: string): boolean {
-  return (
-    filePath.endsWith(".sql") &&
-    !filePath.includes(`${path.sep}meta${path.sep}`)
-  );
 }
 
 function formatLocation(issue: { filePath?: string; line?: number }): string {

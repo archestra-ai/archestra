@@ -268,6 +268,16 @@ archestra:
       # cause). The setup-postgres-extensions init container uses the same budget.
       timeoutSeconds: 300
 
+    # Worker pods only: block startup until the web Deployment has applied
+    # database migrations. This gate covers fresh installs. Upgrades are covered
+    # by archestra.migrationJob, because the platform Service can still route to
+    # previous-revision web pods while the new release is rolling out.
+    waitForMigrations:
+      enabled: true
+      # Maximum seconds to wait for the web Deployment to finish migrations
+      # before the init container gives up and fails.
+      timeoutSeconds: 600
+
     # Vault secret injection init container
     # Similar to Vault Agent Injector (writes secrets to a shared volume) but:
     # - No extra infrastructure needed (no Vault Agent Injector deployment)
@@ -298,6 +308,41 @@ archestra:
     # Resource requests/limits applied to ALL init containers.
     # Required on clusters that enforce ResourceQuota (e.g., OpenShift restricted-v2 SCC).
     resources: {}
+
+  # Database migration Job.
+  #
+  # Runs `pnpm db:migrate` as a Helm pre-upgrade hook so the target version's
+  # schema is applied before web and worker Deployments roll. Disable this if
+  # migrations are applied by an external deployment pipeline.
+  #
+  # Most external Postgres deployments should not need any migrationJob env
+  # settings. Prefer setting postgresql.external_database_url to a complete
+  # connection string; the chart stores it in a Secret and passes it to the
+  # migration Job automatically.
+  migrationJob:
+    enabled: true
+    # Number of retries before the Job is marked failed and aborts the upgrade.
+    backoffLimit: 3
+    # Hard cap on Job runtime. Set to null to disable the deadline.
+    activeDeadlineSeconds: 600
+    # Resource requests/limits for the migration container.
+    # If not set, inherits from archestra.resources.
+    resources: {}
+    # Extra environment variables rendered before the shared platform env. Use
+    # this only when ARCHESTRA_DATABASE_URL contains Kubernetes $(VAR)
+    # references, such as $(PGPASSWORD), that the hook must expand.
+    env: {}
+    # Extra secret-backed environment variables rendered before shared env. This
+    # is the recommended hook-only option when ARCHESTRA_DATABASE_URL contains
+    # $(PGPASSWORD):
+    #   - name: PGPASSWORD
+    #     secretName: my-db-secret
+    #     secretKey: password
+    envFromSecrets: []
+    # Extra valueFrom environment variables rendered before shared env.
+    envWithValueFrom: []
+    # Extra envFrom entries for the migration Job.
+    envFrom: []
 
   # Resource requests and limits for the Archestra container
   # See: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/

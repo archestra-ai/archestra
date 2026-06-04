@@ -15,12 +15,12 @@ catalogs:
     '@better-auth/sso':
       specifier: 1.6.5
       version: 1.6.5
-    ai:
-      specifier: ^6.0.82
-      version: 6.0.90(patch_hash=8234f83330f60e07e41381c776990bea702bdb7251a8e0e67c220e6a743001c2)
     '@typescript/native-preview':
       specifier: beta
       version: 7.0.0-dev.20260421.2
+    ai:
+      specifier: ^6.0.82
+      version: 6.0.90(patch_hash=8234f83330f60e07e41381c776990bea702bdb7251a8e0e67c220e6a743001c2)
     better-auth:
       specifier: 1.6.5
       version: 1.6.5
@@ -79,9 +79,7 @@ overrides:
   '@opentelemetry/sdk-node': 0.217.0
 
 patchedDependencies:
-  ai@6.0.90:
-    hash: 8234f83330f60e07e41381c776990bea702bdb7251a8e0e67c220e6a743001c2
-    path: patches/ai@6.0.90.patch
+  ai@6.0.90: 8234f83330f60e07e41381c776990bea702bdb7251a8e0e67c220e6a743001c2
 
 importers:
 
@@ -106,6 +104,12 @@ importers:
       turbo:
         specifier: ^2.9.14
         version: 2.9.14
+
+  archestra-rs/sandbox-rs:
+    devDependencies:
+      '@napi-rs/cli':
+        specifier: ^3.4.0
+        version: 3.6.2(@emnapi/runtime@1.8.1)(@types/node@25.6.0)
 
   backend:
     dependencies:
@@ -486,6 +490,8 @@ importers:
         specifier: ^4.1.0
         version: 4.1.0(@opentelemetry/api@1.9.0)(@types/node@25.5.0)(jsdom@29.0.0(@noble/hashes@2.0.1))(msw@2.14.6(@types/node@25.5.0)(typescript@6.0.2))(vite@7.3.2(@types/node@25.5.0)(jiti@2.6.1)(lightningcss@1.31.1)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.4))
 
+  drizzle-migration-linter: {}
+
   e2e-tests:
     dependencies:
       '@shared':
@@ -863,12 +869,6 @@ importers:
       vitest:
         specifier: ^4.1.0
         version: 4.1.0(@opentelemetry/api@1.9.1)(@types/node@25.5.0)(jsdom@29.0.0(@noble/hashes@2.0.1))(msw@2.14.6(@types/node@25.5.0)(typescript@6.0.2))(vite@7.3.2(@types/node@25.5.0)(jiti@2.6.1)(lightningcss@1.31.1)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.4))
-
-  archestra-rs/sandbox-rs:
-    devDependencies:
-      '@napi-rs/cli':
-        specifier: ^3.4.0
-        version: 3.6.2(@emnapi/runtime@1.8.1)(@types/node@25.6.0)
 
 packages:
 
@@ -1779,7 +1779,7 @@ packages:
       react-dom: '>=18.0.0'
 
   '@daveyplate/better-auth-ui@https://codeload.github.com/archestra-ai/better-auth-ui/tar.gz/516664eb8c4010d26a961d73f9f461f6459e76c9':
-    resolution: {tarball: https://codeload.github.com/archestra-ai/better-auth-ui/tar.gz/516664eb8c4010d26a961d73f9f461f6459e76c9}
+    resolution: {gitHosted: true, tarball: https://codeload.github.com/archestra-ai/better-auth-ui/tar.gz/516664eb8c4010d26a961d73f9f461f6459e76c9}
     version: 3.3.4
     peerDependencies:
       '@better-auth/passkey': '>=1.4.6'

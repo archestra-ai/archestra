@@ -1,16 +1,12 @@
-import { execFileSync } from "node:child_process";
 import path from "node:path";
 import {
+  findChangedMigrationFiles,
   type LintMigrationResult,
   lintMigrationFile,
   summarizeIssues,
 } from "@drizzle-migration-linter";
 
 const MIGRATIONS_DIR = path.resolve(process.cwd(), "src/database/migrations");
-const GIT_ROOT = execFileSync("git", ["rev-parse", "--show-toplevel"], {
-  encoding: "utf8",
-  cwd: process.cwd(),
-}).trim();
 
 function main(): void {
   const baseRef =
@@ -27,40 +23,11 @@ function main(): void {
 }
 
 function getChangedMigrationFiles(baseRef: string): string[] {
-  try {
-    const migrationsPathspec = path.relative(GIT_ROOT, MIGRATIONS_DIR);
-    const changedOutput = execFileSync(
-      "git",
-      [
-        "diff",
-        "--name-only",
-        "--diff-filter=ACMR",
-        baseRef,
-        "--",
-        migrationsPathspec,
-      ],
-      { encoding: "utf8", cwd: GIT_ROOT },
-    );
-    const untrackedOutput = execFileSync(
-      "git",
-      ["ls-files", "--others", "--exclude-standard", "--", migrationsPathspec],
-      { encoding: "utf8", cwd: GIT_ROOT },
-    );
-
-    return `${changedOutput}\n${untrackedOutput}`
-      .split("\n")
-      .map((file) => file.trim())
-      .filter((file) => file.endsWith(".sql"))
-      .filter((file) => !file.includes("/meta/"))
-      .map((file) => path.resolve(GIT_ROOT, file))
-      .filter((file, index, files) => files.indexOf(file) === index)
-      .sort();
-  } catch {
-    process.stderr.write(
-      `Skipping Drizzle migration linter because base ref ${baseRef} is not available.\n`,
-    );
-    return [];
-  }
+  return findChangedMigrationFiles({
+    migrationsDir: MIGRATIONS_DIR,
+    baseRef,
+    options: { cwd: process.cwd() },
+  });
 }
 
 function printResults(

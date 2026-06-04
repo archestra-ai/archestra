@@ -99,6 +99,24 @@ describe("cli", () => {
     expect(result.stdout).toContain("0002_drop_column.sql");
     expect(result.stdout).not.toContain("0001_initial.sql");
   });
+
+  test("rejects changed-base refs that git could interpret as options", () => {
+    const migrationsDir = path.join(tempDir, "migrations");
+    fs.mkdirSync(migrationsDir, { recursive: true });
+
+    const result = runCli(
+      [
+        "--migrations-dir",
+        migrationsDir,
+        "--changed-base",
+        "--upload-pack=malicious/main",
+      ],
+      tempDir,
+    );
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("Invalid base ref");
+  });
 });
 
 function writeMigration(fileName: string, sql: string): string {

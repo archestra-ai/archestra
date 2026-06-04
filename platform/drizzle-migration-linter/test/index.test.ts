@@ -78,9 +78,19 @@ describe("lintMigrationSql", () => {
       'CREATE UNIQUE INDEX "agents_slug_idx" ON "agents" ("slug");',
     );
 
-    expect(result.issues.map((issue) => issue.code)).toContain(
+    expect(result.issues.map((issue) => issue.code)).toEqual([
       "add-unique-constraint",
+    ]);
+  });
+
+  test("flags unique table constraints without duplicate validating-constraint output", () => {
+    const result = lintMigrationSql(
+      'ALTER TABLE "agents" ADD CONSTRAINT "agents_slug_unique" UNIQUE("slug");',
     );
+
+    expect(result.issues.map((issue) => issue.code)).toEqual([
+      "add-unique-constraint",
+    ]);
   });
 
   test("flags validating constraints but allows not-valid constraints", () => {
@@ -126,6 +136,16 @@ describe("lintMigrationSql", () => {
     ]);
   });
 
+  test("allow-breaking marker accepts horizontal spacing only", () => {
+    const result = lintMigrationSql(`
+      --\tdrizzle-migration-linter:\tallow-breaking
+      -- drizzle-migration-linter:\treason\t=\told column has been unused for two releases
+      ALTER TABLE "agents" DROP COLUMN "legacy_name";
+    `);
+
+    expect(result.issues).toEqual([]);
+  });
+
   test("allow-breaking marker requires a reason", () => {
     const result = lintMigrationSql(`
       -- drizzle-migration-linter: allow-breaking
@@ -138,6 +158,29 @@ describe("lintMigrationSql", () => {
         severity: "error",
       },
     ]);
+  });
+
+  test("allow-breaking reason cannot be only whitespace", () => {
+    const result = lintMigrationSql(`
+      -- drizzle-migration-linter: allow-breaking
+      -- drizzle-migration-linter: reason=${" ".repeat(4)}
+      ALTER TABLE "agents" DROP COLUMN "legacy_name";
+    `);
+
+    expect(result.issues).toMatchObject([
+      {
+        code: "allow-breaking-missing-reason",
+        severity: "error",
+      },
+    ]);
+  });
+
+  test("strips malformed block comments without regex backtracking", () => {
+    const result = lintMigrationSql(
+      `/*${"*".repeat(20_000)}\nALTER TABLE "agents" DROP COLUMN "legacy_name";`,
+    );
+
+    expect(result.issues).toEqual([]);
   });
 });
 

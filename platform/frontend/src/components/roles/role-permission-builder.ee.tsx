@@ -42,6 +42,7 @@ const actionLabels: Record<Action, string> = {
   enable: "Enable",
   query: "Query",
   execute: "Execute",
+  "deploy-to-restricted": "Deploy to Restricted",
 };
 
 const UNGRANTABLE_PERMISSION_TOOLTIP =

@@ -1,6 +1,7 @@
 import type { UIMessage } from "@ai-sdk/react";
 import { describe, expect, it } from "vitest";
 import {
+  collectBrowserToolCallIds,
   deriveCanvasesFromMessages,
   extractFileAttachments,
   filterOptimisticToolCalls,
@@ -184,6 +185,52 @@ describe("filterOptimisticToolCalls", () => {
     expect(filterOptimisticToolCalls(messages, optimisticToolCalls)).toEqual([
       optimisticToolCalls[1],
     ]);
+  });
+});
+
+describe("collectBrowserToolCallIds", () => {
+  it("collects Playwright browser tool calls from messages and optimistic calls", () => {
+    const messages = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-microsoft__playwright-mcp__browser_navigate",
+            toolCallId: "call_1",
+            state: "input-available",
+            input: { url: "https://example.com" },
+          },
+          {
+            type: "dynamic-tool",
+            toolName: "github__search",
+            toolCallId: "call_2",
+            state: "input-available",
+            input: { q: "example" },
+          },
+        ],
+      },
+    ] as never;
+
+    expect(
+      Array.from(
+        collectBrowserToolCallIds({
+          messages,
+          optimisticToolCalls: [
+            {
+              toolCallId: "call_3",
+              toolName: "browser_click",
+              input: {},
+            },
+            {
+              toolCallId: "call_4",
+              toolName: "github__create_issue",
+              input: {},
+            },
+          ],
+        }),
+      ),
+    ).toEqual(["call_1", "call_3"]);
   });
 });
 

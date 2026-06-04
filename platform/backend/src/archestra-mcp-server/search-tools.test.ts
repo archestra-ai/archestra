@@ -140,6 +140,9 @@ describe("search_tools", () => {
       userId: user.id,
     };
 
+    // "trusted data policy" matches only policy tools (trusted-data /
+    // tool-invocation / autonomy), all of which require permissions this
+    // agent:read role lacks, so RBAC filters them all out before ranking.
     const result = await executeArchestraTool(
       TOOL_SEARCH_TOOLS_FULL_NAME,
       { query: "trusted data policy", limit: 10 },

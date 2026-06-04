@@ -72,6 +72,8 @@ import {
   type LocalServerInstallResult,
 } from "./local-server-install-dialog";
 import { ManageUsersDialog } from "./manage-users-dialog";
+import type { McpCatalogFormValues } from "./mcp-catalog-form.types";
+import { buildCloneFormValues } from "./mcp-catalog-form.utils";
 import {
   type CatalogItem,
   type InstalledServer,
@@ -104,6 +106,9 @@ export function InternalMCPCatalog({
 
   const { data: catalogItems } = useInternalMcpCatalog({ initialData });
   const [installingServerIds, setInstallingServerIds] = useState<Set<string>>(
+    new Set(),
+  );
+  const [restartingServerIds, setRestartingServerIds] = useState<Set<string>>(
     new Set(),
   );
   // Track server IDs that are first-time installations (for auto-opening assignments dialog)
@@ -143,6 +148,10 @@ export function InternalMCPCatalog({
   >();
 
   const [editingItem, setEditingItem] = useState<CatalogItem | null>(null);
+  const [cloneValues, setCloneValues] = useState<McpCatalogFormValues | null>(
+    null,
+  );
+  const [cloneSourceId, setCloneSourceId] = useState<string | null>(null);
   const [deletingItem, setDeletingItem] = useState<CatalogItem | null>(null);
   const [installingItemId, setInstallingItemId] = useState<string | null>(null);
 
@@ -244,7 +253,9 @@ export function InternalMCPCatalog({
           const server = installedServers.find((s) => s.id === serverId);
           if (server) {
             if (server.localInstallationStatus === "success") {
-              toast.success(`Successfully installed ${server.name}`);
+              if (!restartingServerIds.has(serverId)) {
+                toast.success(`Successfully installed ${server.name}`);
+              }
               // Force immediate deployment status refresh via WebSocket
               websocketService.send({
                 type: "subscribe_mcp_deployment_statuses",
@@ -274,6 +285,17 @@ export function InternalMCPCatalog({
                 }
               }
             }
+            if (
+              restartingServerIds.has(serverId) &&
+              (server.localInstallationStatus === "success" ||
+                server.localInstallationStatus === "error")
+            ) {
+              setRestartingServerIds((prev) => {
+                const newSet = new Set(prev);
+                newSet.delete(serverId);
+                return newSet;
+              });
+            }
             // Note: No error toast - the error banner on the card provides feedback
           }
         });
@@ -282,6 +304,7 @@ export function InternalMCPCatalog({
   }, [
     installedServers,
     installingServerIds,
+    restartingServerIds,
     queryClient,
     firstInstallationServerIds,
   ]);
@@ -1158,12 +1181,40 @@ export function InternalMCPCatalog({
     }
   };
 
+  const handleClone = (item: CatalogItem) => {
+    setCloneValues(buildCloneFormValues(item));
+    setCloneSourceId(item.id);
+    openDialog("create");
+  };
+
   const handleCancelInstallation = (serverId: string) => {
     // Remove server from installing set to stop polling
     setInstallingServerIds((prev) => {
       const newSet = new Set(prev);
       newSet.delete(serverId);
       return newSet;
+    });
+  };
+
+  const handleRestartPodsStarted = (serverIds: string[]) => {
+    if (serverIds.length === 0) return;
+    setRestartingServerIds((prev) => {
+      const next = new Set(prev);
+      for (const serverId of serverIds) {
+        next.add(serverId);
+      }
+      return next;
+    });
+  };
+
+  const handleRestartPodsFailed = (serverIds: string[]) => {
+    if (serverIds.length === 0) return;
+    setRestartingServerIds((prev) => {
+      const next = new Set(prev);
+      for (const serverId of serverIds) {
+        next.delete(serverId);
+      }
+      return next;
     });
   };
 
@@ -1359,6 +1410,9 @@ export function InternalMCPCatalog({
                       setDetailsServerName(item.name);
                     }}
                     onDelete={() => setDeletingItem(item)}
+                    onClone={() => handleClone(item)}
+                    onRestartPodsStarted={handleRestartPodsStarted}
+                    onRestartPodsFailed={handleRestartPodsFailed}
                     onCancelInstallation={handleCancelInstallation}
                     onAddPersonalConnection={(presetCatalogId) =>
                       handleAddPersonalConnection(item, presetCatalogId)
@@ -1421,6 +1475,9 @@ export function InternalMCPCatalog({
                       setDetailsServerName(item.name);
                     }}
                     onDelete={() => setDeletingItem(item)}
+                    onClone={() => handleClone(item)}
+                    onRestartPodsStarted={handleRestartPodsStarted}
+                    onRestartPodsFailed={handleRestartPodsFailed}
                     onCancelInstallation={handleCancelInstallation}
                     onAddPersonalConnection={(presetCatalogId) =>
                       handleAddPersonalConnection(item, presetCatalogId)
@@ -1465,7 +1522,13 @@ export function InternalMCPCatalog({
 
       <CreateCatalogDialog
         isOpen={isDialogOpened("create")}
-        onClose={() => closeDialog("create")}
+        cloneValues={cloneValues ?? undefined}
+        clonedFrom={cloneSourceId ?? undefined}
+        onClose={() => {
+          setCloneValues(null);
+          setCloneSourceId(null);
+          closeDialog("create");
+        }}
         onSuccess={(createdItem) => {
           // Auto-open the appropriate install dialog based on server type
           if (createdItem.serverType === "local") {

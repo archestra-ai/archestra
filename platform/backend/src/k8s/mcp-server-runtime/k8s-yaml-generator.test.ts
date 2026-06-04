@@ -68,6 +68,28 @@ describe("k8s-yaml-generator", () => {
       expect(yaml).not.toContain("imagePullSecrets");
     });
 
+    test("generates YAML with imagePullPolicy Always", () => {
+      const yaml = generateDeploymentYamlTemplate({
+        serverId: "test-id",
+        serverName: "test-server",
+        namespace: "default",
+        dockerImage: "registry.example.com/test-image:latest",
+      });
+
+      expect(yaml).toContain("imagePullPolicy: Always");
+    });
+
+    test("generates YAML with imagePullPolicy Never for bare local images", () => {
+      const yaml = generateDeploymentYamlTemplate({
+        serverId: "test-id",
+        serverName: "test-server",
+        namespace: "default",
+        dockerImage: "local-mcp-server:latest",
+      });
+
+      expect(yaml).toContain("imagePullPolicy: Never");
+    });
+
     test("generates YAML with secret env vars", () => {
       const yaml = generateDeploymentYamlTemplate({
         serverId: "test-id",

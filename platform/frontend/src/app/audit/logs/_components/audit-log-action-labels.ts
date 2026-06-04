@@ -41,6 +41,10 @@ export const ACTION_LABEL: Record<AuditEventName, string> = {
   "connector.created": "Connector created",
   "connector.updated": "Connector updated",
   "connector.deleted": "Connector deleted",
+  // Environment
+  "environment.created": "Environment created",
+  "environment.updated": "Environment updated",
+  "environment.deleted": "Environment deleted",
   // Identity provider
   "identityProvider.created": "Identity provider created",
   "identityProvider.updated": "Identity provider updated",
@@ -230,6 +234,7 @@ export const KNOWN_RESOURCE_TYPES: readonly string[] = [
   "chatOpsBinding",
   "chatOpsConfig",
   "connector",
+  "environment",
   "identityProvider",
   "internalMcpCatalog",
   "invitation",

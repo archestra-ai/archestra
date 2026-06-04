@@ -2,6 +2,7 @@
 import {
   AGENT_TOOL_PREFIX,
   slugify,
+  TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON,
   TOOL_RUN_TOOL_FULL_NAME,
   TOOL_TODO_WRITE_FULL_NAME,
   TOOL_WHOAMI_FULL_NAME,
@@ -240,6 +241,165 @@ describe("run_tool", () => {
     });
     expect(result.content).toEqual([
       { type: "text", text: "Third-party response" },
+    ]);
+  });
+
+  test("blocks third-party MCP tools when target invocation policy denies the call", async ({
+    makeAgent,
+    makeAgentTool,
+    makeMember,
+    makeOrganization,
+    makeTool,
+    makeToolPolicy,
+    makeUser,
+  }) => {
+    const org = await makeOrganization({ globalToolPolicy: "restrictive" });
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "admin" });
+    const agent = await makeAgent({
+      name: "Run Tool Policy Agent",
+      organizationId: org.id,
+    });
+    const tool = await makeTool({
+      name: `workspace__export_${crypto.randomUUID().slice(0, 8)}`,
+    });
+    await makeAgentTool(agent.id, tool.id);
+    await makeToolPolicy(tool.id, {
+      action: "block_always",
+      reason: "External export blocked",
+      conditions: [
+        { key: "destination", operator: "equal", value: "external" },
+      ],
+    });
+
+    const result = await executeArchestraTool(
+      TOOL_RUN_TOOL_FULL_NAME,
+      {
+        tool_name: tool.name,
+        tool_args: { destination: "external" },
+      },
+      {
+        ...mockContext,
+        agent: { id: agent.id, name: agent.name },
+        agentId: agent.id,
+        organizationId: org.id,
+        userId: user.id,
+      },
+    );
+
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as any).text).toContain(tool.name);
+    expect((result.content[0] as any).text).toContain(
+      "External export blocked",
+    );
+    expect(mcpClient.executeToolCall).not.toHaveBeenCalled();
+  });
+
+  test("blocks third-party MCP tools that require approval when approval was not handled", async ({
+    makeAgent,
+    makeAgentTool,
+    makeMember,
+    makeOrganization,
+    makeTool,
+    makeToolPolicy,
+    makeUser,
+  }) => {
+    const org = await makeOrganization({ globalToolPolicy: "restrictive" });
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "admin" });
+    const agent = await makeAgent({
+      name: "Run Tool Approval Agent",
+      organizationId: org.id,
+    });
+    const tool = await makeTool({
+      name: `workspace__approve_${crypto.randomUUID().slice(0, 8)}`,
+    });
+    await makeAgentTool(agent.id, tool.id);
+    await makeToolPolicy(tool.id, {
+      action: "require_approval",
+      conditions: [],
+    });
+
+    const result = await executeArchestraTool(
+      TOOL_RUN_TOOL_FULL_NAME,
+      {
+        tool_name: tool.name,
+        tool_args: { destination: "external" },
+      },
+      {
+        ...mockContext,
+        agent: { id: agent.id, name: agent.name },
+        agentId: agent.id,
+        organizationId: org.id,
+        userId: user.id,
+      },
+    );
+
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as any).text).toContain(tool.name);
+    expect((result.content[0] as any).text).toContain(
+      TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON,
+    );
+    expect(mcpClient.executeToolCall).not.toHaveBeenCalled();
+  });
+
+  test("dispatches approval-required third-party MCP tools after chat approval was handled", async ({
+    makeAgent,
+    makeAgentTool,
+    makeMember,
+    makeOrganization,
+    makeTool,
+    makeToolPolicy,
+    makeUser,
+  }) => {
+    const org = await makeOrganization({ globalToolPolicy: "restrictive" });
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "admin" });
+    const agent = await makeAgent({
+      name: "Run Tool Approved Agent",
+      organizationId: org.id,
+    });
+    const tool = await makeTool({
+      name: `workspace__approved_${crypto.randomUUID().slice(0, 8)}`,
+    });
+    await makeAgentTool(agent.id, tool.id);
+    await makeToolPolicy(tool.id, {
+      action: "require_approval",
+      conditions: [],
+    });
+    vi.mocked(mcpClient.executeToolCall).mockResolvedValueOnce({
+      content: [{ type: "text", text: "Approved response" }],
+      isError: false,
+    } as any);
+
+    const result = await executeArchestraTool(
+      TOOL_RUN_TOOL_FULL_NAME,
+      {
+        tool_name: tool.name,
+        tool_args: { destination: "external" },
+      },
+      {
+        ...mockContext,
+        agent: { id: agent.id, name: agent.name },
+        agentId: agent.id,
+        organizationId: org.id,
+        userId: user.id,
+        approvalRequiredPoliciesHandled: true,
+      },
+    );
+
+    expect(result.isError).toBe(false);
+    expect(mcpClient.executeToolCall).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: tool.name,
+        arguments: { destination: "external" },
+      }),
+      agent.id,
+      mockContext.tokenAuth,
+      { conversationId: "conversation-1" },
+    );
+    expect(result.content).toEqual([
+      { type: "text", text: "Approved response" },
     ]);
   });
 

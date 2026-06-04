@@ -37,11 +37,9 @@ import {
   UpdateAppearanceSettingsSchema,
   UpdateAuthSettingsSchema,
   UpdateConnectionSettingsSchema,
+  UpdateDefaultEnvironmentSchema,
   UpdateKnowledgeSettingsSchema,
   UpdateLlmSettingsSchema,
-  UpdatePresetEntityDefaultLabelSchema,
-  UpdatePresetEntityDefaultValidationRegexSchema,
-  UpdatePresetEntityNameSchema,
   UpdateSecuritySettingsSchema,
 } from "@/types";
 
@@ -306,65 +304,45 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   fastify.patch(
-    "/api/organization/preset-entity-name",
+    "/api/organization/default-environment",
     {
       schema: {
-        operationId: RouteId.UpdatePresetEntityName,
+        operationId: RouteId.UpdateDefaultEnvironment,
         description:
-          "Configure the org-wide display label for catalog presets (the per-item child-configuration entity). Both singular and plural must be set together, or both null to reset.",
+          "Configure the implicit default environment (the deployment target referenced by internal_mcp_catalog.environment_id = null). Pass null for name to reset to the built-in 'Default' label, or null for namespace to unset it. Omitted fields are left unchanged.",
         tags: ["Organization"],
-        body: UpdatePresetEntityNameSchema,
+        body: UpdateDefaultEnvironmentSchema,
         response: constructResponseSchema(SelectOrganizationSchema),
       },
     },
     async ({ organizationId, body }, reply) => {
-      const organization = await OrganizationModel.patch(organizationId, body);
-
-      if (!organization) {
-        throw new ApiError(404, "Organization not found");
+      // Map the clean API shape to DB columns, including only keys that are
+      // present in the body so omitting a field leaves it unchanged (an
+      // explicit null clears the column).
+      const data: Partial<{
+        defaultEnvironmentName: string | null;
+        defaultEnvironmentDescription: string | null;
+        defaultEnvironmentNamespace: string | null;
+        defaultNetworkPolicy: typeof body.networkPolicy;
+        defaultEnvironmentRestricted: boolean;
+      }> = {};
+      if ("name" in body) {
+        data.defaultEnvironmentName = body.name ?? null;
+      }
+      if ("description" in body) {
+        data.defaultEnvironmentDescription = body.description ?? null;
+      }
+      if ("namespace" in body) {
+        data.defaultEnvironmentNamespace = body.namespace ?? null;
+      }
+      if ("networkPolicy" in body) {
+        data.defaultNetworkPolicy = body.networkPolicy ?? null;
+      }
+      if ("restricted" in body) {
+        data.defaultEnvironmentRestricted = body.restricted ?? false;
       }
 
-      return reply.send(organization);
-    },
-  );
-
-  fastify.patch(
-    "/api/organization/preset-entity-default-label",
-    {
-      schema: {
-        operationId: RouteId.UpdatePresetEntityDefaultLabel,
-        description:
-          "Configure the org-wide display label for the implicit default preset row (parent catalog item). Pass null to reset to the built-in 'Default' label.",
-        tags: ["Organization"],
-        body: UpdatePresetEntityDefaultLabelSchema,
-        response: constructResponseSchema(SelectOrganizationSchema),
-      },
-    },
-    async ({ organizationId, body }, reply) => {
-      const organization = await OrganizationModel.patch(organizationId, body);
-
-      if (!organization) {
-        throw new ApiError(404, "Organization not found");
-      }
-
-      return reply.send(organization);
-    },
-  );
-
-  fastify.patch(
-    "/api/organization/preset-entity-default-validation-regex",
-    {
-      schema: {
-        operationId: RouteId.UpdatePresetEntityDefaultValidationRegex,
-        description:
-          "Set the validation regex applied to default-scoped field values when installing an MCP server (mirrors mcp_preset_entries.validation_regex for the implicit default row). Stored without delimiters or flags. Pass null to disable.",
-        tags: ["Organization"],
-        body: UpdatePresetEntityDefaultValidationRegexSchema,
-        response: constructResponseSchema(SelectOrganizationSchema),
-      },
-    },
-    async ({ organizationId, body }, reply) => {
-      const organization = await OrganizationModel.patch(organizationId, body);
+      const organization = await OrganizationModel.patch(organizationId, data);
 
       if (!organization) {
         throw new ApiError(404, "Organization not found");

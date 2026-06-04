@@ -137,6 +137,10 @@ If ARCHESTRA_AUTH_SECRET env variable is explicitly set, it will override the au
 - name: ARCHESTRA_ORCHESTRATOR_K8S_CLUSTER_DOMAIN
   value: {{ .Values.archestra.orchestrator.kubernetes.clusterDomain | quote }}
 {{- end }}
+{{- if and .Values.archestra.orchestrator.kubernetes.rbac.environmentNamespaces (not (hasKey .Values.archestra.env "ARCHESTRA_ORCHESTRATOR_ENVIRONMENT_NAMESPACES")) }}
+- name: ARCHESTRA_ORCHESTRATOR_ENVIRONMENT_NAMESPACES
+  value: {{ join "," .Values.archestra.orchestrator.kubernetes.rbac.environmentNamespaces | quote }}
+{{- end }}
 {{- if .Values.archestra.codeRuntime.enabled }}
 {{- if not (hasKey .Values.archestra.env "ARCHESTRA_CODE_RUNTIME_ENABLED") }}
 - name: ARCHESTRA_CODE_RUNTIME_ENABLED
@@ -279,6 +283,52 @@ ServiceAccount name for the Archestra Platform
 {{- end }}
 
 {{/*
+RBAC rules granting the platform ServiceAccount the permissions it needs to
+manage MCP server workloads in a namespace. Shared by the release-namespace Role
+and the per-namespace Roles generated from rbac.environmentNamespaces, so both
+grant exactly the same access (no drift).
+*/}}
+{{- define "archestra-platform.mcpManagerRules" -}}
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["get", "list", "create", "update", "patch", "delete", "watch"]
+- apiGroups: [""]
+  resources: ["pods/exec"]
+  verbs: ["get", "create"]
+- apiGroups: [""]
+  resources: ["pods/log"]
+  verbs: ["get", "list"]
+- apiGroups: [""]
+  resources: ["pods/attach"]
+  verbs: ["get", "create"]
+- apiGroups: [""]
+  resources: ["services"]
+  verbs: ["get", "list", "create", "update", "patch", "delete", "watch"]
+- apiGroups: [""]
+  resources: ["secrets"]
+  verbs: ["get", "list", "create", "update", "patch", "delete", "watch"]
+- apiGroups: ["apps"]
+  resources: ["deployments"]
+  verbs: ["get", "list", "create", "update", "patch", "delete", "watch"]
+# Standard Kubernetes NetworkPolicy for IP/CIDR egress rules.
+- apiGroups: ["networking.k8s.io"]
+  resources: ["networkpolicies"]
+  verbs: ["get", "list", "create", "update", "patch", "delete", "watch"]
+# CiliumNetworkPolicy for DNS/FQDN egress rules on Cilium-enabled clusters.
+- apiGroups: ["cilium.io"]
+  resources: ["ciliumnetworkpolicies"]
+  verbs: ["get", "list", "create", "update", "patch", "delete", "watch"]
+# GKE FQDNNetworkPolicy for DNS/FQDN egress rules on supported GKE clusters.
+- apiGroups: ["networking.gke.io"]
+  resources: ["fqdnnetworkpolicies"]
+  verbs: ["get", "list", "create", "update", "patch", "delete", "watch"]
+# EKS Auto Mode ApplicationNetworkPolicy for DNS/FQDN egress rules.
+- apiGroups: ["networking.k8s.aws"]
+  resources: ["applicationnetworkpolicies"]
+  verbs: ["get", "list", "create", "update", "patch", "delete", "watch"]
+{{- end }}
+
+{{/*
 Worker selector labels
 */}}
 {{- define "archestra-platform.workerSelectorLabels" -}}
@@ -293,25 +343,6 @@ Worker labels
 {{- define "archestra-platform.workerLabels" -}}
 helm.sh/chart: {{ include "archestra-platform.chart" . }}
 {{ include "archestra-platform.workerSelectorLabels" . }}
-{{- if .Chart.AppVersion }}
-app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
-{{- end }}
-app.kubernetes.io/managed-by: {{ .Release.Service }}
-app.kubernetes.io/part-of: archestra
-{{- end }}
-
-{{/*
-Database migration Job labels.
-
-Mirrors the worker label scheme: the `app.kubernetes.io/name` is suffixed with
-`-migrate` so the platform Service (which selects on the unsuffixed name) never
-routes traffic to the short-lived migration pod.
-*/}}
-{{- define "archestra-platform.migrationJobLabels" -}}
-helm.sh/chart: {{ include "archestra-platform.chart" . }}
-app.kubernetes.io/name: {{ include "archestra-platform.name" . }}-migrate
-app.kubernetes.io/instance: {{ .Release.Name }}
-app.kubernetes.io/component: migrate
 {{- if .Chart.AppVersion }}
 app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 {{- end }}
@@ -422,52 +453,6 @@ Handles Vault secret injection, pgvector extension setup, and PostgreSQL readine
       {{- else }}
       echo "Skipping PostgreSQL readiness check"
       {{- end }}
-{{- end }}
-
-{{/*
-Worker-only init container that blocks worker startup until the web Deployment
-has applied database migrations, by waiting for the platform Service to accept
-connections on port 9000 (the web pod only listens after running migrations and
-seeding required data).
-
-This is reliable on a *fresh install*: no previous web pods exist, so Service
-reachability can only mean this release's migrations have completed. On an
-*upgrade* the Service still routes to the previous revision's web pods, so this
-check alone would let new worker pods start before the new migrations run --
-that case is covered instead by the pre-upgrade migration Job (migration-job.yaml).
-
-Without any gate the worker boots in parallel with migrations, queries tables
-that do not exist yet (e.g. "organization"), crashes, and only recovers on a
-pod restart.
-*/}}
-{{- define "archestra-platform.waitForMigrationsInitContainer" -}}
-{{- if .Values.archestra.initContainers.waitForMigrations.enabled }}
-- name: wait-for-migrations
-  image: {{ .Values.archestra.initContainers.busyboxImage | default "busybox:1.36" }}
-  {{- with .Values.archestra.initContainers.resources }}
-  resources:
-    {{- toYaml . | nindent 4 }}
-  {{- end }}
-  command:
-    - sh
-    - -c
-    - |
-      HOST={{ include "archestra-platform.fullname" . | quote }}
-      PORT=9000
-      echo "Waiting for migrations (platform web server at ${HOST}:${PORT})..."
-      max_attempts={{ .Values.archestra.initContainers.waitForMigrations.timeoutSeconds | default 600 }}
-      attempt=0
-      until nc -z "${HOST}" "${PORT}"; do
-        attempt=$((attempt + 1))
-        if [ "$attempt" -ge "$max_attempts" ]; then
-          echo "Platform web server at ${HOST}:${PORT} did not become reachable after ${max_attempts}s - giving up" >&2
-          exit 1
-        fi
-        echo "Platform web server is unavailable - sleeping (${attempt}/${max_attempts})"
-        sleep 1
-      done
-      echo "Platform web server is up - migrations applied, continuing"
-{{- end }}
 {{- end }}
 
 {{/*

@@ -1,4 +1,6 @@
 import { ARCHESTRA_MCP_CATALOG_ID, DEFAULT_APP_NAME } from "@shared";
+import { eq } from "drizzle-orm";
+import db, { schema } from "@/database";
 import { describe, expect, test } from "@/test";
 import {
   ENTERPRISE_MANAGED_CLIENT_SECRET_OVERRIDE_SECRET_KEY,
@@ -6,6 +8,7 @@ import {
 } from "@/types";
 import InternalMcpCatalogModel from "./internal-mcp-catalog";
 import McpCatalogLabelModel from "./mcp-catalog-label";
+import ToolModel from "./tool";
 
 describe("InternalMcpCatalogModel", () => {
   describe("findAll with expandSecrets", () => {
@@ -697,6 +700,79 @@ describe("InternalMcpCatalogModel", () => {
       expect(archestraCatalog).toBeDefined();
       expect(archestraCatalog?.name).toBe(DEFAULT_APP_NAME);
       expect(archestraCatalog?.serverType).toBe("builtin");
+    });
+  });
+
+  describe("clonedFrom lineage", () => {
+    test("persists clonedFrom on create", async ({
+      makeOrganization,
+      makeInternalMcpCatalog,
+    }) => {
+      const org = await makeOrganization();
+      const source = await makeInternalMcpCatalog({ organizationId: org.id });
+      const clone = await makeInternalMcpCatalog({
+        organizationId: org.id,
+        clonedFrom: source.id,
+      });
+
+      const fetched = await InternalMcpCatalogModel.findById(clone.id, {
+        expandSecrets: false,
+      });
+      expect(fetched?.clonedFrom).toBe(source.id);
+    });
+
+    test("nulls clonedFrom when the source is deleted (ON DELETE SET NULL)", async ({
+      makeOrganization,
+      makeInternalMcpCatalog,
+    }) => {
+      const org = await makeOrganization();
+      const source = await makeInternalMcpCatalog({ organizationId: org.id });
+      const clone = await makeInternalMcpCatalog({
+        organizationId: org.id,
+        clonedFrom: source.id,
+      });
+
+      const deleted = await InternalMcpCatalogModel.delete(source.id);
+      expect(deleted).toBe(true);
+
+      const fetched = await InternalMcpCatalogModel.findById(clone.id, {
+        expandSecrets: false,
+      });
+      // The clone survives; only the lineage pointer is cleared.
+      expect(fetched).not.toBeNull();
+      expect(fetched?.clonedFrom).toBeNull();
+    });
+
+    test("copies source tools as provisional when created as a clone", async ({
+      makeOrganization,
+      makeInternalMcpCatalog,
+    }) => {
+      const org = await makeOrganization();
+      const source = await makeInternalMcpCatalog({ organizationId: org.id });
+      await ToolModel.create({
+        catalogId: source.id,
+        name: ToolModel.slugifyName(source.name, "search"),
+        parameters: {},
+        description: null,
+      });
+
+      const clone = await InternalMcpCatalogModel.create(
+        {
+          name: `${source.name}-copy`,
+          serverType: "remote",
+          serverUrl: "https://api.example.com/mcp/",
+          scope: "org",
+          clonedFrom: source.id,
+        },
+        { organizationId: org.id },
+      );
+
+      const clonedTools = await db
+        .select()
+        .from(schema.toolsTable)
+        .where(eq(schema.toolsTable.catalogId, clone.id));
+      expect(clonedTools).toHaveLength(1);
+      expect(clonedTools[0].clonedPendingDiscovery).toBe(true);
     });
   });
 });

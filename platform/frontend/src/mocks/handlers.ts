@@ -76,6 +76,12 @@ export const handlers: HttpHandler[] = [
   ...getJson("/api/organization", organizationSeed),
   ...getJson("/api/organization/appearance-settings", appearanceSettingsSeed),
   ...getJson("/api/organization/mcp-preset-entries", []),
+  // Fetched by the catalog form's Environment selector (and the Environments
+  // section). Empty list keeps the strict unhandled-request guard satisfied.
+  ...getJson("/api/environments", {
+    environments: [],
+    defaultAssignedCatalogCount: 0,
+  }),
   ...getJson("/api/teams", teamsSeed),
   ...getJson("/api/internal_mcp_catalog", catalogSeed),
   ...getJson("/api/internal_mcp_catalog/labels/keys", []),
@@ -83,6 +89,18 @@ export const handlers: HttpHandler[] = [
   ...getJson("/api/mcp_server", installedServersSeed),
   ...getJson("/api/secrets/type", { type: "DB", meta: {} }),
   ...getJson("/api/k8s/image-pull-secrets", []),
+  ...getJson("/api/k8s/capabilities", {
+    networkPolicy: {
+      kubernetesNetworkPolicy: true,
+      ciliumNetworkPolicy: false,
+      gkeFqdnNetworkPolicy: false,
+      awsApplicationNetworkPolicy: false,
+      provider: "kubernetes",
+      supportsFqdn: false,
+      supportsHttpMethods: false,
+      message: null,
+    },
+  }),
 
   // Agents
   ...getJson("/api/agents", agentsSeed),

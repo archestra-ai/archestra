@@ -150,7 +150,7 @@ const EditAgentToolArgsSchema = z
           "Updated visibility scope for the agent.",
         ),
         toolExposureMode: ToolExposureModeSchema.optional().describe(
-          "How tools should be exposed to MCP clients and models.",
+          "How tools should be loaded for MCP clients and models.",
         ),
         suggestedPrompts: z
           .array(SuggestedPromptToolInputSchema)

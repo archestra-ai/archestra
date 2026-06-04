@@ -4,6 +4,7 @@ import AgentModel from "@/models/agent";
 import AgentToolModel from "@/models/agent-tool";
 import ApiKeyModel from "@/models/api-key";
 import ChatOpsChannelBindingModel from "@/models/chatops-channel-binding";
+import EnvironmentModel from "@/models/environment";
 import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
 import KnowledgeBaseModel from "@/models/knowledge-base";
 import KnowledgeBaseConnectorModel from "@/models/knowledge-base-connector";
@@ -87,6 +88,7 @@ export const AUDIT_DECISIONS = {
     audited: true,
     model: ChatOpsChannelBindingModel,
   },
+  environmentsTable: { audited: true, model: EnvironmentModel },
   internalMcpCatalogTable: { audited: true, model: InternalMcpCatalogModel },
   knowledgeBasesTable: { audited: true, model: KnowledgeBaseModel },
   knowledgeBaseConnectorsTable: {
@@ -207,7 +209,6 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "preset definitions; static config, audited via catalog",
   },
-
   // =========================================================================
   // A2A protocol runtime
   // =========================================================================

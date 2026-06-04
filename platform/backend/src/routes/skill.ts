@@ -9,12 +9,19 @@ import {
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import {
+  getAgentTypePermissionChecker,
+  requireAgentModifyPermission,
+} from "@/auth/agent-type-permissions";
+import {
   getSkillPermissionChecker,
   requireSkillModifyPermission,
   type SkillPermissionChecker,
 } from "@/auth/skill-permissions";
+import { withDbTransaction } from "@/database";
 import logger from "@/logging";
 import {
+  AgentModel,
+  MemberModel,
   OrganizationModel,
   SkillFileModel,
   SkillModel,
@@ -23,6 +30,11 @@ import {
   ToolModel,
   UserModel,
 } from "@/models";
+import { agentToSkill, SCOPE_FIELD } from "@/skills/agent-migration";
+import {
+  builtInSkillVersion,
+  findBuiltInSkillBySourceRef,
+} from "@/skills/built-in-skills";
 import {
   discoverSkills,
   importSkills,
@@ -36,6 +48,8 @@ import {
   parseSkillManifest,
   SkillParseError,
 } from "@/skills/parser";
+import { skillCatalog } from "@/skills/skill-catalog";
+import { suggestSkillDescription } from "@/skills/skill-description";
 import {
   isSkillNameConflict,
   refineUniqueFilePaths,
@@ -48,6 +62,7 @@ import {
   type Skill,
   SkillFileEncodingSchema,
   SkillWithFilesSchema,
+  UuidIdSchema,
 } from "@/types";
 import { isForeignKeyConstraintError } from "@/utils/db";
 
@@ -64,6 +79,54 @@ const SkillListItemSchema = SelectSkillSchema.extend({
 /** A skill with its resource files and team assignments. */
 const SkillDetailSchema = SkillWithFilesSchema.extend({
   teams: z.array(SkillTeamSchema),
+});
+
+/** One crawled public-GitHub skill returned by a catalog search. */
+const SkillCatalogResultSchema = z.object({
+  repo: z.string(),
+  skillPath: z.string(),
+  name: z.string(),
+  description: z.string(),
+  compatibility: z.string().nullable(),
+  fileCount: z.number(),
+});
+
+/** One source-agent field and how the conversion preserved it. */
+const MigrationFieldSchema = z.object({
+  field: z.string(),
+  detail: z.string(),
+});
+
+/**
+ * Record of how an agent→skill conversion mapped each field: `carried` to a
+ * native skill field, or `annotated` into the SKILL.md body / metadata. Nothing
+ * is silently dropped, so the UI can show the user exactly what changed.
+ */
+const MigrationReportSchema = z.object({
+  carried: z.array(MigrationFieldSchema),
+  annotated: z.array(MigrationFieldSchema),
+});
+
+/** An LLM-suggested skill description for the convert-to-skill dialog. */
+const SuggestSkillDescriptionResponseSchema = z.object({
+  description: z.string(),
+});
+
+const ConvertAgentToSkillResponseSchema = z.object({
+  skill: SkillDetailSchema,
+  report: MigrationReportSchema,
+  /** Whether the source agent was deleted as part of the conversion. */
+  deletedAgent: z.boolean(),
+});
+
+/**
+ * Conversion options gathered in the confirm dialog: an explicit skill
+ * description (required there when the agent has none) and whether to delete the
+ * source agent once the skill exists.
+ */
+const ConvertAgentToSkillInputSchema = z.object({
+  description: z.string().trim().min(1).max(1024).optional(),
+  deleteAgent: z.boolean().optional(),
 });
 
 /** Raw resource file as submitted by the in-app editor. */
@@ -104,6 +167,8 @@ const DiscoveredSkillSchema = z.object({
   name: z.string(),
   description: z.string(),
   compatibility: z.string().nullable(),
+  allowedTools: z.string().nullable(),
+  templated: z.boolean(),
   fileCount: z.number(),
 });
 
@@ -228,6 +293,8 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
             content: parsed.content,
             license: parsed.license,
             compatibility: parsed.compatibility,
+            allowedTools: parsed.allowedTools,
+            templated: parsed.templated,
             metadata: parsed.metadata,
             sourceType: "manual",
             scope,
@@ -241,6 +308,240 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       return reply.send(await loadSkillDetail(skill));
+    },
+  );
+
+  // Lives in the skill plugin (not the agent plugin) so it can reuse the
+  // skill-create authorization helpers; the button that calls it sits on the
+  // agent page. Non-destructive: the source agent is left untouched.
+  fastify.post(
+    "/api/agents/:id/convert-to-skill",
+    {
+      schema: {
+        operationId: RouteId.ConvertAgentToSkill,
+        description:
+          "Convert an internal agent into a new Agent Skill. The skill inherits the agent's scope. The source agent is left intact unless deleteAgent is set.",
+        tags: ["Skills"],
+        params: z.object({ id: UuidIdSchema }),
+        body: ConvertAgentToSkillInputSchema,
+        response: constructResponseSchema(ConvertAgentToSkillResponseSchema),
+      },
+    },
+    async ({ params: { id }, body, user, organizationId }, reply) => {
+      // admin-view load bypasses access filtering; the read + scope checks
+      // below re-impose it before we reveal anything about the resource.
+      const agent = await AgentModel.findById(id, user.id, true);
+      if (!agent || agent.organizationId !== organizationId) {
+        throw new ApiError(404, "Agent not found");
+      }
+
+      // caller must be able to read this resource (type-level, then instance
+      // scope) BEFORE we reveal its type — otherwise a user with only
+      // agent:read could distinguish an inaccessible profile/MCP-gateway/
+      // LLM-proxy from a nonexistent id via the "not an internal agent" 400.
+      const agentChecker = await getAgentTypePermissionChecker({
+        userId: user.id,
+        organizationId,
+      });
+      try {
+        agentChecker.require(agent.agentType, "read");
+      } catch {
+        throw new ApiError(404, "Agent not found");
+      }
+      if (!agentChecker.isAdmin(agent.agentType)) {
+        const accessible = await AgentModel.findById(id, user.id, false);
+        if (!accessible) {
+          throw new ApiError(404, "Agent not found");
+        }
+      }
+
+      // only now that the caller is allowed to read it do we disclose that it
+      // is the wrong kind of resource for conversion.
+      if (agent.agentType !== "agent" || agent.builtInAgentConfig) {
+        throw new ApiError(
+          400,
+          "Only internal agents can be converted to skills.",
+        );
+      }
+
+      // If the caller wants the source agent gone, prove they may delete it
+      // BEFORE creating the skill, so a permission failure doesn't leave an
+      // orphan skill behind. Mirrors the agent DELETE route's authorization.
+      if (body.deleteAgent) {
+        try {
+          agentChecker.require(agent.agentType, "delete");
+        } catch {
+          throw new ApiError(
+            403,
+            "You do not have permission to delete this agent",
+          );
+        }
+        const agentUserTeamIds = agentChecker.isAdmin(agent.agentType)
+          ? []
+          : await TeamModel.getUserTeamIds(user.id);
+        requireAgentModifyPermission({
+          checker: agentChecker,
+          agentType: agent.agentType,
+          agentScope: agent.scope,
+          agentAuthorId: agent.authorId,
+          agentTeamIds: agent.teams.map((team) => team.id),
+          userTeamIds: agentUserTeamIds,
+          userId: user.id,
+        });
+        if (await MemberModel.isAgentDefault(agent.id)) {
+          throw new ApiError(
+            400,
+            "Cannot delete a default agent. Set another agent as default first.",
+          );
+        }
+      }
+
+      const { draft, teamIds, report } = agentToSkill(agent, {
+        description: body.description,
+      });
+
+      // Agent system prompts are unbounded, so enforce the same content-size cap
+      // the manual/import paths apply to SKILL.md (SkillManifestInputSchema). An
+      // oversized skill would otherwise slip in here and later bloat chat
+      // activation payloads and the model's context.
+      if (draft.content.length > MAX_SKILL_FILE_BYTES) {
+        throw new ApiError(
+          400,
+          `Converted skill content exceeds the ${MAX_SKILL_FILE_BYTES}-character limit. Trim the agent's system prompt before converting.`,
+        );
+      }
+
+      // ...and be allowed to create a skill in the scope inherited from the agent.
+      const skillChecker = await getSkillPermissionChecker({
+        userId: user.id,
+        organizationId,
+      });
+      const userTeamIds = skillChecker.isAdmin
+        ? []
+        : await TeamModel.getUserTeamIds(user.id);
+      authorizeSkillScope({
+        checker: skillChecker,
+        scope: draft.scope,
+        authorId: user.id,
+        requestedTeamIds: teamIds,
+        userTeamIds,
+        userId: user.id,
+      });
+      await assertSkillTeams({ scope: draft.scope, teamIds, organizationId });
+
+      // Create the skill and (optionally) delete the source agent in one
+      // transaction so convert+delete is all-or-nothing: a failed delete rolls
+      // back the skill insert, so a retry never collides with a half-created
+      // skill and the user is never left with duplicated state.
+      let deletedAgent = false;
+      const skill = await withTeamFkErrorMapped(() =>
+        withDbTransaction(async (tx) => {
+          const created = await SkillModel.createWithFiles(
+            {
+              skill: {
+                organizationId,
+                authorId: user.id,
+                name: draft.name,
+                description: draft.description,
+                content: draft.content,
+                license: draft.license,
+                compatibility: draft.compatibility,
+                allowedTools: draft.allowedTools,
+                templated: draft.templated,
+                metadata: draft.metadata,
+                sourceType: "manual",
+                scope: draft.scope,
+              },
+              files: [],
+              teamIds,
+            },
+            tx,
+          );
+          if (!created) {
+            // name already taken in this visibility scope — nothing was
+            // inserted, so rolling back here leaves no orphan.
+            throw skillNameConflict(draft.name);
+          }
+          // Eligibility was checked above; delete inside the same transaction.
+          if (body.deleteAgent) {
+            deletedAgent = await AgentModel.delete(agent.id, tx);
+          }
+          return created;
+        }),
+      );
+
+      // this surface persists the agent's scope (and teams) verbatim, so report
+      // it carried. The MCP draft path can't and reports it annotated instead.
+      report.carried.push({ field: SCOPE_FIELD, detail: draft.scope });
+
+      logger.info(
+        { agentId: agent.id, skillId: skill.id, organizationId, deletedAgent },
+        "[Skills] Converted agent to skill",
+      );
+      return reply.send({
+        skill: await loadSkillDetail(skill),
+        report,
+        deletedAgent,
+      });
+    },
+  );
+
+  fastify.post(
+    "/api/agents/:id/suggest-skill-description",
+    {
+      schema: {
+        operationId: RouteId.SuggestSkillDescription,
+        description:
+          "Suggest a skill description for an agent using an LLM, for the convert-to-skill flow. Does not modify the agent or create a skill.",
+        tags: ["Skills"],
+        params: z.object({ id: UuidIdSchema }),
+        response: constructResponseSchema(
+          SuggestSkillDescriptionResponseSchema,
+        ),
+      },
+    },
+    async ({ params: { id }, user, organizationId }, reply) => {
+      // Mirror the convert route's read-authorization so the suggestion endpoint
+      // can't be used to probe agents the caller may not see. admin-view load
+      // first, then re-impose access filtering before disclosing anything.
+      const agent = await AgentModel.findById(id, user.id, true);
+      if (!agent || agent.organizationId !== organizationId) {
+        throw new ApiError(404, "Agent not found");
+      }
+      const agentChecker = await getAgentTypePermissionChecker({
+        userId: user.id,
+        organizationId,
+      });
+      try {
+        agentChecker.require(agent.agentType, "read");
+      } catch {
+        throw new ApiError(404, "Agent not found");
+      }
+      if (!agentChecker.isAdmin(agent.agentType)) {
+        const accessible = await AgentModel.findById(id, user.id, false);
+        if (!accessible) {
+          throw new ApiError(404, "Agent not found");
+        }
+      }
+      if (agent.agentType !== "agent" || agent.builtInAgentConfig) {
+        throw new ApiError(
+          400,
+          "Only internal agents can be converted to skills.",
+        );
+      }
+
+      const description = await suggestSkillDescription({
+        agent,
+        organizationId,
+        userId: user.id,
+      });
+      if (!description) {
+        throw new ApiError(
+          502,
+          "Could not generate a description. Please write one manually.",
+        );
+      }
+      return reply.send({ description });
     },
   );
 
@@ -360,6 +661,8 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
               content: parsed.content,
               license: parsed.license,
               compatibility: parsed.compatibility,
+              allowedTools: parsed.allowedTools,
+              templated: parsed.templated,
               metadata: parsed.metadata,
               scope: newScope,
             },
@@ -468,6 +771,84 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   fastify.post(
+    "/api/skills/:id/reset",
+    {
+      schema: {
+        operationId: RouteId.ResetSkill,
+        description:
+          "Reset a built-in skill to its shipped default SKILL.md and resource files. Only applies to skills with sourceType `built_in`.",
+        tags: ["Skills"],
+        params: z.object({ id: z.string() }),
+        response: constructResponseSchema(SkillDetailSchema),
+      },
+    },
+    async ({ params: { id }, organizationId, user }, reply) => {
+      const skill = await findSkillOrThrow(id, organizationId);
+
+      if (skill.sourceType !== "built_in") {
+        throw new ApiError(400, "Only built-in skills can be reset to default");
+      }
+      const definition = skill.sourceRef
+        ? findBuiltInSkillBySourceRef(skill.sourceRef)
+        : null;
+      if (!definition) {
+        throw new ApiError(404, "No shipped default exists for this skill");
+      }
+
+      const checker = await getSkillPermissionChecker({
+        userId: user.id,
+        organizationId,
+      });
+      const userTeamIds = checker.isAdmin
+        ? []
+        : await TeamModel.getUserTeamIds(user.id);
+      const teamIds = await SkillTeamModel.getTeamsForSkill(id);
+
+      const hasAccess = await SkillTeamModel.userHasSkillAccess({
+        organizationId,
+        userId: user.id,
+        skill,
+        isSkillAdmin: checker.isAdmin,
+      });
+      if (!hasAccess) {
+        throw new ApiError(404, "Skill not found");
+      }
+      requireSkillModifyPermission({
+        checker,
+        scope: skill.scope,
+        authorId: skill.authorId,
+        skillTeamIds: teamIds,
+        userTeamIds,
+        userId: user.id,
+      });
+
+      const reset = await SkillModel.updateWithFiles({
+        id,
+        skill: {
+          name: definition.name,
+          description: definition.description,
+          content: definition.content,
+          sourceCommit: builtInSkillVersion(definition),
+        },
+        files: definition.files.map((file) => ({
+          path: file.path,
+          content: file.content,
+          kind: file.kind,
+        })),
+      });
+      if (!reset) {
+        throw new ApiError(404, "Skill not found");
+      }
+
+      logger.info(
+        { skillId: id, organizationId },
+        "[Skills] Reset built-in skill to default",
+      );
+      return reply.send(await loadSkillDetail(reset));
+    },
+  );
+
+  fastify.post(
     "/api/skills/enable-defaults",
     {
       schema: {
@@ -491,6 +872,42 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         "[Skills] Enabled skill tool defaults and backfilled existing agents",
       );
       return reply.send({ enabled: true, agentsBackfilled });
+    },
+  );
+
+  fastify.get(
+    "/api/skills/catalog/search",
+    {
+      schema: {
+        operationId: RouteId.SearchSkillCatalog,
+        description:
+          "Search the crawled public-GitHub skill catalog by name, repo, path, or description. Backed by an in-memory token index; returns ranked candidates to import via the GitHub import endpoints.",
+        tags: ["Skills"],
+        querystring: z.object({
+          q: z.string().default(""),
+          limit: z.coerce.number().int().min(1).max(100).default(50),
+        }),
+        response: constructResponseSchema(
+          z.object({
+            results: z.array(SkillCatalogResultSchema),
+            totalCount: z.number(),
+          }),
+        ),
+      },
+    },
+    async ({ query: { q, limit } }, reply) => {
+      const results = skillCatalog.search({ query: q, limit });
+      return reply.send({
+        results: results.map((entry) => ({
+          repo: entry.repo,
+          skillPath: entry.skillPath,
+          name: entry.name,
+          description: entry.description,
+          compatibility: entry.compatibility,
+          fileCount: entry.fileCount,
+        })),
+        totalCount: skillCatalog.size,
+      });
     },
   );
 
@@ -568,6 +985,8 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
             content: z.string(),
             license: z.string().nullable(),
             compatibility: z.string().nullable(),
+            allowedTools: z.string().nullable(),
+            templated: z.boolean(),
             metadata: z.record(z.string(), z.string()),
             files: z.array(
               z.object({
@@ -674,6 +1093,8 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
               content: item.parsed.content,
               license: item.parsed.license,
               compatibility: item.parsed.compatibility,
+              allowedTools: item.parsed.allowedTools,
+              templated: item.parsed.templated,
               metadata: item.parsed.metadata,
               sourceType: "github",
               sourceRef: item.sourceRef,

@@ -10,11 +10,16 @@ const {
   createSkill,
   updateSkill,
   deleteSkill,
+  resetSkill,
   discoverGithubSkills,
+  searchSkillCatalog,
   previewGithubSkill,
   importGithubSkills,
   enableSkillToolDefaults,
 } = archestraApiSdk;
+
+export type SkillCatalogResult =
+  archestraApiTypes.SearchSkillCatalogResponses["200"]["results"][number];
 
 type SkillsQuery = NonNullable<archestraApiTypes.GetSkillsData["query"]>;
 type SkillsPaginatedParams = Pick<
@@ -51,6 +56,28 @@ export function useSkillSourceRepos() {
       if (error) {
         handleApiError(error);
         return { repos: [] as string[] };
+      }
+      return data;
+    },
+  });
+}
+
+// searches the crawled public-GitHub skill catalog on the backend. `search` is
+// already debounced by the SearchInput, so keying the query on it is enough;
+// placeholderData keeps the previous results visible while the next query runs.
+export function useSearchSkillCatalog(search: string) {
+  const query = search.trim();
+  return useQuery({
+    queryKey: ["skills", "catalog-search", query],
+    enabled: query.length > 0,
+    placeholderData: (previousData) => previousData,
+    queryFn: async () => {
+      const { data, error } = await searchSkillCatalog({ query: { q: query } });
+      if (error) {
+        // re-throw so the query enters its error state and the page renders
+        // its "could not search" branch, rather than an empty-results state.
+        handleApiError(error);
+        throw new Error(getApiErrorMessage(error));
       }
       return data;
     },
@@ -134,6 +161,26 @@ export function useDeleteSkill() {
       if (!data) return;
       queryClient.invalidateQueries({ queryKey: ["skills"] });
       toast.success("Skill deleted");
+    },
+  });
+}
+
+export function useResetSkill() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { data, error } = await resetSkill({ path: { id } });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data;
+    },
+    onSuccess: (data) => {
+      if (!data) return;
+      queryClient.invalidateQueries({ queryKey: ["skills"] });
+      queryClient.invalidateQueries({ queryKey: ["skills", data.id] });
+      toast.success("Skill reset to default");
     },
   });
 }

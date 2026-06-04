@@ -1,5 +1,5 @@
 {
-  "id": "522754e2-b31a-4fba-9622-5b6426727aa0",
+  "id": "a79ceeb3-2e47-4f78-80f9-396f5573722f",
   "prevId": "ad1ead2b-41d1-4c9c-924c-d61021cbfd44",
   "version": "7",
   "dialect": "postgresql",
@@ -1080,148 +1080,6 @@
           "columns": [
             "agent_id",
             "tool_id"
-          ]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.agent_versions": {
-      "name": "agent_versions",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "agent_id": {
-          "name": "agent_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "organization_id": {
-          "name": "organization_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "version_number": {
-          "name": "version_number",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "snapshot": {
-          "name": "snapshot",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "source": {
-          "name": "source",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_by": {
-          "name": "created_by",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_by_name": {
-          "name": "created_by_name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "agent_versions_agent_id_created_at_idx": {
-          "name": "agent_versions_agent_id_created_at_idx",
-          "columns": [
-            {
-              "expression": "agent_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "created_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "agent_versions_org_id_idx": {
-          "name": "agent_versions_org_id_idx",
-          "columns": [
-            {
-              "expression": "organization_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "agent_versions_agent_id_agents_id_fk": {
-          "name": "agent_versions_agent_id_agents_id_fk",
-          "tableFrom": "agent_versions",
-          "tableTo": "agents",
-          "columnsFrom": [
-            "agent_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "agent_versions_created_by_user_id_fk": {
-          "name": "agent_versions_created_by_user_id_fk",
-          "tableFrom": "agent_versions",
-          "tableTo": "user",
-          "columnsFrom": [
-            "created_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "agent_versions_agent_id_version_number_uniq": {
-          "name": "agent_versions_agent_id_version_number_uniq",
-          "nullsNotDistinct": false,
-          "columns": [
-            "agent_id",
-            "version_number"
           ]
         }
       },
@@ -4423,6 +4281,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "cloned_from": {
+          "name": "cloned_from",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
         "preset_entry_id": {
           "name": "preset_entry_id",
           "type": "uuid",
@@ -4524,6 +4388,21 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "internal_mcp_catalog_cloned_from_idx": {
+          "name": "internal_mcp_catalog_cloned_from_idx",
+          "columns": [
+            {
+              "expression": "cloned_from",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
@@ -4577,6 +4456,19 @@
             "id"
           ],
           "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "internal_mcp_catalog_cloned_from_internal_mcp_catalog_id_fk": {
+          "name": "internal_mcp_catalog_cloned_from_internal_mcp_catalog_id_fk",
+          "tableFrom": "internal_mcp_catalog",
+          "tableTo": "internal_mcp_catalog",
+          "columnsFrom": [
+            "cloned_from"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
           "onUpdate": "no action"
         },
         "internal_mcp_catalog_preset_entry_id_mcp_preset_entry_id_fk": {
@@ -11459,6 +11351,13 @@
           "primaryKey": false,
           "notNull": false
         },
+        "cloned_pending_discovery": {
+          "name": "cloned_pending_discovery",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
         "policies_auto_configured_at": {
           "name": "policies_auto_configured_at",
           "type": "timestamp",
@@ -11504,6 +11403,21 @@
           "columns": [
             {
               "expression": "delegate_to_agent_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "tools_cloned_pending_discovery_idx": {
+          "name": "tools_cloned_pending_discovery_idx",
+          "columns": [
+            {
+              "expression": "cloned_pending_discovery",
               "isExpression": false,
               "asc": true,
               "nulls": "last"

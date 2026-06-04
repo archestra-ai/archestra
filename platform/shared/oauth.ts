@@ -69,3 +69,12 @@ export const MCP_CATALOG_INSTALL_QUERY_PARAM = "install";
  */
 export const MCP_CATALOG_REAUTH_QUERY_PARAM = "reauth";
 export const MCP_CATALOG_SERVER_QUERY_PARAM = "server";
+
+/**
+ * Query param for deep-linking to a catalog item's edit dialog.
+ * Append `?edit={catalogId}` to auto-open the editor. Unlike the install/reauth
+ * params, this one persists while the dialog is open so the URL stays
+ * shareable. Only users who can edit the item see the editor; others get an
+ * access-denied message, and unknown/invisible ids are silently ignored.
+ */
+export const MCP_CATALOG_EDIT_QUERY_PARAM = "edit";

@@ -18,6 +18,7 @@ import type {
   ConnectionBaseUrl,
   GlobalToolPolicy,
   LimitCleanupInterval,
+  NetworkPolicy,
   OnboardingWizard,
   OrganizationChatLink,
   OrganizationCompressionScope,
@@ -28,6 +29,11 @@ const organizationsTable = pgTable("organization", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
   slug: text("slug").notNull().unique(),
+  analyticsInstanceId: uuid("analytics_instance_id").notNull().defaultRandom(),
+  analyticsInstanceStartedAt: timestamp("analytics_instance_started_at"),
+  analyticsInstanceLastHeartbeatAt: timestamp(
+    "analytics_instance_last_heartbeat_at",
+  ),
   logo: text("logo"),
   logoDark: text("logo_dark"),
   createdAt: timestamp("created_at").notNull(),
@@ -217,18 +223,55 @@ const organizationsTable = pgTable("organization", {
   /**
    * Custom label admins choose for the child-configuration entity of every
    * catalog item (internally still called "preset"). When both singular and
-   * plural are set, the catalog UI exposes the per-item presets section and
-   * replaces "Preset"/"presets" copy. Both must be set together — partial
-   * values are rejected at the API.
+   * plural are set, the catalog UI replaces "Preset"/"presets" copy.
+   *
+   * Deprecated/read-only: the registry admin UI and the write endpoints that
+   * set these were removed. Existing values are still read; no new writes.
    */
   presetEntityName: text("preset_entity_name"),
   presetEntityNamePlural: text("preset_entity_name_plural"),
 
   /**
    * Custom display label for the implicit "default" preset row (parent catalog
-   * item). NULL falls back to "Default" in the UI.
+   * item). NULL falls back to "Default" in the UI. Deprecated/read-only — the
+   * write endpoint was removed.
    */
   presetEntityDefaultLabel: text("preset_entity_default_label"),
+
+  /**
+   * Display name of the implicit "default" environment (the deployment target
+   * referenced by internal_mcp_catalog.environment_id = null). NULL falls back
+   * to "Default" in the UI.
+   */
+  defaultEnvironmentName: text("default_environment_name"),
+
+  /**
+   * Kubernetes namespace for the implicit "default" environment. Stored only
+   * (not applied at deploy yet). NULL = unset.
+   */
+  defaultEnvironmentNamespace: text("default_environment_namespace"),
+
+  /**
+   * Optional human-readable description of the implicit "default" environment,
+   * shown in the environment selector. NULL = unset.
+   */
+  defaultEnvironmentDescription: text("default_environment_description"),
+
+  /**
+   * Optional default network egress policy for the implicit "default"
+   * environment. NULL falls back to built-in unrestricted behavior.
+   */
+  defaultNetworkPolicy: jsonb("default_network_policy").$type<NetworkPolicy>(),
+
+  /**
+   * When true, assigning a catalog item to the implicit "default" environment
+   * (environment_id = null) requires the `environment:admin` permission — i.e.
+   * creating a catalog item without choosing an environment is admin-gated.
+   * Mirrors the per-environment `environment.restricted` flag for the default.
+   */
+  defaultEnvironmentRestricted: boolean("default_environment_restricted")
+    .notNull()
+    .default(false),
 
   /**
    * When true, the Agent Skill tools (`list_skills`, `activate_skill`,
@@ -252,6 +295,7 @@ const organizationsTable = pgTable("organization", {
    * Validation regex applied to default-scoped field values when installing an
    * MCP server (mirrors `mcp_preset_entries.validation_regex` for the implicit
    * default row). Stored without delimiters or flags. NULL disables validation.
+   * Deprecated/read-only — the write endpoint was removed.
    */
   presetEntityDefaultValidationRegex: text(
     "preset_entity_default_validation_regex",

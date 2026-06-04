@@ -1,5 +1,9 @@
 import type { UIMessage } from "@ai-sdk/react";
-import { type ArchestraToolShortName, parseFullToolName } from "@shared";
+import {
+  type ArchestraToolShortName,
+  isBrowserMcpTool,
+  parseFullToolName,
+} from "@shared";
 import type { DynamicToolUIPart, ToolUIPart } from "ai";
 import {
   getToolErrorText,
@@ -142,6 +146,32 @@ export function filterOptimisticToolCalls(
   return optimisticToolCalls.filter(
     (toolCall) => !renderedToolCallIds.has(toolCall.toolCallId),
   );
+}
+
+export function collectBrowserToolCallIds(params: {
+  messages: UIMessage[];
+  optimisticToolCalls?: OptimisticToolCall[];
+}): Set<string> {
+  const ids = new Set<string>();
+
+  for (const message of params.messages) {
+    for (const part of message.parts ?? []) {
+      if (!isToolPart(part) || !part.toolCallId) continue;
+
+      const toolName = getToolName(part);
+      if (toolName && isBrowserMcpTool(toolName)) {
+        ids.add(part.toolCallId);
+      }
+    }
+  }
+
+  for (const toolCall of params.optimisticToolCalls ?? []) {
+    if (isBrowserMcpTool(toolCall.toolName)) {
+      ids.add(toolCall.toolCallId);
+    }
+  }
+
+  return ids;
 }
 
 export function identifyCompactToolGroups(

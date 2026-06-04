@@ -25,6 +25,7 @@ export * from "./conversation-compaction";
 export * from "./conversation-share";
 export * from "./dual-llm";
 export * from "./enterprise-managed-credentials";
+export * from "./environment";
 export * from "./identity-provider";
 export * from "./incoming-email";
 export * from "./interaction";

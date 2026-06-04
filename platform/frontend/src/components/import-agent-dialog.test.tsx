@@ -78,7 +78,6 @@ const validPayload = {
     icon: "🤖",
     scope: "personal",
     considerContextUntrusted: false,
-    toolAssignmentMode: "manual",
     toolExposureMode: "full",
     incomingEmailEnabled: false,
     incomingEmailSecurityMode: "private",

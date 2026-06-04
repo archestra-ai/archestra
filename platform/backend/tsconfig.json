@@ -1,6 +1,7 @@
 {
   "compilerOptions": {
     "isolatedModules": true,
+    "resolveJsonModule": true,
     "module": "ESNext",
     "moduleResolution": "Bundler",
     "resolvePackageJsonExports": true,

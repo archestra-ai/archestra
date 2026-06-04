@@ -1,7 +1,7 @@
 # build KinD, Docker CLI, Dagger CLI, and kubectl from source with a patched Go toolchain.
 # the Alpine packages/binaries have historically lagged on Go patch releases, so
 # we compile these tools ourselves to pick up upstream fixes without local vendoring hacks.
-ARG GOLANG_IMAGE=golang:1.25.10-alpine@sha256:8d22e29d960bc50cd025d93d5b7c7d220b1ee9aa7a239b3c8f55a57e987e8d45
+ARG GOLANG_IMAGE=golang:1.25.11-alpine@sha256:c05ba4b73604069d376c4f41346b05374335b5ca0c46fb6dfede5a59f5196931
 ARG NODE_IMAGE=node:24-alpine3.23@sha256:7fddd9ddeae8196abf4a3ef2de34e11f7b1a722119f91f28ddf1e99dcafdf114
 ARG KIND_VERSION=v0.31.0
 ARG KIND_COMMIT=a323333ff9efd8099f95a8a6b5c86c75a210d00f
@@ -31,7 +31,7 @@ COPY docker/dagger-dockercompat /dagger-dockercompat
 RUN git clone --depth 1 --branch "${KIND_VERSION}" https://github.com/kubernetes-sigs/kind.git /kind && \
     test "$(git -C /kind rev-parse HEAD)" = "${KIND_COMMIT}" && \
     cd /kind && \
-    go mod edit -go=1.25.10 && \
+    go mod edit -go=1.25.11 && \
     # golang.org/x/net <0.55.0: CVE-2026-39821 (CRITICAL); fixed in >= 0.55.0
     go get golang.org/x/net@v0.55.0 && \
     CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -o /kind-binary .
@@ -39,7 +39,7 @@ RUN git clone --depth 1 --branch "${DOCKER_CLI_VERSION}" https://github.com/dock
     test "$(git -C /docker-cli rev-parse HEAD)" = "${DOCKER_CLI_COMMIT}" && \
     cd /docker-cli && \
     cp vendor.mod go.mod && cp vendor.sum go.sum && \
-    go mod edit -go=1.25.10 && \
+    go mod edit -go=1.25.11 && \
     # CVE-2026-33186: grpc Improper Authorization fixed in >= 1.79.3
     go get google.golang.org/grpc@v1.79.3 && \
     # CVE-2026-39883: OTel SDK untrusted search path fixed in >= 1.43.0
@@ -62,7 +62,7 @@ RUN git clone --depth 1 --branch "${DAGGER_VERSION}" https://github.com/dagger/d
     test "$(git -C /dagger rev-parse HEAD)" = "${DAGGER_COMMIT}" && \
     cd /dagger && \
     cp -R /dagger-dockercompat ./dockercompat && \
-    go mod edit -go=1.25.10 && \
+    go mod edit -go=1.25.11 && \
     # cve-2026-34040: replace Dagger's BuildKit Docker monolith imports with split Moby modules.
     go mod edit -require=github.com/docker/docker@v29.3.1+incompatible && \
     go mod edit -replace=github.com/docker/docker=./dockercompat && \
@@ -86,8 +86,8 @@ RUN git clone --depth 1 --branch "${DAGGER_VERSION}" https://github.com/dagger/d
 RUN git clone --depth 1 --branch "${KUBECTL_VERSION}" https://github.com/kubernetes/kubernetes.git /kubernetes && \
     test "$(git -C /kubernetes rev-parse HEAD)" = "${KUBECTL_COMMIT}" && \
     cd /kubernetes && \
-    go mod edit -go=1.25.10 && \
-    go work edit -go=1.25.10 && \
+    go mod edit -go=1.25.11 && \
+    go work edit -go=1.25.11 && \
     # cve-2026-35469: spdystream resource exhaustion fixed in >= 0.5.1.
     go get github.com/moby/spdystream@v0.5.1 && \
     # cve-2026-29181: OTel resource exhaustion fixed in >= 1.41.0.
@@ -255,13 +255,14 @@ RUN apk --no-cache upgrade && \
     rm -rf /tmp/*
 
 # install KinD (Kubernetes in Docker), docker-cli, and kubectl for Kubernetes runtime support
-# these binaries are built from source in go-builder with Go 1.25.10 to fix CVE-2025-68121
-# and the Go stdlib HIGH CVEs fixed in 1.25.10 (CVE-2026-42499/39836/39820/33814/33811).
+# these binaries are built from source in go-builder with Go 1.25.11 to fix CVE-2025-68121,
+# the Go stdlib HIGH CVEs fixed in 1.25.10 (CVE-2026-42499/39836/39820/33814/33811), and
+# the Go stdlib HIGH CVE fixed in 1.25.11 (CVE-2026-42504).
 COPY --from=go-builder /docker-binary /usr/local/bin/docker
 COPY --from=go-builder /kind-binary /usr/local/bin/kind
 COPY --from=go-builder /kubectl-binary /usr/local/bin/kubectl
 RUN chmod +x /usr/local/bin/kind /usr/local/bin/docker /usr/local/bin/kubectl
-# TODO: Once KinD releases a version compiled with Go >= 1.25.10, remove the kind-builder stage
+# TODO: Once KinD releases a version compiled with Go >= 1.25.11, remove the kind-builder stage
 # at the top of this file and restore the pre-built binary download below for faster builds.
 # Track releases at: https://github.com/kubernetes-sigs/kind/releases
 # RUN ARCH=$(uname -m) && \

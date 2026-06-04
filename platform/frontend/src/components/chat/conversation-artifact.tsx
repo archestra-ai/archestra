@@ -101,7 +101,7 @@ export function ConversationArtifactPanel({
     },
     table({ node, className, children, ...props }) {
       return (
-        <div className="my-4 w-full overflow-x-auto rounded-md border border-border">
+        <div className="my-4 max-h-[420px] w-full overflow-auto rounded-md border border-border">
           <table
             className={cn(
               "w-full min-w-max border-collapse text-sm",
@@ -125,7 +125,7 @@ export function ConversationArtifactPanel({
       return (
         <th
           className={cn(
-            "border-r border-b border-border px-3 py-2 text-left font-semibold last:border-r-0",
+            "sticky top-0 z-10 border-r border-b border-border bg-muted px-3 py-2 text-left font-semibold last:border-r-0",
             className,
           )}
           {...props}

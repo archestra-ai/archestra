@@ -25,7 +25,8 @@ export type IdentityProviderDialogSection =
   | "attribute-mapping"
   | "enterprise-managed-credentials"
   | "role-mapping"
-  | "team-sync";
+  | "team-sync"
+  | "token-debugger";
 
 export interface IdentityProviderDialogNavItem {
   id: IdentityProviderDialogSection;

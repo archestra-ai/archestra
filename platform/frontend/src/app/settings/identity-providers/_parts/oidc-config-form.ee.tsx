@@ -56,7 +56,8 @@ interface OidcConfigFormProps {
     | "attribute-mapping"
     | "enterprise-managed-credentials"
     | "role-mapping"
-    | "team-sync";
+    | "team-sync"
+    | "token-debugger";
   /** Hide the PKCE checkbox (for providers that don't support it like GitHub) */
   hidePkce?: boolean;
   /** Hide the Provider ID field (for predefined providers like Okta, Google, GitHub) */

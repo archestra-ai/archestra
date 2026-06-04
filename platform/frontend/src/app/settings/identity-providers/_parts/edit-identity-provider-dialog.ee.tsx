@@ -23,6 +23,7 @@ import {
   IdentityProviderDialogShell,
 } from "./identity-provider-dialog-shell.ee";
 import { normalizeIdentityProviderFormValues } from "./identity-provider-form.utils";
+import { IdTokenClaimsDebugger } from "./id-token-claims-debugger.ee";
 import { OidcConfigForm } from "./oidc-config-form.ee";
 import { SamlConfigForm } from "./saml-config-form.ee";
 
@@ -163,7 +164,9 @@ export function EditIdentityProviderDialog({
     return null;
   }
 
-  const navItems = getIdentityProviderDialogNavItems(providerType);
+  const navItems = getIdentityProviderDialogNavItems(providerType, {
+    includeTokenDebugger: true,
+  });
   const validActiveSection = navItems.some((item) => item.id === activeSection)
     ? activeSection
     : "general";
@@ -212,7 +215,9 @@ export function EditIdentityProviderDialog({
           </>
         }
       >
-        {providerType === "saml" ? (
+        {validActiveSection === "token-debugger" ? (
+          <IdTokenClaimsDebugger identityProviderId={provider.id} />
+        ) : providerType === "saml" ? (
           <SamlConfigForm
             form={form}
             identityProviderId={provider.id}

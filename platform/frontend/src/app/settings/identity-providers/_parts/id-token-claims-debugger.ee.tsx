@@ -1,6 +1,5 @@
 "use client";
 
-import { Code2 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useIdentityProviderLatestIdTokenClaims } from "@/lib/auth/identity-provider.query.ee";
 
@@ -23,23 +22,24 @@ export function IdTokenClaimsDebugger({
   const accessTokenWarnings = getAccessTokenWarnings(data?.accessTokenClaims);
 
   return (
-    <div className="space-y-4 rounded-md border p-4">
-      <div className="mb-3 flex items-center gap-2 text-sm font-medium">
-        <Code2 className="h-4 w-4" />
-        Latest identity-provider token claims
+    <div className="space-y-6">
+      <div className="space-y-1">
+        <h3 className="text-lg font-medium">
+          Latest identity-provider token claims
+        </h3>
+        <p className="text-sm text-muted-foreground">
+          Decoded claims from your latest sign-in with this identity provider.
+          Raw signed tokens are never shown.
+        </p>
       </div>
-      <p className="text-xs text-muted-foreground mb-3">
-        Decoded claims from your latest sign-in with this identity provider. Raw
-        signed tokens are never shown.
-      </p>
 
       {isLoading ? (
         <p className="text-sm text-muted-foreground">Loading claims...</p>
       ) : (
-        <>
+        <div className="space-y-6">
           <TokenClaimsPanel
             title="Latest access token claims"
-            description="Used for Microsoft Entra OBO when User Token To Exchange is Access token."
+            description="Used when downstream tools receive or exchange the signed-in user's identity-provider access token."
             formattedClaims={formattedAccessTokenClaims}
             emptyMessage="No access token claims are available for your account yet."
             warnings={accessTokenWarnings}
@@ -50,7 +50,7 @@ export function IdTokenClaimsDebugger({
             formattedClaims={formattedIdTokenClaims}
             emptyMessage="No ID token claims are available for your account yet."
           />
-        </>
+        </div>
       )}
     </div>
   );
@@ -70,10 +70,10 @@ function TokenClaimsPanel({
   warnings?: string[];
 }) {
   return (
-    <div className="space-y-2">
-      <div>
-        <div className="text-sm font-medium">{title}</div>
-        <p className="text-xs text-muted-foreground">{description}</p>
+    <section className="space-y-3">
+      <div className="space-y-1">
+        <h4 className="text-sm font-medium">{title}</h4>
+        <p className="text-sm text-muted-foreground">{description}</p>
       </div>
 
       {warnings.length > 0 && (
@@ -95,7 +95,7 @@ function TokenClaimsPanel({
           {emptyMessage} Sign in with this provider, then reopen this dialog.
         </p>
       )}
-    </div>
+    </section>
   );
 }
 

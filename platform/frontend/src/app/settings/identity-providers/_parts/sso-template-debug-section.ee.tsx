@@ -2,7 +2,6 @@
 
 import { SSO_TEMPLATE_HELPER_LIST_LABEL } from "@shared";
 import { Separator } from "@/components/ui/separator";
-import { IdTokenClaimsDebugger } from "./id-token-claims-debugger.ee";
 import type {
   SsoRoleMappingRule,
   SsoTemplateTestMode,
@@ -53,8 +52,6 @@ export function SsoTemplateDebugSection({
         defaultRole={defaultRole}
         strictMode={strictMode}
       />
-
-      <IdTokenClaimsDebugger identityProviderId={identityProviderId} />
 
       <div className="rounded-md border bg-muted/30 p-4">
         <h4 className="mb-3 text-sm font-medium">Example Templates</h4>

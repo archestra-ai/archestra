@@ -87,6 +87,7 @@ export function useIdentityProviderLatestIdTokenClaims(id: string | undefined) {
     retry: false,
     throwOnError: false,
     enabled: config.enterpriseFeatures.core && !!id,
+    refetchOnMount: "always",
   });
 }
 

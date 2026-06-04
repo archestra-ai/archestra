@@ -1,5 +1,31 @@
 # Changelog
 
+## [1.2.56](https://github.com/archestra-ai/archestra/compare/platform-v1.2.55...platform-v1.2.56) (2026-06-04)
+
+
+### Features
+
+* add Copilot CLI connection client ([#5278](https://github.com/archestra-ai/archestra/issues/5278)) ([44c53ed](https://github.com/archestra-ai/archestra/commit/44c53ede494a49daa0b3f1434b6aa93fdd9bee98))
+* add MCP image refresh action ([#5276](https://github.com/archestra-ai/archestra/issues/5276)) ([1a7920c](https://github.com/archestra-ai/archestra/commit/1a7920cd7179dde0ec65b51d9ba14dcb7c4daba9))
+
+
+### Bug Fixes
+
+* artifact table overflow ([#5284](https://github.com/archestra-ai/archestra/issues/5284)) ([293588b](https://github.com/archestra-ai/archestra/commit/293588b2cb2ba3e25fd4ab221072d6f1de138c80))
+* **docker:** bump Go toolchain to 1.25.11 for CVE-2026-42504 ([#5294](https://github.com/archestra-ai/archestra/issues/5294)) ([68fcae3](https://github.com/archestra-ai/archestra/commit/68fcae3038e70a2c24896540fcba15ebe291237f))
+* empty MCP app panels in chat ([#5286](https://github.com/archestra-ai/archestra/issues/5286)) ([de1e940](https://github.com/archestra-ai/archestra/commit/de1e940e92ea8f5ba5f10d6aa4c49e1e124ba124))
+* **mcp-catalog:** carry over secrets when cloning a catalog item ([#5267](https://github.com/archestra-ai/archestra/issues/5267)) ([ae27f58](https://github.com/archestra-ai/archestra/commit/ae27f58e2efc35cb691437d62080b0ddf01098a2))
+
+
+### Code Refactoring
+
+* **mcp-registry:** drop preset-entry registry admin feature ([#5273](https://github.com/archestra-ai/archestra/issues/5273)) ([033978c](https://github.com/archestra-ai/archestra/commit/033978cddfcfe4ecef1a16339b64e6e5db14dfe6))
+
+
+### Miscellaneous Chores
+
+* productionize environments and network egress policies ([#5265](https://github.com/archestra-ai/archestra/issues/5265)) ([7b89a4a](https://github.com/archestra-ai/archestra/commit/7b89a4a5de293a900d3824308dcca9bad159734b))
+
 ## [1.2.55](https://github.com/archestra-ai/archestra/compare/platform-v1.2.54...platform-v1.2.55) (2026-06-03)
 
 

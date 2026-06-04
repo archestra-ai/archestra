@@ -150,10 +150,10 @@ export function GithubConfigFields({
                     <FormDescription>
                       No GitHub App configurations exist yet. Create one under{" "}
                       <Link
-                        href="/settings/github-apps"
+                        href="/settings/integrations/github-apps"
                         className="font-medium text-primary underline-offset-4 hover:underline"
                       >
-                        Settings → GitHub Apps
+                        Settings → Integrations → GitHub Apps
                       </Link>
                       .
                     </FormDescription>

@@ -1327,6 +1327,7 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/settings/roles": { ac: ["read"] },
   "/settings/identity-providers": { identityProvider: ["read"] },
   "/settings/secrets": { secret: ["read"] },
-  "/settings/github-apps": { githubAppConfig: ["read"] },
+  "/settings/integrations": { githubAppConfig: ["read"] },
+  "/settings/integrations/github-apps": { githubAppConfig: ["read"] },
   "/settings/organization": { organizationSettings: ["read"] },
 };

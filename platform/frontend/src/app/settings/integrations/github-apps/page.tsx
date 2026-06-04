@@ -33,7 +33,7 @@ import {
   useUpdateGithubAppConfig,
 } from "@/lib/github-app-config.query";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
-import { useSetSettingsAction } from "../layout";
+import { useSetSettingsAction } from "../../layout";
 
 const DEFAULT_GITHUB_URL = "https://api.github.com";
 

@@ -13,9 +13,8 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { usePresetEntityName } from "@/lib/organization.query";
 
-export type FieldScopeValue = "installation" | "preset" | "static";
+export type FieldScopeValue = "installation" | "static";
 
 interface FieldScopeSelectProps {
   value: FieldScopeValue;
@@ -32,11 +31,6 @@ export function FieldScopeSelect({
   disableInstallation = false,
   disabledReason,
 }: FieldScopeSelectProps) {
-  const { singular } = usePresetEntityName();
-  // "preset" is deprecated as a selectable scope: it is no longer offered when
-  // adding a field, but a field that already has preset scope keeps rendering
-  // the option so its value still displays and existing config isn't dropped.
-  const showPresetScope = value === "preset";
   const installationItem = (
     <SelectItem
       value="installation"
@@ -70,7 +64,6 @@ export function FieldScopeSelect({
         ) : (
           installationItem
         )}
-        {showPresetScope && <SelectItem value="preset">{singular}</SelectItem>}
         <SelectItem value="static">Static</SelectItem>
       </SelectContent>
     </Select>

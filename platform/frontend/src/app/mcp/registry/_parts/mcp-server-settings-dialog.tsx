@@ -9,7 +9,7 @@ import {
   Trash2,
   XIcon,
 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { Button } from "@/components/ui/button";
 import {
@@ -29,8 +29,6 @@ import {
   EmptyMedia,
 } from "@/components/ui/empty";
 import { TruncatedTooltip } from "@/components/ui/truncated-tooltip";
-import { useCatalogPresets } from "@/lib/mcp/internal-mcp-catalog.query";
-import { usePresetEntityName } from "@/lib/organization.query";
 import { cn } from "@/lib/utils";
 import {
   computeDeploymentStatusSummary,
@@ -39,11 +37,7 @@ import {
 } from "./deployment-status";
 import { EditCatalogContent } from "./edit-catalog-dialog";
 import { ManageUsersContent } from "./manage-users-dialog";
-import {
-  McpLogsContent,
-  type McpLogsTab,
-  PresetSelector,
-} from "./mcp-logs-dialog";
+import { McpLogsContent, type McpLogsTab } from "./mcp-logs-dialog";
 import type { CatalogItem } from "./mcp-server-card";
 import { YamlConfigContent } from "./yaml-config-dialog";
 
@@ -73,16 +67,15 @@ interface McpServerSettingsDialogProps {
   showInspector: boolean;
   showYaml: boolean;
   // Connections
-  onAddPersonalConnection?: (presetCatalogId?: string) => void;
-  onAddSharedConnection?: (teamId: string, presetCatalogId?: string) => void;
-  onAddOrgConnection?: (presetCatalogId?: string) => void;
+  onAddPersonalConnection?: () => void;
+  onAddSharedConnection?: (teamId: string) => void;
+  onAddOrgConnection?: () => void;
   // Debug
   installs: {
     id: string;
     name: string;
     ownerEmail?: string | null;
     teamDetails?: { teamId: string; name: string } | null;
-    presetLabel?: string | null;
   }[];
   deploymentStatuses: Record<string, McpDeploymentStatusEntry>;
   deploymentServerIds: string[];
@@ -157,10 +150,6 @@ export function McpServerSettingsDialog({
   onClone,
 }: McpServerSettingsDialogProps) {
   const isBuiltin = variant === "builtin";
-  const presetEntityName = usePresetEntityName();
-  const { data: presets = [] } = useCatalogPresets(
-    isBuiltin || !presetEntityName.configured ? null : item.id,
-  );
 
   const navItems: NavItemDef[] = [];
   if (!isBuiltin) {
@@ -203,46 +192,6 @@ export function McpServerSettingsDialog({
     : (navItems[0]?.id ?? "configuration");
 
   const isDebugPage = validPage.startsWith("debug-");
-
-  // Preset filter shown in the slim page header on Logs/Inspector/Shell and
-  // Credentials. Drives both McpLogsContent (filters the pod selector) and
-  // ManageUsersContent (filters credential sections). Hidden unless the org
-  // has the preset term configured AND the catalog has ≥ 1 preset child.
-  // The literal "All" is a sentinel for "no filter".
-  const presetLabelOptions = [
-    "All",
-    presetEntityName.defaultLabel,
-    ...presets.map((p) => p.childName ?? p.name),
-  ];
-  const presetIdByLabel = new Map<string, string>([
-    [presetEntityName.defaultLabel, item.id],
-    ...presets.map((p) => [p.childName ?? p.name, p.id] as const),
-  ]);
-  const [pageSelectedPreset, setPageSelectedPreset] = useState<string>("All");
-  // Keep the selector in sync when the dialog opens deep-linked to a
-  // specific pod (e.g. from the chat log button or the per-install reinstall
-  // banner) — otherwise the user might land on a preset that doesn't contain
-  // that pod and see it disappear from the dropdown.
-  useEffect(() => {
-    const init = clickedServerId ?? logsInitialServerId;
-    if (!init) return;
-    const found = installs.find((i) => i.id === init);
-    if (found)
-      setPageSelectedPreset(found.presetLabel ?? presetEntityName.defaultLabel);
-  }, [
-    clickedServerId,
-    logsInitialServerId,
-    installs,
-    presetEntityName.defaultLabel,
-  ]);
-  const presetSelectorVisible =
-    presetEntityName.configured &&
-    presets.length > 0 &&
-    (isDebugPage || validPage === "connections");
-  const credentialsControlledFilter =
-    pageSelectedPreset === "All"
-      ? "all"
-      : (presetIdByLabel.get(pageSelectedPreset) ?? "all");
 
   // Configuration dirty state tracking
   const [isConfigDirty, setIsConfigDirty] = useState(false);
@@ -446,13 +395,6 @@ export function McpServerSettingsDialog({
                 {PAGE_TITLES[validPage]}
               </h2>
               <div className="flex items-center gap-2">
-                {presetSelectorVisible && (
-                  <PresetSelector
-                    presets={presetLabelOptions}
-                    selectedPreset={pageSelectedPreset}
-                    setSelectedPreset={setPageSelectedPreset}
-                  />
-                )}
                 <Button
                   variant="ghost"
                   size="icon"
@@ -495,23 +437,6 @@ export function McpServerSettingsDialog({
                   onAddOrgConnection={onAddOrgConnection}
                   deploymentStatuses={deploymentStatuses}
                   hideHeader
-                  controlledPresetFilter={
-                    presetSelectorVisible
-                      ? credentialsControlledFilter
-                      : undefined
-                  }
-                  onControlledPresetFilterChange={(presetId) => {
-                    if (presetId === "all") {
-                      setPageSelectedPreset(presetEntityName.defaultLabel);
-                      return;
-                    }
-                    for (const [label, id] of presetIdByLabel) {
-                      if (id === presetId) {
-                        setPageSelectedPreset(label);
-                        return;
-                      }
-                    }
-                  }}
                   onOpenPodLogs={
                     showDebug
                       ? (podServerId: string) => {
@@ -556,10 +481,6 @@ export function McpServerSettingsDialog({
                       hideHeader
                       hideTabBar
                       controlledTab={DEBUG_TAB_MAP[validPage]}
-                      controlledSelectedPreset={
-                        presetSelectorVisible ? pageSelectedPreset : undefined
-                      }
-                      onSelectedPresetChange={setPageSelectedPreset}
                       onReinstall={() => onReinstall()}
                       initialServerId={clickedServerId ?? logsInitialServerId}
                     />

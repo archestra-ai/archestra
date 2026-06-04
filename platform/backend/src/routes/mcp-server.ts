@@ -14,9 +14,7 @@ import {
   AgentModel,
   AgentToolModel,
   InternalMcpCatalogModel,
-  McpPresetEntryModel,
   McpServerModel,
-  OrganizationModel,
   TeamModel,
   ToolModel,
 } from "@/models";
@@ -43,7 +41,6 @@ import {
   SelectMcpServerSchema,
   UuidIdSchema,
 } from "@/types";
-import { validateValuesAgainstRegex } from "@/utils/validate-values-against-regex";
 import { broadcastMcpInstallationStatus } from "@/websocket";
 
 const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
@@ -190,43 +187,6 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           throw new ApiError(400, "Catalog item not found");
         }
 
-        // Enforce the preset entry's validation regex (child install) or the
-        // org-wide default regex (parent install) against every prompted user
-        // value. Vault-reference paths (isByosVault) are pre-validated lookups,
-        // not user-entered strings — skip them.
-        if (!isByosVault) {
-          let applicableRegex: string | null = null;
-          let applicableName = "Default";
-          if (catalogItem.presetEntryId) {
-            const entry = await McpPresetEntryModel.findByIdForOrganization(
-              catalogItem.presetEntryId,
-              organizationId,
-            );
-            applicableRegex = entry?.validationRegex ?? null;
-            applicableName = entry?.name ?? "Default";
-          } else {
-            const org = await OrganizationModel.getById(organizationId);
-            applicableRegex = org?.presetEntityDefaultValidationRegex ?? null;
-            applicableName = org?.presetEntityDefaultLabel ?? "Default";
-          }
-          if (applicableRegex) {
-            try {
-              validateValuesAgainstRegex(
-                userConfigValues,
-                applicableRegex,
-                applicableName,
-              );
-              validateValuesAgainstRegex(
-                environmentValues,
-                applicableRegex,
-                applicableName,
-              );
-            } catch (e) {
-              throw new ApiError(400, (e as Error).message);
-            }
-          }
-        }
-
         // Playwright browser preview can only be installed as a personal server
         if (
           isPlaywrightCatalogItem(serverData.catalogId) &&
@@ -241,10 +201,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // Set serverType from catalog item
         serverData.serverType = catalogItem.serverType;
 
-        // The catalog row is the source of truth for the install name. For
-        // preset (child) installs the row's `name` is the composed
-        // `{parent.name}-{childName}`, so this also disambiguates parent vs.
-        // preset installs at the deployment-name layer.
+        // The catalog row is the source of truth for the install name.
         serverData.name = catalogItem.name;
 
         // Scope-based authorization (personal / team / org).
@@ -337,40 +294,6 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // Update local reference for deployment
           if (catalogItem.localConfig) {
             catalogItem.localConfig.serviceAccount = normalizedServiceAccount;
-          }
-        }
-
-        // Apply preset-scoped overlay from the catalog row onto the install
-        // inputs. Preset values have *lower* precedence than install-time
-        // inputs — if the user explicitly supplied the same key at install
-        // time, that wins.
-        // Secret-typed preset env values are also surfaced into
-        // environmentValues here. They reach the pod via the K8s Secret
-        // (built from the install secret bag) — the env builder only emits a
-        // secretKeyRef when it sees a non-empty entry for that key in
-        // environmentValues, so the merge must include secret keys too.
-        // Runs *after* the persist step above so values freshly-supplied via
-        // this install request's `presetFieldValues` are included.
-        if (catalogItem.localConfig?.environment) {
-          const presetSecretBag = catalogItem.presetSecretId
-            ? ((await secretManager().getSecret(catalogItem.presetSecretId))
-                ?.secret as Record<string, unknown> | undefined)
-            : undefined;
-
-          const presetEnvDefaults: Record<string, string> = {};
-          for (const envDef of catalogItem.localConfig.environment) {
-            if (!envDef.promptOnPreset) continue;
-            const v =
-              envDef.type === "secret"
-                ? presetSecretBag?.[envDef.key]
-                : catalogItem.presetFieldValues?.[envDef.key];
-            if (v != null) presetEnvDefaults[envDef.key] = String(v);
-          }
-          if (Object.keys(presetEnvDefaults).length > 0) {
-            environmentValues = {
-              ...presetEnvDefaults,
-              ...(environmentValues ?? {}),
-            };
           }
         }
       }
@@ -586,15 +509,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           };
           let hasPromptedSecrets = false;
 
-          // Resolve the preset secret bundle once if the catalog row carries
-          // one — preset-scoped secret env values live in this bag, keyed by
-          // env-var name.
-          const presetSecretBag = catalogItem.presetSecretId
-            ? ((await secretManager().getSecret(catalogItem.presetSecretId))
-                ?.secret as Record<string, unknown> | undefined)
-            : undefined;
-
-          // Collect all secret-type env vars (static, prompted, and preset).
+          // Collect all secret-type env vars (static and prompted).
           for (const envDef of catalogItem.localConfig?.environment ?? []) {
             if (envDef.type === "secret") {
               let value: string | undefined;
@@ -605,10 +520,6 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 if (value) {
                   hasPromptedSecrets = true;
                 }
-              } else if (envDef.promptOnPreset) {
-                // Preset-scoped — read from the resolved preset secret bag
-                const raw = presetSecretBag?.[envDef.key];
-                value = raw != null ? String(raw) : undefined;
               } else {
                 // Static value from catalog - get from envDef.value
                 value = envDef.value;

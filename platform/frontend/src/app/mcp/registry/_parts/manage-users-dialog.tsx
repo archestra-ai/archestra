@@ -16,7 +16,7 @@ import {
   Trash,
   User,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -43,13 +43,6 @@ import {
   EmptyMedia,
 } from "@/components/ui/empty";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
   Table,
   TableBody,
   TableCell,
@@ -70,12 +63,8 @@ import {
   setOAuthMcpServerId,
   setOAuthState,
 } from "@/lib/auth/oauth-session";
-import {
-  useCatalogPresets,
-  useInternalMcpCatalog,
-} from "@/lib/mcp/internal-mcp-catalog.query";
+import { useInternalMcpCatalog } from "@/lib/mcp/internal-mcp-catalog.query";
 import { useDeleteMcpServer, useMcpServers } from "@/lib/mcp/mcp-server.query";
-import { usePresetEntityName } from "@/lib/organization.query";
 import { useTeams } from "@/lib/teams/team.query";
 import { type DeploymentState, DeploymentStatusDot } from "./deployment-status";
 
@@ -84,16 +73,12 @@ interface ManageUsersDialogProps {
   onClose: () => void;
   label?: string;
   catalogId: string;
-  /**
-   * Called when user wants to add a personal connection. `presetCatalogId`
-   * is set when the user clicked Install on a specific preset card; falls
-   * back to the parent catalog.
-   */
-  onAddPersonalConnection?: (presetCatalogId?: string) => void;
+  /** Called when user wants to add a personal connection. */
+  onAddPersonalConnection?: () => void;
   /** Called when user wants to add a team connection for a specific team */
-  onAddSharedConnection?: (teamId: string, presetCatalogId?: string) => void;
+  onAddSharedConnection?: (teamId: string) => void;
   /** Called when user wants to add an organization-wide connection */
-  onAddOrgConnection?: (presetCatalogId?: string) => void;
+  onAddOrgConnection?: () => void;
   /** Deployment statuses keyed by server ID */
   deploymentStatuses?: Record<string, McpDeploymentStatusEntry>;
   /** Called when user clicks a pod name to open the debug dialog */
@@ -138,19 +123,12 @@ interface ManageUsersContentProps {
   onClose: () => void;
   label?: string;
   catalogId: string;
-  onAddPersonalConnection?: (presetCatalogId?: string) => void;
-  onAddSharedConnection?: (teamId: string, presetCatalogId?: string) => void;
-  onAddOrgConnection?: (presetCatalogId?: string) => void;
+  onAddPersonalConnection?: () => void;
+  onAddSharedConnection?: (teamId: string) => void;
+  onAddOrgConnection?: () => void;
   deploymentStatuses?: Record<string, McpDeploymentStatusEntry>;
   onOpenPodLogs?: (serverId: string) => void;
   hideHeader?: boolean;
-  /**
-   * Externally-controlled preset filter id ("all" or a presetId). When set,
-   * the internal preset Select is hidden and the parent owns the value
-   * (used by the settings dialog so the selector can live in its page header).
-   */
-  controlledPresetFilter?: string;
-  onControlledPresetFilterChange?: (value: string) => void;
 }
 
 export function ManageUsersContent({
@@ -164,53 +142,17 @@ export function ManageUsersContent({
   deploymentStatuses = {},
   onOpenPodLogs,
   hideHeader = false,
-  controlledPresetFilter,
-  onControlledPresetFilterChange,
 }: ManageUsersContentProps) {
-  const isPresetFilterControlled = controlledPresetFilter !== undefined;
   // Subscribe to live mcp-servers query to get fresh data. We fetch all
-  // servers (no catalogId filter) and split by preset client-side so we can
-  // group rows by the preset/default they were installed from.
+  // servers (no catalogId filter) and keep those installed from this catalog.
   const { data: allServersUnfiltered = [], isFetched: serversFetched } =
     useMcpServers();
   const { data: catalogItems } = useInternalMcpCatalog({});
-  const { data: childPresets = [] } = useCatalogPresets(catalogId);
-  const {
-    plural: presetPlural,
-    singular: presetSingular,
-    configured: presetTermConfigured,
-    defaultLabel,
-  } = usePresetEntityName();
 
-  // Map of presetId → preset row. Parent is the "default" preset.
-  const presetEntries = [
-    { id: catalogId, name: defaultLabel, isDefault: true },
-    ...childPresets.map((c) => ({
-      id: c.id,
-      name: c.childName ?? c.name,
-      isDefault: false,
-    })),
-  ];
-  const presetIds = new Set(presetEntries.map((p) => p.id));
-
-  const allServers = allServersUnfiltered.filter((s) =>
-    s.catalogId ? presetIds.has(s.catalogId) : false,
+  const allServers = allServersUnfiltered.filter(
+    (s) => s.catalogId === catalogId,
   );
 
-  // Filter dropdown state — "all" or a specific presetId.
-  // When `controlledPresetFilter` is supplied, the parent owns this state.
-  const [internalSelectedPresetFilter, setInternalSelectedPresetFilter] =
-    useState<string>("all");
-  const selectedPresetFilter = isPresetFilterControlled
-    ? (controlledPresetFilter ?? "all")
-    : internalSelectedPresetFilter;
-  const setSelectedPresetFilter = isPresetFilterControlled
-    ? (next: string) => onControlledPresetFilterChange?.(next)
-    : setInternalSelectedPresetFilter;
-  const visiblePresets =
-    selectedPresetFilter === "all"
-      ? presetEntries
-      : presetEntries.filter((p) => p.id === selectedPresetFilter);
   const { data: session } = useSession();
   const currentUserId = session?.user?.id;
 
@@ -362,34 +304,19 @@ export function ManageUsersContent({
     }
   };
 
-  // Close dialog when all credentials are revoked (only after data has loaded)
-  // But keep dialog open if add callbacks are available or if the catalog has
-  // child presets to display (preset cards are informative even when empty).
+  // Close dialog when all credentials are revoked (only after data has loaded),
+  // but keep it open if add callbacks are available.
   const hasAddCallbacks =
     !!onAddPersonalConnection ||
     !!onAddSharedConnection ||
     !!onAddOrgConnection;
-  const hasChildPresets = childPresets.length > 0;
   useEffect(() => {
-    if (
-      isActive &&
-      serversFetched &&
-      !firstServer &&
-      !hasAddCallbacks &&
-      !hasChildPresets
-    ) {
+    if (isActive && serversFetched && !firstServer && !hasAddCallbacks) {
       onClose();
     }
-  }, [
-    isActive,
-    serversFetched,
-    firstServer,
-    onClose,
-    hasAddCallbacks,
-    hasChildPresets,
-  ]);
+  }, [isActive, serversFetched, firstServer, onClose, hasAddCallbacks]);
 
-  if (!firstServer && !hasAddCallbacks && !hasChildPresets) {
+  if (!firstServer && !hasAddCallbacks) {
     return null;
   }
 
@@ -445,45 +372,9 @@ export function ManageUsersContent({
       )}
 
       <div className={hideHeader ? "space-y-4 px-4 py-4" : "space-y-4 pb-4"}>
-        {/* Legacy in-content preset filter — only shown when the standalone
-            dialog renders (no external page header to host the selector). */}
-        {presetEntries.length > 1 && !isPresetFilterControlled && (
-          <div className="flex items-center justify-end gap-2">
-            <Select
-              value={selectedPresetFilter}
-              onValueChange={setSelectedPresetFilter}
-            >
-              <SelectTrigger className="w-[200px]">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All {presetPlural}</SelectItem>
-                {presetEntries.map((p) => (
-                  <SelectItem key={p.id} value={p.id}>
-                    {p.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        )}
-
-        {visiblePresets.map((preset) => {
-          const presetServers = allServers.filter(
-            (s) => s.catalogId === preset.id,
-          );
-          const split = splitByScope(presetServers);
-          const hasContent = presetServers.length > 0;
-          // Annotate the card title with the configured preset term only
-          // when the org has set one AND non-default presets actually exist.
-          // Without both, the title row carries only the install button.
-          const showAnnotatedTitle =
-            presetTermConfigured && childPresets.length > 0;
-          // Pass undefined for default so the install flow targets the parent
-          // catalog directly (matches pre-preset behaviour).
-          const installPresetCatalogId = preset.isDefault
-            ? undefined
-            : preset.id;
+        {(() => {
+          const split = splitByScope(allServers);
+          const hasContent = allServers.length > 0;
 
           const installMenu = (
             <InstallMenuButton
@@ -493,7 +384,7 @@ export function ManageUsersContent({
                 !split.myPersonalServer
                   ? () => {
                       onClose();
-                      onAddPersonalConnection(installPresetCatalogId);
+                      onAddPersonalConnection();
                     }
                   : undefined
               }
@@ -501,7 +392,7 @@ export function ManageUsersContent({
                 hasAddCallbacks && onAddSharedConnection
                   ? (teamId) => {
                       onClose();
-                      onAddSharedConnection(teamId, installPresetCatalogId);
+                      onAddSharedConnection(teamId);
                     }
                   : undefined
               }
@@ -509,7 +400,7 @@ export function ManageUsersContent({
                 hasAddCallbacks && onAddOrgConnection && !split.hasOrgConnection
                   ? () => {
                       onClose();
-                      onAddOrgConnection(installPresetCatalogId);
+                      onAddOrgConnection();
                     }
                   : undefined
               }
@@ -524,23 +415,10 @@ export function ManageUsersContent({
           );
 
           return (
-            <div key={preset.id} className="space-y-2">
-              {!showAnnotatedTitle && (
-                <div className="flex justify-end">{installMenu}</div>
-              )}
+            <div className="space-y-2">
+              <div className="flex justify-end">{installMenu}</div>
               <Card>
                 <CardContent className="p-0">
-                  {showAnnotatedTitle && (
-                    <div className="flex items-center justify-between gap-2 border-b px-4 py-2.5">
-                      <span className="text-sm font-semibold">
-                        <span className="text-muted-foreground font-normal">
-                          {presetSingular}:{" "}
-                        </span>
-                        {preset.name}
-                      </span>
-                      {installMenu}
-                    </div>
-                  )}
                   {hasContent ? (
                     <UnifiedConnectionsTable
                       myPersonalServer={split.myPersonalServer}
@@ -569,7 +447,7 @@ export function ManageUsersContent({
               </Card>
             </div>
           );
-        })}
+        })()}
       </div>
 
       {!hideHeader && (

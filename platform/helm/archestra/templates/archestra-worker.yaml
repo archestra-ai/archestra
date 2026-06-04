@@ -34,6 +34,7 @@ spec:
       serviceAccountName: {{ include "archestra-platform.serviceAccountName" . }}
       initContainers:
         {{- include "archestra-platform.initContainers" . | nindent 8 }}
+        {{- include "archestra-platform.waitForMigrationsInitContainer" . | nindent 8 }}
       containers:
         - name: {{ .Chart.Name }}-worker
           image: {{ include "archestra-platform.image" . }}

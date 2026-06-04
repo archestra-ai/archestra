@@ -1,0 +1,104 @@
+{{- if and .Values.archestra.migrationJob.enabled (ne (include "archestra-platform.maintenanceModeEnabled" .) "true") }}
+{{/*
+Database migration Job.
+
+Runs `pnpm db:migrate` as a Helm pre-upgrade hook so the target version's
+schema is applied before web and worker Deployments roll. Fresh installs are
+covered by the web pod running migrations on startup plus the worker
+wait-for-migrations init container.
+*/}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "archestra-platform.fullname" . }}-migrate
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "archestra-platform.migrationJobLabels" . | nindent 4 }}
+  annotations:
+    helm.sh/hook: pre-upgrade
+    helm.sh/hook-weight: "-5"
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: {{ .Values.archestra.migrationJob.backoffLimit | default 3 }}
+  {{- with .Values.archestra.migrationJob.activeDeadlineSeconds }}
+  activeDeadlineSeconds: {{ . }}
+  {{- end }}
+  template:
+    metadata:
+      labels:
+        {{- include "archestra-platform.migrationJobLabels" . | nindent 8 }}
+        {{- with .Values.archestra.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ include "archestra-platform.serviceAccountName" . }}
+      restartPolicy: Never
+      initContainers:
+        {{- include "archestra-platform.initContainers" . | nindent 8 }}
+      containers:
+        - name: {{ .Chart.Name }}-migrate
+          image: {{ include "archestra-platform.image" . }}
+          imagePullPolicy: {{ .Values.archestra.imagePullPolicy | default "IfNotPresent" }}
+          workingDir: /app/backend
+          {{- if .Values.archestra.initContainers.vaultSecrets.enabled }}
+          {{- include "archestra-platform.vaultSecretsCommand" "pnpm db:migrate" | nindent 10 }}
+          {{- else }}
+          command: ["pnpm", "db:migrate"]
+          {{- end }}
+          env:
+            {{- range $key, $value := .Values.archestra.migrationJob.env }}
+            - name: {{ $key }}
+              value: {{ $value | quote }}
+            {{- end }}
+            {{- range .Values.archestra.migrationJob.envFromSecrets }}
+            - name: {{ .name }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .secretName }}
+                  key: {{ .secretKey }}
+            {{- end }}
+            {{- range .Values.archestra.migrationJob.envWithValueFrom }}
+            - name: {{ .name }}
+              valueFrom:
+                {{- toYaml .valueFrom | nindent 16 }}
+            {{- end }}
+            {{- include "archestra-platform.env" . | nindent 12 }}
+          {{- if or .Values.archestra.envFrom .Values.archestra.migrationJob.envFrom }}
+          envFrom:
+            {{- with .Values.archestra.envFrom }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+            {{- with .Values.archestra.migrationJob.envFrom }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- end }}
+          {{- with (.Values.archestra.migrationJob.resources | default .Values.archestra.resources) }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- /*
+          The migration container only needs the Vault secrets volume for DB URL
+          injection. Avoid mounting shared diagnostics PVCs here because the
+          hook overlaps running web/worker pods during upgrades.
+          */}}
+          {{- if .Values.archestra.initContainers.vaultSecrets.enabled }}
+          volumeMounts:
+            - name: vault-secrets
+              mountPath: /vault/secrets
+              readOnly: true
+          {{- end }}
+      {{- with .Values.archestra.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.archestra.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if .Values.archestra.initContainers.vaultSecrets.enabled }}
+      volumes:
+        - name: vault-secrets
+          emptyDir:
+            medium: Memory
+      {{- end }}
+{{- end }}

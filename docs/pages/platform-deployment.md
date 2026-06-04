@@ -250,6 +250,8 @@ Environment network policies require the chart's default MCP manager RBAC so Arc
 - `archestra.worker.replicaCount` - Manual replica count for the separate worker Deployment
 - `archestra.worker.resources` - Resource requests/limits for worker pods (default: 2 vCPU request, 1Gi memory request, 2Gi memory limit)
 - `archestra.worker.deploymentStrategy` - Rolling update strategy for worker pods (default: `maxUnavailable: 25%`, `maxSurge: 25%`)
+- `archestra.migrationJob.enabled` - Run database migrations in a pre-upgrade Job before rolling web and worker pods (default: true)
+- `archestra.migrationJob.env`, `archestra.migrationJob.envFromSecrets`, `archestra.migrationJob.envWithValueFrom`, `archestra.migrationJob.envFrom` - Hook-only environment values for database credentials or secret sources that must be available to the migration Job
 
 #### HorizontalPodAutoscaler
 
@@ -462,6 +464,8 @@ helm upgrade archestra-platform \
 ```
 
 If you don't specify `postgresql.external_database_url`, the chart will deploy a managed PostgreSQL instance using the Bitnami PostgreSQL chart. For PostgreSQL-specific configuration options, see the [Bitnami PostgreSQL Helm chart documentation](https://artifacthub.io/packages/helm/bitnami/postgresql?modal=values-schema).
+
+During Helm upgrades, the chart runs `pnpm db:migrate` in a pre-upgrade Job before rolling the web and worker Deployments. Disable `archestra.migrationJob.enabled` only if your deployment pipeline applies migrations out of band. If your external database connection string depends on Kubernetes environment expansion, such as `$(PGPASSWORD)`, set the required hook-only variables through `archestra.migrationJob.envFromSecrets` or `archestra.migrationJob.env` so the hook receives them without post-render patches.
 
 #### SSRF Protection for MCP Server Pods
 

@@ -236,6 +236,7 @@ const RULES: Rule[] = [
       "Adding a validating constraint can fail existing rows. Add it NOT VALID first, then validate separately.",
     matches: (statement) =>
       /\bALTER\s+TABLE\b[\s\S]*\bADD\s+CONSTRAINT\b/i.test(statement) &&
+      !/\bUNIQUE\b/i.test(statement) &&
       !/\bNOT\s+VALID\b/i.test(statement),
   },
   {
@@ -273,7 +274,7 @@ const RULES: Rule[] = [
     message:
       "CREATE INDEX without CONCURRENTLY can block writes on large existing tables.",
     matches: (statement) =>
-      /\bCREATE\s+(?:UNIQUE\s+)?INDEX\b/i.test(statement) &&
+      /\bCREATE\s+INDEX\b/i.test(statement) &&
       !/\bCONCURRENTLY\b/i.test(statement),
   },
   {

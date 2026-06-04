@@ -78,9 +78,19 @@ describe("lintMigrationSql", () => {
       'CREATE UNIQUE INDEX "agents_slug_idx" ON "agents" ("slug");',
     );
 
-    expect(result.issues.map((issue) => issue.code)).toContain(
+    expect(result.issues.map((issue) => issue.code)).toEqual([
       "add-unique-constraint",
+    ]);
+  });
+
+  test("flags unique table constraints without duplicate validating-constraint output", () => {
+    const result = lintMigrationSql(
+      'ALTER TABLE "agents" ADD CONSTRAINT "agents_slug_unique" UNIQUE("slug");',
     );
+
+    expect(result.issues.map((issue) => issue.code)).toEqual([
+      "add-unique-constraint",
+    ]);
   });
 
   test("flags validating constraints but allows not-valid constraints", () => {

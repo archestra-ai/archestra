@@ -3,6 +3,7 @@
   "compilerOptions": {
     "paths": {
       "@/*": ["./src/*"],
+      "@drizzle-migration-linter": ["../drizzle-migration-linter/src/index.ts"],
       "@shared": ["../shared/index.ts"],
       "@shared/*": ["../shared/*"]
     }

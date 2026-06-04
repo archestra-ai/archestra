@@ -4,7 +4,7 @@ import {
   type LintMigrationResult,
   lintMigrationFile,
   summarizeIssues,
-} from "../../../drizzle-migration-linter/src";
+} from "@drizzle-migration-linter";
 
 const MIGRATIONS_DIR = path.resolve(process.cwd(), "src/database/migrations");
 const PLATFORM_ROOT = path.resolve(process.cwd(), "..");

@@ -15,11 +15,5 @@
     "test": "pnpm --dir ../backend exec vitest run --root ../drizzle-migration-linter",
     "type-check": "pnpm --dir ../backend exec tsgo --noEmit --project ../drizzle-migration-linter/tsconfig.json"
   },
-  "devDependencies": {
-    "@types/node": "^25.5.0",
-    "@typescript/native-preview": "catalog:",
-    "tsx": "^4.21.0",
-    "typescript": "catalog:",
-    "vitest": "^4.1.0"
-  }
+  "devDependencies": {}
 }

@@ -16,8 +16,6 @@ const config: KnipConfig = {
   ignoreDependencies: [
     // Workspace dependency - resolved by pnpm
     "@shared",
-    // Local migration-linter package imported through standalone-scripts tsconfig paths.
-    "@drizzle-migration-linter",
     // Native CommonJS addon loaded through package exports; knip does not
     // resolve the workspace package's generated N-API entrypoint correctly.
     "@archestra/sandbox-rs",

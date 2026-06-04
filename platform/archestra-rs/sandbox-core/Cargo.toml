@@ -27,7 +27,7 @@ opentelemetry = "0.27"
 opentelemetry_sdk = "0.27"
 # http/protobuf OTLP over rustls (musl-friendly, no system openssl), aimed at
 # the same collector the node SDK uses (port 4318).
-opentelemetry-otlp = { version = "0.27", default-features = false, features = [
+opentelemetry-otlp = { version = "0.32", default-features = false, features = [
     "trace",
     "logs",
     "http-proto",

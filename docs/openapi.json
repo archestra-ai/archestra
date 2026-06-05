@@ -39757,6 +39757,12 @@
                               "enum": [
                                 "salesforce"
                               ]
+                            },
+                            {
+                              "type": "string",
+                              "enum": [
+                                "web_crawler"
+                              ]
                             }
                           ],
                           "description": "Connector type (e.g. confluence, github)"
@@ -43616,6 +43622,12 @@
                                 "type": "string",
                                 "enum": [
                                   "salesforce"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "web_crawler"
                                 ]
                               }
                             ],
@@ -121568,6 +121580,12 @@
                                       "enum": [
                                         "salesforce"
                                       ]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": [
+                                        "web_crawler"
+                                      ]
                                     }
                                   ]
                                 }
@@ -123545,6 +123563,12 @@
                   "enum": [
                     "salesforce"
                   ]
+                },
+                {
+                  "type": "string",
+                  "enum": [
+                    "web_crawler"
+                  ]
                 }
               ]
             },
@@ -123684,6 +123708,12 @@
                                 "type": "string",
                                 "enum": [
                                   "salesforce"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "web_crawler"
                                 ]
                               }
                             ]
@@ -124279,6 +124309,72 @@
                                   "loginUrl"
                                 ],
                                 "additionalProperties": false
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "type": {
+                                    "type": "string",
+                                    "enum": [
+                                      "web_crawler"
+                                    ]
+                                  },
+                                  "startUrl": {},
+                                  "includePathPrefixes": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    }
+                                  },
+                                  "excludePathPatterns": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    }
+                                  },
+                                  "contentSelector": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  },
+                                  "excludeSelectors": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    }
+                                  },
+                                  "maxPages": {
+                                    "type": "integer",
+                                    "minimum": 1,
+                                    "maximum": 10000
+                                  },
+                                  "maxDepth": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 50
+                                  },
+                                  "batchSize": {
+                                    "type": "integer",
+                                    "minimum": 1,
+                                    "maximum": 100
+                                  },
+                                  "requestDelayMs": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 10000
+                                  },
+                                  "userAgent": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  }
+                                },
+                                "required": [
+                                  "type",
+                                  "startUrl"
+                                ],
+                                "additionalProperties": false
                               }
                             ]
                           },
@@ -124812,6 +124908,12 @@
                         "type": "string",
                         "enum": [
                           "salesforce"
+                        ]
+                      },
+                      {
+                        "type": "string",
+                        "enum": [
+                          "web_crawler"
                         ]
                       }
                     ]
@@ -125404,6 +125506,73 @@
                         "required": [
                           "type"
                         ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "web_crawler"
+                            ]
+                          },
+                          "startUrl": {
+                            "type": "string"
+                          },
+                          "includePathPrefixes": {
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "minLength": 1
+                            }
+                          },
+                          "excludePathPatterns": {
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "minLength": 1
+                            }
+                          },
+                          "contentSelector": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "excludeSelectors": {
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "minLength": 1
+                            }
+                          },
+                          "maxPages": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 10000
+                          },
+                          "maxDepth": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 50
+                          },
+                          "batchSize": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 100
+                          },
+                          "requestDelayMs": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 10000
+                          },
+                          "userAgent": {
+                            "type": "string",
+                            "minLength": 1
+                          }
+                        },
+                        "required": [
+                          "type",
+                          "startUrl"
+                        ]
                       }
                     ]
                   },
@@ -125588,6 +125757,12 @@
                           "type": "string",
                           "enum": [
                             "salesforce"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "web_crawler"
                           ]
                         }
                       ]
@@ -126181,6 +126356,72 @@
                           "required": [
                             "type",
                             "loginUrl"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "web_crawler"
+                              ]
+                            },
+                            "startUrl": {},
+                            "includePathPrefixes": {
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            },
+                            "excludePathPatterns": {
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            },
+                            "contentSelector": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "excludeSelectors": {
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            },
+                            "maxPages": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 10000
+                            },
+                            "maxDepth": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 50
+                            },
+                            "batchSize": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 100
+                            },
+                            "requestDelayMs": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 10000
+                            },
+                            "userAgent": {
+                              "type": "string",
+                              "minLength": 1
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "startUrl"
                           ],
                           "additionalProperties": false
                         }
@@ -126667,6 +126908,12 @@
                           "enum": [
                             "salesforce"
                           ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "web_crawler"
+                          ]
                         }
                       ]
                     },
@@ -127259,6 +127506,72 @@
                           "required": [
                             "type",
                             "loginUrl"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "web_crawler"
+                              ]
+                            },
+                            "startUrl": {},
+                            "includePathPrefixes": {
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            },
+                            "excludePathPatterns": {
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            },
+                            "contentSelector": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "excludeSelectors": {
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            },
+                            "maxPages": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 10000
+                            },
+                            "maxDepth": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 50
+                            },
+                            "batchSize": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 100
+                            },
+                            "requestDelayMs": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 10000
+                            },
+                            "userAgent": {
+                              "type": "string",
+                              "minLength": 1
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "startUrl"
                           ],
                           "additionalProperties": false
                         }
@@ -128224,6 +128537,73 @@
                         "required": [
                           "type"
                         ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "web_crawler"
+                            ]
+                          },
+                          "startUrl": {
+                            "type": "string"
+                          },
+                          "includePathPrefixes": {
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "minLength": 1
+                            }
+                          },
+                          "excludePathPatterns": {
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "minLength": 1
+                            }
+                          },
+                          "contentSelector": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "excludeSelectors": {
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "minLength": 1
+                            }
+                          },
+                          "maxPages": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 10000
+                          },
+                          "maxDepth": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 50
+                          },
+                          "batchSize": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 100
+                          },
+                          "requestDelayMs": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 10000
+                          },
+                          "userAgent": {
+                            "type": "string",
+                            "minLength": 1
+                          }
+                        },
+                        "required": [
+                          "type",
+                          "startUrl"
+                        ]
                       }
                     ]
                   },
@@ -128409,6 +128789,12 @@
                           "type": "string",
                           "enum": [
                             "salesforce"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "web_crawler"
                           ]
                         }
                       ]
@@ -129002,6 +129388,72 @@
                           "required": [
                             "type",
                             "loginUrl"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "web_crawler"
+                              ]
+                            },
+                            "startUrl": {},
+                            "includePathPrefixes": {
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            },
+                            "excludePathPatterns": {
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            },
+                            "contentSelector": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "excludeSelectors": {
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            },
+                            "maxPages": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 10000
+                            },
+                            "maxDepth": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 50
+                            },
+                            "batchSize": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 100
+                            },
+                            "requestDelayMs": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 10000
+                            },
+                            "userAgent": {
+                              "type": "string",
+                              "minLength": 1
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "startUrl"
                           ],
                           "additionalProperties": false
                         }
@@ -129830,6 +130282,12 @@
                                 "enum": [
                                   "salesforce"
                                 ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "web_crawler"
+                                ]
                               }
                             ]
                           }
@@ -130331,6 +130789,12 @@
                           "type": "string",
                           "enum": [
                             "salesforce"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "web_crawler"
                           ]
                         }
                       ]

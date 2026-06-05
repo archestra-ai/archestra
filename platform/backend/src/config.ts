@@ -700,47 +700,27 @@ export const parseCodeRuntimeDaggerRunnerHost = ({
 const isSupportedDaggerRunnerHost = (runnerHost: string): boolean =>
   runnerHost.startsWith("tcp://") || runnerHost.startsWith("kube-pod://");
 
-const codeRuntimeRequested =
-  process.env.ARCHESTRA_CODE_RUNTIME_ENABLED === "true";
-const codeRuntimeDaggerRunnerHost = parseCodeRuntimeDaggerRunnerHost({
-  enabled: codeRuntimeRequested,
-  envValue: process.env.ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST,
-});
-// a missing/invalid runner host disables the feature instead of crashing boot.
-const codeRuntimeEnabled =
-  codeRuntimeRequested && codeRuntimeDaggerRunnerHost !== undefined;
-
-// skills sandbox is on whenever both skills and the code-runtime (Dagger) are enabled.
+// the code execution sandbox (run_command / upload_file / download_file, plus
+// skill activation-mounts) needs a Dagger runner host. it is independent of the
+// skills *read* feature — skills can be listed/activated/read with the sandbox
+// off. the former `run_python` code-runtime env vars now gate the sandbox.
 const skillsSandboxRequested =
-  process.env.ARCHESTRA_AGENTS_SKILLS_ENABLED === "true" && codeRuntimeEnabled;
+  process.env.ARCHESTRA_CODE_RUNTIME_ENABLED === "true";
 const skillsSandboxDaggerRunnerHost = parseCodeRuntimeDaggerRunnerHost({
   enabled: skillsSandboxRequested,
   envValue:
-    process.env.ARCHESTRA_SKILLS_SANDBOX_DAGGER_RUNNER_HOST ||
-    process.env.ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST,
+    process.env.ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST ||
+    process.env.ARCHESTRA_SKILLS_SANDBOX_DAGGER_RUNNER_HOST,
 });
+// a missing/invalid runner host disables the feature instead of crashing boot.
 const skillsSandboxEnabled =
   skillsSandboxRequested && skillsSandboxDaggerRunnerHost !== undefined;
 
-// the unified Dagger runtime fronts both code-runtime and skills sandbox; either
-// feature flag turning on lights up the shared session + warm base.
-// when operators explicitly scope the two features to different hosts the
-// runtime can only honour one — warn loudly so this isn't silently lost.
-if (
-  process.env.ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST &&
-  process.env.ARCHESTRA_SKILLS_SANDBOX_DAGGER_RUNNER_HOST &&
-  process.env.ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST !==
-    process.env.ARCHESTRA_SKILLS_SANDBOX_DAGGER_RUNNER_HOST
-) {
-  logger.warn(
-    `ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST (${process.env.ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST}) and ARCHESTRA_SKILLS_SANDBOX_DAGGER_RUNNER_HOST (${process.env.ARCHESTRA_SKILLS_SANDBOX_DAGGER_RUNNER_HOST}) differ — both features share one Dagger session, so the code-runtime host wins and the skill-sandbox value is ignored`,
-  );
-}
-const daggerRuntimeRunnerHost =
-  codeRuntimeDaggerRunnerHost ?? skillsSandboxDaggerRunnerHost;
+// the Dagger runtime fronts the sandbox; the feature flag turning on lights up
+// the shared session + warm base.
+const daggerRuntimeRunnerHost = skillsSandboxDaggerRunnerHost;
 const daggerRuntimeEnabled =
-  (codeRuntimeEnabled || skillsSandboxEnabled) &&
-  daggerRuntimeRunnerHost !== undefined;
+  skillsSandboxEnabled && daggerRuntimeRunnerHost !== undefined;
 
 const config = {
   frontendBaseUrl,
@@ -1074,29 +1054,9 @@ const config = {
     },
   },
   /**
-   * sandboxed code-execution runtime — lets agents run Python through the
-   * `archestra__run_python` tool. backed by a Dagger Engine; disabled by default.
-   */
-  codeRuntime: {
-    enabled: codeRuntimeEnabled,
-    /** hard wall-clock cap per run, and the default when the caller omits one. */
-    timeoutSeconds: parsePositiveInt(
-      process.env.ARCHESTRA_CODE_RUNTIME_TIMEOUT_SECONDS,
-      60,
-    ),
-    maxConcurrent: parsePositiveInt(
-      process.env.ARCHESTRA_CODE_RUNTIME_MAX_CONCURRENT,
-      10,
-    ),
-    maxOutputBytes: parsePositiveInt(
-      process.env.ARCHESTRA_CODE_RUNTIME_MAX_OUTPUT_BYTES,
-      65536,
-    ),
-  },
-  /**
-   * sandboxed skill-execution runtime — lets agents materialize a skill into a
-   * Dagger container and run arbitrary shell commands against the snapshot.
-   * shares the Dagger engine with `codeRuntime` but is gated on its own flag.
+   * code execution sandbox runtime — the per-conversation Dagger container that
+   * runs commands, holds uploaded files, and materializes activated skills.
+   * gated by `ARCHESTRA_CODE_RUNTIME_ENABLED` + a Dagger runner host.
    */
   skillsSandbox: {
     enabled: skillsSandboxEnabled,
@@ -1123,9 +1083,9 @@ const config = {
   },
   /**
    * unified Dagger runtime — one shared session with a pre-warmed base
-   * container that hosts both `archestra__run_python` and skill-sandbox
-   * commands. The Rust crate (`@archestra/sandbox-rs`) owns the session;
-   * this block only carries enable + connection knobs.
+   * container that hosts the code execution sandbox commands. The Rust crate
+   * (`@archestra/sandbox-rs`) owns the session; this block only carries
+   * enable + connection knobs.
    */
   daggerRuntime: {
     enabled: daggerRuntimeEnabled,

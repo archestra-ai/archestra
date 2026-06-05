@@ -3,7 +3,6 @@ import {
   DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES,
   parseFullToolName,
   SKILL_ARCHESTRA_TOOL_SHORT_NAMES,
-  TOOL_RUN_PYTHON_SHORT_NAME,
 } from "@archestra/shared";
 
 const DEFAULT_ARCHESTRA_TOOL_SHORT_NAME_SET = new Set<string>(
@@ -21,8 +20,6 @@ const SKILL_ARCHESTRA_TOOL_SHORT_NAME_SET = new Set<string>(
  * empty-state enable action) so the skill tools also appear pre-selected on
  * the new agent form, mirroring the server-side `assignSkillToolsToAgent`
  * behavior on save.
- * Pass `includeCodeRuntimeTools: true` when code execution runtime is enabled
- * so run_python is pre-selected only when the tool exists.
  *
  * Returns null if the Archestra catalog isn't found, tools aren't loaded,
  * or no default tools match.
@@ -32,7 +29,6 @@ export function getDefaultArchestraToolIds(
   toolsByCatalogIndex: ({ id: string; name: string }[] | undefined)[],
   options: {
     includeSkillTools?: boolean;
-    includeCodeRuntimeTools?: boolean;
   } = {},
 ): { toolIds: Set<string>; catalogIndex: number } | null {
   const catalogIndex = catalogItems.findIndex(
@@ -49,12 +45,6 @@ export function getDefaultArchestraToolIds(
         const shortName = parseFullToolName(t.name).toolName;
         if (shortName === null) return false;
         if (DEFAULT_ARCHESTRA_TOOL_SHORT_NAME_SET.has(shortName)) return true;
-        if (
-          options.includeCodeRuntimeTools &&
-          shortName === TOOL_RUN_PYTHON_SHORT_NAME
-        ) {
-          return true;
-        }
         if (
           options.includeSkillTools &&
           SKILL_ARCHESTRA_TOOL_SHORT_NAME_SET.has(shortName)

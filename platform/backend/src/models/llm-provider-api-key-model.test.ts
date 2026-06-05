@@ -528,4 +528,52 @@ describe("LlmProviderApiKeyModelLinkModel", () => {
       expect(bestModels.get(apiKey.id)?.id).toBe(chatModel.id);
     });
   });
+
+  describe("best-model marker priority", () => {
+    test.for([
+      { catalog: ["gpt-4o", "gpt-3.5-turbo"], expected: "gpt-4o" },
+      { catalog: ["gpt-4.1", "gpt-4o"], expected: "gpt-4.1" },
+      { catalog: ["gpt-5", "gpt-4o"], expected: "gpt-5" },
+      { catalog: ["gpt-5.4", "gpt-5"], expected: "gpt-5.4" },
+      { catalog: ["gpt-5.5", "gpt-5.4"], expected: "gpt-5.5" },
+      { catalog: ["gpt-5.5-pro", "gpt-5.5"], expected: "gpt-5.5-pro" },
+    ])("marks $expected as best for $catalog", async ({ catalog, expected }, {
+      makeOrganization,
+      makeSecret,
+      makeLlmProviderApiKey,
+    }) => {
+      const org = await makeOrganization();
+      const secret = await makeSecret();
+      const apiKey = await makeLlmProviderApiKey(org.id, secret.id, {
+        provider: "openai",
+      });
+
+      const models = [];
+      for (const modelId of catalog) {
+        models.push(
+          await ModelModel.create({
+            externalId: `openai/${modelId}`,
+            provider: "openai",
+            modelId,
+            description: modelId,
+            inputModalities: ["text"],
+            outputModalities: ["text"],
+            supportsToolCalling: true,
+            lastSyncedAt: new Date(),
+          }),
+        );
+      }
+
+      await LlmProviderApiKeyModelLinkModel.syncModelsForApiKey(
+        apiKey.id,
+        models.map((model) => ({ id: model.id, modelId: model.modelId })),
+        "openai",
+      );
+
+      const best = await LlmProviderApiKeyModelLinkModel.getBestModel(
+        apiKey.id,
+      );
+      expect(best?.modelId).toBe(expected);
+    });
+  });
 });

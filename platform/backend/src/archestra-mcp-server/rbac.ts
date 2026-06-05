@@ -126,10 +126,6 @@ export const TOOL_PERMISSIONS: Record<
   search_tools: null,
   run_tool: null,
 
-  // code execution — gated by explicit tool assignment + the codeRuntime
-  // feature flag (the RBAC model has no "execute" action).
-  run_python: null,
-
   // skills — require skill:read; handlers further filter by per-skill scope.
   list_skills: { resource: "skill", action: "read" },
   activate_skill: { resource: "skill", action: "read" },
@@ -138,11 +134,13 @@ export const TOOL_PERMISSIONS: Record<
   // makes a personal skill, update_skill re-checks the target skill's scope.
   create_skill: { resource: "skill", action: "create" },
   update_skill: { resource: "skill", action: "update" },
-  // Skill sandbox execution — gated by explicit `skill:execute` permission and
-  // per-agent tool assignment. Handlers additionally check `skill:read` per skill.
-  create_skill_sandbox: { resource: "skill", action: "execute" },
-  run_skill_command: { resource: "skill", action: "execute" },
-  get_skill_sandbox_artifact: { resource: "skill", action: "execute" },
+  // Code execution sandbox — gated by `sandbox:execute` and per-agent tool
+  // assignment. The implicit per-conversation sandbox is created lazily; the
+  // create step is not a tool. activate_skill (skill:read) mounts a skill into
+  // the sandbox when the caller also has sandbox:execute.
+  run_command: { resource: "sandbox", action: "execute" },
+  download_file: { resource: "sandbox", action: "execute" },
+  upload_file: { resource: "sandbox", action: "execute" },
 };
 
 /**

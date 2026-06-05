@@ -11,7 +11,6 @@ import {
   SKILL_ARCHESTRA_TOOL_SHORT_NAMES,
   slugify,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
-  TOOL_RUN_PYTHON_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
 } from "@archestra/shared";
@@ -1174,7 +1173,6 @@ class ToolModel {
    * - artifact_write: for artifact management
    * - todo_write: for task tracking
    * - query_knowledge_sources: for querying the knowledge base
-   * - run_python: for code execution, only when the runtime is enabled
    *
    * Seeded default tools are assigned. The query_knowledge_sources tool is
    * filtered out at query time if the agent has no knowledge base assigned.
@@ -1187,12 +1185,12 @@ class ToolModel {
   ): Promise<void> {
     const organization = await OrganizationModel.getFirst();
     archestraMcpBranding.syncFromOrganization(organization);
+    // sandbox tools (run_command / upload_file / download_file) are not
+    // auto-assigned — they require explicit per-agent assignment plus
+    // sandbox:execute, like the rest of the skill-execution surface.
     const defaultToolShortNames: ArchestraToolShortName[] = [
       ...DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES,
     ];
-    if (config.codeRuntime.enabled) {
-      defaultToolShortNames.push(TOOL_RUN_PYTHON_SHORT_NAME);
-    }
 
     const defaultToolNames = defaultToolShortNames.map((shortName) =>
       archestraMcpBranding.getToolName(shortName),

@@ -145,15 +145,12 @@ describe("checkToolPermission", () => {
     );
   });
 
-  test("skill:execute gates skill sandbox tools — admin allowed", async () => {
-    const result = await checkToolPermission(
-      t("run_skill_command"),
-      adminContext,
-    );
+  test("sandbox:execute gates the sandbox tools — admin allowed", async () => {
+    const result = await checkToolPermission(t("run_command"), adminContext);
     expect(result).toBeNull();
   });
 
-  test("skill:execute gates skill sandbox tools — member with only skill:read is denied", async ({
+  test("sandbox:execute gates the sandbox tools — skill:read alone does not grant run_command", async ({
     makeOrganization,
     makeUser,
     makeMember,
@@ -176,15 +173,15 @@ describe("checkToolPermission", () => {
 
     // skill:read allows activate_skill...
     expect(await checkToolPermission(t("activate_skill"), ctx)).toBeNull();
-    // ...but does NOT allow run_skill_command
-    const denied = await checkToolPermission(t("run_skill_command"), ctx);
+    // ...but does NOT allow run_command (needs sandbox:execute)
+    const denied = await checkToolPermission(t("run_command"), ctx);
     expect(denied).not.toBeNull();
     expect((denied?.content[0] as any).text).toContain(
       "do not have permission",
     );
   });
 
-  test("skill:execute gates skill sandbox tools — user with both skill:read and skill:execute is allowed", async ({
+  test("sandbox:execute allows the sandbox tools", async ({
     makeOrganization,
     makeUser,
     makeMember,
@@ -194,10 +191,10 @@ describe("checkToolPermission", () => {
     const org = await makeOrganization();
     const user = await makeUser();
     const role = await makeCustomRole(org.id, {
-      permission: { skill: ["read", "execute"] },
+      permission: { sandbox: ["execute"] },
     });
     await makeMember(user.id, org.id, { role: role.role });
-    const agent = await makeAgent({ name: "Skill Agent" });
+    const agent = await makeAgent({ name: "Sandbox Agent" });
 
     const ctx: ArchestraContext = {
       agent: { id: agent.id, name: agent.name },
@@ -205,13 +202,9 @@ describe("checkToolPermission", () => {
       userId: user.id,
     };
 
-    expect(
-      await checkToolPermission(t("create_skill_sandbox"), ctx),
-    ).toBeNull();
-    expect(await checkToolPermission(t("run_skill_command"), ctx)).toBeNull();
-    expect(
-      await checkToolPermission(t("get_skill_sandbox_artifact"), ctx),
-    ).toBeNull();
+    expect(await checkToolPermission(t("run_command"), ctx)).toBeNull();
+    expect(await checkToolPermission(t("upload_file"), ctx)).toBeNull();
+    expect(await checkToolPermission(t("download_file"), ctx)).toBeNull();
   });
 
   test("returns null for non-Archestra tool names", async () => {

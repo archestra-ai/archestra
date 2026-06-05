@@ -1,12 +1,12 @@
 import { RouteId } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { SkillSandboxArtifactModel, SkillSandboxModel } from "@/models";
+import { SkillSandboxFileModel, SkillSandboxModel } from "@/models";
 import { isInlineSafeImageMime } from "@/skills-sandbox/mime-sniff";
 import { ApiError } from "@/types";
 
 /**
- * Serves bytes from `skill_sandbox_artifacts` back to the browser so the UI
+ * Serves bytes from `skill_sandbox_files` (kind `artifact`) back to the browser so the UI
  * can render previews or trigger downloads. The MCP tool only ever returns
  * metadata (`ArtifactRef`); this is the only path that exposes the actual
  * bytes outside the sandbox runtime.
@@ -39,7 +39,7 @@ const skillSandboxArtifactRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { artifactId }, organizationId, user }, reply) => {
-      const artifact = await SkillSandboxArtifactModel.findById(artifactId);
+      const artifact = await SkillSandboxFileModel.findArtifactById(artifactId);
       if (!artifact) {
         throw new ApiError(404, "Artifact not found");
       }

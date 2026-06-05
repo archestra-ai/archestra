@@ -35,6 +35,7 @@ export const allAvailableActions: Record<Resource, Action[]> = {
     "admin",
     "execute",
   ],
+  sandbox: ["execute"],
   agentTrigger: ["read", "create", "update", "delete"],
   scheduledTask: ["read", "create", "update", "delete", "admin"],
 
@@ -97,6 +98,7 @@ export const editorPermissions: Record<Resource, Action[]> = {
   // Agents
   agent: ["read", "create", "update", "delete", "team-admin"],
   skill: ["read", "create", "update", "delete", "team-admin", "execute"],
+  sandbox: ["execute"],
   agentTrigger: ["read", "create", "update", "delete"],
   scheduledTask: ["read", "create", "update", "delete"],
 
@@ -159,6 +161,7 @@ export const memberPermissions: Record<Resource, Action[]> = {
   // Agents
   agent: ["read", "create", "update", "delete"],
   skill: ["read", "create", "update", "delete", "execute"],
+  sandbox: ["execute"],
   agentTrigger: [],
   scheduledTask: ["read", "create", "update", "delete"],
 
@@ -256,6 +259,8 @@ export const permissionDescriptions: Record<string, string> = {
   "skill:admin":
     "Full administrative control over all agent skills, bypassing team restrictions",
   "skill:execute": "Execute skill scripts",
+  "sandbox:execute":
+    "Run commands and upload/download files in code execution sandboxes",
   "agentTrigger:read":
     "View agent trigger configurations (Slack, MS Teams, email)",
   "agentTrigger:create": "Set up new agent triggers",
@@ -1222,7 +1227,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.ImportGithubSkills]: { skill: ["create"] },
   [RouteId.GetSkillSourceRepos]: { skill: ["read"] },
   [RouteId.EnableSkillToolDefaults]: { skill: ["admin"] },
-  [RouteId.GetSkillSandboxArtifact]: { skill: ["execute"] },
+  // matches the `download_file` tool (sandbox:execute) that hands out this
+  // URL, so a role allowed to produce an artifact can also fetch it.
+  [RouteId.GetSkillSandboxArtifact]: { sandbox: ["execute"] },
 
   // Audit Log Routes
   [RouteId.GetAuditLogs]: {

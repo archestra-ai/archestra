@@ -188,12 +188,21 @@ export const OPENROUTER_LATEST_ALIAS_PREFIX = "~";
  * Patterns are substrings that model IDs must contain (case-insensitive).
  * Used to identify "best" (highest quality) models.
  *
- * IMPORTANT: Patterns are checked in array order (first match wins).
- * More specific patterns should come before general ones.
+ * Patterns are checked in array order (first match wins), so list each
+ * provider's ids most- to least-preferred (more specific before general). The
+ * first listed id present in the account is the one marked best.
  */
 export const MODEL_MARKER_PATTERNS: Record<SupportedProvider, string[]> = {
   anthropic: ["opus-4-8", "opus-4-7"],
-  openai: ["gpt-5.5-pro", "gpt-5.5"],
+  openai: [
+    "gpt-5.5-pro",
+    "gpt-5.5",
+    "gpt-5.4",
+    "gpt-5.3",
+    "gpt-5",
+    "gpt-4.1",
+    "gpt-4o",
+  ],
   gemini: ["gemini-3.1-pro-preview", "gemini-2.5-pro"],
   cerebras: ["zai-glm-4.7"],
   cohere: ["command-a-plus-05-2026"],

@@ -354,21 +354,29 @@ export const AUDIT_DECISIONS = {
     reason:
       "ephemeral execution sandbox state; runtime artifact, no admin signal",
   },
-  skillSandboxSkillsTable: {
+  skillSandboxSkillMountsTable: {
     audited: false,
-    reason: "join: sandbox × skill; parent (sandbox) is ephemeral",
-  },
-  skillSandboxFileSnapshotsTable: {
-    audited: false,
-    reason: "child of sandbox; per-sandbox file snapshot",
+    reason: "child of sandbox; ordered skill mount, parent is ephemeral",
   },
   skillSandboxCommandsTable: {
     audited: false,
     reason: "child of sandbox; append-only command replay log",
   },
-  skillSandboxArtifactsTable: {
+  skillSandboxFilesTable: {
     audited: false,
-    reason: "child of sandbox; exported file bytes",
+    reason: "child of sandbox; uploaded input + exported artifact file bytes",
+  },
+  skillSandboxReplayEventsTable: {
+    audited: false,
+    reason: "child of sandbox; append-only ordered replay log",
+  },
+  skillVersionsTable: {
+    audited: false,
+    reason: "child of skill; immutable version snapshot, parent audited",
+  },
+  skillVersionFilesTable: {
+    audited: false,
+    reason: "child of skill version; immutable file snapshot",
   },
   kbChunksTable: {
     audited: false,

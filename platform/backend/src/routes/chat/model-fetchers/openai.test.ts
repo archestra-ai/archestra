@@ -1,5 +1,5 @@
 import { describe, expect, test } from "@/test";
-import { mapOpenAiModelToModelInfo } from "./openai";
+import { isChatModelId, mapOpenAiModelToModelInfo } from "./openai";
 
 describe("mapOpenAiModelToModelInfo", () => {
   test("maps standard OpenAI model", () => {
@@ -58,5 +58,34 @@ describe("mapOpenAiModelToModelInfo", () => {
       provider: "openai",
       createdAt: undefined,
     });
+  });
+});
+
+describe("isChatModelId", () => {
+  test.each([
+    "gpt-5.5-pro",
+    "gpt-5.5",
+    "gpt-4.1",
+    "gpt-4o",
+    "chatgpt-4o-latest",
+    "gpt-4-turbo",
+    "gpt-4",
+    "gpt-3.5-turbo",
+    "o1",
+    "o3",
+  ])("keeps standard chat model %s", (id) => {
+    expect(isChatModelId(id)).toBe(true);
+  });
+
+  test.each([
+    "babbage-002",
+    "davinci-002",
+    "gpt-3.5-turbo-instruct",
+    "gpt-4o-audio-preview",
+    "whisper-1",
+    "tts-1",
+    "dall-e-3",
+  ])("drops non-chat model %s", (id) => {
+    expect(isChatModelId(id)).toBe(false);
   });
 });

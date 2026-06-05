@@ -23151,7 +23151,7 @@ export type GetConfigResponses = {
         };
         features: {
             orchestratorK8sRuntime: boolean;
-            codeRuntime: boolean;
+            sandbox: boolean;
             agentSkillsEnabled: boolean;
             byosEnabled: boolean;
             byosVaultKvVersion: '1' | '2';
@@ -49638,6 +49638,7 @@ export type GetSkillsResponses = {
             name: string;
             description: string;
             content: string;
+            latestVersion: number;
             license: string | null;
             compatibility: string | null;
             allowedTools: string | null;
@@ -49763,6 +49764,7 @@ export type CreateSkillResponses = {
         name: string;
         description: string;
         content: string;
+        latestVersion: number;
         license: string | null;
         compatibility: string | null;
         allowedTools: string | null;
@@ -49883,6 +49885,7 @@ export type ConvertAgentToSkillResponses = {
             name: string;
             description: string;
             content: string;
+            latestVersion: number;
             license: string | null;
             compatibility: string | null;
             allowedTools: string | null;
@@ -50181,6 +50184,7 @@ export type GetSkillResponses = {
         name: string;
         description: string;
         content: string;
+        latestVersion: number;
         license: string | null;
         compatibility: string | null;
         allowedTools: string | null;
@@ -50306,6 +50310,7 @@ export type UpdateSkillResponses = {
         name: string;
         description: string;
         content: string;
+        latestVersion: number;
         license: string | null;
         compatibility: string | null;
         allowedTools: string | null;
@@ -50505,6 +50510,7 @@ export type ResetSkillResponses = {
         name: string;
         description: string;
         content: string;
+        latestVersion: number;
         license: string | null;
         compatibility: string | null;
         allowedTools: string | null;
@@ -51011,6 +51017,7 @@ export type ImportGithubSkillsResponses = {
             name: string;
             description: string;
             content: string;
+            latestVersion: number;
             license: string | null;
             compatibility: string | null;
             allowedTools: string | null;

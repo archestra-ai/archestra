@@ -9,7 +9,7 @@ import type {
 } from "@/types";
 
 /** Bytes for an uploaded input file, written into the replay log. */
-export interface UploadInput {
+interface UploadInput {
   sandboxId: string;
   organizationId: string;
   path: string;
@@ -20,7 +20,7 @@ export interface UploadInput {
 }
 
 /** Identity of the skill version a mount pins. */
-export interface SkillMountRef {
+interface SkillMountRef {
   skillId: string;
   skillName: string;
   skillVersionId: string;
@@ -33,7 +33,7 @@ export interface SkillMountRef {
  * SKILL.md (`content`) plus its resource files (`files`) — each at its recorded
  * sequence point.
  */
-export type SkillSandboxReplayEntry =
+type SkillSandboxReplayEntry =
   | { kind: "command"; sequence: number; command: SkillSandboxCommand }
   | { kind: "upload"; sequence: number; upload: SkillSandboxFile }
   | {

@@ -13,7 +13,7 @@ import { asSandboxId, type Skill, type SkillVersion } from "@/types";
  * `mounted: false`, so the model is shown the instructions read-only and never
  * told to run code that lives under another skill's name.
  */
-export interface ActivationVersion {
+interface ActivationVersion {
   version: SkillVersion;
   mounted: boolean;
 }

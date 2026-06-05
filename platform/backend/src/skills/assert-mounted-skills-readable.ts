@@ -2,9 +2,7 @@ import { getSkillPermissionChecker } from "@/auth/skill-permissions";
 import { SkillModel, SkillSandboxModel, SkillTeamModel } from "@/models";
 
 /** Result of the revocation gate: ok, or a model-facing reason it failed. */
-export type MountReadabilityResult =
-  | { ok: true }
-  | { ok: false; reason: string };
+type MountReadabilityResult = { ok: true } | { ok: false; reason: string };
 
 /**
  * Revocation gate for the materializing sandbox tools. Before a container is

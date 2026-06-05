@@ -244,6 +244,8 @@ const registry = defineArchestraTools([
             name: skill.name,
             content: version.content,
             compatibility: skill.compatibility,
+            allowedTools: skill.allowedTools,
+            templated: skill.templated,
           },
           files,
           // only advertise sandbox runnability when this skill's bytes are

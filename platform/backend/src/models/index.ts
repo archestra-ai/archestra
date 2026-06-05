@@ -67,12 +67,8 @@ export {
   default as SkillSandboxModel,
   SkillInvalidFilePathError,
 } from "./skill-sandbox";
-export { default as SkillSandboxCommandModel } from "./skill-sandbox-command";
 export { default as SkillSandboxFileModel } from "./skill-sandbox-file";
-export {
-  default as SkillSandboxReplayEventModel,
-  type SkillSandboxReplayEntry,
-} from "./skill-sandbox-replay-event";
+export { default as SkillSandboxReplayEventModel } from "./skill-sandbox-replay-event";
 export { default as SkillShareLinkModel } from "./skill-share-link";
 export { default as SkillShareLinkRevisionModel } from "./skill-share-link-revision";
 export { default as SkillTeamModel } from "./skill-team";

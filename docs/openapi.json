@@ -81671,7 +81671,7 @@
                         "orchestratorK8sRuntime": {
                           "type": "boolean"
                         },
-                        "codeRuntime": {
+                        "sandbox": {
                           "type": "boolean"
                         },
                         "agentSkillsEnabled": {
@@ -81763,7 +81763,7 @@
                       },
                       "required": [
                         "orchestratorK8sRuntime",
-                        "codeRuntime",
+                        "sandbox",
                         "agentSkillsEnabled",
                         "byosEnabled",
                         "byosVaultKvVersion",
@@ -187961,6 +187961,11 @@
                           "content": {
                             "type": "string"
                           },
+                          "latestVersion": {
+                            "type": "integer",
+                            "minimum": -2147483648,
+                            "maximum": 2147483647
+                          },
                           "license": {
                             "nullable": true,
                             "type": "string"
@@ -188041,6 +188046,7 @@
                           "name",
                           "description",
                           "content",
+                          "latestVersion",
                           "license",
                           "compatibility",
                           "allowedTools",
@@ -188449,6 +188455,11 @@
                     "content": {
                       "type": "string"
                     },
+                    "latestVersion": {
+                      "type": "integer",
+                      "minimum": -2147483648,
+                      "maximum": 2147483647
+                    },
                     "license": {
                       "nullable": true,
                       "type": "string"
@@ -188575,6 +188586,7 @@
                     "name",
                     "description",
                     "content",
+                    "latestVersion",
                     "license",
                     "compatibility",
                     "allowedTools",
@@ -188909,6 +188921,11 @@
                         "content": {
                           "type": "string"
                         },
+                        "latestVersion": {
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
                         "license": {
                           "nullable": true,
                           "type": "string"
@@ -189035,6 +189052,7 @@
                         "name",
                         "description",
                         "content",
+                        "latestVersion",
                         "license",
                         "compatibility",
                         "allowedTools",
@@ -189682,6 +189700,11 @@
                     "content": {
                       "type": "string"
                     },
+                    "latestVersion": {
+                      "type": "integer",
+                      "minimum": -2147483648,
+                      "maximum": 2147483647
+                    },
                     "license": {
                       "nullable": true,
                       "type": "string"
@@ -189808,6 +189831,7 @@
                     "name",
                     "description",
                     "content",
+                    "latestVersion",
                     "license",
                     "compatibility",
                     "allowedTools",
@@ -190177,6 +190201,11 @@
                     "content": {
                       "type": "string"
                     },
+                    "latestVersion": {
+                      "type": "integer",
+                      "minimum": -2147483648,
+                      "maximum": 2147483647
+                    },
                     "license": {
                       "nullable": true,
                       "type": "string"
@@ -190303,6 +190332,7 @@
                     "name",
                     "description",
                     "content",
+                    "latestVersion",
                     "license",
                     "compatibility",
                     "allowedTools",
@@ -191151,6 +191181,11 @@
                     "content": {
                       "type": "string"
                     },
+                    "latestVersion": {
+                      "type": "integer",
+                      "minimum": -2147483648,
+                      "maximum": 2147483647
+                    },
                     "license": {
                       "nullable": true,
                       "type": "string"
@@ -191277,6 +191312,7 @@
                     "name",
                     "description",
                     "content",
+                    "latestVersion",
                     "license",
                     "compatibility",
                     "allowedTools",
@@ -192948,6 +192984,11 @@
                           "content": {
                             "type": "string"
                           },
+                          "latestVersion": {
+                            "type": "integer",
+                            "minimum": -2147483648,
+                            "maximum": 2147483647
+                          },
                           "license": {
                             "nullable": true,
                             "type": "string"
@@ -193002,6 +193043,7 @@
                           "name",
                           "description",
                           "content",
+                          "latestVersion",
                           "license",
                           "compatibility",
                           "allowedTools",
@@ -193275,7 +193317,7 @@
         "tags": [
           "Skills"
         ],
-        "description": "Stream the raw bytes of a skill sandbox artifact. Inline for known-safe raster images; download for everything else.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`skill:execute`: Execute skill scripts",
+        "description": "Stream the raw bytes of a skill sandbox artifact. Inline for known-safe raster images; download for everything else.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`sandbox:execute`: Run commands and upload/download files in code execution sandboxes",
         "parameters": [
           {
             "schema": {
@@ -193296,7 +193338,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "skill:execute"
+            "sandbox:execute"
           ]
         }
       }

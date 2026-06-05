@@ -375,44 +375,6 @@ describe("SkillSandboxFileModel (artifacts)", () => {
     // an upload is a file row too, but the artifact lookup is kind-scoped.
     expect(await SkillSandboxFileModel.findArtifactById(upload.id)).toBeNull();
   });
-
-  test("listArtifactsBySandbox returns most-recent first", async ({
-    makeOrganization,
-    makeUser,
-  }) => {
-    const org = await makeOrganization();
-    const user = await makeUser();
-    const sandbox = await SkillSandboxModel.create({
-      organizationId: org.id,
-      userId: user.id,
-      conversationId: null,
-      agentId: null,
-      defaultCwd: "/home/sandbox",
-    });
-
-    const a = await SkillSandboxFileModel.createArtifact({
-      sandboxId: sandbox.id,
-      organizationId: org.id,
-      path: "out/a.txt",
-      mimeType: "text/plain",
-      originalName: null,
-      sizeBytes: 1,
-      data: Buffer.from("a"),
-    });
-    await new Promise((r) => setTimeout(r, 5));
-    const b = await SkillSandboxFileModel.createArtifact({
-      sandboxId: sandbox.id,
-      organizationId: org.id,
-      path: "out/b.txt",
-      mimeType: "text/plain",
-      originalName: null,
-      sizeBytes: 1,
-      data: Buffer.from("b"),
-    });
-
-    const rows = await SkillSandboxFileModel.listArtifactsBySandbox(sandbox.id);
-    expect(rows.map((r) => r.id)).toEqual([b.id, a.id]);
-  });
 });
 
 describe("Cascade behavior", () => {
@@ -448,7 +410,7 @@ describe("Cascade behavior", () => {
       organizationId: org.id,
       mount: mountRef(skill, await latestVersionId(skill)),
     });
-    await SkillSandboxFileModel.createArtifact({
+    const artifact = await SkillSandboxFileModel.createArtifact({
       sandboxId: sandbox.id,
       organizationId: org.id,
       path: "out/a.txt",
@@ -470,8 +432,8 @@ describe("Cascade behavior", () => {
       await SkillSandboxModel.listMountedSkillIds(sandbox.id),
     ).toHaveLength(0);
     expect(
-      await SkillSandboxFileModel.listArtifactsBySandbox(sandbox.id),
-    ).toHaveLength(0);
+      await SkillSandboxFileModel.findArtifactById(artifact.id),
+    ).toBeNull();
     // the pinned version survives (RESTRICT would block deleting it, not the
     // sandbox); the mount row is gone via cascade.
     expect(

@@ -6,7 +6,7 @@ import { isInlineSafeImageMime } from "@/skills-sandbox/mime-sniff";
 import { ApiError } from "@/types";
 
 /**
- * Serves bytes from `skill_sandbox_artifacts` back to the browser so the UI
+ * Serves bytes from `skill_sandbox_files` (kind `artifact`) back to the browser so the UI
  * can render previews or trigger downloads. The MCP tool only ever returns
  * metadata (`ArtifactRef`); this is the only path that exposes the actual
  * bytes outside the sandbox runtime.

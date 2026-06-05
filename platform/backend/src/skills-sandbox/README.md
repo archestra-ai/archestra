@@ -2,56 +2,66 @@
 
 DB-backed, Dagger-materialized execution sandbox for Agent Skills.
 
+> Not released yet: the sandbox is gated behind the sandbox feature flag
+> (`config.skillsSandbox`, derived from `ARCHESTRA_CODE_RUNTIME_ENABLED` + a
+> Dagger runner host).
+
 ## What this directory contains
 
 - `skill-sandbox-runtime-service.ts` — singleton service that owns the Dagger
-  client. Materializes a sandbox from its DB recipe, replays the persisted
-  command log, executes a new command, and exports files as artifacts. Mirrors
-  the structure of `../code-runtime/code-runtime-service.ts` (status FSM,
-  semaphore, lifecycle hooks).
+  client. Materializes a sandbox from its DB replay log, replays it, executes a
+  new command, and exports files as artifacts (status FSM, per-sandbox queue,
+  lifecycle hooks).
 - `runtime-image.ts` — base image (`ghcr.io/astral-sh/uv:…`), apt-package
   baseline (bash, curl, git, jq, nodejs, npm, build-essential), non-root user
   (`1000:1000`), and skill-root layout (`/skills/<skill-name>`).
 - `types.ts` — `SkillSandboxLimits`, `CommandResult`, `ArtifactRef`,
   `UploadRef`, `SkillSandboxError`, runtime status enum. Tool-layer code in
-  `../archestra-mcp-server/skill-sandbox.ts` re-uses these so the
-  service/tool boundary stays typed end-to-end.
+  `../archestra-mcp-server/sandbox.ts` re-uses these so the service/tool
+  boundary stays typed end-to-end.
 
 ## Source of truth
 
-- Postgres owns the durable recipe:
-  - `skill_sandboxes` — metadata (owner, image, default cwd, primary skill) plus
+- Postgres owns the durable replay recipe:
+  - `skill_sandboxes` — metadata (owner, image, default cwd, `is_default`) plus
     `next_replay_sequence`, the atomic allocator for replay ordering
-  - `skill_sandbox_skills` — junction of skills mounted at create time
+  - `skill_sandbox_skill_mounts` — skills mounted into the sandbox, each pinning
+    an immutable `skill_version_id` (so editing a skill mid-conversation never
+    mutates a running sandbox)
   - `skill_sandbox_commands` — executed-command payloads
-  - `skill_sandbox_uploads` — uploaded input file bytes (bytea)
+  - `skill_sandbox_files` — file bytes (bytea), role-tagged by `kind`: an
+    `upload` is input bytes written *into* the sandbox; an `artifact` is output
+    bytes copied *out* of a materialized container for download
   - `skill_sandbox_replay_events` — the ordered replay log: one sequenced row per
-    command or upload, each pointing at its payload. This is the replay input
-  - `skill_sandbox_artifacts` — exported (output) file bytes (bytea)
+    command, upload, or skill mount, each pointing at its payload. This is the
+    replay input. A generated `file_kind = 'upload'` + composite FK constrains
+    an event's `file_id` to only ever reference an `upload`-kind file row
+  - skill bytes themselves live in `skill_versions` + `skill_version_files`
+    (immutable per version); a mount references a version, not the live skill
 - Dagger owns ephemeral filesystem state. There is no retention guarantee; if
   the engine restarts or evicts a cached layer, replay rebuilds the container
   from the DB recipe.
 
-Uploads vs artifacts: an **artifact** is output bytes copied *out* of a
-materialized container, recorded for download. An **upload** is input bytes
-written *into* the sandbox; it must live in the replay recipe (not as an
+Uploads vs artifacts: an **upload** must live in the replay log (not as an
 artifact), otherwise a later cache-cold rebuild would reconstruct a sandbox
-missing the uploaded file.
+missing the uploaded file. An **artifact** is a terminal output, recorded only
+for download.
 
 ## Replay semantics
 
-Every `runCommand` materializes a fresh container from the base image, mounts
-the snapshotted skill files at their `/skills/<name>` roots, then replays the
-full ordered `skill_sandbox_replay_events` log before executing the new command.
-Each event is applied in `sequence` order: a command re-executes, an upload
-re-writes its bytes at its absolute path. Interleaving is preserved, so a file
-uploaded between command A and command B is **not** present while A replays —
-the on-disk order always matches the order operations were accepted.
+Every `run_command` materializes a fresh container from the base image, then
+replays the full ordered `skill_sandbox_replay_events` log before executing the
+new command. Each event is applied in `sequence` order: a command re-executes,
+an upload re-writes its bytes at its absolute path, a skill mount writes the
+pinned version's `SKILL.md` (+ its version files) under `/skills/<name>`.
+Interleaving is preserved, so a file uploaded between command A and command B is
+**not** present while A replays — the on-disk order always matches the order
+operations were accepted.
 
-`upload_skill_sandbox_file` does no Dagger work itself; it persists the bytes as
-an upload event (serialized through the same per-sandbox queue as commands, so
-its sequence lands deterministically relative to in-flight runs). The file
-materializes on the next `runCommand` / `getArtifact` replay.
+`upload_file` does no Dagger work itself; it persists the bytes as an upload
+event (serialized through the same per-sandbox queue as commands, so its
+sequence lands deterministically relative to in-flight runs). The file
+materializes on the next `run_command` / `download_file` replay.
 
 Dagger's layer cache keeps the hot path fast; on a cold cache replay is slower
 but still deterministic for deterministic commands. Non-deterministic commands
@@ -80,15 +90,18 @@ prompt.
 
 ## RBAC
 
-All four sandbox MCP tools are gated by `skill:execute`
-(`backend/src/auth/skill-permissions.ts`). `create_skill_sandbox` additionally
-requires `skill:read` for every skill being mounted and respects per-skill
-team scoping. Sandboxes are owner-scoped: `run_skill_command`,
-`get_skill_sandbox_artifact`, and `upload_skill_sandbox_file` reject access to a
-sandbox the caller does not own within the same organization.
+The sandbox MCP tools (`run_command`, `upload_file`, `download_file`) are gated
+by `sandbox:execute` (`backend/src/archestra-mcp-server/rbac.ts`). Sandboxes are
+scoped to the caller's organization + user + **conversation**: a `target: { id }`
+referencing a sandbox outside that scope is rejected.
 
-`upload_skill_sandbox_file` with a `chat_attachment` source reads the bytes
-server-side (never through model context) and requires the attachment to belong
-to both the caller's organization and the **current conversation** — an
-attachment from another conversation is rejected to block cross-conversation
-exfiltration.
+Skills are mounted into the default sandbox by `activate_skill` (and
+slash-command activation), which enforces `skill:read` + per-skill team scope
+for the activating user. Before building any container, `run_command` and
+`download_file` re-check that every mounted skill is still readable by the
+caller (revocation gate) and fail closed otherwise.
+
+`upload_file` with a `chat_attachment` source reads the bytes server-side
+(never through model context) and requires the attachment to belong to both the
+caller's organization and the **current conversation** — an attachment from
+another conversation is rejected to block cross-conversation exfiltration.

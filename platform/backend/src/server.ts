@@ -1073,7 +1073,7 @@ function registerWebServerShutdown(
 
       cacheManager.shutdown();
 
-      // Stop accepting new code-runtime / skill-sandbox runs
+      // Stop accepting new skill-sandbox runs
       await skillSandboxRuntimeService.shutdown();
 
       if (shouldRunWorker) {
@@ -1215,7 +1215,7 @@ const startWorker = async () => {
       try {
         await healthServer.close();
         cacheManager.shutdown();
-          await skillSandboxRuntimeService.shutdown();
+        await skillSandboxRuntimeService.shutdown();
         await taskQueueService.stopWorker();
         clearTimeout(forceExitTimeout);
         process.exit(0);

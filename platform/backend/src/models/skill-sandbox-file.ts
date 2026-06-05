@@ -1,4 +1,4 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type { InsertSkillSandboxFile, SkillSandboxFile } from "@/types";
 
@@ -33,23 +33,6 @@ class SkillSandboxFileModel {
         ),
       );
     return row ? normalizeFileData(row) : null;
-  }
-
-  /** Artifact rows for a sandbox, most-recent first. */
-  static async listArtifactsBySandbox(
-    sandboxId: string,
-  ): Promise<SkillSandboxFile[]> {
-    const rows = await db
-      .select()
-      .from(schema.skillSandboxFilesTable)
-      .where(
-        and(
-          eq(schema.skillSandboxFilesTable.sandboxId, sandboxId),
-          eq(schema.skillSandboxFilesTable.kind, "artifact"),
-        ),
-      )
-      .orderBy(desc(schema.skillSandboxFilesTable.createdAt));
-    return rows.map(normalizeFileData);
   }
 }
 

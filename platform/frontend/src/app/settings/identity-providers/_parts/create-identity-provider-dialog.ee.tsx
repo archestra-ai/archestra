@@ -160,7 +160,7 @@ export function CreateIdentityProviderDialog({
           activeSection={
             validActiveSection as Exclude<
               IdentityProviderDialogSection,
-              "enterprise-managed-credentials"
+              "enterprise-managed-credentials" | "token-debugger"
             >
           }
           hideProviderId={hideProviderId}

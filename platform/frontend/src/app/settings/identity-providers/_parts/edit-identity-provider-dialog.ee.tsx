@@ -17,13 +17,13 @@ import {
   useIdentityProvider,
   useUpdateIdentityProvider,
 } from "@/lib/auth/identity-provider.query.ee";
+import { IdTokenClaimsDebugger } from "./id-token-claims-debugger.ee";
 import { getIdentityProviderDialogNavItems } from "./identity-provider-dialog-nav-items.ee";
 import {
   type IdentityProviderDialogSection,
   IdentityProviderDialogShell,
 } from "./identity-provider-dialog-shell.ee";
 import { normalizeIdentityProviderFormValues } from "./identity-provider-form.utils";
-import { IdTokenClaimsDebugger } from "./id-token-claims-debugger.ee";
 import { OidcConfigForm } from "./oidc-config-form.ee";
 import { SamlConfigForm } from "./saml-config-form.ee";
 
@@ -224,7 +224,7 @@ export function EditIdentityProviderDialog({
             activeSection={
               validActiveSection as Exclude<
                 IdentityProviderDialogSection,
-                "enterprise-managed-credentials"
+                "enterprise-managed-credentials" | "token-debugger"
               >
             }
           />

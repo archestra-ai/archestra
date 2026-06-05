@@ -192,4 +192,21 @@ describe("__internals", () => {
       }),
     ).toThrow("artifact path must be under");
   });
+
+  test("validateUploadPath rejects directory and sandbox-root targets", () => {
+    // the resolved roots themselves are directories: persisting an upload to
+    // one would replay-fail forever or shadow /skills and break skill mounts.
+    for (const root of ["/skills", "/home/sandbox"]) {
+      expect(() => __internals.validateUploadPath(root)).toThrow(
+        "must be a file, not a directory",
+      );
+    }
+    expect(() => __internals.validateUploadPath("/skills/")).toThrow(
+      "must be a file, not a directory",
+    );
+    // a real file under a root is accepted.
+    expect(() =>
+      __internals.validateUploadPath("/skills/alpha/input.csv"),
+    ).not.toThrow();
+  });
 });

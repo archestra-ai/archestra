@@ -1227,7 +1227,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.ImportGithubSkills]: { skill: ["create"] },
   [RouteId.GetSkillSourceRepos]: { skill: ["read"] },
   [RouteId.EnableSkillToolDefaults]: { skill: ["admin"] },
-  [RouteId.GetSkillSandboxArtifact]: { skill: ["execute"] },
+  // matches the `download_file` tool (sandbox:execute) that hands out this
+  // URL, so a role allowed to produce an artifact can also fetch it.
+  [RouteId.GetSkillSandboxArtifact]: { sandbox: ["execute"] },
 
   // Audit Log Routes
   [RouteId.GetAuditLogs]: {

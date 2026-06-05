@@ -677,10 +677,20 @@ function validateUploadPath(path: string): void {
       `upload path must be a file, not a directory: ${JSON.stringify(path)}`,
     );
   }
+  // the sandbox roots themselves are directories: uploading to one would either
+  // replay-fail forever (/home/sandbox already exists) or shadow /skills with a
+  // regular file and break every later skill mount. reject before it is
+  // persisted as an unreplayable event.
+  if (path === SKILL_SANDBOX_ROOT || path === SKILL_SANDBOX_HOME) {
+    throw new SkillSandboxError(
+      `upload path must be a file, not a directory: ${JSON.stringify(path)}`,
+    );
+  }
 }
 
 /** @public — exported for tests */
 export const __internals = {
   resolveArtifactPath,
+  validateUploadPath,
   asSandboxId,
 };

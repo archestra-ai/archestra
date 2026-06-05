@@ -1,4 +1,4 @@
-import type { archestraApiTypes } from "@shared";
+import type { archestraApiTypes } from "@archestra/shared";
 import { Github, Globe, Upload } from "lucide-react";
 import type { ReactNode } from "react";
 

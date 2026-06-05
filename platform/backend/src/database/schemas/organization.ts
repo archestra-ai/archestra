@@ -2,8 +2,8 @@ import type {
   OrganizationCustomFont,
   OrganizationTheme,
   SupportedProvider,
-} from "@shared";
-import { DEFAULT_OAUTH_ACCESS_TOKEN_LIFETIME_SECONDS } from "@shared";
+} from "@archestra/shared";
+import { DEFAULT_OAUTH_ACCESS_TOKEN_LIFETIME_SECONDS } from "@archestra/shared";
 import {
   boolean,
   integer,

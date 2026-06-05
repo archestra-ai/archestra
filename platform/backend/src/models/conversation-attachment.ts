@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { and, eq, inArray, isNull } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import db, { schema } from "@/database";
 
 type ConversationAttachment =
@@ -105,18 +105,26 @@ class ConversationAttachmentModel {
   static async findByConversationIdWithoutData(
     conversationId: string,
   ): Promise<Omit<ConversationAttachment, "fileData">[]> {
-    return db
-      .select(metadataColumns)
-      .from(schema.conversationAttachmentsTable)
-      .where(
-        and(
-          eq(
-            schema.conversationAttachmentsTable.conversationId,
-            conversationId,
+    return (
+      db
+        .select(metadataColumns)
+        .from(schema.conversationAttachmentsTable)
+        .where(
+          and(
+            eq(
+              schema.conversationAttachmentsTable.conversationId,
+              conversationId,
+            ),
+            isNull(schema.conversationAttachmentsTable.deletedAt),
           ),
-          isNull(schema.conversationAttachmentsTable.deletedAt),
-        ),
-      );
+        )
+        // stable order so downstream consumers (e.g. sandbox auto-staging, which
+        // suffixes duplicate filenames in this order) are deterministic.
+        .orderBy(
+          asc(schema.conversationAttachmentsTable.createdAt),
+          asc(schema.conversationAttachmentsTable.id),
+        )
+    );
   }
 
   static async updateTextPreview(

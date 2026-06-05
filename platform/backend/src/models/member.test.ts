@@ -1,4 +1,4 @@
-import { ADMIN_ROLE_NAME, MEMBER_ROLE_NAME } from "@shared";
+import { ADMIN_ROLE_NAME, MEMBER_ROLE_NAME } from "@archestra/shared";
 import { describe, expect, test } from "@/test";
 import MemberModel from "./member";
 

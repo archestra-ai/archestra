@@ -3,7 +3,7 @@ import {
   IdentityProviderSamlConfigSchema,
   IdpRoleMappingConfigSchema,
   IdpTeamSyncConfigSchema,
-} from "@shared";
+} from "@archestra/shared";
 import {
   createInsertSchema,
   createSelectSchema,

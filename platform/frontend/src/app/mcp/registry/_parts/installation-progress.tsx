@@ -1,6 +1,6 @@
 "use client";
 
-import type { McpDeploymentStatusEntry } from "@shared";
+import type { McpDeploymentStatusEntry } from "@archestra/shared";
 import { FileText } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";

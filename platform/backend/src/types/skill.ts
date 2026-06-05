@@ -1,4 +1,4 @@
-import { ResourceVisibilityScopeSchema } from "@shared";
+import { ResourceVisibilityScopeSchema } from "@archestra/shared";
 import {
   createInsertSchema,
   createSelectSchema,
@@ -38,7 +38,9 @@ export const SelectSkillSchema = createSelectSchema(schema.skillsTable, {
 });
 
 // drizzle-zod uses field overrides verbatim, so `.optional()` is applied here
-// to keep defaulted columns optional in insert/update payloads.
+// to keep defaulted columns optional in insert/update payloads. `latestVersion`
+// is owned by `SkillModel` (set on create, bumped on fork), so it is omitted
+// from external insert/update payloads.
 export const InsertSkillSchema = createInsertSchema(schema.skillsTable, {
   sourceType: SkillSourceTypeSchema.optional(),
   scope: ResourceVisibilityScopeSchema.optional(),
@@ -46,6 +48,7 @@ export const InsertSkillSchema = createInsertSchema(schema.skillsTable, {
   templated: z.boolean().optional(),
 }).omit({
   id: true,
+  latestVersion: true,
   createdAt: true,
   updatedAt: true,
 });
@@ -58,8 +61,37 @@ export const UpdateSkillSchema = createUpdateSchema(schema.skillsTable, {
 }).omit({
   id: true,
   organizationId: true,
+  latestVersion: true,
   createdAt: true,
   updatedAt: true,
+});
+
+export const SelectSkillVersionSchema = createSelectSchema(
+  schema.skillVersionsTable,
+);
+export const InsertSkillVersionSchema = createInsertSchema(
+  schema.skillVersionsTable,
+).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const SelectSkillVersionFileSchema = createSelectSchema(
+  schema.skillVersionFilesTable,
+  {
+    kind: SkillFileKindSchema,
+    encoding: SkillFileEncodingSchema,
+  },
+);
+export const InsertSkillVersionFileSchema = createInsertSchema(
+  schema.skillVersionFilesTable,
+  {
+    kind: SkillFileKindSchema,
+    encoding: SkillFileEncodingSchema,
+  },
+).omit({
+  id: true,
+  createdAt: true,
 });
 
 export const SelectSkillFileSchema = createSelectSchema(
@@ -91,3 +123,9 @@ export type InsertSkill = z.infer<typeof InsertSkillSchema>;
 export type UpdateSkill = z.infer<typeof UpdateSkillSchema>;
 export type SkillFile = z.infer<typeof SelectSkillFileSchema>;
 export type InsertSkillFile = z.infer<typeof InsertSkillFileSchema>;
+export type SkillVersion = z.infer<typeof SelectSkillVersionSchema>;
+export type InsertSkillVersion = z.infer<typeof InsertSkillVersionSchema>;
+export type SkillVersionFile = z.infer<typeof SelectSkillVersionFileSchema>;
+export type InsertSkillVersionFile = z.infer<
+  typeof InsertSkillVersionFileSchema
+>;

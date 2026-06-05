@@ -1,4 +1,8 @@
-import { ADMIN_ROLE_NAME, EDITOR_ROLE_NAME, MEMBER_ROLE_NAME } from "@shared";
+import {
+  ADMIN_ROLE_NAME,
+  EDITOR_ROLE_NAME,
+  MEMBER_ROLE_NAME,
+} from "@archestra/shared";
 import { type Mock, vi } from "vitest";
 import McpCatalogTeamModel from "@/models/mcp-catalog-team";
 import type { FastifyInstanceWithZod } from "@/server";

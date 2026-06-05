@@ -5271,7 +5271,6 @@ export type UserConfigFieldInput = {
     title: string;
     description: string;
     promptOnInstallation?: boolean;
-    promptOnPreset?: boolean;
     required?: boolean;
     default?: UserConfigFieldDefaultInput;
     multiple?: boolean;
@@ -10549,7 +10548,6 @@ export type UserConfigField = {
     title: string;
     description: string;
     promptOnInstallation?: boolean;
-    promptOnPreset?: boolean;
     required?: boolean;
     default?: UserConfigFieldDefault;
     multiple?: boolean;
@@ -16814,7 +16812,7 @@ export type AzureResponsesWithDefaultAgentData = {
     body: {
         model: string;
         input?: string | Array<{
-            type: string;
+            type?: string;
             [key: string]: unknown;
         }>;
         instructions?: string | null;
@@ -16983,7 +16981,7 @@ export type AzureResponsesWithAgentData = {
     body: {
         model: string;
         input?: string | Array<{
-            type: string;
+            type?: string;
             [key: string]: unknown;
         }>;
         instructions?: string | null;
@@ -23153,7 +23151,7 @@ export type GetConfigResponses = {
         };
         features: {
             orchestratorK8sRuntime: boolean;
-            codeRuntime: boolean;
+            sandbox: boolean;
             agentSkillsEnabled: boolean;
             byosEnabled: boolean;
             byosVaultKvVersion: '1' | '2';
@@ -25520,7 +25518,7 @@ export type GetInteractionsResponses = {
             request: {
                 model: string;
                 input?: string | Array<{
-                    type: string;
+                    type?: string;
                     [key: string]: unknown;
                 }>;
                 instructions?: string | null;
@@ -25556,7 +25554,7 @@ export type GetInteractionsResponses = {
             processedRequest?: {
                 model: string;
                 input?: string | Array<{
-                    type: string;
+                    type?: string;
                     [key: string]: unknown;
                 }>;
                 instructions?: string | null;
@@ -27335,7 +27333,7 @@ export type GetInteractionsResponses = {
             request: {
                 model: string;
                 input?: string | Array<{
-                    type: string;
+                    type?: string;
                     [key: string]: unknown;
                 }>;
                 instructions?: string | null;
@@ -27371,7 +27369,7 @@ export type GetInteractionsResponses = {
             processedRequest?: {
                 model: string;
                 input?: string | Array<{
-                    type: string;
+                    type?: string;
                     [key: string]: unknown;
                 }>;
                 instructions?: string | null;
@@ -28003,7 +28001,7 @@ export type GetInteractionResponses = {
         request: {
             model: string;
             input?: string | Array<{
-                type: string;
+                type?: string;
                 [key: string]: unknown;
             }>;
             instructions?: string | null;
@@ -28039,7 +28037,7 @@ export type GetInteractionResponses = {
         processedRequest?: {
             model: string;
             input?: string | Array<{
-                type: string;
+                type?: string;
                 [key: string]: unknown;
             }>;
             instructions?: string | null;
@@ -29818,7 +29816,7 @@ export type GetInteractionResponses = {
         request: {
             model: string;
             input?: string | Array<{
-                type: string;
+                type?: string;
                 [key: string]: unknown;
             }>;
             instructions?: string | null;
@@ -29854,7 +29852,7 @@ export type GetInteractionResponses = {
         processedRequest?: {
             model: string;
             input?: string | Array<{
-                type: string;
+                type?: string;
                 [key: string]: unknown;
             }>;
             instructions?: string | null;
@@ -29992,9 +29990,7 @@ export type GetInteractionResponse = GetInteractionResponses[keyof GetInteractio
 export type GetInternalMcpCatalogData = {
     body?: never;
     path?: never;
-    query?: {
-        includeChildren?: boolean | 'true' | 'false';
-    };
+    query?: never;
     url: '/api/internal_mcp_catalog';
 };
 
@@ -30098,7 +30094,6 @@ export type GetInternalMcpCatalogResponses = {
                 type: 'plain_text' | 'secret' | 'boolean' | 'number';
                 value?: string;
                 promptOnInstallation: boolean;
-                promptOnPreset?: boolean;
                 required?: boolean;
                 description?: string;
                 default?: LocalConfigEnvironmentDefault;
@@ -30140,6 +30135,7 @@ export type GetInternalMcpCatalogResponses = {
             client_id: string;
             client_secret?: string;
             audience?: string;
+            resource?: string;
             redirect_uris: Array<string>;
             scopes: Array<string>;
             description?: string;
@@ -30178,14 +30174,7 @@ export type GetInternalMcpCatalogResponses = {
         organizationId: string | null;
         authorId: string | null;
         scope: 'personal' | 'team' | 'org';
-        parentCatalogItemId: string | null;
-        childName: string | null;
         clonedFrom: string | null;
-        presetEntryId: string | null;
-        presetFieldValues: {
-            [key: string]: UserConfigFieldDefault;
-        };
-        presetSecretId: string | null;
         environmentId: string | null;
         catalogReinstallRequired: boolean;
         createdAt: string;
@@ -30237,7 +30226,6 @@ export type CreateInternalMcpCatalogItemData = {
                 type: 'plain_text' | 'secret' | 'boolean' | 'number';
                 value?: string;
                 promptOnInstallation: boolean;
-                promptOnPreset?: boolean;
                 required?: boolean;
                 description?: string;
                 default?: LocalConfigEnvironmentDefaultInput;
@@ -30279,6 +30267,7 @@ export type CreateInternalMcpCatalogItemData = {
             client_id: string;
             client_secret?: string;
             audience?: string;
+            resource?: string;
             redirect_uris: Array<string>;
             scopes: Array<string>;
             description?: string;
@@ -30315,14 +30304,7 @@ export type CreateInternalMcpCatalogItemData = {
         } | null;
         icon?: string | null;
         scope?: 'personal' | 'team' | 'org';
-        parentCatalogItemId?: string | null;
-        childName?: string | null;
         clonedFrom?: string | null;
-        presetEntryId?: string | null;
-        presetFieldValues?: {
-            [key: string]: UserConfigFieldDefaultInput;
-        };
-        presetSecretId?: string | null;
         environmentId?: string | null;
         catalogReinstallRequired?: boolean;
         labels?: Array<{
@@ -30440,7 +30422,6 @@ export type CreateInternalMcpCatalogItemResponses = {
                 type: 'plain_text' | 'secret' | 'boolean' | 'number';
                 value?: string;
                 promptOnInstallation: boolean;
-                promptOnPreset?: boolean;
                 required?: boolean;
                 description?: string;
                 default?: LocalConfigEnvironmentDefault;
@@ -30482,6 +30463,7 @@ export type CreateInternalMcpCatalogItemResponses = {
             client_id: string;
             client_secret?: string;
             audience?: string;
+            resource?: string;
             redirect_uris: Array<string>;
             scopes: Array<string>;
             description?: string;
@@ -30520,14 +30502,7 @@ export type CreateInternalMcpCatalogItemResponses = {
         organizationId: string | null;
         authorId: string | null;
         scope: 'personal' | 'team' | 'org';
-        parentCatalogItemId: string | null;
-        childName: string | null;
         clonedFrom: string | null;
-        presetEntryId: string | null;
-        presetFieldValues: {
-            [key: string]: UserConfigFieldDefault;
-        };
-        presetSecretId: string | null;
         environmentId: string | null;
         catalogReinstallRequired: boolean;
         createdAt: string;
@@ -30740,7 +30715,6 @@ export type GetInternalMcpCatalogItemResponses = {
                 type: 'plain_text' | 'secret' | 'boolean' | 'number';
                 value?: string;
                 promptOnInstallation: boolean;
-                promptOnPreset?: boolean;
                 required?: boolean;
                 description?: string;
                 default?: LocalConfigEnvironmentDefault;
@@ -30782,6 +30756,7 @@ export type GetInternalMcpCatalogItemResponses = {
             client_id: string;
             client_secret?: string;
             audience?: string;
+            resource?: string;
             redirect_uris: Array<string>;
             scopes: Array<string>;
             description?: string;
@@ -30820,14 +30795,7 @@ export type GetInternalMcpCatalogItemResponses = {
         organizationId: string | null;
         authorId: string | null;
         scope: 'personal' | 'team' | 'org';
-        parentCatalogItemId: string | null;
-        childName: string | null;
         clonedFrom: string | null;
-        presetEntryId: string | null;
-        presetFieldValues: {
-            [key: string]: UserConfigFieldDefault;
-        };
-        presetSecretId: string | null;
         environmentId: string | null;
         catalogReinstallRequired: boolean;
         createdAt: string;
@@ -30876,7 +30844,6 @@ export type UpdateInternalMcpCatalogItemData = {
                 type: 'plain_text' | 'secret' | 'boolean' | 'number';
                 value?: string;
                 promptOnInstallation: boolean;
-                promptOnPreset?: boolean;
                 required?: boolean;
                 description?: string;
                 default?: LocalConfigEnvironmentDefaultInput;
@@ -30918,6 +30885,7 @@ export type UpdateInternalMcpCatalogItemData = {
             client_id: string;
             client_secret?: string;
             audience?: string;
+            resource?: string;
             redirect_uris: Array<string>;
             scopes: Array<string>;
             description?: string;
@@ -30954,12 +30922,6 @@ export type UpdateInternalMcpCatalogItemData = {
         } | null;
         icon?: string | null;
         scope?: 'personal' | 'team' | 'org';
-        childName?: string | null;
-        presetEntryId?: string | null;
-        presetFieldValues?: {
-            [key: string]: UserConfigFieldDefaultInput;
-        };
-        presetSecretId?: string | null;
         environmentId?: string | null;
         catalogReinstallRequired?: boolean;
         labels?: Array<{
@@ -31079,7 +31041,6 @@ export type UpdateInternalMcpCatalogItemResponses = {
                 type: 'plain_text' | 'secret' | 'boolean' | 'number';
                 value?: string;
                 promptOnInstallation: boolean;
-                promptOnPreset?: boolean;
                 required?: boolean;
                 description?: string;
                 default?: LocalConfigEnvironmentDefault;
@@ -31121,6 +31082,7 @@ export type UpdateInternalMcpCatalogItemResponses = {
             client_id: string;
             client_secret?: string;
             audience?: string;
+            resource?: string;
             redirect_uris: Array<string>;
             scopes: Array<string>;
             description?: string;
@@ -31159,14 +31121,7 @@ export type UpdateInternalMcpCatalogItemResponses = {
         organizationId: string | null;
         authorId: string | null;
         scope: 'personal' | 'team' | 'org';
-        parentCatalogItemId: string | null;
-        childName: string | null;
         clonedFrom: string | null;
-        presetEntryId: string | null;
-        presetFieldValues: {
-            [key: string]: UserConfigFieldDefault;
-        };
-        presetSecretId: string | null;
         environmentId: string | null;
         catalogReinstallRequired: boolean;
         createdAt: string;
@@ -31956,661 +31911,6 @@ export type GetInternalMcpCatalogLabelKeysResponses = {
 };
 
 export type GetInternalMcpCatalogLabelKeysResponse = GetInternalMcpCatalogLabelKeysResponses[keyof GetInternalMcpCatalogLabelKeysResponses];
-
-export type GetCatalogChildrenData = {
-    body?: never;
-    path: {
-        catalogId: string;
-    };
-    query?: never;
-    url: '/api/internal_mcp_catalog/{catalogId}/children';
-};
-
-export type GetCatalogChildrenErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type GetCatalogChildrenError = GetCatalogChildrenErrors[keyof GetCatalogChildrenErrors];
-
-export type GetCatalogChildrenResponses = {
-    /**
-     * Default Response
-     */
-    200: Array<{
-        id: string;
-        name: string;
-        version: string | null;
-        description: string | null;
-        instructions: string | null;
-        repository: string | null;
-        installationCommand: string | null;
-        requiresAuth: boolean;
-        authDescription: string | null;
-        authFields: Array<{
-            name: string;
-            label: string;
-            type: string;
-            required: boolean;
-            description?: string;
-        }> | null;
-        serverType: 'local' | 'remote' | 'builtin';
-        multitenant: boolean;
-        serverUrl: string | null;
-        docsUrl: string | null;
-        clientSecretId: string | null;
-        localConfigSecretId: string | null;
-        localConfig: {
-            command?: string;
-            arguments?: Array<string>;
-            environment?: Array<{
-                key: string;
-                type: 'plain_text' | 'secret' | 'boolean' | 'number';
-                value?: string;
-                promptOnInstallation: boolean;
-                promptOnPreset?: boolean;
-                required?: boolean;
-                description?: string;
-                default?: LocalConfigEnvironmentDefault;
-                mounted?: boolean;
-            }>;
-            envFrom?: Array<{
-                type: 'secret' | 'configMap';
-                name: string;
-                prefix?: string;
-            }>;
-            dockerImage?: string;
-            serviceAccount?: string;
-            transportType?: 'stdio' | 'streamable-http';
-            httpPort?: number;
-            httpPath?: string;
-            nodePort?: number;
-            imagePullSecrets?: Array<{
-                source: 'existing';
-                name: string;
-            } | {
-                source: 'credentials';
-                server: string;
-                username: string;
-                password?: string;
-                email?: string;
-            }>;
-        } | null;
-        deploymentSpecYaml: string | null;
-        userConfig: {
-            [key: string]: UserConfigField;
-        } | null;
-        oauthConfig: {
-            name: string;
-            server_url: string;
-            grant_type?: 'authorization_code' | 'client_credentials';
-            auth_server_url?: string;
-            authorization_endpoint?: string;
-            resource_metadata_url?: string;
-            client_id: string;
-            client_secret?: string;
-            audience?: string;
-            redirect_uris: Array<string>;
-            scopes: Array<string>;
-            description?: string;
-            well_known_url?: string;
-            default_scopes: Array<string>;
-            supports_resource_metadata: boolean;
-            generic_oauth?: boolean;
-            token_endpoint?: string;
-            access_token_env_var?: string;
-            requires_proxy?: boolean;
-            provider_name?: string;
-            browser_auth?: boolean;
-            streamable_http_url?: string;
-            streamable_http_port?: number;
-        } | null;
-        enterpriseManagedConfig: {
-            identityProviderId?: string;
-            assertionMode?: 'exchange' | 'passthrough';
-            resourceType?: 'mcp' | 'oauth_protected_resource' | 'secret' | 'service_account' | 'custom_http';
-            resourceIdentifier?: string;
-            requestedIssuer?: string;
-            requestedCredentialType?: 'id_jag' | 'bearer_token' | 'secret' | 'service_account' | 'opaque_json';
-            scopes?: Array<string>;
-            audience?: string;
-            clientIdOverride?: string;
-            clientSecretOverride?: string;
-            tokenInjectionMode?: 'authorization_bearer' | 'raw_authorization' | 'header' | 'env' | 'body_field';
-            headerName?: string;
-            envVarName?: string;
-            bodyFieldName?: string;
-            responseFieldPath?: string;
-            fallbackMode?: 'fail_closed' | 'fallback_to_dynamic' | 'fallback_to_static';
-            cacheTtlSeconds?: number;
-        } | null;
-        icon: string | null;
-        organizationId: string | null;
-        authorId: string | null;
-        scope: 'personal' | 'team' | 'org';
-        parentCatalogItemId: string | null;
-        childName: string | null;
-        clonedFrom: string | null;
-        presetEntryId: string | null;
-        presetFieldValues: {
-            [key: string]: UserConfigFieldDefault;
-        };
-        presetSecretId: string | null;
-        environmentId: string | null;
-        catalogReinstallRequired: boolean;
-        createdAt: string;
-        updatedAt: string;
-        labels: Array<{
-            key: string;
-            value: string;
-        }>;
-        teams: Array<{
-            id: string;
-            name: string;
-        }>;
-        authorName?: string | null;
-    }>;
-};
-
-export type GetCatalogChildrenResponse = GetCatalogChildrenResponses[keyof GetCatalogChildrenResponses];
-
-export type CreateCatalogChildData = {
-    body: {
-        presetEntryId: string;
-        presetFieldValues?: {
-            [key: string]: UserConfigFieldDefaultInput;
-        };
-    };
-    path: {
-        catalogId: string;
-    };
-    query?: never;
-    url: '/api/internal_mcp_catalog/{catalogId}/children';
-};
-
-export type CreateCatalogChildErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type CreateCatalogChildError = CreateCatalogChildErrors[keyof CreateCatalogChildErrors];
-
-export type CreateCatalogChildResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        name: string;
-        version: string | null;
-        description: string | null;
-        instructions: string | null;
-        repository: string | null;
-        installationCommand: string | null;
-        requiresAuth: boolean;
-        authDescription: string | null;
-        authFields: Array<{
-            name: string;
-            label: string;
-            type: string;
-            required: boolean;
-            description?: string;
-        }> | null;
-        serverType: 'local' | 'remote' | 'builtin';
-        multitenant: boolean;
-        serverUrl: string | null;
-        docsUrl: string | null;
-        clientSecretId: string | null;
-        localConfigSecretId: string | null;
-        localConfig: {
-            command?: string;
-            arguments?: Array<string>;
-            environment?: Array<{
-                key: string;
-                type: 'plain_text' | 'secret' | 'boolean' | 'number';
-                value?: string;
-                promptOnInstallation: boolean;
-                promptOnPreset?: boolean;
-                required?: boolean;
-                description?: string;
-                default?: LocalConfigEnvironmentDefault;
-                mounted?: boolean;
-            }>;
-            envFrom?: Array<{
-                type: 'secret' | 'configMap';
-                name: string;
-                prefix?: string;
-            }>;
-            dockerImage?: string;
-            serviceAccount?: string;
-            transportType?: 'stdio' | 'streamable-http';
-            httpPort?: number;
-            httpPath?: string;
-            nodePort?: number;
-            imagePullSecrets?: Array<{
-                source: 'existing';
-                name: string;
-            } | {
-                source: 'credentials';
-                server: string;
-                username: string;
-                password?: string;
-                email?: string;
-            }>;
-        } | null;
-        deploymentSpecYaml: string | null;
-        userConfig: {
-            [key: string]: UserConfigField;
-        } | null;
-        oauthConfig: {
-            name: string;
-            server_url: string;
-            grant_type?: 'authorization_code' | 'client_credentials';
-            auth_server_url?: string;
-            authorization_endpoint?: string;
-            resource_metadata_url?: string;
-            client_id: string;
-            client_secret?: string;
-            audience?: string;
-            redirect_uris: Array<string>;
-            scopes: Array<string>;
-            description?: string;
-            well_known_url?: string;
-            default_scopes: Array<string>;
-            supports_resource_metadata: boolean;
-            generic_oauth?: boolean;
-            token_endpoint?: string;
-            access_token_env_var?: string;
-            requires_proxy?: boolean;
-            provider_name?: string;
-            browser_auth?: boolean;
-            streamable_http_url?: string;
-            streamable_http_port?: number;
-        } | null;
-        enterpriseManagedConfig: {
-            identityProviderId?: string;
-            assertionMode?: 'exchange' | 'passthrough';
-            resourceType?: 'mcp' | 'oauth_protected_resource' | 'secret' | 'service_account' | 'custom_http';
-            resourceIdentifier?: string;
-            requestedIssuer?: string;
-            requestedCredentialType?: 'id_jag' | 'bearer_token' | 'secret' | 'service_account' | 'opaque_json';
-            scopes?: Array<string>;
-            audience?: string;
-            clientIdOverride?: string;
-            clientSecretOverride?: string;
-            tokenInjectionMode?: 'authorization_bearer' | 'raw_authorization' | 'header' | 'env' | 'body_field';
-            headerName?: string;
-            envVarName?: string;
-            bodyFieldName?: string;
-            responseFieldPath?: string;
-            fallbackMode?: 'fail_closed' | 'fallback_to_dynamic' | 'fallback_to_static';
-            cacheTtlSeconds?: number;
-        } | null;
-        icon: string | null;
-        organizationId: string | null;
-        authorId: string | null;
-        scope: 'personal' | 'team' | 'org';
-        parentCatalogItemId: string | null;
-        childName: string | null;
-        clonedFrom: string | null;
-        presetEntryId: string | null;
-        presetFieldValues: {
-            [key: string]: UserConfigFieldDefault;
-        };
-        presetSecretId: string | null;
-        environmentId: string | null;
-        catalogReinstallRequired: boolean;
-        createdAt: string;
-        updatedAt: string;
-        labels: Array<{
-            key: string;
-            value: string;
-        }>;
-        teams: Array<{
-            id: string;
-            name: string;
-        }>;
-        authorName?: string | null;
-    };
-};
-
-export type CreateCatalogChildResponse = CreateCatalogChildResponses[keyof CreateCatalogChildResponses];
-
-export type UpdateCatalogChildData = {
-    body: {
-        presetFieldValues?: {
-            [key: string]: UserConfigFieldDefaultInput;
-        };
-    };
-    path: {
-        catalogId: string;
-        childId: string;
-    };
-    query?: never;
-    url: '/api/internal_mcp_catalog/{catalogId}/children/{childId}';
-};
-
-export type UpdateCatalogChildErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type UpdateCatalogChildError = UpdateCatalogChildErrors[keyof UpdateCatalogChildErrors];
-
-export type UpdateCatalogChildResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        name: string;
-        version: string | null;
-        description: string | null;
-        instructions: string | null;
-        repository: string | null;
-        installationCommand: string | null;
-        requiresAuth: boolean;
-        authDescription: string | null;
-        authFields: Array<{
-            name: string;
-            label: string;
-            type: string;
-            required: boolean;
-            description?: string;
-        }> | null;
-        serverType: 'local' | 'remote' | 'builtin';
-        multitenant: boolean;
-        serverUrl: string | null;
-        docsUrl: string | null;
-        clientSecretId: string | null;
-        localConfigSecretId: string | null;
-        localConfig: {
-            command?: string;
-            arguments?: Array<string>;
-            environment?: Array<{
-                key: string;
-                type: 'plain_text' | 'secret' | 'boolean' | 'number';
-                value?: string;
-                promptOnInstallation: boolean;
-                promptOnPreset?: boolean;
-                required?: boolean;
-                description?: string;
-                default?: LocalConfigEnvironmentDefault;
-                mounted?: boolean;
-            }>;
-            envFrom?: Array<{
-                type: 'secret' | 'configMap';
-                name: string;
-                prefix?: string;
-            }>;
-            dockerImage?: string;
-            serviceAccount?: string;
-            transportType?: 'stdio' | 'streamable-http';
-            httpPort?: number;
-            httpPath?: string;
-            nodePort?: number;
-            imagePullSecrets?: Array<{
-                source: 'existing';
-                name: string;
-            } | {
-                source: 'credentials';
-                server: string;
-                username: string;
-                password?: string;
-                email?: string;
-            }>;
-        } | null;
-        deploymentSpecYaml: string | null;
-        userConfig: {
-            [key: string]: UserConfigField;
-        } | null;
-        oauthConfig: {
-            name: string;
-            server_url: string;
-            grant_type?: 'authorization_code' | 'client_credentials';
-            auth_server_url?: string;
-            authorization_endpoint?: string;
-            resource_metadata_url?: string;
-            client_id: string;
-            client_secret?: string;
-            audience?: string;
-            redirect_uris: Array<string>;
-            scopes: Array<string>;
-            description?: string;
-            well_known_url?: string;
-            default_scopes: Array<string>;
-            supports_resource_metadata: boolean;
-            generic_oauth?: boolean;
-            token_endpoint?: string;
-            access_token_env_var?: string;
-            requires_proxy?: boolean;
-            provider_name?: string;
-            browser_auth?: boolean;
-            streamable_http_url?: string;
-            streamable_http_port?: number;
-        } | null;
-        enterpriseManagedConfig: {
-            identityProviderId?: string;
-            assertionMode?: 'exchange' | 'passthrough';
-            resourceType?: 'mcp' | 'oauth_protected_resource' | 'secret' | 'service_account' | 'custom_http';
-            resourceIdentifier?: string;
-            requestedIssuer?: string;
-            requestedCredentialType?: 'id_jag' | 'bearer_token' | 'secret' | 'service_account' | 'opaque_json';
-            scopes?: Array<string>;
-            audience?: string;
-            clientIdOverride?: string;
-            clientSecretOverride?: string;
-            tokenInjectionMode?: 'authorization_bearer' | 'raw_authorization' | 'header' | 'env' | 'body_field';
-            headerName?: string;
-            envVarName?: string;
-            bodyFieldName?: string;
-            responseFieldPath?: string;
-            fallbackMode?: 'fail_closed' | 'fallback_to_dynamic' | 'fallback_to_static';
-            cacheTtlSeconds?: number;
-        } | null;
-        icon: string | null;
-        organizationId: string | null;
-        authorId: string | null;
-        scope: 'personal' | 'team' | 'org';
-        parentCatalogItemId: string | null;
-        childName: string | null;
-        clonedFrom: string | null;
-        presetEntryId: string | null;
-        presetFieldValues: {
-            [key: string]: UserConfigFieldDefault;
-        };
-        presetSecretId: string | null;
-        environmentId: string | null;
-        catalogReinstallRequired: boolean;
-        createdAt: string;
-        updatedAt: string;
-        labels: Array<{
-            key: string;
-            value: string;
-        }>;
-        teams: Array<{
-            id: string;
-            name: string;
-        }>;
-        authorName?: string | null;
-    };
-};
-
-export type UpdateCatalogChildResponse = UpdateCatalogChildResponses[keyof UpdateCatalogChildResponses];
 
 export type GetInternalMcpCatalogLabelValuesData = {
     body?: never;
@@ -38580,95 +37880,6 @@ export type McpGatewayPostResponses = {
     200: unknown;
 };
 
-export type ListMcpPresetEntriesData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/organization/mcp-preset-entries';
-};
-
-export type ListMcpPresetEntriesErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type ListMcpPresetEntriesError = ListMcpPresetEntriesErrors[keyof ListMcpPresetEntriesErrors];
-
-export type ListMcpPresetEntriesResponses = {
-    /**
-     * Default Response
-     */
-    200: Array<{
-        id: string;
-        organizationId: string;
-        name: string;
-        sortOrder: number;
-        validationRegex: string | null;
-        createdAt: string;
-        assignedCatalogCount: number;
-    }>;
-};
-
-export type ListMcpPresetEntriesResponse = ListMcpPresetEntriesResponses[keyof ListMcpPresetEntriesResponses];
-
 export type McpProxyPostData = {
     body: {
         [key: string]: unknown;
@@ -38795,6 +38006,7 @@ export type GetMcpServerInstallationRequestsResponses = {
                 client_id: string;
                 client_secret?: string;
                 audience?: string;
+                resource?: string;
                 redirect_uris: Array<string>;
                 scopes: Array<string>;
                 description?: string;
@@ -38824,7 +38036,6 @@ export type GetMcpServerInstallationRequestsResponses = {
                     type: 'plain_text' | 'secret' | 'boolean' | 'number';
                     value?: string;
                     promptOnInstallation: boolean;
-                    promptOnPreset?: boolean;
                     required?: boolean;
                     description?: string;
                     default?: LocalConfigEnvironmentDefault;
@@ -38895,6 +38106,7 @@ export type CreateMcpServerInstallationRequestData = {
                 client_id: string;
                 client_secret?: string;
                 audience?: string;
+                resource?: string;
                 redirect_uris: Array<string>;
                 scopes: Array<string>;
                 description?: string;
@@ -38924,7 +38136,6 @@ export type CreateMcpServerInstallationRequestData = {
                     type: 'plain_text' | 'secret' | 'boolean' | 'number';
                     value?: string;
                     promptOnInstallation: boolean;
-                    promptOnPreset?: boolean;
                     required?: boolean;
                     description?: string;
                     default?: LocalConfigEnvironmentDefaultInput;
@@ -39055,6 +38266,7 @@ export type CreateMcpServerInstallationRequestResponses = {
                 client_id: string;
                 client_secret?: string;
                 audience?: string;
+                resource?: string;
                 redirect_uris: Array<string>;
                 scopes: Array<string>;
                 description?: string;
@@ -39084,7 +38296,6 @@ export type CreateMcpServerInstallationRequestResponses = {
                     type: 'plain_text' | 'secret' | 'boolean' | 'number';
                     value?: string;
                     promptOnInstallation: boolean;
-                    promptOnPreset?: boolean;
                     required?: boolean;
                     description?: string;
                     default?: LocalConfigEnvironmentDefault;
@@ -39320,6 +38531,7 @@ export type GetMcpServerInstallationRequestResponses = {
                 client_id: string;
                 client_secret?: string;
                 audience?: string;
+                resource?: string;
                 redirect_uris: Array<string>;
                 scopes: Array<string>;
                 description?: string;
@@ -39349,7 +38561,6 @@ export type GetMcpServerInstallationRequestResponses = {
                     type: 'plain_text' | 'secret' | 'boolean' | 'number';
                     value?: string;
                     promptOnInstallation: boolean;
-                    promptOnPreset?: boolean;
                     required?: boolean;
                     description?: string;
                     default?: LocalConfigEnvironmentDefault;
@@ -39420,6 +38631,7 @@ export type UpdateMcpServerInstallationRequestData = {
                 client_id: string;
                 client_secret?: string;
                 audience?: string;
+                resource?: string;
                 redirect_uris: Array<string>;
                 scopes: Array<string>;
                 description?: string;
@@ -39449,7 +38661,6 @@ export type UpdateMcpServerInstallationRequestData = {
                     type: 'plain_text' | 'secret' | 'boolean' | 'number';
                     value?: string;
                     promptOnInstallation: boolean;
-                    promptOnPreset?: boolean;
                     required?: boolean;
                     description?: string;
                     default?: LocalConfigEnvironmentDefaultInput;
@@ -39592,6 +38803,7 @@ export type UpdateMcpServerInstallationRequestResponses = {
                 client_id: string;
                 client_secret?: string;
                 audience?: string;
+                resource?: string;
                 redirect_uris: Array<string>;
                 scopes: Array<string>;
                 description?: string;
@@ -39621,7 +38833,6 @@ export type UpdateMcpServerInstallationRequestResponses = {
                     type: 'plain_text' | 'secret' | 'boolean' | 'number';
                     value?: string;
                     promptOnInstallation: boolean;
-                    promptOnPreset?: boolean;
                     required?: boolean;
                     description?: string;
                     default?: LocalConfigEnvironmentDefault;
@@ -39774,6 +38985,7 @@ export type ApproveMcpServerInstallationRequestResponses = {
                 client_id: string;
                 client_secret?: string;
                 audience?: string;
+                resource?: string;
                 redirect_uris: Array<string>;
                 scopes: Array<string>;
                 description?: string;
@@ -39803,7 +39015,6 @@ export type ApproveMcpServerInstallationRequestResponses = {
                     type: 'plain_text' | 'secret' | 'boolean' | 'number';
                     value?: string;
                     promptOnInstallation: boolean;
-                    promptOnPreset?: boolean;
                     required?: boolean;
                     description?: string;
                     default?: LocalConfigEnvironmentDefault;
@@ -39956,6 +39167,7 @@ export type DeclineMcpServerInstallationRequestResponses = {
                 client_id: string;
                 client_secret?: string;
                 audience?: string;
+                resource?: string;
                 redirect_uris: Array<string>;
                 scopes: Array<string>;
                 description?: string;
@@ -39985,7 +39197,6 @@ export type DeclineMcpServerInstallationRequestResponses = {
                     type: 'plain_text' | 'secret' | 'boolean' | 'number';
                     value?: string;
                     promptOnInstallation: boolean;
-                    promptOnPreset?: boolean;
                     required?: boolean;
                     description?: string;
                     default?: LocalConfigEnvironmentDefault;
@@ -40138,6 +39349,7 @@ export type AddMcpServerInstallationRequestNoteResponses = {
                 client_id: string;
                 client_secret?: string;
                 audience?: string;
+                resource?: string;
                 redirect_uris: Array<string>;
                 scopes: Array<string>;
                 description?: string;
@@ -40167,7 +39379,6 @@ export type AddMcpServerInstallationRequestNoteResponses = {
                     type: 'plain_text' | 'secret' | 'boolean' | 'number';
                     value?: string;
                     promptOnInstallation: boolean;
-                    promptOnPreset?: boolean;
                     required?: boolean;
                     description?: string;
                     default?: LocalConfigEnvironmentDefault;
@@ -42079,7 +41290,7 @@ export type ModelRouterResponsesWithDefaultAgentData = {
     body: {
         model: string;
         input?: string | Array<{
-            type: string;
+            type?: string;
             [key: string]: unknown;
         }>;
         instructions?: string | null;
@@ -42248,7 +41459,7 @@ export type ModelRouterResponsesWithAgentData = {
     body: {
         model: string;
         input?: string | Array<{
-            type: string;
+            type?: string;
             [key: string]: unknown;
         }>;
         instructions?: string | null;
@@ -43453,7 +42664,7 @@ export type OpenAiResponsesWithDefaultAgentData = {
     body: {
         model: string;
         input?: string | Array<{
-            type: string;
+            type?: string;
             [key: string]: unknown;
         }>;
         instructions?: string | null;
@@ -43622,7 +42833,7 @@ export type OpenAiResponsesWithAgentData = {
     body: {
         model: string;
         input?: string | Array<{
-            type: string;
+            type?: string;
             [key: string]: unknown;
         }>;
         instructions?: string | null;
@@ -45286,9 +44497,6 @@ export type GetOrganizationResponses = {
             isDefault: boolean;
             visible: boolean;
         }> | null;
-        presetEntityName: string | null;
-        presetEntityNamePlural: string | null;
-        presetEntityDefaultLabel: string | null;
         defaultEnvironmentName: string | null;
         defaultEnvironmentNamespace: string | null;
         defaultEnvironmentDescription: string | null;
@@ -45301,7 +44509,6 @@ export type GetOrganizationResponses = {
         defaultEnvironmentRestricted: boolean;
         skillToolsEnabled: boolean;
         skillSlashCommandsEnabled: boolean;
-        presetEntityDefaultValidationRegex: string | null;
     };
 };
 
@@ -45578,9 +44785,6 @@ export type UpdateAppearanceSettingsResponses = {
             isDefault: boolean;
             visible: boolean;
         }> | null;
-        presetEntityName: string | null;
-        presetEntityNamePlural: string | null;
-        presetEntityDefaultLabel: string | null;
         defaultEnvironmentName: string | null;
         defaultEnvironmentNamespace: string | null;
         defaultEnvironmentDescription: string | null;
@@ -45593,7 +44797,6 @@ export type UpdateAppearanceSettingsResponses = {
         defaultEnvironmentRestricted: boolean;
         skillToolsEnabled: boolean;
         skillSlashCommandsEnabled: boolean;
-        presetEntityDefaultValidationRegex: string | null;
     };
 };
 
@@ -45741,9 +44944,6 @@ export type UpdateSecuritySettingsResponses = {
             isDefault: boolean;
             visible: boolean;
         }> | null;
-        presetEntityName: string | null;
-        presetEntityNamePlural: string | null;
-        presetEntityDefaultLabel: string | null;
         defaultEnvironmentName: string | null;
         defaultEnvironmentNamespace: string | null;
         defaultEnvironmentDescription: string | null;
@@ -45756,7 +44956,6 @@ export type UpdateSecuritySettingsResponses = {
         defaultEnvironmentRestricted: boolean;
         skillToolsEnabled: boolean;
         skillSlashCommandsEnabled: boolean;
-        presetEntityDefaultValidationRegex: string | null;
     };
 };
 
@@ -45907,9 +45106,6 @@ export type UpdateLlmSettingsResponses = {
             isDefault: boolean;
             visible: boolean;
         }> | null;
-        presetEntityName: string | null;
-        presetEntityNamePlural: string | null;
-        presetEntityDefaultLabel: string | null;
         defaultEnvironmentName: string | null;
         defaultEnvironmentNamespace: string | null;
         defaultEnvironmentDescription: string | null;
@@ -45922,7 +45118,6 @@ export type UpdateLlmSettingsResponses = {
         defaultEnvironmentRestricted: boolean;
         skillToolsEnabled: boolean;
         skillSlashCommandsEnabled: boolean;
-        presetEntityDefaultValidationRegex: string | null;
     };
 };
 
@@ -46072,9 +45267,6 @@ export type UpdateAgentSettingsResponses = {
             isDefault: boolean;
             visible: boolean;
         }> | null;
-        presetEntityName: string | null;
-        presetEntityNamePlural: string | null;
-        presetEntityDefaultLabel: string | null;
         defaultEnvironmentName: string | null;
         defaultEnvironmentNamespace: string | null;
         defaultEnvironmentDescription: string | null;
@@ -46087,7 +45279,6 @@ export type UpdateAgentSettingsResponses = {
         defaultEnvironmentRestricted: boolean;
         skillToolsEnabled: boolean;
         skillSlashCommandsEnabled: boolean;
-        presetEntityDefaultValidationRegex: string | null;
     };
 };
 
@@ -46244,9 +45435,6 @@ export type UpdateConnectionSettingsResponses = {
             isDefault: boolean;
             visible: boolean;
         }> | null;
-        presetEntityName: string | null;
-        presetEntityNamePlural: string | null;
-        presetEntityDefaultLabel: string | null;
         defaultEnvironmentName: string | null;
         defaultEnvironmentNamespace: string | null;
         defaultEnvironmentDescription: string | null;
@@ -46259,7 +45447,6 @@ export type UpdateConnectionSettingsResponses = {
         defaultEnvironmentRestricted: boolean;
         skillToolsEnabled: boolean;
         skillSlashCommandsEnabled: boolean;
-        presetEntityDefaultValidationRegex: string | null;
     };
 };
 
@@ -46415,9 +45602,6 @@ export type UpdateDefaultEnvironmentResponses = {
             isDefault: boolean;
             visible: boolean;
         }> | null;
-        presetEntityName: string | null;
-        presetEntityNamePlural: string | null;
-        presetEntityDefaultLabel: string | null;
         defaultEnvironmentName: string | null;
         defaultEnvironmentNamespace: string | null;
         defaultEnvironmentDescription: string | null;
@@ -46430,7 +45614,6 @@ export type UpdateDefaultEnvironmentResponses = {
         defaultEnvironmentRestricted: boolean;
         skillToolsEnabled: boolean;
         skillSlashCommandsEnabled: boolean;
-        presetEntityDefaultValidationRegex: string | null;
     };
 };
 
@@ -46578,9 +45761,6 @@ export type UpdateAuthSettingsResponses = {
             isDefault: boolean;
             visible: boolean;
         }> | null;
-        presetEntityName: string | null;
-        presetEntityNamePlural: string | null;
-        presetEntityDefaultLabel: string | null;
         defaultEnvironmentName: string | null;
         defaultEnvironmentNamespace: string | null;
         defaultEnvironmentDescription: string | null;
@@ -46593,7 +45773,6 @@ export type UpdateAuthSettingsResponses = {
         defaultEnvironmentRestricted: boolean;
         skillToolsEnabled: boolean;
         skillSlashCommandsEnabled: boolean;
-        presetEntityDefaultValidationRegex: string | null;
     };
 };
 
@@ -46743,9 +45922,6 @@ export type UpdateKnowledgeSettingsResponses = {
             isDefault: boolean;
             visible: boolean;
         }> | null;
-        presetEntityName: string | null;
-        presetEntityNamePlural: string | null;
-        presetEntityDefaultLabel: string | null;
         defaultEnvironmentName: string | null;
         defaultEnvironmentNamespace: string | null;
         defaultEnvironmentDescription: string | null;
@@ -46758,7 +45934,6 @@ export type UpdateKnowledgeSettingsResponses = {
         defaultEnvironmentRestricted: boolean;
         skillToolsEnabled: boolean;
         skillSlashCommandsEnabled: boolean;
-        presetEntityDefaultValidationRegex: string | null;
     };
 };
 
@@ -46903,9 +46078,6 @@ export type DropEmbeddingConfigResponses = {
             isDefault: boolean;
             visible: boolean;
         }> | null;
-        presetEntityName: string | null;
-        presetEntityNamePlural: string | null;
-        presetEntityDefaultLabel: string | null;
         defaultEnvironmentName: string | null;
         defaultEnvironmentNamespace: string | null;
         defaultEnvironmentDescription: string | null;
@@ -46918,7 +46090,6 @@ export type DropEmbeddingConfigResponses = {
         defaultEnvironmentRestricted: boolean;
         skillToolsEnabled: boolean;
         skillSlashCommandsEnabled: boolean;
-        presetEntityDefaultValidationRegex: string | null;
     };
 };
 
@@ -47152,9 +46323,6 @@ export type CompleteOnboardingResponses = {
             isDefault: boolean;
             visible: boolean;
         }> | null;
-        presetEntityName: string | null;
-        presetEntityNamePlural: string | null;
-        presetEntityDefaultLabel: string | null;
         defaultEnvironmentName: string | null;
         defaultEnvironmentNamespace: string | null;
         defaultEnvironmentDescription: string | null;
@@ -47167,7 +46335,6 @@ export type CompleteOnboardingResponses = {
         defaultEnvironmentRestricted: boolean;
         skillToolsEnabled: boolean;
         skillSlashCommandsEnabled: boolean;
-        presetEntityDefaultValidationRegex: string | null;
     };
 };
 
@@ -50543,6 +49710,7 @@ export type GetSkillsResponses = {
             name: string;
             description: string;
             content: string;
+            latestVersion: number;
             license: string | null;
             compatibility: string | null;
             allowedTools: string | null;
@@ -50668,6 +49836,7 @@ export type CreateSkillResponses = {
         name: string;
         description: string;
         content: string;
+        latestVersion: number;
         license: string | null;
         compatibility: string | null;
         allowedTools: string | null;
@@ -50788,6 +49957,7 @@ export type ConvertAgentToSkillResponses = {
             name: string;
             description: string;
             content: string;
+            latestVersion: number;
             license: string | null;
             compatibility: string | null;
             allowedTools: string | null;
@@ -51086,6 +50256,7 @@ export type GetSkillResponses = {
         name: string;
         description: string;
         content: string;
+        latestVersion: number;
         license: string | null;
         compatibility: string | null;
         allowedTools: string | null;
@@ -51211,6 +50382,7 @@ export type UpdateSkillResponses = {
         name: string;
         description: string;
         content: string;
+        latestVersion: number;
         license: string | null;
         compatibility: string | null;
         allowedTools: string | null;
@@ -51410,6 +50582,7 @@ export type ResetSkillResponses = {
         name: string;
         description: string;
         content: string;
+        latestVersion: number;
         license: string | null;
         compatibility: string | null;
         allowedTools: string | null;
@@ -51916,6 +51089,7 @@ export type ImportGithubSkillsResponses = {
             name: string;
             description: string;
             content: string;
+            latestVersion: number;
             license: string | null;
             compatibility: string | null;
             allowedTools: string | null;

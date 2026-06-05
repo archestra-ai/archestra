@@ -2,7 +2,7 @@ import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import {
   DEFAULT_OAUTH_ACCESS_TOKEN_LIFETIME_SECONDS,
   OAUTH_SCOPES,
-} from "@shared";
+} from "@archestra/shared";
 import { decodeProtectedHeader } from "jose";
 import config from "@/config";
 import {

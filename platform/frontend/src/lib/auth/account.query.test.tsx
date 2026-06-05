@@ -1,4 +1,4 @@
-import { archestraApiSdk } from "@shared";
+import { archestraApiSdk } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
@@ -26,7 +26,7 @@ vi.mock("@/lib/clients/auth/auth-client", () => ({
   },
 }));
 
-vi.mock("@shared", () => ({
+vi.mock("@archestra/shared", () => ({
   archestraApiSdk: {
     getDefaultCredentialsStatus: vi.fn(),
   },

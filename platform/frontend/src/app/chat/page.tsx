@@ -1,7 +1,7 @@
 "use client";
 
 import type { UIMessage } from "@ai-sdk/react";
-import { type ChatSkillMetadata, E2eTestId } from "@shared";
+import { type ChatSkillMetadata, E2eTestId } from "@archestra/shared";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,

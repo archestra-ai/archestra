@@ -7,7 +7,7 @@
  * rate(mcp_tool_calls_total{agent_name="my-agent"}[5m])
  */
 
-import { MCP_DEPLOYMENT_STATES } from "@shared";
+import { MCP_DEPLOYMENT_STATES } from "@archestra/shared";
 import client from "prom-client";
 import logger from "@/logging";
 import type { AgentType } from "@/types";

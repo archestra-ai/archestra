@@ -122,7 +122,7 @@ export abstract class BaseConnector implements Connector {
     config: Record<string, unknown>;
     credentials: ConnectorCredentials;
     checkpoint: Record<string, unknown> | null;
-    embeddingInputModalities?: import("@shared").ModelInputModality[];
+    embeddingInputModalities?: import("@archestra/shared").ModelInputModality[];
   }): Promise<number | null> {
     return null;
   }

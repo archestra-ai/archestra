@@ -1,4 +1,4 @@
-import { DEFAULT_APP_NAME, RouteId } from "@shared";
+import { DEFAULT_APP_NAME, RouteId } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { getSkillPermissionChecker } from "@/auth/skill-permissions";

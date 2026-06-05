@@ -18,7 +18,6 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { MCP_CONFIG_AUTOCOMPLETE } from "@/lib/mcp/mcp-form-autocomplete";
-import { usePresetEntityName } from "@/lib/organization.query";
 
 export interface HeaderDraft {
   headerName: string;
@@ -29,12 +28,8 @@ export interface HeaderDraft {
   includeBearerPrefix: boolean;
   /**
    * When true, the value is treated as credential material:
-   *   - Per-preset (`scope === "preset"`): persisted into the catalog row's
-   *     `preset_secret_id` bag instead of the plaintext
-   *     `preset_field_values` jsonb.
    *   - Per-installation (`scope === "installation"`): the value input is
-   *     masked in install dialogs (storage already goes to the install's
-   *     secret bag for either flag value).
+   *     masked in install dialogs (storage goes to the install's secret bag).
    *   - Static: server-side validator rejects `sensitive: true` because the
    *     value lives in `userConfig.default` plaintext.
    */
@@ -74,7 +69,6 @@ export function HeaderDialog({
   onClose,
   onConfirm,
 }: HeaderDialogProps) {
-  const { singular } = usePresetEntityName();
   const [draft, setDraft] = useState<HeaderDraft>(initial ?? EMPTY_DRAFT);
 
   useEffect(() => {
@@ -184,12 +178,6 @@ export function HeaderDialog({
             }
           />
         )}
-        {draft.scope === "preset" && (
-          <ScopeCallout
-            title={`An admin sets this for each ${singular}`}
-            body={`Each ${singular} that uses this server supplies its own value.`}
-          />
-        )}
         {draft.scope === "static" && (
           <div className="space-y-2">
             <Label htmlFor="header-value">Value</Label>
@@ -237,14 +225,14 @@ export function HeaderDialog({
           title="Sensitive value"
           body={
             draft.scope === "static"
-              ? `Only available for Installation and ${singular} headers. Static headers are always non-sensitive.`
+              ? "Only available for Installation headers. Static headers are always non-sensitive."
               : "Store this value securely. Use for API tokens, credentials, and other secrets."
           }
           checked={draft.sensitive}
           onChange={(sensitive) => updateDraft({ sensitive })}
           ariaLabel="Sensitive header value"
           disabled={draft.scope === "static"}
-          disabledReason={`Static headers are always non-sensitive. Use Installation or ${singular} scope for secrets.`}
+          disabledReason="Static headers are always non-sensitive. Use Installation scope for secrets."
         />
 
         <div className="space-y-2">

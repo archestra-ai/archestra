@@ -1,3 +1,4 @@
+import type { ModelInputModality } from "@archestra/shared";
 import { ClientSecretCredential } from "@azure/identity";
 import { Client, ResponseType } from "@microsoft/microsoft-graph-client";
 import { TokenCredentialAuthenticationProvider } from "@microsoft/microsoft-graph-client/authProviders/azureTokenCredentials/index.js";
@@ -5,7 +6,6 @@ import type {
   DriveItem as GraphDriveItem,
   SitePage as GraphSitePage,
 } from "@microsoft/microsoft-graph-types";
-import type { ModelInputModality } from "@shared";
 import JSZip from "jszip";
 import type {
   ConnectorCredentials,

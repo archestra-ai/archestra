@@ -1,4 +1,7 @@
-import { AUTO_PROVISIONED_INVITATION_STATUS, MEMBER_ROLE_NAME } from "@shared";
+import {
+  AUTO_PROVISIONED_INVITATION_STATUS,
+  MEMBER_ROLE_NAME,
+} from "@archestra/shared";
 import config from "@/config";
 import db, { schema } from "@/database";
 import logger from "@/logging";

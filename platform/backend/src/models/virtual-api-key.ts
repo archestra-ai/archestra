@@ -3,7 +3,7 @@ import {
   ARCHESTRA_TOKEN_PREFIX,
   type PaginationQuery,
   type SupportedProvider,
-} from "@shared";
+} from "@archestra/shared";
 import { and, count, eq, ilike, inArray, sql } from "drizzle-orm";
 import db, { schema, withDbTransaction } from "@/database";
 import type { PaginatedResult } from "@/database/utils/pagination";

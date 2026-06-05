@@ -1,6 +1,6 @@
 "use client";
 
-import { COMMUNITY_SLACK_URL, GITHUB_REPO_URL } from "@shared";
+import { COMMUNITY_SLACK_URL, GITHUB_REPO_URL } from "@archestra/shared";
 import { Github, Slack } from "lucide-react";
 import config from "@/lib/config/config";
 

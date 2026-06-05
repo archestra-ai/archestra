@@ -1,4 +1,4 @@
-import type { Action, Resource } from "@shared";
+import type { Action, Resource } from "@archestra/shared";
 import { Fragment } from "react";
 import { CodeText } from "@/components/code-text";
 import { cn } from "@/lib/utils";

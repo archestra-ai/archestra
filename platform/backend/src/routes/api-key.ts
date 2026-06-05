@@ -1,4 +1,4 @@
-import { RouteId } from "@shared";
+import { RouteId } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { auth as betterAuth } from "@/auth/better-auth";
 import ApiKeyModel from "@/models/api-key";

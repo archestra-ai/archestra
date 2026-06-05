@@ -1,4 +1,4 @@
-import type { archestraApiTypes } from "@shared";
+import type { archestraApiTypes } from "@archestra/shared";
 
 type InstalledServer = archestraApiTypes.GetMcpServersResponses["200"][number];
 

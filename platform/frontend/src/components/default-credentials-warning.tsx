@@ -5,7 +5,7 @@ import {
   DEFAULT_ADMIN_PASSWORD,
   DocsPage,
   getDocsUrl,
-} from "@shared";
+} from "@archestra/shared";
 import { AlertTriangle } from "lucide-react";
 import { CopyButton } from "@/components/copy-button";
 import { ExternalDocsLink } from "@/components/external-docs-link";

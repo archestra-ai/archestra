@@ -98,7 +98,9 @@ export const ChatCompletionResponseSchema = z
 
 const ResponsesInputItemSchema = z
   .object({
-    type: z.string(),
+    // Optional: Responses "easy input message" items carry only role/content
+    // and omit `type` (it defaults to "message"); the AI SDK emits this shape.
+    type: z.string().optional(),
   })
   .passthrough()
   .describe(

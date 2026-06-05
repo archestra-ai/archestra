@@ -1,4 +1,4 @@
-import type { StatisticsTimeFrame } from "@shared";
+import type { StatisticsTimeFrame } from "@archestra/shared";
 import { render, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import StatisticsPage from "./page";

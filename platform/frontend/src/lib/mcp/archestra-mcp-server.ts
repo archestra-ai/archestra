@@ -6,7 +6,7 @@ import {
   getArchestraMcpServerName,
   getArchestraToolFullName,
   getArchestraToolShortName,
-} from "@shared";
+} from "@archestra/shared";
 import { useMemo } from "react";
 import appConfig from "@/lib/config/config";
 import { useAppName } from "@/lib/hooks/use-app-name";

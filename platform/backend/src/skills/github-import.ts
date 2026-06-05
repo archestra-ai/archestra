@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
+import { TimeInMs } from "@archestra/shared";
 import { Octokit } from "@octokit/rest";
-import { TimeInMs } from "@shared";
 import { LRUCacheManager } from "@/cache-manager";
 import logger from "@/logging";
 import type { SkillFileEncoding, SkillFileKind } from "@/types";

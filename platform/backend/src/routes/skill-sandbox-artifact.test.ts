@@ -1,4 +1,4 @@
-import { SkillSandboxArtifactModel, SkillSandboxModel } from "@/models";
+import { SkillSandboxFileModel, SkillSandboxModel } from "@/models";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -11,15 +11,10 @@ const PNG_FAKE = Buffer.concat([PNG_HEADER, Buffer.alloc(64, 0xab)]);
 
 async function seedSandbox(params: { organizationId: string; userId: string }) {
   return await SkillSandboxModel.create({
-    sandbox: {
-      organizationId: params.organizationId,
-      userId: params.userId,
-      conversationId: null,
-      defaultCwd: "/sandbox/skills/example",
-      primarySkillId: null,
-      agentId: null,
-    },
-    skillIds: [],
+    organizationId: params.organizationId,
+    userId: params.userId,
+    conversationId: null,
+    defaultCwd: "/sandbox/skills/example",
   });
 }
 
@@ -30,11 +25,11 @@ async function seedArtifact(params: {
   data: Buffer;
   path?: string;
 }) {
-  return await SkillSandboxArtifactModel.create({
+  return await SkillSandboxFileModel.createArtifact({
     sandboxId: params.sandboxId,
-    organizationId: params.organizationId,
     path: params.path ?? "/sandbox/skills/example/out.png",
     mimeType: params.mimeType,
+    originalName: null,
     sizeBytes: params.data.byteLength,
     data: params.data,
   });

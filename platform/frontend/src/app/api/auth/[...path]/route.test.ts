@@ -1,4 +1,4 @@
-import { LINKED_IDP_AUTH_COMPLETE_ENDPOINT } from "@shared";
+import { LINKED_IDP_AUTH_COMPLETE_ENDPOINT } from "@archestra/shared";
 import { NextRequest } from "next/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 

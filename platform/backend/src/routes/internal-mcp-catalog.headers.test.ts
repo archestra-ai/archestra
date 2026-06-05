@@ -49,22 +49,14 @@ describe("Internal MCP Catalog - Header User Config Routes", () => {
   // ===========================================================================
   //
   // Server-side contract (validateHeaderMappedUserConfig in types/mcp-catalog.ts):
-  //   `sensitive: true` is only legal when the field has at least one prompt
-  //   flag set. Truly static fields (neither promptOnInstallation nor
-  //   promptOnPreset) must not be sensitive — their value lives in
-  //   `userConfig.default` plaintext on the catalog row.
-  //
-  // Regression note: the validator used to reduce to `promptOnInstallation
-  // === false`, which mis-classified preset-scoped fields whenever the
-  // frontend sent the prompt flag as an explicit boolean false (instead of
-  // leaving it undefined). The matrix below exercises both wire shapes so
-  // a regression to the old check would surface immediately.
+  //   `sensitive: true` is only legal for install-prompted fields. Static
+  //   fields (`promptOnInstallation === false`) must not be sensitive — their
+  //   value lives in `userConfig.default` plaintext on the catalog row.
 
   describe("header sensitive-flag validator", () => {
     type Row = {
       caseId: string;
       promptOnInstallation: boolean | undefined;
-      promptOnPreset: boolean | undefined;
       sensitive: boolean;
       expectedStatus: 200 | 400;
       description: string;
@@ -72,45 +64,15 @@ describe("Internal MCP Catalog - Header User Config Routes", () => {
 
     const rows = [
       {
-        caseId: "static-implicit",
-        promptOnInstallation: false,
-        promptOnPreset: undefined,
-        sensitive: true,
-        expectedStatus: 400,
-        description:
-          "static (promptOnPreset omitted) + sensitive → rejected (legacy wire shape)",
-      },
-      {
         caseId: "static-explicit",
         promptOnInstallation: false,
-        promptOnPreset: false,
         sensitive: true,
         expectedStatus: 400,
-        description:
-          "static (promptOnPreset explicitly false) + sensitive → rejected",
-      },
-      {
-        caseId: "preset-explicit-install-false",
-        promptOnInstallation: false,
-        promptOnPreset: true,
-        sensitive: true,
-        expectedStatus: 200,
-        description:
-          "preset + sensitive with explicit promptOnInstallation:false → accepted (frontend wire shape)",
-      },
-      {
-        caseId: "preset-implicit-install",
-        promptOnInstallation: undefined,
-        promptOnPreset: true,
-        sensitive: true,
-        expectedStatus: 200,
-        description:
-          "preset + sensitive with promptOnInstallation omitted → accepted",
+        description: "static + sensitive → rejected",
       },
       {
         caseId: "install-sensitive",
         promptOnInstallation: true,
-        promptOnPreset: undefined,
         sensitive: true,
         expectedStatus: 200,
         description: "install + sensitive → accepted",
@@ -118,7 +80,6 @@ describe("Internal MCP Catalog - Header User Config Routes", () => {
       {
         caseId: "static-nonsensitive",
         promptOnInstallation: false,
-        promptOnPreset: undefined,
         sensitive: false,
         expectedStatus: 200,
         description: "static + non-sensitive → accepted (baseline)",
@@ -140,9 +101,6 @@ describe("Internal MCP Catalog - Header User Config Routes", () => {
       };
       if (row.promptOnInstallation !== undefined) {
         field.promptOnInstallation = row.promptOnInstallation;
-      }
-      if (row.promptOnPreset !== undefined) {
-        field.promptOnPreset = row.promptOnPreset;
       }
       return field;
     }
@@ -170,9 +128,6 @@ describe("Internal MCP Catalog - Header User Config Routes", () => {
         expect(persisted.sensitive).toBe(row.sensitive);
         if (row.promptOnInstallation !== undefined) {
           expect(persisted.promptOnInstallation).toBe(row.promptOnInstallation);
-        }
-        if (row.promptOnPreset !== undefined) {
-          expect(persisted.promptOnPreset).toBe(row.promptOnPreset);
         }
       }
     }
@@ -231,33 +186,22 @@ describe("Internal MCP Catalog - Header User Config Routes", () => {
   // Sensitive headers must not carry a plaintext `default`
   // ===========================================================================
   //
-  // applyPresetHeaderMappings falls back to `field.default` when the row's
-  // presetFieldValues lacks the key. If a preset-scoped sensitive header
-  // ships with a `default`, that default lives in plaintext userConfig
-  // JSONB and is sent on every request whose preset overlay is empty —
-  // defeating the point of marking the field sensitive. The validator must
-  // reject the combination at the door regardless of scope.
+  // A sensitive install-prompted header with a `default` would send that
+  // default in plaintext for any caller without an overlay — defeating the
+  // point of marking the field sensitive. The validator must reject the
+  // combination at the door.
 
   describe("sensitive header-mapped fields cannot carry a plaintext default", () => {
     type Row = {
       caseId: string;
       promptOnInstallation: boolean | undefined;
-      promptOnPreset: boolean | undefined;
       description: string;
     };
 
     const rows: Row[] = [
       {
-        caseId: "preset",
-        promptOnInstallation: false,
-        promptOnPreset: true,
-        description:
-          "preset + sensitive + default → rejected (default would be read by applyPresetHeaderMappings as plaintext fallback)",
-      },
-      {
         caseId: "install",
         promptOnInstallation: true,
-        promptOnPreset: undefined,
         description:
           "install + sensitive + default → rejected (default would be sent in plaintext for any caller without an overlay)",
       },
@@ -275,9 +219,6 @@ describe("Internal MCP Catalog - Header User Config Routes", () => {
       };
       if (row.promptOnInstallation !== undefined) {
         f.promptOnInstallation = row.promptOnInstallation;
-      }
-      if (row.promptOnPreset !== undefined) {
-        f.promptOnPreset = row.promptOnPreset;
       }
       return f;
     }
@@ -350,8 +291,7 @@ describe("Internal MCP Catalog - Header User Config Routes", () => {
               required: false,
               sensitive: true,
               headerName: "x-sens-clean",
-              promptOnPreset: true,
-              promptOnInstallation: false,
+              promptOnInstallation: true,
             },
           },
         },

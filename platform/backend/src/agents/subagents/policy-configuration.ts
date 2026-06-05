@@ -2,7 +2,7 @@ import {
   BUILT_IN_AGENT_IDS,
   buildPolicyConfigSystemPromptContext,
   type SupportedProvider,
-} from "@shared";
+} from "@archestra/shared";
 import { generateText, Output } from "ai";
 import { createLLMModel } from "@/clients/llm-client";
 import logger from "@/logging";

@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { IDENTITY_PROVIDER_ID, LLM_PROXY_OAUTH_SCOPE } from "@shared";
+import { IDENTITY_PROVIDER_ID, LLM_PROXY_OAUTH_SCOPE } from "@archestra/shared";
 import { vi } from "vitest";
 import { betterAuth } from "@/auth";
 import config from "@/config";

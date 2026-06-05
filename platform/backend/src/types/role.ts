@@ -1,4 +1,4 @@
-import { PermissionsSchema } from "@shared";
+import { PermissionsSchema } from "@archestra/shared";
 import { createInsertSchema, createUpdateSchema } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";

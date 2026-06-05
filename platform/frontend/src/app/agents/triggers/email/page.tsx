@@ -1,6 +1,6 @@
 "use client";
 
-import { type archestraApiTypes, DocsPage } from "@shared";
+import { type archestraApiTypes, DocsPage } from "@archestra/shared";
 import { AlertTriangle, RefreshCw, Settings2, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { CopyButton } from "@/components/copy-button";

@@ -13,7 +13,7 @@ import {
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
   type TokenUsage,
-} from "@shared";
+} from "@archestra/shared";
 import {
   convertToModelMessages,
   createUIMessageStream,
@@ -494,6 +494,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   organizationId,
                   userId: user.id,
                   agentId: conversation.agentId ?? undefined,
+                  conversationId,
                 })
               : (messages as ChatMessage[]);
 

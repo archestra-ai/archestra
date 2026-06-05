@@ -1,4 +1,4 @@
-import { ADMIN_ROLE_NAME } from "@shared";
+import { ADMIN_ROLE_NAME } from "@archestra/shared";
 import { AgentModel, SkillModel } from "@/models";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";

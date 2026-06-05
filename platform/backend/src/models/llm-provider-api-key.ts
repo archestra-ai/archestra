@@ -3,7 +3,7 @@ import {
   isVaultReference,
   parseVaultReference,
   type SupportedProvider,
-} from "@shared";
+} from "@archestra/shared";
 import { and, asc, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
 import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
 import db, { schema } from "@/database";

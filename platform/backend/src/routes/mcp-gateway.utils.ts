@@ -1,4 +1,17 @@
 import { createHash } from "node:crypto";
+import type { IncomingMessage } from "node:http";
+import {
+  ARCHESTRA_MCP_CATALOG_ID,
+  hasArchestraTokenPrefix,
+  isAgentTool,
+  MCP_APPS_SERVER_EXTENSION_CAPABILITIES,
+  MCP_ENTERPRISE_AUTH_EXTENSION_CAPABILITIES,
+  OAUTH_TOKEN_ID_PREFIX,
+  parseFullToolName,
+  TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
+  TOOL_RUN_TOOL_SHORT_NAME,
+  TOOL_SEARCH_TOOLS_SHORT_NAME,
+} from "@archestra/shared";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import {
@@ -11,18 +24,6 @@ import {
   ReadResourceRequestSchema,
   type Tool,
 } from "@modelcontextprotocol/sdk/types.js";
-import {
-  ARCHESTRA_MCP_CATALOG_ID,
-  hasArchestraTokenPrefix,
-  isAgentTool,
-  MCP_APPS_SERVER_EXTENSION_CAPABILITIES,
-  MCP_ENTERPRISE_AUTH_EXTENSION_CAPABILITIES,
-  OAUTH_TOKEN_ID_PREFIX,
-  parseFullToolName,
-  TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
-  TOOL_RUN_TOOL_SHORT_NAME,
-  TOOL_SEARCH_TOOLS_SHORT_NAME,
-} from "@shared";
 import type { FastifyRequest } from "fastify";
 import {
   archestraMcpBranding,
@@ -561,6 +562,33 @@ export function createStatelessTransport(
 
   logger.info({ agentId }, "Stateless transport instance created");
   return transport;
+}
+
+/**
+ * Hono's Node adapter drains unread request bodies by calling
+ * `request.socket.destroySoon()`. Fastify inject uses a socket-like test object
+ * without that legacy method, so provide the method only when the socket lacks it.
+ */
+export function ensureRequestSocketDestroySoon(request: IncomingMessage): void {
+  const socket = request.socket as
+    | (IncomingMessage["socket"] & {
+        destroySoon?: () => void;
+        end?: () => void;
+      })
+    | undefined;
+
+  if (!socket || typeof socket.destroySoon === "function") {
+    return;
+  }
+
+  socket.destroySoon = () => {
+    if (typeof socket.destroy === "function") {
+      socket.destroy();
+      return;
+    }
+
+    socket.end?.();
+  };
 }
 
 /**

@@ -4,7 +4,7 @@ import {
   type ChatSkillMetadata,
   SUPPORTED_KNOWLEDGE_FILE_EXTENSIONS,
   SUPPORTED_KNOWLEDGE_FILE_MIME_TYPES,
-} from "@shared";
+} from "@archestra/shared";
 import {
   AlertTriangle,
   FilePlus2,

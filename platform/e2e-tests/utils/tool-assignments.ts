@@ -1,11 +1,11 @@
-import { expect, type Page } from "@playwright/test";
 import {
   E2eTestId,
   getAgentToolCatalogPillTestId,
   getAssignmentComboboxDisabledOptionTestId,
   getAssignmentComboboxOptionTestId,
   getAssignmentComboboxSearchInputTestId,
-} from "@shared";
+} from "@archestra/shared";
+import { expect, type Page } from "@playwright/test";
 import { goToPage } from "../fixtures";
 
 type AssignmentTarget = {

@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNotNull } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type { InsertSkillSandboxFile, SkillSandboxFile } from "@/types";
 
@@ -33,6 +33,27 @@ class SkillSandboxFileModel {
         ),
       );
     return row ? normalizeFileData(row) : null;
+  }
+
+  /**
+   * Chat-attachment ids already staged into a sandbox, so auto-staging only
+   * appends the not-yet-present delta.
+   */
+  static async listStagedAttachmentIds(
+    sandboxId: string,
+  ): Promise<Set<string>> {
+    const rows = await db
+      .select({ id: schema.skillSandboxFilesTable.sourceAttachmentId })
+      .from(schema.skillSandboxFilesTable)
+      .where(
+        and(
+          eq(schema.skillSandboxFilesTable.sandboxId, sandboxId),
+          isNotNull(schema.skillSandboxFilesTable.sourceAttachmentId),
+        ),
+      );
+    return new Set(
+      rows.map((r) => r.id).filter((id): id is string => id != null),
+    );
   }
 }
 

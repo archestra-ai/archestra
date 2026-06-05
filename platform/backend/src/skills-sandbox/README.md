@@ -31,7 +31,10 @@ DB-backed, Dagger-materialized execution sandbox for Agent Skills.
   - `skill_sandbox_commands` — executed-command payloads
   - `skill_sandbox_files` — file bytes (bytea), role-tagged by `kind`: an
     `upload` is input bytes written *into* the sandbox; an `artifact` is output
-    bytes copied *out* of a materialized container for download
+    bytes copied *out* of a materialized container for download. An upload
+    auto-staged from a chat attachment records its `source_attachment_id`; a
+    partial unique index `(sandbox_id, source_attachment_id)` makes re-staging a
+    DB-level no-op
   - `skill_sandbox_replay_events` — the ordered replay log: one sequenced row per
     command, upload, or skill mount, each pointing at its payload. This is the
     replay input. A generated `file_kind = 'upload'` + composite FK constrains
@@ -62,6 +65,37 @@ operations were accepted.
 event (serialized through the same per-sandbox queue as commands, so its
 sequence lands deterministically relative to in-flight runs). The file
 materializes on the next `run_command` / `download_file` replay.
+
+## Chat attachment auto-staging
+
+Files the user attaches in chat are auto-staged into the conversation's
+**default** sandbox so the model can use them without juggling attachment ids
+(the failure mode that motivated this: the model can't see attachment ids, so it
+otherwise guesses). On each `run_command` / `download_file`, before context is
+built, `stageConversationAttachments` (in `skill-sandbox-runtime-service.ts`,
+run inside the per-sandbox queue) appends an upload replay event for every
+not-yet-staged attachment of the sandbox's conversation, at
+`/home/sandbox/attachments/<sanitized-name>` (duplicate names get a short
+attachment-id suffix). It is idempotent (tracked via `source_attachment_id` +
+the partial unique index) and multi-turn safe (attachments added later stage on
+the next op). Only the conversation's default sandbox is staged — `{ fresh }` /
+`{ id }` sandboxes are not. Attachments over `artifactBytesLimit` are skipped
+with a model-visible notice (returned in `stagingNotices`) rather than silently
+dropped. `upload_file` remains the path for inline base64/text content, explicit
+paths, non-default sandboxes, and non-chat-UI gateway clients (which have no
+`conversation_attachments`).
+
+## Python environment
+
+The warm base image makes `/home/sandbox` a uv **project**: a `pyproject.toml`
+plus the project venv at `/home/sandbox/.venv` (on `PATH`, so `python3` is the
+venv interpreter), seeded with numpy/pandas/httpx. The model installs more with
+`uv add --project /home/sandbox <pkg>` (the `--project` flag makes it work from
+any cwd, including a skill dir); `pip` is shimmed to fail with that hint. Skill
+`requirements.txt` installs go through `uv pip install --python <venv>` instead,
+which targets the same venv without mutating the project file. `uv add` is a
+replayed network command, so version resolution can drift across cold replays —
+pin versions when determinism matters.
 
 Dagger's layer cache keeps the hot path fast; on a cold cache replay is slower
 but still deterministic for deterministic commands. Non-deterministic commands

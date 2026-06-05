@@ -2,6 +2,7 @@ import type { ReplayEntry } from "@archestra/sandbox-rs";
 import config from "@/config";
 import logger from "@/logging";
 import {
+  ConversationAttachmentModel,
   SkillInvalidFilePathError,
   SkillSandboxFileModel,
   SkillSandboxModel,
@@ -44,6 +45,12 @@ const SYNTHETIC_ENGINE_FAILURE_EXIT_CODE = -1;
 // build state.
 const VENV_PYTHON = "/home/sandbox/.venv/bin/python";
 const REQUIREMENTS_FILE = "requirements.txt";
+// reserved at the skill root: the mount synthesizes this from the pinned
+// version body, so a resource file may not occupy it or any subpath of it.
+const SKILL_MANIFEST_FILE = "SKILL.md";
+// where conversation chat attachments are auto-staged inside the container, so
+// the model can read user-provided files without juggling attachment ids.
+const ATTACHMENTS_DIR = `${SKILL_SANDBOX_HOME}/attachments`;
 // covers the cold first install for a typical skill (pillow + a few siblings);
 // subsequent calls hit Dagger's layer cache and finish in ms.
 const REQUIREMENTS_INSTALL_TIMEOUT_SECONDS = 180;
@@ -88,6 +95,9 @@ class SkillSandboxRuntimeService {
     return this.runExclusive(params.sandboxId, async () => {
       const sandbox = await this.loadSandbox(params.sandboxId);
       await this.assertMountsReadable(params.sandboxId, params.caller);
+      // stage chat attachments before building context so they're part of this
+      // run's replay (the model sees them under /home/sandbox/attachments/).
+      const stagingNotices = await stageConversationAttachments(sandbox);
       const cwd = params.cwd ?? sandbox.defaultCwd;
       const { replayEntries } = await this.buildContext(sandbox);
 
@@ -154,6 +164,7 @@ class SkillSandboxRuntimeService {
         durationMs: executed.durationMs,
         timedOut: executed.timedOut,
         truncated: executed.truncated,
+        stagingNotices,
       };
     });
   }
@@ -164,6 +175,7 @@ class SkillSandboxRuntimeService {
     return this.runExclusive(params.sandboxId, async () => {
       const sandbox = await this.loadSandbox(params.sandboxId);
       await this.assertMountsReadable(params.sandboxId, params.caller);
+      const stagingNotices = await stageConversationAttachments(sandbox);
       const resolvedPath = resolveArtifactPath({
         path: params.path,
         defaultCwd: sandbox.defaultCwd,
@@ -217,6 +229,7 @@ class SkillSandboxRuntimeService {
         path: row.path,
         mimeType: row.mimeType,
         sizeBytes: row.sizeBytes,
+        stagingNotices,
       };
     });
   }
@@ -273,6 +286,11 @@ class SkillSandboxRuntimeService {
           `failed to persist upload: ${dbError instanceof Error ? dbError.message : String(dbError)}`,
         );
       }
+      // tool uploads carry no sourceAttachmentId, so the conflict path never
+      // fires — a null here means the insert genuinely failed.
+      if (!row) {
+        throw new SkillSandboxError("failed to persist upload");
+      }
 
       return {
         uploadId: row.id,
@@ -307,16 +325,7 @@ class SkillSandboxRuntimeService {
         params.skill.skillVersionId,
       );
       for (const file of files) {
-        if (
-          file.path.startsWith("/") ||
-          file.path.split("/").some((s) => s === "..") ||
-          file.path === "SKILL.md"
-        ) {
-          throw new SkillInvalidFilePathError(
-            params.skill.skillName,
-            file.path,
-          );
-        }
+        validateSkillMountFilePath(params.skill.skillName, file.path);
       }
 
       // install the skill's requirements into the shared venv as a replay
@@ -488,7 +497,7 @@ class SkillSandboxRuntimeService {
                 files: [
                   {
                     skillName: entry.mount.skillName,
-                    path: "SKILL.md",
+                    path: SKILL_MANIFEST_FILE,
                     encoding: "utf8" as const,
                     content: entry.content,
                   },
@@ -686,9 +695,169 @@ function validateUploadPath(path: string): void {
   }
 }
 
+/**
+ * Reject a skill resource path before it is persisted as a mount. Beyond the
+ * absolute/`..` checks the Rust replay validator runs, this normalizes away `.`
+ * and empty segments and rejects the whole reserved `SKILL.md` subtree: paths
+ * like `./SKILL.md` (would clobber the synthesized manifest) and
+ * `SKILL.md/injected.txt` (treats the manifest as a directory) pass
+ * create/update input validation but would break every later `run_command`.
+ */
+function validateSkillMountFilePath(skillName: string, path: string): void {
+  const segments = path.split("/").filter((s) => s !== "" && s !== ".");
+  if (
+    path.startsWith("/") ||
+    segments.length === 0 ||
+    segments.some((s) => s === "..") ||
+    segments[0] === SKILL_MANIFEST_FILE
+  ) {
+    throw new SkillInvalidFilePathError(skillName, path);
+  }
+}
+
+/**
+ * Stage the conversation's chat attachments into the default sandbox as upload
+ * replay events under {@link ATTACHMENTS_DIR}, so the model can use files the
+ * user attached without knowing any attachment id. Idempotent and multi-turn
+ * safe: only attachments not already staged (tracked via `source_attachment_id`)
+ * are appended, and the DB-level partial unique index makes a concurrent repeat
+ * a no-op.
+ *
+ * Scope is the sandbox's own conversation — the sandbox was already access-
+ * checked (org + user + conversation) at target resolution, so attachments can
+ * never cross into another conversation. Returns model-visible notices for
+ * attachments skipped (e.g. over the size limit) so a missing file is never
+ * silently assumed present. Pure DB I/O — must run inside the per-sandbox queue.
+ */
+async function stageConversationAttachments(
+  sandbox: SkillSandbox,
+): Promise<string[]> {
+  // only the conversation's default sandbox auto-absorbs attachments; fresh /
+  // explicit sandboxes are opt-in surfaces the caller drives with upload_file.
+  if (!sandbox.isDefault || !sandbox.conversationId) return [];
+
+  const attachments =
+    await ConversationAttachmentModel.findByConversationIdWithoutData(
+      sandbox.conversationId,
+    );
+  if (attachments.length === 0) return [];
+
+  const stagedIds = await SkillSandboxFileModel.listStagedAttachmentIds(
+    sandbox.id,
+  );
+  const { toStage, notices } = planAttachmentStaging({
+    attachments,
+    stagedIds,
+    limit: config.skillsSandbox.artifactBytesLimit,
+  });
+  if (toStage.length === 0) return notices;
+
+  const withData = await ConversationAttachmentModel.findByIdsWithData(
+    toStage.map((a) => a.id),
+  );
+  const dataById = new Map(withData.map((a) => [a.id, a]));
+
+  for (const { id, path } of toStage) {
+    const full = dataById.get(id);
+    // soft-deleted between the metadata read and here — skip; next op re-syncs.
+    if (!full) continue;
+    // sanitized names are always valid; this guards our own path logic and
+    // fails loudly (not silently) if that ever regresses.
+    validateUploadPath(path);
+    await SkillSandboxReplayEventModel.appendUpload({
+      sandboxId: sandbox.id,
+      path,
+      mimeType: full.mimeType,
+      originalName: full.originalName,
+      sizeBytes: full.fileData.byteLength,
+      data: full.fileData,
+      sourceAttachmentId: full.id,
+    });
+  }
+  return notices;
+}
+
+/**
+ * Decide which conversation attachments to stage and where. Pure policy (no
+ * I/O): assigns deterministic paths over the full ordered attachment set, skips
+ * the already-staged ones, and emits a notice for any that exceed `limit`.
+ */
+function planAttachmentStaging(params: {
+  attachments: { id: string; originalName: string | null; fileSize: number }[];
+  stagedIds: Set<string>;
+  limit: number;
+}): { toStage: { id: string; path: string }[]; notices: string[] } {
+  const { attachments, stagedIds, limit } = params;
+  const pathByAttachment = assignAttachmentPaths(attachments);
+  const notices: string[] = [];
+  const toStage: { id: string; path: string }[] = [];
+  for (const attachment of attachments) {
+    if (stagedIds.has(attachment.id)) continue;
+    if (attachment.fileSize > limit) {
+      notices.push(
+        `attachment ${JSON.stringify(attachment.originalName ?? attachment.id)} (${attachment.fileSize} bytes) was not auto-staged into the sandbox: it exceeds the ${limit}-byte file limit. Reference it via its download URL instead.`,
+      );
+      continue;
+    }
+    const path = pathByAttachment.get(attachment.id);
+    if (path) toStage.push({ id: attachment.id, path });
+  }
+  return { toStage, notices };
+}
+
+/**
+ * Map each conversation attachment to a deterministic, shell-safe absolute path
+ * under {@link ATTACHMENTS_DIR}. Duplicate sanitized names get a short
+ * attachment-id suffix; the input order (created_at, id) is stable, so a given
+ * attachment always resolves to the same path across turns.
+ */
+function assignAttachmentPaths(
+  attachments: { id: string; originalName: string | null }[],
+): Map<string, string> {
+  const used = new Set<string>();
+  const paths = new Map<string, string>();
+  for (const attachment of attachments) {
+    const safe = sanitizeAttachmentName(attachment.originalName, attachment.id);
+    let name = safe;
+    if (used.has(name)) {
+      const short = attachment.id.slice(0, 8);
+      const dot = safe.lastIndexOf(".");
+      name =
+        dot > 0
+          ? `${safe.slice(0, dot)}-${short}${safe.slice(dot)}`
+          : `${safe}-${short}`;
+    }
+    used.add(name);
+    paths.set(attachment.id, `${ATTACHMENTS_DIR}/${name}`);
+  }
+  return paths;
+}
+
+/**
+ * Reduce a caller-supplied filename to a single shell-safe path segment: keep
+ * only `[A-Za-z0-9._-]`, drop any directory prefix and leading dots (so `..`
+ * can't escape), and fall back to the attachment id when nothing usable remains.
+ */
+function sanitizeAttachmentName(
+  originalName: string | null,
+  attachmentId: string,
+): string {
+  const base = (originalName ?? "").split("/").pop() ?? "";
+  const cleaned = base.replace(/[^A-Za-z0-9._-]/g, "_").replace(/^\.+/, "");
+  if (cleaned === "") {
+    return `attachment-${attachmentId.slice(0, 8)}`;
+  }
+  return cleaned;
+}
+
 /** @public — exported for tests */
 export const __internals = {
   resolveArtifactPath,
   validateUploadPath,
+  validateSkillMountFilePath,
+  stageConversationAttachments,
+  planAttachmentStaging,
+  assignAttachmentPaths,
+  sanitizeAttachmentName,
   asSandboxId,
 };

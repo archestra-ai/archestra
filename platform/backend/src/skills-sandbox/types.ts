@@ -42,6 +42,12 @@ export interface CommandResult {
   timedOut: boolean;
   /** stdout or stderr was truncated to the configured byte cap. */
   truncated: boolean;
+  /**
+   * Human-readable notices about chat attachments that could not be auto-staged
+   * (e.g. too large). Empty when everything staged cleanly. Surfaced to the
+   * model so a skipped attachment is never silently assumed present.
+   */
+  stagingNotices: string[];
 }
 
 export interface ExportArtifactParams {
@@ -58,6 +64,8 @@ export interface ArtifactRef {
   path: string;
   mimeType: string;
   sizeBytes: number;
+  /** See {@link CommandResult.stagingNotices}. */
+  stagingNotices: string[];
 }
 
 export interface UploadFileParams {

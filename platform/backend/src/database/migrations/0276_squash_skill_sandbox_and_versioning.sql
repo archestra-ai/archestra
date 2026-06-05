@@ -17,6 +17,7 @@ CREATE TABLE "skill_sandbox_files" (
 	"path" text NOT NULL,
 	"mime_type" text NOT NULL,
 	"original_name" text,
+	"source_attachment_id" uuid,
 	"size_bytes" integer NOT NULL,
 	"data" "bytea" NOT NULL,
 	"created_at" timestamp DEFAULT now() NOT NULL,
@@ -95,6 +96,7 @@ ALTER TABLE "skill_version_files" ADD CONSTRAINT "skill_version_files_version_id
 ALTER TABLE "skill_versions" ADD CONSTRAINT "skill_versions_skill_id_skills_id_fk" FOREIGN KEY ("skill_id") REFERENCES "public"."skills"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 CREATE INDEX "skill_sandbox_files_sandbox_id_idx" ON "skill_sandbox_files" USING btree ("sandbox_id");--> statement-breakpoint
 CREATE INDEX "skill_sandbox_files_sandbox_kind_idx" ON "skill_sandbox_files" USING btree ("sandbox_id","kind");--> statement-breakpoint
+CREATE UNIQUE INDEX "skill_sandbox_files_sandbox_attachment_uidx" ON "skill_sandbox_files" USING btree ("sandbox_id","source_attachment_id") WHERE "skill_sandbox_files"."source_attachment_id" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX "skill_sandbox_replay_events_sandbox_id_idx" ON "skill_sandbox_replay_events" USING btree ("sandbox_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "skill_sandbox_replay_events_sandbox_sequence_uidx" ON "skill_sandbox_replay_events" USING btree ("sandbox_id","sequence");--> statement-breakpoint
 CREATE INDEX "skill_sandbox_skill_mounts_sandbox_id_idx" ON "skill_sandbox_skill_mounts" USING btree ("sandbox_id");--> statement-breakpoint

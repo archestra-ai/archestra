@@ -52,8 +52,11 @@ export function formatSkillActivation({
   const sandboxHint = canRunSandbox
     ? " This skill is now mounted in your sandbox under /skills/" +
       `${escapeXmlText(skill.name)}. To execute a script or shell command from ` +
-      "it, call run_command (its modules are importable). Use download_file to " +
-      "retrieve generated files, upload_file to add inputs."
+      "it, call run_command (its modules are importable). Python is the uv " +
+      "project venv at /home/sandbox — install packages with " +
+      "`uv add --project /home/sandbox <pkg>`. Files the user attached are under " +
+      "/home/sandbox/attachments/. Use download_file to retrieve generated " +
+      "files, upload_file to add inputs."
     : "";
   const resources =
     files.length > 0

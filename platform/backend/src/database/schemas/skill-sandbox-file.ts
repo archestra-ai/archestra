@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import {
   customType,
   index,
@@ -6,6 +7,7 @@ import {
   text,
   timestamp,
   unique,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 import type { SkillSandboxFileKind } from "@/types/skill-sandbox";
@@ -46,6 +48,13 @@ const skillSandboxFilesTable = pgTable(
     mimeType: text("mime_type").notNull(),
     /** Caller-provided source filename; uploads only. */
     originalName: text("original_name"),
+    /**
+     * For uploads auto-staged from a chat attachment: the source
+     * `conversation_attachments` row. Plain uuid (no FK) — the attachment may be
+     * soft-deleted while its staged bytes live on in the replay recipe. Null for
+     * `upload_file`-tool uploads and for artifacts.
+     */
+    sourceAttachmentId: uuid("source_attachment_id"),
     sizeBytes: integer("size_bytes").notNull(),
     data: bytea("data").notNull(),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
@@ -59,6 +68,12 @@ const skillSandboxFilesTable = pgTable(
     // parent key for the replay-event composite FK: lets a replay event point
     // only at `kind = 'upload'` rows (see skill-sandbox-replay-event.ts).
     unique("skill_sandbox_files_id_kind_uidx").on(table.id, table.kind),
+    // one staged upload per (sandbox, attachment): makes auto-staging idempotent
+    // at the DB level (ON CONFLICT DO NOTHING) even across backend processes,
+    // where the in-memory per-sandbox queue cannot coordinate.
+    uniqueIndex("skill_sandbox_files_sandbox_attachment_uidx")
+      .on(table.sandboxId, table.sourceAttachmentId)
+      .where(sql`${table.sourceAttachmentId} IS NOT NULL`),
   ],
 );
 

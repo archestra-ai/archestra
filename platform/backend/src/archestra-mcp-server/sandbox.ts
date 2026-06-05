@@ -115,6 +115,12 @@ const RunCommandOutputSchema = z.object({
   durationMs: z.number(),
   timedOut: z.boolean(),
   truncated: z.boolean(),
+  stagingNotices: z
+    .array(z.string())
+    .describe(
+      "Notices about chat attachments that could not be auto-staged (e.g. too " +
+        "large). Empty when all attachments are available in the sandbox.",
+    ),
 });
 
 const DownloadFileSchema = z
@@ -154,6 +160,12 @@ const DownloadFileOutputSchema = z.object({
    * src>` or `<a href>` in the same-origin chat UI.
    */
   downloadUrl: z.string(),
+  stagingNotices: z
+    .array(z.string())
+    .describe(
+      "Notices about chat attachments that could not be auto-staged (e.g. too " +
+        "large). Empty when all attachments are available in the sandbox.",
+    ),
 });
 
 const UploadSourceSchema = z.discriminatedUnion("type", [
@@ -223,11 +235,16 @@ const registry = defineArchestraTools([
     shortName: TOOL_RUN_COMMAND_SHORT_NAME,
     title: "Run Command",
     description:
-      "Execute a shell command in the conversation's code sandbox. The sandbox " +
-      "is created on first use and persists across calls — files written by " +
-      "one command are visible to the next. Activated skills are runnable " +
-      "under /skills. Returns stdout, stderr, exit code, and timing (text " +
-      "only — use download_file for generated files). Requires `sandbox:execute`.",
+      "Execute a shell command in the conversation's code sandbox (Debian, " +
+      "working dir /home/sandbox). Created on first use and persists across " +
+      "calls — files written by one command are visible to the next. Python " +
+      "runs in a uv project at /home/sandbox: `python3` is the project venv " +
+      "(numpy, pandas, httpx preinstalled); install more with " +
+      "`uv add --project /home/sandbox <pkg>` (pip is disabled). Files the user " +
+      "attached to the chat are auto-staged under /home/sandbox/attachments/. " +
+      "Activated skills are runnable under /skills. Returns stdout, stderr, " +
+      "exit code, and timing (text only — use download_file for generated " +
+      "files). Requires `sandbox:execute`.",
     schema: RunCommandSchema,
     outputSchema: RunCommandOutputSchema,
     async handler({ args, context }) {
@@ -263,7 +280,10 @@ const registry = defineArchestraTools([
 
         return structuredSuccessResult(
           { ...result },
-          formatCommandSummary(result),
+          withStagingNotices(
+            formatCommandSummary(result),
+            result.stagingNotices,
+          ),
         );
       } catch (error) {
         return handleRuntimeError(error, resolved.sandboxId, "run_command");
@@ -319,11 +339,15 @@ const registry = defineArchestraTools([
             mimeType: result.mimeType,
             sizeBytes: result.sizeBytes,
             downloadUrl,
+            stagingNotices: result.stagingNotices,
           },
-          [
-            `Saved ${result.path} (${result.sizeBytes} bytes).`,
-            `Download URL (use this for links, not the sandbox path): ${downloadUrl}`,
-          ].join("\n"),
+          withStagingNotices(
+            [
+              `Saved ${result.path} (${result.sizeBytes} bytes).`,
+              `Download URL (use this for links, not the sandbox path): ${downloadUrl}`,
+            ].join("\n"),
+            result.stagingNotices,
+          ),
         );
       } catch (error) {
         return handleRuntimeError(error, resolved.sandboxId, "download_file");
@@ -337,7 +361,10 @@ const registry = defineArchestraTools([
       "Upload a file into the conversation's sandbox from a chat attachment, " +
       "inline base64, or inline text. The bytes become part of the sandbox " +
       "recipe, so the file is present on every later run_command and " +
-      "download_file call. Requires `sandbox:execute`.",
+      "download_file call. Note: files the user attached to the chat are " +
+      "already auto-staged under /home/sandbox/attachments/ — use this tool to " +
+      "write inline content, place a file at a specific path, or upload into a " +
+      "non-default sandbox. Requires `sandbox:execute`.",
     schema: UploadFileSchema,
     outputSchema: UploadFileOutputSchema,
     async handler({ args, context }) {
@@ -581,4 +608,15 @@ function formatCommandSummary(result: {
     lines.push("", "(output was truncated)");
   }
   return lines.join("\n");
+}
+
+/** Append auto-staging notices to a tool summary so skips are model-visible. */
+function withStagingNotices(summary: string, notices: string[]): string {
+  if (notices.length === 0) return summary;
+  return [
+    summary,
+    "",
+    "Attachment notices:",
+    ...notices.map((n) => `- ${n}`),
+  ].join("\n");
 }

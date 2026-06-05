@@ -194,6 +194,7 @@ describe("SkillSandboxReplayEventModel", () => {
       sizeBytes: 3,
       data: Buffer.from("a,b", "utf8"),
     });
+    if (!upload) throw new Error("upload not appended");
     // a mount that ships requirements.txt also appends an install command in the
     // same transaction, so this is two events: skill_mount then command.
     await SkillSandboxReplayEventModel.appendSkillMount({
@@ -357,6 +358,7 @@ describe("SkillSandboxFileModel (artifacts)", () => {
       sizeBytes: 1,
       data: Buffer.from("a"),
     });
+    if (!upload) throw new Error("upload not appended");
 
     // an upload is a file row too, but the artifact lookup is kind-scoped.
     expect(await SkillSandboxFileModel.findArtifactById(upload.id)).toBeNull();

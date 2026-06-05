@@ -9879,6 +9879,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "source_attachment_id": {
+          "name": "source_attachment_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
         "size_bytes": {
           "name": "size_bytes",
           "type": "integer",
@@ -9932,6 +9938,28 @@
             }
           ],
           "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "skill_sandbox_files_sandbox_attachment_uidx": {
+          "name": "skill_sandbox_files_sandbox_attachment_uidx",
+          "columns": [
+            {
+              "expression": "sandbox_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "source_attachment_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"skill_sandbox_files\".\"source_attachment_id\" IS NOT NULL",
           "concurrently": false,
           "method": "btree",
           "with": {}

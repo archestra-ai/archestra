@@ -139,6 +139,7 @@ describe("sandbox tools (runtime enabled)", () => {
         durationMs: 12,
         timedOut: false,
         truncated: false,
+        stagingNotices: [],
       });
   }
 
@@ -158,6 +159,7 @@ describe("sandbox tools (runtime enabled)", () => {
           durationMs: 1,
           timedOut: false,
           truncated: false,
+          stagingNotices: [],
         });
 
       const result = await executeArchestraTool(
@@ -318,6 +320,7 @@ describe("sandbox tools (runtime enabled)", () => {
           path: "/home/sandbox/out/file.txt",
           mimeType: "text/plain",
           sizeBytes: 42,
+          stagingNotices: [],
         });
 
       const result = await executeArchestraTool(
@@ -358,6 +361,7 @@ describe("sandbox tools (runtime enabled)", () => {
         path: "/home/sandbox/preview.png",
         mimeType: "image/png",
         sizeBytes: 256,
+        stagingNotices: [],
       });
 
       const result = await executeArchestraTool(

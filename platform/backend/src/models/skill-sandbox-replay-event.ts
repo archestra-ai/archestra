@@ -16,6 +16,12 @@ interface UploadInput {
   originalName: string | null;
   sizeBytes: number;
   data: Buffer;
+  /**
+   * Source chat attachment when this upload was auto-staged. When set, the
+   * insert is idempotent per `(sandbox_id, source_attachment_id)` — a repeat
+   * stage is a no-op that returns `null` instead of a duplicate replay event.
+   */
+  sourceAttachmentId?: string | null;
 }
 
 /** Identity of the skill version a mount pins. */
@@ -75,8 +81,18 @@ class SkillSandboxReplayEventModel {
     });
   }
 
-  /** Insert an uploaded file and record it as the next ordered replay event. */
-  static async appendUpload(upload: UploadInput): Promise<SkillSandboxFile> {
+  /**
+   * Insert an uploaded file and record it as the next ordered replay event.
+   *
+   * Returns `null` when `sourceAttachmentId` is set and an upload for that
+   * (sandbox, attachment) already exists: the partial unique index makes the
+   * insert a race-safe no-op, so concurrent auto-staging across processes never
+   * doubles a staged attachment. Tool uploads (no `sourceAttachmentId`) never
+   * conflict and always return a row.
+   */
+  static async appendUpload(
+    upload: UploadInput,
+  ): Promise<SkillSandboxFile | null> {
     return await db.transaction(async (tx) => {
       const [row] = await tx
         .insert(schema.skillSandboxFilesTable)
@@ -86,13 +102,20 @@ class SkillSandboxReplayEventModel {
           path: upload.path,
           mimeType: upload.mimeType,
           originalName: upload.originalName,
+          sourceAttachmentId: upload.sourceAttachmentId ?? null,
           sizeBytes: upload.sizeBytes,
           data: upload.data,
         })
+        .onConflictDoNothing({
+          target: [
+            schema.skillSandboxFilesTable.sandboxId,
+            schema.skillSandboxFilesTable.sourceAttachmentId,
+          ],
+          where: sql`${schema.skillSandboxFilesTable.sourceAttachmentId} is not null`,
+        })
         .returning();
-      if (!row) {
-        throw new Error("failed to insert sandbox upload");
-      }
+      // already staged: ON CONFLICT made the insert a no-op.
+      if (!row) return null;
       const sequence = await allocateSequence(tx, upload.sandboxId);
       await tx.insert(schema.skillSandboxReplayEventsTable).values({
         sandboxId: upload.sandboxId,

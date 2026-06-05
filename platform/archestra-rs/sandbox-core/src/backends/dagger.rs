@@ -53,7 +53,6 @@ pub const DEFAULT_APT_PACKAGES: &[&str] = &[
 /// `python3` command so per-call uv installs are layered on (fast) instead of
 /// recreated (slow).
 const DEFAULT_VENV_DIR: &str = "/home/sandbox/.venv";
-const DEFAULT_VENV_PYTHON: &str = "/home/sandbox/.venv/bin/python";
 const DEFAULT_PYTHON_REQUIREMENTS: &[&str] = &["numpy", "pandas", "httpx"];
 
 const SESSION_READY_TIMEOUT: Duration = Duration::from_secs(60);
@@ -71,7 +70,15 @@ const ARTIFACT_NOT_FOUND_EXIT_CODE: isize = 66;
 /// `pip3` instead — and the follow-up `cp pip pip3` would refuse with
 /// "are the same file". kept as a const so it shows up verbatim in build
 /// logs and survives `cargo fmt`.
-const PIP_SHIM_SETUP: &str = "rm -f /usr/local/bin/pip /usr/local/bin/pip3 /usr/local/bin/pip3.12 && printf '%s\\n' '#!/bin/sh' 'echo \"error: pip is disabled in this sandbox. Use \\\"uv add <pkg>\\\" instead.\" >&2' 'exit 1' > /usr/local/bin/pip && chmod +x /usr/local/bin/pip && ln -s pip /usr/local/bin/pip3 && ln -s pip /usr/local/bin/pip3.12";
+const PIP_SHIM_SETUP: &str = "rm -f /usr/local/bin/pip /usr/local/bin/pip3 /usr/local/bin/pip3.12 && printf '%s\\n' '#!/bin/sh' 'echo \"error: pip is disabled in this sandbox. Use \\\"uv add --project /home/sandbox <pkg>\\\" instead.\" >&2' 'exit 1' > /usr/local/bin/pip && chmod +x /usr/local/bin/pip && ln -s pip /usr/local/bin/pip3 && ln -s pip /usr/local/bin/pip3.12";
+
+/// minimal uv project written into the sandbox home so `uv add <pkg>` works:
+/// uv refuses to add to a non-project ("No `pyproject.toml` found"), and the
+/// project's default `.venv` is exactly `DEFAULT_VENV_DIR`. model installs via
+/// `uv add` and skill `requirements.txt` installs via `uv pip install --python`
+/// therefore land in the same interpreter that `python3` resolves to.
+const PYPROJECT_SETUP: &str =
+    "printf '[project]\\nname = \"sandbox\"\\nversion = \"0.0.0\"\\nrequires-python = \">=3.12\"\\n' > pyproject.toml";
 
 /// the Dagger engine connection plus its lazily-warmed base image. one per
 /// session; cloned `DaggerConn` handles are cheap (an Arc internally).
@@ -300,6 +307,16 @@ pub(crate) async fn spawn() -> Result<Arc<SessionHandle>> {
     }
 }
 
+/// warm-base user-setup command: scaffold the uv project, create the venv at
+/// `DEFAULT_VENV_DIR`, and seed defaults via `uv add`. runs from the home dir so
+/// uv discovers the freshly written `pyproject.toml`. pure so the scaffolding
+/// stays under test without a live engine.
+fn warm_base_user_setup(py_requirements: &str) -> String {
+    format!(
+        "cd {SKILL_SANDBOX_HOME} && {PYPROJECT_SETUP} && uv venv --python python3 {DEFAULT_VENV_DIR} && uv add {py_requirements}"
+    )
+}
+
 #[tracing::instrument(name = "sandbox.warm_base.build", skip_all, fields(image = tracing::field::Empty))]
 async fn build_warm_base(client: &DaggerConn) -> Result<Container> {
     let image = env::var("ARCHESTRA_DAGGER_RUNTIME_IMAGE")
@@ -316,10 +333,9 @@ async fn build_warm_base(client: &DaggerConn) -> Result<Container> {
     let root_setup = format!(
         "apt-get update -qq && apt-get install -y --no-install-recommends {apt_packages} && rm -rf /var/lib/apt/lists/* && mkdir -p {SKILL_SANDBOX_HOME} {SKILL_SANDBOX_ROOT} && chown -R 1000:1000 {SKILL_SANDBOX_HOME} {SKILL_SANDBOX_ROOT} && {PIP_SHIM_SETUP}"
     );
-    // user setup: uv venv + default python packages, owned by sandbox user.
-    let user_setup = format!(
-        "uv venv --python python3 {DEFAULT_VENV_DIR} && uv pip install --python {DEFAULT_VENV_PYTHON} {py_requirements}"
-    );
+    // user setup: scaffold the uv project, create the venv, seed default
+    // packages with `uv add` (same path the model uses), owned by sandbox user.
+    let user_setup = warm_base_user_setup(&py_requirements);
     client
         .container()
         .from(&image)
@@ -686,6 +702,25 @@ mod tests {
 
         let generic = domain_error("connection reset", None);
         assert_eq!(classify_engine_fault(&generic), EngineFault::Unreachable);
+    }
+
+    #[test]
+    fn warm_base_user_setup_scaffolds_uv_project() {
+        let cmd = warm_base_user_setup("numpy pandas");
+        // must run in the project dir so `uv add` can discover pyproject.toml.
+        assert!(cmd.starts_with("cd /home/sandbox &&"));
+        assert!(cmd.contains("pyproject.toml"));
+        assert!(cmd.contains("uv venv --python python3 /home/sandbox/.venv"));
+        // deps seeded via the same `uv add` path the model uses.
+        assert!(cmd.contains("uv add numpy pandas"));
+        assert!(!cmd.contains("uv pip install"));
+    }
+
+    #[test]
+    fn pip_shim_directs_to_project_scoped_uv_add() {
+        // the shim is the model's only feedback when it reaches for pip; it must
+        // point at a command that actually works from any cwd.
+        assert!(PIP_SHIM_SETUP.contains("uv add --project /home/sandbox <pkg>"));
     }
 
     #[test]

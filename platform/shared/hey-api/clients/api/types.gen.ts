@@ -17631,6 +17631,11 @@ export type BedrockConverseWithDefaultAgentData = {
                     }>;
                     status?: 'success' | 'error';
                 };
+            } | {
+                cachePoint: {
+                    type: string;
+                    ttl?: string;
+                };
             }>;
         }>;
         system?: Array<{
@@ -17644,6 +17649,11 @@ export type BedrockConverseWithDefaultAgentData = {
                     text: string;
                     qualifiers?: Array<'grounding_source' | 'query' | 'guard_content'>;
                 };
+            };
+        } | {
+            cachePoint: {
+                type: string;
+                ttl?: string;
             };
         }>;
         inferenceConfig?: {
@@ -17941,6 +17951,11 @@ export type BedrockConverseWithAgentData = {
                     }>;
                     status?: 'success' | 'error';
                 };
+            } | {
+                cachePoint: {
+                    type: string;
+                    ttl?: string;
+                };
             }>;
         }>;
         system?: Array<{
@@ -17954,6 +17969,11 @@ export type BedrockConverseWithAgentData = {
                     text: string;
                     qualifiers?: Array<'grounding_source' | 'query' | 'guard_content'>;
                 };
+            };
+        } | {
+            cachePoint: {
+                type: string;
+                ttl?: string;
             };
         }>;
         inferenceConfig?: {
@@ -18253,6 +18273,11 @@ export type BedrockConverseStreamWithDefaultAgentData = {
                     }>;
                     status?: 'success' | 'error';
                 };
+            } | {
+                cachePoint: {
+                    type: string;
+                    ttl?: string;
+                };
             }>;
         }>;
         system?: Array<{
@@ -18266,6 +18291,11 @@ export type BedrockConverseStreamWithDefaultAgentData = {
                     text: string;
                     qualifiers?: Array<'grounding_source' | 'query' | 'guard_content'>;
                 };
+            };
+        } | {
+            cachePoint: {
+                type: string;
+                ttl?: string;
             };
         }>;
         inferenceConfig?: {
@@ -18438,6 +18468,11 @@ export type BedrockConverseStreamWithAgentData = {
                     }>;
                     status?: 'success' | 'error';
                 };
+            } | {
+                cachePoint: {
+                    type: string;
+                    ttl?: string;
+                };
             }>;
         }>;
         system?: Array<{
@@ -18451,6 +18486,11 @@ export type BedrockConverseStreamWithAgentData = {
                     text: string;
                     qualifiers?: Array<'grounding_source' | 'query' | 'guard_content'>;
                 };
+            };
+        } | {
+            cachePoint: {
+                type: string;
+                ttl?: string;
             };
         }>;
         inferenceConfig?: {
@@ -18625,6 +18665,11 @@ export type BedrockConverseWithAgentAndModelData = {
                     }>;
                     status?: 'success' | 'error';
                 };
+            } | {
+                cachePoint: {
+                    type: string;
+                    ttl?: string;
+                };
             }>;
         }>;
         system?: Array<{
@@ -18638,6 +18683,11 @@ export type BedrockConverseWithAgentAndModelData = {
                     text: string;
                     qualifiers?: Array<'grounding_source' | 'query' | 'guard_content'>;
                 };
+            };
+        } | {
+            cachePoint: {
+                type: string;
+                ttl?: string;
             };
         }>;
         inferenceConfig?: {
@@ -18938,6 +18988,11 @@ export type BedrockConverseStreamWithAgentAndModelData = {
                     }>;
                     status?: 'success' | 'error';
                 };
+            } | {
+                cachePoint: {
+                    type: string;
+                    ttl?: string;
+                };
             }>;
         }>;
         system?: Array<{
@@ -18951,6 +19006,11 @@ export type BedrockConverseStreamWithAgentAndModelData = {
                     text: string;
                     qualifiers?: Array<'grounding_source' | 'query' | 'guard_content'>;
                 };
+            };
+        } | {
+            cachePoint: {
+                type: string;
+                ttl?: string;
             };
         }>;
         inferenceConfig?: {
@@ -26007,6 +26067,11 @@ export type GetInteractionsResponses = {
                             }>;
                             status?: 'success' | 'error';
                         };
+                    } | {
+                        cachePoint: {
+                            type: string;
+                            ttl?: string;
+                        };
                     }>;
                 }>;
                 system?: Array<{
@@ -26017,6 +26082,11 @@ export type GetInteractionsResponses = {
                             text: string;
                             qualifiers?: Array<'grounding_source' | 'query' | 'guard_content'>;
                         };
+                    };
+                } | {
+                    cachePoint: {
+                        type: string;
+                        ttl?: string;
                     };
                 }>;
                 inferenceConfig?: {
@@ -26166,6 +26236,11 @@ export type GetInteractionsResponses = {
                             }>;
                             status?: 'success' | 'error';
                         };
+                    } | {
+                        cachePoint: {
+                            type: string;
+                            ttl?: string;
+                        };
                     }>;
                 }>;
                 system?: Array<{
@@ -26176,6 +26251,11 @@ export type GetInteractionsResponses = {
                             text: string;
                             qualifiers?: Array<'grounding_source' | 'query' | 'guard_content'>;
                         };
+                    };
+                } | {
+                    cachePoint: {
+                        type: string;
+                        ttl?: string;
                     };
                 }>;
                 inferenceConfig?: {
@@ -28490,6 +28570,11 @@ export type GetInteractionResponses = {
                         }>;
                         status?: 'success' | 'error';
                     };
+                } | {
+                    cachePoint: {
+                        type: string;
+                        ttl?: string;
+                    };
                 }>;
             }>;
             system?: Array<{
@@ -28500,6 +28585,11 @@ export type GetInteractionResponses = {
                         text: string;
                         qualifiers?: Array<'grounding_source' | 'query' | 'guard_content'>;
                     };
+                };
+            } | {
+                cachePoint: {
+                    type: string;
+                    ttl?: string;
                 };
             }>;
             inferenceConfig?: {
@@ -28649,6 +28739,11 @@ export type GetInteractionResponses = {
                         }>;
                         status?: 'success' | 'error';
                     };
+                } | {
+                    cachePoint: {
+                        type: string;
+                        ttl?: string;
+                    };
                 }>;
             }>;
             system?: Array<{
@@ -28659,6 +28754,11 @@ export type GetInteractionResponses = {
                         text: string;
                         qualifiers?: Array<'grounding_source' | 'query' | 'guard_content'>;
                     };
+                };
+            } | {
+                cachePoint: {
+                    type: string;
+                    ttl?: string;
                 };
             }>;
             inferenceConfig?: {

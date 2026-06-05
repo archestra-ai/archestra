@@ -9,6 +9,7 @@ import {
   SkillSandboxReplayEventModel,
   SkillVersionModel,
 } from "@/models";
+import * as metrics from "@/observability/metrics";
 import {
   SandboxRuntimeError,
   sandboxRuntimeService,
@@ -100,6 +101,7 @@ class SkillSandboxRuntimeService {
       let executed: Awaited<
         ReturnType<typeof sandboxRuntimeService.runCommand>
       >;
+      const startedAt = Date.now();
       try {
         executed = await sandboxRuntimeService.runCommand({
           command: params.command,
@@ -116,6 +118,12 @@ class SkillSandboxRuntimeService {
         // may have already run inside Dagger but we lost the result. Record a
         // synthetic row so subsequent replays re-execute it instead of
         // silently dropping it from the log, then surface the error.
+        // wall-clock of the failed engine call (the inner durationMs is lost on
+        // throw); the success path below observes the engine-reported duration.
+        metrics.sandbox.reportCommand({
+          status: "runtime_error",
+          durationSeconds: (Date.now() - startedAt) / 1000,
+        });
         if (shouldRecordOnFailure(error)) {
           await this.appendSyntheticRow({
             sandboxId: params.sandboxId,
@@ -127,6 +135,11 @@ class SkillSandboxRuntimeService {
         }
         throw this.toSkillError(error);
       }
+
+      metrics.sandbox.reportCommand({
+        status: metrics.sandbox.classifyCommandStatus(executed),
+        durationSeconds: executed.durationMs / 1000,
+      });
 
       let row: Awaited<
         ReturnType<typeof SkillSandboxReplayEventModel.appendCommand>
@@ -434,6 +447,15 @@ class SkillSandboxRuntimeService {
       organizationId: caller.organizationId,
     });
     if (!result.ok) {
+      logger.warn(
+        {
+          sandboxId,
+          userId: caller.userId,
+          organizationId: caller.organizationId,
+          reason: result.code,
+        },
+        "[SkillSandbox] revocation gate blocked sandbox access",
+      );
       throw new SkillSandboxError(result.reason);
     }
   }
@@ -635,17 +657,29 @@ function shellQuote(value: string): string {
   return `'${value.replace(/'/g, "'\\''")}'`;
 }
 
+/**
+ * Reject a sandbox path with a stable reason code logged for audit. The raw
+ * path stays in the model-facing message only — never in the structured log —
+ * to avoid leaking user-supplied content into operational logs.
+ */
+function rejectPath(reason: string, message: string): never {
+  logger.warn({ reason }, "[SkillSandbox] rejected sandbox path");
+  throw new SkillSandboxError(message);
+}
+
 function resolveArtifactPath(params: {
   path: string;
   defaultCwd: string;
 }): string {
   if (params.path.includes("\0")) {
-    throw new SkillSandboxError(
+    rejectPath(
+      "artifact_path_nul",
       `invalid artifact path: ${JSON.stringify(params.path)}`,
     );
   }
   if (params.path.split("/").some((segment) => segment === "..")) {
-    throw new SkillSandboxError(
+    rejectPath(
+      "artifact_path_traversal",
       `invalid artifact path: ${JSON.stringify(params.path)}`,
     );
   }
@@ -655,7 +689,8 @@ function resolveArtifactPath(params: {
       (root) => params.path === root || params.path.startsWith(`${root}/`),
     );
     if (!isAllowed) {
-      throw new SkillSandboxError(
+      rejectPath(
+        "artifact_path_outside_roots",
         `artifact path must be under ${SKILL_SANDBOX_ROOT} or ${SKILL_SANDBOX_HOME}: ${JSON.stringify(params.path)}`,
       );
     }
@@ -676,10 +711,14 @@ function resolveArtifactPath(params: {
  */
 function validateUploadPath(path: string): void {
   if (/["$`\\\n\r]/.test(path)) {
-    throw new SkillSandboxError(`invalid upload path: ${JSON.stringify(path)}`);
+    rejectPath(
+      "upload_path_shell_metachar",
+      `invalid upload path: ${JSON.stringify(path)}`,
+    );
   }
   if (path.endsWith("/")) {
-    throw new SkillSandboxError(
+    rejectPath(
+      "upload_path_directory",
       `upload path must be a file, not a directory: ${JSON.stringify(path)}`,
     );
   }
@@ -688,7 +727,8 @@ function validateUploadPath(path: string): void {
   // regular file and break every later skill mount. reject before it is
   // persisted as an unreplayable event.
   if (path === SKILL_SANDBOX_ROOT || path === SKILL_SANDBOX_HOME) {
-    throw new SkillSandboxError(
+    rejectPath(
+      "upload_path_root_directory",
       `upload path must be a file, not a directory: ${JSON.stringify(path)}`,
     );
   }
@@ -744,11 +784,26 @@ async function stageConversationAttachments(
   const stagedIds = await SkillSandboxFileModel.listStagedAttachmentIds(
     sandbox.id,
   );
-  const { toStage, notices } = planAttachmentStaging({
+  const limit = config.skillsSandbox.artifactBytesLimit;
+  const { toStage, notices, oversized } = planAttachmentStaging({
     attachments,
     stagedIds,
-    limit: config.skillsSandbox.artifactBytesLimit,
+    limit,
   });
+  for (const skip of oversized) {
+    // debug, not warn: an oversize attachment is expected and recoverable (the
+    // model gets a notice + download URL), and staging re-runs every op — a warn
+    // here would repeat for the whole conversation.
+    logger.debug(
+      {
+        sandboxId: sandbox.id,
+        attachmentId: skip.attachmentId,
+        sizeBytes: skip.sizeBytes,
+        limit,
+      },
+      "[SkillSandbox] skipped oversize attachment during auto-staging",
+    );
+  }
   if (toStage.length === 0) return notices;
 
   const withData = await ConversationAttachmentModel.findByIdsWithData(
@@ -785,10 +840,15 @@ function planAttachmentStaging(params: {
   attachments: { id: string; originalName: string | null; fileSize: number }[];
   stagedIds: Set<string>;
   limit: number;
-}): { toStage: { id: string; path: string }[]; notices: string[] } {
+}): {
+  toStage: { id: string; path: string }[];
+  notices: string[];
+  oversized: { attachmentId: string; sizeBytes: number }[];
+} {
   const { attachments, stagedIds, limit } = params;
   const pathByAttachment = assignAttachmentPaths(attachments);
   const notices: string[] = [];
+  const oversized: { attachmentId: string; sizeBytes: number }[] = [];
   const toStage: { id: string; path: string }[] = [];
   for (const attachment of attachments) {
     if (stagedIds.has(attachment.id)) continue;
@@ -796,12 +856,16 @@ function planAttachmentStaging(params: {
       notices.push(
         `attachment ${JSON.stringify(attachment.originalName ?? attachment.id)} (${attachment.fileSize} bytes) was not auto-staged into the sandbox: it exceeds the ${limit}-byte file limit. Reference it via its download URL instead.`,
       );
+      oversized.push({
+        attachmentId: attachment.id,
+        sizeBytes: attachment.fileSize,
+      });
       continue;
     }
     const path = pathByAttachment.get(attachment.id);
     if (path) toStage.push({ id: attachment.id, path });
   }
-  return { toStage, notices };
+  return { toStage, notices, oversized };
 }
 
 /**

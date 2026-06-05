@@ -60651,6 +60651,28 @@
                                 "required": [
                                   "toolResult"
                                 ]
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "cachePoint": {
+                                    "type": "object",
+                                    "properties": {
+                                      "type": {
+                                        "type": "string"
+                                      },
+                                      "ttl": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "type"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "cachePoint"
+                                ]
                               }
                             ]
                           }
@@ -60731,6 +60753,28 @@
                           },
                           "required": [
                             "guardContent"
+                          ]
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "cachePoint": {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string"
+                                },
+                                "ttl": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "type"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "cachePoint"
                           ]
                         }
                       ]
@@ -61864,6 +61908,28 @@
                                 "required": [
                                   "toolResult"
                                 ]
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "cachePoint": {
+                                    "type": "object",
+                                    "properties": {
+                                      "type": {
+                                        "type": "string"
+                                      },
+                                      "ttl": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "type"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "cachePoint"
+                                ]
                               }
                             ]
                           }
@@ -61944,6 +62010,28 @@
                           },
                           "required": [
                             "guardContent"
+                          ]
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "cachePoint": {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string"
+                                },
+                                "ttl": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "type"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "cachePoint"
                           ]
                         }
                       ]
@@ -63087,6 +63175,28 @@
                                 "required": [
                                   "toolResult"
                                 ]
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "cachePoint": {
+                                    "type": "object",
+                                    "properties": {
+                                      "type": {
+                                        "type": "string"
+                                      },
+                                      "ttl": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "type"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "cachePoint"
+                                ]
                               }
                             ]
                           }
@@ -63167,6 +63277,28 @@
                           },
                           "required": [
                             "guardContent"
+                          ]
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "cachePoint": {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string"
+                                },
+                                "ttl": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "type"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "cachePoint"
                           ]
                         }
                       ]
@@ -63855,6 +63987,28 @@
                                 "required": [
                                   "toolResult"
                                 ]
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "cachePoint": {
+                                    "type": "object",
+                                    "properties": {
+                                      "type": {
+                                        "type": "string"
+                                      },
+                                      "ttl": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "type"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "cachePoint"
+                                ]
                               }
                             ]
                           }
@@ -63935,6 +64089,28 @@
                           },
                           "required": [
                             "guardContent"
+                          ]
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "cachePoint": {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string"
+                                },
+                                "ttl": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "type"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "cachePoint"
                           ]
                         }
                       ]
@@ -64633,6 +64809,28 @@
                                 "required": [
                                   "toolResult"
                                 ]
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "cachePoint": {
+                                    "type": "object",
+                                    "properties": {
+                                      "type": {
+                                        "type": "string"
+                                      },
+                                      "ttl": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "type"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "cachePoint"
+                                ]
                               }
                             ]
                           }
@@ -64713,6 +64911,28 @@
                           },
                           "required": [
                             "guardContent"
+                          ]
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "cachePoint": {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string"
+                                },
+                                "ttl": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "type"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "cachePoint"
                           ]
                         }
                       ]
@@ -65861,6 +66081,28 @@
                                 "required": [
                                   "toolResult"
                                 ]
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "cachePoint": {
+                                    "type": "object",
+                                    "properties": {
+                                      "type": {
+                                        "type": "string"
+                                      },
+                                      "ttl": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "type"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "cachePoint"
+                                ]
                               }
                             ]
                           }
@@ -65941,6 +66183,28 @@
                           },
                           "required": [
                             "guardContent"
+                          ]
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "cachePoint": {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string"
+                                },
+                                "ttl": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "type"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "cachePoint"
                           ]
                         }
                       ]
@@ -92110,6 +92374,30 @@
                                                   "toolResult"
                                                 ],
                                                 "additionalProperties": false
+                                              },
+                                              {
+                                                "type": "object",
+                                                "properties": {
+                                                  "cachePoint": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                      "type": {
+                                                        "type": "string"
+                                                      },
+                                                      "ttl": {
+                                                        "type": "string"
+                                                      }
+                                                    },
+                                                    "required": [
+                                                      "type"
+                                                    ],
+                                                    "additionalProperties": false
+                                                  }
+                                                },
+                                                "required": [
+                                                  "cachePoint"
+                                                ],
+                                                "additionalProperties": false
                                               }
                                             ]
                                           }
@@ -92176,6 +92464,30 @@
                                           },
                                           "required": [
                                             "guardContent"
+                                          ],
+                                          "additionalProperties": false
+                                        },
+                                        {
+                                          "type": "object",
+                                          "properties": {
+                                            "cachePoint": {
+                                              "type": "object",
+                                              "properties": {
+                                                "type": {
+                                                  "type": "string"
+                                                },
+                                                "ttl": {
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "type"
+                                              ],
+                                              "additionalProperties": false
+                                            }
+                                          },
+                                          "required": [
+                                            "cachePoint"
                                           ],
                                           "additionalProperties": false
                                         }
@@ -92867,6 +93179,30 @@
                                                   "toolResult"
                                                 ],
                                                 "additionalProperties": false
+                                              },
+                                              {
+                                                "type": "object",
+                                                "properties": {
+                                                  "cachePoint": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                      "type": {
+                                                        "type": "string"
+                                                      },
+                                                      "ttl": {
+                                                        "type": "string"
+                                                      }
+                                                    },
+                                                    "required": [
+                                                      "type"
+                                                    ],
+                                                    "additionalProperties": false
+                                                  }
+                                                },
+                                                "required": [
+                                                  "cachePoint"
+                                                ],
+                                                "additionalProperties": false
                                               }
                                             ]
                                           }
@@ -92933,6 +93269,30 @@
                                           },
                                           "required": [
                                             "guardContent"
+                                          ],
+                                          "additionalProperties": false
+                                        },
+                                        {
+                                          "type": "object",
+                                          "properties": {
+                                            "cachePoint": {
+                                              "type": "object",
+                                              "properties": {
+                                                "type": {
+                                                  "type": "string"
+                                                },
+                                                "ttl": {
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "type"
+                                              ],
+                                              "additionalProperties": false
+                                            }
+                                          },
+                                          "required": [
+                                            "cachePoint"
                                           ],
                                           "additionalProperties": false
                                         }
@@ -104833,6 +105193,30 @@
                                             "toolResult"
                                           ],
                                           "additionalProperties": false
+                                        },
+                                        {
+                                          "type": "object",
+                                          "properties": {
+                                            "cachePoint": {
+                                              "type": "object",
+                                              "properties": {
+                                                "type": {
+                                                  "type": "string"
+                                                },
+                                                "ttl": {
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "type"
+                                              ],
+                                              "additionalProperties": false
+                                            }
+                                          },
+                                          "required": [
+                                            "cachePoint"
+                                          ],
+                                          "additionalProperties": false
                                         }
                                       ]
                                     }
@@ -104899,6 +105283,30 @@
                                     },
                                     "required": [
                                       "guardContent"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "cachePoint": {
+                                        "type": "object",
+                                        "properties": {
+                                          "type": {
+                                            "type": "string"
+                                          },
+                                          "ttl": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "type"
+                                        ],
+                                        "additionalProperties": false
+                                      }
+                                    },
+                                    "required": [
+                                      "cachePoint"
                                     ],
                                     "additionalProperties": false
                                   }
@@ -105590,6 +105998,30 @@
                                             "toolResult"
                                           ],
                                           "additionalProperties": false
+                                        },
+                                        {
+                                          "type": "object",
+                                          "properties": {
+                                            "cachePoint": {
+                                              "type": "object",
+                                              "properties": {
+                                                "type": {
+                                                  "type": "string"
+                                                },
+                                                "ttl": {
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "type"
+                                              ],
+                                              "additionalProperties": false
+                                            }
+                                          },
+                                          "required": [
+                                            "cachePoint"
+                                          ],
+                                          "additionalProperties": false
                                         }
                                       ]
                                     }
@@ -105656,6 +106088,30 @@
                                     },
                                     "required": [
                                       "guardContent"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "cachePoint": {
+                                        "type": "object",
+                                        "properties": {
+                                          "type": {
+                                            "type": "string"
+                                          },
+                                          "ttl": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "type"
+                                        ],
+                                        "additionalProperties": false
+                                      }
+                                    },
+                                    "required": [
+                                      "cachePoint"
                                     ],
                                     "additionalProperties": false
                                   }

@@ -1935,17 +1935,10 @@
       "breakpoints": true
     },
     {
-      "idx": 273,
+      "idx": 276,
       "version": "7",
-      "when": 1780598677816,
-      "tag": "0273_sandbox_skill_mounts",
-      "breakpoints": true
-    },
-    {
-      "idx": 274,
-      "version": "7",
-      "when": 1780609286895,
-      "tag": "0274_many_chat",
+      "when": 1780648968237,
+      "tag": "0276_squash_skill_sandbox_and_versioning",
       "breakpoints": true
     }
   ]

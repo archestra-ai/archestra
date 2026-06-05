@@ -1,4 +1,5 @@
 import { ADMIN_ROLE_NAME, MEMBER_ROLE_NAME } from "@shared";
+import ServiceAccountModel from "@/models/service-account";
 import { describe, expect, test } from "@/test";
 import { getSkillPermissionChecker } from "./skill-permissions";
 
@@ -85,5 +86,27 @@ describe("getSkillPermissionChecker", () => {
 
     expect(checker.canRead).toBe(true);
     expect(checker.canExecute).toBe(true);
+  });
+
+  test("service-account synthetic user id resolves the account's role permissions", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const sa = await ServiceAccountModel.create({
+      organizationId: org.id,
+      name: "ci-bot",
+      role: ADMIN_ROLE_NAME,
+    });
+
+    const checker = await getSkillPermissionChecker({
+      userId: `service-account:${sa.id}`,
+      organizationId: org.id,
+    });
+
+    // Before the fix this returned an empty permission set (all false) because
+    // the synthetic service-account id has no member row.
+    expect(checker.canRead).toBe(true);
+    expect(checker.canExecute).toBe(true);
+    expect(checker.isAdmin).toBe(true);
   });
 });

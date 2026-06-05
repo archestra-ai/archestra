@@ -1,6 +1,6 @@
-import { UserModel } from "@/models";
 import type { ResourceVisibilityScope } from "@/types/visibility";
 import { requireScopedModifyPermission } from "./agent-type-permissions";
+import { getPermissionsForUserContext } from "./utils";
 
 /**
  * Skill RBAC helpers. Skills follow the same 3-tier scope model as agents
@@ -19,15 +19,20 @@ export interface SkillPermissionChecker {
   isTeamAdmin: boolean;
 }
 
-/** Fetch the user's skill-resource permissions once for a request. */
+/**
+ * Fetch the user's skill-resource permissions once for a request. Resolves via
+ * the service-account-aware lookup so token-authenticated service accounts (whose
+ * synthetic `service-account:<id>` user id has no member row) get their role's
+ * permissions instead of an empty set.
+ */
 export async function getSkillPermissionChecker(params: {
   userId: string;
   organizationId: string;
 }): Promise<SkillPermissionChecker> {
-  const permissions = await UserModel.getUserPermissions(
-    params.userId,
-    params.organizationId,
-  );
+  const permissions = await getPermissionsForUserContext({
+    userId: params.userId,
+    organizationId: params.organizationId,
+  });
   const skill = permissions.skill ?? [];
   return {
     canRead: skill.includes("read"),

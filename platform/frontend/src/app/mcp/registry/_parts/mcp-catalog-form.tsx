@@ -84,7 +84,7 @@ import {
 } from "@/lib/mcp/mcp-form-autocomplete";
 import { useDefaultEnvironment } from "@/lib/organization.query";
 import { useGetSecret } from "@/lib/secrets.query";
-import { useTeams } from "@/lib/teams/team.query";
+import { useAssignableTeams } from "@/lib/teams/team.query";
 import {
   type CascadeSnapshot,
   computeCascadeOutcome,
@@ -526,7 +526,12 @@ export function McpCatalogForm({
     mcpRegistry: ["team-admin"],
   });
   const { data: canReadTeams } = useHasPermissions({ team: ["read"] });
-  const { data: teams } = useTeams();
+  // All teams for a full admin, otherwise only the user's own teams (the only
+  // ones the backend lets a non-admin assign).
+  const { data: teams } = useAssignableTeams({
+    isResourceAdmin: !!isAdmin,
+    enabled: !!canReadTeams,
+  });
   const { data: environmentList } = useEnvironments();
   const environments = environmentList?.environments;
   // Deploying to a restricted environment needs environment:deploy-to-restricted;

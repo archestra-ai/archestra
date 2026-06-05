@@ -42,7 +42,7 @@ import {
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
-import { useTeams } from "@/lib/teams/team.query";
+import { useMyTeams } from "@/lib/teams/team.query";
 import { McpGatewayActions } from "./mcp-gateway-actions";
 
 type McpGatewaysInitialData = {
@@ -165,8 +165,7 @@ function McpGateways({
   });
   const { data: canReadTeams } = useHasPermissions({ team: ["read"] });
 
-  const { data: userTeams } = useTeams({
-    initialData: initialData?.teams,
+  const { data: userTeams } = useMyTeams({
     enabled: !!canReadTeams,
   });
 

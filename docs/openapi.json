@@ -199676,6 +199676,14 @@
             "in": "query",
             "name": "name",
             "required": false
+          },
+          {
+            "schema": {
+              "type": "boolean"
+            },
+            "in": "query",
+            "name": "mine",
+            "required": false
           }
         ],
         "responses": {

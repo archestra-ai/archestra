@@ -1,6 +1,6 @@
 import type { archestraApiTypes } from "@shared";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
-import { useTeams } from "@/lib/teams/team.query";
+import { useMyTeams } from "@/lib/teams/team.query";
 
 export type CatalogItem =
   archestraApiTypes.GetInternalMcpCatalogResponses["200"][number];
@@ -182,7 +182,7 @@ export function useCanModifyCatalogItem(
   const { data: isTeamAdmin, isLoading: isTeamAdminLoading } =
     useHasPermissions({ mcpRegistry: ["team-admin"] });
   const { data: canReadTeams } = useHasPermissions({ team: ["read"] });
-  const { data: userTeams, isLoading: teamsLoading } = useTeams({
+  const { data: userTeams, isLoading: teamsLoading } = useMyTeams({
     enabled: !!canReadTeams,
   });
   const { data: session, isPending: isSessionLoading } = useSession();

@@ -94,3 +94,42 @@ export const Loader = ({ className, size = 16, ...props }: LoaderProps) => (
     <LoaderIcon size={size} />
   </div>
 );
+
+export type GoldenSnitchLoaderProps = HTMLAttributes<HTMLOutputElement> & {
+  size?: number;
+};
+
+export const GoldenSnitchLoader = ({
+  className,
+  size = 18,
+  ...props
+}: GoldenSnitchLoaderProps) => (
+  <output
+    aria-label="Golden Snitch loading"
+    className={cn("inline-flex items-center justify-center", className)}
+    {...props}
+  >
+    <svg
+      className="overflow-visible"
+      height={size}
+      viewBox="0 0 24 16"
+      width={Math.round(size * 1.5)}
+    >
+      <title>Golden Snitch</title>
+      <g className="origin-center [animation:snitch-dart_900ms_ease-in-out_infinite]">
+        <path
+          d="M10 8c-2.8-2.6-5.3-3.6-8-3.2 2.1 1.1 3.9 2.4 5.4 4C5.8 9 4.1 9.7 2.3 11.1c2.8.2 5.3-.7 7.7-3.1Z"
+          fill="currentColor"
+          opacity="0.45"
+        />
+        <path
+          d="M14 8c2.8-2.6 5.3-3.6 8-3.2-2.1 1.1-3.9 2.4-5.4 4 1.6.2 3.3.9 5.1 2.3-2.8.2-5.3-.7-7.7-3.1Z"
+          fill="currentColor"
+          opacity="0.45"
+        />
+        <circle cx="12" cy="8" fill="oklch(0.82 0.17 83)" r="3.2" />
+        <circle cx="10.9" cy="7" fill="white" opacity="0.55" r="0.9" />
+      </g>
+    </svg>
+  </output>
+);

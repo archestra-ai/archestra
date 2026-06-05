@@ -10,7 +10,8 @@ vi.mock("next-themes", () => ({
   useTheme: () => mockUseTheme(),
 }));
 
-import { ToolInput, ToolOutput } from "./tool";
+import { GoldenSnitchLoader } from "./loader";
+import { Tool, ToolHeader, ToolInput, ToolOutput } from "./tool";
 
 function mockClipboard(writeText: ReturnType<typeof vi.fn>) {
   Object.defineProperty(navigator, "clipboard", {
@@ -83,5 +84,36 @@ describe("Tool copy actions", () => {
     await user.click(screen.getByRole("button", { name: "Copy to clipboard" }));
 
     expect(writeText).toHaveBeenCalledWith("ARCH_TEST = asdfasdfadsf");
+  });
+});
+
+describe("ToolHeader loader", () => {
+  it("renders the default running loader when no custom indicator is provided", () => {
+    render(
+      <Tool>
+        <ToolHeader type="tool-test" state="input-available" />
+      </Tool>,
+    );
+
+    expect(screen.getByText("Running")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("status", { name: /golden snitch loading/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("renders the Golden Snitch loader when provided", () => {
+    render(
+      <Tool>
+        <ToolHeader
+          type="tool-test"
+          state="input-available"
+          runningIndicator={<GoldenSnitchLoader />}
+        />
+      </Tool>,
+    );
+
+    expect(
+      screen.getByRole("status", { name: /golden snitch loading/i }),
+    ).toBeInTheDocument();
   });
 });

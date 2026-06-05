@@ -4,6 +4,7 @@ import {
   type archestraApiTypes,
   ChatMessageMetadataSchema,
   DocsPage,
+  getSortingHatMeta,
   parseFullToolName,
   type ResourceVisibilityScope,
   SWAP_AGENT_FAILED_POKE_TEXT,
@@ -39,7 +40,7 @@ import {
   ConversationContent,
   ConversationScrollButton,
 } from "@/components/ai-elements/conversation";
-import { Loader } from "@/components/ai-elements/loader";
+import { GoldenSnitchLoader, Loader } from "@/components/ai-elements/loader";
 import { Message, MessageContent } from "@/components/ai-elements/message";
 import {
   Reasoning,
@@ -124,6 +125,7 @@ import {
   UnsafeContextStartsHereDivider,
 } from "./message-boundary-divider";
 import { PolicyDeniedTool } from "./policy-denied-tool";
+import { SortingHatModal } from "./sorting-hat-modal";
 import {
   getSwapAgentBoundaryLabel,
   SwapAgentBoundaryDivider,
@@ -200,6 +202,19 @@ function isToolPart(part: any): part is {
       part.type?.startsWith("data-tool-ui-start") ||
       part.type === "dynamic-tool")
   );
+}
+
+function findSortingHatMonologue(messages: UIMessage[]): string[] | undefined {
+  for (const message of messages) {
+    for (const part of message.parts ?? []) {
+      if (!isToolPart(part)) continue;
+      const meta = getSortingHatMeta(part.output);
+      if (meta?.monologue && meta.monologue.length > 0) {
+        return meta.monologue;
+      }
+    }
+  }
+  return undefined;
 }
 
 export function ChatMessages({
@@ -383,6 +398,16 @@ export function ChatMessages({
   const pendingToolCalls = useMemo(
     () => filterOptimisticToolCalls(messages, optimisticToolCalls),
     [messages, optimisticToolCalls],
+  );
+  const sortingHatMonologue = useMemo(
+    () => findSortingHatMonologue(messages),
+    [messages],
+  );
+  const hasToolInvocation = useMemo(
+    () =>
+      pendingToolCalls.length > 0 ||
+      messages.some((message) => message.parts?.some(isToolPart)),
+    [messages, pendingToolCalls.length],
   );
   const unsafeBoundaryRef = useRef<HTMLDivElement>(null);
   const [showStickyUnsafeIndicator, setShowStickyUnsafeIndicator] =
@@ -1410,6 +1435,11 @@ export function ChatMessages({
           }
         }}
       />
+      <SortingHatModal
+        conversationId={conversationId}
+        hasToolInvocation={hasToolInvocation}
+        monologue={sortingHatMonologue}
+      />
     </>
   );
 }
@@ -1675,6 +1705,8 @@ const MessageTool = memo(
   }) {
     const rawOutput = toolResultPart ? toolResultPart.output : part.output;
     const mcpOutput = rawOutput as McpToolOutput | undefined;
+    const sortingHatHouse =
+      getSortingHatMeta(rawOutput)?.house ?? inferSortingHatHouse(toolName);
     const uiResourceUri =
       (mcpOutput?._meta?.ui as { resourceUri?: string } | undefined)
         ?.resourceUri ?? earlyToolUiData?.uiResourceUri;
@@ -1948,6 +1980,14 @@ const MessageTool = memo(
           })}
           isCollapsible={isExpandable}
           actionButton={logsButton}
+          runningIndicator={
+            sortingHatHouse === "gryffindor" ? (
+              <GoldenSnitchLoader
+                data-testid="golden-snitch-loader"
+                size={16}
+              />
+            ) : undefined
+          }
         />
         <ToolContent forceMount={uiResourceUri ? true : undefined}>
           {hasInput ? <ToolInput input={displayInput} /> : null}
@@ -2120,6 +2160,23 @@ const getHeaderState = ({
 }) => {
   return getToolHeaderState({ state, toolResultPart, errorText });
 };
+
+function inferSortingHatHouse(toolName: string): "gryffindor" | null {
+  const normalized = toolName.toLowerCase();
+  return [
+    "deploy",
+    "execute",
+    "incident",
+    "migrate",
+    "probe",
+    "restart",
+    "rollback",
+    "run",
+    "trigger",
+  ].some((keyword) => normalized.includes(keyword))
+    ? "gryffindor"
+    : null;
+}
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);

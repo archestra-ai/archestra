@@ -14,7 +14,7 @@ vi.mock("next-themes", () => ({
 
 import { LightDarkButtons } from "./light-dark-buttons";
 
-function setup(currentMode: "light" | "dark" = "dark") {
+function setup(currentMode: "light" | "dark" | "forbidden-forest" = "dark") {
   const setTheme = vi.fn();
   mockUseTheme.mockReturnValue({ theme: currentMode, setTheme });
   return { setTheme, ...render(<LightDarkButtons />) };
@@ -35,6 +35,9 @@ describe("LightDarkButtons", () => {
       "aria-pressed",
       "false",
     );
+    expect(
+      screen.getByRole("button", { name: /forbidden forest/i }),
+    ).toHaveAttribute("aria-pressed", "false");
   });
 
   it("calls setTheme('light') when the Light button is clicked", async () => {
@@ -47,5 +50,13 @@ describe("LightDarkButtons", () => {
     const { setTheme } = setup("light");
     await userEvent.click(screen.getByRole("button", { name: /dark/i }));
     expect(setTheme).toHaveBeenCalledWith("dark");
+  });
+
+  it("calls setTheme('forbidden-forest') when the Forbidden Forest button is clicked", async () => {
+    const { setTheme } = setup("light");
+    await userEvent.click(
+      screen.getByRole("button", { name: /forbidden forest/i }),
+    );
+    expect(setTheme).toHaveBeenCalledWith("forbidden-forest");
   });
 });

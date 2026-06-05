@@ -66,10 +66,12 @@ export type ToolHeaderProps = {
   isCollapsible?: boolean;
   /** Optional action button to display in the header (e.g., View Logs) */
   actionButton?: React.ReactNode;
+  runningIndicator?: React.ReactNode;
 };
 
 const getStatusBadge = (
   status: ToolUIPart["state"] | "output-available-dual-llm" | "output-denied",
+  runningIndicator?: ReactNode,
 ) => {
   const labels = {
     "input-streaming": "Pending",
@@ -84,7 +86,9 @@ const getStatusBadge = (
 
   const icons = {
     "input-streaming": <CircleIcon className="size-4" />,
-    "input-available": <ClockIcon className="size-4 animate-pulse" />,
+    "input-available": runningIndicator ?? (
+      <ClockIcon className="size-4 animate-pulse" />
+    ),
     "approval-requested": <ClockIcon className="size-4 text-yellow-600" />,
     "approval-responded": <CheckCircleIcon className="size-4 text-blue-600" />,
     "output-available": <CheckCircleIcon className="size-4 text-green-600" />,
@@ -111,6 +115,7 @@ export const ToolHeader = ({
   icon,
   isCollapsible = true,
   actionButton,
+  runningIndicator,
   ...props
 }: ToolHeaderProps) => (
   <CollapsibleTrigger
@@ -127,7 +132,7 @@ export const ToolHeader = ({
         <span className="font-medium text-sm">
           {title ?? type.split("-").slice(1).join("-")}
         </span>
-        {getStatusBadge(state)}
+        {getStatusBadge(state, runningIndicator)}
       </div>
     </div>
     {actionButton && (

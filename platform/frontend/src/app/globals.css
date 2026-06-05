@@ -18,6 +18,37 @@
 
 @custom-variant dark (&:is(.dark *));
 
+html.forbidden-forest {
+  --background: oklch(0.16 0.04 154);
+  --foreground: oklch(0.93 0.02 145);
+  --card: oklch(0.20 0.04 154);
+  --card-foreground: oklch(0.93 0.02 145);
+  --popover: oklch(0.20 0.04 154);
+  --popover-foreground: oklch(0.93 0.02 145);
+  --primary: oklch(0.72 0.14 145);
+  --primary-foreground: oklch(0.14 0.04 154);
+  --secondary: oklch(0.25 0.04 154);
+  --secondary-foreground: oklch(0.90 0.02 145);
+  --muted: oklch(0.24 0.03 154);
+  --muted-foreground: oklch(0.72 0.03 145);
+  --accent: oklch(0.30 0.05 154);
+  --accent-foreground: oklch(0.92 0.02 145);
+  --border: oklch(0.34 0.04 154);
+  --input: oklch(0.34 0.04 154);
+  --ring: oklch(0.72 0.14 145);
+  --sidebar: oklch(0.14 0.04 154);
+  --sidebar-foreground: oklch(0.93 0.02 145);
+  --sidebar-accent: oklch(0.26 0.04 154);
+  --sidebar-accent-foreground: oklch(0.92 0.02 145);
+  --sidebar-border: oklch(0.32 0.04 154);
+  --sidebar-ring: oklch(0.72 0.14 145);
+}
+
+@keyframes snitch-dart {
+  0%, 100% { transform: translateX(-1px) rotate(-4deg); }
+  50% { transform: translateX(2px) rotate(5deg); }
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);

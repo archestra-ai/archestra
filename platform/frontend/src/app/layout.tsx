@@ -185,6 +185,11 @@ export default function RootLayout({
                   defaultTheme="light"
                   enableSystem
                   disableTransitionOnChange
+                  value={{
+                    light: "light",
+                    dark: "dark",
+                    "forbidden-forest": "dark forbidden-forest",
+                  }}
                 >
                   <PostHogProviderWrapper>
                     <OrgThemeLoader />

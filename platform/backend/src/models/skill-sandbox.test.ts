@@ -202,7 +202,8 @@ describe("SkillSandboxReplayEventModel", () => {
       organizationId: org.id,
       mount: mountRef(skill, await latestVersionId(skill)),
       installCommand: {
-        command: "uv pip install -r /skills/alpha/requirements.txt",
+        command:
+          "uv add --project /home/sandbox -r /skills/alpha/requirements.txt",
         cwd: "/home/sandbox",
         timeoutSeconds: 180,
       },
@@ -233,7 +234,7 @@ describe("SkillSandboxReplayEventModel", () => {
     // SKILL.md is carried as the version body; requirements.txt as a version file.
     expect(m.content).toBe("# alpha");
     expect(m.files.map((f) => f.path)).toEqual(["requirements.txt"]);
-    expect(install.command.command).toContain("uv pip install");
+    expect(install.command.command).toContain("uv add --project");
 
     // the allocator advanced past every appended event.
     const refreshed = await SkillSandboxModel.findById(sandbox.id);

@@ -40,10 +40,6 @@ const CONSUMER_ID = "skill-sandbox";
 // exit status was lost. distinct from any value the wrapped bash subprocess
 // can produce (which is bounded to 0..255).
 const SYNTHETIC_ENGINE_FAILURE_EXIT_CODE = -1;
-// must match `DEFAULT_VENV_PYTHON` in archestra-rs/sandbox-core/src/session.rs; we don't
-// re-export it from the napi crate to avoid coupling the TS adapter to Rust
-// build state.
-const VENV_PYTHON = "/home/sandbox/.venv/bin/python";
 const REQUIREMENTS_FILE = "requirements.txt";
 // reserved at the skill root: the mount synthesizes this from the pinned
 // version body, so a resource file may not occupy it or any subpath of it.
@@ -328,11 +324,14 @@ class SkillSandboxRuntimeService {
         validateSkillMountFilePath(params.skill.skillName, file.path);
       }
 
-      // install the skill's requirements into the shared venv as a replay
-      // command right after the mount, mirroring how user commands replay.
+      // install the skill's requirements into the shared uv project as a replay
+      // command right after the mount, mirroring how user commands replay. We
+      // use `uv add` (not bare `uv pip install`) so the deps are recorded in
+      // pyproject/uv.lock — otherwise a later model `uv add <pkg>` could prune
+      // them as extraneous on sync. `--project` lets it run from any cwd.
       const installCommand = files.some((f) => f.path === REQUIREMENTS_FILE)
         ? {
-            command: `uv pip install --python ${VENV_PYTHON} --quiet -r ${shellQuote(
+            command: `uv add --project ${SKILL_SANDBOX_HOME} --quiet -r ${shellQuote(
               `${skillRootPath(params.skill.skillName)}/${REQUIREMENTS_FILE}`,
             )}`,
             cwd: SKILL_SANDBOX_HOME,

@@ -78,7 +78,7 @@ const PIP_SHIM_SETUP: &str = "rm -f /usr/local/bin/pip /usr/local/bin/pip3 /usr/
 /// minimal uv project written into the sandbox home so `uv add <pkg>` works:
 /// uv refuses to add to a non-project ("No `pyproject.toml` found"), and the
 /// project's default `.venv` is exactly `DEFAULT_VENV_DIR`. model installs via
-/// `uv add` and skill `requirements.txt` installs via `uv pip install --python`
+/// `uv add` and skill `requirements.txt` installs (also `uv add --project … -r`)
 /// therefore land in the same interpreter that `python3` resolves to.
 const PYPROJECT_SETUP: &str = "printf '[project]\\nname = \"sandbox\"\\nversion = \"0.0.0\"\\nrequires-python = \">=3.12\"\\n' > pyproject.toml";
 

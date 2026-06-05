@@ -1,5 +1,5 @@
+import { TimeInMs } from "@archestra/shared";
 import KeyvPostgres from "@keyv/postgres";
-import { TimeInMs } from "@shared";
 import { sql } from "drizzle-orm";
 import Keyv from "keyv";
 import QuickLRU from "quick-lru";

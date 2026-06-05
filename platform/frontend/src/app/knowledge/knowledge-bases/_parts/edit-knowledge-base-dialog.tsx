@@ -1,6 +1,6 @@
 "use client";
 
-import type { archestraApiTypes } from "@shared";
+import type { archestraApiTypes } from "@archestra/shared";
 import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { FormDialog } from "@/components/form-dialog";

@@ -1,4 +1,4 @@
-import { IDENTITY_PROVIDER_ID } from "@shared";
+import { IDENTITY_PROVIDER_ID } from "@archestra/shared";
 import type { ReactNode } from "react";
 
 type ClaimHint = {

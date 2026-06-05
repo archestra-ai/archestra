@@ -1,4 +1,4 @@
-import { OAUTH_GRANT_TYPE } from "@shared";
+import { OAUTH_GRANT_TYPE } from "@archestra/shared";
 import Fastify, { type FastifyInstance } from "fastify";
 import {
   serializerCompiler,

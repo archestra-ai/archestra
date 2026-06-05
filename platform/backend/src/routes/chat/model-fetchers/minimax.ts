@@ -1,4 +1,4 @@
-import { MINIMAX_MODELS } from "@shared";
+import { MINIMAX_MODELS } from "@archestra/shared";
 import type { ModelInfo } from "./types";
 
 export async function fetchMinimaxModels(): Promise<ModelInfo[]> {

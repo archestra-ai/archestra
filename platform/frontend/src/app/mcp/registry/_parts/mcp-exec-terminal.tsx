@@ -5,7 +5,7 @@ import type {
   McpExecErrorMessage,
   McpExecOutputMessage,
   McpExecStartedMessage,
-} from "@shared";
+} from "@archestra/shared";
 import { Copy } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";

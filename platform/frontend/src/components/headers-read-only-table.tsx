@@ -9,7 +9,6 @@ import type {
 } from "react-hook-form";
 import type { FieldScopeValue } from "@/components/field-scope-select";
 import { Button } from "@/components/ui/button";
-import { usePresetEntityName } from "@/lib/organization.query";
 
 interface HeadersReadOnlyTableProps<TFieldValues extends FieldValues> {
   form: { watch: UseFormWatch<TFieldValues> };
@@ -57,16 +56,9 @@ export function HeadersReadOnlyTable<TFieldValues extends FieldValues>({
             `${fieldNamePrefix}.${index}.promptOnInstallation` as FieldPath<TFieldValues>,
           ),
         );
-        const promptOnPreset = Boolean(
-          form.watch(
-            `${fieldNamePrefix}.${index}.promptOnPreset` as FieldPath<TFieldValues>,
-          ),
-        );
         const scope: FieldScopeValue = promptOnInstallation
           ? "installation"
-          : promptOnPreset
-            ? "preset"
-            : "static";
+          : "static";
         const value = form.watch(
           `${fieldNamePrefix}.${index}.value` as FieldPath<TFieldValues>,
         ) as string | undefined;
@@ -158,12 +150,8 @@ function ValueCell({
   scope: FieldScopeValue;
   value: string | undefined;
 }) {
-  const { singular } = usePresetEntityName();
   if (scope === "installation") {
     return <span className="text-muted-foreground">per-installation</span>;
-  }
-  if (scope === "preset") {
-    return <span className="text-muted-foreground">per-{singular}</span>;
   }
   if (!value) {
     return <span className="text-muted-foreground italic">not set</span>;

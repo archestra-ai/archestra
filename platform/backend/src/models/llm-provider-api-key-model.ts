@@ -2,10 +2,11 @@ import {
   type CompleteModelSelection,
   MODEL_MARKER_PATTERNS,
   type SupportedProvider,
-} from "@shared";
+} from "@archestra/shared";
 import { and, asc, desc, eq, inArray, or, sql } from "drizzle-orm";
 import db, { schema, withDbTransaction } from "@/database";
 import type { LlmProviderApiKey, Model } from "@/types";
+import ModelModel from "./model";
 
 /** Aggregate of an API key's linked-model count and oldest sync timestamp. */
 export interface ModelSyncState {
@@ -417,6 +418,10 @@ class LlmProviderApiKeyModelLinkModel {
    * model" fallback for resolution. Rows are ordered is_best first, then by
    * provider and model id, so the first row is a deterministic best pick.
    * `modelId` is the models.id UUID (matches the model_id FK columns).
+   *
+   * Only chat-capable, non-ignored models are returned, matching the model
+   * picker (`supportsTextChat`), so resolution never auto-selects a model the
+   * UI hides or that cannot serve chat.
    */
   static async getRankedModelsForApiKeys(
     apiKeyIds: string[],
@@ -424,9 +429,9 @@ class LlmProviderApiKeyModelLinkModel {
     if (apiKeyIds.length === 0) {
       return [];
     }
-    return db
+    const rows = await db
       .select({
-        modelId: schema.llmProviderApiKeyModelsTable.modelId,
+        model: schema.modelsTable,
         apiKeyId: schema.llmProviderApiKeyModelsTable.apiKeyId,
         isBest: schema.llmProviderApiKeyModelsTable.isBest,
       })
@@ -441,6 +446,14 @@ class LlmProviderApiKeyModelLinkModel {
         asc(schema.modelsTable.provider),
         asc(schema.modelsTable.modelId),
       );
+
+    return rows
+      .filter((row) => ModelModel.supportsTextChat(row.model))
+      .map((row) => ({
+        modelId: row.model.id,
+        apiKeyId: row.apiKeyId,
+        isBest: row.isBest,
+      }));
   }
 
   static async getBestModel(apiKeyId: string): Promise<Model | null> {
@@ -459,7 +472,7 @@ class LlmProviderApiKeyModelLinkModel {
       )
       .limit(1);
 
-    if (result?.model) {
+    if (result?.model && ModelModel.supportsTextChat(result.model)) {
       return result.model;
     }
 
@@ -468,7 +481,9 @@ class LlmProviderApiKeyModelLinkModel {
 
   /**
    * Get the "best" model for multiple API keys in two batched queries.
-   * Returns the model marked with is_best=true, or falls back to the first model.
+   * Returns the model marked with is_best=true, or falls back to the first
+   * model. Both candidates are filtered through `supportsTextChat`, so a hidden
+   * or non-chat model is never returned as a key's best.
    */
   static async getBestModelsForApiKeys(
     apiKeyIds: string[],
@@ -500,7 +515,9 @@ class LlmProviderApiKeyModelLinkModel {
 
     const modelsByApiKeyId = new Map<string, Model>();
     for (const result of bestModels) {
-      modelsByApiKeyId.set(result.apiKeyId, result.model);
+      if (ModelModel.supportsTextChat(result.model)) {
+        modelsByApiKeyId.set(result.apiKeyId, result.model);
+      }
     }
 
     const missingApiKeyIds = apiKeyIds.filter(
@@ -530,7 +547,10 @@ class LlmProviderApiKeyModelLinkModel {
       );
 
     for (const result of fallbackModels) {
-      if (!modelsByApiKeyId.has(result.apiKeyId)) {
+      if (
+        !modelsByApiKeyId.has(result.apiKeyId) &&
+        ModelModel.supportsTextChat(result.model)
+      ) {
         modelsByApiKeyId.set(result.apiKeyId, result.model);
       }
     }
@@ -539,10 +559,12 @@ class LlmProviderApiKeyModelLinkModel {
   }
 
   /**
-   * Get the first model linked to an API key (used as fallback).
+   * Get the first chat-capable, non-ignored model linked to an API key (used as
+   * fallback). Honors `supportsTextChat` so a hidden or non-chat model — e.g. a
+   * legacy completions-only model that sorts first alphabetically — is skipped.
    */
   static async getFirstModelForApiKey(apiKeyId: string): Promise<Model | null> {
-    const [result] = await db
+    const rows = await db
       .select({ model: schema.modelsTable })
       .from(schema.llmProviderApiKeyModelsTable)
       .innerJoin(
@@ -550,10 +572,11 @@ class LlmProviderApiKeyModelLinkModel {
         eq(schema.llmProviderApiKeyModelsTable.modelId, schema.modelsTable.id),
       )
       .where(eq(schema.llmProviderApiKeyModelsTable.apiKeyId, apiKeyId))
-      .orderBy(asc(schema.modelsTable.modelId))
-      .limit(1);
+      .orderBy(asc(schema.modelsTable.modelId));
 
-    return result?.model ?? null;
+    return (
+      rows.find((row) => ModelModel.supportsTextChat(row.model))?.model ?? null
+    );
   }
 }
 

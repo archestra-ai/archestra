@@ -184,7 +184,7 @@ function NgrokSetupDialog({
   const [authToken, setAuthToken] = useState("");
 
   const token = authToken || "<your-ngrok-auth-token>";
-  const dockerCommandUnix = `docker run -p 9000:9000 -p 3000:3000 \\
+  const dockerCommandUnix = `docker run -p 127.0.0.1:9000:9000 -p 127.0.0.1:3000:3000 \\
   -e ARCHESTRA_QUICKSTART=true \\
   -e ARCHESTRA_NGROK_AUTH_TOKEN=${token} \\
   -v /var/run/docker.sock:/var/run/docker.sock \\
@@ -192,7 +192,7 @@ function NgrokSetupDialog({
   -v archestra-app-data:/app/data \\
   archestra/platform`;
 
-  const dockerCommandWindows = `docker run -p 9000:9000 -p 3000:3000 \`
+  const dockerCommandWindows = `docker run -p 127.0.0.1:9000:9000 -p 127.0.0.1:3000:3000 \`
   -e ARCHESTRA_QUICKSTART=true \`
   -e ARCHESTRA_NGROK_AUTH_TOKEN=${token} \`
   -v /var/run/docker.sock:/var/run/docker.sock \`

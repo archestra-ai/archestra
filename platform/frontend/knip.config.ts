@@ -6,7 +6,7 @@ const config: KnipConfig = {
   ignore: [],
   ignoreDependencies: [
     // Workspace dependency - resolved by pnpm
-    "@shared",
+    "@archestra/shared",
     // Used by Sentry for instrumentation
     "import-in-the-middle",
     "require-in-the-middle",

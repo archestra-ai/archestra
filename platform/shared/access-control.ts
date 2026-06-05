@@ -51,10 +51,11 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   // MCP
   mcpGateway: ["read", "create", "update", "delete", "team-admin", "admin"],
   toolPolicy: ["read", "create", "update", "delete"],
-  mcpRegistry: ["read", "create", "update", "delete"],
+  mcpRegistry: ["read", "create", "update", "delete", "team-admin"],
   mcpServerInstallation: ["read", "create", "update", "delete", "admin"],
   mcpServerInstallationRequest: ["read", "create", "update", "delete", "admin"],
   environment: ["admin", "deploy-to-restricted"],
+  githubAppConfig: ["read", "create", "update", "delete"],
 
   // Knowledge
   knowledgeFile: ["read", "create", "update", "delete", "admin"],
@@ -112,10 +113,11 @@ export const editorPermissions: Record<Resource, Action[]> = {
   // MCP
   mcpGateway: ["read", "create", "update", "delete", "team-admin"],
   toolPolicy: ["read", "create", "update", "delete"],
-  mcpRegistry: ["read", "create", "update", "delete"],
+  mcpRegistry: ["read", "create", "update", "delete", "team-admin"],
   mcpServerInstallation: ["read", "create", "update", "delete"],
   mcpServerInstallationRequest: ["read", "create", "update", "delete"],
   environment: ["admin"],
+  githubAppConfig: ["read", "create", "update", "delete"],
 
   // Knowledge
   knowledgeFile: ["read", "create", "update", "delete"],
@@ -177,6 +179,9 @@ export const memberPermissions: Record<Resource, Action[]> = {
   mcpServerInstallation: ["read", "create", "delete"],
   mcpServerInstallationRequest: ["read", "create", "update"],
   environment: [],
+  // minting installation tokens from a stored App credential is privileged;
+  // default members get no access — editors and admins manage/use App configs
+  githubAppConfig: [],
 
   // Knowledge
   knowledgeFile: ["read"],
@@ -281,6 +286,7 @@ export const permissionDescriptions: Record<string, string> = {
   "mcpRegistry:create": "Add servers to the MCP registry",
   "mcpRegistry:update": "Modify MCP registry entries",
   "mcpRegistry:delete": "Remove servers from the MCP registry",
+  "mcpRegistry:team-admin": "Manage team assignments for MCP registry entries",
   "mcpServerInstallation:read": "View installed MCP servers and their status",
   "mcpServerInstallation:create": "Install MCP servers from the registry",
   "mcpServerInstallation:update": "Modify installed MCP server configuration",
@@ -298,6 +304,10 @@ export const permissionDescriptions: Record<string, string> = {
     "Create, edit, and delete deployment environments (everyone can view them)",
   "environment:deploy-to-restricted":
     "Deploy catalog items to restricted environments",
+  "githubAppConfig:read": "View GitHub App configurations",
+  "githubAppConfig:create": "Create GitHub App configurations",
+  "githubAppConfig:update": "Modify GitHub App configurations",
+  "githubAppConfig:delete": "Delete GitHub App configurations",
 
   // LLM
   "llmProxy:read": "View and list LLM proxies",
@@ -592,15 +602,6 @@ export const requiredEndpointPermissionsMap: Partial<
   },
   [RouteId.GetK8sImagePullSecrets]: {
     mcpRegistry: ["read"],
-  },
-  [RouteId.GetCatalogChildren]: {
-    mcpRegistry: ["read"],
-  },
-  [RouteId.CreateCatalogChild]: {
-    mcpRegistry: ["create"],
-  },
-  [RouteId.UpdateCatalogChild]: {
-    mcpRegistry: ["update"],
   },
   [RouteId.GetMcpServers]: {
     mcpServerInstallation: ["read"],
@@ -953,9 +954,6 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.UpdateConnectionSettings]: {
     organizationSettings: ["update"],
   },
-  [RouteId.ListMcpPresetEntries]: {
-    mcpRegistry: ["read"],
-  },
   // Listing environments is available to any authenticated user (read is ungated).
   [RouteId.ListEnvironments]: {},
   [RouteId.CreateEnvironment]: {
@@ -972,6 +970,21 @@ export const requiredEndpointPermissionsMap: Partial<
   },
   [RouteId.GetK8sCapabilities]: {
     environment: ["admin"],
+  },
+  [RouteId.ListGithubAppConfigs]: {
+    githubAppConfig: ["read"],
+  },
+  [RouteId.GetGithubAppConfig]: {
+    githubAppConfig: ["read"],
+  },
+  [RouteId.CreateGithubAppConfig]: {
+    githubAppConfig: ["create"],
+  },
+  [RouteId.UpdateGithubAppConfig]: {
+    githubAppConfig: ["update"],
+  },
+  [RouteId.DeleteGithubAppConfig]: {
+    githubAppConfig: ["delete"],
   },
   [RouteId.UpdateKnowledgeSettings]: {
     knowledgeSettings: ["update"],
@@ -1303,5 +1316,7 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/settings/roles": { ac: ["read"] },
   "/settings/identity-providers": { identityProvider: ["read"] },
   "/settings/secrets": { secret: ["read"] },
+  "/settings/integrations": { githubAppConfig: ["read"] },
+  "/settings/integrations/github-apps": { githubAppConfig: ["read"] },
   "/settings/organization": { organizationSettings: ["read"] },
 };

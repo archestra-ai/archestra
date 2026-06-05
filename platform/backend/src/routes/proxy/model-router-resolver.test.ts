@@ -1,4 +1,4 @@
-import { ApiError } from "@shared";
+import { ApiError } from "@archestra/shared";
 import { vi } from "vitest";
 import { ModelModel } from "@/models";
 import { afterEach, describe, expect, test } from "@/test";

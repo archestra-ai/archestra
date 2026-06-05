@@ -534,6 +534,50 @@ describe("identity provider routes", () => {
       expect(response.json()).not.toHaveProperty("idToken");
     });
 
+    test("returns decoded access token claims without exposing the raw token", async ({
+      makeAccount,
+      makeIdentityProvider,
+    }) => {
+      const idp = await makeIdentityProvider(organizationId, {
+        providerId: "access-claims-provider",
+        oidcConfig: {
+          clientId: "test-client",
+          clientSecret: "test-secret",
+          issuer: "https://idp.example.com",
+          pkce: false,
+          discoveryEndpoint:
+            "https://idp.example.com/.well-known/openid-configuration",
+        },
+      });
+
+      await makeAccount(user.id, {
+        providerId: "access-claims-provider",
+        accessToken: createMockIdToken({
+          aud: "exchange-client-id",
+          scp: "api.read",
+          oid: "user-object-id",
+        }),
+        accessTokenExpiresAt: new Date("2026-06-04T18:00:00.000Z"),
+      });
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/identity-providers/${idp.id}/latest-id-token-claims`,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({
+        providerId: "access-claims-provider",
+        claims: null,
+        accessTokenClaims: {
+          aud: "exchange-client-id",
+          scp: "api.read",
+          oid: "user-object-id",
+        },
+      });
+      expect(response.json()).not.toHaveProperty("accessToken");
+    });
+
     test("does not expose another user's token claims", async ({
       makeAccount,
       makeIdentityProvider,

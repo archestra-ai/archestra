@@ -1,6 +1,6 @@
 "use client";
 
-import type { archestraApiTypes, InteractionSource } from "@shared";
+import type { archestraApiTypes, InteractionSource } from "@archestra/shared";
 import { AgentIcon } from "@/components/agent-icon";
 import { SourceLabel } from "@/components/source-badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";

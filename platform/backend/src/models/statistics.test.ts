@@ -1,4 +1,4 @@
-import type { StatisticsTimeFrame } from "@shared";
+import type { StatisticsTimeFrame } from "@archestra/shared";
 import { describe, expect, test } from "@/test";
 import AgentModel from "./agent";
 import StatisticsModel from "./statistics";

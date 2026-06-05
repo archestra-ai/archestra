@@ -1,4 +1,4 @@
-import { E2eTestId } from "@shared";
+import { E2eTestId } from "@archestra/shared";
 import {
   Clock,
   Copy,

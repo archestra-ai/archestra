@@ -1,6 +1,9 @@
 // biome-ignore-all lint/suspicious/noExplicitAny: test
 
-import { ARCHESTRA_TOOL_SHORT_NAMES, getArchestraToolFullName } from "@shared";
+import {
+  ARCHESTRA_TOOL_SHORT_NAMES,
+  getArchestraToolFullName,
+} from "@archestra/shared";
 import { vi } from "vitest";
 import { archestraMcpBranding } from "@/archestra-mcp-server";
 import { UserModel } from "@/models";

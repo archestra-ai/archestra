@@ -1,4 +1,7 @@
-import { parseFullToolName, SKILL_ARCHESTRA_TOOL_SHORT_NAMES } from "@shared";
+import {
+  parseFullToolName,
+  SKILL_ARCHESTRA_TOOL_SHORT_NAMES,
+} from "@archestra/shared";
 import { promptNeedsRendering } from "@/templating";
 import type { ResourceVisibilityScope } from "@/types/visibility";
 

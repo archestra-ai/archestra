@@ -8,7 +8,7 @@ import {
   MCP_DEFAULT_LOG_LINES,
   type McpDeploymentStatusEntry,
   type ServerWebSocketMessage,
-} from "@shared";
+} from "@archestra/shared";
 import type { WebSocket, WebSocketServer } from "ws";
 import { WebSocket as WS, WebSocketServer as WSS } from "ws";
 import { betterAuth, hasPermission } from "@/auth";

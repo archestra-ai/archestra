@@ -4,7 +4,7 @@ import {
   TOOL_CREATE_SKILL_SANDBOX_FULL_NAME,
   TOOL_GET_SKILL_SANDBOX_ARTIFACT_FULL_NAME,
   TOOL_RUN_SKILL_COMMAND_FULL_NAME,
-} from "@shared";
+} from "@archestra/shared";
 import config from "@/config";
 import {
   ConversationModel,

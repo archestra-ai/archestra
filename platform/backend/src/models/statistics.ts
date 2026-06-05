@@ -1,4 +1,4 @@
-import type { StatisticsTimeFrame } from "@shared";
+import type { StatisticsTimeFrame } from "@archestra/shared";
 import { and, eq, gte, inArray, lte, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";

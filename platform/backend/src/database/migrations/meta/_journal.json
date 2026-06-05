@@ -1926,6 +1926,13 @@
       "when": 1780493123672,
       "tag": "0274_futuristic_madelyne_pryor",
       "breakpoints": true
+    },
+    {
+      "idx": 275,
+      "version": "7",
+      "when": 1780571335736,
+      "tag": "0275_breezy_lord_hawal",
+      "breakpoints": true
     }
   ]
 }

@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { ResourceVisibilityScope } from "@shared";
+import type { ResourceVisibilityScope } from "@archestra/shared";
 import { and, count, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
 import db, { schema, withDbTransaction } from "@/database";
 import type { UploadedFileProcessingStatus } from "@/types";

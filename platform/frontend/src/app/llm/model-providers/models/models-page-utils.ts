@@ -1,4 +1,4 @@
-import { compareModelsForDisplay } from "@shared";
+import { compareModelsForDisplay } from "@archestra/shared";
 
 export type ModelsPageModelTypeFilter = "all" | "chat" | "embedding";
 

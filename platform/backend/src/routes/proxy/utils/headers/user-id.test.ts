@@ -1,4 +1,4 @@
-import { USER_ID_HEADER } from "@shared";
+import { USER_ID_HEADER } from "@archestra/shared";
 import { describe, expect, test } from "@/test";
 import { getUser } from "./user-id";
 

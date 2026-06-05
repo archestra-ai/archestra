@@ -1,4 +1,4 @@
-import { TOOL_RUN_PYTHON_FULL_NAME } from "@shared";
+import { TOOL_RUN_PYTHON_FULL_NAME } from "@archestra/shared";
 import { CODE_RUNTIME_LIMITS } from "@/code-runtime/types";
 import { describe, expect, test } from "@/test";
 import {

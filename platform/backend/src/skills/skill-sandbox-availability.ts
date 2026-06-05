@@ -3,7 +3,7 @@ import {
   TOOL_CREATE_SKILL_SANDBOX_SHORT_NAME,
   TOOL_GET_SKILL_SANDBOX_ARTIFACT_SHORT_NAME,
   TOOL_RUN_SKILL_COMMAND_SHORT_NAME,
-} from "@shared";
+} from "@archestra/shared";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import type { SkillPermissionChecker } from "@/auth/skill-permissions";
 import config from "@/config";

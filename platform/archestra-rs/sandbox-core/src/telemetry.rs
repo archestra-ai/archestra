@@ -69,7 +69,6 @@ mod imp {
     use opentelemetry_otlp::{LogExporter, SpanExporter, WithExportConfig, WithHttpConfig};
     use opentelemetry_sdk::Resource;
     use opentelemetry_sdk::propagation::TraceContextPropagator;
-    use opentelemetry_sdk::runtime;
     use tracing_subscriber::filter::LevelFilter;
     use tracing_subscriber::prelude::*;
     use tracing_subscriber::{EnvFilter, Layer};
@@ -81,8 +80,8 @@ mod imp {
     // keep both providers alive for the process lifetime: dropping either tears
     // down its batch-export task, and they're also what `flush` force-flushes on
     // shutdown. the tracer is additionally registered globally for propagation.
-    static TRACER_PROVIDER: OnceLock<opentelemetry_sdk::trace::TracerProvider> = OnceLock::new();
-    static LOGGER_PROVIDER: OnceLock<opentelemetry_sdk::logs::LoggerProvider> = OnceLock::new();
+    static TRACER_PROVIDER: OnceLock<opentelemetry_sdk::trace::SdkTracerProvider> = OnceLock::new();
+    static LOGGER_PROVIDER: OnceLock<opentelemetry_sdk::logs::SdkLoggerProvider> = OnceLock::new();
     static INIT: Once = Once::new();
 
     pub(super) fn init() {
@@ -97,10 +96,12 @@ mod imp {
     fn try_init() -> Result<(), Box<dyn std::error::Error>> {
         let base = base_endpoint();
         let headers = auth_headers();
-        let resource = Resource::new(vec![
-            KeyValue::new("service.name", SERVICE_NAME),
-            KeyValue::new("service.version", env!("CARGO_PKG_VERSION")),
-        ]);
+        let resource = Resource::builder_empty()
+            .with_attributes([
+                KeyValue::new("service.name", SERVICE_NAME),
+                KeyValue::new("service.version", env!("CARGO_PKG_VERSION")),
+            ])
+            .build();
 
         // --- traces ---
         let mut span_builder = SpanExporter::builder()
@@ -109,8 +110,8 @@ mod imp {
         if let Some(h) = headers.clone() {
             span_builder = span_builder.with_headers(h);
         }
-        let tracer_provider = opentelemetry_sdk::trace::TracerProvider::builder()
-            .with_batch_exporter(span_builder.build()?, runtime::Tokio)
+        let tracer_provider = opentelemetry_sdk::trace::SdkTracerProvider::builder()
+            .with_batch_exporter(span_builder.build()?)
             .with_resource(resource.clone())
             .build();
         let tracer = tracer_provider.tracer(SERVICE_NAME);
@@ -125,8 +126,8 @@ mod imp {
         if let Some(h) = headers {
             log_builder = log_builder.with_headers(h);
         }
-        let logger_provider = opentelemetry_sdk::logs::LoggerProvider::builder()
-            .with_batch_exporter(log_builder.build()?, runtime::Tokio)
+        let logger_provider = opentelemetry_sdk::logs::SdkLoggerProvider::builder()
+            .with_batch_exporter(log_builder.build()?)
             .with_resource(resource)
             .build();
         let log_bridge = OpenTelemetryTracingBridge::new(&logger_provider);
@@ -167,19 +168,15 @@ mod imp {
     }
 
     pub(super) fn flush() {
-        if let Some(provider) = TRACER_PROVIDER.get() {
-            for result in provider.force_flush() {
-                if let Err(err) = result {
-                    eprintln!("sandbox-rs: trace flush failed: {err}");
-                }
-            }
+        if let Some(provider) = TRACER_PROVIDER.get()
+            && let Err(err) = provider.force_flush()
+        {
+            eprintln!("sandbox-rs: trace flush failed: {err}");
         }
-        if let Some(provider) = LOGGER_PROVIDER.get() {
-            for result in provider.force_flush() {
-                if let Err(err) = result {
-                    eprintln!("sandbox-rs: log flush failed: {err}");
-                }
-            }
+        if let Some(provider) = LOGGER_PROVIDER.get()
+            && let Err(err) = provider.force_flush()
+        {
+            eprintln!("sandbox-rs: log flush failed: {err}");
         }
     }
 

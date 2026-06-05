@@ -1,4 +1,4 @@
-import { ChatErrorCode, type ChatErrorResponse } from "@shared";
+import { ChatErrorCode, type ChatErrorResponse } from "@archestra/shared";
 import { describe, expect, test } from "@/test";
 import ConversationChatErrorModel from "./conversation-chat-error";
 

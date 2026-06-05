@@ -9,11 +9,11 @@ import {
   type Resource,
   roleDescriptions,
   TimeInMs,
-} from "@shared";
+} from "@archestra/shared";
 import {
   allAvailableActions,
   predefinedPermissionsMap,
-} from "@shared/access-control";
+} from "@archestra/shared/access-control";
 import { and, eq, getTableColumns, ilike, sql } from "drizzle-orm";
 import { LRUCacheManager } from "@/cache-manager";
 import db, { schema } from "@/database";

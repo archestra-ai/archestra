@@ -543,3 +543,11 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @ozantaybas
 - @839194950
 - @Ashlok2003
+- @jstortoise
+- @samuelsattler
+- @ChiragArora31
+- @sisiruowan
+- @mindtrovertlabs-sketch
+- @sibsfinx
+- @akkikumar72
+- @nirav-gondaliya

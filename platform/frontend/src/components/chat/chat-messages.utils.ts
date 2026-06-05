@@ -3,7 +3,7 @@ import {
   type ArchestraToolShortName,
   isBrowserMcpTool,
   parseFullToolName,
-} from "@shared";
+} from "@archestra/shared";
 import type { DynamicToolUIPart, ToolUIPart } from "ai";
 import {
   getToolErrorText,

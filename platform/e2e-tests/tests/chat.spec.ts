@@ -1,5 +1,5 @@
+import { E2eTestId } from "@archestra/shared";
 import type { Page } from "@playwright/test";
-import { E2eTestId } from "@shared";
 import { WIREMOCK_BASE_URL } from "../consts";
 import {
   ensureWireMockAnthropicChatProvider,
@@ -183,7 +183,9 @@ const testConfigs: ChatProviderTestConfig[] = [
 
 // cerebras: model selector intermittently never renders in CI (15s timeout).
 // Tracked alongside MQ flakiness from https://github.com/archestra-ai/archestra/actions/runs/26282803981.
-const skippedProviders = new Set<string>(["cerebras"]);
+// cohere: mocked streaming response intermittently never becomes visible in CI (90s timeout),
+// failing all retries. Tracked from https://github.com/archestra-ai/archestra/actions/runs/26950850016.
+const skippedProviders = new Set<string>(["cerebras", "cohere"]);
 
 for (const config of testConfigs) {
   test.describe(`Chat-UI-${config.providerName}`, () => {

@@ -6,7 +6,7 @@ import {
   MAX_DOMAIN_LENGTH,
   MAX_PASSTHROUGH_HEADERS,
   MAX_SUGGESTED_PROMPTS,
-} from "@shared";
+} from "@archestra/shared";
 import {
   createInsertSchema,
   createSelectSchema,

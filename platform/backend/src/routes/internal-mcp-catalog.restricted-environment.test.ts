@@ -1,4 +1,4 @@
-import type { Permissions } from "@shared";
+import type { Permissions } from "@archestra/shared";
 import { type Mock, vi } from "vitest";
 import { InternalMcpCatalogModel } from "@/models";
 import type { FastifyInstanceWithZod } from "@/server";

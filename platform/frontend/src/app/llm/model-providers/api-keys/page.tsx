@@ -6,7 +6,7 @@ import {
   formatSecretStorageType,
   isProviderApiKeyOptional,
   type ResourceVisibilityScope,
-} from "@shared";
+} from "@archestra/shared";
 import type { ColumnDef } from "@tanstack/react-table";
 import {
   AlertTriangle,

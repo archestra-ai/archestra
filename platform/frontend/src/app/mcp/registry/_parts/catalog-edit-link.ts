@@ -1,4 +1,4 @@
-import { MCP_CATALOG_EDIT_QUERY_PARAM } from "@shared";
+import { MCP_CATALOG_EDIT_QUERY_PARAM } from "@archestra/shared";
 
 /**
  * Search string (without leading `?`) with `?edit=<id>` set, preserving all

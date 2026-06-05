@@ -3,7 +3,7 @@ import {
   type archestraApiTypes,
   type ResourceVisibilityScope,
   type SupportedProvider,
-} from "@shared";
+} from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { handleApiError, toApiError } from "@/lib/utils";

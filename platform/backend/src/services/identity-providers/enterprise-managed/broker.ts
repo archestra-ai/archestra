@@ -1,4 +1,4 @@
-import { OAUTH_GRANT_TYPE, OAUTH_TOKEN_TYPE } from "@shared";
+import { OAUTH_GRANT_TYPE, OAUTH_TOKEN_TYPE } from "@archestra/shared";
 import type { TokenAuthContext } from "@/clients/mcp-client";
 import logger from "@/logging";
 import { resolveEnterpriseAssertion } from "@/services/identity-providers/enterprise-managed/assertion-resolver";

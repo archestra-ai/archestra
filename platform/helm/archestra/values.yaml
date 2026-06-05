@@ -9,7 +9,7 @@ archestra:
   # We use the "generic" updater with inline annotation to preserve YAML comments throughout the file.
   # See: https://github.com/googleapis/release-please/blob/main/docs/customizing.md#updating-arbitrary-files
   # See: https://github.com/googleapis/release-please/issues/2195
-  imageTag: "1.2.55" # x-release-please-version
+  imageTag: "1.2.58" # x-release-please-version
 
   # Image pull policy for the Archestra container
   # Options: Always, IfNotPresent, Never
@@ -269,19 +269,9 @@ archestra:
       timeoutSeconds: 300
 
     # Worker pods only: block startup until the web Deployment has applied
-    # database migrations. The web pod runs `pnpm db:migrate` before it starts
-    # listening on port 9000, so a successful TCP connect to the platform
-    # Service means the schema is ready. Without this gate the worker boots in
-    # parallel with migrations, queries tables that do not exist yet (e.g.
-    # "organization"), crashes, and only recovers on a pod restart.
-    #
-    # This is the gate for *fresh installs* (no previous web pods exist, so
-    # Service reachability is an accurate signal). *Upgrades* are covered by the
-    # pre-upgrade migration Job (see archestra.migrationJob), because during an
-    # upgrade the Service still routes to the previous revision's web pods.
-    #
-    # Disable this if migrations are applied out-of-band before the worker
-    # Deployment is rolled out.
+    # database migrations. This gate covers fresh installs. Upgrades are covered
+    # by archestra.migrationJob, because the platform Service can still route to
+    # previous-revision web pods while the new release is rolling out.
     waitForMigrations:
       enabled: true
       # Maximum seconds to wait for the web Deployment to finish migrations
@@ -322,29 +312,37 @@ archestra:
   # Database migration Job.
   #
   # Runs `pnpm db:migrate` as a Helm pre-upgrade hook so the target version's
-  # schema is applied before the web and worker Deployments roll. This closes
-  # the rolling-upgrade gap that the worker's wait-for-migrations init container
-  # cannot cover: during an upgrade the platform Service still routes to the
-  # previous revision's web pods, so a reachability check passes before the new
-  # migrations have run.
+  # schema is applied before web and worker Deployments roll. Disable this if
+  # migrations are applied by an external deployment pipeline.
   #
-  # Intentionally pre-upgrade only (not pre-install): on a fresh install the
-  # bundled PostgreSQL subchart does not exist yet when pre-install hooks run,
-  # so the Job would deadlock. Fresh installs are covered by the web pod running
-  # migrations on startup (the worker waits via the wait-for-migrations init
-  # container).
-  #
-  # Disable this if migrations are applied by an external pipeline.
+  # Most external Postgres deployments should not need any migrationJob env
+  # settings. Prefer setting postgresql.external_database_url to a complete
+  # connection string; the chart stores it in a Secret and passes it to the
+  # migration Job automatically.
   migrationJob:
     enabled: true
-    # Number of retries before the Job is marked failed (which aborts the
-    # `helm upgrade`).
+    # Number of retries before the Job is marked failed and aborts the upgrade.
     backoffLimit: 3
     # Hard cap on Job runtime. Set to null to disable the deadline.
     activeDeadlineSeconds: 600
     # Resource requests/limits for the migration container.
     # If not set, inherits from archestra.resources.
     resources: {}
+    # Extra environment variables rendered before the shared platform env. Use
+    # this only when ARCHESTRA_DATABASE_URL contains Kubernetes $(VAR)
+    # references, such as $(PGPASSWORD), that the hook must expand.
+    env: {}
+    # Extra secret-backed environment variables rendered before shared env. This
+    # is the recommended hook-only option when ARCHESTRA_DATABASE_URL contains
+    # $(PGPASSWORD):
+    #   - name: PGPASSWORD
+    #     secretName: my-db-secret
+    #     secretKey: password
+    envFromSecrets: []
+    # Extra valueFrom environment variables rendered before shared env.
+    envWithValueFrom: []
+    # Extra envFrom entries for the migration Job.
+    envFrom: []
 
   # Resource requests and limits for the Archestra container
   # See: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/

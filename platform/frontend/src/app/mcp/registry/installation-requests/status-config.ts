@@ -1,4 +1,4 @@
-import type { archestraApiTypes } from "@shared";
+import type { archestraApiTypes } from "@archestra/shared";
 import { CheckCircle, Clock, XCircle } from "lucide-react";
 
 type RequestStatus = NonNullable<

@@ -1,5 +1,8 @@
 import { createHmac } from "node:crypto";
-import { SLACK_REQUIRED_BOT_SCOPES, SLACK_SLASH_COMMANDS } from "@shared";
+import {
+  SLACK_REQUIRED_BOT_SCOPES,
+  SLACK_SLASH_COMMANDS,
+} from "@archestra/shared";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { CacheKey, cacheManager } from "@/cache-manager";
 import SlackProvider from "./slack-provider";

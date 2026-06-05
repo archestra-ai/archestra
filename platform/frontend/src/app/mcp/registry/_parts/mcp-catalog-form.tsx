@@ -1,7 +1,7 @@
 "use client";
 
+import { type archestraApiTypes, DocsPage } from "@archestra/shared";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { type archestraApiTypes, DocsPage } from "@shared";
 import {
   Ban,
   Code,
@@ -349,7 +349,6 @@ export function McpCatalogForm({
           fieldName: undefined,
           headerName: "Authorization",
           promptOnInstallation: true,
-          promptOnPreset: false,
           required: true,
           value: "",
           description: "",
@@ -520,6 +519,12 @@ export function McpCatalogForm({
   const { data: isAdmin } = useHasPermissions({
     mcpServerInstallation: ["admin"],
   });
+  // Sharing to teams needs mcpRegistry:team-admin (admins bypass) plus team:read
+  // to populate the picker. Mirrors the agent/skill visibility gating.
+  const { data: isTeamAdmin } = useHasPermissions({
+    mcpRegistry: ["team-admin"],
+  });
+  const { data: canReadTeams } = useHasPermissions({ team: ["read"] });
   const { data: teams } = useTeams();
   const { data: environmentList } = useEnvironments();
   const environments = environmentList?.environments;
@@ -540,6 +545,10 @@ export function McpCatalogForm({
   const hasCustomEnvironmentOptions = accessibleEnvironments.length > 0;
   const canManageEnvironments = hasEnvAdmin ?? false;
   const currentScope = form.watch("scope");
+  const canShareWithTeams = (isAdmin ?? false) || (isTeamAdmin ?? false);
+  // Shared items are one-way: an item that is already team/org-scoped cannot be
+  // demoted back to personal (mirrors the agent dialog).
+  const initialScope = initialValues?.scope;
   const enterpriseAuthDisabledReason: ReactNode | null =
     !isEnterpriseCoreEnabled
       ? "Available with the Enterprise Core license."
@@ -573,16 +582,20 @@ export function McpCatalogForm({
         label: "Personal",
         description: "Only you can access this MCP server.",
         icon: Lock,
+        disabled: initialScope != null && initialScope !== "personal",
+        disabledReason: "Shared MCP servers cannot be made personal.",
       },
       {
         value: "team",
         label: "Teams",
         description: "Share this MCP server with selected teams.",
         icon: Users,
-        disabled: !isAdmin || !teams?.length,
-        disabledReason: !isAdmin
-          ? "Only admins can assign MCP servers to teams."
-          : "Create a team first to share this MCP server.",
+        disabled: !canShareWithTeams || !canReadTeams || !teams?.length,
+        disabledReason: !canReadTeams
+          ? "Team sharing is unavailable without team:read permission."
+          : !canShareWithTeams
+            ? "You need mcpRegistry:team-admin permission to share with teams."
+            : "Create a team first to share this MCP server.",
       },
       {
         value: "org",
@@ -593,7 +606,7 @@ export function McpCatalogForm({
         disabledReason: "Only admins can make MCP servers organization-wide.",
       },
     ],
-    [isAdmin, teams],
+    [isAdmin, canShareWithTeams, canReadTeams, teams, initialScope],
   );
 
   // Check if BYOS feature is available (enterprise license)
@@ -1840,7 +1853,7 @@ export function McpCatalogForm({
                                   render={({ field }) => (
                                     <FormItem>
                                       <FormLabel>
-                                        Redirect URIs{" "}
+                                        MCP OAuth callback URIs{" "}
                                         <span className="text-destructive">
                                           *
                                         </span>
@@ -1853,7 +1866,15 @@ export function McpCatalogForm({
                                         />
                                       </FormControl>
                                       <FormDescription>
-                                        Comma-separated list of redirect URIs
+                                        Use {appName}'s MCP install callback,
+                                        usually{" "}
+                                        <code>
+                                          {typeof window !== "undefined"
+                                            ? `${window.location.origin}/oauth-callback`
+                                            : "https://app.example.com/oauth-callback"}
+                                        </code>
+                                        . Do not use the SSO callback URL under{" "}
+                                        <code>/api/auth/sso/callback</code>.
                                       </FormDescription>
                                       <FormMessage />
                                     </FormItem>
@@ -2451,7 +2472,6 @@ type AdditionalHeader = {
   description?: string;
   includeBearerPrefix?: boolean;
   promptOnInstallation?: boolean;
-  promptOnPreset?: boolean;
 };
 
 /**
@@ -2484,7 +2504,6 @@ function deriveAdditionalHeaders(userConfig: unknown): AdditionalHeader[] {
         cfg.promptOnInstallation === undefined
           ? true
           : Boolean(cfg.promptOnInstallation),
-      promptOnPreset: Boolean(cfg.promptOnPreset),
     });
   }
   return out;
@@ -2537,10 +2556,10 @@ function additionalHeadersChangeRequiresReinstall(
     if ((p.headerName ?? "") !== (n.headerName ?? "")) return true; // Routing
     if (Boolean(p.sensitive) !== Boolean(n.sensitive)) return true; // Storage
     // Static header value rotation. `value` only matters at runtime
-    // when the header is fully static (no install or preset prompt) —
-    // for prompted headers it's just a placeholder.
-    const wasStatic = !p.promptOnInstallation && !p.promptOnPreset;
-    const isStatic = !n.promptOnInstallation && !n.promptOnPreset;
+    // when the header is fully static (no install prompt) — for prompted
+    // headers it's just a placeholder.
+    const wasStatic = !p.promptOnInstallation;
+    const isStatic = !n.promptOnInstallation;
     if (wasStatic && isStatic && (p.value ?? "") !== (n.value ?? "")) {
       return true;
     }
@@ -2663,14 +2682,9 @@ function readHeaderRowAsDraft(
 ): HeaderDraft {
   const row = form.getValues(`additionalHeaders.${index}`);
   const promptOnInstallation = Boolean(row?.promptOnInstallation);
-  const promptOnPreset = Boolean(row?.promptOnPreset);
   return {
     headerName: row?.headerName ?? "",
-    scope: promptOnInstallation
-      ? "installation"
-      : promptOnPreset
-        ? "preset"
-        : "static",
+    scope: promptOnInstallation ? "installation" : "static",
     required: Boolean(row?.required),
     value: row?.value ?? "",
     description: row?.description ?? "",
@@ -2698,7 +2712,6 @@ function headerDraftToRow(draft: HeaderDraft) {
     fieldName: undefined,
     headerName: draft.headerName,
     promptOnInstallation: draft.scope === "installation",
-    promptOnPreset: draft.scope === "preset",
     required: draft.scope === "installation" ? draft.required : false,
     value: draft.scope === "static" ? draft.value : "",
     description: draft.description,
@@ -2723,7 +2736,6 @@ function applyHeaderDraftToRow(
     );
   set("headerName", draft.headerName);
   set("promptOnInstallation", draft.scope === "installation");
-  set("promptOnPreset", draft.scope === "preset");
   set("required", draft.scope === "installation" ? draft.required : false);
   set("value", draft.scope === "static" ? draft.value : "");
   set("description", draft.description);

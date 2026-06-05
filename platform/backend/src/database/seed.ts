@@ -15,7 +15,7 @@ import {
   type SupportedProvider,
   SupportedProviders,
   testMcpServerCommand,
-} from "@shared";
+} from "@archestra/shared";
 import { and, eq, inArray, isNull } from "drizzle-orm";
 import config, { getProviderEnvApiKey } from "@/config";
 import db, { schema, withDbTransaction } from "@/database";

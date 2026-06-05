@@ -1,4 +1,4 @@
-import { LINKED_IDP_SSO_MODE } from "@shared";
+import { LINKED_IDP_SSO_MODE } from "@archestra/shared";
 import { z } from "zod";
 import { type Transaction, withDbTransaction } from "@/database";
 import logger from "@/logging";

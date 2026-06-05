@@ -1,6 +1,6 @@
 "use client";
 
-import { isProviderApiKeyOptional } from "@shared";
+import { isProviderApiKeyOptional } from "@archestra/shared";
 import {
   ArrowUpRight,
   Info,

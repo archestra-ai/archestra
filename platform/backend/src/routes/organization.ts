@@ -3,7 +3,7 @@ import {
   addNomicTaskPrefix,
   isModelSelectionComplete,
   RouteId,
-} from "@shared";
+} from "@archestra/shared";
 import { and, eq, inArray, like } from "drizzle-orm";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";

@@ -2,7 +2,7 @@ import {
   isSupportedProvider,
   type SupportedProvider,
   SupportedProviders,
-} from "@shared";
+} from "@archestra/shared";
 import { LlmProviderApiKeyModelLinkModel, ModelModel } from "@/models";
 import { ApiError, type Model } from "@/types";
 

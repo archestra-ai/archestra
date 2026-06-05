@@ -15,7 +15,7 @@
 import {
   isLargeResultBrowserMcpTool,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
-} from "@shared";
+} from "@archestra/shared";
 import logger from "@/logging";
 import type { ChatMessage, ChatMessagePart } from "@/types";
 import {

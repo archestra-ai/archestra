@@ -7,7 +7,7 @@ import {
   GeminiErrorReasons,
   OpenAIErrorTypes,
   ZhipuaiErrorTypes,
-} from "@shared";
+} from "@archestra/shared";
 import { vi } from "vitest";
 import { beforeEach, describe, expect, it } from "@/test";
 

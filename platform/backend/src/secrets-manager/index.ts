@@ -1,4 +1,4 @@
-import { SecretsManagerType, SupportedProviders } from "@shared";
+import { SecretsManagerType, SupportedProviders } from "@archestra/shared";
 import {
   type AnthropicWorkloadIdentityStoredConfig,
   encodeAnthropicWorkloadIdentityMarker,

@@ -1,4 +1,4 @@
-import { type DocsPage, getDocsUrl, WEBSITE_URL } from "@shared";
+import { type DocsPage, getDocsUrl, WEBSITE_URL } from "@archestra/shared";
 import appConfig from "@/lib/config/config";
 
 /**

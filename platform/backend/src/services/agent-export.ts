@@ -1,7 +1,7 @@
 import {
   parseFullToolName,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
-} from "@shared";
+} from "@archestra/shared";
 import { and, eq, inArray } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { AgentModel } from "@/models";

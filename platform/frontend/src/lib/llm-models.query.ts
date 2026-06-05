@@ -4,7 +4,7 @@ import {
   LAZY_MODEL_SYNC_STATUS_HEADER,
   LAZY_MODEL_SYNC_STATUS_PENDING,
   type SupportedProvider,
-} from "@shared";
+} from "@archestra/shared";
 import {
   keepPreviousData,
   type QueryClient,

@@ -239,12 +239,26 @@ describe("knowledge-connector schemas", () => {
         githubUrl: "api.github.com",
         owner: "test-org",
         authMethod: "github_app",
-        githubAppId: "12345",
-        githubAppInstallationId: "67890",
+        githubAppConfigId: "123e4567-e89b-12d3-a456-426614174000",
       });
 
       expect(result.authMethod).toBe("github_app");
+      expect(result.githubAppConfigId).toBe(
+        "123e4567-e89b-12d3-a456-426614174000",
+      );
       expect(result.githubUrl).toBe("https://api.github.com");
+    });
+
+    test("rejects a non-UUID githubAppConfigId", () => {
+      expect(() =>
+        GithubConfigSchema.parse({
+          type: "github",
+          githubUrl: "api.github.com",
+          owner: "test-org",
+          authMethod: "github_app",
+          githubAppConfigId: "not-a-uuid",
+        }),
+      ).toThrow();
     });
 
     test("accepts repository file type filters", () => {

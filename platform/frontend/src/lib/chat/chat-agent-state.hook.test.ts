@@ -3,7 +3,7 @@ import {
   makeSwapAgentPokeText,
   SWAP_AGENT_FAILED_POKE_TEXT,
   SWAP_TO_DEFAULT_AGENT_POKE_TEXT,
-} from "@shared";
+} from "@archestra/shared";
 import type { UIMessage } from "ai";
 import { describe, expect, test } from "vitest";
 import {

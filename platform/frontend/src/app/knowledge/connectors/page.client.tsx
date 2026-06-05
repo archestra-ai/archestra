@@ -4,7 +4,7 @@ import {
   type archestraApiTypes,
   CONNECTOR_TYPE_LABELS,
   type ConnectorType,
-} from "@shared";
+} from "@archestra/shared";
 import type { ColumnDef } from "@tanstack/react-table";
 import { formatDistanceToNow } from "date-fns";
 import { Database, Pencil, Trash2, Users } from "lucide-react";

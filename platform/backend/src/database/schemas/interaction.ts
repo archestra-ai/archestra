@@ -1,7 +1,7 @@
 import type {
   InteractionSource,
   SupportedProviderDiscriminator,
-} from "@shared";
+} from "@archestra/shared";
 import {
   index,
   integer,

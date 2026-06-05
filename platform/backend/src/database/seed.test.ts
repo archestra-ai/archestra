@@ -4,7 +4,7 @@ import {
   CHAT_TITLE_GENERATION_SYSTEM_PROMPT,
   CONTEXT_COMPACTION_SYSTEM_PROMPT,
   POLICY_CONFIG_SYSTEM_PROMPT,
-} from "@shared";
+} from "@archestra/shared";
 import { and, eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { SkillFileModel, SkillModel } from "@/models";

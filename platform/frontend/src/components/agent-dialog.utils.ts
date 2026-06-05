@@ -1,4 +1,4 @@
-import type { AgentType } from "@shared";
+import type { AgentType } from "@archestra/shared";
 
 export function getNamePlaceholder(agentType: AgentType): string {
   const placeholders: Record<AgentType, string> = {

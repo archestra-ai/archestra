@@ -1,6 +1,9 @@
 "use client";
 
-import { type archestraApiTypes, buildSlackSlashCommands } from "@shared";
+import {
+  type archestraApiTypes,
+  buildSlackSlashCommands,
+} from "@archestra/shared";
 import { AlertTriangle, Info } from "lucide-react";
 import { useEffect, useState } from "react";
 import { CopyButton } from "@/components/copy-button";

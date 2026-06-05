@@ -17,16 +17,16 @@ if (isMainModule) {
 }
 
 import { readFileSync } from "node:fs";
+import {
+  EmbeddingDimensionsSchema,
+  LocalConfigEnvironmentDefaultSchema,
+  SUPPORTED_EMBEDDING_DIMENSIONS,
+} from "@archestra/shared";
 import fastifyCors from "@fastify/cors";
 import fastifyFormbody from "@fastify/formbody";
 import fastifySwagger from "@fastify/swagger";
 import type { McpUiResourceCsp } from "@modelcontextprotocol/ext-apps";
 import * as Sentry from "@sentry/node";
-import {
-  EmbeddingDimensionsSchema,
-  LocalConfigEnvironmentDefaultSchema,
-  SUPPORTED_EMBEDDING_DIMENSIONS,
-} from "@shared";
 import Fastify, { type FastifyRequest } from "fastify";
 import metricsPlugin from "fastify-metrics";
 import {

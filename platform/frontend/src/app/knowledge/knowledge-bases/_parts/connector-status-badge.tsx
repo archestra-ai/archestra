@@ -1,6 +1,6 @@
 "use client";
 
-import type { archestraApiTypes } from "@shared";
+import type { archestraApiTypes } from "@archestra/shared";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 

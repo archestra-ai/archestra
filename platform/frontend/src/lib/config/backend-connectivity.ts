@@ -1,4 +1,4 @@
-import { archestraApiSdk } from "@shared";
+import { archestraApiSdk } from "@archestra/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 const { getHealth } = archestraApiSdk;

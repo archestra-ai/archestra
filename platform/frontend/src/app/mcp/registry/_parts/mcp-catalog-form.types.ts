@@ -1,4 +1,4 @@
-import { LocalConfigFormSchema } from "@shared";
+import { LocalConfigFormSchema } from "@archestra/shared";
 import { z } from "zod";
 
 const HEADER_NAME_REGEX = /^[A-Za-z0-9-]+$/;
@@ -14,28 +14,16 @@ const headerNameSchema = z
     "Header name must contain only alphanumeric characters and hyphens",
   );
 
-const additionalHeaderSchema = z
-  .object({
-    fieldName: z.string().optional(),
-    headerName: headerNameSchema,
-    promptOnInstallation: z.boolean(),
-    promptOnPreset: z.boolean().optional(),
-    required: z.boolean(),
-    value: z.string().optional(),
-    description: z.string().optional().or(z.literal("")),
-    includeBearerPrefix: z.boolean().optional(),
-    sensitive: z.boolean().optional(),
-  })
-  .superRefine((value, ctx) => {
-    if (value.promptOnInstallation && value.promptOnPreset) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["promptOnPreset"],
-        message:
-          "promptOnInstallation and promptOnPreset are mutually exclusive",
-      });
-    }
-  });
+const additionalHeaderSchema = z.object({
+  fieldName: z.string().optional(),
+  headerName: headerNameSchema,
+  promptOnInstallation: z.boolean(),
+  required: z.boolean(),
+  value: z.string().optional(),
+  description: z.string().optional().or(z.literal("")),
+  includeBearerPrefix: z.boolean().optional(),
+  sensitive: z.boolean().optional(),
+});
 
 // Simplified OAuth config schema
 export const oauthConfigSchema = z

@@ -1,6 +1,6 @@
 "use client";
 
-import { DocsPage, getDocsUrl } from "@shared";
+import { DocsPage, getDocsUrl } from "@archestra/shared";
 import type { LlmProviderApiKeyResponse } from "@/components/llm-provider-api-key-form";
 import {
   type ProviderApiKeyMap,

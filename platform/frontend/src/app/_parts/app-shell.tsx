@@ -1,6 +1,6 @@
 "use client";
 
-import type { Permissions } from "@shared/permission.types";
+import type { Permissions } from "@archestra/shared/permission.types";
 import { usePathname } from "next/navigation";
 import { ConversationSearchProvider } from "@/components/conversation-search-provider";
 import { ImpersonationBanner } from "@/components/impersonation-banner";

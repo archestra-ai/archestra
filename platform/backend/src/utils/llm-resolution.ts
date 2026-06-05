@@ -5,7 +5,7 @@ import {
   resolveModelSelection,
   type SupportedProvider,
   SupportedProvidersSchema,
-} from "@shared";
+} from "@archestra/shared";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
 import config, { getProviderEnvApiKey } from "@/config";
 import logger from "@/logging";

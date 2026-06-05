@@ -8,12 +8,12 @@ import {
   type Resource,
   resourceLabels,
   roleDescriptions,
-} from "@shared";
+} from "@archestra/shared";
 import {
   allAvailableActions,
   permissionDescriptions,
   predefinedPermissionsMap,
-} from "@shared/access-control";
+} from "@archestra/shared/access-control";
 import logger from "@/logging";
 
 const __filename = fileURLToPath(import.meta.url);

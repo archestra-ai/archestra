@@ -1,4 +1,4 @@
-import { archestraApiSdk, type Permissions } from "@shared";
+import { archestraApiSdk, type Permissions } from "@archestra/shared";
 import { useQuery } from "@tanstack/react-query";
 import { hasPermissions } from "@/lib/auth/auth.utils";
 import { authClient } from "@/lib/clients/auth/auth-client";

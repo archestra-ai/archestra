@@ -7,7 +7,7 @@ export default defineConfig({
   format: ["esm" as const],
   sourcemap: true,
   deps: {
-    alwaysBundle: [/^@shared/],
+    alwaysBundle: [/^@archestra\/shared/],
   },
   loader: {
     ".py": "text" as const,

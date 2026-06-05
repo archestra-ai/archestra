@@ -1,4 +1,4 @@
-import { DocsPage, getDocsUrl } from "@shared";
+import { DocsPage, getDocsUrl } from "@archestra/shared";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 
 export const DEFAULT_TABLE_LIMIT = 10;

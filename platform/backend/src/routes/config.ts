@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { RouteId, SupportedProvidersSchema } from "@shared";
+import { RouteId, SupportedProvidersSchema } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { getEmailProviderInfo } from "@/agents/incoming-email";

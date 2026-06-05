@@ -2,7 +2,7 @@
   "openapi": "3.0.0",
   "info": {
     "title": "Archestra",
-    "version": "1.2.57"
+    "version": "1.2.58"
   },
   "components": {
     "schemas": {
@@ -16897,9 +16897,6 @@
             "type": "string"
           },
           "promptOnInstallation": {
-            "type": "boolean"
-          },
-          "promptOnPreset": {
             "type": "boolean"
           },
           "required": {
@@ -34600,9 +34597,6 @@
             "type": "string"
           },
           "promptOnInstallation": {
-            "type": "boolean"
-          },
-          "promptOnPreset": {
             "type": "boolean"
           },
           "required": {
@@ -57849,9 +57843,6 @@
                               "type": "string"
                             }
                           },
-                          "required": [
-                            "type"
-                          ],
                           "additionalProperties": {},
                           "description": "https://developers.openai.com/api/reference/resources/responses/methods/create"
                         }
@@ -58434,9 +58425,6 @@
                               "type": "string"
                             }
                           },
-                          "required": [
-                            "type"
-                          ],
                           "additionalProperties": {},
                           "description": "https://developers.openai.com/api/reference/resources/responses/methods/create"
                         }
@@ -89480,9 +89468,6 @@
                                               "type": "string"
                                             }
                                           },
-                                          "required": [
-                                            "type"
-                                          ],
                                           "additionalProperties": {},
                                           "description": "https://developers.openai.com/api/reference/resources/responses/methods/create"
                                         }
@@ -89606,9 +89591,6 @@
                                               "type": "string"
                                             }
                                           },
-                                          "required": [
-                                            "type"
-                                          ],
                                           "additionalProperties": {},
                                           "description": "https://developers.openai.com/api/reference/resources/responses/methods/create"
                                         }
@@ -99475,9 +99457,6 @@
                                               "type": "string"
                                             }
                                           },
-                                          "required": [
-                                            "type"
-                                          ],
                                           "additionalProperties": {},
                                           "description": "https://developers.openai.com/api/reference/resources/responses/methods/create"
                                         }
@@ -99601,9 +99580,6 @@
                                               "type": "string"
                                             }
                                           },
-                                          "required": [
-                                            "type"
-                                          ],
                                           "additionalProperties": {},
                                           "description": "https://developers.openai.com/api/reference/resources/responses/methods/create"
                                         }
@@ -102215,9 +102191,6 @@
                                         "type": "string"
                                       }
                                     },
-                                    "required": [
-                                      "type"
-                                    ],
                                     "additionalProperties": {},
                                     "description": "https://developers.openai.com/api/reference/resources/responses/methods/create"
                                   }
@@ -102341,9 +102314,6 @@
                                         "type": "string"
                                       }
                                     },
-                                    "required": [
-                                      "type"
-                                    ],
                                     "additionalProperties": {},
                                     "description": "https://developers.openai.com/api/reference/resources/responses/methods/create"
                                   }
@@ -112210,9 +112180,6 @@
                                         "type": "string"
                                       }
                                     },
-                                    "required": [
-                                      "type"
-                                    ],
                                     "additionalProperties": {},
                                     "description": "https://developers.openai.com/api/reference/resources/responses/methods/create"
                                   }
@@ -112336,9 +112303,6 @@
                                         "type": "string"
                                       }
                                     },
-                                    "required": [
-                                      "type"
-                                    ],
                                     "additionalProperties": {},
                                     "description": "https://developers.openai.com/api/reference/resources/responses/methods/create"
                                   }
@@ -113201,27 +113165,6 @@
           "MCP Catalog"
         ],
         "description": "Get all Internal MCP catalog items\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`mcpRegistry:read`: Browse the MCP server registry",
-        "parameters": [
-          {
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "boolean"
-                },
-                {
-                  "type": "string",
-                  "enum": [
-                    "true",
-                    "false"
-                  ]
-                }
-              ]
-            },
-            "in": "query",
-            "name": "includeChildren",
-            "required": false
-          }
-        ],
         "responses": {
           "200": {
             "description": "Default Response",
@@ -113364,9 +113307,6 @@
                                   "type": "string"
                                 },
                                 "promptOnInstallation": {
-                                  "type": "boolean"
-                                },
-                                "promptOnPreset": {
                                   "type": "boolean"
                                 },
                                 "required": {
@@ -113731,36 +113671,7 @@
                           "org"
                         ]
                       },
-                      "parentCatalogItemId": {
-                        "nullable": true,
-                        "type": "string",
-                        "format": "uuid",
-                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                      },
-                      "childName": {
-                        "nullable": true,
-                        "type": "string"
-                      },
                       "clonedFrom": {
-                        "nullable": true,
-                        "type": "string",
-                        "format": "uuid",
-                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                      },
-                      "presetEntryId": {
-                        "nullable": true,
-                        "type": "string",
-                        "format": "uuid",
-                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                      },
-                      "presetFieldValues": {
-                        "default": {},
-                        "type": "object",
-                        "additionalProperties": {
-                          "$ref": "#/components/schemas/UserConfigFieldDefault"
-                        }
-                      },
-                      "presetSecretId": {
                         "nullable": true,
                         "type": "string",
                         "format": "uuid",
@@ -113862,12 +113773,7 @@
                       "organizationId",
                       "authorId",
                       "scope",
-                      "parentCatalogItemId",
-                      "childName",
                       "clonedFrom",
-                      "presetEntryId",
-                      "presetFieldValues",
-                      "presetSecretId",
                       "environmentId",
                       "catalogReinstallRequired",
                       "createdAt",
@@ -114265,9 +114171,6 @@
                             "promptOnInstallation": {
                               "type": "boolean"
                             },
-                            "promptOnPreset": {
-                              "type": "boolean"
-                            },
                             "required": {
                               "type": "boolean"
                             },
@@ -114611,35 +114514,7 @@
                       "org"
                     ]
                   },
-                  "parentCatalogItemId": {
-                    "nullable": true,
-                    "type": "string",
-                    "format": "uuid",
-                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                  },
-                  "childName": {
-                    "nullable": true,
-                    "type": "string"
-                  },
                   "clonedFrom": {
-                    "nullable": true,
-                    "type": "string",
-                    "format": "uuid",
-                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                  },
-                  "presetEntryId": {
-                    "nullable": true,
-                    "type": "string",
-                    "format": "uuid",
-                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                  },
-                  "presetFieldValues": {
-                    "type": "object",
-                    "additionalProperties": {
-                      "$ref": "#/components/schemas/UserConfigFieldDefaultInput"
-                    }
-                  },
-                  "presetSecretId": {
                     "nullable": true,
                     "type": "string",
                     "format": "uuid",
@@ -114841,9 +114716,6 @@
                                 "type": "string"
                               },
                               "promptOnInstallation": {
-                                "type": "boolean"
-                              },
-                              "promptOnPreset": {
                                 "type": "boolean"
                               },
                               "required": {
@@ -115208,36 +115080,7 @@
                         "org"
                       ]
                     },
-                    "parentCatalogItemId": {
-                      "nullable": true,
-                      "type": "string",
-                      "format": "uuid",
-                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                    },
-                    "childName": {
-                      "nullable": true,
-                      "type": "string"
-                    },
                     "clonedFrom": {
-                      "nullable": true,
-                      "type": "string",
-                      "format": "uuid",
-                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                    },
-                    "presetEntryId": {
-                      "nullable": true,
-                      "type": "string",
-                      "format": "uuid",
-                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                    },
-                    "presetFieldValues": {
-                      "default": {},
-                      "type": "object",
-                      "additionalProperties": {
-                        "$ref": "#/components/schemas/UserConfigFieldDefault"
-                      }
-                    },
-                    "presetSecretId": {
                       "nullable": true,
                       "type": "string",
                       "format": "uuid",
@@ -115333,12 +115176,7 @@
                     "organizationId",
                     "authorId",
                     "scope",
-                    "parentCatalogItemId",
-                    "childName",
                     "clonedFrom",
-                    "presetEntryId",
-                    "presetFieldValues",
-                    "presetSecretId",
                     "environmentId",
                     "catalogReinstallRequired",
                     "createdAt",
@@ -115749,9 +115587,6 @@
                               "promptOnInstallation": {
                                 "type": "boolean"
                               },
-                              "promptOnPreset": {
-                                "type": "boolean"
-                              },
                               "required": {
                                 "type": "boolean"
                               },
@@ -116114,36 +115949,7 @@
                         "org"
                       ]
                     },
-                    "parentCatalogItemId": {
-                      "nullable": true,
-                      "type": "string",
-                      "format": "uuid",
-                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                    },
-                    "childName": {
-                      "nullable": true,
-                      "type": "string"
-                    },
                     "clonedFrom": {
-                      "nullable": true,
-                      "type": "string",
-                      "format": "uuid",
-                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                    },
-                    "presetEntryId": {
-                      "nullable": true,
-                      "type": "string",
-                      "format": "uuid",
-                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                    },
-                    "presetFieldValues": {
-                      "default": {},
-                      "type": "object",
-                      "additionalProperties": {
-                        "$ref": "#/components/schemas/UserConfigFieldDefault"
-                      }
-                    },
-                    "presetSecretId": {
                       "nullable": true,
                       "type": "string",
                       "format": "uuid",
@@ -116239,12 +116045,7 @@
                     "organizationId",
                     "authorId",
                     "scope",
-                    "parentCatalogItemId",
-                    "childName",
                     "clonedFrom",
-                    "presetEntryId",
-                    "presetFieldValues",
-                    "presetSecretId",
                     "environmentId",
                     "catalogReinstallRequired",
                     "createdAt",
@@ -116632,9 +116433,6 @@
                             "promptOnInstallation": {
                               "type": "boolean"
                             },
-                            "promptOnPreset": {
-                              "type": "boolean"
-                            },
                             "required": {
                               "type": "boolean"
                             },
@@ -116978,28 +116776,6 @@
                       "org"
                     ]
                   },
-                  "childName": {
-                    "nullable": true,
-                    "type": "string"
-                  },
-                  "presetEntryId": {
-                    "nullable": true,
-                    "type": "string",
-                    "format": "uuid",
-                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                  },
-                  "presetFieldValues": {
-                    "type": "object",
-                    "additionalProperties": {
-                      "$ref": "#/components/schemas/UserConfigFieldDefaultInput"
-                    }
-                  },
-                  "presetSecretId": {
-                    "nullable": true,
-                    "type": "string",
-                    "format": "uuid",
-                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                  },
                   "environmentId": {
                     "nullable": true,
                     "type": "string",
@@ -117204,9 +116980,6 @@
                                 "type": "string"
                               },
                               "promptOnInstallation": {
-                                "type": "boolean"
-                              },
-                              "promptOnPreset": {
                                 "type": "boolean"
                               },
                               "required": {
@@ -117571,36 +117344,7 @@
                         "org"
                       ]
                     },
-                    "parentCatalogItemId": {
-                      "nullable": true,
-                      "type": "string",
-                      "format": "uuid",
-                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                    },
-                    "childName": {
-                      "nullable": true,
-                      "type": "string"
-                    },
                     "clonedFrom": {
-                      "nullable": true,
-                      "type": "string",
-                      "format": "uuid",
-                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                    },
-                    "presetEntryId": {
-                      "nullable": true,
-                      "type": "string",
-                      "format": "uuid",
-                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                    },
-                    "presetFieldValues": {
-                      "default": {},
-                      "type": "object",
-                      "additionalProperties": {
-                        "$ref": "#/components/schemas/UserConfigFieldDefault"
-                      }
-                    },
-                    "presetSecretId": {
                       "nullable": true,
                       "type": "string",
                       "format": "uuid",
@@ -117696,12 +117440,7 @@
                     "organizationId",
                     "authorId",
                     "scope",
-                    "parentCatalogItemId",
-                    "childName",
                     "clonedFrom",
-                    "presetEntryId",
-                    "presetFieldValues",
-                    "presetSecretId",
                     "environmentId",
                     "catalogReinstallRequired",
                     "createdAt",
@@ -120744,2779 +120483,6 @@
           "kind": "static",
           "permissions": [
             "mcpRegistry:read"
-          ]
-        }
-      }
-    },
-    "/api/internal_mcp_catalog/{catalogId}/children": {
-      "get": {
-        "operationId": "getCatalogChildren",
-        "tags": [
-          "MCP Catalog"
-        ],
-        "description": "List child catalog items (\"presets\" in UI) for a parent catalog item\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`mcpRegistry:read`: Browse the MCP server registry",
-        "parameters": [
-          {
-            "schema": {
-              "type": "string",
-              "format": "uuid",
-              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
-            },
-            "in": "path",
-            "name": "catalogId",
-            "required": true
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "type": "object",
-                    "properties": {
-                      "id": {
-                        "type": "string",
-                        "format": "uuid",
-                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                      },
-                      "name": {
-                        "type": "string"
-                      },
-                      "version": {
-                        "nullable": true,
-                        "type": "string"
-                      },
-                      "description": {
-                        "nullable": true,
-                        "type": "string"
-                      },
-                      "instructions": {
-                        "nullable": true,
-                        "type": "string"
-                      },
-                      "repository": {
-                        "nullable": true,
-                        "type": "string"
-                      },
-                      "installationCommand": {
-                        "nullable": true,
-                        "type": "string"
-                      },
-                      "requiresAuth": {
-                        "type": "boolean"
-                      },
-                      "authDescription": {
-                        "nullable": true,
-                        "type": "string"
-                      },
-                      "authFields": {
-                        "nullable": true,
-                        "type": "array",
-                        "items": {
-                          "type": "object",
-                          "properties": {
-                            "name": {
-                              "type": "string"
-                            },
-                            "label": {
-                              "type": "string"
-                            },
-                            "type": {
-                              "type": "string"
-                            },
-                            "required": {
-                              "default": false,
-                              "type": "boolean"
-                            },
-                            "description": {
-                              "type": "string"
-                            }
-                          },
-                          "required": [
-                            "name",
-                            "label",
-                            "type",
-                            "required"
-                          ],
-                          "additionalProperties": false
-                        }
-                      },
-                      "serverType": {
-                        "type": "string",
-                        "enum": [
-                          "local",
-                          "remote",
-                          "builtin"
-                        ]
-                      },
-                      "multitenant": {
-                        "type": "boolean"
-                      },
-                      "serverUrl": {
-                        "nullable": true,
-                        "type": "string"
-                      },
-                      "docsUrl": {
-                        "nullable": true,
-                        "type": "string"
-                      },
-                      "clientSecretId": {
-                        "nullable": true,
-                        "type": "string",
-                        "format": "uuid",
-                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                      },
-                      "localConfigSecretId": {
-                        "nullable": true,
-                        "type": "string",
-                        "format": "uuid",
-                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                      },
-                      "localConfig": {
-                        "nullable": true,
-                        "type": "object",
-                        "properties": {
-                          "command": {
-                            "type": "string"
-                          },
-                          "arguments": {
-                            "type": "array",
-                            "items": {
-                              "type": "string"
-                            }
-                          },
-                          "environment": {
-                            "type": "array",
-                            "items": {
-                              "type": "object",
-                              "properties": {
-                                "key": {
-                                  "type": "string"
-                                },
-                                "type": {
-                                  "type": "string",
-                                  "enum": [
-                                    "plain_text",
-                                    "secret",
-                                    "boolean",
-                                    "number"
-                                  ]
-                                },
-                                "value": {
-                                  "type": "string"
-                                },
-                                "promptOnInstallation": {
-                                  "type": "boolean"
-                                },
-                                "promptOnPreset": {
-                                  "type": "boolean"
-                                },
-                                "required": {
-                                  "type": "boolean"
-                                },
-                                "description": {
-                                  "type": "string"
-                                },
-                                "default": {
-                                  "allOf": [
-                                    {
-                                      "$ref": "#/components/schemas/LocalConfigEnvironmentDefault"
-                                    }
-                                  ]
-                                },
-                                "mounted": {
-                                  "type": "boolean"
-                                }
-                              },
-                              "required": [
-                                "key",
-                                "type",
-                                "promptOnInstallation"
-                              ],
-                              "additionalProperties": false
-                            }
-                          },
-                          "envFrom": {
-                            "type": "array",
-                            "items": {
-                              "type": "object",
-                              "properties": {
-                                "type": {
-                                  "type": "string",
-                                  "enum": [
-                                    "secret",
-                                    "configMap"
-                                  ]
-                                },
-                                "name": {
-                                  "type": "string",
-                                  "minLength": 1
-                                },
-                                "prefix": {
-                                  "type": "string"
-                                }
-                              },
-                              "required": [
-                                "type",
-                                "name"
-                              ],
-                              "additionalProperties": false
-                            }
-                          },
-                          "dockerImage": {
-                            "type": "string"
-                          },
-                          "serviceAccount": {
-                            "type": "string"
-                          },
-                          "transportType": {
-                            "type": "string",
-                            "enum": [
-                              "stdio",
-                              "streamable-http"
-                            ]
-                          },
-                          "httpPort": {
-                            "type": "number"
-                          },
-                          "httpPath": {
-                            "type": "string"
-                          },
-                          "nodePort": {
-                            "type": "number"
-                          },
-                          "imagePullSecrets": {
-                            "type": "array",
-                            "items": {
-                              "anyOf": [
-                                {
-                                  "oneOf": [
-                                    {
-                                      "type": "object",
-                                      "properties": {
-                                        "source": {
-                                          "type": "string",
-                                          "enum": [
-                                            "existing"
-                                          ]
-                                        },
-                                        "name": {
-                                          "type": "string",
-                                          "minLength": 1
-                                        }
-                                      },
-                                      "required": [
-                                        "source",
-                                        "name"
-                                      ],
-                                      "additionalProperties": false
-                                    },
-                                    {
-                                      "type": "object",
-                                      "properties": {
-                                        "source": {
-                                          "type": "string",
-                                          "enum": [
-                                            "credentials"
-                                          ]
-                                        },
-                                        "server": {
-                                          "type": "string",
-                                          "minLength": 1
-                                        },
-                                        "username": {
-                                          "type": "string",
-                                          "minLength": 1
-                                        },
-                                        "password": {
-                                          "type": "string"
-                                        },
-                                        "email": {
-                                          "type": "string"
-                                        }
-                                      },
-                                      "required": [
-                                        "source",
-                                        "server",
-                                        "username"
-                                      ],
-                                      "additionalProperties": false
-                                    }
-                                  ]
-                                }
-                              ]
-                            }
-                          }
-                        },
-                        "additionalProperties": false
-                      },
-                      "deploymentSpecYaml": {
-                        "nullable": true,
-                        "type": "string"
-                      },
-                      "userConfig": {
-                        "nullable": true,
-                        "type": "object",
-                        "additionalProperties": {
-                          "$ref": "#/components/schemas/UserConfigField"
-                        }
-                      },
-                      "oauthConfig": {
-                        "nullable": true,
-                        "type": "object",
-                        "properties": {
-                          "name": {
-                            "type": "string"
-                          },
-                          "server_url": {
-                            "type": "string"
-                          },
-                          "grant_type": {
-                            "type": "string",
-                            "enum": [
-                              "authorization_code",
-                              "client_credentials"
-                            ]
-                          },
-                          "auth_server_url": {
-                            "type": "string"
-                          },
-                          "authorization_endpoint": {
-                            "type": "string"
-                          },
-                          "resource_metadata_url": {
-                            "type": "string"
-                          },
-                          "client_id": {
-                            "type": "string"
-                          },
-                          "client_secret": {
-                            "type": "string"
-                          },
-                          "audience": {
-                            "type": "string"
-                          },
-                          "redirect_uris": {
-                            "type": "array",
-                            "items": {
-                              "type": "string"
-                            }
-                          },
-                          "scopes": {
-                            "type": "array",
-                            "items": {
-                              "type": "string"
-                            }
-                          },
-                          "description": {
-                            "type": "string"
-                          },
-                          "well_known_url": {
-                            "type": "string"
-                          },
-                          "default_scopes": {
-                            "type": "array",
-                            "items": {
-                              "type": "string"
-                            }
-                          },
-                          "supports_resource_metadata": {
-                            "type": "boolean"
-                          },
-                          "generic_oauth": {
-                            "type": "boolean"
-                          },
-                          "token_endpoint": {
-                            "type": "string"
-                          },
-                          "access_token_env_var": {
-                            "type": "string",
-                            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
-                          },
-                          "requires_proxy": {
-                            "type": "boolean"
-                          },
-                          "provider_name": {
-                            "type": "string"
-                          },
-                          "browser_auth": {
-                            "type": "boolean"
-                          },
-                          "streamable_http_url": {
-                            "type": "string"
-                          },
-                          "streamable_http_port": {
-                            "type": "number"
-                          }
-                        },
-                        "required": [
-                          "name",
-                          "server_url",
-                          "client_id",
-                          "redirect_uris",
-                          "scopes",
-                          "default_scopes",
-                          "supports_resource_metadata"
-                        ],
-                        "additionalProperties": false
-                      },
-                      "enterpriseManagedConfig": {
-                        "nullable": true,
-                        "type": "object",
-                        "properties": {
-                          "identityProviderId": {
-                            "type": "string"
-                          },
-                          "assertionMode": {
-                            "type": "string",
-                            "enum": [
-                              "exchange",
-                              "passthrough"
-                            ]
-                          },
-                          "resourceType": {
-                            "type": "string",
-                            "enum": [
-                              "mcp",
-                              "oauth_protected_resource",
-                              "secret",
-                              "service_account",
-                              "custom_http"
-                            ]
-                          },
-                          "resourceIdentifier": {
-                            "type": "string"
-                          },
-                          "requestedIssuer": {
-                            "type": "string"
-                          },
-                          "requestedCredentialType": {
-                            "type": "string",
-                            "enum": [
-                              "id_jag",
-                              "bearer_token",
-                              "secret",
-                              "service_account",
-                              "opaque_json"
-                            ]
-                          },
-                          "scopes": {
-                            "type": "array",
-                            "items": {
-                              "type": "string"
-                            }
-                          },
-                          "audience": {
-                            "type": "string"
-                          },
-                          "clientIdOverride": {
-                            "type": "string"
-                          },
-                          "clientSecretOverride": {
-                            "type": "string"
-                          },
-                          "tokenInjectionMode": {
-                            "type": "string",
-                            "enum": [
-                              "authorization_bearer",
-                              "raw_authorization",
-                              "header",
-                              "env",
-                              "body_field"
-                            ]
-                          },
-                          "headerName": {
-                            "type": "string"
-                          },
-                          "envVarName": {
-                            "type": "string"
-                          },
-                          "bodyFieldName": {
-                            "type": "string"
-                          },
-                          "responseFieldPath": {
-                            "type": "string"
-                          },
-                          "fallbackMode": {
-                            "type": "string",
-                            "enum": [
-                              "fail_closed",
-                              "fallback_to_dynamic",
-                              "fallback_to_static"
-                            ]
-                          },
-                          "cacheTtlSeconds": {
-                            "type": "integer",
-                            "minimum": 0,
-                            "maximum": 9007199254740991
-                          }
-                        },
-                        "additionalProperties": false
-                      },
-                      "icon": {
-                        "nullable": true,
-                        "type": "string"
-                      },
-                      "organizationId": {
-                        "nullable": true,
-                        "type": "string"
-                      },
-                      "authorId": {
-                        "nullable": true,
-                        "type": "string"
-                      },
-                      "scope": {
-                        "type": "string",
-                        "enum": [
-                          "personal",
-                          "team",
-                          "org"
-                        ]
-                      },
-                      "parentCatalogItemId": {
-                        "nullable": true,
-                        "type": "string",
-                        "format": "uuid",
-                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                      },
-                      "childName": {
-                        "nullable": true,
-                        "type": "string"
-                      },
-                      "clonedFrom": {
-                        "nullable": true,
-                        "type": "string",
-                        "format": "uuid",
-                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                      },
-                      "presetEntryId": {
-                        "nullable": true,
-                        "type": "string",
-                        "format": "uuid",
-                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                      },
-                      "presetFieldValues": {
-                        "default": {},
-                        "type": "object",
-                        "additionalProperties": {
-                          "$ref": "#/components/schemas/UserConfigFieldDefault"
-                        }
-                      },
-                      "presetSecretId": {
-                        "nullable": true,
-                        "type": "string",
-                        "format": "uuid",
-                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                      },
-                      "environmentId": {
-                        "nullable": true,
-                        "type": "string",
-                        "format": "uuid",
-                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                      },
-                      "catalogReinstallRequired": {
-                        "type": "boolean"
-                      },
-                      "createdAt": {
-                        "type": "string",
-                        "format": "date-time"
-                      },
-                      "updatedAt": {
-                        "type": "string",
-                        "format": "date-time"
-                      },
-                      "labels": {
-                        "default": [],
-                        "type": "array",
-                        "items": {
-                          "type": "object",
-                          "properties": {
-                            "key": {
-                              "type": "string",
-                              "minLength": 1
-                            },
-                            "value": {
-                              "type": "string",
-                              "minLength": 1
-                            }
-                          },
-                          "required": [
-                            "key",
-                            "value"
-                          ],
-                          "additionalProperties": false
-                        }
-                      },
-                      "teams": {
-                        "default": [],
-                        "type": "array",
-                        "items": {
-                          "type": "object",
-                          "properties": {
-                            "id": {
-                              "type": "string"
-                            },
-                            "name": {
-                              "type": "string"
-                            }
-                          },
-                          "required": [
-                            "id",
-                            "name"
-                          ],
-                          "additionalProperties": false
-                        }
-                      },
-                      "authorName": {
-                        "nullable": true,
-                        "type": "string"
-                      }
-                    },
-                    "required": [
-                      "id",
-                      "name",
-                      "version",
-                      "description",
-                      "instructions",
-                      "repository",
-                      "installationCommand",
-                      "requiresAuth",
-                      "authDescription",
-                      "authFields",
-                      "serverType",
-                      "multitenant",
-                      "serverUrl",
-                      "docsUrl",
-                      "clientSecretId",
-                      "localConfigSecretId",
-                      "localConfig",
-                      "deploymentSpecYaml",
-                      "userConfig",
-                      "oauthConfig",
-                      "enterpriseManagedConfig",
-                      "icon",
-                      "organizationId",
-                      "authorId",
-                      "scope",
-                      "parentCatalogItemId",
-                      "childName",
-                      "clonedFrom",
-                      "presetEntryId",
-                      "presetFieldValues",
-                      "presetSecretId",
-                      "environmentId",
-                      "catalogReinstallRequired",
-                      "createdAt",
-                      "updatedAt",
-                      "labels",
-                      "teams"
-                    ],
-                    "additionalProperties": false
-                  }
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_validation_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_authentication_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_authorization_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_not_found_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_conflict_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_internal_server_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          }
-        },
-        "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "mcpRegistry:read"
-          ]
-        }
-      },
-      "post": {
-        "operationId": "createCatalogChild",
-        "tags": [
-          "MCP Catalog"
-        ],
-        "description": "Create a child catalog item (\"preset\" in UI) under a parent. Inherits all template columns from parent.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`mcpRegistry:create`: Add servers to the MCP registry",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "presetEntryId": {
-                    "type": "string",
-                    "format": "uuid",
-                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                  },
-                  "presetFieldValues": {
-                    "type": "object",
-                    "additionalProperties": {
-                      "$ref": "#/components/schemas/UserConfigFieldDefaultInput"
-                    }
-                  }
-                },
-                "required": [
-                  "presetEntryId"
-                ]
-              }
-            }
-          }
-        },
-        "parameters": [
-          {
-            "schema": {
-              "type": "string",
-              "format": "uuid",
-              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
-            },
-            "in": "path",
-            "name": "catalogId",
-            "required": true
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "id": {
-                      "type": "string",
-                      "format": "uuid",
-                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                    },
-                    "name": {
-                      "type": "string"
-                    },
-                    "version": {
-                      "nullable": true,
-                      "type": "string"
-                    },
-                    "description": {
-                      "nullable": true,
-                      "type": "string"
-                    },
-                    "instructions": {
-                      "nullable": true,
-                      "type": "string"
-                    },
-                    "repository": {
-                      "nullable": true,
-                      "type": "string"
-                    },
-                    "installationCommand": {
-                      "nullable": true,
-                      "type": "string"
-                    },
-                    "requiresAuth": {
-                      "type": "boolean"
-                    },
-                    "authDescription": {
-                      "nullable": true,
-                      "type": "string"
-                    },
-                    "authFields": {
-                      "nullable": true,
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "name": {
-                            "type": "string"
-                          },
-                          "label": {
-                            "type": "string"
-                          },
-                          "type": {
-                            "type": "string"
-                          },
-                          "required": {
-                            "default": false,
-                            "type": "boolean"
-                          },
-                          "description": {
-                            "type": "string"
-                          }
-                        },
-                        "required": [
-                          "name",
-                          "label",
-                          "type",
-                          "required"
-                        ],
-                        "additionalProperties": false
-                      }
-                    },
-                    "serverType": {
-                      "type": "string",
-                      "enum": [
-                        "local",
-                        "remote",
-                        "builtin"
-                      ]
-                    },
-                    "multitenant": {
-                      "type": "boolean"
-                    },
-                    "serverUrl": {
-                      "nullable": true,
-                      "type": "string"
-                    },
-                    "docsUrl": {
-                      "nullable": true,
-                      "type": "string"
-                    },
-                    "clientSecretId": {
-                      "nullable": true,
-                      "type": "string",
-                      "format": "uuid",
-                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                    },
-                    "localConfigSecretId": {
-                      "nullable": true,
-                      "type": "string",
-                      "format": "uuid",
-                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                    },
-                    "localConfig": {
-                      "nullable": true,
-                      "type": "object",
-                      "properties": {
-                        "command": {
-                          "type": "string"
-                        },
-                        "arguments": {
-                          "type": "array",
-                          "items": {
-                            "type": "string"
-                          }
-                        },
-                        "environment": {
-                          "type": "array",
-                          "items": {
-                            "type": "object",
-                            "properties": {
-                              "key": {
-                                "type": "string"
-                              },
-                              "type": {
-                                "type": "string",
-                                "enum": [
-                                  "plain_text",
-                                  "secret",
-                                  "boolean",
-                                  "number"
-                                ]
-                              },
-                              "value": {
-                                "type": "string"
-                              },
-                              "promptOnInstallation": {
-                                "type": "boolean"
-                              },
-                              "promptOnPreset": {
-                                "type": "boolean"
-                              },
-                              "required": {
-                                "type": "boolean"
-                              },
-                              "description": {
-                                "type": "string"
-                              },
-                              "default": {
-                                "allOf": [
-                                  {
-                                    "$ref": "#/components/schemas/LocalConfigEnvironmentDefault"
-                                  }
-                                ]
-                              },
-                              "mounted": {
-                                "type": "boolean"
-                              }
-                            },
-                            "required": [
-                              "key",
-                              "type",
-                              "promptOnInstallation"
-                            ],
-                            "additionalProperties": false
-                          }
-                        },
-                        "envFrom": {
-                          "type": "array",
-                          "items": {
-                            "type": "object",
-                            "properties": {
-                              "type": {
-                                "type": "string",
-                                "enum": [
-                                  "secret",
-                                  "configMap"
-                                ]
-                              },
-                              "name": {
-                                "type": "string",
-                                "minLength": 1
-                              },
-                              "prefix": {
-                                "type": "string"
-                              }
-                            },
-                            "required": [
-                              "type",
-                              "name"
-                            ],
-                            "additionalProperties": false
-                          }
-                        },
-                        "dockerImage": {
-                          "type": "string"
-                        },
-                        "serviceAccount": {
-                          "type": "string"
-                        },
-                        "transportType": {
-                          "type": "string",
-                          "enum": [
-                            "stdio",
-                            "streamable-http"
-                          ]
-                        },
-                        "httpPort": {
-                          "type": "number"
-                        },
-                        "httpPath": {
-                          "type": "string"
-                        },
-                        "nodePort": {
-                          "type": "number"
-                        },
-                        "imagePullSecrets": {
-                          "type": "array",
-                          "items": {
-                            "anyOf": [
-                              {
-                                "oneOf": [
-                                  {
-                                    "type": "object",
-                                    "properties": {
-                                      "source": {
-                                        "type": "string",
-                                        "enum": [
-                                          "existing"
-                                        ]
-                                      },
-                                      "name": {
-                                        "type": "string",
-                                        "minLength": 1
-                                      }
-                                    },
-                                    "required": [
-                                      "source",
-                                      "name"
-                                    ],
-                                    "additionalProperties": false
-                                  },
-                                  {
-                                    "type": "object",
-                                    "properties": {
-                                      "source": {
-                                        "type": "string",
-                                        "enum": [
-                                          "credentials"
-                                        ]
-                                      },
-                                      "server": {
-                                        "type": "string",
-                                        "minLength": 1
-                                      },
-                                      "username": {
-                                        "type": "string",
-                                        "minLength": 1
-                                      },
-                                      "password": {
-                                        "type": "string"
-                                      },
-                                      "email": {
-                                        "type": "string"
-                                      }
-                                    },
-                                    "required": [
-                                      "source",
-                                      "server",
-                                      "username"
-                                    ],
-                                    "additionalProperties": false
-                                  }
-                                ]
-                              }
-                            ]
-                          }
-                        }
-                      },
-                      "additionalProperties": false
-                    },
-                    "deploymentSpecYaml": {
-                      "nullable": true,
-                      "type": "string"
-                    },
-                    "userConfig": {
-                      "nullable": true,
-                      "type": "object",
-                      "additionalProperties": {
-                        "$ref": "#/components/schemas/UserConfigField"
-                      }
-                    },
-                    "oauthConfig": {
-                      "nullable": true,
-                      "type": "object",
-                      "properties": {
-                        "name": {
-                          "type": "string"
-                        },
-                        "server_url": {
-                          "type": "string"
-                        },
-                        "grant_type": {
-                          "type": "string",
-                          "enum": [
-                            "authorization_code",
-                            "client_credentials"
-                          ]
-                        },
-                        "auth_server_url": {
-                          "type": "string"
-                        },
-                        "authorization_endpoint": {
-                          "type": "string"
-                        },
-                        "resource_metadata_url": {
-                          "type": "string"
-                        },
-                        "client_id": {
-                          "type": "string"
-                        },
-                        "client_secret": {
-                          "type": "string"
-                        },
-                        "audience": {
-                          "type": "string"
-                        },
-                        "redirect_uris": {
-                          "type": "array",
-                          "items": {
-                            "type": "string"
-                          }
-                        },
-                        "scopes": {
-                          "type": "array",
-                          "items": {
-                            "type": "string"
-                          }
-                        },
-                        "description": {
-                          "type": "string"
-                        },
-                        "well_known_url": {
-                          "type": "string"
-                        },
-                        "default_scopes": {
-                          "type": "array",
-                          "items": {
-                            "type": "string"
-                          }
-                        },
-                        "supports_resource_metadata": {
-                          "type": "boolean"
-                        },
-                        "generic_oauth": {
-                          "type": "boolean"
-                        },
-                        "token_endpoint": {
-                          "type": "string"
-                        },
-                        "access_token_env_var": {
-                          "type": "string",
-                          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
-                        },
-                        "requires_proxy": {
-                          "type": "boolean"
-                        },
-                        "provider_name": {
-                          "type": "string"
-                        },
-                        "browser_auth": {
-                          "type": "boolean"
-                        },
-                        "streamable_http_url": {
-                          "type": "string"
-                        },
-                        "streamable_http_port": {
-                          "type": "number"
-                        }
-                      },
-                      "required": [
-                        "name",
-                        "server_url",
-                        "client_id",
-                        "redirect_uris",
-                        "scopes",
-                        "default_scopes",
-                        "supports_resource_metadata"
-                      ],
-                      "additionalProperties": false
-                    },
-                    "enterpriseManagedConfig": {
-                      "nullable": true,
-                      "type": "object",
-                      "properties": {
-                        "identityProviderId": {
-                          "type": "string"
-                        },
-                        "assertionMode": {
-                          "type": "string",
-                          "enum": [
-                            "exchange",
-                            "passthrough"
-                          ]
-                        },
-                        "resourceType": {
-                          "type": "string",
-                          "enum": [
-                            "mcp",
-                            "oauth_protected_resource",
-                            "secret",
-                            "service_account",
-                            "custom_http"
-                          ]
-                        },
-                        "resourceIdentifier": {
-                          "type": "string"
-                        },
-                        "requestedIssuer": {
-                          "type": "string"
-                        },
-                        "requestedCredentialType": {
-                          "type": "string",
-                          "enum": [
-                            "id_jag",
-                            "bearer_token",
-                            "secret",
-                            "service_account",
-                            "opaque_json"
-                          ]
-                        },
-                        "scopes": {
-                          "type": "array",
-                          "items": {
-                            "type": "string"
-                          }
-                        },
-                        "audience": {
-                          "type": "string"
-                        },
-                        "clientIdOverride": {
-                          "type": "string"
-                        },
-                        "clientSecretOverride": {
-                          "type": "string"
-                        },
-                        "tokenInjectionMode": {
-                          "type": "string",
-                          "enum": [
-                            "authorization_bearer",
-                            "raw_authorization",
-                            "header",
-                            "env",
-                            "body_field"
-                          ]
-                        },
-                        "headerName": {
-                          "type": "string"
-                        },
-                        "envVarName": {
-                          "type": "string"
-                        },
-                        "bodyFieldName": {
-                          "type": "string"
-                        },
-                        "responseFieldPath": {
-                          "type": "string"
-                        },
-                        "fallbackMode": {
-                          "type": "string",
-                          "enum": [
-                            "fail_closed",
-                            "fallback_to_dynamic",
-                            "fallback_to_static"
-                          ]
-                        },
-                        "cacheTtlSeconds": {
-                          "type": "integer",
-                          "minimum": 0,
-                          "maximum": 9007199254740991
-                        }
-                      },
-                      "additionalProperties": false
-                    },
-                    "icon": {
-                      "nullable": true,
-                      "type": "string"
-                    },
-                    "organizationId": {
-                      "nullable": true,
-                      "type": "string"
-                    },
-                    "authorId": {
-                      "nullable": true,
-                      "type": "string"
-                    },
-                    "scope": {
-                      "type": "string",
-                      "enum": [
-                        "personal",
-                        "team",
-                        "org"
-                      ]
-                    },
-                    "parentCatalogItemId": {
-                      "nullable": true,
-                      "type": "string",
-                      "format": "uuid",
-                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                    },
-                    "childName": {
-                      "nullable": true,
-                      "type": "string"
-                    },
-                    "clonedFrom": {
-                      "nullable": true,
-                      "type": "string",
-                      "format": "uuid",
-                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                    },
-                    "presetEntryId": {
-                      "nullable": true,
-                      "type": "string",
-                      "format": "uuid",
-                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                    },
-                    "presetFieldValues": {
-                      "default": {},
-                      "type": "object",
-                      "additionalProperties": {
-                        "$ref": "#/components/schemas/UserConfigFieldDefault"
-                      }
-                    },
-                    "presetSecretId": {
-                      "nullable": true,
-                      "type": "string",
-                      "format": "uuid",
-                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                    },
-                    "environmentId": {
-                      "nullable": true,
-                      "type": "string",
-                      "format": "uuid",
-                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                    },
-                    "catalogReinstallRequired": {
-                      "type": "boolean"
-                    },
-                    "createdAt": {
-                      "type": "string",
-                      "format": "date-time"
-                    },
-                    "updatedAt": {
-                      "type": "string",
-                      "format": "date-time"
-                    },
-                    "labels": {
-                      "default": [],
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "key": {
-                            "type": "string",
-                            "minLength": 1
-                          },
-                          "value": {
-                            "type": "string",
-                            "minLength": 1
-                          }
-                        },
-                        "required": [
-                          "key",
-                          "value"
-                        ],
-                        "additionalProperties": false
-                      }
-                    },
-                    "teams": {
-                      "default": [],
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "id": {
-                            "type": "string"
-                          },
-                          "name": {
-                            "type": "string"
-                          }
-                        },
-                        "required": [
-                          "id",
-                          "name"
-                        ],
-                        "additionalProperties": false
-                      }
-                    },
-                    "authorName": {
-                      "nullable": true,
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "id",
-                    "name",
-                    "version",
-                    "description",
-                    "instructions",
-                    "repository",
-                    "installationCommand",
-                    "requiresAuth",
-                    "authDescription",
-                    "authFields",
-                    "serverType",
-                    "multitenant",
-                    "serverUrl",
-                    "docsUrl",
-                    "clientSecretId",
-                    "localConfigSecretId",
-                    "localConfig",
-                    "deploymentSpecYaml",
-                    "userConfig",
-                    "oauthConfig",
-                    "enterpriseManagedConfig",
-                    "icon",
-                    "organizationId",
-                    "authorId",
-                    "scope",
-                    "parentCatalogItemId",
-                    "childName",
-                    "clonedFrom",
-                    "presetEntryId",
-                    "presetFieldValues",
-                    "presetSecretId",
-                    "environmentId",
-                    "catalogReinstallRequired",
-                    "createdAt",
-                    "updatedAt",
-                    "labels",
-                    "teams"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_validation_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_authentication_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_authorization_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_not_found_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_conflict_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_internal_server_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          }
-        },
-        "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "mcpRegistry:create"
-          ]
-        }
-      }
-    },
-    "/api/internal_mcp_catalog/{catalogId}/children/{childId}": {
-      "patch": {
-        "operationId": "updateCatalogChild",
-        "tags": [
-          "MCP Catalog"
-        ],
-        "description": "Update a child catalog item (\"preset\" in UI). Only `presetFieldValues` may be edited; template fields cascade from parent and the name is immutable after creation.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`mcpRegistry:update`: Modify MCP registry entries",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "presetFieldValues": {
-                    "type": "object",
-                    "additionalProperties": {
-                      "$ref": "#/components/schemas/UserConfigFieldDefaultInput"
-                    }
-                  }
-                }
-              }
-            }
-          }
-        },
-        "parameters": [
-          {
-            "schema": {
-              "type": "string",
-              "format": "uuid",
-              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
-            },
-            "in": "path",
-            "name": "catalogId",
-            "required": true
-          },
-          {
-            "schema": {
-              "type": "string",
-              "format": "uuid",
-              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
-            },
-            "in": "path",
-            "name": "childId",
-            "required": true
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "id": {
-                      "type": "string",
-                      "format": "uuid",
-                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                    },
-                    "name": {
-                      "type": "string"
-                    },
-                    "version": {
-                      "nullable": true,
-                      "type": "string"
-                    },
-                    "description": {
-                      "nullable": true,
-                      "type": "string"
-                    },
-                    "instructions": {
-                      "nullable": true,
-                      "type": "string"
-                    },
-                    "repository": {
-                      "nullable": true,
-                      "type": "string"
-                    },
-                    "installationCommand": {
-                      "nullable": true,
-                      "type": "string"
-                    },
-                    "requiresAuth": {
-                      "type": "boolean"
-                    },
-                    "authDescription": {
-                      "nullable": true,
-                      "type": "string"
-                    },
-                    "authFields": {
-                      "nullable": true,
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "name": {
-                            "type": "string"
-                          },
-                          "label": {
-                            "type": "string"
-                          },
-                          "type": {
-                            "type": "string"
-                          },
-                          "required": {
-                            "default": false,
-                            "type": "boolean"
-                          },
-                          "description": {
-                            "type": "string"
-                          }
-                        },
-                        "required": [
-                          "name",
-                          "label",
-                          "type",
-                          "required"
-                        ],
-                        "additionalProperties": false
-                      }
-                    },
-                    "serverType": {
-                      "type": "string",
-                      "enum": [
-                        "local",
-                        "remote",
-                        "builtin"
-                      ]
-                    },
-                    "multitenant": {
-                      "type": "boolean"
-                    },
-                    "serverUrl": {
-                      "nullable": true,
-                      "type": "string"
-                    },
-                    "docsUrl": {
-                      "nullable": true,
-                      "type": "string"
-                    },
-                    "clientSecretId": {
-                      "nullable": true,
-                      "type": "string",
-                      "format": "uuid",
-                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                    },
-                    "localConfigSecretId": {
-                      "nullable": true,
-                      "type": "string",
-                      "format": "uuid",
-                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                    },
-                    "localConfig": {
-                      "nullable": true,
-                      "type": "object",
-                      "properties": {
-                        "command": {
-                          "type": "string"
-                        },
-                        "arguments": {
-                          "type": "array",
-                          "items": {
-                            "type": "string"
-                          }
-                        },
-                        "environment": {
-                          "type": "array",
-                          "items": {
-                            "type": "object",
-                            "properties": {
-                              "key": {
-                                "type": "string"
-                              },
-                              "type": {
-                                "type": "string",
-                                "enum": [
-                                  "plain_text",
-                                  "secret",
-                                  "boolean",
-                                  "number"
-                                ]
-                              },
-                              "value": {
-                                "type": "string"
-                              },
-                              "promptOnInstallation": {
-                                "type": "boolean"
-                              },
-                              "promptOnPreset": {
-                                "type": "boolean"
-                              },
-                              "required": {
-                                "type": "boolean"
-                              },
-                              "description": {
-                                "type": "string"
-                              },
-                              "default": {
-                                "allOf": [
-                                  {
-                                    "$ref": "#/components/schemas/LocalConfigEnvironmentDefault"
-                                  }
-                                ]
-                              },
-                              "mounted": {
-                                "type": "boolean"
-                              }
-                            },
-                            "required": [
-                              "key",
-                              "type",
-                              "promptOnInstallation"
-                            ],
-                            "additionalProperties": false
-                          }
-                        },
-                        "envFrom": {
-                          "type": "array",
-                          "items": {
-                            "type": "object",
-                            "properties": {
-                              "type": {
-                                "type": "string",
-                                "enum": [
-                                  "secret",
-                                  "configMap"
-                                ]
-                              },
-                              "name": {
-                                "type": "string",
-                                "minLength": 1
-                              },
-                              "prefix": {
-                                "type": "string"
-                              }
-                            },
-                            "required": [
-                              "type",
-                              "name"
-                            ],
-                            "additionalProperties": false
-                          }
-                        },
-                        "dockerImage": {
-                          "type": "string"
-                        },
-                        "serviceAccount": {
-                          "type": "string"
-                        },
-                        "transportType": {
-                          "type": "string",
-                          "enum": [
-                            "stdio",
-                            "streamable-http"
-                          ]
-                        },
-                        "httpPort": {
-                          "type": "number"
-                        },
-                        "httpPath": {
-                          "type": "string"
-                        },
-                        "nodePort": {
-                          "type": "number"
-                        },
-                        "imagePullSecrets": {
-                          "type": "array",
-                          "items": {
-                            "anyOf": [
-                              {
-                                "oneOf": [
-                                  {
-                                    "type": "object",
-                                    "properties": {
-                                      "source": {
-                                        "type": "string",
-                                        "enum": [
-                                          "existing"
-                                        ]
-                                      },
-                                      "name": {
-                                        "type": "string",
-                                        "minLength": 1
-                                      }
-                                    },
-                                    "required": [
-                                      "source",
-                                      "name"
-                                    ],
-                                    "additionalProperties": false
-                                  },
-                                  {
-                                    "type": "object",
-                                    "properties": {
-                                      "source": {
-                                        "type": "string",
-                                        "enum": [
-                                          "credentials"
-                                        ]
-                                      },
-                                      "server": {
-                                        "type": "string",
-                                        "minLength": 1
-                                      },
-                                      "username": {
-                                        "type": "string",
-                                        "minLength": 1
-                                      },
-                                      "password": {
-                                        "type": "string"
-                                      },
-                                      "email": {
-                                        "type": "string"
-                                      }
-                                    },
-                                    "required": [
-                                      "source",
-                                      "server",
-                                      "username"
-                                    ],
-                                    "additionalProperties": false
-                                  }
-                                ]
-                              }
-                            ]
-                          }
-                        }
-                      },
-                      "additionalProperties": false
-                    },
-                    "deploymentSpecYaml": {
-                      "nullable": true,
-                      "type": "string"
-                    },
-                    "userConfig": {
-                      "nullable": true,
-                      "type": "object",
-                      "additionalProperties": {
-                        "$ref": "#/components/schemas/UserConfigField"
-                      }
-                    },
-                    "oauthConfig": {
-                      "nullable": true,
-                      "type": "object",
-                      "properties": {
-                        "name": {
-                          "type": "string"
-                        },
-                        "server_url": {
-                          "type": "string"
-                        },
-                        "grant_type": {
-                          "type": "string",
-                          "enum": [
-                            "authorization_code",
-                            "client_credentials"
-                          ]
-                        },
-                        "auth_server_url": {
-                          "type": "string"
-                        },
-                        "authorization_endpoint": {
-                          "type": "string"
-                        },
-                        "resource_metadata_url": {
-                          "type": "string"
-                        },
-                        "client_id": {
-                          "type": "string"
-                        },
-                        "client_secret": {
-                          "type": "string"
-                        },
-                        "audience": {
-                          "type": "string"
-                        },
-                        "redirect_uris": {
-                          "type": "array",
-                          "items": {
-                            "type": "string"
-                          }
-                        },
-                        "scopes": {
-                          "type": "array",
-                          "items": {
-                            "type": "string"
-                          }
-                        },
-                        "description": {
-                          "type": "string"
-                        },
-                        "well_known_url": {
-                          "type": "string"
-                        },
-                        "default_scopes": {
-                          "type": "array",
-                          "items": {
-                            "type": "string"
-                          }
-                        },
-                        "supports_resource_metadata": {
-                          "type": "boolean"
-                        },
-                        "generic_oauth": {
-                          "type": "boolean"
-                        },
-                        "token_endpoint": {
-                          "type": "string"
-                        },
-                        "access_token_env_var": {
-                          "type": "string",
-                          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
-                        },
-                        "requires_proxy": {
-                          "type": "boolean"
-                        },
-                        "provider_name": {
-                          "type": "string"
-                        },
-                        "browser_auth": {
-                          "type": "boolean"
-                        },
-                        "streamable_http_url": {
-                          "type": "string"
-                        },
-                        "streamable_http_port": {
-                          "type": "number"
-                        }
-                      },
-                      "required": [
-                        "name",
-                        "server_url",
-                        "client_id",
-                        "redirect_uris",
-                        "scopes",
-                        "default_scopes",
-                        "supports_resource_metadata"
-                      ],
-                      "additionalProperties": false
-                    },
-                    "enterpriseManagedConfig": {
-                      "nullable": true,
-                      "type": "object",
-                      "properties": {
-                        "identityProviderId": {
-                          "type": "string"
-                        },
-                        "assertionMode": {
-                          "type": "string",
-                          "enum": [
-                            "exchange",
-                            "passthrough"
-                          ]
-                        },
-                        "resourceType": {
-                          "type": "string",
-                          "enum": [
-                            "mcp",
-                            "oauth_protected_resource",
-                            "secret",
-                            "service_account",
-                            "custom_http"
-                          ]
-                        },
-                        "resourceIdentifier": {
-                          "type": "string"
-                        },
-                        "requestedIssuer": {
-                          "type": "string"
-                        },
-                        "requestedCredentialType": {
-                          "type": "string",
-                          "enum": [
-                            "id_jag",
-                            "bearer_token",
-                            "secret",
-                            "service_account",
-                            "opaque_json"
-                          ]
-                        },
-                        "scopes": {
-                          "type": "array",
-                          "items": {
-                            "type": "string"
-                          }
-                        },
-                        "audience": {
-                          "type": "string"
-                        },
-                        "clientIdOverride": {
-                          "type": "string"
-                        },
-                        "clientSecretOverride": {
-                          "type": "string"
-                        },
-                        "tokenInjectionMode": {
-                          "type": "string",
-                          "enum": [
-                            "authorization_bearer",
-                            "raw_authorization",
-                            "header",
-                            "env",
-                            "body_field"
-                          ]
-                        },
-                        "headerName": {
-                          "type": "string"
-                        },
-                        "envVarName": {
-                          "type": "string"
-                        },
-                        "bodyFieldName": {
-                          "type": "string"
-                        },
-                        "responseFieldPath": {
-                          "type": "string"
-                        },
-                        "fallbackMode": {
-                          "type": "string",
-                          "enum": [
-                            "fail_closed",
-                            "fallback_to_dynamic",
-                            "fallback_to_static"
-                          ]
-                        },
-                        "cacheTtlSeconds": {
-                          "type": "integer",
-                          "minimum": 0,
-                          "maximum": 9007199254740991
-                        }
-                      },
-                      "additionalProperties": false
-                    },
-                    "icon": {
-                      "nullable": true,
-                      "type": "string"
-                    },
-                    "organizationId": {
-                      "nullable": true,
-                      "type": "string"
-                    },
-                    "authorId": {
-                      "nullable": true,
-                      "type": "string"
-                    },
-                    "scope": {
-                      "type": "string",
-                      "enum": [
-                        "personal",
-                        "team",
-                        "org"
-                      ]
-                    },
-                    "parentCatalogItemId": {
-                      "nullable": true,
-                      "type": "string",
-                      "format": "uuid",
-                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                    },
-                    "childName": {
-                      "nullable": true,
-                      "type": "string"
-                    },
-                    "clonedFrom": {
-                      "nullable": true,
-                      "type": "string",
-                      "format": "uuid",
-                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                    },
-                    "presetEntryId": {
-                      "nullable": true,
-                      "type": "string",
-                      "format": "uuid",
-                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                    },
-                    "presetFieldValues": {
-                      "default": {},
-                      "type": "object",
-                      "additionalProperties": {
-                        "$ref": "#/components/schemas/UserConfigFieldDefault"
-                      }
-                    },
-                    "presetSecretId": {
-                      "nullable": true,
-                      "type": "string",
-                      "format": "uuid",
-                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                    },
-                    "environmentId": {
-                      "nullable": true,
-                      "type": "string",
-                      "format": "uuid",
-                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                    },
-                    "catalogReinstallRequired": {
-                      "type": "boolean"
-                    },
-                    "createdAt": {
-                      "type": "string",
-                      "format": "date-time"
-                    },
-                    "updatedAt": {
-                      "type": "string",
-                      "format": "date-time"
-                    },
-                    "labels": {
-                      "default": [],
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "key": {
-                            "type": "string",
-                            "minLength": 1
-                          },
-                          "value": {
-                            "type": "string",
-                            "minLength": 1
-                          }
-                        },
-                        "required": [
-                          "key",
-                          "value"
-                        ],
-                        "additionalProperties": false
-                      }
-                    },
-                    "teams": {
-                      "default": [],
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "id": {
-                            "type": "string"
-                          },
-                          "name": {
-                            "type": "string"
-                          }
-                        },
-                        "required": [
-                          "id",
-                          "name"
-                        ],
-                        "additionalProperties": false
-                      }
-                    },
-                    "authorName": {
-                      "nullable": true,
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "id",
-                    "name",
-                    "version",
-                    "description",
-                    "instructions",
-                    "repository",
-                    "installationCommand",
-                    "requiresAuth",
-                    "authDescription",
-                    "authFields",
-                    "serverType",
-                    "multitenant",
-                    "serverUrl",
-                    "docsUrl",
-                    "clientSecretId",
-                    "localConfigSecretId",
-                    "localConfig",
-                    "deploymentSpecYaml",
-                    "userConfig",
-                    "oauthConfig",
-                    "enterpriseManagedConfig",
-                    "icon",
-                    "organizationId",
-                    "authorId",
-                    "scope",
-                    "parentCatalogItemId",
-                    "childName",
-                    "clonedFrom",
-                    "presetEntryId",
-                    "presetFieldValues",
-                    "presetSecretId",
-                    "environmentId",
-                    "catalogReinstallRequired",
-                    "createdAt",
-                    "updatedAt",
-                    "labels",
-                    "teams"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_validation_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_authentication_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_authorization_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_not_found_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_conflict_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_internal_server_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          }
-        },
-        "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "mcpRegistry:update"
           ]
         }
       }
@@ -146847,305 +143813,6 @@
         }
       }
     },
-    "/api/organization/mcp-preset-entries": {
-      "get": {
-        "operationId": "listMcpPresetEntries",
-        "tags": [
-          "Organization"
-        ],
-        "description": "List org-level preset entries (e.g. Production, Staging). Includes an assignedCatalogCount so the UI can render a delete-confirmation count.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`mcpRegistry:read`: Browse the MCP server registry",
-        "responses": {
-          "200": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "type": "object",
-                    "properties": {
-                      "id": {
-                        "type": "string",
-                        "format": "uuid",
-                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                      },
-                      "organizationId": {
-                        "type": "string"
-                      },
-                      "name": {
-                        "type": "string"
-                      },
-                      "sortOrder": {
-                        "type": "integer",
-                        "minimum": -2147483648,
-                        "maximum": 2147483647
-                      },
-                      "validationRegex": {
-                        "nullable": true,
-                        "type": "string"
-                      },
-                      "createdAt": {
-                        "type": "string",
-                        "format": "date-time"
-                      },
-                      "assignedCatalogCount": {
-                        "type": "integer",
-                        "minimum": 0,
-                        "maximum": 9007199254740991
-                      }
-                    },
-                    "required": [
-                      "id",
-                      "organizationId",
-                      "name",
-                      "sortOrder",
-                      "validationRegex",
-                      "createdAt",
-                      "assignedCatalogCount"
-                    ],
-                    "additionalProperties": false
-                  }
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_validation_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_authentication_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_authorization_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_not_found_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_conflict_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_internal_server_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          }
-        },
-        "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "mcpRegistry:read"
-          ]
-        }
-      }
-    },
     "/api/mcp/{agentId}": {
       "post": {
         "operationId": "mcpProxyPost",
@@ -147444,9 +144111,6 @@
                                           "type": "string"
                                         },
                                         "promptOnInstallation": {
-                                          "type": "boolean"
-                                        },
-                                        "promptOnPreset": {
                                           "type": "boolean"
                                         },
                                         "required": {
@@ -148126,9 +144790,6 @@
                                     "promptOnInstallation": {
                                       "type": "boolean"
                                     },
-                                    "promptOnPreset": {
-                                      "type": "boolean"
-                                    },
                                     "required": {
                                       "type": "boolean"
                                     },
@@ -148509,9 +145170,6 @@
                                         "type": "string"
                                       },
                                       "promptOnInstallation": {
-                                        "type": "boolean"
-                                      },
-                                      "promptOnPreset": {
                                         "type": "boolean"
                                       },
                                       "required": {
@@ -149223,9 +145881,6 @@
                                       "promptOnInstallation": {
                                         "type": "boolean"
                                       },
-                                      "promptOnPreset": {
-                                        "type": "boolean"
-                                      },
                                       "required": {
                                         "type": "boolean"
                                       },
@@ -149906,9 +146561,6 @@
                                     "promptOnInstallation": {
                                       "type": "boolean"
                                     },
-                                    "promptOnPreset": {
-                                      "type": "boolean"
-                                    },
                                     "required": {
                                       "type": "boolean"
                                     },
@@ -150340,9 +146992,6 @@
                                         "type": "string"
                                       },
                                       "promptOnInstallation": {
-                                        "type": "boolean"
-                                      },
-                                      "promptOnPreset": {
                                         "type": "boolean"
                                       },
                                       "required": {
@@ -151343,9 +147992,6 @@
                                       "promptOnInstallation": {
                                         "type": "boolean"
                                       },
-                                      "promptOnPreset": {
-                                        "type": "boolean"
-                                      },
                                       "required": {
                                         "type": "boolean"
                                       },
@@ -152068,9 +148714,6 @@
                                         "type": "string"
                                       },
                                       "promptOnInstallation": {
-                                        "type": "boolean"
-                                      },
-                                      "promptOnPreset": {
                                         "type": "boolean"
                                       },
                                       "required": {
@@ -152799,9 +149442,6 @@
                                         "type": "string"
                                       },
                                       "promptOnInstallation": {
-                                        "type": "boolean"
-                                      },
-                                      "promptOnPreset": {
                                         "type": "boolean"
                                       },
                                       "required": {
@@ -159939,9 +156579,6 @@
                               "type": "string"
                             }
                           },
-                          "required": [
-                            "type"
-                          ],
                           "additionalProperties": {},
                           "description": "https://developers.openai.com/api/reference/resources/responses/methods/create"
                         }
@@ -160524,9 +157161,6 @@
                               "type": "string"
                             }
                           },
-                          "required": [
-                            "type"
-                          ],
                           "additionalProperties": {},
                           "description": "https://developers.openai.com/api/reference/resources/responses/methods/create"
                         }
@@ -164519,9 +161153,6 @@
                               "type": "string"
                             }
                           },
-                          "required": [
-                            "type"
-                          ],
                           "additionalProperties": {},
                           "description": "https://developers.openai.com/api/reference/resources/responses/methods/create"
                         }
@@ -165104,9 +161735,6 @@
                               "type": "string"
                             }
                           },
-                          "required": [
-                            "type"
-                          ],
                           "additionalProperties": {},
                           "description": "https://developers.openai.com/api/reference/resources/responses/methods/create"
                         }
@@ -170855,18 +167483,6 @@
                         "additionalProperties": false
                       }
                     },
-                    "presetEntityName": {
-                      "nullable": true,
-                      "type": "string"
-                    },
-                    "presetEntityNamePlural": {
-                      "nullable": true,
-                      "type": "string"
-                    },
-                    "presetEntityDefaultLabel": {
-                      "nullable": true,
-                      "type": "string"
-                    },
                     "defaultEnvironmentName": {
                       "nullable": true,
                       "type": "string"
@@ -170928,10 +167544,6 @@
                     },
                     "skillSlashCommandsEnabled": {
                       "type": "boolean"
-                    },
-                    "presetEntityDefaultValidationRegex": {
-                      "nullable": true,
-                      "type": "string"
                     }
                   },
                   "required": [
@@ -170983,17 +167595,13 @@
                     "connectionShownClientIds",
                     "connectionShownProviders",
                     "connectionBaseUrls",
-                    "presetEntityName",
-                    "presetEntityNamePlural",
-                    "presetEntityDefaultLabel",
                     "defaultEnvironmentName",
                     "defaultEnvironmentNamespace",
                     "defaultEnvironmentDescription",
                     "defaultNetworkPolicy",
                     "defaultEnvironmentRestricted",
                     "skillToolsEnabled",
-                    "skillSlashCommandsEnabled",
-                    "presetEntityDefaultValidationRegex"
+                    "skillSlashCommandsEnabled"
                   ],
                   "additionalProperties": false
                 }
@@ -171783,18 +168391,6 @@
                         "additionalProperties": false
                       }
                     },
-                    "presetEntityName": {
-                      "nullable": true,
-                      "type": "string"
-                    },
-                    "presetEntityNamePlural": {
-                      "nullable": true,
-                      "type": "string"
-                    },
-                    "presetEntityDefaultLabel": {
-                      "nullable": true,
-                      "type": "string"
-                    },
                     "defaultEnvironmentName": {
                       "nullable": true,
                       "type": "string"
@@ -171856,10 +168452,6 @@
                     },
                     "skillSlashCommandsEnabled": {
                       "type": "boolean"
-                    },
-                    "presetEntityDefaultValidationRegex": {
-                      "nullable": true,
-                      "type": "string"
                     }
                   },
                   "required": [
@@ -171911,17 +168503,13 @@
                     "connectionShownClientIds",
                     "connectionShownProviders",
                     "connectionBaseUrls",
-                    "presetEntityName",
-                    "presetEntityNamePlural",
-                    "presetEntityDefaultLabel",
                     "defaultEnvironmentName",
                     "defaultEnvironmentNamespace",
                     "defaultEnvironmentDescription",
                     "defaultNetworkPolicy",
                     "defaultEnvironmentRestricted",
                     "skillToolsEnabled",
-                    "skillSlashCommandsEnabled",
-                    "presetEntityDefaultValidationRegex"
+                    "skillSlashCommandsEnabled"
                   ],
                   "additionalProperties": false
                 }
@@ -172983,18 +169571,6 @@
                         "additionalProperties": false
                       }
                     },
-                    "presetEntityName": {
-                      "nullable": true,
-                      "type": "string"
-                    },
-                    "presetEntityNamePlural": {
-                      "nullable": true,
-                      "type": "string"
-                    },
-                    "presetEntityDefaultLabel": {
-                      "nullable": true,
-                      "type": "string"
-                    },
                     "defaultEnvironmentName": {
                       "nullable": true,
                       "type": "string"
@@ -173056,10 +169632,6 @@
                     },
                     "skillSlashCommandsEnabled": {
                       "type": "boolean"
-                    },
-                    "presetEntityDefaultValidationRegex": {
-                      "nullable": true,
-                      "type": "string"
                     }
                   },
                   "required": [
@@ -173111,17 +169683,13 @@
                     "connectionShownClientIds",
                     "connectionShownProviders",
                     "connectionBaseUrls",
-                    "presetEntityName",
-                    "presetEntityNamePlural",
-                    "presetEntityDefaultLabel",
                     "defaultEnvironmentName",
                     "defaultEnvironmentNamespace",
                     "defaultEnvironmentDescription",
                     "defaultNetworkPolicy",
                     "defaultEnvironmentRestricted",
                     "skillToolsEnabled",
-                    "skillSlashCommandsEnabled",
-                    "presetEntityDefaultValidationRegex"
+                    "skillSlashCommandsEnabled"
                   ],
                   "additionalProperties": false
                 }
@@ -173797,18 +170365,6 @@
                         "additionalProperties": false
                       }
                     },
-                    "presetEntityName": {
-                      "nullable": true,
-                      "type": "string"
-                    },
-                    "presetEntityNamePlural": {
-                      "nullable": true,
-                      "type": "string"
-                    },
-                    "presetEntityDefaultLabel": {
-                      "nullable": true,
-                      "type": "string"
-                    },
                     "defaultEnvironmentName": {
                       "nullable": true,
                       "type": "string"
@@ -173870,10 +170426,6 @@
                     },
                     "skillSlashCommandsEnabled": {
                       "type": "boolean"
-                    },
-                    "presetEntityDefaultValidationRegex": {
-                      "nullable": true,
-                      "type": "string"
                     }
                   },
                   "required": [
@@ -173925,17 +170477,13 @@
                     "connectionShownClientIds",
                     "connectionShownProviders",
                     "connectionBaseUrls",
-                    "presetEntityName",
-                    "presetEntityNamePlural",
-                    "presetEntityDefaultLabel",
                     "defaultEnvironmentName",
                     "defaultEnvironmentNamespace",
                     "defaultEnvironmentDescription",
                     "defaultNetworkPolicy",
                     "defaultEnvironmentRestricted",
                     "skillToolsEnabled",
-                    "skillSlashCommandsEnabled",
-                    "presetEntityDefaultValidationRegex"
+                    "skillSlashCommandsEnabled"
                   ],
                   "additionalProperties": false
                 }
@@ -174594,18 +171142,6 @@
                         "additionalProperties": false
                       }
                     },
-                    "presetEntityName": {
-                      "nullable": true,
-                      "type": "string"
-                    },
-                    "presetEntityNamePlural": {
-                      "nullable": true,
-                      "type": "string"
-                    },
-                    "presetEntityDefaultLabel": {
-                      "nullable": true,
-                      "type": "string"
-                    },
                     "defaultEnvironmentName": {
                       "nullable": true,
                       "type": "string"
@@ -174667,10 +171203,6 @@
                     },
                     "skillSlashCommandsEnabled": {
                       "type": "boolean"
-                    },
-                    "presetEntityDefaultValidationRegex": {
-                      "nullable": true,
-                      "type": "string"
                     }
                   },
                   "required": [
@@ -174722,17 +171254,13 @@
                     "connectionShownClientIds",
                     "connectionShownProviders",
                     "connectionBaseUrls",
-                    "presetEntityName",
-                    "presetEntityNamePlural",
-                    "presetEntityDefaultLabel",
                     "defaultEnvironmentName",
                     "defaultEnvironmentNamespace",
                     "defaultEnvironmentDescription",
                     "defaultNetworkPolicy",
                     "defaultEnvironmentRestricted",
                     "skillToolsEnabled",
-                    "skillSlashCommandsEnabled",
-                    "presetEntityDefaultValidationRegex"
+                    "skillSlashCommandsEnabled"
                   ],
                   "additionalProperties": false
                 }
@@ -175453,18 +171981,6 @@
                         "additionalProperties": false
                       }
                     },
-                    "presetEntityName": {
-                      "nullable": true,
-                      "type": "string"
-                    },
-                    "presetEntityNamePlural": {
-                      "nullable": true,
-                      "type": "string"
-                    },
-                    "presetEntityDefaultLabel": {
-                      "nullable": true,
-                      "type": "string"
-                    },
                     "defaultEnvironmentName": {
                       "nullable": true,
                       "type": "string"
@@ -175526,10 +172042,6 @@
                     },
                     "skillSlashCommandsEnabled": {
                       "type": "boolean"
-                    },
-                    "presetEntityDefaultValidationRegex": {
-                      "nullable": true,
-                      "type": "string"
                     }
                   },
                   "required": [
@@ -175581,17 +172093,13 @@
                     "connectionShownClientIds",
                     "connectionShownProviders",
                     "connectionBaseUrls",
-                    "presetEntityName",
-                    "presetEntityNamePlural",
-                    "presetEntityDefaultLabel",
                     "defaultEnvironmentName",
                     "defaultEnvironmentNamespace",
                     "defaultEnvironmentDescription",
                     "defaultNetworkPolicy",
                     "defaultEnvironmentRestricted",
                     "skillToolsEnabled",
-                    "skillSlashCommandsEnabled",
-                    "presetEntityDefaultValidationRegex"
+                    "skillSlashCommandsEnabled"
                   ],
                   "additionalProperties": false
                 }
@@ -176287,18 +172795,6 @@
                         "additionalProperties": false
                       }
                     },
-                    "presetEntityName": {
-                      "nullable": true,
-                      "type": "string"
-                    },
-                    "presetEntityNamePlural": {
-                      "nullable": true,
-                      "type": "string"
-                    },
-                    "presetEntityDefaultLabel": {
-                      "nullable": true,
-                      "type": "string"
-                    },
                     "defaultEnvironmentName": {
                       "nullable": true,
                       "type": "string"
@@ -176360,10 +172856,6 @@
                     },
                     "skillSlashCommandsEnabled": {
                       "type": "boolean"
-                    },
-                    "presetEntityDefaultValidationRegex": {
-                      "nullable": true,
-                      "type": "string"
                     }
                   },
                   "required": [
@@ -176415,17 +172907,13 @@
                     "connectionShownClientIds",
                     "connectionShownProviders",
                     "connectionBaseUrls",
-                    "presetEntityName",
-                    "presetEntityNamePlural",
-                    "presetEntityDefaultLabel",
                     "defaultEnvironmentName",
                     "defaultEnvironmentNamespace",
                     "defaultEnvironmentDescription",
                     "defaultNetworkPolicy",
                     "defaultEnvironmentRestricted",
                     "skillToolsEnabled",
-                    "skillSlashCommandsEnabled",
-                    "presetEntityDefaultValidationRegex"
+                    "skillSlashCommandsEnabled"
                   ],
                   "additionalProperties": false
                 }
@@ -177071,18 +173559,6 @@
                         "additionalProperties": false
                       }
                     },
-                    "presetEntityName": {
-                      "nullable": true,
-                      "type": "string"
-                    },
-                    "presetEntityNamePlural": {
-                      "nullable": true,
-                      "type": "string"
-                    },
-                    "presetEntityDefaultLabel": {
-                      "nullable": true,
-                      "type": "string"
-                    },
                     "defaultEnvironmentName": {
                       "nullable": true,
                       "type": "string"
@@ -177144,10 +173620,6 @@
                     },
                     "skillSlashCommandsEnabled": {
                       "type": "boolean"
-                    },
-                    "presetEntityDefaultValidationRegex": {
-                      "nullable": true,
-                      "type": "string"
                     }
                   },
                   "required": [
@@ -177199,17 +173671,13 @@
                     "connectionShownClientIds",
                     "connectionShownProviders",
                     "connectionBaseUrls",
-                    "presetEntityName",
-                    "presetEntityNamePlural",
-                    "presetEntityDefaultLabel",
                     "defaultEnvironmentName",
                     "defaultEnvironmentNamespace",
                     "defaultEnvironmentDescription",
                     "defaultNetworkPolicy",
                     "defaultEnvironmentRestricted",
                     "skillToolsEnabled",
-                    "skillSlashCommandsEnabled",
-                    "presetEntityDefaultValidationRegex"
+                    "skillSlashCommandsEnabled"
                   ],
                   "additionalProperties": false
                 }
@@ -177868,18 +174336,6 @@
                         "additionalProperties": false
                       }
                     },
-                    "presetEntityName": {
-                      "nullable": true,
-                      "type": "string"
-                    },
-                    "presetEntityNamePlural": {
-                      "nullable": true,
-                      "type": "string"
-                    },
-                    "presetEntityDefaultLabel": {
-                      "nullable": true,
-                      "type": "string"
-                    },
                     "defaultEnvironmentName": {
                       "nullable": true,
                       "type": "string"
@@ -177941,10 +174397,6 @@
                     },
                     "skillSlashCommandsEnabled": {
                       "type": "boolean"
-                    },
-                    "presetEntityDefaultValidationRegex": {
-                      "nullable": true,
-                      "type": "string"
                     }
                   },
                   "required": [
@@ -177996,17 +174448,13 @@
                     "connectionShownClientIds",
                     "connectionShownProviders",
                     "connectionBaseUrls",
-                    "presetEntityName",
-                    "presetEntityNamePlural",
-                    "presetEntityDefaultLabel",
                     "defaultEnvironmentName",
                     "defaultEnvironmentNamespace",
                     "defaultEnvironmentDescription",
                     "defaultNetworkPolicy",
                     "defaultEnvironmentRestricted",
                     "skillToolsEnabled",
-                    "skillSlashCommandsEnabled",
-                    "presetEntityDefaultValidationRegex"
+                    "skillSlashCommandsEnabled"
                   ],
                   "additionalProperties": false
                 }
@@ -178632,18 +175080,6 @@
                         "additionalProperties": false
                       }
                     },
-                    "presetEntityName": {
-                      "nullable": true,
-                      "type": "string"
-                    },
-                    "presetEntityNamePlural": {
-                      "nullable": true,
-                      "type": "string"
-                    },
-                    "presetEntityDefaultLabel": {
-                      "nullable": true,
-                      "type": "string"
-                    },
                     "defaultEnvironmentName": {
                       "nullable": true,
                       "type": "string"
@@ -178705,10 +175141,6 @@
                     },
                     "skillSlashCommandsEnabled": {
                       "type": "boolean"
-                    },
-                    "presetEntityDefaultValidationRegex": {
-                      "nullable": true,
-                      "type": "string"
                     }
                   },
                   "required": [
@@ -178760,17 +175192,13 @@
                     "connectionShownClientIds",
                     "connectionShownProviders",
                     "connectionBaseUrls",
-                    "presetEntityName",
-                    "presetEntityNamePlural",
-                    "presetEntityDefaultLabel",
                     "defaultEnvironmentName",
                     "defaultEnvironmentNamespace",
                     "defaultEnvironmentDescription",
                     "defaultNetworkPolicy",
                     "defaultEnvironmentRestricted",
                     "skillToolsEnabled",
-                    "skillSlashCommandsEnabled",
-                    "presetEntityDefaultValidationRegex"
+                    "skillSlashCommandsEnabled"
                   ],
                   "additionalProperties": false
                 }
@@ -179709,18 +176137,6 @@
                         "additionalProperties": false
                       }
                     },
-                    "presetEntityName": {
-                      "nullable": true,
-                      "type": "string"
-                    },
-                    "presetEntityNamePlural": {
-                      "nullable": true,
-                      "type": "string"
-                    },
-                    "presetEntityDefaultLabel": {
-                      "nullable": true,
-                      "type": "string"
-                    },
                     "defaultEnvironmentName": {
                       "nullable": true,
                       "type": "string"
@@ -179782,10 +176198,6 @@
                     },
                     "skillSlashCommandsEnabled": {
                       "type": "boolean"
-                    },
-                    "presetEntityDefaultValidationRegex": {
-                      "nullable": true,
-                      "type": "string"
                     }
                   },
                   "required": [
@@ -179837,17 +176249,13 @@
                     "connectionShownClientIds",
                     "connectionShownProviders",
                     "connectionBaseUrls",
-                    "presetEntityName",
-                    "presetEntityNamePlural",
-                    "presetEntityDefaultLabel",
                     "defaultEnvironmentName",
                     "defaultEnvironmentNamespace",
                     "defaultEnvironmentDescription",
                     "defaultNetworkPolicy",
                     "defaultEnvironmentRestricted",
                     "skillToolsEnabled",
-                    "skillSlashCommandsEnabled",
-                    "presetEntityDefaultValidationRegex"
+                    "skillSlashCommandsEnabled"
                   ],
                   "additionalProperties": false
                 }

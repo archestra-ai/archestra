@@ -6,7 +6,7 @@ import {
   TOOL_RUN_TOOL_FULL_NAME,
   TOOL_TODO_WRITE_FULL_NAME,
   TOOL_WHOAMI_FULL_NAME,
-} from "@shared";
+} from "@archestra/shared";
 import { vi } from "vitest";
 import mcpClient from "@/clients/mcp-client";
 import { ToolModel } from "@/models";

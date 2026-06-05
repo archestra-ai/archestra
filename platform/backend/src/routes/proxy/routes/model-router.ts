@@ -3,7 +3,7 @@ import {
   LLM_PROXY_OAUTH_SCOPE,
   RouteId,
   type SupportedProvider,
-} from "@shared";
+} from "@archestra/shared";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";

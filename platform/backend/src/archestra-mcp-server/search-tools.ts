@@ -1,9 +1,9 @@
-import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import {
   parseFullToolName,
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
-} from "@shared";
+} from "@archestra/shared";
+import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import { InternalMcpCatalogModel, ToolModel } from "@/models";
 import { archestraMcpBranding } from "./branding";

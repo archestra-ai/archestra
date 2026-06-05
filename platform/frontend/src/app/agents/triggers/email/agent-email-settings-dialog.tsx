@@ -1,7 +1,7 @@
 "use client";
 
+import type { archestraApiTypes } from "@archestra/shared";
 import { zodResolver } from "@hookform/resolvers/zod";
-import type { archestraApiTypes } from "@shared";
 import {
   Building2,
   Globe,

@@ -242,6 +242,19 @@ export const DEFAULT_MODELS: Record<SupportedProvider, string> = {
   minimax: "MiniMax-M3",
   azure: "gpt-5.5",
 };
+
+/**
+ * True for OpenAI "pro" reasoning models, which OpenAI serves only through the
+ * Responses API (`/v1/responses`). Calling them on `/v1/chat/completions`
+ * returns `api_not_found_error` ("not a chat model"), so the chat client must
+ * route these models to the Responses transport instead. "pro" is matched as a
+ * hyphen/slash-delimited token, so dated snapshots (`gpt-5.5-pro-2026-01-01`)
+ * are covered.
+ */
+export function requiresOpenAiResponsesApi(modelId: string): boolean {
+  return /(?:^|[-/])pro(?:[-/]|$)/i.test(modelId);
+}
+
 /**
  * Maps models.dev provider IDs to Archestra provider names.
  * This is the single source of truth for all synchronization logic.

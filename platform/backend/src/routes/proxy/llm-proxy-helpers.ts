@@ -5,14 +5,14 @@
  * duplication between streaming and non-streaming code paths.
  */
 
-import { context as otelContext } from "@opentelemetry/api";
 import {
   ApiError,
   type ArchestraInternalErrorCode,
   type InteractionSource,
   type SupportedProvider,
   type SupportedProviderDiscriminator,
-} from "@shared";
+} from "@archestra/shared";
+import { context as otelContext } from "@opentelemetry/api";
 import type { FastifyReply } from "fastify";
 import logger from "@/logging";
 import { metrics } from "@/observability";

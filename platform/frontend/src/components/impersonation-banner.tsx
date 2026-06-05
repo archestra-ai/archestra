@@ -1,6 +1,6 @@
 "use client";
 
-import { E2eTestId } from "@shared";
+import { E2eTestId } from "@archestra/shared";
 import { useSession } from "@/lib/auth/auth.query";
 import { useStopImpersonating } from "@/lib/impersonation.query";
 import { Button } from "./ui/button";

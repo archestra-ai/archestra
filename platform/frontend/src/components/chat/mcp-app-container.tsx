@@ -1,3 +1,9 @@
+import {
+  type archestraApiTypes,
+  buildFullToolName,
+  MCP_SERVER_TOOL_NAME_SEPARATOR,
+  parseFullToolName,
+} from "@archestra/shared";
 import type {
   McpUiDisplayMode,
   McpUiResourceCsp,
@@ -8,12 +14,6 @@ import {
   AppBridge,
   PostMessageTransport,
 } from "@modelcontextprotocol/ext-apps/app-bridge";
-import {
-  type archestraApiTypes,
-  buildFullToolName,
-  MCP_SERVER_TOOL_NAME_SEPARATOR,
-  parseFullToolName,
-} from "@shared";
 import { PanelRightOpen } from "lucide-react";
 import { useTheme } from "next-themes";
 import type React from "react";

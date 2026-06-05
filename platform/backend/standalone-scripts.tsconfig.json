@@ -4,8 +4,8 @@
     "paths": {
       "@/*": ["./src/*"],
       "@drizzle-migration-linter": ["../drizzle-migration-linter/src/index.ts"],
-      "@shared": ["../shared/index.ts"],
-      "@shared/*": ["../shared/*"]
+      "@archestra/shared": ["../shared/index.ts"],
+      "@archestra/shared/*": ["../shared/*"]
     }
   },
   "include": ["src/**/*"],

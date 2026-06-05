@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { OAUTH_TOKEN_TYPE } from "@shared";
+import { OAUTH_TOKEN_TYPE } from "@archestra/shared";
 import { vi } from "vitest";
 import db, { schema } from "@/database";
 import { describe, expect, test } from "@/test";

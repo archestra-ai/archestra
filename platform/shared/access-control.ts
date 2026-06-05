@@ -603,15 +603,6 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetK8sImagePullSecrets]: {
     mcpRegistry: ["read"],
   },
-  [RouteId.GetCatalogChildren]: {
-    mcpRegistry: ["read"],
-  },
-  [RouteId.CreateCatalogChild]: {
-    mcpRegistry: ["create"],
-  },
-  [RouteId.UpdateCatalogChild]: {
-    mcpRegistry: ["update"],
-  },
   [RouteId.GetMcpServers]: {
     mcpServerInstallation: ["read"],
   },
@@ -962,9 +953,6 @@ export const requiredEndpointPermissionsMap: Partial<
   },
   [RouteId.UpdateConnectionSettings]: {
     organizationSettings: ["update"],
-  },
-  [RouteId.ListMcpPresetEntries]: {
-    mcpRegistry: ["read"],
   },
   // Listing environments is available to any authenticated user (read is ungated).
   [RouteId.ListEnvironments]: {},

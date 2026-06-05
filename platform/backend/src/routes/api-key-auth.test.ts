@@ -1,4 +1,4 @@
-import { ADMIN_ROLE_NAME } from "@shared";
+import { ADMIN_ROLE_NAME } from "@archestra/shared";
 import { vi } from "vitest";
 import db, { schema } from "@/database";
 import type { FastifyInstanceWithZod } from "@/server";

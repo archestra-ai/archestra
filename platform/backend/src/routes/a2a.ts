@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { SESSION_ID_HEADER } from "@shared";
+import { SESSION_ID_HEADER } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { executeA2AMessage } from "@/agents/a2a-executor";

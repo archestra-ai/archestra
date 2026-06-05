@@ -3,7 +3,7 @@ import {
   type archestraApiTypes,
   PLAYWRIGHT_MCP_CATALOG_ID,
   PLAYWRIGHT_MCP_SERVER_NAME,
-} from "@shared";
+} from "@archestra/shared";
 import {
   keepPreviousData,
   useMutation,

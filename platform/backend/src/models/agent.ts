@@ -5,7 +5,7 @@ import {
   parseFullToolName,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
   urlSlugify,
-} from "@shared";
+} from "@archestra/shared";
 import {
   and,
   asc,

@@ -9,11 +9,11 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
-      "@shared/access-control": path.resolve(
+      "@archestra/shared/access-control": path.resolve(
         __dirname,
         "../shared/access-control.ts",
       ),
-      "@shared": path.resolve(__dirname, "../shared/index.ts"),
+      "@archestra/shared": path.resolve(__dirname, "../shared/index.ts"),
     },
   },
   test: {

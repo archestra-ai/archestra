@@ -1,8 +1,8 @@
-import { RouteId } from "@shared";
+import { RouteId } from "@archestra/shared";
 import {
   permissionDescriptions,
   requiredEndpointPermissionsMap,
-} from "@shared/access-control";
+} from "@archestra/shared/access-control";
 
 // === Exports ===
 

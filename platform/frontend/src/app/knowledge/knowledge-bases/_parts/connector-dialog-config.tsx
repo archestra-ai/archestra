@@ -4,7 +4,7 @@ import {
   type archestraApiTypes,
   CONNECTOR_TYPE_LABELS,
   DocsPage,
-} from "@shared";
+} from "@archestra/shared";
 import type { ReactNode } from "react";
 import type { UseFormReturn } from "react-hook-form";
 import {

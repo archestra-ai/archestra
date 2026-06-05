@@ -1,4 +1,4 @@
-import { ResourceVisibilityScopeSchema } from "@shared";
+import { ResourceVisibilityScopeSchema } from "@archestra/shared";
 import {
   createInsertSchema,
   createSelectSchema,

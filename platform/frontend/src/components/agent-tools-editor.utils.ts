@@ -4,7 +4,7 @@ import {
   parseFullToolName,
   SKILL_ARCHESTRA_TOOL_SHORT_NAMES,
   TOOL_RUN_PYTHON_SHORT_NAME,
-} from "@shared";
+} from "@archestra/shared";
 
 const DEFAULT_ARCHESTRA_TOOL_SHORT_NAME_SET = new Set<string>(
   DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES,

@@ -1,6 +1,6 @@
 "use client";
 
-import { isProviderApiKeyOptional } from "@shared";
+import { isProviderApiKeyOptional } from "@archestra/shared";
 import { Loader2 } from "lucide-react";
 import { useEffect } from "react";
 import { useForm } from "react-hook-form";

@@ -1,4 +1,4 @@
-import { E2eTestId } from "@shared";
+import { E2eTestId } from "@archestra/shared";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { useSearchParams } from "next/navigation";
 import { StrictMode } from "react";

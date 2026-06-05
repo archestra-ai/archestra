@@ -1,6 +1,6 @@
 "use client";
 
-import { type archestraApiTypes, parseFullToolName } from "@shared";
+import { type archestraApiTypes, parseFullToolName } from "@archestra/shared";
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";

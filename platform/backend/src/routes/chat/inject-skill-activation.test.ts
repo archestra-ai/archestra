@@ -1,4 +1,4 @@
-import type { ChatMessage } from "@shared";
+import type { ChatMessage } from "@archestra/shared";
 import { SkillModel } from "@/models";
 import { expect, test } from "@/test";
 import { injectSkillActivation } from "./inject-skill-activation";

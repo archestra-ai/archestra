@@ -23,7 +23,7 @@ vi.mock("@/lib/auth/auth.query", () => ({
 }));
 
 // Mock shared module
-vi.mock("@shared", () => ({
+vi.mock("@archestra/shared", () => ({
   requiredPagePermissionsMap: {
     "/protected": { "organization:read": ["read"] },
     "/admin": { "organization:write": ["write"] },

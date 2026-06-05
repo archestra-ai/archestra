@@ -1,4 +1,4 @@
-import { addNomicTaskPrefix } from "@shared";
+import { addNomicTaskPrefix } from "@archestra/shared";
 import config from "@/config";
 import logger from "@/logging";
 import { KbChunkModel } from "@/models";

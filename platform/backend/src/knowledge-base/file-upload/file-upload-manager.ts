@@ -3,7 +3,7 @@ import {
   type ResourceVisibilityScope,
   SUPPORTED_KNOWLEDGE_FILE_EXTENSIONS,
   SUPPORTED_KNOWLEDGE_FILE_MIME_TYPES,
-} from "@shared";
+} from "@archestra/shared";
 import config from "@/config";
 import {
   extractTextFiles,

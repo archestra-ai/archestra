@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { urlSlugify } from "@shared";
+import { urlSlugify } from "@archestra/shared";
 
 /**
  * Pure builders for the on-disk manifests served by the shared skill

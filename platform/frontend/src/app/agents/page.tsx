@@ -2,7 +2,7 @@ import {
   archestraApiSdk,
   type archestraApiTypes,
   type ErrorExtended,
-} from "@shared";
+} from "@archestra/shared";
 
 import { ForbiddenPage } from "@/app/_parts/forbidden-page";
 import { ServerErrorFallback } from "@/components/error-fallback";

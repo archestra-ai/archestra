@@ -1,9 +1,9 @@
-import { and, asc, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type {
   InsertSkillSandbox,
-  InsertSkillSandboxFileSnapshot,
   SkillSandbox,
+  SkillSandboxSkillMount,
 } from "@/types";
 
 /**
@@ -21,111 +21,84 @@ export class SkillInvalidFilePathError extends Error {
 
 class SkillSandboxModel {
   /**
-   * Create a sandbox row together with its junction entries and an immutable file
-   * snapshot in a single transaction. Skill content and files are fetched in a
-   * single LEFT JOIN statement so the snapshot is always internally consistent
-   * under PostgreSQL's default READ COMMITTED isolation — a concurrent
-   * update_skill that commits while this method runs cannot produce a mixed
-   * snapshot (old SKILL.md with new files, or vice versa).
-   *
-   * Throws {@link SkillInvalidFilePathError} if any mounted skill contains a file
-   * with an absolute or traversal path.
+   * Create an empty sandbox row. Skills are no longer fixed at creation — they
+   * are mounted later via the replay log (see
+   * `SkillSandboxReplayEventModel.appendSkillMount`), so a fresh sandbox starts
+   * as a plain shell with nothing under `/skills`.
    */
-  static async create(params: {
-    sandbox: InsertSkillSandbox;
-    skillIds: string[];
+  static async create(sandbox: InsertSkillSandbox): Promise<SkillSandbox> {
+    const [row] = await db
+      .insert(schema.skillSandboxesTable)
+      .values(sandbox)
+      .returning();
+    if (!row) {
+      throw new Error("failed to insert skill sandbox");
+    }
+    return row;
+  }
+
+  /**
+   * Find the conversation's default sandbox or create it. The partial unique
+   * index `(organization_id, user_id, conversation_id) WHERE is_default` makes
+   * `INSERT ... ON CONFLICT DO NOTHING` safe under concurrent first calls: the
+   * loser's insert is a no-op and both callers re-select the same row.
+   */
+  static async findOrCreateDefault(params: {
+    organizationId: string;
+    userId: string;
+    conversationId: string;
+    defaultCwd: string;
   }): Promise<SkillSandbox> {
-    return await db.transaction(async (tx) => {
-      const [sandbox] = await tx
-        .insert(schema.skillSandboxesTable)
-        .values(params.sandbox)
-        .returning();
+    const { organizationId, userId, conversationId, defaultCwd } = params;
 
-      if (!sandbox) {
-        throw new Error("failed to insert skill sandbox");
-      }
+    await db
+      .insert(schema.skillSandboxesTable)
+      .values({
+        organizationId,
+        userId,
+        conversationId,
+        defaultCwd,
+        isDefault: true,
+      })
+      .onConflictDoNothing();
 
-      if (params.skillIds.length > 0) {
-        await tx.insert(schema.skillSandboxSkillsTable).values(
-          params.skillIds.map((skillId) => ({
-            sandboxId: sandbox.id,
-            skillId,
-          })),
-        );
+    const [row] = await db
+      .select()
+      .from(schema.skillSandboxesTable)
+      .where(
+        and(
+          eq(schema.skillSandboxesTable.organizationId, organizationId),
+          eq(schema.skillSandboxesTable.userId, userId),
+          eq(schema.skillSandboxesTable.conversationId, conversationId),
+          eq(schema.skillSandboxesTable.isDefault, true),
+        ),
+      );
+    if (!row) {
+      throw new Error(
+        `failed to find-or-create default sandbox for conversation ${conversationId}`,
+      );
+    }
+    return row;
+  }
 
-        const joinRows = await tx
-          .select({
-            skill: schema.skillsTable,
-            file: schema.skillFilesTable,
-          })
-          .from(schema.skillsTable)
-          .leftJoin(
-            schema.skillFilesTable,
-            eq(schema.skillsTable.id, schema.skillFilesTable.skillId),
-          )
-          .where(inArray(schema.skillsTable.id, params.skillIds))
-          .orderBy(asc(schema.skillFilesTable.path));
-
-        // group join rows into a per-skill map (preserves file order from ORDER BY)
-        const skillFileMap = new Map<
-          string,
-          {
-            skill: (typeof joinRows)[number]["skill"];
-            files: NonNullable<(typeof joinRows)[number]["file"]>[];
-          }
-        >();
-        for (const row of joinRows) {
-          const entry = skillFileMap.get(row.skill.id);
-          if (entry) {
-            if (row.file) entry.files.push(row.file);
-          } else {
-            skillFileMap.set(row.skill.id, {
-              skill: row.skill,
-              files: row.file ? [row.file] : [],
-            });
-          }
-        }
-
-        const snapshotRows: InsertSkillSandboxFileSnapshot[] = [];
-        for (const { skill, files } of skillFileMap.values()) {
-          snapshotRows.push({
-            sandboxId: sandbox.id,
-            organizationId: sandbox.organizationId,
-            skillId: skill.id,
-            skillName: skill.name,
-            path: "SKILL.md",
-            encoding: "utf8",
-            content: skill.content,
-          });
-          for (const file of files) {
-            if (
-              file.path.startsWith("/") ||
-              file.path.split("/").some((s) => s === "..") ||
-              file.path === "SKILL.md"
-            ) {
-              throw new SkillInvalidFilePathError(skill.name, file.path);
-            }
-            snapshotRows.push({
-              sandboxId: sandbox.id,
-              organizationId: sandbox.organizationId,
-              skillId: skill.id,
-              skillName: skill.name,
-              path: file.path,
-              encoding: file.encoding,
-              content: file.content,
-            });
-          }
-        }
-
-        if (snapshotRows.length > 0) {
-          await tx
-            .insert(schema.skillSandboxFileSnapshotsTable)
-            .values(snapshotRows);
-        }
-      }
-
-      return sandbox;
-    });
+  /** The conversation's default sandbox, if one has been created. */
+  static async findDefault(params: {
+    organizationId: string;
+    userId: string;
+    conversationId: string;
+  }): Promise<SkillSandbox | null> {
+    const [row] = await db
+      .select()
+      .from(schema.skillSandboxesTable)
+      .where(
+        and(
+          eq(schema.skillSandboxesTable.organizationId, params.organizationId),
+          eq(schema.skillSandboxesTable.userId, params.userId),
+          eq(schema.skillSandboxesTable.conversationId, params.conversationId),
+          eq(schema.skillSandboxesTable.isDefault, true),
+        ),
+      );
+    return row ?? null;
   }
 
   static async findById(id: string): Promise<SkillSandbox | null> {
@@ -157,13 +130,30 @@ class SkillSandboxModel {
       );
   }
 
-  /** Skill ids that were mounted into the sandbox at creation. */
-  static async listSkillIds(sandboxId: string): Promise<string[]> {
+  /** Distinct skill ids mounted into the sandbox over its lifetime. */
+  static async listMountedSkillIds(sandboxId: string): Promise<string[]> {
     const rows = await db
-      .select({ skillId: schema.skillSandboxSkillsTable.skillId })
-      .from(schema.skillSandboxSkillsTable)
-      .where(eq(schema.skillSandboxSkillsTable.sandboxId, sandboxId));
+      .selectDistinct({ skillId: schema.skillSandboxSkillMountsTable.skillId })
+      .from(schema.skillSandboxSkillMountsTable)
+      .where(eq(schema.skillSandboxSkillMountsTable.sandboxId, sandboxId));
     return rows.map((r) => r.skillId);
+  }
+
+  /** The mount pinning a given skill in a sandbox, if the skill is mounted. */
+  static async findMountBySkill(params: {
+    sandboxId: string;
+    skillId: string;
+  }): Promise<SkillSandboxSkillMount | null> {
+    const [row] = await db
+      .select()
+      .from(schema.skillSandboxSkillMountsTable)
+      .where(
+        and(
+          eq(schema.skillSandboxSkillMountsTable.sandboxId, params.sandboxId),
+          eq(schema.skillSandboxSkillMountsTable.skillId, params.skillId),
+        ),
+      );
+    return row ?? null;
   }
 }
 

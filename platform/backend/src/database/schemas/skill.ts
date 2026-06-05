@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import {
   boolean,
   index,
+  integer,
   jsonb,
   pgTable,
   text,
@@ -48,6 +49,12 @@ const skillsTable = pgTable(
     description: text("description").notNull(),
     /** Full markdown instructions (the SKILL.md body). */
     content: text("content").notNull(),
+    /**
+     * Head version number, pointing at the latest `skill_versions` row. Bumped
+     * in the same transaction as an edit that forks a new version. Every skill
+     * has at least version 1 (written on create / backfilled on migration).
+     */
+    latestVersion: integer("latest_version").notNull(),
     /** Optional `license` frontmatter field. */
     license: text("license"),
     /** Optional `compatibility` frontmatter field (environment requirements). */

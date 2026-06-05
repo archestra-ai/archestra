@@ -6,7 +6,7 @@ import {
   type ModelInputModality,
   type SupportedProvider,
   supportsFileUploads,
-} from "@shared";
+} from "@archestra/shared";
 import { MoreVerticalIcon, PaperclipIcon, XIcon } from "lucide-react";
 import { memo, useCallback } from "react";
 import { ModelSelectorLogo } from "@/components/ai-elements/model-selector";

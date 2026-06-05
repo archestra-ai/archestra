@@ -1,4 +1,4 @@
-import type { ChatSkillMetadata } from "@shared";
+import type { ChatSkillMetadata } from "@archestra/shared";
 
 /** A slash command bound to a skill, e.g. typing `/deep-research` in chat. */
 export type SkillCommand = {

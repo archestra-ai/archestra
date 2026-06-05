@@ -1,6 +1,9 @@
 "use client";
 
-import { type archestraApiTypes, isPlaywrightCatalogItem } from "@shared";
+import {
+  type archestraApiTypes,
+  isPlaywrightCatalogItem,
+} from "@archestra/shared";
 import { Bot, Loader2, Pencil, X } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";

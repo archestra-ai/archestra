@@ -366,6 +366,7 @@ The base URL can also be set globally via the `ARCHESTRA_VLLM_BASE_URL` environm
 ### Important Notes
 
 - **Configure base URL to enable vLLM**: The vLLM provider is only available when `ARCHESTRA_VLLM_BASE_URL` is set or a per-key base URL is configured in the UI. Without either, vLLM won't appear as an option.
+- **Auto-seeding needs the base URL**: Setting `ARCHESTRA_CHAT_VLLM_API_KEY` alone does not create a vLLM key at startup. `ARCHESTRA_VLLM_BASE_URL` must also be set, otherwise the provider is skipped (a key without a base URL would silently route to the public OpenAI endpoint).
 - **No API key required for most deployments**: Unlike cloud providers, self-hosted vLLM typically doesn't require authentication. When adding a vLLM key in the platform, the API key field is marked as optional.
 
 ## Ollama
@@ -689,6 +690,8 @@ Known region prefixes: `us`, `eu`, `ap`, `global`.
 | `ARCHESTRA_AZURE_OPENAI_RESPONSES_API_VERSION` | No | Azure Responses API version (default: `2025-04-01-preview`) |
 | `ARCHESTRA_AZURE_OPENAI_ENTRA_ID_ENABLED` | No | Set to `true` to use Microsoft Entra ID instead of an Azure API key |
 | `ARCHESTRA_CHAT_AZURE_OPENAI_API_KEY` | No | Default API key for Azure AI Foundry chat (can be overridden per conversation/team/org) |
+
+Setting `ARCHESTRA_CHAT_AZURE_OPENAI_API_KEY` alone does not create an Azure key at startup; `ARCHESTRA_AZURE_OPENAI_BASE_URL` must also be set (Azure has no usable default endpoint), otherwise the provider is skipped.
 
 ### Getting an Azure API Key
 

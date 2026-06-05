@@ -112,6 +112,10 @@ export function findChangedMigrationFiles(params: {
     [
       "diff",
       "--name-only",
+      // git diff prints repo-root-relative paths; --relative makes them
+      // relative to cwd so they match git ls-files below (and resolve correctly
+      // when the linter runs from a subdirectory such as backend/).
+      "--relative",
       "--diff-filter=ACMR",
       resolvedBaseRef,
       "--",

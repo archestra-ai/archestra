@@ -6,7 +6,7 @@ import {
   SOURCE_HEADER,
   UNTRUSTED_CONTEXT_HEADER,
   USER_ID_HEADER,
-} from "@shared";
+} from "@archestra/shared";
 import { streamText } from "ai";
 import { vi } from "vitest";
 import { ConversationModel, LlmProviderApiKeyModel } from "@/models";

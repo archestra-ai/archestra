@@ -1,4 +1,7 @@
-import { OPENROUTER_FREE_MODEL_ID, type SupportedProvider } from "@shared";
+import {
+  OPENROUTER_FREE_MODEL_ID,
+  type SupportedProvider,
+} from "@archestra/shared";
 import { vi } from "vitest";
 import LlmProviderApiKeyModelLinkModel from "@/models/llm-provider-api-key-model";
 import ModelModel from "@/models/model";

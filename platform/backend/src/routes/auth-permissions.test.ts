@@ -1,5 +1,5 @@
-import { ADMIN_ROLE_NAME, MEMBER_ROLE_NAME } from "@shared";
-import { allAvailableActions } from "@shared/access-control";
+import { ADMIN_ROLE_NAME, MEMBER_ROLE_NAME } from "@archestra/shared";
+import { allAvailableActions } from "@archestra/shared/access-control";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";

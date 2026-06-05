@@ -1,7 +1,7 @@
 import {
   LINKED_IDP_AUTH_COMPLETE_ENDPOINT,
   LINKED_IDP_AUTH_INTENT_ENDPOINT,
-} from "@shared";
+} from "@archestra/shared";
 import { getCookies, parseSetCookieHeader } from "better-auth/cookies";
 import { makeSignature } from "better-auth/crypto";
 import { eq } from "drizzle-orm";

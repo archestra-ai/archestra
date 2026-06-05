@@ -2,7 +2,7 @@ import {
   MODELS_DEV_PROVIDER_MAP,
   type SupportedProvider,
   TimeInMs,
-} from "@shared";
+} from "@archestra/shared";
 import { z } from "zod";
 import { CacheKey, cacheManager } from "@/cache-manager";
 import logger from "@/logging";

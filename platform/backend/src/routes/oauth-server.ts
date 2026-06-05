@@ -1,4 +1,8 @@
-import { OAUTH_ENDPOINTS, OAUTH_GRANT_TYPE, OAUTH_SCOPES } from "@shared";
+import {
+  OAUTH_ENDPOINTS,
+  OAUTH_GRANT_TYPE,
+  OAUTH_SCOPES,
+} from "@archestra/shared";
 import { eq } from "drizzle-orm";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";

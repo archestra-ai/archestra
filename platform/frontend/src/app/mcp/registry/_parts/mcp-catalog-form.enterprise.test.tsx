@@ -31,7 +31,6 @@ vi.mock("@/lib/auth/auth.query", () => ({
 }));
 
 vi.mock("@/lib/organization.query", () => ({
-  usePresetEntityName: vi.fn(() => ({ singular: "Preset", plural: "Presets" })),
   useDefaultEnvironment: vi.fn(() => ({
     name: "Default",
     namespace: null,

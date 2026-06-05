@@ -1,4 +1,4 @@
-import type { ApiError } from "@shared";
+import type { ApiError } from "@archestra/shared";
 import { toast } from "sonner";
 
 type ApiSdkError =

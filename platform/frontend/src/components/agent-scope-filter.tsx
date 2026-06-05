@@ -1,6 +1,6 @@
 "use client";
 
-import type { Permissions } from "@shared";
+import type { Permissions } from "@archestra/shared";
 import { X } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";

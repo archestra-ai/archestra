@@ -7,7 +7,7 @@ import {
   DEFAULT_APP_NAME,
   MEMBER_ROLE_NAME,
   type SupportedProvider,
-} from "@shared";
+} from "@archestra/shared";
 import { beforeEach as baseBeforeEach, test as baseTest } from "vitest";
 import db, { schema } from "@/database";
 import {

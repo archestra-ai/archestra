@@ -1,10 +1,10 @@
-import type { CallToolResult, Tool } from "@modelcontextprotocol/sdk/types.js";
 import {
   type ArchestraToolFullName,
   type ArchestraToolShortName,
   getArchestraToolFullName,
   type McpToolError,
-} from "@shared";
+} from "@archestra/shared";
+import type { CallToolResult, Tool } from "@modelcontextprotocol/sdk/types.js";
 import { ZodError, type ZodType, z } from "zod";
 import logger from "@/logging";
 import {

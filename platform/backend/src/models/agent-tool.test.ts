@@ -2,7 +2,7 @@ import {
   getArchestraToolFullName,
   TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
-} from "@shared";
+} from "@archestra/shared";
 import { archestraMcpBranding } from "@/archestra-mcp-server";
 import { beforeEach, describe, expect, test } from "@/test";
 import AgentModel from "./agent";

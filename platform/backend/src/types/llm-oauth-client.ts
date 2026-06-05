@@ -1,4 +1,7 @@
-import { type SupportedProvider, SupportedProvidersSchema } from "@shared";
+import {
+  type SupportedProvider,
+  SupportedProvidersSchema,
+} from "@archestra/shared";
 import { z } from "zod";
 
 export const LLM_OAUTH_CLIENT_METADATA_TYPE = "llm_oauth_client";

@@ -31,7 +31,7 @@ describe("messagesToMarkdown", () => {
     const messages = [
       makeMessage("assistant", [
         {
-          type: "tool-run_skill_command",
+          type: "tool-run_command",
           state: "output-available",
           toolCallId: "call-1",
           input: { command: "ls" },
@@ -39,9 +39,9 @@ describe("messagesToMarkdown", () => {
         },
         {
           type: "dynamic-tool",
-          toolName: "create_skill_sandbox",
+          toolName: "download_file",
           state: "output-error",
-          input: { skills: ["alpha"] },
+          input: { path: "out.bin" },
           errorText: "permission denied",
         },
       ]),
@@ -53,11 +53,11 @@ describe("messagesToMarkdown", () => {
       exportedAt,
     });
 
-    expect(md).toContain("### Tool: `run_skill_command`");
+    expect(md).toContain("### Tool: `run_command`");
     expect(md).toContain("state=`output-available`");
     expect(md).toContain('"command": "ls"');
     expect(md).toContain('"stdout": "SKILL.md\\n"');
-    expect(md).toContain("### Tool: `create_skill_sandbox`");
+    expect(md).toContain("### Tool: `download_file`");
     expect(md).toContain("**Error:**");
     expect(md).toContain("permission denied");
   });

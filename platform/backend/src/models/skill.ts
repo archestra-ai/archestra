@@ -1,5 +1,6 @@
 import {
   and,
+  asc,
   count,
   desc,
   eq,
@@ -11,7 +12,9 @@ import {
 } from "drizzle-orm";
 import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import type { InsertSkill, InsertSkillFile, Skill, UpdateSkill } from "@/types";
+import type { SkillFileEncoding, SkillFileKind } from "@/types/skill";
 import type { ResourceVisibilityScope } from "@/types/visibility";
+import SkillVersionModel, { type VersionFileInput } from "./skill-version";
 
 class SkillModel {
   static async findByOrganization(params: {
@@ -218,7 +221,7 @@ class SkillModel {
     const run = async (tx: Transaction) => {
       const [skill] = await tx
         .insert(schema.skillsTable)
-        .values(params.skill)
+        .values({ ...params.skill, latestVersion: 1 })
         .onConflictDoNothing()
         .returning();
 
@@ -237,6 +240,19 @@ class SkillModel {
             params.teamIds.map((teamId) => ({ skillId: skill.id, teamId })),
           );
       }
+
+      // every skill starts at immutable version 1.
+      const versionFiles = toVersionFiles(params.files);
+      await SkillVersionModel.insertVersion(tx, {
+        skillId: skill.id,
+        version: 1,
+        content: skill.content,
+        contentHash: SkillVersionModel.computeContentHash({
+          content: skill.content,
+          files: versionFiles,
+        }),
+        files: versionFiles,
+      });
 
       return skill;
     };
@@ -299,6 +315,41 @@ class SkillModel {
         }
       }
 
+      // fork an immutable version iff the canonical payload changed. The hash is
+      // computed over the resulting file set (read back here so an omitted
+      // `files` reuses the untouched rows), so a metadata-only edit is a no-op.
+      const currentFiles = await tx
+        .select()
+        .from(schema.skillFilesTable)
+        .where(eq(schema.skillFilesTable.skillId, params.id))
+        .orderBy(asc(schema.skillFilesTable.path));
+      const versionFiles = toVersionFiles(currentFiles);
+      const contentHash = SkillVersionModel.computeContentHash({
+        content: skill.content,
+        files: versionFiles,
+      });
+      const latest = await SkillVersionModel.findBySkillAndVersion(
+        params.id,
+        skill.latestVersion,
+        tx,
+      );
+      if (!latest || latest.contentHash !== contentHash) {
+        const nextVersion = skill.latestVersion + 1;
+        await SkillVersionModel.insertVersion(tx, {
+          skillId: params.id,
+          version: nextVersion,
+          content: skill.content,
+          contentHash,
+          files: versionFiles,
+        });
+        const [bumped] = await tx
+          .update(schema.skillsTable)
+          .set({ latestVersion: nextVersion })
+          .where(eq(schema.skillsTable.id, params.id))
+          .returning();
+        return bumped ?? skill;
+      }
+
       return skill;
     });
   }
@@ -329,6 +380,23 @@ class SkillModel {
 
     return row ?? null;
   }
+}
+
+/** Normalize a resource file set into the shape a version snapshot stores. */
+function toVersionFiles(
+  files: {
+    path: string;
+    content: string;
+    encoding?: SkillFileEncoding;
+    kind: SkillFileKind;
+  }[],
+): VersionFileInput[] {
+  return files.map((file) => ({
+    path: file.path,
+    content: file.content,
+    encoding: file.encoding ?? "utf8",
+    kind: file.kind,
+  }));
 }
 
 function buildOrgFilters(params: {

@@ -1,3 +1,4 @@
+import type { SupportedProvider } from "@archestra/shared";
 import { describe, expect, test } from "@/test";
 import LlmProviderApiKeyModelLinkModel from "./llm-provider-api-key-model";
 import ModelModel from "./model";
@@ -324,6 +325,330 @@ describe("LlmProviderApiKeyModelLinkModel", () => {
         ]);
 
       expect(linkedSelections).toEqual(new Set([`${apiKey.id}:${model.id}`]));
+    });
+  });
+
+  describe("chat-capable filtering in resolution fallbacks", () => {
+    test("getFirstModelForApiKey skips ignored models", async ({
+      makeOrganization,
+      makeSecret,
+      makeLlmProviderApiKey,
+    }) => {
+      const org = await makeOrganization();
+      const secret = await makeSecret();
+      const apiKey = await makeLlmProviderApiKey(org.id, secret.id, {
+        provider: "openai",
+      });
+
+      const hiddenModel = await ModelModel.create({
+        externalId: "openai/babbage-002",
+        provider: "openai",
+        modelId: "babbage-002",
+        description: "Babbage",
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+        supportsToolCalling: false,
+        lastSyncedAt: new Date(),
+      });
+      await ModelModel.update(hiddenModel.id, { ignored: true });
+
+      const chatModel = await ModelModel.create({
+        externalId: "openai/gpt-5.4",
+        provider: "openai",
+        modelId: "gpt-5.4",
+        description: "GPT-5.4",
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+        supportsToolCalling: true,
+        lastSyncedAt: new Date(),
+      });
+
+      await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(apiKey.id, [
+        hiddenModel.id,
+        chatModel.id,
+      ]);
+
+      const first =
+        await LlmProviderApiKeyModelLinkModel.getFirstModelForApiKey(apiKey.id);
+      expect(first?.id).toBe(chatModel.id);
+    });
+
+    test("getRankedModelsForApiKeys excludes ignored and embedding models", async ({
+      makeOrganization,
+      makeSecret,
+      makeLlmProviderApiKey,
+    }) => {
+      const org = await makeOrganization();
+      const secret = await makeSecret();
+      const apiKey = await makeLlmProviderApiKey(org.id, secret.id, {
+        provider: "openai",
+      });
+
+      const hiddenModel = await ModelModel.create({
+        externalId: "openai/babbage-002",
+        provider: "openai",
+        modelId: "babbage-002",
+        description: "Babbage",
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+        supportsToolCalling: false,
+        lastSyncedAt: new Date(),
+      });
+      await ModelModel.update(hiddenModel.id, { ignored: true });
+
+      const embeddingModel = await ModelModel.create({
+        externalId: "openai/text-embedding-3-small",
+        provider: "openai",
+        modelId: "text-embedding-3-small",
+        description: "Embedding",
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+        embeddingDimensions: 1536,
+        lastSyncedAt: new Date(),
+      });
+
+      const chatModel = await ModelModel.create({
+        externalId: "openai/gpt-5.4",
+        provider: "openai",
+        modelId: "gpt-5.4",
+        description: "GPT-5.4",
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+        supportsToolCalling: true,
+        lastSyncedAt: new Date(),
+      });
+
+      await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(apiKey.id, [
+        hiddenModel.id,
+        embeddingModel.id,
+        chatModel.id,
+      ]);
+
+      const ranked =
+        await LlmProviderApiKeyModelLinkModel.getRankedModelsForApiKeys([
+          apiKey.id,
+        ]);
+
+      expect(ranked.map((r) => r.modelId)).toEqual([chatModel.id]);
+    });
+
+    test("getBestModel skips an ignored best-marked model", async ({
+      makeOrganization,
+      makeSecret,
+      makeLlmProviderApiKey,
+    }) => {
+      const org = await makeOrganization();
+      const secret = await makeSecret();
+      const apiKey = await makeLlmProviderApiKey(org.id, secret.id, {
+        provider: "openai",
+      });
+
+      const hiddenBest = await ModelModel.create({
+        externalId: "openai/gpt-5.5",
+        provider: "openai",
+        modelId: "gpt-5.5",
+        description: "GPT-5.5",
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+        supportsToolCalling: true,
+        lastSyncedAt: new Date(),
+      });
+      const chatModel = await ModelModel.create({
+        externalId: "openai/gpt-5.4",
+        provider: "openai",
+        modelId: "gpt-5.4",
+        description: "GPT-5.4",
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+        supportsToolCalling: true,
+        lastSyncedAt: new Date(),
+      });
+
+      await LlmProviderApiKeyModelLinkModel.syncModelsForApiKey(
+        apiKey.id,
+        [
+          { id: hiddenBest.id, modelId: hiddenBest.modelId },
+          { id: chatModel.id, modelId: chatModel.modelId },
+        ],
+        "openai",
+      );
+      await ModelModel.update(hiddenBest.id, { ignored: true });
+
+      const best = await LlmProviderApiKeyModelLinkModel.getBestModel(
+        apiKey.id,
+      );
+      expect(best?.id).toBe(chatModel.id);
+    });
+
+    test("getBestModelsForApiKeys skips an ignored best-marked model", async ({
+      makeOrganization,
+      makeSecret,
+      makeLlmProviderApiKey,
+    }) => {
+      const org = await makeOrganization();
+      const secret = await makeSecret();
+      const apiKey = await makeLlmProviderApiKey(org.id, secret.id, {
+        provider: "openai",
+      });
+
+      const hiddenBest = await ModelModel.create({
+        externalId: "openai/gpt-5.5",
+        provider: "openai",
+        modelId: "gpt-5.5",
+        description: "GPT-5.5",
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+        supportsToolCalling: true,
+        lastSyncedAt: new Date(),
+      });
+      const chatModel = await ModelModel.create({
+        externalId: "openai/gpt-5.4",
+        provider: "openai",
+        modelId: "gpt-5.4",
+        description: "GPT-5.4",
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+        supportsToolCalling: true,
+        lastSyncedAt: new Date(),
+      });
+
+      await LlmProviderApiKeyModelLinkModel.syncModelsForApiKey(
+        apiKey.id,
+        [
+          { id: hiddenBest.id, modelId: hiddenBest.modelId },
+          { id: chatModel.id, modelId: chatModel.modelId },
+        ],
+        "openai",
+      );
+      await ModelModel.update(hiddenBest.id, { ignored: true });
+
+      const bestModels =
+        await LlmProviderApiKeyModelLinkModel.getBestModelsForApiKeys([
+          apiKey.id,
+        ]);
+      expect(bestModels.get(apiKey.id)?.id).toBe(chatModel.id);
+    });
+  });
+
+  describe("best-model marker priority", () => {
+    test.for([
+      { catalog: ["gpt-4o", "gpt-3.5-turbo"], expected: "gpt-4o" },
+      { catalog: ["gpt-4.1", "gpt-4o"], expected: "gpt-4.1" },
+      { catalog: ["gpt-5", "gpt-4o"], expected: "gpt-5" },
+      { catalog: ["gpt-5.4", "gpt-5"], expected: "gpt-5.4" },
+      { catalog: ["gpt-5.5", "gpt-5.4"], expected: "gpt-5.5" },
+      { catalog: ["gpt-5.5-pro", "gpt-5.5"], expected: "gpt-5.5-pro" },
+    ])("marks $expected as best for $catalog", async ({ catalog, expected }, {
+      makeOrganization,
+      makeSecret,
+      makeLlmProviderApiKey,
+    }) => {
+      const org = await makeOrganization();
+      const secret = await makeSecret();
+      const apiKey = await makeLlmProviderApiKey(org.id, secret.id, {
+        provider: "openai",
+      });
+
+      const models = [];
+      for (const modelId of catalog) {
+        models.push(
+          await ModelModel.create({
+            externalId: `openai/${modelId}`,
+            provider: "openai",
+            modelId,
+            description: modelId,
+            inputModalities: ["text"],
+            outputModalities: ["text"],
+            supportsToolCalling: true,
+            lastSyncedAt: new Date(),
+          }),
+        );
+      }
+
+      await LlmProviderApiKeyModelLinkModel.syncModelsForApiKey(
+        apiKey.id,
+        models.map((model) => ({ id: model.id, modelId: model.modelId })),
+        "openai",
+      );
+
+      const best = await LlmProviderApiKeyModelLinkModel.getBestModel(
+        apiKey.id,
+      );
+      expect(best?.modelId).toBe(expected);
+    });
+  });
+
+  describe("best-model marker priority across providers", () => {
+    const cases: Array<{
+      provider: SupportedProvider;
+      catalog: string[];
+      expected: string;
+    }> = [
+      {
+        provider: "anthropic",
+        catalog: ["claude-sonnet-4-8", "claude-haiku-4-5"],
+        expected: "claude-sonnet-4-8",
+      },
+      {
+        provider: "azure",
+        catalog: ["gpt-4o", "gpt-3.5-turbo"],
+        expected: "gpt-4o",
+      },
+      {
+        provider: "gemini",
+        catalog: ["gemini-2.5-flash"],
+        expected: "gemini-2.5-flash",
+      },
+      {
+        provider: "bedrock",
+        catalog: ["anthropic.claude-sonnet-4-8"],
+        expected: "anthropic.claude-sonnet-4-8",
+      },
+      { provider: "xai", catalog: ["grok-3"], expected: "grok-3" },
+      {
+        provider: "cohere",
+        catalog: ["command-r-plus"],
+        expected: "command-r-plus",
+      },
+    ];
+
+    test.for(cases)("$provider marks $expected as best for $catalog", async ({
+      provider,
+      catalog,
+      expected,
+    }, { makeOrganization, makeSecret, makeLlmProviderApiKey }) => {
+      const org = await makeOrganization();
+      const secret = await makeSecret();
+      const apiKey = await makeLlmProviderApiKey(org.id, secret.id, {
+        provider,
+      });
+
+      const models = [];
+      for (const modelId of catalog) {
+        models.push(
+          await ModelModel.create({
+            externalId: `${provider}/${modelId}`,
+            provider,
+            modelId,
+            description: modelId,
+            inputModalities: ["text"],
+            outputModalities: ["text"],
+            supportsToolCalling: true,
+            lastSyncedAt: new Date(),
+          }),
+        );
+      }
+
+      await LlmProviderApiKeyModelLinkModel.syncModelsForApiKey(
+        apiKey.id,
+        models.map((model) => ({ id: model.id, modelId: model.modelId })),
+        provider,
+      );
+
+      const best = await LlmProviderApiKeyModelLinkModel.getBestModel(
+        apiKey.id,
+      );
+      expect(best?.modelId).toBe(expected);
     });
   });
 });

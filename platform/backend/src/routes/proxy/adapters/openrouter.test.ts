@@ -1,4 +1,4 @@
-import { ApiError } from "@shared";
+import { ApiError } from "@archestra/shared";
 import { describe, expect, test } from "@/test";
 import type { Openrouter } from "@/types";
 import { openrouterAdapterFactory } from "./openrouter";

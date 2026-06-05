@@ -1,10 +1,13 @@
 import {
+  archestraApiSdk,
+  getManageCredentialsButtonTestId,
+} from "@archestra/shared";
+import {
   type APIRequestContext,
   type APIResponse,
   expect,
   type Page,
 } from "@playwright/test";
-import { archestraApiSdk, getManageCredentialsButtonTestId } from "@shared";
 import {
   DEFAULT_TEAM_NAME,
   E2eTestId,

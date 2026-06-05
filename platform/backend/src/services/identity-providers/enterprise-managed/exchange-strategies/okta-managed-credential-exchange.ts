@@ -3,7 +3,7 @@ import {
   OAUTH_CLIENT_ASSERTION_TYPE,
   OAUTH_GRANT_TYPE,
   OAUTH_TOKEN_TYPE,
-} from "@shared";
+} from "@archestra/shared";
 import { importPKCS8, SignJWT } from "jose";
 import logger from "@/logging";
 import { discoverOidcTokenEndpoint } from "@/services/identity-providers/oidc";

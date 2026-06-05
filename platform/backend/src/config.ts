@@ -130,8 +130,8 @@ const getPortFromUrl = (): number => {
  *
  * Quickstart mode (Docker):
  *   - Inside the container the app binds to 0.0.0.0.
- *   - On the host, Docker's `-p 3000:3000` maps to 0.0.0.0 by default,
- *     making the app accessible from LAN IPs.
+ *   - Quickstart examples bind host ports to 127.0.0.1 by default.
+ *     Users can opt into LAN access with explicit `0.0.0.0` port bindings.
  *   - Quickstart is designed for quick evaluation, so all origins are
  *     accepted without checks. It's ok if someone will decide to
  *     access Archestra from the mobile phone.

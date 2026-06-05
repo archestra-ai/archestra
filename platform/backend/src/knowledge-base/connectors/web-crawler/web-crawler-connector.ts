@@ -479,6 +479,7 @@ function isAllowedUrl(params: {
   const url = new URL(params.url);
   const startUrl = new URL(params.startUrl);
 
+  if (url.protocol !== "http:" && url.protocol !== "https:") return false;
   if (url.origin !== startUrl.origin) return false;
   if (
     !params.allowedPathPrefixes.some((prefix) =>

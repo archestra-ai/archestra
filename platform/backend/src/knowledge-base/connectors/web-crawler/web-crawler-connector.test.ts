@@ -290,13 +290,13 @@ describe("WebCrawlerConnector", () => {
     await collectBatches({
       startUrl: `${site.url}/docs/`,
       maxDepth: 1,
-      requestDelayMs: 60,
+      requestDelayMs: 200,
     });
 
     expect(requestedAt).toHaveLength(3);
-    // Keep a small tolerance so scheduling jitter does not make this flaky.
-    expect(requestedAt[1] - requestedAt[0]).toBeGreaterThanOrEqual(45);
-    expect(requestedAt[2] - requestedAt[1]).toBeGreaterThanOrEqual(45);
+    // Keep a wide tolerance so scheduling jitter does not make this flaky.
+    expect(requestedAt[1] - requestedAt[0]).toBeGreaterThanOrEqual(120);
+    expect(requestedAt[2] - requestedAt[1]).toBeGreaterThanOrEqual(120);
   });
 
   test("records failed linked pages as skipped items without failing the sync", async () => {

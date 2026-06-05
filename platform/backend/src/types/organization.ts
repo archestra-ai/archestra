@@ -336,7 +336,14 @@ export const SelectOrganizationSchema = InternalSelectOrganizationSchema.omit({
 export const InsertOrganizationSchema = createInsertSchema(
   schema.organizationsTable,
   extendedFields,
-);
+).omit({
+  // Preset feature removed; columns retained in DB (non-destructive) but no
+  // longer accepted by the API, mirroring SelectOrganizationSchema.
+  presetEntityName: true,
+  presetEntityNamePlural: true,
+  presetEntityDefaultLabel: true,
+  presetEntityDefaultValidationRegex: true,
+});
 export const UpdateAppearanceSettingsSchema = z.object({
   theme: OrganizationThemeSchema.optional(),
   customFont: OrganizationCustomFontSchema.optional(),

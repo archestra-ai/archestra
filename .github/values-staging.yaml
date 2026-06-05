@@ -94,6 +94,7 @@ archestra:
       # Maps backend port (9000) and frontend port (3000) to their respective BackendConfigs
       # These BackendConfigs are defined in archestra-ai/infra repo (gke/ingress.tf)
       cloud.google.com/backend-config: '{"ports": {"9000":"archestra-platform-backend-config", "3000":"archestra-platform-frontend-config"}}'
+      cloud.google.com/neg: '{"ingress": true}'
 
   ingress:
     enabled: true
@@ -113,10 +114,6 @@ archestra:
             pathType: Prefix
       - host: backend.archestra.dev
         paths:
-          # Block public access to metrics endpoint
-          - path: /metrics
-            port: 1
-            pathType: Exact
           - path: /
             port: 9000
             pathType: Prefix

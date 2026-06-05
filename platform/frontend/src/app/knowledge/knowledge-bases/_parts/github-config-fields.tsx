@@ -1,7 +1,11 @@
 "use client";
 
-import Link from "next/link";
+import { useEffect } from "react";
 import type { UseFormReturn } from "react-hook-form";
+import {
+  GithubAuthConfigFields,
+  type GithubAuthMethod,
+} from "@/components/github-auth-config-fields";
 import {
   FormControl,
   FormDescription,
@@ -11,13 +15,6 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { useGithubAppConfigs } from "@/lib/github-app-config.query";
 
@@ -40,11 +37,40 @@ export function GithubConfigFields({
   hideRepositoryOptions = false,
 }: GithubConfigFieldsProps) {
   const authMethod = form.watch(`${prefix}.authMethod`) as string | undefined;
+  const githubAppConfigId = form.watch(`${prefix}.githubAppConfigId`) as
+    | string
+    | undefined;
   const includeRepositoryFiles = form.watch(
     `${prefix}.includeRepositoryFiles`,
   ) as boolean | undefined;
-  const usesGithubApp = authMethod === "github_app";
   const { data: githubAppConfigs = [] } = useGithubAppConfigs();
+  const appConfigError = hideAuth
+    ? undefined
+    : getFieldError(form.formState.errors, `${prefix}.githubAppConfigId`);
+
+  useEffect(() => {
+    if (hideAuth) return;
+    form.register(`${prefix}.authMethod`);
+    form.register(`${prefix}.githubAppConfigId`, {
+      validate: (value) =>
+        form.getValues(`${prefix}.authMethod`) !== "github_app" ||
+        Boolean(value) ||
+        "Select a GitHub App configuration",
+    });
+  }, [form, hideAuth, prefix]);
+
+  const handleAuthMethodChange = (value: GithubAuthMethod) => {
+    form.setValue(`${prefix}.authMethod`, value, {
+      shouldDirty: true,
+      shouldValidate: true,
+    });
+    if (value === "pat") {
+      form.setValue(`${prefix}.githubAppConfigId`, "", {
+        shouldDirty: true,
+        shouldValidate: true,
+      });
+    }
+  };
 
   return (
     <div className="space-y-4">
@@ -90,80 +116,19 @@ export function GithubConfigFields({
       )}
 
       {!hideAuth && (
-        <>
-          <FormField
-            control={form.control}
-            name={`${prefix}.authMethod`}
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Authentication Method</FormLabel>
-                <Select
-                  onValueChange={field.onChange}
-                  value={(field.value as string | undefined) ?? "pat"}
-                >
-                  <FormControl>
-                    <SelectTrigger className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    <SelectItem value="pat">Personal Access Token</SelectItem>
-                    <SelectItem value="github_app">GitHub App</SelectItem>
-                  </SelectContent>
-                </Select>
-                <FormDescription>
-                  Use GitHub App authentication for organization-managed
-                  installs.
-                </FormDescription>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          {usesGithubApp && (
-            <FormField
-              control={form.control}
-              name={`${prefix}.githubAppConfigId`}
-              rules={{ required: "Select a GitHub App configuration" }}
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>GitHub App Configuration</FormLabel>
-                  {githubAppConfigs.length > 0 ? (
-                    <Select
-                      onValueChange={field.onChange}
-                      value={(field.value as string | undefined) ?? ""}
-                    >
-                      <FormControl>
-                        <SelectTrigger className="w-full">
-                          <SelectValue placeholder="Select a configuration" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {githubAppConfigs.map((appConfig) => (
-                          <SelectItem key={appConfig.id} value={appConfig.id}>
-                            {appConfig.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  ) : (
-                    <FormDescription>
-                      No GitHub App configurations exist yet. Create one under{" "}
-                      <Link
-                        href="/settings/integrations/github-apps"
-                        className="font-medium text-primary underline-offset-4 hover:underline"
-                      >
-                        Settings → Integrations → GitHub Apps
-                      </Link>
-                      .
-                    </FormDescription>
-                  )}
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-          )}
-        </>
+        <GithubAuthConfigFields
+          authMethod={(authMethod as GithubAuthMethod | undefined) ?? "pat"}
+          onAuthMethodChange={handleAuthMethodChange}
+          githubAppConfigId={githubAppConfigId ?? ""}
+          onGithubAppConfigIdChange={(value) =>
+            form.setValue(`${prefix}.githubAppConfigId`, value, {
+              shouldDirty: true,
+              shouldValidate: true,
+            })
+          }
+          githubAppConfigs={githubAppConfigs}
+          appConfigError={appConfigError}
+        />
       )}
 
       {!hideRepositoryOptions && (
@@ -289,4 +254,21 @@ export function GithubConfigFields({
       )}
     </div>
   );
+}
+
+function getFieldError(
+  errors: Record<string, unknown> | undefined,
+  path: string,
+): string | undefined {
+  const error = path.split(".").reduce<unknown>((current, part) => {
+    if (!current || typeof current !== "object") return undefined;
+    return (current as Record<string, unknown>)[part];
+  }, errors);
+
+  if (!error || typeof error !== "object" || !("message" in error)) {
+    return undefined;
+  }
+
+  const message = (error as { message?: unknown }).message;
+  return typeof message === "string" ? message : undefined;
 }

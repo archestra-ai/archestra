@@ -595,9 +595,16 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
     await executionPromise;
 
     expect(mockStreamText).toHaveBeenCalledTimes(1);
-    expect(mockStreamText.mock.calls[0]?.[0].messages).toEqual(
-      compactedMessages,
-    );
+    // applyPromptCacheBreakpoints marks the first and last message (the stable
+    // prefix + rolling tail) with Anthropic cache_control before streamText, so
+    // the compacted messages reach the model carrying that breakpoint.
+    const cacheBreakpoint = {
+      providerOptions: { anthropic: { cacheControl: { type: "ephemeral" } } },
+    };
+    expect(mockStreamText.mock.calls[0]?.[0].messages).toEqual([
+      { ...compactedMessages[0], ...cacheBreakpoint },
+      { ...compactedMessages[1], ...cacheBreakpoint },
+    ]);
   });
 
   test("prepends load-tools guidance when the agent loads tools when needed", async () => {

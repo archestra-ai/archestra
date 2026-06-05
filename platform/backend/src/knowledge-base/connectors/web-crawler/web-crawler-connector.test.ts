@@ -21,7 +21,7 @@ describe("WebCrawlerConnector", () => {
   });
 
   test("validates crawl scope and regular expression config", async () => {
-    const connector = new WebCrawlerConnector();
+    const connector = new WebCrawlerConnector({ allowPrivateNetwork: true });
 
     await expect(
       connector.validateConfig({
@@ -40,6 +40,23 @@ describe("WebCrawlerConnector", () => {
       error: "Invalid exclude path pattern: [",
     });
 
+    const unsafePattern = await connector.validateConfig({
+      startUrl: "https://docs.example.test/guide/",
+      excludePathPatterns: ["(a+)+$"],
+    });
+    expect(unsafePattern).toEqual({
+      valid: false,
+      error: "Unsafe exclude path pattern: (a+)+$",
+    });
+
+    const invalidUrl = await connector.validateConfig({
+      startUrl: "not a url",
+    });
+    expect(invalidUrl).toEqual({
+      valid: false,
+      error: "Invalid web crawler configuration",
+    });
+
     const excludedStartUrl = await connector.validateConfig({
       startUrl: "https://docs.example.test/guide/",
       includePathPrefixes: ["/api/"],
@@ -47,6 +64,20 @@ describe("WebCrawlerConnector", () => {
     expect(excludedStartUrl).toEqual({
       valid: false,
       error: "Start URL is excluded by the configured crawl scope",
+    });
+  });
+
+  test("blocks private network start URLs by default", async () => {
+    const connector = new WebCrawlerConnector();
+
+    const result = await connector.validateConfig({
+      startUrl: "http://127.0.0.1/docs/",
+    });
+
+    expect(result).toEqual({
+      valid: false,
+      error:
+        "Host 127.0.0.1 resolves to a private or internal network address",
     });
   });
 
@@ -135,6 +166,30 @@ describe("WebCrawlerConnector", () => {
     expect(batches.flatMap((batch) => batch.skipped ?? [])).toEqual([]);
   });
 
+  test("falls back to the fetched URL when canonical points to another origin", async () => {
+    const site = await createTestSite({
+      "/docs/": html(`
+        <html>
+          <head>
+            <title>Cross Origin Canonical</title>
+            <link rel="canonical" href="https://external.example.test/docs/">
+          </head>
+          <body>
+            <main><h1>Cross Origin Canonical</h1></main>
+          </body>
+        </html>
+      `),
+    });
+
+    const batches = await collectBatches({
+      startUrl: `${site.url}/docs/`,
+    });
+    const [document] = batches.flatMap((batch) => batch.documents);
+
+    expect(document.sourceUrl).toBe(`${site.url}/docs/`);
+    expect(document.metadata.url).toBe(`${site.url}/docs/`);
+  });
+
   test("respects maxDepth, maxPages, and emits batches with hasMore", async () => {
     const site = await createTestSite({
       "/docs/": html(`
@@ -202,6 +257,7 @@ describe("WebCrawlerConnector", () => {
     });
 
     expect(requestedAt).toHaveLength(3);
+    // Keep a small tolerance so scheduling jitter does not make this flaky.
     expect(requestedAt[1] - requestedAt[0]).toBeGreaterThanOrEqual(45);
     expect(requestedAt[2] - requestedAt[1]).toBeGreaterThanOrEqual(45);
   });
@@ -242,7 +298,7 @@ describe("WebCrawlerConnector", () => {
         res.end(JSON.stringify({ ok: true }));
       },
     });
-    const connector = new WebCrawlerConnector();
+    const connector = new WebCrawlerConnector({ allowPrivateNetwork: true });
 
     await expect(
       connector.testConnection({
@@ -263,7 +319,7 @@ describe("WebCrawlerConnector", () => {
 async function collectBatches(
   config: Record<string, unknown>,
 ): Promise<ConnectorSyncBatch[]> {
-  const connector = new WebCrawlerConnector();
+  const connector = new WebCrawlerConnector({ allowPrivateNetwork: true });
   const batches: ConnectorSyncBatch[] = [];
 
   for await (const batch of connector.sync({

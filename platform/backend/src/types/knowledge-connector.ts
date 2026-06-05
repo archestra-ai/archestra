@@ -357,7 +357,10 @@ export type SalesforceCheckpoint = z.infer<typeof SalesforceCheckpointSchema>;
 
 export const WebCrawlerConfigSchema = z.object({
   type: WEB_CRAWLER,
-  startUrl: z.string().transform(ensureProtocol),
+  startUrl: z
+    .string()
+    .transform(ensureProtocol)
+    .refine(isValidUrl, { message: "startUrl must be a valid URL" }),
   includePathPrefixes: z.array(z.string().min(1)).optional(),
   excludePathPatterns: z.array(z.string().min(1)).optional(),
   contentSelector: z.string().min(1).optional(),
@@ -529,6 +532,15 @@ export interface ConnectorSyncBatch {
 function ensureProtocol(url: string): string {
   if (/^[a-z][a-z0-9+.-]*:\/\//i.test(url)) return url;
   return `https://${url}`;
+}
+
+function isValidUrl(url: string): boolean {
+  try {
+    new URL(url);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function stripTrailingSlashes(url: string): string {

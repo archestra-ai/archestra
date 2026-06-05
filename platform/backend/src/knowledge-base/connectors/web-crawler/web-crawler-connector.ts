@@ -1,9 +1,12 @@
 import { createHash } from "node:crypto";
+import { lookup } from "node:dns/promises";
 import {
   CheerioCrawler,
   type CheerioCrawlingContext,
   Configuration,
 } from "@crawlee/cheerio";
+import ipaddr from "ipaddr.js";
+import safeRegex from "safe-regex2";
 import type {
   ConnectorCredentials,
   ConnectorDocument,
@@ -29,6 +32,20 @@ const DEFAULT_EXCLUDE_SELECTORS = [
   "form",
   "iframe",
 ];
+const BLOCKED_HOST_RANGES = new Set([
+  "broadcast",
+  "carrierGradeNat",
+  "ipv4Mapped",
+  "linkLocal",
+  "loopback",
+  "multicast",
+  "private",
+  "reserved",
+  "rfc6145",
+  "rfc6052",
+  "uniqueLocal",
+  "unspecified",
+]);
 
 type ExtractedPage = {
   title: string;
@@ -37,20 +54,39 @@ type ExtractedPage = {
 };
 type CrawlerCheerioApi = CheerioCrawlingContext["$"];
 type CrawlerCheerioSelection = ReturnType<CrawlerCheerioApi>;
+type WebCrawlerConnectorOptions = {
+  allowPrivateNetwork?: boolean;
+};
 
 export class WebCrawlerConnector extends BaseConnector {
   type = "web_crawler" as const;
+  private readonly allowPrivateNetwork: boolean;
+
+  constructor(options: WebCrawlerConnectorOptions = {}) {
+    super();
+    this.allowPrivateNetwork = options.allowPrivateNetwork ?? false;
+  }
 
   async validateConfig(
     config: Record<string, unknown>,
   ): Promise<{ valid: boolean; error?: string }> {
-    return this.validateConfigWithSchema({
-      config,
-      parser: parseWebCrawlerConfig,
-      label: "web crawler",
-      invalidConfigError: "Invalid web crawler configuration",
-      extraChecks: validateParsedConfig,
+    const parsed = parseWebCrawlerConfig(config);
+    if (!parsed) {
+      return {
+        valid: false,
+        error: "Invalid web crawler configuration",
+      };
+    }
+
+    const error = await validateParsedConfig({
+      config: parsed,
+      allowPrivateNetwork: this.allowPrivateNetwork,
     });
+    if (error) {
+      return { valid: false, error };
+    }
+
+    return { valid: true };
   }
 
   async testConnection(params: {
@@ -60,6 +96,13 @@ export class WebCrawlerConnector extends BaseConnector {
     const parsed = parseWebCrawlerConfig(params.config);
     if (!parsed) {
       return { success: false, error: "Invalid web crawler configuration" };
+    }
+    const configError = await validateParsedConfig({
+      config: parsed,
+      allowPrivateNetwork: this.allowPrivateNetwork,
+    });
+    if (configError) {
+      return { success: false, error: configError };
     }
 
     return this.runConnectionTest({
@@ -93,37 +136,39 @@ export class WebCrawlerConnector extends BaseConnector {
     if (!parsed) {
       throw new Error("Invalid web crawler configuration");
     }
+    const configError = await validateParsedConfig({
+      config: parsed,
+      allowPrivateNetwork: this.allowPrivateNetwork,
+    });
+    if (configError) {
+      throw new Error(configError);
+    }
 
-    const documents: ConnectorDocument[] = [];
-    const skipped: NonNullable<ConnectorSyncBatch["skipped"]> = [];
     // Web pages do not expose a uniform item-level updated timestamp, so syncs
     // use the crawl start time as the full-refresh checkpoint.
     const checkpoint = new Date().toISOString();
+    const batcher = new CrawlBatcher({
+      batchSize: parsed.batchSize ?? DEFAULT_BATCH_SIZE,
+      checkpoint,
+    });
     const crawler = this.createCrawler({
       config: parsed,
-      onDocument: (document) => documents.push(document),
-      onSkipped: (item) => skipped.push(item),
+      onDocument: (document) => batcher.addDocument(document),
+      onSkipped: (item) => batcher.addSkipped(item),
     });
 
-    await crawler.run([normalizeCrawlUrl(parsed.startUrl)]);
+    const crawl = crawler
+      .run([normalizeCrawlUrl(parsed.startUrl)])
+      .then(() => batcher.finish())
+      .catch((error: unknown) => batcher.fail(error));
 
-    const batchSize = parsed.batchSize ?? DEFAULT_BATCH_SIZE;
-    for (let i = 0; i < documents.length; i += batchSize) {
-      yield {
-        documents: documents.slice(i, i + batchSize),
-        checkpoint: { type: "web_crawler", lastSyncedAt: checkpoint },
-        hasMore: i + batchSize < documents.length,
-        skipped: i === 0 ? skipped : undefined,
-      };
-    }
-
-    if (documents.length === 0) {
-      yield {
-        documents: [],
-        checkpoint: { type: "web_crawler", lastSyncedAt: checkpoint },
-        hasMore: false,
-        skipped,
-      };
+    try {
+      for await (const batch of batcher) {
+        yield batch;
+      }
+      await crawl;
+    } finally {
+      await crawl;
     }
   }
 
@@ -158,6 +203,10 @@ export class WebCrawlerConnector extends BaseConnector {
             if (previousRequestCompletedAt > 0 && elapsedMs < requestDelayMs) {
               await sleep(requestDelayMs - elapsedMs);
             }
+            await assertPublicCrawlUrl({
+              url: _context.request.url,
+              allowPrivateNetwork: this.allowPrivateNetwork,
+            });
 
             gotOptions.headers = {
               ...gotOptions.headers,
@@ -229,26 +278,36 @@ function parseWebCrawlerConfig(
   return parsed.success ? parsed.data : null;
 }
 
-function validateParsedConfig(config: WebCrawlerConfig): string | null {
-  const startUrl = new URL(config.startUrl);
+async function validateParsedConfig(params: {
+  config: WebCrawlerConfig;
+  allowPrivateNetwork: boolean;
+}): Promise<string | null> {
+  const startUrl = new URL(params.config.startUrl);
   if (startUrl.protocol !== "http:" && startUrl.protocol !== "https:") {
     return "Start URL must use HTTP or HTTPS";
   }
 
   try {
-    compileExcludePathPatterns(config.excludePathPatterns);
+    await assertPublicCrawlUrl({
+      url: params.config.startUrl,
+      allowPrivateNetwork: params.allowPrivateNetwork,
+    });
+    compileExcludePathPatterns(params.config.excludePathPatterns);
   } catch (error) {
     return error instanceof Error ? error.message : String(error);
   }
 
-  const normalizedStartUrl = normalizeCrawlUrl(config.startUrl);
+  const normalizedStartUrl = normalizeCrawlUrl(params.config.startUrl);
   if (
     !isAllowedUrl({
       url: normalizedStartUrl,
       startUrl: normalizedStartUrl,
-      allowedPathPrefixes: buildAllowedPathPrefixes(config, normalizedStartUrl),
+      allowedPathPrefixes: buildAllowedPathPrefixes(
+        params.config,
+        normalizedStartUrl,
+      ),
       excludePathPatterns: compileExcludePathPatterns(
-        config.excludePathPatterns,
+        params.config.excludePathPatterns,
       ),
     })
   ) {
@@ -268,10 +327,10 @@ function extractPage(params: {
     normalizeText($("title").first().text()) ||
     normalizeText($("h1").first().text()) ||
     requestUrl;
-  const canonicalHref = $("link[rel='canonical']").attr("href");
-  const canonicalUrl = normalizeCrawlUrl(
-    canonicalHref ? new URL(canonicalHref, requestUrl).href : requestUrl,
-  );
+  const canonicalUrl = normalizeCanonicalUrl({
+    canonicalHref: $("link[rel='canonical']").attr("href"),
+    requestUrl,
+  });
   const root = selectContentRoot($, config.contentSelector);
 
   for (const selector of [
@@ -381,8 +440,15 @@ function normalizePathPrefix(prefix: string): string {
 function compileExcludePathPatterns(patterns: string[] | undefined): RegExp[] {
   return (patterns ?? []).map((pattern) => {
     try {
-      return new RegExp(pattern);
-    } catch {
+      const regex = new RegExp(pattern);
+      if (!safeRegex(regex)) {
+        throw new Error(`Unsafe exclude path pattern: ${pattern}`);
+      }
+      return regex;
+    } catch (error) {
+      if (error instanceof Error && error.message.startsWith("Unsafe ")) {
+        throw error;
+      }
       throw new Error(`Invalid exclude path pattern: ${pattern}`);
     }
   });
@@ -437,6 +503,23 @@ function normalizeDiscoveredUrl(
   }
 }
 
+function normalizeCanonicalUrl(params: {
+  canonicalHref: string | undefined;
+  requestUrl: string;
+}): string {
+  if (!params.canonicalHref) return normalizeCrawlUrl(params.requestUrl);
+
+  try {
+    const canonicalUrl = new URL(params.canonicalHref, params.requestUrl);
+    if (canonicalUrl.origin !== new URL(params.requestUrl).origin) {
+      return normalizeCrawlUrl(params.requestUrl);
+    }
+    return normalizeCrawlUrl(canonicalUrl.href);
+  } catch {
+    return normalizeCrawlUrl(params.requestUrl);
+  }
+}
+
 function normalizeCrawlUrl(rawUrl: string): string {
   const url = new URL(rawUrl);
   url.hash = "";
@@ -459,4 +542,139 @@ function getRequestDepth(userData: Record<string, unknown>): number {
 
 async function sleep(ms: number): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function assertPublicCrawlUrl(params: {
+  url: string;
+  allowPrivateNetwork: boolean;
+}): Promise<void> {
+  if (params.allowPrivateNetwork) return;
+
+  const hostname = new URL(params.url).hostname;
+  const addresses = await resolveHostname(hostname);
+  if (addresses.some(isBlockedAddress)) {
+    throw new Error(
+      `Host ${hostname} resolves to a private or internal network address`,
+    );
+  }
+}
+
+async function resolveHostname(hostname: string): Promise<string[]> {
+  if (ipaddr.isValid(hostname)) return [hostname];
+
+  try {
+    return (await lookup(hostname, { all: true })).map(
+      (address) => address.address,
+    );
+  } catch {
+    throw new Error(`Start URL host could not be resolved: ${hostname}`);
+  }
+}
+
+function isBlockedAddress(address: string): boolean {
+  if (!ipaddr.isValid(address)) return true;
+
+  const parsed = ipaddr.parse(address);
+  return BLOCKED_HOST_RANGES.has(parsed.range());
+}
+
+class CrawlBatcher implements AsyncIterable<ConnectorSyncBatch> {
+  private documentBuffer: ConnectorDocument[] = [];
+  private pendingDocuments: ConnectorDocument[] | null = null;
+  private skippedBuffer: NonNullable<ConnectorSyncBatch["skipped"]> = [];
+  private queue: ConnectorSyncBatch[] = [];
+  private waiters: Array<() => void> = [];
+  private finished = false;
+  private error: unknown = null;
+  private emittedBatch = false;
+
+  constructor(
+    private readonly params: {
+      batchSize: number;
+      checkpoint: string;
+    },
+  ) {}
+
+  addDocument(document: ConnectorDocument): void {
+    this.documentBuffer.push(document);
+    if (this.documentBuffer.length < this.params.batchSize) return;
+
+    if (this.pendingDocuments) {
+      this.enqueueBatch(this.pendingDocuments, true);
+    }
+    this.pendingDocuments = this.documentBuffer.splice(
+      0,
+      this.params.batchSize,
+    );
+  }
+
+  addSkipped(item: NonNullable<ConnectorSyncBatch["skipped"]>[number]): void {
+    this.skippedBuffer.push(item);
+  }
+
+  finish(): void {
+    if (this.pendingDocuments) {
+      this.enqueueBatch(
+        this.pendingDocuments,
+        this.documentBuffer.length > 0,
+      );
+      this.pendingDocuments = null;
+    }
+
+    if (
+      this.documentBuffer.length > 0 ||
+      this.skippedBuffer.length > 0 ||
+      !this.emittedBatch
+    ) {
+      this.enqueueBatch(this.documentBuffer.splice(0), false);
+    }
+
+    this.finished = true;
+    this.notify();
+  }
+
+  fail(error: unknown): void {
+    this.error = error;
+    this.finished = true;
+    this.notify();
+  }
+
+  async *[Symbol.asyncIterator](): AsyncIterator<ConnectorSyncBatch> {
+    while (true) {
+      const batch = await this.shift();
+      if (!batch) return;
+      yield batch;
+    }
+  }
+
+  private enqueueBatch(
+    documents: ConnectorDocument[],
+    hasMore: boolean,
+  ): void {
+    const skipped = this.skippedBuffer.splice(0);
+    this.queue.push({
+      documents,
+      checkpoint: { type: "web_crawler", lastSyncedAt: this.params.checkpoint },
+      hasMore,
+      skipped: skipped.length > 0 ? skipped : undefined,
+    });
+    this.emittedBatch = true;
+    this.notify();
+  }
+
+  private async shift(): Promise<ConnectorSyncBatch | null> {
+    while (this.queue.length === 0) {
+      if (this.error) throw this.error;
+      if (this.finished) return null;
+      await new Promise<void>((resolve) => this.waiters.push(resolve));
+    }
+
+    return this.queue.shift() ?? null;
+  }
+
+  private notify(): void {
+    for (const waiter of this.waiters.splice(0)) {
+      waiter();
+    }
+  }
 }

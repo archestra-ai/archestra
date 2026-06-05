@@ -68,6 +68,11 @@ overrides:
 patchedDependencies:
   ai@6.0.90: patches/ai@6.0.90.patch
 
+packageExtensions:
+  '@hookform/resolvers@*':
+    dependencies:
+      zod: ^4.3.4
+
 # Enforce Node.js version requirements from package.json engines field.
 engineStrict: true
 

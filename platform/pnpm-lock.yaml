@@ -78,6 +78,8 @@ overrides:
   '@opentelemetry/exporter-prometheus': 0.217.0
   '@opentelemetry/sdk-node': 0.217.0
 
+packageExtensionsChecksum: sha256-OtX37i1Ryo9P6g4B33ec8l4gf38qd6EPAZjHSLupRlQ=
+
 patchedDependencies:
   ai@6.0.90: 8234f83330f60e07e41381c776990bea702bdb7251a8e0e67c220e6a743001c2
 
@@ -12770,6 +12772,7 @@ snapshots:
     dependencies:
       '@standard-schema/utils': 0.3.0
       react-hook-form: 7.71.2(react@19.2.4)
+      zod: 4.3.6
 
   '@iconify/types@2.0.0': {}
 

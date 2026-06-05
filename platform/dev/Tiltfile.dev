@@ -142,8 +142,11 @@ else:
       # If only the server var is overridden, a .env value for the public mirror
       # (e.g. set by `dev:stack:up`) reaches the browser and defeats the
       # fail-loudly behavior for escaped client-side fetches.
-      'ARCHESTRA_INTERNAL_API_BASE_URL': 'http://127.0.0.1:1',
-      'NEXT_PUBLIC_ARCHESTRA_INTERNAL_API_BASE_URL': 'http://127.0.0.1:1',
+      # Port 65535, not 1: port 1 is on undici's blocked-ports list, so an
+      # escaped fetch throws "bad port" before dialing instead of the intended
+      # ECONNREFUSED, which breaks SSR rendering. Mirrors frontend/playwright.config.ts.
+      'ARCHESTRA_INTERNAL_API_BASE_URL': 'http://127.0.0.1:65535',
+      'NEXT_PUBLIC_ARCHESTRA_INTERNAL_API_BASE_URL': 'http://127.0.0.1:65535',
       'NEXT_PUBLIC_SENTRY_DSN': '',
     }
   )

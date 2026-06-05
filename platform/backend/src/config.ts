@@ -1333,3 +1333,18 @@ export function getProviderEnvApiKey(
   }
   return undefined;
 }
+
+/**
+ * Get the configured base URL for a provider, normalized to undefined when empty.
+ * Centralizes the config.llm[provider].baseUrl lookup; mirrors getProviderEnvApiKey.
+ */
+export function getProviderConfiguredBaseUrl(
+  provider: SupportedProvider,
+): string | undefined {
+  const entry = config.llm[provider as keyof typeof config.llm];
+  if (typeof entry === "object" && entry !== null && "baseUrl" in entry) {
+    const baseUrl = entry.baseUrl?.trim();
+    return baseUrl || undefined;
+  }
+  return undefined;
+}

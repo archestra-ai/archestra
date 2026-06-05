@@ -1,5 +1,5 @@
 import type { IncomingHttpHeaders } from "node:http";
-import type { Permissions } from "@shared";
+import type { Permissions } from "@archestra/shared";
 import { vi } from "vitest";
 import { ServiceAccountModel, UserModel } from "@/models";
 import {

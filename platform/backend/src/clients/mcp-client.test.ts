@@ -7,7 +7,7 @@ import {
   MCP_CATALOG_SERVER_QUERY_PARAM,
   MCP_ENTERPRISE_AUTH_EXTENSION_ID,
   OAUTH_TOKEN_TYPE,
-} from "@shared";
+} from "@archestra/shared";
 import { vi } from "vitest";
 import config from "@/config";
 import db, { schema } from "@/database";

@@ -1,6 +1,6 @@
 "use client";
 
-import { SSO_TEMPLATE_HELPER_LIST_LABEL } from "@shared";
+import { SSO_TEMPLATE_HELPER_LIST_LABEL } from "@archestra/shared";
 import { Separator } from "@/components/ui/separator";
 import type {
   SsoRoleMappingRule,

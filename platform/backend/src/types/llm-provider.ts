@@ -33,7 +33,7 @@ import type {
   InteractionSource,
   SupportedProvider,
   SupportedProviderDiscriminator,
-} from "@shared";
+} from "@archestra/shared";
 
 import type { Agent } from "./agent";
 

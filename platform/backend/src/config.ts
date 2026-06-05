@@ -1,7 +1,6 @@
 import { homedir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import type { OTLPExporterNodeConfigBase } from "@opentelemetry/otlp-exporter-base";
 import {
   DEFAULT_ADMIN_EMAIL,
   DEFAULT_ADMIN_EMAIL_ENV_VAR_NAME,
@@ -12,7 +11,8 @@ import {
   DEFAULT_VAULT_TOKEN,
   type SupportedProvider,
   SupportedProviders,
-} from "@shared";
+} from "@archestra/shared";
+import type { OTLPExporterNodeConfigBase } from "@opentelemetry/otlp-exporter-base";
 import dotenv from "dotenv";
 import logger from "@/logging";
 import {
@@ -130,8 +130,8 @@ const getPortFromUrl = (): number => {
  *
  * Quickstart mode (Docker):
  *   - Inside the container the app binds to 0.0.0.0.
- *   - On the host, Docker's `-p 3000:3000` maps to 0.0.0.0 by default,
- *     making the app accessible from LAN IPs.
+ *   - Quickstart examples bind host ports to 127.0.0.1 by default.
+ *     Users can opt into LAN access with explicit `0.0.0.0` port bindings.
  *   - Quickstart is designed for quick evaluation, so all origins are
  *     accepted without checks. It's ok if someone will decide to
  *     access Archestra from the mobile phone.

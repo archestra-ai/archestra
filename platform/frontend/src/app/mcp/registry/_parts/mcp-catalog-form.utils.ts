@@ -5,7 +5,7 @@ import {
   type ImagePullSecretConfig,
   isVaultReference,
   parseVaultReference,
-} from "@shared";
+} from "@archestra/shared";
 import { parseDockerArgsToLocalConfig } from "./docker-args-parser";
 import type { McpCatalogFormValues } from "./mcp-catalog-form.types";
 

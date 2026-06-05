@@ -1,5 +1,5 @@
 import type { UIMessage } from "@ai-sdk/react";
-import { hasRenderableAssistantContent } from "@shared";
+import { hasRenderableAssistantContent } from "@archestra/shared";
 
 /**
  * Preserves the last renderable assistant content when a live session update

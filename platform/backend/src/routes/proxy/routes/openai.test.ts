@@ -16,7 +16,7 @@
  */
 
 import { createHash } from "node:crypto";
-import { LLM_PROXY_OAUTH_SCOPE } from "@shared";
+import { LLM_PROXY_OAUTH_SCOPE } from "@archestra/shared";
 import { eq } from "drizzle-orm";
 import Fastify, { type FastifyInstance } from "fastify";
 import {

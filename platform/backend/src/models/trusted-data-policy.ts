@@ -1,4 +1,4 @@
-import { CONTEXT_EXTERNAL_AGENT_ID, CONTEXT_TEAM_IDS } from "@shared";
+import { CONTEXT_EXTERNAL_AGENT_ID, CONTEXT_TEAM_IDS } from "@archestra/shared";
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { get } from "lodash-es";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";

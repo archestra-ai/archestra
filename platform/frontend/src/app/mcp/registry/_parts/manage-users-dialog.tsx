@@ -5,7 +5,7 @@ import {
   formatSecretStorageType,
   getManageCredentialsAddToTeamOptionTestId,
   type McpDeploymentStatusEntry,
-} from "@shared";
+} from "@archestra/shared";
 import { format } from "date-fns";
 import {
   AlertTriangle,

@@ -1,6 +1,6 @@
 "use client";
 
-import { archestraApiSdk } from "@shared";
+import { archestraApiSdk } from "@archestra/shared";
 import { useQuery } from "@tanstack/react-query";
 import {
   AlertTriangle,

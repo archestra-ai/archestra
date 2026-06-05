@@ -2,7 +2,7 @@ import {
   type ChatMessage,
   ChatMessageMetadataSchema,
   type ChatMessagePart,
-} from "@shared";
+} from "@archestra/shared";
 import { getSkillPermissionChecker } from "@/auth/skill-permissions";
 import logger from "@/logging";
 import { SkillModel, SkillTeamModel, SkillVersionModel } from "@/models";

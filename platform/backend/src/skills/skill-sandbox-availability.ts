@@ -3,7 +3,7 @@ import {
   TOOL_DOWNLOAD_FILE_SHORT_NAME,
   TOOL_RUN_COMMAND_SHORT_NAME,
   TOOL_UPLOAD_FILE_SHORT_NAME,
-} from "@shared";
+} from "@archestra/shared";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { userHasPermission } from "@/auth/utils";
 import config from "@/config";

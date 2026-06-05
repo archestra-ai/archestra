@@ -1,4 +1,4 @@
-import type { ModelInputModality } from "@shared";
+import type { ModelInputModality } from "@archestra/shared";
 import { z } from "zod";
 
 // ===== Connector Type =====

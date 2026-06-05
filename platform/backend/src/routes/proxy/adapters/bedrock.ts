@@ -1,6 +1,9 @@
 import { createHash } from "node:crypto";
+import {
+  ArchestraInternalErrorCode,
+  BedrockErrorTypes,
+} from "@archestra/shared";
 import type { ConverseStreamOutput } from "@aws-sdk/client-bedrock-runtime";
-import { ArchestraInternalErrorCode, BedrockErrorTypes } from "@shared";
 import { EventStreamCodec } from "@smithy/eventstream-codec";
 import { fromUtf8, toUtf8 } from "@smithy/util-utf8";
 import { encode as toonEncode } from "@toon-format/toon";

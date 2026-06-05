@@ -1,2 +1,2 @@
-export type { ResourceVisibilityScope } from "@shared";
-export { ResourceVisibilityScopeSchema } from "@shared";
+export type { ResourceVisibilityScope } from "@archestra/shared";
+export { ResourceVisibilityScopeSchema } from "@archestra/shared";

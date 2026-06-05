@@ -1,4 +1,4 @@
-import { DEFAULT_THEME_ID } from "@shared";
+import { DEFAULT_THEME_ID } from "@archestra/shared";
 import { eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { describe, expect, test } from "@/test";

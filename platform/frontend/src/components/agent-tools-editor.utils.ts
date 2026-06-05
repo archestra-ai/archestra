@@ -3,7 +3,7 @@ import {
   DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES,
   parseFullToolName,
   SKILL_ARCHESTRA_TOOL_SHORT_NAMES,
-} from "@shared";
+} from "@archestra/shared";
 
 const DEFAULT_ARCHESTRA_TOOL_SHORT_NAME_SET = new Set<string>(
   DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES,

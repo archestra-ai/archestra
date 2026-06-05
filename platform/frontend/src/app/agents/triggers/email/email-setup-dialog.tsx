@@ -1,6 +1,6 @@
 "use client";
 
-import { DocsPage } from "@shared";
+import { DocsPage } from "@archestra/shared";
 import { Mail, RefreshCw, ShieldCheck } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { CopyButton } from "@/components/copy-button";

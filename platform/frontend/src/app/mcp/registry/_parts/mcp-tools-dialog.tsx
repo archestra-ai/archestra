@@ -1,6 +1,6 @@
 "use client";
 
-import { E2eTestId, parseFullToolName } from "@shared";
+import { E2eTestId, parseFullToolName } from "@archestra/shared";
 import { Search, UserPlus, Users } from "lucide-react";
 import { useMemo, useState } from "react";
 import { StandardDialog } from "@/components/standard-dialog";

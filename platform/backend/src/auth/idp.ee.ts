@@ -1,4 +1,4 @@
-import { MEMBER_ROLE_NAME } from "@shared";
+import { MEMBER_ROLE_NAME } from "@archestra/shared";
 import { APIError } from "better-auth";
 import { jwtDecode } from "jwt-decode";
 import {

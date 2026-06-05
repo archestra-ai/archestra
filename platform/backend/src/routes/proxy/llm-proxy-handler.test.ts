@@ -6,7 +6,7 @@
  * 2. recordBlockedToolSpans is called when tool invocation policies block tool calls
  */
 
-import { CHAT_API_KEY_ID_HEADER } from "@shared";
+import { CHAT_API_KEY_ID_HEADER } from "@archestra/shared";
 import Fastify, { type FastifyInstance } from "fastify";
 import {
   serializerCompiler,

@@ -1,5 +1,5 @@
+import { E2eTestId } from "@archestra/shared";
 import type { APIRequestContext, Page } from "@playwright/test";
-import { E2eTestId } from "@shared";
 import {
   getE2eRequestUrl,
   LLM_PROVIDER_API_KEYS_ROUTE,

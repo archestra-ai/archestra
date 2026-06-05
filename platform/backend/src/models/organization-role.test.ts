@@ -1,5 +1,9 @@
-import { ADMIN_ROLE_NAME, EDITOR_ROLE_NAME, MEMBER_ROLE_NAME } from "@shared";
-import { predefinedPermissionsMap } from "@shared/access-control";
+import {
+  ADMIN_ROLE_NAME,
+  EDITOR_ROLE_NAME,
+  MEMBER_ROLE_NAME,
+} from "@archestra/shared";
+import { predefinedPermissionsMap } from "@archestra/shared/access-control";
 import { describe, expect, test, vi } from "@/test";
 import OrganizationRoleModel from "./organization-role";
 

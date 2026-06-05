@@ -14,7 +14,7 @@ import { hasPermission } from "@/auth";
 const mockHasPermission = hasPermission as Mock;
 
 // Mock archestraCatalogSdk to prevent external catalog calls during approve
-vi.mock("@shared", async (importOriginal) => {
+vi.mock("@archestra/shared", async (importOriginal) => {
   const actual = await importOriginal<Record<string, unknown>>();
   return {
     ...actual,

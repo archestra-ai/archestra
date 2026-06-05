@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
-import type { archestraCatalogTypes } from "@shared";
-import { archestraCatalogSdk } from "@shared";
+import type { archestraCatalogTypes } from "@archestra/shared";
+import { archestraCatalogSdk } from "@archestra/shared";
 import { and, desc, eq } from "drizzle-orm";
 import config from "@/config";
 import db, { schema } from "@/database";

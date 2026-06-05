@@ -137,8 +137,8 @@ export default defineConfig((options: UserConfig) => {
     // Generate source maps for better stack traces
     sourcemap: true,
 
-    // Don't bundle dependencies - use them from node_modules, except for @shared (including subpaths)
-    noExternal: [/^@shared/],
+    // Don't bundle dependencies - use them from node_modules, except for @archestra/shared (including subpaths)
+    noExternal: [/^@archestra\/shared/],
     loader: {
       ".py": "text" as const,
     },

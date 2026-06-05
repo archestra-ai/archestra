@@ -1,5 +1,5 @@
 import type { IncomingHttpHeaders } from "node:http";
-import type { Action, Permissions, Resource } from "@shared";
+import type { Action, Permissions, Resource } from "@archestra/shared";
 import { auth as betterAuth } from "@/auth/better-auth";
 import logger from "@/logging";
 import { ServiceAccountModel, UserModel } from "@/models";

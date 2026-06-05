@@ -1,4 +1,4 @@
-import type { InteractionSource, PaginationQuery } from "@shared";
+import type { InteractionSource, PaginationQuery } from "@archestra/shared";
 import {
   and,
   asc,

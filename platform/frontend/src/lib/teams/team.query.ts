@@ -1,4 +1,4 @@
-import { archestraApiSdk, type archestraApiTypes } from "@shared";
+import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { useFeature } from "@/lib/config/config.query";
 

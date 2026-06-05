@@ -4,7 +4,7 @@ import {
   TOOL_DOWNLOAD_FILE_FULL_NAME,
   TOOL_RUN_COMMAND_FULL_NAME,
   TOOL_UPLOAD_FILE_FULL_NAME,
-} from "@shared";
+} from "@archestra/shared";
 import config from "@/config";
 import {
   ConversationAttachmentModel,

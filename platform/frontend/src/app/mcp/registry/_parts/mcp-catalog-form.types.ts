@@ -1,4 +1,4 @@
-import { LocalConfigFormSchema } from "@shared";
+import { LocalConfigFormSchema } from "@archestra/shared";
 import { z } from "zod";
 
 const HEADER_NAME_REGEX = /^[A-Za-z0-9-]+$/;

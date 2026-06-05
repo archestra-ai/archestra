@@ -4,7 +4,7 @@ import {
   SWAP_AGENT_POKE_AGENT_NAME_SUFFIX,
   SWAP_AGENT_POKE_PREFIX,
   SWAP_TO_DEFAULT_AGENT_POKE_TEXT,
-} from "@shared";
+} from "@archestra/shared";
 import type { UIMessage } from "ai";
 import { useMemo } from "react";
 

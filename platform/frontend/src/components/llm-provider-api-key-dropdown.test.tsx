@@ -1,4 +1,4 @@
-import { E2eTestId } from "@shared";
+import { E2eTestId } from "@archestra/shared";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { type ComponentProps, useState } from "react";

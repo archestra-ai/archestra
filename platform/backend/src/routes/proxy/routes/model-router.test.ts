@@ -3,7 +3,7 @@ import {
   LLM_PROXY_OAUTH_SCOPE,
   SOURCE_HEADER,
   type SupportedProvider,
-} from "@shared";
+} from "@archestra/shared";
 import { eq } from "drizzle-orm";
 import Fastify from "fastify";
 import {

@@ -1,6 +1,6 @@
 "use client";
 
-import { isAgentTool, PLAYWRIGHT_MCP_CATALOG_ID } from "@shared";
+import { isAgentTool, PLAYWRIGHT_MCP_CATALOG_ID } from "@archestra/shared";
 import { useQueries } from "@tanstack/react-query";
 import { Globe, Loader2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";

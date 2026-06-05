@@ -1,11 +1,11 @@
-import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import {
   ARCHESTRA_TOOL_PREFIX,
   type ArchestraToolFullName,
   getArchestraToolFullName,
   getArchestraToolShortName,
   isAgentTool,
-} from "@shared";
+} from "@archestra/shared";
+import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { ZodError, type ZodType } from "zod";
 import config from "@/config";
 // Import all groups

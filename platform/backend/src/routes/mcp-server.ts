@@ -1,5 +1,9 @@
 import type { IncomingHttpHeaders } from "node:http";
-import { isPlaywrightCatalogItem, OAUTH_TOKEN_TYPE, RouteId } from "@shared";
+import {
+  isPlaywrightCatalogItem,
+  OAUTH_TOKEN_TYPE,
+  RouteId,
+} from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { hasPermission, userHasPermission } from "@/auth";

@@ -1,6 +1,6 @@
 "use client";
 
-import type { archestraApiTypes } from "@shared";
+import type { archestraApiTypes } from "@archestra/shared";
 import { ExternalLink } from "lucide-react";
 import * as React from "react";
 import { useState } from "react";

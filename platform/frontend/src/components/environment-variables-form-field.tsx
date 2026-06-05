@@ -1,6 +1,6 @@
 "use client";
 
-import { parseVaultReference } from "@shared";
+import { parseVaultReference } from "@archestra/shared";
 import { Key, Loader2, Plus, Trash2 } from "lucide-react";
 import { lazy, Suspense, useEffect, useState } from "react";
 import type {

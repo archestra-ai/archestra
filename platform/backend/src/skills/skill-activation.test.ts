@@ -1,4 +1,4 @@
-import { buildUserSystemPromptContext } from "@shared";
+import { buildUserSystemPromptContext } from "@archestra/shared";
 import { describe, expect, test } from "@/test";
 import {
   buildSkillActivationPromptContext,

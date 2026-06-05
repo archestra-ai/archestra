@@ -7,7 +7,7 @@ import {
   CreateLinkedIdentityProviderIntentResponseSchema,
   LINKED_IDP_AUTH_COMPLETE_ENDPOINT,
   LINKED_IDP_AUTH_INTENT_ENDPOINT,
-} from "@shared";
+} from "@archestra/shared";
 
 export async function createLinkedIdentityProviderIntent(
   params: CreateLinkedIdentityProviderIntentRequest,

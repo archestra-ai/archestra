@@ -1,4 +1,4 @@
-import { TOOL_ACTIVATE_SKILL_FULL_NAME } from "@shared";
+import { TOOL_ACTIVATE_SKILL_FULL_NAME } from "@archestra/shared";
 import { describe, expect, it } from "vitest";
 import {
   buildSkillDescriptionPrompt,

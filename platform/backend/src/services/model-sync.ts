@@ -3,7 +3,7 @@ import {
   OPENROUTER_FREE_MODEL_ID,
   type SupportedEmbeddingDimension,
   type SupportedProvider,
-} from "@shared";
+} from "@archestra/shared";
 import {
   type ModelsDevApiResponse,
   modelsDevClient,

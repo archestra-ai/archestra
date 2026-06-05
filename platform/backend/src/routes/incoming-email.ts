@@ -1,4 +1,4 @@
-import { IncomingEmailSecurityModeSchema, RouteId } from "@shared";
+import { IncomingEmailSecurityModeSchema, RouteId } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import {

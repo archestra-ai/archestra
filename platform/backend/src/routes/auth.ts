@@ -6,7 +6,7 @@ import {
   LLM_PROXY_OAUTH_SCOPE,
   OAUTH_GRANT_TYPE,
   RouteId,
-} from "@shared";
+} from "@archestra/shared";
 import { verifyPassword } from "better-auth/crypto";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";

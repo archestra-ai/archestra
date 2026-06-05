@@ -11,6 +11,7 @@
   "overrides": {
     "cross-spawn": ">=7.0.6",
     "hono": ">=4.12.2",
+    "ip-address": ">=10.1.1",
     "path-to-regexp": ">=8.4.0"
   }
 }

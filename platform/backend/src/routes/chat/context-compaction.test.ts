@@ -1,4 +1,4 @@
-import { CONTEXT_COMPACTION_SYSTEM_PROMPT } from "@shared";
+import { CONTEXT_COMPACTION_SYSTEM_PROMPT } from "@archestra/shared";
 import { describe, expect, test } from "vitest";
 import type { ChatMessage, ChatMessagePart } from "@/types";
 import type { ConversationCompaction } from "@/types/conversation-compaction";

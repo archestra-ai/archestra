@@ -1,4 +1,4 @@
-import { isAgentTool } from "@shared";
+import { isAgentTool } from "@archestra/shared";
 import { getArchestraMcpTools } from "@/archestra-mcp-server";
 import logger from "@/logging";
 import { ToolModel } from "@/models";

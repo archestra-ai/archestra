@@ -29,9 +29,9 @@ function readIntTestsPort(): string | undefined {
 
 export default defineConfig({
   testDir: "./tests-integration",
-  // Path aliases live in tests-integration/tsconfig.json (resolves @shared/*
-  // into the workspace's shared package without relying on Node's ESM scoped
-  // package resolver, which rejects `@shared` as a bare name).
+  // Path aliases live in tests-integration/tsconfig.json (resolves @archestra/shared/*
+  // onto the workspace's shared sources directly, so specs can import shared
+  // subpaths without going through the package's published exports map).
   tsconfig: "./tests-integration/tsconfig.json",
   // Tests share a single Next.js dev server with a process-global MSW handler
   // list. Running them in parallel would let one test's `mswControl.use(...)`

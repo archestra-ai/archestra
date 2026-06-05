@@ -4,7 +4,7 @@ import {
   providerDisplayNames,
   type SupportedProvider,
   SupportedProviders,
-} from "@shared";
+} from "@archestra/shared";
 import { Plus } from "lucide-react";
 import React, { useEffect, useState } from "react";
 import { Condition } from "@/app/llm/(costs)/optimization-rules/_parts/condition";

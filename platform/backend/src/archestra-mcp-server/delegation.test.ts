@@ -1,5 +1,5 @@
 // biome-ignore-all lint/suspicious/noExplicitAny: test
-import { AGENT_TOOL_PREFIX, slugify } from "@shared";
+import { AGENT_TOOL_PREFIX, slugify } from "@archestra/shared";
 import { vi } from "vitest";
 import { ToolModel } from "@/models";
 import { beforeEach, describe, expect, test } from "@/test";

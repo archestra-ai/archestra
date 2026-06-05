@@ -1,6 +1,6 @@
 "use client";
 
-import { E2eTestId, parseVaultReference } from "@shared";
+import { E2eTestId, parseVaultReference } from "@archestra/shared";
 import { CheckCircle2, Info, Key, Loader2 } from "lucide-react";
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import {

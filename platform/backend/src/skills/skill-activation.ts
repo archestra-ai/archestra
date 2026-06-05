@@ -1,7 +1,7 @@
 import {
   buildUserSystemPromptContext,
   type UserSystemPromptContext,
-} from "@shared";
+} from "@archestra/shared";
 import { TeamModel, UserModel } from "@/models";
 import { renderSystemPrompt } from "@/templating";
 import type { Skill, SkillFile } from "@/types";

@@ -3,7 +3,7 @@
 import {
   getIdentityProviderDialogNavButtonTestId,
   type IdentityProviderFormValues,
-} from "@shared";
+} from "@archestra/shared";
 import { IdCard, XIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import type { UseFormReturn } from "react-hook-form";

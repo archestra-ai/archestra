@@ -1679,6 +1679,21 @@ const MessageTool = memo(
       (mcpOutput?._meta?.ui as { resourceUri?: string } | undefined)
         ?.resourceUri ?? earlyToolUiData?.uiResourceUri;
 
+    // When the model dispatched through run_tool, the MCP App belongs to the
+    // *target* tool. Unwrap so the app receives the target tool's name (for the
+    // sandbox origin and tool callbacks) and its real arguments (e.g. Excalidraw
+    // elements) instead of the run_tool wrapper.
+    const runToolInput =
+      getToolShortName(toolName) === TOOL_RUN_TOOL_SHORT_NAME
+        ? (part.input as {
+            tool_name?: string;
+            tool_args?: Record<string, unknown>;
+          } | null)
+        : null;
+    const mcpAppToolName = runToolInput?.tool_name ?? toolName;
+    const mcpAppToolInput =
+      runToolInput?.tool_args ?? (part.input as Record<string, unknown>);
+
     // Use the text content string when available; fall back to the raw output for non-MCP tools.
     const output = mcpOutput?.content ?? rawOutput;
     const errorText = getToolErrorText({ part, toolResultPart });
@@ -1908,9 +1923,9 @@ const MessageTool = memo(
               <McpAppSection
                 uiResourceUri={uiResourceUri}
                 agentId={agentId}
-                toolName={toolName}
+                toolName={mcpAppToolName}
                 toolCallId={part.toolCallId}
-                toolInput={part.input as Record<string, unknown>}
+                toolInput={mcpAppToolInput}
                 rawOutput={mcpOutput}
                 preloadedResource={
                   earlyToolUiData?.html
@@ -2002,9 +2017,9 @@ const MessageTool = memo(
               <McpAppSection
                 uiResourceUri={uiResourceUri}
                 agentId={agentId}
-                toolName={toolName}
+                toolName={mcpAppToolName}
                 toolCallId={part.toolCallId}
-                toolInput={part.input as Record<string, unknown>}
+                toolInput={mcpAppToolInput}
                 rawOutput={mcpOutput}
                 preloadedResource={
                   earlyToolUiData?.html

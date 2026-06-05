@@ -1554,6 +1554,86 @@ describe("mcpToolToModelOutput", () => {
   });
 });
 
+describe("buildArchestraToolOutput", () => {
+  const archestraResponse = {
+    content: [{ type: "text" as const, text: "Diagram displayed!" }],
+    structuredContent: { checkpoint: "abc" },
+    _meta: { extra: true },
+  };
+
+  test("returns plain text for a direct (non-run_tool) archestra tool", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent();
+    const result = await chatClient.buildArchestraToolOutput({
+      response: archestraResponse,
+      toolName: "archestra__whoami",
+      toolArguments: {},
+      agentId: agent.id,
+    });
+
+    expect(result).toBe("Diagram displayed!");
+  });
+
+  test("attaches the target tool's UI resource when dispatched via run_tool", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent();
+    const mockToolDef = {
+      name: "excalidraw__create_view",
+      meta: { _meta: { ui: { resourceUri: "ui://excalidraw/mcp-app.html" } } },
+    };
+    const spy = vi
+      .spyOn(ToolModel, "findByNameForAgent")
+      // biome-ignore lint/suspicious/noExplicitAny: test mock data
+      .mockResolvedValueOnce(mockToolDef as any);
+
+    const result = await chatClient.buildArchestraToolOutput({
+      response: archestraResponse,
+      toolName: "archestra__run_tool",
+      toolArguments: {
+        tool_name: "excalidraw__create_view",
+        tool_args: { elements: "[]" },
+      },
+      agentId: agent.id,
+    });
+
+    expect(spy).toHaveBeenCalledWith("excalidraw__create_view", agent.id);
+    expect(typeof result).toBe("object");
+    expect(result).toMatchObject({
+      content: "Diagram displayed!",
+      _meta: {
+        extra: true,
+        ui: { resourceUri: "ui://excalidraw/mcp-app.html" },
+      },
+      structuredContent: { checkpoint: "abc" },
+    });
+
+    spy.mockRestore();
+  });
+
+  test("returns plain text when the dispatched target has no UI resource", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent();
+    const spy = vi
+      .spyOn(ToolModel, "findByNameForAgent")
+      // biome-ignore lint/suspicious/noExplicitAny: test mock data
+      .mockResolvedValueOnce({ name: "context7__search", meta: null } as any);
+
+    const result = await chatClient.buildArchestraToolOutput({
+      response: archestraResponse,
+      toolName: "archestra__run_tool",
+      toolArguments: { tool_name: "context7__search", tool_args: {} },
+      agentId: agent.id,
+    });
+
+    expect(result).toBe("Diagram displayed!");
+
+    spy.mockRestore();
+  });
+});
+
 describe("throwIfApprovalRequired", () => {
   const { resolveApprovalPolicyTarget, throwIfApprovalRequired } =
     chatClient.__test;

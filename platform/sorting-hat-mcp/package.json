@@ -1,0 +1,29 @@
+{
+  "name": "@archestra/sorting-hat-mcp",
+  "version": "1.2.57",
+  "description": "First-party Sorting Hat MCP tools for tool-call sorting and Patronus authorization.",
+  "type": "module",
+  "private": true,
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "lint": "biome check",
+    "lint:fix": "biome check --write",
+    "lint:fix:unsafe": "biome check --write --unsafe",
+    "type-check": "tsgo --noEmit",
+    "test": "vitest",
+    "check:ci": "concurrently --kill-others-on-fail --group --names type-check,test,biome 'pnpm type-check' 'pnpm test' 'biome ci'",
+    "check:commit": "concurrently --kill-others-on-fail --group --names type-check,biome 'pnpm type-check' 'biome ci'"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.27.1"
+  },
+  "devDependencies": {
+    "@types/node": "^25",
+    "@typescript/native-preview": "catalog:",
+    "concurrently": "^9.2.1",
+    "typescript": "catalog:",
+    "vitest": "^4.1.0"
+  }
+}

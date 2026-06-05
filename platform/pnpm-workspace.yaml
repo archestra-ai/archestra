@@ -2,6 +2,7 @@ packages:
   - "backend"
   - "drizzle-migration-linter"
   - "frontend"
+  - "sorting-hat-mcp"
   - "shared"
   - "archestra-rs/sandbox-rs"
   - "e2e-tests"

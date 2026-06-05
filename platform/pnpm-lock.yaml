@@ -157,6 +157,9 @@ importers:
       '@archestra/shared':
         specifier: workspace:*
         version: link:../shared
+      '@archestra/sorting-hat-mcp':
+        specifier: workspace:*
+        version: link:../sorting-hat-mcp
       '@aws-crypto/sha256-js':
         specifier: ^5.2.0
         version: 5.2.0
@@ -865,6 +868,28 @@ importers:
       knip:
         specifier: ^5.85.0
         version: 5.86.0(@types/node@25.5.0)(typescript@6.0.2)
+      typescript:
+        specifier: 'catalog:'
+        version: 6.0.2
+      vitest:
+        specifier: ^4.1.0
+        version: 4.1.0(@opentelemetry/api@1.9.1)(@types/node@25.5.0)(jsdom@29.0.0(@noble/hashes@2.0.1))(msw@2.14.6(@types/node@25.5.0)(typescript@6.0.2))(vite@7.3.2(@types/node@25.5.0)(jiti@2.6.1)(lightningcss@1.31.1)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.4))
+
+  sorting-hat-mcp:
+    dependencies:
+      '@modelcontextprotocol/sdk':
+        specifier: ^1.27.1
+        version: 1.27.1(zod@4.3.6)
+    devDependencies:
+      '@types/node':
+        specifier: ^25
+        version: 25.5.0
+      '@typescript/native-preview':
+        specifier: 'catalog:'
+        version: 7.0.0-dev.20260421.2
+      concurrently:
+        specifier: ^9.2.1
+        version: 9.2.1
       typescript:
         specifier: 'catalog:'
         version: 6.0.2

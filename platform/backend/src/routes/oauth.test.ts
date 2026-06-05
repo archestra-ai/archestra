@@ -10,6 +10,7 @@ import oauthRoutes, {
   discoverScopes,
   generateCodeChallenge,
   generateCodeVerifier,
+  getOAuthResource,
   resolveOAuthScopesForAuthorization,
 } from "./oauth";
 
@@ -58,6 +59,27 @@ describe("OAuth helper functions", () => {
       const c1 = generateCodeChallenge("verifier-a");
       const c2 = generateCodeChallenge("verifier-b");
       expect(c1).not.toBe(c2);
+    });
+  });
+
+  describe("getOAuthResource", () => {
+    test("prefers explicit resource over legacy audience and server URL", () => {
+      expect(
+        getOAuthResource({
+          resource: "https://resource.example.com",
+          audience: "api://legacy-audience",
+          server_url: "https://mcp.example.com/mcp",
+        }),
+      ).toBe("https://resource.example.com");
+    });
+
+    test("falls back to audience before server URL", () => {
+      expect(
+        getOAuthResource({
+          audience: "api://legacy-audience",
+          server_url: "https://mcp.example.com/mcp",
+        }),
+      ).toBe("api://legacy-audience");
     });
   });
 

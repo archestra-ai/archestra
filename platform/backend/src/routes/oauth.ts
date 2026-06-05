@@ -929,6 +929,7 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
         try {
           // Use MCP SDK's exchangeAuthorization - it handles all discovery and authentication
+          const oauthResource = getOAuthResource(oauthConfig);
           const tokens = await exchangeAuthorization(oauthConfig.server_url, {
             clientInformation: {
               client_id: clientId,
@@ -937,8 +938,7 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
             authorizationCode: code,
             codeVerifier: oauthState.codeVerifier,
             redirectUri,
-            // For GitHub Copilot, pass the MCP server URL as resource
-            resource: new URL(oauthConfig.server_url),
+            resource: new URL(oauthResource ?? oauthConfig.server_url),
           });
 
           fastify.log.info("MCP SDK token exchange successful");
@@ -1108,11 +1108,13 @@ function isSsoCallbackRedirectUri(redirectUri: string | undefined): boolean {
   }
 }
 
-function getOAuthResource(oauthConfig: {
+export function getOAuthResource(oauthConfig: {
   audience?: string;
   resource?: string;
   server_url?: string;
 }): string | undefined {
+  // Prefer the explicit RFC 8707 resource, then legacy audience configs, then
+  // the MCP endpoint URL for existing catalog entries.
   return oauthConfig.resource || oauthConfig.audience || oauthConfig.server_url;
 }
 

@@ -319,6 +319,11 @@ describe("decideEnvSeed", () => {
     expect(decideEnvSeed("azure").kind).toBe("skip");
   });
 
+  test("treats a whitespace-only base URL as not configured", () => {
+    config.llm.azure.baseUrl = "   ";
+    expect(decideEnvSeed("azure").kind).toBe("skip");
+  });
+
   test("creates Azure with the base URL persisted when configured", () => {
     config.llm.azure.baseUrl = "https://my-resource.openai.azure.com/openai";
     expect(decideEnvSeed("azure")).toEqual({

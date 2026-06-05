@@ -603,8 +603,9 @@ export function decideEnvSeed(provider: SupportedProvider): EnvSeedDecision {
 
 /**
  * Sync models for an API key. Bedrock's fetcher throws without a base URL; that is
- * caught here so a key-only/IAM Bedrock seed still succeeds with a best-effort model
- * list (its runtime falls back to the us-east-1 region).
+ * caught here so a key-only/IAM Bedrock seed still creates a usable key (chat falls
+ * back to the us-east-1 region) — its model list just stays empty until a base URL
+ * is configured.
  */
 async function syncModelsForApiKey(
   apiKeyId: string,

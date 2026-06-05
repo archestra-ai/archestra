@@ -1,5 +1,11 @@
+import { vi } from "vitest";
 import { describe, expect, test } from "@/test";
-import { mapOpenAiModelToModelInfo } from "./openai";
+import { fetchOpenAiModels, mapOpenAiModelToModelInfo } from "./openai";
+import { fetchModelsWithBearerAuth } from "./openai-compatible";
+
+vi.mock("./openai-compatible", () => ({
+  fetchModelsWithBearerAuth: vi.fn(),
+}));
 
 describe("mapOpenAiModelToModelInfo", () => {
   test("maps standard OpenAI model", () => {
@@ -58,5 +64,27 @@ describe("mapOpenAiModelToModelInfo", () => {
       provider: "openai",
       createdAt: undefined,
     });
+  });
+});
+
+describe("fetchOpenAiModels exclusion", () => {
+  test.each([
+    { id: "gpt-4o", included: true },
+    { id: "chatgpt-4o-latest", included: true },
+    { id: "gpt-5.5-pro", included: true },
+    { id: "babbage-002", included: false },
+    { id: "davinci-002", included: false },
+    { id: "gpt-3.5-turbo-instruct", included: false },
+    { id: "whisper-1", included: false },
+    { id: "dall-e-3", included: false },
+    { id: "tts-1", included: false },
+  ])("$id -> included=$included", async ({ id, included }) => {
+    vi.mocked(fetchModelsWithBearerAuth).mockResolvedValue({
+      data: [{ id, object: "model", owned_by: "openai", created: 1 }],
+    });
+
+    const models = await fetchOpenAiModels("test-key");
+
+    expect(models.some((model) => model.id === id)).toBe(included);
   });
 });

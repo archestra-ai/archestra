@@ -42,6 +42,9 @@ export async function fetchOpenAiModels(
     extraHeaders,
   });
 
+  // babbage/davinci are OpenAI's legacy completions-only base models: they 404
+  // on /chat/completions ("not a chat model"), so exclude them alongside the
+  // other non-chat families to keep them out of the chat catalog.
   const excludePatterns = [
     "instruct",
     "tts",
@@ -50,6 +53,8 @@ export async function fetchOpenAiModels(
     "audio",
     "sora",
     "dall-e",
+    "babbage",
+    "davinci",
   ];
 
   return data.data

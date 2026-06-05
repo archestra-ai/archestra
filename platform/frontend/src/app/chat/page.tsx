@@ -947,8 +947,15 @@ export function ChatPageContent({
   const status = chatSession?.status ?? "ready";
   const setMessages = chatSession?.setMessages;
   const stop = chatSession?.stop;
+  // Hide the error while the session is auto-recovering (retry scheduled or
+  // reattaching to the still-running response) — flashing a "connection
+  // error" card for a turn that restores itself a second later reads as
+  // breakage. If recovery fails, the terminal error clears isRecovering and
+  // surfaces here.
   const error =
-    status === "submitted" || status === "streaming"
+    status === "submitted" ||
+    status === "streaming" ||
+    chatSession?.isRecovering
       ? undefined
       : chatSession?.error;
   const addToolResult = chatSession?.addToolResult;

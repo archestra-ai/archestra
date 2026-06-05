@@ -363,6 +363,64 @@ describe("ChatProvider retries", () => {
     // inline error panel — the toast is the only surfaced feedback.
     expect(mocks.clearError).toHaveBeenCalledTimes(1);
   });
+
+  it("marks the session as recovering while auto-retrying or reattaching, but not for terminal errors", async () => {
+    const latestSessionRef: { current: ChatSessionSnapshot } = {
+      current: undefined,
+    };
+
+    render(
+      <ChatProvider>
+        <RegisterChatSession />
+        <CaptureChatSession
+          onSession={(session) => {
+            latestSessionRef.current = session;
+          }}
+        />
+      </ChatProvider>,
+    );
+
+    await waitFor(() => expect(latestSessionRef.current).toBeDefined());
+    expect(latestSessionRef.current?.isRecovering).toBe(false);
+
+    // Transient network error → auto-retry scheduled → recovering: the UI
+    // must not flash the error while the retry is in flight.
+    act(() => {
+      chatOptions?.onError?.(new Error("Failed to fetch"));
+    });
+    await waitFor(() =>
+      expect(latestSessionRef.current?.isRecovering).toBe(true),
+    );
+
+    // Duplicate-run 409 → resumeStream reattach → still recovering.
+    act(() => {
+      chatOptions?.onError?.(
+        new Error("This conversation already has an active response."),
+      );
+    });
+    await waitFor(() =>
+      expect(latestSessionRef.current?.isRecovering).toBe(true),
+    );
+
+    // Stream concluded → recovery over.
+    act(() => {
+      chatOptions?.onFinish?.({ message: { parts: [] }, isAbort: false });
+    });
+    await waitFor(() =>
+      expect(latestSessionRef.current?.isRecovering).toBe(false),
+    );
+
+    // Terminal (structured, non-retryable) error → not recovering: the
+    // error must surface.
+    act(() => {
+      chatOptions?.onError?.(
+        new Error(JSON.stringify({ code: "server_error", message: "boom" })),
+      );
+    });
+    await waitFor(() =>
+      expect(latestSessionRef.current?.isRecovering).toBe(false),
+    );
+  });
 });
 
 describe("ChatProvider auto title generation", () => {

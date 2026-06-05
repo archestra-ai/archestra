@@ -360,11 +360,12 @@ export const WebCrawlerConfigSchema = z.object({
   startUrl: z
     .string()
     .transform(ensureProtocol)
-    .refine(isValidUrl, { message: "startUrl must be a valid URL" }),
+    .refine(isValidUrl, { message: "startUrl must be a valid URL" })
+    .refine(isHttpUrl, { message: "startUrl must use HTTP or HTTPS" }),
   includePathPrefixes: z.array(z.string().min(1)).optional(),
   excludePathPatterns: z.array(z.string().min(1)).optional(),
-  contentSelector: z.string().min(1).optional(),
-  excludeSelectors: z.array(z.string().min(1)).optional(),
+  contentSelector: z.string().min(1).max(500).optional(),
+  excludeSelectors: z.array(z.string().min(1).max(500)).optional(),
   maxPages: z.number().int().min(1).max(10_000).optional(),
   maxDepth: z.number().int().min(0).max(50).optional(),
   batchSize: z.number().int().min(1).max(100).optional(),
@@ -538,6 +539,15 @@ function isValidUrl(url: string): boolean {
   try {
     new URL(url);
     return true;
+  } catch {
+    return false;
+  }
+}
+
+function isHttpUrl(url: string): boolean {
+  try {
+    const protocol = new URL(url).protocol;
+    return protocol === "http:" || protocol === "https:";
   } catch {
     return false;
   }

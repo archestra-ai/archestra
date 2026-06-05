@@ -304,6 +304,8 @@ Crawl static HTML pages from a documentation site or public web property.
 
 **Authentication:** none in the initial version. The crawler only fetches pages reachable over HTTP(S).
 
+Private and internal network addresses are blocked. Start URLs and discovered pages cannot resolve to loopback, link-local, RFC 1918 private ranges, cloud metadata endpoints, or other reserved address ranges.
+
 | Field                 | Description                                                                                              |
 | --------------------- | -------------------------------------------------------------------------------------------------------- |
 | Start URL             | First page to crawl. Crawling stays on the same host.                                                    |

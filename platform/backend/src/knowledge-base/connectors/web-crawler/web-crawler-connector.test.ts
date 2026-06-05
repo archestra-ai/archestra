@@ -93,8 +93,7 @@ describe("WebCrawlerConnector", () => {
 
     expect(result).toEqual({
       valid: false,
-      error:
-        "Host 127.0.0.1 resolves to a private or internal network address",
+      error: "Host 127.0.0.1 resolves to a private or internal network address",
     });
   });
 
@@ -183,6 +182,29 @@ describe("WebCrawlerConnector", () => {
     expect(batches.flatMap((batch) => batch.skipped ?? [])).toEqual([]);
   });
 
+  test("does not index a start URL that redirects to another host", async () => {
+    const site = await createTestSite({
+      "/docs/": (_req, res) => {
+        res.writeHead(302, {
+          location: "https://external.example.test/docs/",
+        });
+        res.end();
+      },
+    });
+
+    const batches = await collectBatches({
+      startUrl: `${site.url}/docs/`,
+      maxPages: 1,
+    });
+
+    expect(batches.flatMap((batch) => batch.documents)).toEqual([]);
+    expect(batches.flatMap((batch) => batch.skipped ?? [])).toEqual([
+      expect.objectContaining({
+        itemId: `${site.url}/docs/`,
+      }),
+    ]);
+  });
+
   test("falls back to the fetched URL when canonical points to another origin", async () => {
     const site = await createTestSite({
       "/docs/": html(`
@@ -245,10 +267,12 @@ describe("WebCrawlerConnector", () => {
 
   test("applies the configured delay between serialized requests", async () => {
     const requestedAt: number[] = [];
-    const recordRequest = (body: string): RouteHandler => (_req, res) => {
-      requestedAt.push(Date.now());
-      sendHtml(res, body);
-    };
+    const recordRequest =
+      (body: string): RouteHandler =>
+      (_req, res) => {
+        requestedAt.push(Date.now());
+        sendHtml(res, body);
+      };
     const site = await createTestSite({
       "/docs/": recordRequest(
         html(`
@@ -259,12 +283,8 @@ describe("WebCrawlerConnector", () => {
           </main>
         `),
       ),
-      "/docs/page-2.html": recordRequest(
-        html("<main><h1>Page 2</h1></main>"),
-      ),
-      "/docs/page-3.html": recordRequest(
-        html("<main><h1>Page 3</h1></main>"),
-      ),
+      "/docs/page-2.html": recordRequest(html("<main><h1>Page 2</h1></main>")),
+      "/docs/page-3.html": recordRequest(html("<main><h1>Page 3</h1></main>")),
     });
 
     await collectBatches({

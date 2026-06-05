@@ -567,6 +567,9 @@ async function assertPublicCrawlUrl(params: {
   if (params.allowPrivateNetwork) return;
 
   const hostname = new URL(params.url).hostname;
+  // Crawlee performs its own HTTP request after this check, so DNS can still
+  // change between validation and fetch. Re-checking in preNavigationHooks
+  // narrows that window and catches rebinding across queued requests.
   const addresses = await resolveHostname(hostname);
   if (addresses.some(isBlockedAddress)) {
     throw new Error(
@@ -629,11 +632,10 @@ class CrawlBatcher implements AsyncIterable<ConnectorSyncBatch> {
   }
 
   finish(): void {
+    if (this.finished) return;
+
     if (this.pendingDocuments) {
-      this.enqueueBatch(
-        this.pendingDocuments,
-        this.documentBuffer.length > 0,
-      );
+      this.enqueueBatch(this.pendingDocuments, this.documentBuffer.length > 0);
       this.pendingDocuments = null;
     }
 
@@ -665,10 +667,7 @@ class CrawlBatcher implements AsyncIterable<ConnectorSyncBatch> {
     }
   }
 
-  private enqueueBatch(
-    documents: ConnectorDocument[],
-    hasMore: boolean,
-  ): void {
+  private enqueueBatch(documents: ConnectorDocument[], hasMore: boolean): void {
     const skipped = this.skippedBuffer.splice(0);
     this.queue.push({
       documents,

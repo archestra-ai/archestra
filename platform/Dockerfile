@@ -239,8 +239,9 @@ COPY docker/certs/gcloud-sql-global.pem /tmp/gcloud-sql-ca.pem
 
 RUN apk --no-cache upgrade && \
     # Install PostgreSQL 17, pgvector, supervisord, and git.
-    # git (CLI + http-backend) backs the skill-marketplace smart-HTTP clone endpoint.
-    apk add --no-cache postgresql17 postgresql17-contrib postgresql-pgvector su-exec git && \
+    # The skill-marketplace clone endpoint needs the git CLI (materialize.ts) and
+    # git-http-backend, the smart-HTTP CGI — which Alpine ships in git-daemon, not git.
+    apk add --no-cache postgresql17 postgresql17-contrib postgresql-pgvector su-exec git git-daemon && \
     # Combine all CA bundles
     cat /tmp/aws-rds-ca.pem /tmp/gcloud-sql-ca.pem > /etc/ssl/certs/cloud-database-ca-bundle.pem && \
     rm -f /tmp/aws-rds-ca.pem /tmp/gcloud-sql-ca.pem && \

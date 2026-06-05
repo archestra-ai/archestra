@@ -7,6 +7,7 @@ import {
   JiraConfigSchema,
   SalesforceCheckpointSchema,
   SalesforceConfigSchema,
+  WebCrawlerConfigSchema,
 } from "./knowledge-connector";
 
 describe("knowledge-connector schemas", () => {
@@ -228,6 +229,38 @@ describe("knowledge-connector schemas", () => {
       expect(result.type).toBe("confluence");
       if (result.type === "confluence") {
         expect(result.confluenceUrl).toBe("https://mycompany.atlassian.net");
+      }
+    });
+  });
+
+  describe("WebCrawlerConfigSchema URL validation", () => {
+    test("normalizes web crawler start URLs without a protocol", () => {
+      const result = WebCrawlerConfigSchema.parse({
+        type: "web_crawler",
+        startUrl: "docs.example.com:8443/guide",
+      });
+
+      expect(result.startUrl).toBe("https://docs.example.com:8443/guide");
+    });
+
+    test("rejects explicit non-HTTP schemes before protocol normalization", () => {
+      for (const startUrl of [
+        "data:text/html,<main>Docs</main>",
+        "javascript:alert(1)",
+        "vbscript:msgbox('x')",
+        "ftp://docs.example.com/guide",
+      ]) {
+        const result = WebCrawlerConfigSchema.safeParse({
+          type: "web_crawler",
+          startUrl,
+        });
+
+        expect(result.success).toBe(false);
+        if (!result.success) {
+          expect(result.error.issues[0]?.message).toBe(
+            "startUrl must use HTTP or HTTPS",
+          );
+        }
       }
     });
   });

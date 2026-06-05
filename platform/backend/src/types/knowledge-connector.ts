@@ -359,6 +359,9 @@ export const WebCrawlerConfigSchema = z.object({
   type: WEB_CRAWLER,
   startUrl: z
     .string()
+    .refine(hasAllowedWebCrawlerStartUrlScheme, {
+      message: "startUrl must use HTTP or HTTPS",
+    })
     .transform(ensureProtocol)
     .refine(isValidUrl, { message: "startUrl must be a valid URL" })
     .refine(isHttpUrl, { message: "startUrl must use HTTP or HTTPS" }),
@@ -533,6 +536,15 @@ export interface ConnectorSyncBatch {
 function ensureProtocol(url: string): string {
   if (/^[a-z][a-z0-9+.-]*:\/\//i.test(url)) return url;
   return `https://${url}`;
+}
+
+function hasAllowedWebCrawlerStartUrlScheme(url: string): boolean {
+  if (/^https?:\/\//i.test(url)) return true;
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(url)) return false;
+  if (/^[a-z][a-z0-9+.-]*:/i.test(url)) {
+    return /^(?:localhost|[a-z0-9.-]*\.[a-z0-9.-]+):\d+(?:[/?#]|$)/i.test(url);
+  }
+  return true;
 }
 
 function isValidUrl(url: string): boolean {

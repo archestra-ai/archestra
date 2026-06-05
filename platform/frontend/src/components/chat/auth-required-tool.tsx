@@ -1,4 +1,4 @@
-import type { AuthRequiredAction } from "@shared";
+import type { AuthRequiredAction } from "@archestra/shared";
 import { AuthErrorTool } from "./auth-error-tool";
 
 interface AuthRequiredToolProps {

@@ -1,4 +1,4 @@
-import type { archestraApiTypes } from "@shared";
+import type { archestraApiTypes } from "@archestra/shared";
 
 type Config = archestraApiTypes.GetConfigResponses["200"];
 
@@ -18,7 +18,7 @@ export function makeConfig(
     },
     features: {
       orchestratorK8sRuntime: false,
-      codeRuntime: false,
+      sandbox: false,
       agentSkillsEnabled: false,
       byosEnabled: false,
       byosVaultKvVersion: "1",

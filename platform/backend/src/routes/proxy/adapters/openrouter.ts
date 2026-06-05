@@ -4,7 +4,7 @@
  * OpenRouter exposes an OpenAI-compatible API at https://openrouter.ai/api/v1
  * and recommends attribution headers (HTTP-Referer, X-OpenRouter-Title).
  */
-import { ApiError, ArchestraInternalErrorCode } from "@shared";
+import { ApiError, ArchestraInternalErrorCode } from "@archestra/shared";
 import { get } from "lodash-es";
 import OpenAIProvider from "openai";
 import type {

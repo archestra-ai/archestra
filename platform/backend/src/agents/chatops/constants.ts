@@ -2,7 +2,7 @@
  * ChatOps constants and configuration
  */
 
-import { TimeInMs } from "@shared";
+import { TimeInMs } from "@archestra/shared";
 import type { ChatOpsConnectionMode } from "@/types";
 
 /**
@@ -69,7 +69,7 @@ export const SLACK_DEFAULT_CONNECTION_MODE: ChatOpsConnectionMode =
   "socket" as const;
 
 /** @public — re-exported for testability */
-export { SLACK_SLASH_COMMANDS } from "@shared";
+export { SLACK_SLASH_COMMANDS } from "@archestra/shared";
 
 /**
  * Attachment limits for chatops file downloads.

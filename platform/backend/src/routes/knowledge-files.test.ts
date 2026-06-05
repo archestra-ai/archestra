@@ -1,4 +1,4 @@
-import { TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME } from "@shared";
+import { TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME } from "@archestra/shared";
 import { eq } from "drizzle-orm";
 import { vi } from "vitest";
 import db, { schema } from "@/database";

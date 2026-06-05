@@ -1,5 +1,5 @@
-import type { RouteId } from "@shared";
-import { requiredEndpointPermissionsMap } from "@shared/access-control";
+import type { RouteId } from "@archestra/shared";
+import { requiredEndpointPermissionsMap } from "@archestra/shared/access-control";
 import { type Mock, vi } from "vitest";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import AuditLogModel from "@/models/audit-log";

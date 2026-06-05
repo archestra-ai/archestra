@@ -1,5 +1,8 @@
 import { generateKeyPairSync } from "node:crypto";
-import { OAUTH_CLIENT_ASSERTION_TYPE, OAUTH_TOKEN_TYPE } from "@shared";
+import {
+  OAUTH_CLIENT_ASSERTION_TYPE,
+  OAUTH_TOKEN_TYPE,
+} from "@archestra/shared";
 import { vi } from "vitest";
 import type { ExternalIdentityProviderConfig } from "@/services/identity-providers/oidc";
 import { describe, expect, test } from "@/test";

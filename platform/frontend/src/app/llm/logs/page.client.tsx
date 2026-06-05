@@ -5,7 +5,7 @@ import {
   DynamicInteraction,
   INTERACTION_SOURCE_DISPLAY,
   type InteractionSource,
-} from "@shared";
+} from "@archestra/shared";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Database, Layers, MessageSquare, User } from "lucide-react";
 import Link from "next/link";

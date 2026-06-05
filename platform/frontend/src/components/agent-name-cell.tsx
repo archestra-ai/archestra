@@ -1,6 +1,6 @@
 "use client";
 
-import type { AgentScope, archestraApiTypes } from "@shared";
+import type { AgentScope, archestraApiTypes } from "@archestra/shared";
 import type { ReactNode } from "react";
 import { AgentBadge } from "@/components/agent-badge";
 import { LabelTags } from "@/components/label-tags";

@@ -33,7 +33,7 @@ vi.mock("@/models", () => ({
   },
 }));
 
-vi.mock("@shared/access-control", () => ({
+vi.mock("@archestra/shared/access-control", () => ({
   requiredEndpointPermissionsMap: {
     createAgent: { agent: ["create"] },
     getAgents: { agent: ["read"] },

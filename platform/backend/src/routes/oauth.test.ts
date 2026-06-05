@@ -1,12 +1,19 @@
 import { createHash } from "node:crypto";
 import { type Mock, vi } from "vitest";
-import { beforeEach, describe, expect, test } from "@/test";
-import {
+import { cacheManager } from "@/cache-manager";
+import { secretManager } from "@/secrets-manager";
+import type { FastifyInstanceWithZod } from "@/server";
+import { createFastifyInstance } from "@/server";
+import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import oauthRoutes, {
   buildDiscoveryUrls,
   discoverOAuthEndpoints,
   discoverScopes,
   generateCodeChallenge,
   generateCodeVerifier,
+  getOAuthResource,
+  getOAuthResourceUrl,
+  refreshOAuthToken,
   resolveOAuthScopesForAuthorization,
 } from "./oauth";
 
@@ -55,6 +62,76 @@ describe("OAuth helper functions", () => {
       const c1 = generateCodeChallenge("verifier-a");
       const c2 = generateCodeChallenge("verifier-b");
       expect(c1).not.toBe(c2);
+    });
+  });
+
+  describe("getOAuthResource", () => {
+    test("prefers explicit resource over legacy audience and server URL", () => {
+      expect(
+        getOAuthResource({
+          resource: "https://resource.example.com",
+          audience: "api://legacy-audience",
+          server_url: "https://mcp.example.com/mcp",
+        }),
+      ).toBe("https://resource.example.com");
+    });
+
+    test("falls back to audience before server URL", () => {
+      expect(
+        getOAuthResource({
+          audience: "api://legacy-audience",
+          server_url: "https://mcp.example.com/mcp",
+        }),
+      ).toBe("api://legacy-audience");
+    });
+
+    test("falls back to server URL when no resource or audience is configured", () => {
+      expect(
+        getOAuthResource({
+          server_url: "https://mcp.example.com/mcp",
+        }),
+      ).toBe("https://mcp.example.com/mcp");
+    });
+
+    test("returns undefined when no resource fields are configured", () => {
+      expect(getOAuthResource({})).toBeUndefined();
+    });
+
+    test("parses api-scheme resource values for proxy token exchange", () => {
+      const resourceUrl = getOAuthResourceUrl({
+        resource: "api://downstream-client-id",
+        server_url: "https://mcp.example.com/mcp",
+      });
+
+      expect(resourceUrl.protocol).toBe("api:");
+      expect(resourceUrl.href).toBe("api://downstream-client-id");
+    });
+
+    test("uses URL-shaped audience values for proxy token exchange", () => {
+      const resourceUrl = getOAuthResourceUrl({
+        audience: "api://legacy-audience",
+        server_url: "https://mcp.example.com/mcp",
+      });
+
+      expect(resourceUrl.href).toBe("api://legacy-audience");
+    });
+
+    test("falls back to server URL when legacy audience is not URL-shaped", () => {
+      const resourceUrl = getOAuthResourceUrl({
+        audience: "legacy-audience",
+        server_url: "https://mcp.example.com/mcp",
+      });
+
+      expect(resourceUrl.href).toBe("https://mcp.example.com/mcp");
+    });
+
+    test("rejects invalid resource values for proxy token exchange", () => {
+      expect(() =>
+        getOAuthResourceUrl({
+          resource: "downstream-client-id",
+          server_url: "https://mcp.example.com/mcp",
+        }),
+      ).toThrow("Invalid OAuth resource URL");
     });
   });
 
@@ -476,5 +553,125 @@ describe("OAuth helper functions", () => {
 
       globalThis.fetch = originalFetch;
     });
+  });
+});
+
+describe("OAuth routes", () => {
+  let app: FastifyInstanceWithZod;
+  const originalFetch = globalThis.fetch;
+
+  beforeEach(async () => {
+    cacheManager.start();
+    app = createFastifyInstance();
+    await app.register(oauthRoutes);
+  });
+
+  afterEach(async () => {
+    globalThis.fetch = originalFetch;
+    vi.restoreAllMocks();
+    await app.close();
+  });
+
+  test("uses a configured OAuth resource separately from the MCP endpoint URL", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      name: "Resource Split MCP",
+      serverType: "remote",
+      serverUrl: "https://mcp.example.com/mcp",
+      oauthConfig: {
+        name: "Resource Split MCP",
+        server_url: "https://mcp.example.com/mcp",
+        resource: "https://mcp.example.com",
+        grant_type: "authorization_code",
+        auth_server_url: "https://login.example.com/tenant/v2.0",
+        authorization_endpoint:
+          "https://login.example.com/tenant/oauth2/v2.0/authorize",
+        token_endpoint: "https://login.example.com/tenant/oauth2/v2.0/token",
+        client_id: "public-client-id",
+        redirect_uris: ["http://localhost:3000/oauth-callback"],
+        scopes: ["api://downstream-app/Tools.Read"],
+        default_scopes: ["api://downstream-app/Tools.Read"],
+        supports_resource_metadata: false,
+      },
+    });
+
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        authorization_endpoint:
+          "https://login.example.com/tenant/oauth2/v2.0/authorize",
+        token_endpoint: "https://login.example.com/tenant/oauth2/v2.0/token",
+      }),
+    }) as Mock;
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/oauth/initiate",
+      payload: {
+        catalogId: catalog.id,
+      },
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    const authorizationUrl = new URL(response.json().authorizationUrl);
+    expect(authorizationUrl.searchParams.get("resource")).toBe(
+      "https://mcp.example.com",
+    );
+    expect(authorizationUrl.searchParams.get("resource")).not.toBe(
+      "https://mcp.example.com/mcp",
+    );
+  });
+
+  test("includes configured OAuth resource when refreshing access tokens", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      name: "Refresh Resource Split MCP",
+      serverType: "remote",
+      serverUrl: "https://mcp.example.com/mcp",
+      oauthConfig: {
+        name: "Refresh Resource Split MCP",
+        server_url: "https://mcp.example.com/mcp",
+        resource: "https://mcp.example.com",
+        grant_type: "authorization_code",
+        auth_server_url: "https://login.example.com/tenant/v2.0",
+        authorization_endpoint:
+          "https://login.example.com/tenant/oauth2/v2.0/authorize",
+        token_endpoint: "https://login.example.com/tenant/oauth2/v2.0/token",
+        client_id: "public-client-id",
+        client_secret: "public-client-secret",
+        redirect_uris: ["http://localhost:3000/oauth-callback"],
+        scopes: ["api://downstream-app/Tools.Read"],
+        default_scopes: ["api://downstream-app/Tools.Read"],
+        supports_resource_metadata: false,
+      },
+    });
+    const secret = await secretManager().createSecret(
+      {
+        refresh_token: "stored-refresh-token",
+        access_token: "old-access-token",
+      },
+      "refresh-resource-token",
+      true,
+    );
+
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        access_token: "new-access-token",
+        refresh_token: "new-refresh-token",
+        expires_in: 3600,
+      }),
+    }) as Mock;
+    globalThis.fetch = fetchMock;
+
+    await expect(refreshOAuthToken(secret.id, catalog.id)).resolves.toBe(true);
+
+    const requestBody = fetchMock.mock.calls.at(-1)?.[1]
+      ?.body as URLSearchParams;
+    expect(requestBody.get("grant_type")).toBe("refresh_token");
+    expect(requestBody.get("refresh_token")).toBe("stored-refresh-token");
+    expect(requestBody.get("resource")).toBe("https://mcp.example.com");
   });
 });

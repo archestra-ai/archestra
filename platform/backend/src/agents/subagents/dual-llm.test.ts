@@ -1,4 +1,4 @@
-import { BUILT_IN_AGENT_IDS } from "@shared";
+import { BUILT_IN_AGENT_IDS } from "@archestra/shared";
 import { generateObject, generateText } from "ai";
 import { vi } from "vitest";
 import AgentModel from "@/models/agent";

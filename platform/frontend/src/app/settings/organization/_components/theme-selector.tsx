@@ -1,6 +1,6 @@
 "use client";
 
-import type { OrganizationTheme } from "@shared";
+import type { OrganizationTheme } from "@archestra/shared";
 import { Check } from "lucide-react";
 import { WithPermissions } from "@/components/roles/with-permissions";
 import { SettingsCardHeader } from "@/components/settings/settings-block";

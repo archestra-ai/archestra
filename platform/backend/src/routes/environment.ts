@@ -1,4 +1,4 @@
-import { RouteId } from "@shared";
+import { RouteId } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import mcpServerRuntimeManager from "@/k8s/mcp-server-runtime/manager";

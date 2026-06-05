@@ -1,5 +1,66 @@
 # Changelog
 
+## [1.2.59](https://github.com/archestra-ai/archestra/compare/platform-v1.2.58...platform-v1.2.59) (2026-06-05)
+
+
+### Features
+
+* **llm:** broaden OpenAI best-model markers (gpt-5.x, gpt-4.1, gpt-4o) ([#5345](https://github.com/archestra-ai/archestra/issues/5345)) ([54be183](https://github.com/archestra-ai/archestra/commit/54be183a6d46052230db20294bf4d6a8486941ce))
+* **llm:** support OpenAI pro reasoning models via the Responses API ([#5335](https://github.com/archestra-ai/archestra/issues/5335)) ([bd8da77](https://github.com/archestra-ai/archestra/commit/bd8da775d4d1b8690fd6bc5632f2b3242484d3d3))
+* **sandbox:** redesign agent code-execution MCP tools ([#5253](https://github.com/archestra-ai/archestra/issues/5253)) ([1a5bf38](https://github.com/archestra-ai/archestra/commit/1a5bf3806c15d73df63f8c159beaff1675eb1a11))
+
+
+### Bug Fixes
+
+* Docker quickstart loopback bindings ([#5328](https://github.com/archestra-ai/archestra/issues/5328)) ([69db671](https://github.com/archestra-ai/archestra/commit/69db6714bb7d0bd9b98941987517ca535fe591ca))
+* improve mcp oauth resource handling ([#5343](https://github.com/archestra-ai/archestra/issues/5343)) ([7c1190b](https://github.com/archestra-ai/archestra/commit/7c1190bcb9a9b4fb13fcb6bbd675004bf2523c54))
+* **llm:** exclude hidden and non-chat models from default model resolution ([#5337](https://github.com/archestra-ai/archestra/issues/5337)) ([d76db02](https://github.com/archestra-ai/archestra/commit/d76db02a6862dd5b1c63b16ae9497b1c87a72666))
+* **llm:** exclude OpenAI completions-only models from the chat catalog ([#5340](https://github.com/archestra-ai/archestra/issues/5340)) ([6443008](https://github.com/archestra-ai/archestra/commit/64430080b52cf40c7367d2bcb0a11acaa374574f))
+
+
+### Dependencies
+
+* address Dependabot npm advisories and Rust OTEL bumps ([#5324](https://github.com/archestra-ai/archestra/issues/5324)) ([37cade3](https://github.com/archestra-ai/archestra/commit/37cade3522b3c537db99be3e33150a7dfb353423))
+* bump better-auth to 1.6.11 to fix CVE-2026-45337 ([#5333](https://github.com/archestra-ai/archestra/issues/5333)) ([67e801a](https://github.com/archestra-ai/archestra/commit/67e801a4da3eaa713501321de9a441cdeae445f0))
+
+
+### Code Refactoring
+
+* **mcp-registry:** remove catalog preset feature (2) ([#5303](https://github.com/archestra-ai/archestra/issues/5303)) ([427f333](https://github.com/archestra-ai/archestra/commit/427f333a7670cb4f9cdd92ecc88ccad23b5b5fdc))
+
+
+### Miscellaneous Chores
+
+* rename [@shared](https://github.com/shared) workspace package to @archestra/shared ([#5188](https://github.com/archestra-ai/archestra/issues/5188)) ([4c74e33](https://github.com/archestra-ai/archestra/commit/4c74e33e0b26f018df3721426f74afce2a6cb5c9))
+* share GitHub auth config fields ([#5342](https://github.com/archestra-ai/archestra/issues/5342)) ([cafafb8](https://github.com/archestra-ai/archestra/commit/cafafb8563b3c54ebb200c87c2b42c23b6379a79))
+
+## [1.2.58](https://github.com/archestra-ai/archestra/compare/platform-v1.2.57...platform-v1.2.58) (2026-06-05)
+
+
+### Bug Fixes
+
+* create migration hook database secret ([#5321](https://github.com/archestra-ai/archestra/issues/5321)) ([5810c1b](https://github.com/archestra-ai/archestra/commit/5810c1bacecce34077778b9259da1343fa925df0))
+* improve oauth debugging UX ([#5316](https://github.com/archestra-ai/archestra/issues/5316)) ([07eb69e](https://github.com/archestra-ai/archestra/commit/07eb69ec5c13cf3d172eb21475ca440c096642f2))
+* run Helm migrations before upgrades ([#5318](https://github.com/archestra-ai/archestra/issues/5318)) ([37f0797](https://github.com/archestra-ai/archestra/commit/37f07978c1db5b67e3b022d068a7f9fcf6e10199))
+
+## [1.2.57](https://github.com/archestra-ai/archestra/compare/platform-v1.2.56...platform-v1.2.57) (2026-06-04)
+
+
+### Features
+
+* **github:** GitHub App auth for skill imports and KB connectors ([#5293](https://github.com/archestra-ai/archestra/issues/5293)) ([06d8091](https://github.com/archestra-ai/archestra/commit/06d8091fa1c0345e07c68436c45b6162ef70b996))
+* **mcp-catalog:** let team-admins scope catalog items to their teams ([#5298](https://github.com/archestra-ai/archestra/issues/5298)) ([d3e3f8d](https://github.com/archestra-ai/archestra/commit/d3e3f8d21e1381be94c650899910ad553d1b2acb))
+
+
+### Code Refactoring
+
+* **mcp-registry:** remove catalog preset feature ([#5290](https://github.com/archestra-ai/archestra/issues/5290)) ([ae539b4](https://github.com/archestra-ai/archestra/commit/ae539b4a846a864294d082c44780f0db3ddee24e))
+
+
+### Miscellaneous Chores
+
+* bump default LLM models ([#5297](https://github.com/archestra-ai/archestra/issues/5297)) ([0fb1206](https://github.com/archestra-ai/archestra/commit/0fb1206d6b8f9d0e4acbfc3ef30af43135220aa9))
+
 ## [1.2.56](https://github.com/archestra-ai/archestra/compare/platform-v1.2.55...platform-v1.2.56) (2026-06-04)
 
 

@@ -4,7 +4,7 @@ import {
   CONTEXT_TEAM_IDS,
   DocsPage,
   getDocsUrl,
-} from "@shared";
+} from "@archestra/shared";
 import { ArrowRightIcon, Plus } from "lucide-react";
 import { CodeText } from "@/components/code-text";
 import { ExternalDocsLink } from "@/components/external-docs-link";

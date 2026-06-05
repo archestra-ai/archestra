@@ -1,21 +1,21 @@
-import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import {
   ARCHESTRA_TOOL_PREFIX,
   type ArchestraToolFullName,
+  type ArchestraToolShortName,
   getArchestraToolFullName,
   getArchestraToolShortName,
   isAgentTool,
-} from "@shared";
+  TOOL_RUN_TOOL_SHORT_NAME,
+  TOOL_SEARCH_TOOLS_SHORT_NAME,
+} from "@archestra/shared";
+import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { ZodError, type ZodType } from "zod";
 import config from "@/config";
+import { ToolModel } from "@/models";
 // Import all groups
 import { toolEntries as agentToolEntries, tools as agentTools } from "./agents";
 import { archestraMcpBranding } from "./branding";
 import { toolEntries as chatToolEntries, tools as chatTools } from "./chat";
-import {
-  toolEntries as codeExecutionToolEntries,
-  tools as codeExecutionTools,
-} from "./code-execution";
 import { delegationToolArgsSchema, handleDelegation } from "./delegation";
 import {
   type ArchestraRuntimeToolEntry,
@@ -53,13 +53,13 @@ import {
   tools as runToolTools,
 } from "./run-tool";
 import {
+  toolEntries as sandboxToolEntries,
+  tools as sandboxTools,
+} from "./sandbox";
+import {
   toolEntries as searchToolEntries,
   tools as searchToolTools,
 } from "./search-tools";
-import {
-  toolEntries as skillSandboxToolEntries,
-  tools as skillSandboxTools,
-} from "./skill-sandbox";
 import { toolEntries as skillToolEntries, tools as skillTools } from "./skills";
 import {
   toolEntries as toolAssignmentToolEntries,
@@ -87,9 +87,8 @@ const toolEntries: Partial<
   ...chatToolEntries,
   ...searchToolEntries,
   ...runToolEntries,
-  ...codeExecutionToolEntries,
   ...skillToolEntries,
-  ...skillSandboxToolEntries,
+  ...sandboxToolEntries,
 };
 
 export function getArchestraMcpTools() {
@@ -106,9 +105,8 @@ export function getArchestraMcpTools() {
     ...chatTools,
     ...searchToolTools,
     ...runToolTools,
-    ...(config.codeRuntime.enabled ? codeExecutionTools : []),
     ...skillTools,
-    ...(config.skillsSandbox.enabled ? skillSandboxTools : []),
+    ...(config.skillsSandbox.enabled ? sandboxTools : []),
   ];
 
   if (archestraMcpBranding.toolPrefix === ARCHESTRA_TOOL_PREFIX) {
@@ -150,6 +148,13 @@ export async function executeArchestraTool(
   // Centralized RBAC check — ensures the user has the required permission
   const rbacDenied = await checkToolPermission(toolName, context);
   if (rbacDenied) return rbacDenied;
+
+  // Centralized assignment check — an agent may only execute Archestra tools
+  // that are actually assigned to it (the same set advertised by tools/list and
+  // search_tools). Without this, run_tool or a raw tools/call could invoke any
+  // Archestra tool the user has RBAC for, regardless of assignment.
+  const assignmentDenied = await checkToolAssignedToAgent(toolName, context);
+  if (assignmentDenied) return assignmentDenied;
 
   const resolvedToolName =
     toolEntries[toolName as ArchestraToolFullName] != null
@@ -198,6 +203,31 @@ export async function executeArchestraTool(
     }
     throw error;
   }
+}
+
+// run_tool / search_tools are the dispatch surface (advertised implicitly in
+// search_and_run_only mode), so they bypass the assignment check.
+const ASSIGNMENT_EXEMPT_SHORT_NAMES = new Set<ArchestraToolShortName>([
+  TOOL_RUN_TOOL_SHORT_NAME,
+  TOOL_SEARCH_TOOLS_SHORT_NAME,
+]);
+
+async function checkToolAssignedToAgent(
+  toolName: string,
+  context: ArchestraContext,
+): Promise<CallToolResult | null> {
+  const shortName = archestraMcpBranding.getToolShortName(toolName);
+  // Assignment is agent-scoped; org/team-token sessions rely on RBAC alone.
+  if (!context.agentId || !shortName) return null;
+  if (ASSIGNMENT_EXEMPT_SHORT_NAMES.has(shortName)) return null;
+
+  const assignedTools = await ToolModel.getMcpToolsByAgent(context.agentId);
+  const isAssigned = assignedTools.some(
+    (tool) => archestraMcpBranding.getToolShortName(tool.name) === shortName,
+  );
+  return isAssigned
+    ? null
+    : errorResult(`Tool '${toolName}' is not assigned to this agent.`);
 }
 
 function resolveArchestraToolName(toolName: string): string | null {

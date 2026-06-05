@@ -1,4 +1,4 @@
-import { SLACK_REQUIRED_BOT_SCOPES } from "@shared";
+import { SLACK_REQUIRED_BOT_SCOPES } from "@archestra/shared";
 import { describe, expect, it } from "vitest";
 import { buildSlackManifest } from "./slack-manifest";
 

@@ -5,7 +5,7 @@ import {
   IDENTITY_PROVIDER_ID,
   IDENTITY_TRUSTED_PROVIDER_IDS,
   type IdentityProviderId,
-} from "@shared";
+} from "@archestra/shared";
 import { useCallback, useState } from "react";
 import { EnterpriseLicenseRequired } from "@/components/enterprise-license-required";
 import { IdentityProviderIcon } from "@/components/identity-provider-icons.ee";

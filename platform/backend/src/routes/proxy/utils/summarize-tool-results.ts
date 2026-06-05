@@ -9,7 +9,10 @@
  * the most recent ones intact so the LLM can work with current state.
  */
 
-import { isLargeResultBrowserMcpTool, parseFullToolName } from "@shared";
+import {
+  isLargeResultBrowserMcpTool,
+  parseFullToolName,
+} from "@archestra/shared";
 import logger from "@/logging";
 import {
   estimateToolResultContentLength,

@@ -160,7 +160,7 @@ describe("GithubConnector", () => {
       expect(result).toEqual({ valid: true });
     });
 
-    test("requires app IDs when GitHub App auth is selected", async () => {
+    test("requires a config reference when GitHub App auth is selected", async () => {
       const result = await connector.validateConfig({
         githubUrl: "https://api.github.com",
         owner: "test-org",
@@ -168,7 +168,7 @@ describe("GithubConnector", () => {
       });
 
       expect(result.valid).toBe(false);
-      expect(result.error).toContain("githubAppId");
+      expect(result.error).toContain("githubAppConfigId");
     });
   });
 
@@ -227,8 +227,7 @@ describe("GithubConnector", () => {
           config: {
             ...validConfig,
             authMethod: "github_app",
-            githubAppId: "12345",
-            githubAppInstallationId: "67890",
+            githubAppConfigId: "00000000-0000-4000-8000-000000000001",
           },
           credentials: {
             apiToken: [
@@ -236,6 +235,11 @@ describe("GithubConnector", () => {
               "MIIB",
               "-----END PRIVATE KEY-----",
             ].join("\\n"),
+            githubApp: {
+              githubUrl: "https://api.github.com",
+              appId: "12345",
+              installationId: "67890",
+            },
           },
         });
 
@@ -269,8 +273,7 @@ describe("GithubConnector", () => {
           config: {
             ...validConfig,
             authMethod: "github_app",
-            githubAppId: "12345",
-            githubAppInstallationId: "67892",
+            githubAppConfigId: "00000000-0000-4000-8000-000000000002",
           },
           credentials: {
             apiToken: [
@@ -278,6 +281,11 @@ describe("GithubConnector", () => {
               "MIIB",
               "-----END PRIVATE KEY-----",
             ].join("\\n"),
+            githubApp: {
+              githubUrl: "https://api.github.com",
+              appId: "12345",
+              installationId: "67892",
+            },
           },
         });
 
@@ -302,8 +310,7 @@ describe("GithubConnector", () => {
       const config = {
         ...validConfig,
         authMethod: "github_app",
-        githubAppId: "12345",
-        githubAppInstallationId: "67891",
+        githubAppConfigId: "00000000-0000-4000-8000-000000000003",
       };
       const appCredentials = {
         apiToken: [
@@ -311,6 +318,11 @@ describe("GithubConnector", () => {
           "MIIB",
           "-----END PRIVATE KEY-----",
         ].join("\\n"),
+        githubApp: {
+          githubUrl: "https://api.github.com",
+          appId: "12345",
+          installationId: "67891",
+        },
       };
 
       try {
@@ -415,8 +427,7 @@ describe("GithubConnector", () => {
             githubUrl: "https://api.github.com",
             owner: "test-org",
             authMethod: "github_app",
-            githubAppId: "12345",
-            githubAppInstallationId: "67893",
+            githubAppConfigId: "00000000-0000-4000-8000-000000000004",
           },
           credentials: {
             apiToken: [
@@ -424,6 +435,11 @@ describe("GithubConnector", () => {
               "MIIB",
               "-----END PRIVATE KEY-----",
             ].join("\\n"),
+            githubApp: {
+              githubUrl: "https://api.github.com",
+              appId: "12345",
+              installationId: "67893",
+            },
           },
           checkpoint: null,
         })) {

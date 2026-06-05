@@ -1,6 +1,6 @@
 "use client";
 
-import type { SupportedProvider } from "@shared";
+import type { SupportedProvider } from "@archestra/shared";
 import { AlertCircle } from "lucide-react";
 import Link from "next/link";
 import { useEffect } from "react";

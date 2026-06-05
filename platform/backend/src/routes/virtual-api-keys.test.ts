@@ -1,4 +1,4 @@
-import { hasArchestraTokenPrefix } from "@shared";
+import { hasArchestraTokenPrefix } from "@archestra/shared";
 import { vi } from "vitest";
 import { LlmProviderApiKeyModel } from "@/models";
 import VirtualApiKeyModel from "@/models/virtual-api-key";

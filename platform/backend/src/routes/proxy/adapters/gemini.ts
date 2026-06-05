@@ -1,3 +1,4 @@
+import { ArchestraInternalErrorCode } from "@archestra/shared";
 import {
   Behavior,
   type Candidate,
@@ -9,7 +10,6 @@ import {
   type HarmProbability,
   type Part,
 } from "@google/genai";
-import { ArchestraInternalErrorCode } from "@shared";
 import { encode as toonEncode } from "@toon-format/toon";
 import { get } from "lodash-es";
 import { createGoogleGenAIClient } from "@/clients/gemini-client";

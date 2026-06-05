@@ -1,4 +1,4 @@
-import type { McpDeploymentStatusEntry } from "@shared";
+import type { McpDeploymentStatusEntry } from "@archestra/shared";
 import {
   Tooltip,
   TooltipContent,

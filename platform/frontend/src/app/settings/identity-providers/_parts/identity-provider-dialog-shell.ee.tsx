@@ -3,7 +3,7 @@
 import {
   getIdentityProviderDialogNavButtonTestId,
   type IdentityProviderFormValues,
-} from "@shared";
+} from "@archestra/shared";
 import { IdCard, XIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import type { UseFormReturn } from "react-hook-form";
@@ -25,7 +25,8 @@ export type IdentityProviderDialogSection =
   | "attribute-mapping"
   | "enterprise-managed-credentials"
   | "role-mapping"
-  | "team-sync";
+  | "team-sync"
+  | "token-debugger";
 
 export interface IdentityProviderDialogNavItem {
   id: IdentityProviderDialogSection;

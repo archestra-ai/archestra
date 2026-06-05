@@ -77,7 +77,7 @@ Prefer Playwright's recommended locators over raw `locator()` calls. In priority
 2. `page.getByText()` - text content.
 3. `page.getByLabel()` - form controls by label.
 4. `page.getByPlaceholder()` - input elements by placeholder.
-5. `page.getByTestId()` - custom test IDs using `E2eTestId` constants from `@shared`.
+5. `page.getByTestId()` - custom test IDs using `E2eTestId` constants from `@archestra/shared`.
 
 Avoid raw CSS selectors, XPath selectors, and arbitrary timeouts. Use Playwright auto-waiting instead.
 

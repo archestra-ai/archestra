@@ -19,7 +19,7 @@ import {
   type SupportedProvider,
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
-} from "@shared";
+} from "@archestra/shared";
 import {
   AlertTriangle,
   Bot,

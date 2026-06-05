@@ -3,7 +3,7 @@ import type {
   IdentityProviderSamlConfig,
   IdpRoleMappingConfig,
   IdpTeamSyncConfig,
-} from "@shared";
+} from "@archestra/shared";
 import { boolean, pgTable, text } from "drizzle-orm/pg-core";
 import usersTable from "./user";
 

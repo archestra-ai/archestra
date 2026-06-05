@@ -1,4 +1,4 @@
-import type { SupportedProvider } from "@shared";
+import type { SupportedProvider } from "@archestra/shared";
 import { fetchAnthropicModels } from "./anthropic";
 import { fetchAzureModels } from "./azure";
 import { fetchBedrockModels } from "./bedrock";

@@ -5,6 +5,7 @@ import ApiKeyModel from "@/models/api-key";
 import ChatOpsChannelBindingModel from "@/models/chatops-channel-binding";
 import chatOpsConfigModel from "@/models/chatops-config";
 import EnvironmentModel from "@/models/environment";
+import GithubAppConfigModel from "@/models/github-app-config";
 import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
 import KnowledgeBaseModel from "@/models/knowledge-base";
 import KnowledgeBaseConnectorModel from "@/models/knowledge-base-connector";
@@ -280,6 +281,16 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     resourceType: "connector",
     fetchById: (id, orgId) =>
       KnowledgeBaseConnectorModel.findByIdForAudit(id, orgId),
+  },
+
+  // GitHub App configs
+  "/api/github-app-configs": {
+    resourceType: "githubAppConfig",
+    fetchById: (id, orgId) => GithubAppConfigModel.findByIdForAudit(id, orgId),
+  },
+  "/api/github-app-configs/:id": {
+    resourceType: "githubAppConfig",
+    fetchById: (id, orgId) => GithubAppConfigModel.findByIdForAudit(id, orgId),
   },
 
   // Limits

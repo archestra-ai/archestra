@@ -1,10 +1,10 @@
-import { oauthProviderClient } from "@better-auth/oauth-provider/client";
-import { ssoClient } from "@better-auth/sso/client";
 import {
   allAvailableActions,
   editorPermissions,
   memberPermissions,
-} from "@shared/access-control";
+} from "@archestra/shared/access-control";
+import { oauthProviderClient } from "@better-auth/oauth-provider/client";
+import { ssoClient } from "@better-auth/sso/client";
 import {
   adminClient,
   inferOrgAdditionalFields,

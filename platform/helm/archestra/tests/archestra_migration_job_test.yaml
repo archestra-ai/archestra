@@ -1,0 +1,141 @@
+suite: archestra migration job
+templates:
+  - migration-job.yaml
+values:
+  - ../ci/test-values.yaml
+tests:
+  - it: creates a pre-upgrade migration job by default
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: Job
+      - equal:
+          path: metadata.annotations["helm.sh/hook"]
+          value: pre-upgrade
+      - equal:
+          path: metadata.annotations["helm.sh/hook-weight"]
+          value: "-5"
+      - equal:
+          path: metadata.annotations["helm.sh/hook-delete-policy"]
+          value: before-hook-creation,hook-succeeded
+      - matchRegex:
+          path: metadata.name
+          pattern: -archestra-platform-migrate$
+      - equal:
+          path: spec.template.spec.restartPolicy
+          value: Never
+      - equal:
+          path: spec.template.spec.containers[0].workingDir
+          value: /app/backend
+      - equal:
+          path: spec.template.spec.containers[0].command
+          value:
+            - pnpm
+            - db:migrate
+
+  - it: does not create the migration job when disabled
+    set:
+      archestra.migrationJob.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: does not create the migration job in maintenance mode
+    set:
+      archestra.env:
+        ARCHESTRA_MAINTENANCE_MODE_MESSAGE: "Scheduled maintenance"
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: uses a complete external database URL from the hook auth secret
+    set:
+      postgresql.enabled: false
+      postgresql.external_database_url: postgresql://external:pass@external-host:5432/externaldb
+    asserts:
+      - contains:
+          path: spec.template.spec.initContainers[0].env
+          content:
+            name: ARCHESTRA_DATABASE_URL
+            valueFrom:
+              secretKeyRef:
+                name: RELEASE-NAME-archestra-platform-migrate-auth
+                key: database-url
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_DATABASE_URL
+            valueFrom:
+              secretKeyRef:
+                name: RELEASE-NAME-archestra-platform-migrate-auth
+                key: database-url
+
+  - it: prepends migration-job env before shared env for Kubernetes variable expansion
+    set:
+      postgresql.enabled: false
+      postgresql.external_database_url: null
+      archestra.env:
+        ARCHESTRA_DATABASE_URL: postgresql://external:$(PGPASSWORD)@external-host:5432/externaldb
+      archestra.migrationJob.env:
+        PGPASSWORD: external-secret-password
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].env[0]
+          value:
+            name: PGPASSWORD
+            value: external-secret-password
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_DATABASE_URL
+            value: postgresql://external:$(PGPASSWORD)@external-host:5432/externaldb
+
+  - it: supports migration-job secret-backed env
+    set:
+      archestra.migrationJob.envFromSecrets:
+        - name: PGPASSWORD
+          secretName: external-db-secret
+          secretKey: password
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].env[0]
+          value:
+            name: PGPASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: external-db-secret
+                key: password
+
+  - it: supports migration-job envFrom entries
+    set:
+      archestra.migrationJob.envFrom:
+        - secretRef:
+            name: migration-job-env
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].envFrom
+          content:
+            secretRef:
+              name: migration-job-env
+
+  - it: uses only the vault volume mount and not shared diagnostics mounts
+    set:
+      archestra.diagnostics.enabled: true
+      archestra.initContainers.vaultSecrets.enabled: true
+      archestra.initContainers.vaultSecrets.secrets:
+        - envVar: ARCHESTRA_DATABASE_URL
+          path: secret/data/team/database_url
+          key: url
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: vault-secrets
+            mountPath: /vault/secrets
+            readOnly: true
+      - notContains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: diagnostics
+          any: true

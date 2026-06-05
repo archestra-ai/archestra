@@ -83,7 +83,7 @@ Prefer Playwright's recommended locators over raw `locator()` calls. In priority
 2. `page.getByText()` - Find by text content
 3. `page.getByLabel()` - Form controls by label
 4. `page.getByPlaceholder()` - Input elements by placeholder
-5. `page.getByTestId()` - Custom test IDs (use `E2eTestId` constants from `@shared`)
+5. `page.getByTestId()` - Custom test IDs (use `E2eTestId` constants from `@archestra/shared`)
 
 **Avoid:**
 - Raw CSS selectors: `page.locator('.my-class')` or `page.locator('#my-id')`

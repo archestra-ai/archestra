@@ -1,4 +1,7 @@
-import { parseFullToolName, SKILL_ARCHESTRA_TOOL_SHORT_NAMES } from "@shared";
+import {
+  parseFullToolName,
+  SKILL_ARCHESTRA_TOOL_SHORT_NAMES,
+} from "@archestra/shared";
 import { createLLMModel } from "@/clients/llm-client";
 import logger from "@/logging";
 import { generateTaggedText } from "@/utils/generate-tagged-text";

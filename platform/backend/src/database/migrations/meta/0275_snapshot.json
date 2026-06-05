@@ -1,5 +1,5 @@
 {
-  "id": "3a7bebc8-39e5-4238-8975-23d603c5ca6d",
+  "id": "6329c204-ab2d-44d3-9d5e-65e54100113c",
   "prevId": "9c3784cb-f102-4a39-bce7-bbd4825aff6a",
   "version": "7",
   "dialect": "postgresql",
@@ -3684,6 +3684,107 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.github_app_configs": {
+      "name": "github_app_configs",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "organization_id": {
+          "name": "organization_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "github_url": {
+          "name": "github_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'https://api.github.com'"
+        },
+        "app_id": {
+          "name": "app_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "installation_id": {
+          "name": "installation_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "secret_id": {
+          "name": "secret_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "github_app_configs_organization_id_idx": {
+          "name": "github_app_configs_organization_id_idx",
+          "columns": [
+            {
+              "expression": "organization_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "github_app_configs_secret_id_secret_id_fk": {
+          "name": "github_app_configs_secret_id_secret_id_fk",
+          "tableFrom": "github_app_configs",
+          "tableTo": "secret",
+          "columnsFrom": [
+            "secret_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.identity_provider": {
       "name": "identity_provider",
       "schema": "",
@@ -4982,13 +5083,6 @@
           "primaryKey": false,
           "notNull": true,
           "default": "'pending'"
-        },
-        "embedding_error": {
-          "name": "embedding_error",
-          "type": "kb_document_embedding_error",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": false
         },
         "chunk_count": {
           "name": "chunk_count",
@@ -12501,18 +12595,6 @@
         "personal",
         "team",
         "org"
-      ]
-    },
-    "public.kb_document_embedding_error": {
-      "name": "kb_document_embedding_error",
-      "schema": "public",
-      "values": [
-        "rate_limit",
-        "auth_error",
-        "model_not_found",
-        "server_error",
-        "dimensions_mismatch",
-        "unknown"
       ]
     },
     "public.oauth_refresh_error_enum": {

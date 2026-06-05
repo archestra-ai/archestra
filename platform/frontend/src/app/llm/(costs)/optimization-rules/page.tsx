@@ -1,6 +1,6 @@
 "use client";
 
-import { providerDisplayNames } from "@shared";
+import { providerDisplayNames } from "@archestra/shared";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Edit, Plus, Power, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";

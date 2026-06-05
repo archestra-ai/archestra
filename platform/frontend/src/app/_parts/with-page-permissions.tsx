@@ -1,6 +1,6 @@
 "use client";
 
-import { requiredPagePermissionsMap } from "@shared/access-control";
+import { requiredPagePermissionsMap } from "@archestra/shared/access-control";
 import { usePathname } from "next/navigation";
 import type React from "react";
 import { ForbiddenPage } from "@/app/_parts/forbidden-page";

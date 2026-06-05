@@ -4,7 +4,7 @@ import {
   type archestraApiTypes,
   calculateCostSavings,
   DynamicInteraction,
-} from "@shared";
+} from "@archestra/shared";
 import { ArrowLeft, Database, Layers } from "lucide-react";
 import Link from "next/link";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";

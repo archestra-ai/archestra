@@ -1,6 +1,9 @@
 "use client";
 
-import type { archestraApiTypes, ResourceVisibilityScope } from "@shared";
+import type {
+  archestraApiTypes,
+  ResourceVisibilityScope,
+} from "@archestra/shared";
 import {
   AlertTriangle,
   ArrowLeft,
@@ -12,6 +15,10 @@ import {
   SearchX,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import {
+  GithubAuthConfigFields,
+  type GithubAuthMethod,
+} from "@/components/github-auth-config-fields";
 import { SearchInput } from "@/components/search-input";
 import { StandardDialog } from "@/components/standard-dialog";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -32,6 +39,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useGithubAppConfigs } from "@/lib/github-app-config.query";
 import {
   useDiscoverGithubSkills,
   useImportGithubSkills,
@@ -73,10 +81,13 @@ export function ImportSkillsDialog({
 }) {
   const discover = useDiscoverGithubSkills();
   const importSkills = useImportGithubSkills();
+  const { data: githubAppConfigs = [] } = useGithubAppConfigs();
 
   const [repoUrl, setRepoUrl] = useState(initialRepoUrl);
   const [path, setPath] = useState("");
+  const [authMethod, setAuthMethod] = useState<"pat" | "github_app">("pat");
   const [githubToken, setGithubToken] = useState("");
+  const [githubAppConfigId, setGithubAppConfigId] = useState("");
   const [discovered, setDiscovered] = useState<DiscoveredSkill[] | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [search, setSearch] = useState("");
@@ -86,11 +97,21 @@ export function ImportSkillsDialog({
   const [scope, setScope] = useState<ResourceVisibilityScope>("personal");
   const [teamIds, setTeamIds] = useState<string[]>([]);
 
+  // PAT and GitHub App auth are mutually exclusive; the backend rejects both
+  const githubAuthFields =
+    authMethod === "github_app"
+      ? githubAppConfigId
+        ? { githubAppConfigId }
+        : {}
+      : githubToken.trim()
+        ? { githubToken: githubToken.trim() }
+        : {};
+
   const previewBody = previewSkillPath
     ? {
         repoUrl,
         ...(path.trim() && { path: path.trim() }),
-        ...(githubToken.trim() && { githubToken: githubToken.trim() }),
+        ...githubAuthFields,
         skillPath: previewSkillPath,
       }
     : null;
@@ -100,7 +121,9 @@ export function ImportSkillsDialog({
   const reset = () => {
     setRepoUrl("");
     setPath("");
+    setAuthMethod("pat");
     setGithubToken("");
+    setGithubAppConfigId("");
     setDiscovered(null);
     setSelected(new Set());
     setSearch("");
@@ -121,12 +144,19 @@ export function ImportSkillsDialog({
     onOpenChange(isOpen);
   };
 
+  const handleAuthMethodChange = (value: GithubAuthMethod) => {
+    setAuthMethod(value);
+    if (value === "pat") {
+      setGithubAppConfigId("");
+    }
+  };
+
   const handleDiscover = async (overrideRepoUrl?: string) => {
     setDiscoverError(null);
     const { data, errorMessage } = await discover.mutateAsync({
       repoUrl: overrideRepoUrl ?? repoUrl,
       ...(path.trim() && { path: path.trim() }),
-      ...(githubToken.trim() && { githubToken: githubToken.trim() }),
+      ...githubAuthFields,
     });
     if (data) {
       setDiscovered(data.skills);
@@ -165,7 +195,7 @@ export function ImportSkillsDialog({
     const result = await importSkills.mutateAsync({
       repoUrl,
       ...(path.trim() && { path: path.trim() }),
-      ...(githubToken.trim() && { githubToken: githubToken.trim() }),
+      ...githubAuthFields,
       skillPaths: [...selected],
       scope,
       teamIds: scope === "team" ? teamIds : [],
@@ -230,7 +260,10 @@ export function ImportSkillsDialog({
 
   const isSelectStep = discovered !== null;
   const isAutoDiscovering = autoDiscover && !isSelectStep && !discoverError;
-  const hasGithubToken = githubToken.trim().length > 0;
+  const hasGithubAuth =
+    authMethod === "github_app"
+      ? githubAppConfigId.length > 0
+      : githubToken.trim().length > 0;
 
   const repoSlug = repoUrl
     .replace(/^https?:\/\//, "")
@@ -617,37 +650,48 @@ export function ImportSkillsDialog({
               directories under this path.
             </p>
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="skill-token">
-              GitHub token
-              <span className="text-muted-foreground font-normal">
-                (optional)
-              </span>
-            </Label>
-            <Input
-              id="skill-token"
-              type="password"
-              value={githubToken}
-              onChange={(e) => setGithubToken(e.target.value)}
-              placeholder="ghp_…"
-              autoComplete="new-password"
-              data-1p-ignore
-              data-lpignore="true"
-            />
-            <p className="text-sm text-muted-foreground">
-              Required for private repositories. Used only for this import and
-              never stored.{" "}
-              <a
-                href="https://github.com/settings/personal-access-tokens/new"
-                target="_blank"
-                rel="noreferrer"
-                className="font-medium text-primary underline-offset-4 hover:underline"
-              >
-                Create a token
-              </a>
-              .
-            </p>
-          </div>
+          <GithubAuthConfigFields
+            authMethod={authMethod}
+            onAuthMethodChange={handleAuthMethodChange}
+            githubAppConfigId={githubAppConfigId}
+            onGithubAppConfigIdChange={setGithubAppConfigId}
+            githubAppConfigs={githubAppConfigs}
+            authLabel="Authentication"
+            authOptional
+            configuredDescription={
+              <>
+                Mints a short-lived installation token for this import. Manage
+                configurations in
+              </>
+            }
+            patFields={
+              <>
+                <Input
+                  id="skill-token"
+                  type="password"
+                  value={githubToken}
+                  onChange={(e) => setGithubToken(e.target.value)}
+                  placeholder="ghp_…"
+                  autoComplete="new-password"
+                  data-1p-ignore
+                  data-lpignore="true"
+                />
+                <p className="text-sm text-muted-foreground">
+                  Required for private repositories. Used only for this import
+                  and never stored.{" "}
+                  <a
+                    href="https://github.com/settings/personal-access-tokens/new"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="font-medium text-primary underline-offset-4 hover:underline"
+                  >
+                    Create a token
+                  </a>
+                  .
+                </p>
+              </>
+            }
+          />
           <SkillScopeSelector
             scope={scope}
             onScopeChange={setScope}
@@ -660,10 +704,10 @@ export function ImportSkillsDialog({
               <AlertTitle>Couldn’t reach that repository</AlertTitle>
               <AlertDescription>
                 <p>{discoverError}</p>
-                {!hasGithubToken && (
+                {!hasGithubAuth && (
                   <p>
-                    If the repository is private, paste a GitHub token above and
-                    try again.
+                    If the repository is private, add GitHub authentication
+                    above and try again.
                   </p>
                 )}
               </AlertDescription>

@@ -1,4 +1,3 @@
-import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import {
   TOOL_ARTIFACT_WRITE_SHORT_NAME,
   TOOL_SWAP_AGENT_SHORT_NAME,
@@ -6,7 +5,8 @@ import {
   TOOL_TODO_WRITE_SHORT_NAME,
   type ToolStateMcpToolError,
   ToolStateMcpToolErrorSchema,
-} from "@shared";
+} from "@archestra/shared";
+import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import { isAgentTypeAdmin } from "@/auth/agent-type-permissions";
 import logger from "@/logging";

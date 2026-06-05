@@ -1,6 +1,6 @@
 "use client";
 
-import { calculateCostSavings, DynamicInteraction } from "@shared";
+import { calculateCostSavings, DynamicInteraction } from "@archestra/shared";
 import {
   ArrowLeft,
   Bot,

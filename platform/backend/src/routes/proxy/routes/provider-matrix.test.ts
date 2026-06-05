@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type Anthropic from "@anthropic-ai/sdk";
+import type { SupportedProvider } from "@archestra/shared";
 import { FinishReason, type GenerateContentResponse } from "@google/genai";
-import type { SupportedProvider } from "@shared";
 import Fastify, {
   type FastifyInstance,
   type FastifyPluginAsync,

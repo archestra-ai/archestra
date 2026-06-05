@@ -1,1 +1,1 @@
-export type { ChatMessage, ChatMessagePart } from "@shared";
+export type { ChatMessage, ChatMessagePart } from "@archestra/shared";

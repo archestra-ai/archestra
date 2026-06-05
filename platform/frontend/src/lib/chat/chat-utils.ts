@@ -1,5 +1,5 @@
 import type { UIMessage } from "@ai-sdk/react";
-import type { archestraApiTypes } from "@shared";
+import type { archestraApiTypes } from "@archestra/shared";
 
 const DEFAULT_SESSION_NAME = "New Chat Session";
 

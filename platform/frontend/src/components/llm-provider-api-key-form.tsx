@@ -5,7 +5,7 @@ import {
   DEFAULT_PROVIDER_BASE_URLS,
   E2eTestId,
   isProviderApiKeyOptional,
-} from "@shared";
+} from "@archestra/shared";
 import { Building2, CheckCircle2, Trash2, User, Users } from "lucide-react";
 import Link from "next/link";
 import { lazy, Suspense, useEffect, useMemo } from "react";

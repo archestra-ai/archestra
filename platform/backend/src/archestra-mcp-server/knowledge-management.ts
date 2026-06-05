@@ -16,7 +16,7 @@ import {
   TOOL_UNASSIGN_KNOWLEDGE_CONNECTOR_FROM_KNOWLEDGE_BASE_SHORT_NAME,
   TOOL_UPDATE_KNOWLEDGE_BASE_SHORT_NAME,
   TOOL_UPDATE_KNOWLEDGE_CONNECTOR_SHORT_NAME,
-} from "@shared";
+} from "@archestra/shared";
 import { z } from "zod";
 import {
   buildUserAccessControlList,

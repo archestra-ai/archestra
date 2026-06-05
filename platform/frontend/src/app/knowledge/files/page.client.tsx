@@ -4,7 +4,7 @@ import {
   KNOWLEDGE_FILE_ACCEPT_ATTRIBUTE,
   KNOWLEDGE_FILE_SUPPORTED_FORMATS_LABEL,
   type ResourceVisibilityScope,
-} from "@shared";
+} from "@archestra/shared";
 import type { ColumnDef } from "@tanstack/react-table";
 import { formatDistanceToNow } from "date-fns";
 import {

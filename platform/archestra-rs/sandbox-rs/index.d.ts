@@ -27,8 +27,7 @@ export interface Limits {
 
 export interface ReadArtifactInput {
   traceparent?: string
-  snapshots: Array<SnapshotFile>
-  replayCommands: Array<ReplayCommand>
+  replayEntries: Array<ReplayEntry>
   limits: Limits
   path: string
   /**
@@ -37,11 +36,6 @@ export interface ReadArtifactInput {
    * the same directory as the original commands.
    */
   defaultCwd: string
-  /**
-   * PYTHONPATH applied during the replay used to read the artifact. Should
-   * match what was set on the original runs so imports resolve identically.
-   */
-  pythonpath?: string
 }
 
 export interface ReplayCommand {
@@ -50,19 +44,50 @@ export interface ReplayCommand {
   timeoutSeconds: number
 }
 
+/**
+ * a single ordered replay step crossing the NAPI boundary. exactly one of
+ * `command` / `file` / `skill_mount` is populated, keyed by `kind`
+ * (`"command"` | `"file"` | `"skill_mount"`); the core converts it into the
+ * internal [`ReplayStep`] enum at the entry point, where invalid combinations
+ * are rejected.
+ */
+export interface ReplayEntry {
+  kind: string
+  command?: ReplayCommand
+  file?: ReplayInputFile
+  skillMount?: ReplaySkillMount
+}
+
+/**
+ * a file written into the sandbox during replay. unlike [`SnapshotFile`]
+ * (relative to a skill root), `path` is absolute and bounded to the sandbox
+ * roots — uploads can target the home dir as well as a skill root.
+ */
+export interface ReplayInputFile {
+  path: string
+  encoding: string
+  content: string
+}
+
+/**
+ * a skill mounted into the sandbox at its replay sequence point. `files` are
+ * the skill's snapshotted files (`path` relative to the skill root); the
+ * materialize layer writes them under `/skills/<skill_name>` and extends
+ * PYTHONPATH at this point. mounts are append-only, so a mount never changes a
+ * prior layer's parent chain (the Dagger layer cache stays warm).
+ */
+export interface ReplaySkillMount {
+  skillName: string
+  files: Array<SnapshotFile>
+}
+
 export interface RunSandboxInput {
   traceparent?: string
-  snapshots: Array<SnapshotFile>
-  replayCommands: Array<ReplayCommand>
+  replayEntries: Array<ReplayEntry>
   limits: Limits
   command: string
   cwd: string
   timeoutSeconds: number
-  /**
-   * PYTHONPATH applied to the materialized container. Lets skill modules
-   * (`/skills/<name>`) resolve via `import` from any cwd.
-   */
-  pythonpath?: string
 }
 
 export interface SnapshotFile {

@@ -3,8 +3,9 @@
   "compilerOptions": {
     "paths": {
       "@/*": ["./src/*"],
-      "@shared": ["../shared/index.ts"],
-      "@shared/*": ["../shared/*"]
+      "@drizzle-migration-linter": ["../drizzle-migration-linter/src/index.ts"],
+      "@archestra/shared": ["../shared/index.ts"],
+      "@archestra/shared/*": ["../shared/*"]
     }
   },
   "include": ["src/**/*"],

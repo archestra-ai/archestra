@@ -49,6 +49,23 @@ describe("WebCrawlerConnector", () => {
       error: "Unsafe exclude path pattern: (a+)+$",
     });
 
+    await expect(
+      connector.validateConfig({
+        startUrl: "https://docs.example.test/guide/",
+        includePathPrefixes: ["https://docs.example.test/guide/"],
+      }),
+    ).resolves.toEqual({ valid: true });
+
+    const crossOriginPrefix = await connector.validateConfig({
+      startUrl: "https://docs.example.test/guide/",
+      includePathPrefixes: ["https://other.example.test/guide/"],
+    });
+    expect(crossOriginPrefix).toEqual({
+      valid: false,
+      error:
+        "Include path prefix URLs must use the same origin as the start URL",
+    });
+
     const invalidUrl = await connector.validateConfig({
       startUrl: "not a url",
     });

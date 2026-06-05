@@ -117,6 +117,7 @@ export function WebCrawlerConfigFields({
           label="Max Pages"
           placeholder="250"
           description="Stops the crawl after this many pages."
+          min={1}
         />
         <NumberField
           form={form}
@@ -131,6 +132,7 @@ export function WebCrawlerConfigFields({
           label="Batch Size"
           placeholder="25"
           description="Documents yielded per sync batch."
+          min={1}
         />
         <NumberField
           form={form}
@@ -171,6 +173,7 @@ function NumberField({
   label,
   placeholder,
   description,
+  min = 0,
 }: {
   // biome-ignore lint/suspicious/noExplicitAny: form type is generic across different connector schemas
   form: UseFormReturn<any>;
@@ -178,6 +181,7 @@ function NumberField({
   label: string;
   placeholder: string;
   description: string;
+  min?: number;
 }) {
   return (
     <FormField
@@ -189,7 +193,7 @@ function NumberField({
           <FormControl>
             <Input
               type="number"
-              min={0}
+              min={min}
               placeholder={placeholder}
               {...field}
               value={(field.value as number | undefined) ?? ""}

@@ -166,8 +166,8 @@ export class WebCrawlerConnector extends BaseConnector {
       for await (const batch of batcher) {
         yield batch;
       }
-      await crawl;
     } finally {
+      // Always settle the crawler promise so setup/teardown errors are observed.
       await crawl;
     }
   }
@@ -292,6 +292,7 @@ async function validateParsedConfig(params: {
       url: params.config.startUrl,
       allowPrivateNetwork: params.allowPrivateNetwork,
     });
+    validateIncludePathPrefixOrigins(params.config);
     compileExcludePathPatterns(params.config.excludePathPatterns);
   } catch (error) {
     return error instanceof Error ? error.message : String(error);
@@ -427,6 +428,21 @@ function buildAllowedPathPrefixes(
 
   const lastSlash = path.lastIndexOf("/");
   return [path.slice(0, lastSlash + 1) || "/"];
+}
+
+function validateIncludePathPrefixOrigins(config: WebCrawlerConfig): void {
+  const startOrigin = new URL(config.startUrl).origin;
+
+  for (const prefix of config.includePathPrefixes ?? []) {
+    if (!/^https?:\/\//i.test(prefix)) continue;
+
+    const prefixUrl = new URL(prefix);
+    if (prefixUrl.origin !== startOrigin) {
+      throw new Error(
+        "Include path prefix URLs must use the same origin as the start URL",
+      );
+    }
+  }
 }
 
 function normalizePathPrefix(prefix: string): string {
@@ -634,6 +650,8 @@ class CrawlBatcher implements AsyncIterable<ConnectorSyncBatch> {
   }
 
   fail(error: unknown): void {
+    // Do not flush buffered documents after crawl failure; callers should not
+    // persist a partial batch from an incomplete crawl.
     this.error = error;
     this.finished = true;
     this.notify();

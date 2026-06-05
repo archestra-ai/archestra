@@ -270,6 +270,12 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       });
 
       if (!activeRun) {
+        if (activeChatRunService.shuttingDown) {
+          throw new ApiError(
+            503,
+            "The server is shutting down. Please retry in a moment.",
+          );
+        }
         throw new ApiError(
           409,
           "This conversation already has an active response. Stop it before sending another message.",

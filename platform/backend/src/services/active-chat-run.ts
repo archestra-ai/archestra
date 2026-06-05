@@ -24,6 +24,7 @@ export class ActiveChatRunService {
   // Run ids this process created and believes may still be 'running'. Used to
   // fail only this pod's runs on graceful shutdown (no schema-level pod id).
   private readonly inFlightRunIds = new Set<string>();
+  private isShuttingDown = false;
 
   constructor(
     private readonly notifier: ActiveChatRunNotifier,
@@ -31,17 +32,26 @@ export class ActiveChatRunService {
     private readonly stopPollIntervalMs: number,
   ) {}
 
+  get shuttingDown(): boolean {
+    return this.isShuttingDown;
+  }
+
   async createRun(params: {
     conversationId: string;
     userId: string;
     organizationId: string;
   }) {
+    // Refuse new runs once shutdown started, so nothing is created after
+    // failInFlightRuns() has already snapshotted this pod's runs to fail.
+    if (this.isShuttingDown) {
+      return null;
+    }
+
     this.cleanupTerminalRunsIfNeeded(params.conversationId);
 
     const run = await ActiveChatRunModel.create(params);
     if (run) {
-      this.inFlightRunIds.add(run.id);
-      return run;
+      return this.registerCreatedRun(run);
     }
 
     try {
@@ -54,25 +64,30 @@ export class ActiveChatRunService {
     }
 
     const retriedRun = await ActiveChatRunModel.create(params);
-    if (retriedRun) {
-      this.inFlightRunIds.add(retriedRun.id);
-    }
+    return retriedRun ? this.registerCreatedRun(retriedRun) : null;
+  }
 
-    return retriedRun;
+  beginShutdown(): void {
+    this.isShuttingDown = true;
   }
 
   // Single terminal-transition entry point so the in-flight set stays bounded.
+  // Removes from the set only after the DB write resolves: if it throws, the id
+  // is retained so failInFlightRuns()/the reaper still fail the run later.
   async markTerminal(params: {
     runId: string;
     status: Exclude<ChatActiveRunStatus, "running">;
     error?: string | null;
   }): Promise<void> {
-    this.inFlightRunIds.delete(params.runId);
     await ActiveChatRunModel.markTerminal(params);
+    this.inFlightRunIds.delete(params.runId);
   }
 
   // Periodic safety net for runs orphaned by a hard kill (OOM/SIGKILL) that
   // never reached graceful shutdown. Graceful shutdown handles the common case.
+  // Intentionally does not prune inFlightRunIds: a leftover id is a harmless
+  // no-op for failInFlightRuns (it re-asserts status='running' in SQL), and the
+  // set is fully cleared on shutdown.
   async reapStaleRuns(): Promise<void> {
     try {
       const reaped =
@@ -283,6 +298,25 @@ export class ActiveChatRunService {
       stopped = true;
       waitController.abort();
     };
+  }
+
+  // Track a freshly created run, closing the window where shutdown began while
+  // ActiveChatRunModel.create was awaiting: fail it now rather than orphan it.
+  private async registerCreatedRun(
+    run: NonNullable<Awaited<ReturnType<typeof ActiveChatRunModel.create>>>,
+  ): Promise<typeof run | null> {
+    this.inFlightRunIds.add(run.id);
+
+    if (this.isShuttingDown) {
+      await this.markTerminal({
+        runId: run.id,
+        status: "failed",
+        error: "Server shut down before the chat stream completed.",
+      });
+      return null;
+    }
+
+    return run;
   }
 
   private async notifyEvent(runId: string): Promise<void> {

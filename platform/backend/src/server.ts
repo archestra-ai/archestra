@@ -952,7 +952,9 @@ const startWebServer = async () => {
     }, PROCESSED_EMAIL_CLEANUP_INTERVAL_MS);
 
     // Safety net for chat runs orphaned 'running' by a hard kill that skipped
-    // graceful shutdown. Runs only on the web server, which owns chat streams.
+    // graceful shutdown. Registered only on the web server (workers never create
+    // chat runs); every web replica runs it, which is safe because the underlying
+    // UPDATE is filtered on status='running' and is idempotent across pods.
     const activeChatRunReaperIntervalId = setInterval(() => {
       void activeChatRunService.reapStaleRuns();
     }, ACTIVE_CHAT_RUN_REAPER_INTERVAL_MS);
@@ -1062,6 +1064,10 @@ function registerWebServerShutdown(
 ): void {
   const gracefulShutdown = async (signal: string) => {
     fastify.log.info(`Received ${signal}, shutting down gracefully...`);
+
+    // Stop accepting new runs before snapshotting, so nothing created after this
+    // point escapes the cleanup below.
+    activeChatRunService.beginShutdown();
 
     // Fail this pod's in-flight chat runs first: a long SSE stream keeps Fastify
     // connections open, so waiting for fastify.close() risks SIGKILL before the

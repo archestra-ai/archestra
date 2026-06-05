@@ -340,6 +340,42 @@ test("failInFlightRuns fails this pod's running runs and clears the set", async 
   expect(await service.failInFlightRuns()).toBe(0);
 });
 
+test("createRun refuses new runs once shutdown has begun", async ({
+  makeAgent,
+  makeConversation,
+  makeOrganization,
+  makeUser,
+}) => {
+  const user = await makeUser();
+  const organization = await makeOrganization();
+  const agent = await makeAgent({ organizationId: organization.id });
+  const conversation = await makeConversation(agent.id, {
+    userId: user.id,
+    organizationId: organization.id,
+  });
+  const service = new ActiveChatRunService(
+    new InMemoryActiveChatRunNotifier(),
+    10_000,
+    10_000,
+  );
+
+  service.beginShutdown();
+  expect(service.shuttingDown).toBe(true);
+
+  const run = await service.createRun({
+    conversationId: conversation.id,
+    userId: user.id,
+    organizationId: organization.id,
+  });
+
+  // No run is created after shutdown begins, so there is nothing to orphan.
+  expect(run).toBeNull();
+  expect(
+    await ActiveChatRunModel.findRunningByConversation(conversation.id),
+  ).toBeNull();
+  expect(await service.failInFlightRuns()).toBe(0);
+});
+
 test("reapStaleRuns fails runs past the stale cutoff", async ({
   makeAgent,
   makeConversation,

@@ -218,7 +218,6 @@ const registry = defineArchestraTools([
         organizationId: ctx.organizationId,
         userId: ctx.userId,
         conversationId: context.conversationId,
-        agentId: context.agent.id ?? null,
         canRunSandbox,
       });
       if (!activation) {

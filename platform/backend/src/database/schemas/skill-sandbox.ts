@@ -9,7 +9,6 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
-import agentsTable from "./agent";
 import conversationsTable from "./conversation";
 import usersTable from "./user";
 
@@ -38,10 +37,6 @@ const skillSandboxesTable = pgTable(
       () => conversationsTable.id,
       { onDelete: "set null" },
     ),
-    /** Agent that created the sandbox, when known. */
-    agentId: uuid("agent_id").references(() => agentsTable.id, {
-      onDelete: "set null",
-    }),
     /**
      * The conversation's implicit default sandbox. At most one per
      * (org, user, conversation) — enforced by the partial unique index below so

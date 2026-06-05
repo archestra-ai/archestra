@@ -434,7 +434,6 @@ async function resolveTarget(params: {
 }): Promise<{ sandboxId: SandboxId } | { error: string }> {
   const { target, userCtx, context } = params;
   const conversationId = context.conversationId ?? null;
-  const agentId = context.agentId ?? null;
 
   if (target && "id" in target) {
     const sandbox = await SkillSandboxModel.findById(target.id);
@@ -456,7 +455,6 @@ async function resolveTarget(params: {
       organizationId: userCtx.organizationId,
       userId: userCtx.userId,
       conversationId,
-      agentId,
       defaultCwd: SKILL_SANDBOX_HOME,
       isDefault: false,
     });
@@ -474,7 +472,6 @@ async function resolveTarget(params: {
     organizationId: userCtx.organizationId,
     userId: userCtx.userId,
     conversationId,
-    agentId,
     defaultCwd: SKILL_SANDBOX_HOME,
   });
   return { sandboxId: asSandboxId(sandbox.id) };

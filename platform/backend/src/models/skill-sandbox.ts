@@ -47,11 +47,9 @@ class SkillSandboxModel {
     organizationId: string;
     userId: string;
     conversationId: string;
-    agentId: string | null;
     defaultCwd: string;
   }): Promise<SkillSandbox> {
-    const { organizationId, userId, conversationId, agentId, defaultCwd } =
-      params;
+    const { organizationId, userId, conversationId, defaultCwd } = params;
 
     await db
       .insert(schema.skillSandboxesTable)
@@ -59,7 +57,6 @@ class SkillSandboxModel {
         organizationId,
         userId,
         conversationId,
-        agentId,
         defaultCwd,
         isDefault: true,
       })

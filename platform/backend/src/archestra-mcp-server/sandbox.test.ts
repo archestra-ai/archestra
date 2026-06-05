@@ -587,7 +587,6 @@ describe("sandbox tools (runtime enabled)", () => {
           organizationId,
           userId,
           conversationId: ctx.conversationId as string,
-          agentId: agent.id,
           defaultCwd: "/home/sandbox",
         });
         await SkillSandboxReplayEventModel.appendSkillMount({

@@ -199,7 +199,6 @@ class SkillSandboxRuntimeService {
       try {
         row = await SkillSandboxFileModel.createArtifact({
           sandboxId: params.sandboxId,
-          organizationId: sandbox.organizationId,
           path: resolvedPath,
           mimeType,
           originalName: null,
@@ -263,7 +262,6 @@ class SkillSandboxRuntimeService {
       try {
         row = await SkillSandboxReplayEventModel.appendUpload({
           sandboxId: params.sandboxId,
-          organizationId: sandbox.organizationId,
           path: resolvedPath,
           mimeType,
           originalName: params.originalName ?? null,

@@ -11,7 +11,6 @@ import type {
 /** Bytes for an uploaded input file, written into the replay log. */
 interface UploadInput {
   sandboxId: string;
-  organizationId: string;
   path: string;
   mimeType: string;
   originalName: string | null;
@@ -68,7 +67,6 @@ class SkillSandboxReplayEventModel {
       const sequence = await allocateSequence(tx, command.sandboxId);
       await tx.insert(schema.skillSandboxReplayEventsTable).values({
         sandboxId: command.sandboxId,
-        organizationId: command.organizationId,
         sequence,
         kind: "command",
         commandId: row.id,
@@ -85,7 +83,6 @@ class SkillSandboxReplayEventModel {
         .values({
           kind: "upload",
           sandboxId: upload.sandboxId,
-          organizationId: upload.organizationId,
           path: upload.path,
           mimeType: upload.mimeType,
           originalName: upload.originalName,
@@ -99,7 +96,6 @@ class SkillSandboxReplayEventModel {
       const sequence = await allocateSequence(tx, upload.sandboxId);
       await tx.insert(schema.skillSandboxReplayEventsTable).values({
         sandboxId: upload.sandboxId,
-        organizationId: upload.organizationId,
         sequence,
         kind: "upload",
         fileId: row.id,
@@ -139,7 +135,6 @@ class SkillSandboxReplayEventModel {
         .insert(schema.skillSandboxSkillMountsTable)
         .values({
           sandboxId,
-          organizationId,
           skillId: mount.skillId,
           skillVersionId: mount.skillVersionId,
           skillName: mount.skillName,
@@ -157,7 +152,6 @@ class SkillSandboxReplayEventModel {
       const sequence = await allocateSequence(tx, sandboxId);
       await tx.insert(schema.skillSandboxReplayEventsTable).values({
         sandboxId,
-        organizationId,
         sequence,
         kind: "skill_mount",
         skillMountId: row.id,
@@ -187,7 +181,6 @@ class SkillSandboxReplayEventModel {
         const installSequence = await allocateSequence(tx, sandboxId);
         await tx.insert(schema.skillSandboxReplayEventsTable).values({
           sandboxId,
-          organizationId,
           sequence: installSequence,
           kind: "command",
           commandId: commandRow.id,

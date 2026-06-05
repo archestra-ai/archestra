@@ -102,7 +102,6 @@ export async function injectSkillActivation({
     organizationId,
     userId,
     conversationId,
-    agentId: agentId ?? null,
     canRunSandbox,
   });
   if (!activation) {

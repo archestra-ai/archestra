@@ -39,8 +39,6 @@ const skillSandboxReplayEventsTable = pgTable(
     sandboxId: uuid("sandbox_id")
       .notNull()
       .references(() => skillSandboxesTable.id, { onDelete: "cascade" }),
-    /** Denormalized owning org, copied from the parent sandbox at insert time. */
-    organizationId: text("organization_id").notNull(),
     /** Per-sandbox monotonic order, allocated from `skill_sandboxes.next_replay_sequence`. */
     sequence: integer("sequence").notNull(),
     kind: text("kind").$type<SkillSandboxReplayEventKind>().notNull(),

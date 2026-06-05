@@ -15,7 +15,6 @@ async function seedSandbox(params: { organizationId: string; userId: string }) {
     userId: params.userId,
     conversationId: null,
     defaultCwd: "/sandbox/skills/example",
-    agentId: null,
   });
 }
 
@@ -28,7 +27,6 @@ async function seedArtifact(params: {
 }) {
   return await SkillSandboxFileModel.createArtifact({
     sandboxId: params.sandboxId,
-    organizationId: params.organizationId,
     path: params.path ?? "/sandbox/skills/example/out.png",
     mimeType: params.mimeType,
     originalName: null,

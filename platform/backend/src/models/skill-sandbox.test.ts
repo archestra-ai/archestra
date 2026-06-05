@@ -62,7 +62,6 @@ describe("SkillSandboxModel", () => {
       organizationId: org.id,
       userId: user.id,
       conversationId: null,
-      agentId: null,
       defaultCwd: "/home/sandbox",
     });
 
@@ -91,7 +90,6 @@ describe("SkillSandboxModel", () => {
       organizationId: org.id,
       userId: user.id,
       conversationId: conversation.id,
-      agentId: agent.id,
       defaultCwd: "/home/sandbox",
     };
     const first = await SkillSandboxModel.findOrCreateDefault(params);
@@ -119,7 +117,6 @@ describe("SkillSandboxModel", () => {
       organizationId: org.id,
       userId: user.id,
       conversationId: null,
-      agentId: null,
       defaultCwd: "/home/sandbox",
     });
 
@@ -141,7 +138,6 @@ describe("SkillSandboxModel", () => {
       organizationId: org.id,
       userId: user.id,
       conversationId: null,
-      agentId: null,
       defaultCwd: "/home/sandbox",
     });
 
@@ -176,7 +172,6 @@ describe("SkillSandboxReplayEventModel", () => {
       organizationId: org.id,
       userId: user.id,
       conversationId: null,
-      agentId: null,
       defaultCwd: "/home/sandbox",
     });
 
@@ -193,7 +188,6 @@ describe("SkillSandboxReplayEventModel", () => {
     });
     const upload = await SkillSandboxReplayEventModel.appendUpload({
       sandboxId: sandbox.id,
-      organizationId: org.id,
       path: "/home/sandbox/input.csv",
       mimeType: "text/csv",
       originalName: "input.csv",
@@ -257,7 +251,6 @@ describe("SkillSandboxReplayEventModel", () => {
       organizationId: org.id,
       userId: user.id,
       conversationId: null,
-      agentId: null,
       defaultCwd: "/home/sandbox",
     });
 
@@ -289,12 +282,10 @@ describe("SkillSandboxReplayEventModel", () => {
       organizationId: org.id,
       userId: user.id,
       conversationId: null,
-      agentId: null,
       defaultCwd: "/home/sandbox",
     });
     const artifact = await SkillSandboxFileModel.createArtifact({
       sandboxId: sandbox.id,
-      organizationId: org.id,
       path: "out/report.txt",
       mimeType: "text/plain",
       originalName: null,
@@ -307,7 +298,6 @@ describe("SkillSandboxReplayEventModel", () => {
     await expect(
       db.insert(schema.skillSandboxReplayEventsTable).values({
         sandboxId: sandbox.id,
-        organizationId: org.id,
         sequence: 0,
         kind: "upload",
         fileId: artifact.id,
@@ -327,14 +317,12 @@ describe("SkillSandboxFileModel (artifacts)", () => {
       organizationId: org.id,
       userId: user.id,
       conversationId: null,
-      agentId: null,
       defaultCwd: "/home/sandbox",
     });
 
     const payload = Buffer.from("hello, world", "utf8");
     const artifact = await SkillSandboxFileModel.createArtifact({
       sandboxId: sandbox.id,
-      organizationId: org.id,
       path: "out/report.txt",
       mimeType: "text/plain",
       originalName: null,
@@ -359,12 +347,10 @@ describe("SkillSandboxFileModel (artifacts)", () => {
       organizationId: org.id,
       userId: user.id,
       conversationId: null,
-      agentId: null,
       defaultCwd: "/home/sandbox",
     });
     const upload = await SkillSandboxReplayEventModel.appendUpload({
       sandboxId: sandbox.id,
-      organizationId: org.id,
       path: "/home/sandbox/in.csv",
       mimeType: "text/csv",
       originalName: null,
@@ -390,7 +376,6 @@ describe("Cascade behavior", () => {
       organizationId: org.id,
       userId: user.id,
       conversationId: null,
-      agentId: null,
       defaultCwd: "/home/sandbox",
     });
 
@@ -412,7 +397,6 @@ describe("Cascade behavior", () => {
     });
     const artifact = await SkillSandboxFileModel.createArtifact({
       sandboxId: sandbox.id,
-      organizationId: org.id,
       path: "out/a.txt",
       mimeType: "text/plain",
       originalName: null,

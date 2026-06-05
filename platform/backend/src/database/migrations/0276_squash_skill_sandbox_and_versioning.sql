@@ -14,7 +14,6 @@ CREATE TABLE "skill_sandbox_files" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"kind" text NOT NULL,
 	"sandbox_id" uuid NOT NULL,
-	"organization_id" text NOT NULL,
 	"path" text NOT NULL,
 	"mime_type" text NOT NULL,
 	"original_name" text,
@@ -27,7 +26,6 @@ CREATE TABLE "skill_sandbox_files" (
 CREATE TABLE "skill_sandbox_replay_events" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"sandbox_id" uuid NOT NULL,
-	"organization_id" text NOT NULL,
 	"sequence" integer NOT NULL,
 	"kind" text NOT NULL,
 	"command_id" uuid,
@@ -45,7 +43,6 @@ CREATE TABLE "skill_sandbox_replay_events" (
 CREATE TABLE "skill_sandbox_skill_mounts" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"sandbox_id" uuid NOT NULL,
-	"organization_id" text NOT NULL,
 	"skill_id" uuid NOT NULL,
 	"skill_version_id" uuid NOT NULL,
 	"skill_name" text NOT NULL,
@@ -79,6 +76,8 @@ ALTER TABLE "skill_sandbox_skills" DISABLE ROW LEVEL SECURITY;--> statement-brea
 DROP TABLE "skill_sandbox_artifacts" CASCADE;--> statement-breakpoint
 DROP TABLE "skill_sandbox_file_snapshots" CASCADE;--> statement-breakpoint
 DROP TABLE "skill_sandbox_skills" CASCADE;--> statement-breakpoint
+ALTER TABLE "skill_sandboxes" DROP CONSTRAINT "skill_sandboxes_agent_id_agents_id_fk";
+--> statement-breakpoint
 ALTER TABLE "skill_sandboxes" DROP CONSTRAINT "skill_sandboxes_primary_skill_id_skills_id_fk";
 --> statement-breakpoint
 ALTER TABLE "skill_sandboxes" ADD COLUMN "is_default" boolean DEFAULT false NOT NULL;--> statement-breakpoint
@@ -104,6 +103,7 @@ CREATE UNIQUE INDEX "skill_version_files_version_path_uidx" ON "skill_version_fi
 CREATE INDEX "skill_versions_skill_id_idx" ON "skill_versions" USING btree ("skill_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "skill_versions_skill_version_uidx" ON "skill_versions" USING btree ("skill_id","version");--> statement-breakpoint
 CREATE UNIQUE INDEX "skill_sandboxes_default_uidx" ON "skill_sandboxes" USING btree ("organization_id","user_id","conversation_id") WHERE "skill_sandboxes"."is_default";--> statement-breakpoint
+ALTER TABLE "skill_sandboxes" DROP COLUMN "agent_id";--> statement-breakpoint
 ALTER TABLE "skill_sandboxes" DROP COLUMN "primary_skill_id";--> statement-breakpoint
 -- backfill version 1 for every existing skill. content_hash is a sentinel: the
 -- canonical hash is computed in app code (sha256 over body + files), impractical

@@ -93,7 +93,6 @@ describe("resolveEffectiveSkillVersion", () => {
       organizationId: org.id,
       userId: user.id,
       conversationId: conversation.id,
-      agentId: agent.id,
       defaultCwd: "/home/sandbox",
     });
     await SkillSandboxReplayEventModel.appendSkillMount({
@@ -168,7 +167,6 @@ describe("resolveActivationVersion (sandbox runtime enabled)", () => {
       organizationId: org.id,
       userId: user.id,
       conversationId: conversation.id,
-      agentId: agent.id,
       canRunSandbox: true,
     });
 
@@ -239,7 +237,6 @@ describe("resolveActivationVersion (sandbox runtime enabled)", () => {
       organizationId: org.id,
       userId: user.id,
       conversationId: conversation.id,
-      agentId: agent.id,
       defaultCwd: "/home/sandbox",
     });
     await SkillSandboxReplayEventModel.appendSkillMount({
@@ -259,7 +256,6 @@ describe("resolveActivationVersion (sandbox runtime enabled)", () => {
       organizationId: org.id,
       userId: user.id,
       conversationId: conversation.id,
-      agentId: agent.id,
       canRunSandbox: true,
     });
 

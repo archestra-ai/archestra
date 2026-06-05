@@ -72,7 +72,6 @@ export async function resolveActivationVersion(params: {
   organizationId: string;
   userId: string | undefined;
   conversationId: string | undefined;
-  agentId: string | null;
   canRunSandbox: boolean;
 }): Promise<ActivationVersion | null> {
   if (params.canRunSandbox && params.userId && params.conversationId) {
@@ -82,7 +81,6 @@ export async function resolveActivationVersion(params: {
         organizationId: params.organizationId,
         userId: params.userId,
         conversationId: params.conversationId,
-        agentId: params.agentId,
       });
     } catch (error) {
       logger.error(
@@ -117,7 +115,6 @@ async function mountAndResolve(params: {
   organizationId: string;
   userId: string;
   conversationId: string;
-  agentId: string | null;
 }): Promise<ActivationVersion | null> {
   const latest = await SkillVersionModel.findBySkillAndVersion(
     params.skill.id,
@@ -129,7 +126,6 @@ async function mountAndResolve(params: {
     organizationId: params.organizationId,
     userId: params.userId,
     conversationId: params.conversationId,
-    agentId: params.agentId,
     defaultCwd: SKILL_SANDBOX_HOME,
   });
 

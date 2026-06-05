@@ -29,8 +29,6 @@ const skillSandboxSkillMountsTable = pgTable(
     sandboxId: uuid("sandbox_id")
       .notNull()
       .references(() => skillSandboxesTable.id, { onDelete: "cascade" }),
-    /** Denormalized owning org, copied from the parent sandbox at insert time. */
-    organizationId: text("organization_id").notNull(),
     /** Durable skill identity for the revocation gate; intentionally not a FK. */
     skillId: uuid("skill_id").notNull(),
     /** Immutable version whose bytes this mount replays. */

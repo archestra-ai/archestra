@@ -57849,9 +57849,6 @@
                               "type": "string"
                             }
                           },
-                          "required": [
-                            "type"
-                          ],
                           "additionalProperties": {},
                           "description": "https://developers.openai.com/api/reference/resources/responses/methods/create"
                         }
@@ -58434,9 +58431,6 @@
                               "type": "string"
                             }
                           },
-                          "required": [
-                            "type"
-                          ],
                           "additionalProperties": {},
                           "description": "https://developers.openai.com/api/reference/resources/responses/methods/create"
                         }
@@ -89480,9 +89474,6 @@
                                               "type": "string"
                                             }
                                           },
-                                          "required": [
-                                            "type"
-                                          ],
                                           "additionalProperties": {},
                                           "description": "https://developers.openai.com/api/reference/resources/responses/methods/create"
                                         }
@@ -89606,9 +89597,6 @@
                                               "type": "string"
                                             }
                                           },
-                                          "required": [
-                                            "type"
-                                          ],
                                           "additionalProperties": {},
                                           "description": "https://developers.openai.com/api/reference/resources/responses/methods/create"
                                         }
@@ -99475,9 +99463,6 @@
                                               "type": "string"
                                             }
                                           },
-                                          "required": [
-                                            "type"
-                                          ],
                                           "additionalProperties": {},
                                           "description": "https://developers.openai.com/api/reference/resources/responses/methods/create"
                                         }
@@ -99601,9 +99586,6 @@
                                               "type": "string"
                                             }
                                           },
-                                          "required": [
-                                            "type"
-                                          ],
                                           "additionalProperties": {},
                                           "description": "https://developers.openai.com/api/reference/resources/responses/methods/create"
                                         }
@@ -102215,9 +102197,6 @@
                                         "type": "string"
                                       }
                                     },
-                                    "required": [
-                                      "type"
-                                    ],
                                     "additionalProperties": {},
                                     "description": "https://developers.openai.com/api/reference/resources/responses/methods/create"
                                   }
@@ -102341,9 +102320,6 @@
                                         "type": "string"
                                       }
                                     },
-                                    "required": [
-                                      "type"
-                                    ],
                                     "additionalProperties": {},
                                     "description": "https://developers.openai.com/api/reference/resources/responses/methods/create"
                                   }
@@ -112210,9 +112186,6 @@
                                         "type": "string"
                                       }
                                     },
-                                    "required": [
-                                      "type"
-                                    ],
                                     "additionalProperties": {},
                                     "description": "https://developers.openai.com/api/reference/resources/responses/methods/create"
                                   }
@@ -112336,9 +112309,6 @@
                                         "type": "string"
                                       }
                                     },
-                                    "required": [
-                                      "type"
-                                    ],
                                     "additionalProperties": {},
                                     "description": "https://developers.openai.com/api/reference/resources/responses/methods/create"
                                   }
@@ -159939,9 +159909,6 @@
                               "type": "string"
                             }
                           },
-                          "required": [
-                            "type"
-                          ],
                           "additionalProperties": {},
                           "description": "https://developers.openai.com/api/reference/resources/responses/methods/create"
                         }
@@ -160524,9 +160491,6 @@
                               "type": "string"
                             }
                           },
-                          "required": [
-                            "type"
-                          ],
                           "additionalProperties": {},
                           "description": "https://developers.openai.com/api/reference/resources/responses/methods/create"
                         }
@@ -164519,9 +164483,6 @@
                               "type": "string"
                             }
                           },
-                          "required": [
-                            "type"
-                          ],
                           "additionalProperties": {},
                           "description": "https://developers.openai.com/api/reference/resources/responses/methods/create"
                         }
@@ -165104,9 +165065,6 @@
                               "type": "string"
                             }
                           },
-                          "required": [
-                            "type"
-                          ],
                           "additionalProperties": {},
                           "description": "https://developers.openai.com/api/reference/resources/responses/methods/create"
                         }

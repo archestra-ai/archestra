@@ -16814,7 +16814,7 @@ export type AzureResponsesWithDefaultAgentData = {
     body: {
         model: string;
         input?: string | Array<{
-            type: string;
+            type?: string;
             [key: string]: unknown;
         }>;
         instructions?: string | null;
@@ -16983,7 +16983,7 @@ export type AzureResponsesWithAgentData = {
     body: {
         model: string;
         input?: string | Array<{
-            type: string;
+            type?: string;
             [key: string]: unknown;
         }>;
         instructions?: string | null;
@@ -25520,7 +25520,7 @@ export type GetInteractionsResponses = {
             request: {
                 model: string;
                 input?: string | Array<{
-                    type: string;
+                    type?: string;
                     [key: string]: unknown;
                 }>;
                 instructions?: string | null;
@@ -25556,7 +25556,7 @@ export type GetInteractionsResponses = {
             processedRequest?: {
                 model: string;
                 input?: string | Array<{
-                    type: string;
+                    type?: string;
                     [key: string]: unknown;
                 }>;
                 instructions?: string | null;
@@ -27335,7 +27335,7 @@ export type GetInteractionsResponses = {
             request: {
                 model: string;
                 input?: string | Array<{
-                    type: string;
+                    type?: string;
                     [key: string]: unknown;
                 }>;
                 instructions?: string | null;
@@ -27371,7 +27371,7 @@ export type GetInteractionsResponses = {
             processedRequest?: {
                 model: string;
                 input?: string | Array<{
-                    type: string;
+                    type?: string;
                     [key: string]: unknown;
                 }>;
                 instructions?: string | null;
@@ -28003,7 +28003,7 @@ export type GetInteractionResponses = {
         request: {
             model: string;
             input?: string | Array<{
-                type: string;
+                type?: string;
                 [key: string]: unknown;
             }>;
             instructions?: string | null;
@@ -28039,7 +28039,7 @@ export type GetInteractionResponses = {
         processedRequest?: {
             model: string;
             input?: string | Array<{
-                type: string;
+                type?: string;
                 [key: string]: unknown;
             }>;
             instructions?: string | null;
@@ -29818,7 +29818,7 @@ export type GetInteractionResponses = {
         request: {
             model: string;
             input?: string | Array<{
-                type: string;
+                type?: string;
                 [key: string]: unknown;
             }>;
             instructions?: string | null;
@@ -29854,7 +29854,7 @@ export type GetInteractionResponses = {
         processedRequest?: {
             model: string;
             input?: string | Array<{
-                type: string;
+                type?: string;
                 [key: string]: unknown;
             }>;
             instructions?: string | null;
@@ -42007,7 +42007,7 @@ export type ModelRouterResponsesWithDefaultAgentData = {
     body: {
         model: string;
         input?: string | Array<{
-            type: string;
+            type?: string;
             [key: string]: unknown;
         }>;
         instructions?: string | null;
@@ -42176,7 +42176,7 @@ export type ModelRouterResponsesWithAgentData = {
     body: {
         model: string;
         input?: string | Array<{
-            type: string;
+            type?: string;
             [key: string]: unknown;
         }>;
         instructions?: string | null;
@@ -43381,7 +43381,7 @@ export type OpenAiResponsesWithDefaultAgentData = {
     body: {
         model: string;
         input?: string | Array<{
-            type: string;
+            type?: string;
             [key: string]: unknown;
         }>;
         instructions?: string | null;
@@ -43550,7 +43550,7 @@ export type OpenAiResponsesWithAgentData = {
     body: {
         model: string;
         input?: string | Array<{
-            type: string;
+            type?: string;
             [key: string]: unknown;
         }>;
         instructions?: string | null;

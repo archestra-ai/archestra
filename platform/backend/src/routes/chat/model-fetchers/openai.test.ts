@@ -1,11 +1,5 @@
-import { vi } from "vitest";
 import { describe, expect, test } from "@/test";
-import { fetchOpenAiModels, mapOpenAiModelToModelInfo } from "./openai";
-import { fetchModelsWithBearerAuth } from "./openai-compatible";
-
-vi.mock("./openai-compatible", () => ({
-  fetchModelsWithBearerAuth: vi.fn(),
-}));
+import { isChatModelId, mapOpenAiModelToModelInfo } from "./openai";
 
 describe("mapOpenAiModelToModelInfo", () => {
   test("maps standard OpenAI model", () => {
@@ -67,24 +61,31 @@ describe("mapOpenAiModelToModelInfo", () => {
   });
 });
 
-describe("fetchOpenAiModels exclusion", () => {
+describe("isChatModelId", () => {
   test.each([
-    { id: "gpt-4o", included: true },
-    { id: "chatgpt-4o-latest", included: true },
-    { id: "gpt-5.5-pro", included: true },
-    { id: "babbage-002", included: false },
-    { id: "davinci-002", included: false },
-    { id: "gpt-3.5-turbo-instruct", included: false },
-    { id: "whisper-1", included: false },
-    { id: "dall-e-3", included: false },
-    { id: "tts-1", included: false },
-  ])("$id -> included=$included", async ({ id, included }) => {
-    vi.mocked(fetchModelsWithBearerAuth).mockResolvedValue({
-      data: [{ id, object: "model", owned_by: "openai", created: 1 }],
-    });
+    "gpt-5.5-pro",
+    "gpt-5.5",
+    "gpt-4.1",
+    "gpt-4o",
+    "chatgpt-4o-latest",
+    "gpt-4-turbo",
+    "gpt-4",
+    "gpt-3.5-turbo",
+    "o1",
+    "o3",
+  ])("keeps standard chat model %s", (id) => {
+    expect(isChatModelId(id)).toBe(true);
+  });
 
-    const models = await fetchOpenAiModels("test-key");
-
-    expect(models.some((model) => model.id === id)).toBe(included);
+  test.each([
+    "babbage-002",
+    "davinci-002",
+    "gpt-3.5-turbo-instruct",
+    "gpt-4o-audio-preview",
+    "whisper-1",
+    "tts-1",
+    "dall-e-3",
+  ])("drops non-chat model %s", (id) => {
+    expect(isChatModelId(id)).toBe(false);
   });
 });

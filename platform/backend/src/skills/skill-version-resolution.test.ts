@@ -1,12 +1,16 @@
+import config from "@/config";
 import {
   SkillModel,
   SkillSandboxModel,
   SkillSandboxReplayEventModel,
   SkillVersionModel,
 } from "@/models";
-import { describe, expect, test } from "@/test";
+import { afterAll, beforeAll, describe, expect, test } from "@/test";
 import type { Skill } from "@/types";
-import { resolveEffectiveSkillVersion } from "./skill-version-resolution";
+import {
+  resolveActivationVersion,
+  resolveEffectiveSkillVersion,
+} from "./skill-version-resolution";
 
 async function seedSkillV2(organizationId: string): Promise<Skill> {
   const created = await SkillModel.createWithFiles({
@@ -128,5 +132,150 @@ describe("resolveEffectiveSkillVersion", () => {
       conversationId: crypto.randomUUID(),
     });
     expect(elsewhere?.version).toBe(2);
+  });
+});
+
+describe("resolveActivationVersion (sandbox runtime enabled)", () => {
+  const originalSkills = config.skillsSandbox.enabled;
+  const originalDagger = config.daggerRuntime.enabled;
+  beforeAll(() => {
+    (config.skillsSandbox as { enabled: boolean }).enabled = true;
+    (config.daggerRuntime as { enabled: boolean }).enabled = true;
+  });
+  afterAll(() => {
+    (config.skillsSandbox as { enabled: boolean }).enabled = originalSkills;
+    (config.daggerRuntime as { enabled: boolean }).enabled = originalDagger;
+  });
+
+  test("mounts a skill and reports it runnable", async ({
+    makeOrganization,
+    makeUser,
+    makeAgent,
+    makeConversation,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const agent = await makeAgent({ organizationId: org.id });
+    const conversation = await makeConversation(agent.id, {
+      userId: user.id,
+      organizationId: org.id,
+    });
+    if (!conversation) throw new Error("conversation seed failed");
+
+    const skill = await seedSkillV2(org.id);
+    const result = await resolveActivationVersion({
+      skill,
+      organizationId: org.id,
+      userId: user.id,
+      conversationId: conversation.id,
+      agentId: agent.id,
+      canRunSandbox: true,
+    });
+
+    expect(result?.mounted).toBe(true);
+    expect(result?.version.version).toBe(2);
+    const sandbox = await SkillSandboxModel.findDefault({
+      organizationId: org.id,
+      userId: user.id,
+      conversationId: conversation.id,
+    });
+    const mount = await SkillSandboxModel.findMountBySkill({
+      sandboxId: sandbox?.id ?? "",
+      skillId: skill.id,
+    });
+    expect(mount?.skillVersionId).toBe(result?.version.id);
+  });
+
+  test("a same-named skill that loses the mount path is shown read-only", async ({
+    makeOrganization,
+    makeUser,
+    makeAgent,
+    makeConversation,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const agent = await makeAgent({ organizationId: org.id });
+    const conversation = await makeConversation(agent.id, {
+      userId: user.id,
+      organizationId: org.id,
+    });
+    if (!conversation) throw new Error("conversation seed failed");
+
+    // two accessible skills with the same name (org + the caller's personal),
+    // allowed by per-scope name uniqueness. Both want /skills/shared.
+    const orgSkill = await SkillModel.createWithFiles({
+      skill: {
+        organizationId: org.id,
+        authorId: null,
+        name: "shared",
+        description: "org",
+        content: "# org body",
+        metadata: {},
+        sourceType: "manual",
+        scope: "org",
+      },
+      files: [],
+    });
+    const personalSkill = await SkillModel.createWithFiles({
+      skill: {
+        organizationId: org.id,
+        authorId: user.id,
+        name: "shared",
+        description: "personal",
+        content: "# personal body",
+        metadata: {},
+        sourceType: "manual",
+        scope: "personal",
+      },
+      files: [],
+    });
+    if (!orgSkill || !personalSkill) throw new Error("seed failed");
+
+    const orgV1 = await SkillVersionModel.findBySkillAndVersion(orgSkill.id, 1);
+    if (!orgV1) throw new Error("missing org v1");
+
+    // the org skill already occupies /skills/shared in the default sandbox.
+    const sandbox = await SkillSandboxModel.findOrCreateDefault({
+      organizationId: org.id,
+      userId: user.id,
+      conversationId: conversation.id,
+      agentId: agent.id,
+      defaultCwd: "/home/sandbox",
+    });
+    await SkillSandboxReplayEventModel.appendSkillMount({
+      sandboxId: sandbox.id,
+      organizationId: org.id,
+      mount: {
+        skillId: orgSkill.id,
+        skillName: orgSkill.name,
+        skillVersionId: orgV1.id,
+      },
+    });
+
+    // activating the personal "shared" collides on (sandbox, skill_name): it
+    // must NOT be reported runnable, and the org skill must keep the path.
+    const result = await resolveActivationVersion({
+      skill: personalSkill,
+      organizationId: org.id,
+      userId: user.id,
+      conversationId: conversation.id,
+      agentId: agent.id,
+      canRunSandbox: true,
+    });
+
+    expect(result?.mounted).toBe(false);
+    expect(result?.version.content).toBe("# personal body");
+    // the personal skill never got a mount; the org skill still owns the path.
+    expect(
+      await SkillSandboxModel.findMountBySkill({
+        sandboxId: sandbox.id,
+        skillId: personalSkill.id,
+      }),
+    ).toBeNull();
+    const pathOwner = await SkillSandboxModel.findMountBySkill({
+      sandboxId: sandbox.id,
+      skillId: orgSkill.id,
+    });
+    expect(pathOwner?.skillVersionId).toBe(orgV1.id);
   });
 });

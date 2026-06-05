@@ -97,7 +97,7 @@ export async function injectSkillActivation({
   // resolve the effective version and pin it by mounting (shared with
   // activate_skill), so the injected block, the mounted bytes, and a later
   // read_skill_file all expose the same version.
-  const version = await resolveActivationVersion({
+  const activation = await resolveActivationVersion({
     skill,
     organizationId,
     userId,
@@ -105,9 +105,10 @@ export async function injectSkillActivation({
     agentId: agentId ?? null,
     canRunSandbox,
   });
-  if (!version) {
+  if (!activation) {
     return messages;
   }
+  const { version, mounted } = activation;
   const files = await SkillVersionModel.findFiles(version.id);
 
   logger.info(
@@ -115,6 +116,7 @@ export async function injectSkillActivation({
       organizationId,
       skillName: skill.name,
       version: version.version,
+      mounted,
       fileCount: files.length,
     },
     "[Skills] Skill activated via slash command",
@@ -130,7 +132,8 @@ export async function injectSkillActivation({
         compatibility: skill.compatibility,
       },
       files,
-      canRunSandbox,
+      // only claim sandbox runnability when this skill actually holds the mount.
+      canRunSandbox: mounted,
       promptContext: skill.templated
         ? await buildSkillActivationPromptContext({ userId, organizationId })
         : null,

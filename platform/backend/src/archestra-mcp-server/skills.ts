@@ -213,7 +213,7 @@ const registry = defineArchestraTools([
       // mounting it under /skills. The same version drives the response and the
       // mount, so the model never sees bytes that differ from what run_command
       // will execute. Idempotent per skill per sandbox.
-      const version = await resolveActivationVersion({
+      const activation = await resolveActivationVersion({
         skill,
         organizationId: ctx.organizationId,
         userId: ctx.userId,
@@ -221,9 +221,10 @@ const registry = defineArchestraTools([
         agentId: context.agent.id ?? null,
         canRunSandbox,
       });
-      if (!version) {
+      if (!activation) {
         return errorResult(`Skill "${skill.name}" has no readable version.`);
       }
+      const { version, mounted } = activation;
       const files = await SkillVersionModel.findFiles(version.id);
 
       logger.info(
@@ -231,6 +232,7 @@ const registry = defineArchestraTools([
           organizationId: ctx.organizationId,
           skillName: skill.name,
           version: version.version,
+          mounted,
           fileCount: files.length,
         },
         "[Skills] Skill activated",
@@ -244,7 +246,10 @@ const registry = defineArchestraTools([
             compatibility: skill.compatibility,
           },
           files,
-          canRunSandbox,
+          // only advertise sandbox runnability when this skill's bytes are
+          // actually mounted under /skills/<name> (not when a same-named skill
+          // won the path).
+          canRunSandbox: mounted,
           promptContext: skill.templated
             ? await buildSkillActivationPromptContext({
                 userId: ctx.userId,

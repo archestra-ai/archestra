@@ -83,6 +83,18 @@ describe("OAuth helper functions", () => {
         }),
       ).toBe("api://legacy-audience");
     });
+
+    test("falls back to server URL when no resource or audience is configured", () => {
+      expect(
+        getOAuthResource({
+          server_url: "https://mcp.example.com/mcp",
+        }),
+      ).toBe("https://mcp.example.com/mcp");
+    });
+
+    test("returns undefined when no resource fields are configured", () => {
+      expect(getOAuthResource({})).toBeUndefined();
+    });
   });
 
   describe("buildDiscoveryUrls", () => {

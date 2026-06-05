@@ -98,7 +98,10 @@ describe("run_tool", () => {
     expect(mcpClient.executeToolCall).not.toHaveBeenCalled();
   });
 
-  test("dispatches built-in tools by short name", async () => {
+  test("dispatches built-in tools by short name", async ({
+    seedAndAssignArchestraTools,
+  }) => {
+    await seedAndAssignArchestraTools(testAgent.id);
     const result = await executeArchestraTool(
       TOOL_RUN_TOOL_FULL_NAME,
       { tool_name: "whoami" },
@@ -113,7 +116,10 @@ describe("run_tool", () => {
     expect(mcpClient.executeToolCall).not.toHaveBeenCalled();
   });
 
-  test("dispatches built-in tools by full name", async () => {
+  test("dispatches built-in tools by full name", async ({
+    seedAndAssignArchestraTools,
+  }) => {
+    await seedAndAssignArchestraTools(testAgent.id);
     const result = await executeArchestraTool(
       TOOL_RUN_TOOL_FULL_NAME,
       { tool_name: TOOL_WHOAMI_FULL_NAME },
@@ -128,7 +134,10 @@ describe("run_tool", () => {
     expect(mcpClient.executeToolCall).not.toHaveBeenCalled();
   });
 
-  test("returns target built-in tool validation errors", async () => {
+  test("returns target built-in tool validation errors", async ({
+    seedAndAssignArchestraTools,
+  }) => {
+    await seedAndAssignArchestraTools(testAgent.id);
     const result = await executeArchestraTool(
       TOOL_RUN_TOOL_FULL_NAME,
       {
@@ -151,6 +160,32 @@ describe("run_tool", () => {
       "Validation error in archestra__todo_write",
     );
     expect((result.content[0] as any).text).toContain("todos[0].status:");
+    expect(mcpClient.executeToolCall).not.toHaveBeenCalled();
+  });
+
+  test("blocks built-in Archestra tools that are not assigned to the agent", async ({
+    makeAgent,
+  }) => {
+    // Fresh agent with no Archestra tools assigned.
+    const unassignedAgent = await makeAgent({
+      name: "Unassigned Agent",
+      organizationId: mockContext.organizationId,
+    });
+
+    const result = await executeArchestraTool(
+      TOOL_RUN_TOOL_FULL_NAME,
+      { tool_name: "swap_agent", tool_args: { agentId: "some-agent-id" } },
+      {
+        ...mockContext,
+        agent: { id: unassignedAgent.id, name: unassignedAgent.name },
+        agentId: unassignedAgent.id,
+      },
+    );
+
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as any).text).toContain(
+      "is not assigned to this agent",
+    );
     expect(mcpClient.executeToolCall).not.toHaveBeenCalled();
   });
 

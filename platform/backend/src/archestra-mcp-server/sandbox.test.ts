@@ -71,7 +71,21 @@ describe("sandbox tools (runtime disabled)", () => {
     expect(TOOL_PERMISSIONS.upload_file).toEqual(perm);
   });
 
-  test("run_command returns a clean error when the runtime is disabled", async () => {
+  test("run_command returns a clean error when the runtime is disabled", async ({
+    makeInternalMcpCatalog,
+    makeTool,
+    makeAgentTool,
+  }) => {
+    // The runtime-disabled catalog omits sandbox tools, so seeding can't assign
+    // run_command. Assign it directly so execution reaches the "not enabled"
+    // handler rather than the assignment gate.
+    const catalog = await makeInternalMcpCatalog();
+    const tool = await makeTool({
+      name: TOOL_RUN_COMMAND_FULL_NAME,
+      catalogId: catalog.id,
+    });
+    await makeAgentTool(context.agentId as string, tool.id);
+
     const result = await executeArchestraTool(
       TOOL_RUN_COMMAND_FULL_NAME,
       { command: "echo hi" },
@@ -97,19 +111,29 @@ describe("sandbox tools (runtime enabled)", () => {
     (config.skillsSandbox as { enabled: boolean }).enabled = originalEnabled;
   });
 
-  beforeEach(async ({ makeAgent, makeUser, makeMember }) => {
-    agent = await makeAgent({ name: "Sandbox Agent" });
-    organizationId = agent.organizationId;
-    const user = await makeUser();
-    await makeMember(user.id, organizationId, { role: ADMIN_ROLE_NAME });
-    userId = user.id;
-    context = {
-      agent: { id: agent.id, name: agent.name },
-      agentId: agent.id,
-      organizationId,
-      userId,
-    };
-  });
+  beforeEach(
+    async ({
+      makeAgent,
+      makeUser,
+      makeMember,
+      seedAndAssignArchestraTools,
+    }) => {
+      agent = await makeAgent({ name: "Sandbox Agent" });
+      organizationId = agent.organizationId;
+      const user = await makeUser();
+      await makeMember(user.id, organizationId, { role: ADMIN_ROLE_NAME });
+      userId = user.id;
+      // Sandbox tools are gated by per-agent assignment (plus sandbox:execute),
+      // so assign the full Archestra set (seeded with the runtime enabled).
+      await seedAndAssignArchestraTools(agent.id);
+      context = {
+        agent: { id: agent.id, name: agent.name },
+        agentId: agent.id,
+        organizationId,
+        userId,
+      };
+    },
+  );
 
   afterEach(() => {
     vi.restoreAllMocks();

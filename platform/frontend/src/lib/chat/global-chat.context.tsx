@@ -32,7 +32,6 @@ import {
   useRef,
   useState,
 } from "react";
-import { toast } from "sonner";
 import { filterOptimisticToolCalls } from "@/components/chat/chat-messages.utils";
 import { useGenerateConversationTitle } from "@/lib/chat/chat.query";
 import {
@@ -606,9 +605,15 @@ function ChatSessionHook({
       });
 
       if (isDuplicateActiveRunError(chatError)) {
-        toast.error(
-          "This conversation already has a response in progress. Stop it before sending another message.",
-        );
+        // The backend refused the send because this conversation still has a
+        // run generating — typically after the stream connection was severed
+        // (LB cut, network blip) while the backend kept going, and the
+        // auto-retry below re-POSTed into the live run. Reattach to it via the
+        // active-run replay endpoint instead of dead-ending: the user sees the
+        // in-progress response (and the Stop button) again. If the run
+        // finished in the meantime, the reconnect returns 204 and is a no-op —
+        // the conversation refetch above already shows the persisted outcome.
+        void resumeStream();
         return;
       }
 

@@ -16,8 +16,16 @@ function anthropicCacheControl(message: ModelMessage) {
   )?.anthropic?.cacheControl;
 }
 
-// A message whose content part already carries a cache_control marker, as
-// `materializeAttachments` produces for file/document parts.
+function bedrockCachePoint(message: ModelMessage) {
+  return (
+    message.providerOptions as
+      | { bedrock?: { cachePoint?: unknown } }
+      | undefined
+  )?.bedrock?.cachePoint;
+}
+
+// A message whose content part already carries an Anthropic cache_control
+// marker, as `materializeAttachments` produces for file/document parts.
 function messageWithMarkedPart(text: string): ModelMessage {
   return {
     role: "user",
@@ -53,14 +61,14 @@ describe("applyPromptCacheBreakpoints", () => {
     expect(anthropicCacheControl(result[0])).toEqual(EPHEMERAL);
   });
 
-  it("does not annotate messages for non-Anthropic providers", () => {
+  it("does not annotate messages for auto-caching providers", () => {
     const messages = [userMessage("a"), userMessage("b")];
 
-    for (const provider of ["openai", "gemini", "bedrock"]) {
+    for (const provider of ["openai", "gemini", "deepseek"]) {
       const result = applyPromptCacheBreakpoints({ provider, messages });
       expect(result).toBe(messages);
       expect(anthropicCacheControl(result[0])).toBeUndefined();
-      expect(anthropicCacheControl(result[result.length - 1])).toBeUndefined();
+      expect(bedrockCachePoint(result[0])).toBeUndefined();
     }
   });
 
@@ -152,5 +160,38 @@ describe("applyPromptCacheBreakpoints", () => {
     expect(anthropicCacheControl(result[0])).toEqual(EPHEMERAL);
     // The already-marked message keeps only its part-level marker.
     expect(anthropicCacheControl(result[1])).toBeUndefined();
+  });
+
+  it("marks the first and last message for Bedrock with cachePoint", () => {
+    const result = applyPromptCacheBreakpoints({
+      provider: "bedrock",
+      messages: [userMessage("a"), userMessage("b"), userMessage("c")],
+    });
+
+    expect(bedrockCachePoint(result[0])).toEqual({ type: "default" });
+    expect(bedrockCachePoint(result[1])).toBeUndefined();
+    expect(bedrockCachePoint(result[2])).toEqual({ type: "default" });
+    // Bedrock uses cachePoint, not Anthropic's cacheControl.
+    expect(anthropicCacheControl(result[0])).toBeUndefined();
+  });
+
+  it("ignores Anthropic markers when budgeting Bedrock cachePoints", () => {
+    // 4 parts carry an Anthropic cacheControl marker, but those do not count as
+    // Bedrock cache points, so Bedrock still has its full budget of 4.
+    const messages = [
+      messageWithMarkedPart("a"),
+      messageWithMarkedPart("b"),
+      messageWithMarkedPart("c"),
+      messageWithMarkedPart("d"),
+      userMessage("e"),
+    ];
+
+    const result = applyPromptCacheBreakpoints({
+      provider: "bedrock",
+      messages,
+    });
+
+    expect(bedrockCachePoint(result[0])).toEqual({ type: "default" });
+    expect(bedrockCachePoint(result[4])).toEqual({ type: "default" });
   });
 });

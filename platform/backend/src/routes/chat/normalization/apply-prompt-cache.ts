@@ -1,20 +1,37 @@
 import type { ModelMessage } from "ai";
 
-const EPHEMERAL_CACHE_CONTROL = { type: "ephemeral" as const };
+// Per-provider cache-breakpoint marker, written into a message's
+// `providerOptions`. Anthropic and Amazon Bedrock both require explicit
+// breakpoints and both cap at 4 per request; only the providerOptions key and
+// value shape differ:
+//   - Anthropic: `{ anthropic: { cacheControl: { type: "ephemeral" } } }`
+//   - Bedrock:   `{ bedrock:   { cachePoint:   { type: "default"   } } }`
+const CACHE_BREAKPOINTS = {
+  anthropic: {
+    key: "anthropic",
+    field: "cacheControl",
+    value: { type: "ephemeral" },
+  },
+  bedrock: { key: "bedrock", field: "cachePoint", value: { type: "default" } },
+} as const;
 
-// Anthropic rejects a request with more than 4 `cache_control` breakpoints, and
-// the @ai-sdk/anthropic provider throws before the call. Breakpoints already
-// present (e.g. `materializeAttachments` marks each file/document part) count
-// against this budget, so the markers added here must fit in what's left.
-const MAX_ANTHROPIC_CACHE_BREAKPOINTS = 4;
+type CacheBreakpointConfig =
+  (typeof CACHE_BREAKPOINTS)[keyof typeof CACHE_BREAKPOINTS];
+
+// Anthropic and Bedrock both reject a request with more than 4 cache
+// breakpoints, and the AI SDK provider throws before the call. Breakpoints
+// already present (e.g. `materializeAttachments` marks each Anthropic
+// file/document part) count against this budget, so the markers added here
+// must fit in what's left.
+const MAX_CACHE_BREAKPOINTS = 4;
 
 /**
- * Adds Anthropic `cache_control` breakpoints so the chat request's stable
- * prefix is prompt-cached across turns. Without a breakpoint Anthropic caches
+ * Adds provider cache breakpoints so the chat request's stable prefix is
+ * prompt-cached across turns. Without a breakpoint Anthropic and Bedrock cache
  * nothing, re-billing the full system prompt + tool definitions + history on
  * every turn.
  *
- * A breakpoint caches everything rendered before it — Anthropic renders
+ * A breakpoint caches everything rendered before it — the prefix is
  * `tools → system → messages` — so placing the markers on messages also caches
  * the system prompt and tools. Up to two breakpoints are added:
  *   - last message: a rolling breakpoint that extends the cached prefix to the
@@ -23,28 +40,30 @@ const MAX_ANTHROPIC_CACHE_BREAKPOINTS = 4;
  *     changes, so it stays a cache hit on every later turn.
  *
  * Last is prioritized over first when only one slot is left in the breakpoint
- * budget. Messages that already carry a breakpoint (attachment parts) are left
+ * budget. Messages that already carry a breakpoint for this provider are left
  * alone — their prefix is already cacheable and re-marking would waste budget.
  *
- * No-op for providers other than Anthropic: OpenAI, Gemini, DeepSeek, etc.
- * cache prefixes automatically and reject or ignore explicit markers. (Bedrock
- * also supports caching but via `providerOptions.bedrock.cachePoint`, handled
- * separately.)
+ * No-op for providers other than Anthropic and Bedrock: OpenAI, Gemini,
+ * DeepSeek, etc. cache prefixes automatically and reject or ignore explicit
+ * markers.
  */
 export function applyPromptCacheBreakpoints(params: {
   provider: string;
   messages: ModelMessage[];
 }): ModelMessage[] {
   const { provider, messages } = params;
-  if (provider !== "anthropic" || messages.length === 0) {
+  const config = (CACHE_BREAKPOINTS as Record<string, CacheBreakpointConfig>)[
+    provider
+  ];
+  if (!config || messages.length === 0) {
     return messages;
   }
 
   const existingBreakpoints = messages.reduce(
-    (total, message) => total + anthropicBreakpointCount(message),
+    (total, message) => total + breakpointCount(message, config),
     0,
   );
-  let budget = MAX_ANTHROPIC_CACHE_BREAKPOINTS - existingBreakpoints;
+  let budget = MAX_CACHE_BREAKPOINTS - existingBreakpoints;
   if (budget <= 0) {
     return messages;
   }
@@ -58,7 +77,7 @@ export function applyPromptCacheBreakpoints(params: {
   for (const index of candidates) {
     if (budget <= 0) break;
     // Already cacheable via its own marker — don't spend budget re-marking it.
-    if (anthropicBreakpointCount(messages[index]) > 0) continue;
+    if (breakpointCount(messages[index], config) > 0) continue;
     indicesToMark.add(index);
     budget--;
   }
@@ -68,24 +87,27 @@ export function applyPromptCacheBreakpoints(params: {
   }
 
   return messages.map((message, index) =>
-    indicesToMark.has(index) ? withAnthropicCacheControl(message) : message,
+    indicesToMark.has(index) ? withCacheBreakpoint(message, config) : message,
   );
 }
 
-// Counts `cache_control` breakpoints a message already contributes: one per
-// content part that carries the marker, plus the message-level marker. May
+// Counts cache breakpoints a message already contributes for this provider: one
+// per content part that carries the marker, plus the message-level marker. May
 // slightly over-count (a message-level marker only takes effect on the last
 // part when that part has none), which is the safe direction — over-counting
 // makes us add fewer breakpoints, never more than the cap allows.
-function anthropicBreakpointCount(message: ModelMessage): number {
-  let count = hasAnthropicCacheControl(message.providerOptions) ? 1 : 0;
+function breakpointCount(
+  message: ModelMessage,
+  config: CacheBreakpointConfig,
+): number {
+  let count = hasCacheBreakpoint(message.providerOptions, config) ? 1 : 0;
   if (Array.isArray(message.content)) {
     for (const part of message.content) {
       // Not every content part type declares `providerOptions`; read it
       // structurally rather than narrowing the wide part union.
       const partProviderOptions = (part as { providerOptions?: unknown })
         .providerOptions;
-      if (hasAnthropicCacheControl(partProviderOptions)) {
+      if (hasCacheBreakpoint(partProviderOptions, config)) {
         count++;
       }
     }
@@ -93,21 +115,30 @@ function anthropicBreakpointCount(message: ModelMessage): number {
   return count;
 }
 
-function hasAnthropicCacheControl(providerOptions: unknown): boolean {
-  return Boolean(
-    (providerOptions as { anthropic?: { cacheControl?: unknown } } | undefined)
-      ?.anthropic?.cacheControl,
-  );
+function hasCacheBreakpoint(
+  providerOptions: unknown,
+  config: CacheBreakpointConfig,
+): boolean {
+  const providerEntry = (
+    providerOptions as Record<string, Record<string, unknown>> | undefined
+  )?.[config.key];
+  return Boolean(providerEntry?.[config.field]);
 }
 
-function withAnthropicCacheControl(message: ModelMessage): ModelMessage {
-  const providerOptions = message.providerOptions ?? {};
-  const anthropic = providerOptions.anthropic ?? {};
+function withCacheBreakpoint(
+  message: ModelMessage,
+  config: CacheBreakpointConfig,
+): ModelMessage {
+  const providerOptions = (message.providerOptions ?? {}) as Record<
+    string,
+    Record<string, unknown>
+  >;
+  const providerEntry = providerOptions[config.key] ?? {};
   return {
     ...message,
     providerOptions: {
       ...providerOptions,
-      anthropic: { ...anthropic, cacheControl: EPHEMERAL_CACHE_CONTROL },
+      [config.key]: { ...providerEntry, [config.field]: config.value },
     },
-  };
+  } as ModelMessage;
 }

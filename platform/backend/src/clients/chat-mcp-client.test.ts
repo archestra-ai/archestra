@@ -60,6 +60,7 @@ beforeEach(() => {
   vi.mocked(mcpClient.executeToolCall).mockReset();
   vi.mocked(resolveSessionExternalIdpToken).mockResolvedValue(null);
   vi.mocked(StreamableHTTPClientTransport).mockClear();
+  chatClient.__test.clearApprovedToolExecutionCache();
 });
 
 describe("isBrowserMcpTool", () => {
@@ -582,6 +583,39 @@ describe("executeMcpTool error handling", () => {
 
     const result = await chatClient.__test.executeMcpTool(baseCtx);
     expect(result.content).toBe("Tool execution failed");
+  });
+
+  test("reuses approved executions with the same tool call id", async () => {
+    const approvedCtx = {
+      ...baseCtx,
+      conversationId: "conversation-1",
+      toolCallId: "call_approved_1",
+      approvedToolExecutionKey:
+        "00000000-0000-4000-8000-000000000001:conversation-1:call_approved_1",
+    };
+    vi.mocked(mcpClient.executeToolCall).mockResolvedValue(
+      mockResult({
+        content: [{ type: "text", text: "created" }],
+        isError: false,
+      }),
+    );
+
+    const [firstResult, secondResult] = await Promise.all([
+      chatClient.__test.executeMcpTool(approvedCtx),
+      chatClient.__test.executeMcpTool(approvedCtx),
+    ]);
+    const thirdResult = await chatClient.__test.executeMcpTool(approvedCtx);
+
+    expect(mcpClient.executeToolCall).toHaveBeenCalledTimes(1);
+    expect(mcpClient.executeToolCall).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "call_approved_1" }),
+      approvedCtx.agentId,
+      undefined,
+      { conversationId: "conversation-1" },
+    );
+    expect(firstResult.content).toBe("created");
+    expect(secondResult.content).toBe("created");
+    expect(thirdResult.content).toBe("created");
   });
 
   test("preserves structured error metadata for auth-expired tool errors", async () => {

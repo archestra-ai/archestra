@@ -157,6 +157,14 @@ const uiResourceCache = new LRUCacheManager<ToolUiResourceData | null>({
   defaultTtl: UI_RESOURCE_CACHE_TTL_MS,
 });
 
+const APPROVED_TOOL_EXECUTION_TTL_MS = 10 * TimeInMs.Minute;
+const approvedToolExecutionCache = new LRUCacheManager<
+  Promise<Awaited<ReturnType<typeof mcpClient.executeToolCall>>>
+>({
+  maxSize: 1000,
+  defaultTtl: APPROVED_TOOL_EXECUTION_TTL_MS,
+});
+
 /** @public — exported for testability (test cleanup) */
 export function clearUiResourceCache(): void {
   uiResourceCache.clear();
@@ -217,6 +225,9 @@ export const __test = {
   pingClientWithTimeout,
   resolveApprovalPolicyTarget,
   throwIfApprovalRequired,
+  clearApprovedToolExecutionCache() {
+    approvedToolExecutionCache.clear();
+  },
 };
 
 /**
@@ -947,6 +958,22 @@ export async function getChatMcpTools({
                 globalToolPolicy,
               );
             }
+            const approvalTarget = resolveApprovalPolicyTarget(
+              mcpTool.name,
+              args,
+            );
+            const requiresApproval =
+              !blockOnApprovalRequired &&
+              (await ToolInvocationPolicyModel.checkApprovalRequired(
+                approvalTarget.toolName,
+                approvalTarget.toolInput,
+                {
+                  teamIds: [],
+                  externalAgentId: getChatExternalAgentId(),
+                },
+                globalToolPolicy,
+              ));
+            const toolCallId = getToolCallIdFromExecuteOptions(options);
 
             logger.info(
               { agentId, userId, toolName: mcpTool.name, arguments: args },
@@ -1049,6 +1076,15 @@ export async function getChatMcpTools({
                     globalToolPolicy,
                     considerContextUntrusted,
                     abortSignal,
+                    toolCallId: requiresApproval ? toolCallId : undefined,
+                    approvedToolExecutionKey:
+                      requiresApproval && toolCallId
+                        ? buildApprovedToolExecutionKey({
+                            agentId,
+                            conversationId,
+                            toolCallId,
+                          })
+                        : undefined,
                   });
                 } catch (error) {
                   reportToolMetrics({
@@ -1439,6 +1475,8 @@ interface ToolExecutionContext {
   globalToolPolicy: GlobalToolPolicy;
   considerContextUntrusted: boolean;
   abortSignal?: AbortSignal;
+  toolCallId?: string;
+  approvedToolExecutionKey?: string;
 }
 
 /**
@@ -1469,6 +1507,8 @@ async function executeMcpTool(ctx: ToolExecutionContext): Promise<{
     conversationId,
     mcpGwToken,
     abortSignal,
+    toolCallId,
+    approvedToolExecutionKey,
   } = ctx;
   throwIfAborted(abortSignal);
   const startTime = Date.now();
@@ -1504,27 +1544,34 @@ async function executeMcpTool(ctx: ToolExecutionContext): Promise<{
 
   // Execute via mcpClient
   const toolCall = {
-    id: randomUUID(),
+    id: toolCallId ?? randomUUID(),
     name: toolName,
     arguments: toolArguments ?? {},
   };
 
   let result: Awaited<ReturnType<typeof mcpClient.executeToolCall>>;
   try {
-    result = await mcpClient.executeToolCall(
-      toolCall,
-      agentId,
-      mcpGwToken
-        ? {
-            tokenId: mcpGwToken.tokenId,
-            teamId: mcpGwToken.teamId,
-            isOrganizationToken: mcpGwToken.isOrganizationToken,
-            organizationId,
-            userId,
-          }
-        : undefined,
-      { conversationId },
-    );
+    const executeToolCall = () =>
+      mcpClient.executeToolCall(
+        toolCall,
+        agentId,
+        mcpGwToken
+          ? {
+              tokenId: mcpGwToken.tokenId,
+              teamId: mcpGwToken.teamId,
+              isOrganizationToken: mcpGwToken.isOrganizationToken,
+              organizationId,
+              userId,
+            }
+          : undefined,
+        { conversationId },
+      );
+    result = await (approvedToolExecutionKey
+      ? executeApprovedMcpToolCallOnce(
+          approvedToolExecutionKey,
+          executeToolCall,
+        )
+      : executeToolCall());
     reportToolMetrics({
       toolName,
       agentId,
@@ -1905,6 +1952,46 @@ function throwIfAborted(abortSignal?: AbortSignal): void {
   const abortError = new Error("Chat execution aborted");
   abortError.name = "AbortError";
   throw abortError;
+}
+
+function getToolCallIdFromExecuteOptions(options: unknown): string | undefined {
+  if (!isRecord(options)) {
+    return undefined;
+  }
+
+  return typeof options.toolCallId === "string"
+    ? options.toolCallId
+    : undefined;
+}
+
+function buildApprovedToolExecutionKey({
+  agentId,
+  conversationId,
+  toolCallId,
+}: {
+  agentId: string;
+  conversationId?: string;
+  toolCallId: string;
+}): string {
+  return `${agentId}:${conversationId ?? "no-conversation"}:${toolCallId}`;
+}
+
+function executeApprovedMcpToolCallOnce(
+  executionKey: string,
+  executeToolCall: () => ReturnType<typeof mcpClient.executeToolCall>,
+): ReturnType<typeof mcpClient.executeToolCall> {
+  const existingExecution = approvedToolExecutionCache.get(executionKey);
+  if (existingExecution) {
+    logger.info(
+      { executionKey },
+      "Reusing approved MCP tool execution for duplicate tool call",
+    );
+    return existingExecution;
+  }
+
+  const execution = executeToolCall();
+  approvedToolExecutionCache.set(executionKey, execution);
+  return execution;
 }
 
 function isAbortLikeError(error: unknown): boolean {

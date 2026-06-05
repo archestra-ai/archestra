@@ -65,10 +65,12 @@ export default defineConfig({
       // Point the SDK at an unreachable port instead of the real backend so
       // any SSR fetch that escapes MSW fails loudly with ECONNREFUSED rather
       // than silently hitting a developer's locally running Fastify on 9000.
+      // Use a Fetch-allowed port: blocked "bad ports" fail before MSW can
+      // intercept the request.
       // MSW Node registers handlers against this URL via getJson() and
       // intercepts before the socket dial, so reachability is irrelevant for
       // the happy path.
-      ARCHESTRA_INTERNAL_API_BASE_URL: "http://127.0.0.1:1",
+      ARCHESTRA_INTERNAL_API_BASE_URL: "http://127.0.0.1:65535",
       NEXT_PUBLIC_SENTRY_DSN: "",
     },
   },

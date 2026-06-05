@@ -120,6 +120,9 @@ export function transformFormToApiData(
           ? undefined
           : values.oauthConfig.client_secret || undefined,
       audience: values.oauthConfig.audience || undefined,
+      resource: isClientCredentials
+        ? undefined
+        : values.oauthConfig.resource || undefined,
       redirect_uris: redirectUrisList,
       scopes: scopesList,
       // default_scopes is the fallback used by the backend's scope resolution:
@@ -314,6 +317,7 @@ export function transformCatalogItemToFormValues(
         client_id: string;
         client_secret: string;
         audience: string;
+        resource: string;
         redirect_uris: string;
         scopes: string;
         supports_resource_metadata: boolean;
@@ -337,6 +341,7 @@ export function transformCatalogItemToFormValues(
         typeof item.userConfig?.audience?.default === "string"
           ? item.userConfig.audience.default
           : item.oauthConfig.audience || "",
+      resource: item.oauthConfig.resource || "",
       redirect_uris: item.oauthConfig.redirect_uris?.join(", ") || "",
       scopes: item.oauthConfig.scopes?.join(", ") || "",
       supports_resource_metadata:
@@ -572,6 +577,8 @@ export function transformExternalCatalogToFormValues(
       client_id: server.oauth_config.client_id || "",
       client_secret: server.oauth_config.client_secret || "",
       audience: "",
+      resource:
+        getOptionalStringProperty(server.oauth_config, "resource") || "",
       redirect_uris:
         redirectUris ||
         (typeof window !== "undefined"
@@ -748,6 +755,7 @@ export function transformExternalCatalogToFormValues(
       client_id: "",
       client_secret: "",
       audience: "",
+      resource: "",
       redirect_uris:
         typeof window !== "undefined"
           ? `${window.location.origin}/oauth-callback`

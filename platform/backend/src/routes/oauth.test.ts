@@ -1,7 +1,10 @@
 import { createHash } from "node:crypto";
 import { type Mock, vi } from "vitest";
-import { beforeEach, describe, expect, test } from "@/test";
-import {
+import { cacheManager } from "@/cache-manager";
+import type { FastifyInstanceWithZod } from "@/server";
+import { createFastifyInstance } from "@/server";
+import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import oauthRoutes, {
   buildDiscoveryUrls,
   discoverOAuthEndpoints,
   discoverScopes,
@@ -476,5 +479,73 @@ describe("OAuth helper functions", () => {
 
       globalThis.fetch = originalFetch;
     });
+  });
+});
+
+describe("OAuth routes", () => {
+  let app: FastifyInstanceWithZod;
+  const originalFetch = globalThis.fetch;
+
+  beforeEach(async () => {
+    cacheManager.start();
+    app = createFastifyInstance();
+    await app.register(oauthRoutes);
+  });
+
+  afterEach(async () => {
+    globalThis.fetch = originalFetch;
+    vi.restoreAllMocks();
+    await app.close();
+  });
+
+  test("uses a configured OAuth resource separately from the MCP endpoint URL", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      name: "Resource Split MCP",
+      serverType: "remote",
+      serverUrl: "https://mcp.example.com/mcp",
+      oauthConfig: {
+        name: "Resource Split MCP",
+        server_url: "https://mcp.example.com/mcp",
+        resource: "https://mcp.example.com",
+        grant_type: "authorization_code",
+        auth_server_url: "https://login.example.com/tenant/v2.0",
+        authorization_endpoint:
+          "https://login.example.com/tenant/oauth2/v2.0/authorize",
+        token_endpoint: "https://login.example.com/tenant/oauth2/v2.0/token",
+        client_id: "public-client-id",
+        redirect_uris: ["http://localhost:3000/oauth-callback"],
+        scopes: ["api://downstream-app/Tools.Read"],
+        default_scopes: ["api://downstream-app/Tools.Read"],
+        supports_resource_metadata: false,
+      },
+    });
+
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        authorization_endpoint:
+          "https://login.example.com/tenant/oauth2/v2.0/authorize",
+        token_endpoint: "https://login.example.com/tenant/oauth2/v2.0/token",
+      }),
+    }) as Mock;
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/oauth/initiate",
+      payload: {
+        catalogId: catalog.id,
+      },
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    const authorizationUrl = new URL(response.json().authorizationUrl);
+    expect(authorizationUrl.searchParams.get("resource")).toBe(
+      "https://mcp.example.com",
+    );
+    expect(authorizationUrl.searchParams.get("resource")).not.toBe(
+      "https://mcp.example.com/mcp",
+    );
   });
 });

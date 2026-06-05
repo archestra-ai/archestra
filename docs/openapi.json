@@ -113494,6 +113494,9 @@
                           "audience": {
                             "type": "string"
                           },
+                          "resource": {
+                            "type": "string"
+                          },
                           "redirect_uris": {
                             "type": "array",
                             "items": {
@@ -114347,6 +114350,9 @@
                       "audience": {
                         "type": "string"
                       },
+                      "resource": {
+                        "type": "string"
+                      },
                       "redirect_uris": {
                         "type": "array",
                         "items": {
@@ -114901,6 +114907,9 @@
                           "type": "string"
                         },
                         "audience": {
+                          "type": "string"
+                        },
+                        "resource": {
                           "type": "string"
                         },
                         "redirect_uris": {
@@ -115772,6 +115781,9 @@
                         "audience": {
                           "type": "string"
                         },
+                        "resource": {
+                          "type": "string"
+                        },
                         "redirect_uris": {
                           "type": "array",
                           "items": {
@@ -116609,6 +116621,9 @@
                       "audience": {
                         "type": "string"
                       },
+                      "resource": {
+                        "type": "string"
+                      },
                       "redirect_uris": {
                         "type": "array",
                         "items": {
@@ -117165,6 +117180,9 @@
                           "type": "string"
                         },
                         "audience": {
+                          "type": "string"
+                        },
+                        "resource": {
                           "type": "string"
                         },
                         "redirect_uris": {
@@ -143980,6 +143998,9 @@
                                   "audience": {
                                     "type": "string"
                                   },
+                                  "resource": {
+                                    "type": "string"
+                                  },
                                   "redirect_uris": {
                                     "type": "array",
                                     "items": {
@@ -144659,6 +144680,9 @@
                               "audience": {
                                 "type": "string"
                               },
+                              "resource": {
+                                "type": "string"
+                              },
                               "redirect_uris": {
                                 "type": "array",
                                 "items": {
@@ -145037,6 +145061,9 @@
                                   "type": "string"
                                 },
                                 "audience": {
+                                  "type": "string"
+                                },
+                                "resource": {
                                   "type": "string"
                                 },
                                 "redirect_uris": {
@@ -145748,6 +145775,9 @@
                                 "audience": {
                                   "type": "string"
                                 },
+                                "resource": {
+                                  "type": "string"
+                                },
                                 "redirect_uris": {
                                   "type": "array",
                                   "items": {
@@ -146430,6 +146460,9 @@
                               "audience": {
                                 "type": "string"
                               },
+                              "resource": {
+                                "type": "string"
+                              },
                               "redirect_uris": {
                                 "type": "array",
                                 "items": {
@@ -146859,6 +146892,9 @@
                                   "type": "string"
                                 },
                                 "audience": {
+                                  "type": "string"
+                                },
+                                "resource": {
                                   "type": "string"
                                 },
                                 "redirect_uris": {
@@ -147859,6 +147895,9 @@
                                 "audience": {
                                   "type": "string"
                                 },
+                                "resource": {
+                                  "type": "string"
+                                },
                                 "redirect_uris": {
                                   "type": "array",
                                   "items": {
@@ -148581,6 +148620,9 @@
                                   "type": "string"
                                 },
                                 "audience": {
+                                  "type": "string"
+                                },
+                                "resource": {
                                   "type": "string"
                                 },
                                 "redirect_uris": {
@@ -149309,6 +149351,9 @@
                                   "type": "string"
                                 },
                                 "audience": {
+                                  "type": "string"
+                                },
+                                "resource": {
                                   "type": "string"
                                 },
                                 "redirect_uris": {

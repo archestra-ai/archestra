@@ -848,8 +848,9 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // RFC 8707: Include resource parameter for audience binding
       // Required by MCP servers like Windmill that need to know which
       // protected resource the token is intended for
-      if (oauthConfig.server_url) {
-        authUrl.searchParams.set("resource", oauthConfig.server_url);
+      const oauthResource = getOAuthResource(oauthConfig);
+      if (oauthResource) {
+        authUrl.searchParams.set("resource", oauthResource);
       }
 
       return reply.send({
@@ -969,6 +970,7 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
             oauthConfig.token_endpoint || `${oauthConfig.server_url}/token`;
         }
 
+        const oauthResource = getOAuthResource(oauthConfig);
         const tokenResponse = await fetch(tokenEndpoint, {
           method: "POST",
           headers: {
@@ -983,6 +985,9 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
             code_verifier: oauthState.codeVerifier,
             ...(clientSecret && {
               client_secret: clientSecret,
+            }),
+            ...(oauthResource && {
+              resource: oauthResource,
             }),
           }),
         });
@@ -1101,6 +1106,14 @@ function isSsoCallbackRedirectUri(redirectUri: string | undefined): boolean {
   } catch {
     return redirectUri.includes("/api/auth/sso/callback");
   }
+}
+
+function getOAuthResource(oauthConfig: {
+  audience?: string;
+  resource?: string;
+  server_url?: string;
+}): string | undefined {
+  return oauthConfig.resource || oauthConfig.audience || oauthConfig.server_url;
 }
 
 export default oauthRoutes;

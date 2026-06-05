@@ -30135,6 +30135,7 @@ export type GetInternalMcpCatalogResponses = {
             client_id: string;
             client_secret?: string;
             audience?: string;
+            resource?: string;
             redirect_uris: Array<string>;
             scopes: Array<string>;
             description?: string;
@@ -30266,6 +30267,7 @@ export type CreateInternalMcpCatalogItemData = {
             client_id: string;
             client_secret?: string;
             audience?: string;
+            resource?: string;
             redirect_uris: Array<string>;
             scopes: Array<string>;
             description?: string;
@@ -30461,6 +30463,7 @@ export type CreateInternalMcpCatalogItemResponses = {
             client_id: string;
             client_secret?: string;
             audience?: string;
+            resource?: string;
             redirect_uris: Array<string>;
             scopes: Array<string>;
             description?: string;
@@ -30753,6 +30756,7 @@ export type GetInternalMcpCatalogItemResponses = {
             client_id: string;
             client_secret?: string;
             audience?: string;
+            resource?: string;
             redirect_uris: Array<string>;
             scopes: Array<string>;
             description?: string;
@@ -30881,6 +30885,7 @@ export type UpdateInternalMcpCatalogItemData = {
             client_id: string;
             client_secret?: string;
             audience?: string;
+            resource?: string;
             redirect_uris: Array<string>;
             scopes: Array<string>;
             description?: string;
@@ -31077,6 +31082,7 @@ export type UpdateInternalMcpCatalogItemResponses = {
             client_id: string;
             client_secret?: string;
             audience?: string;
+            resource?: string;
             redirect_uris: Array<string>;
             scopes: Array<string>;
             description?: string;
@@ -37928,6 +37934,7 @@ export type GetMcpServerInstallationRequestsResponses = {
                 client_id: string;
                 client_secret?: string;
                 audience?: string;
+                resource?: string;
                 redirect_uris: Array<string>;
                 scopes: Array<string>;
                 description?: string;
@@ -38027,6 +38034,7 @@ export type CreateMcpServerInstallationRequestData = {
                 client_id: string;
                 client_secret?: string;
                 audience?: string;
+                resource?: string;
                 redirect_uris: Array<string>;
                 scopes: Array<string>;
                 description?: string;
@@ -38186,6 +38194,7 @@ export type CreateMcpServerInstallationRequestResponses = {
                 client_id: string;
                 client_secret?: string;
                 audience?: string;
+                resource?: string;
                 redirect_uris: Array<string>;
                 scopes: Array<string>;
                 description?: string;
@@ -38450,6 +38459,7 @@ export type GetMcpServerInstallationRequestResponses = {
                 client_id: string;
                 client_secret?: string;
                 audience?: string;
+                resource?: string;
                 redirect_uris: Array<string>;
                 scopes: Array<string>;
                 description?: string;
@@ -38549,6 +38559,7 @@ export type UpdateMcpServerInstallationRequestData = {
                 client_id: string;
                 client_secret?: string;
                 audience?: string;
+                resource?: string;
                 redirect_uris: Array<string>;
                 scopes: Array<string>;
                 description?: string;
@@ -38720,6 +38731,7 @@ export type UpdateMcpServerInstallationRequestResponses = {
                 client_id: string;
                 client_secret?: string;
                 audience?: string;
+                resource?: string;
                 redirect_uris: Array<string>;
                 scopes: Array<string>;
                 description?: string;
@@ -38901,6 +38913,7 @@ export type ApproveMcpServerInstallationRequestResponses = {
                 client_id: string;
                 client_secret?: string;
                 audience?: string;
+                resource?: string;
                 redirect_uris: Array<string>;
                 scopes: Array<string>;
                 description?: string;
@@ -39082,6 +39095,7 @@ export type DeclineMcpServerInstallationRequestResponses = {
                 client_id: string;
                 client_secret?: string;
                 audience?: string;
+                resource?: string;
                 redirect_uris: Array<string>;
                 scopes: Array<string>;
                 description?: string;
@@ -39263,6 +39277,7 @@ export type AddMcpServerInstallationRequestNoteResponses = {
                 client_id: string;
                 client_secret?: string;
                 audience?: string;
+                resource?: string;
                 redirect_uris: Array<string>;
                 scopes: Array<string>;
                 description?: string;

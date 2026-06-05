@@ -1,13 +1,17 @@
 import {
   ARCHESTRA_TOOL_PREFIX,
   type ArchestraToolFullName,
+  type ArchestraToolShortName,
   getArchestraToolFullName,
   getArchestraToolShortName,
   isAgentTool,
+  TOOL_RUN_TOOL_SHORT_NAME,
+  TOOL_SEARCH_TOOLS_SHORT_NAME,
 } from "@archestra/shared";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { ZodError, type ZodType } from "zod";
 import config from "@/config";
+import { ToolModel } from "@/models";
 // Import all groups
 import { toolEntries as agentToolEntries, tools as agentTools } from "./agents";
 import { archestraMcpBranding } from "./branding";
@@ -145,6 +149,13 @@ export async function executeArchestraTool(
   const rbacDenied = await checkToolPermission(toolName, context);
   if (rbacDenied) return rbacDenied;
 
+  // Centralized assignment check — an agent may only execute Archestra tools
+  // that are actually assigned to it (the same set advertised by tools/list and
+  // search_tools). Without this, run_tool or a raw tools/call could invoke any
+  // Archestra tool the user has RBAC for, regardless of assignment.
+  const assignmentDenied = await checkToolAssignedToAgent(toolName, context);
+  if (assignmentDenied) return assignmentDenied;
+
   const resolvedToolName =
     toolEntries[toolName as ArchestraToolFullName] != null
       ? toolName
@@ -192,6 +203,31 @@ export async function executeArchestraTool(
     }
     throw error;
   }
+}
+
+// run_tool / search_tools are the dispatch surface (advertised implicitly in
+// search_and_run_only mode), so they bypass the assignment check.
+const ASSIGNMENT_EXEMPT_SHORT_NAMES = new Set<ArchestraToolShortName>([
+  TOOL_RUN_TOOL_SHORT_NAME,
+  TOOL_SEARCH_TOOLS_SHORT_NAME,
+]);
+
+async function checkToolAssignedToAgent(
+  toolName: string,
+  context: ArchestraContext,
+): Promise<CallToolResult | null> {
+  const shortName = archestraMcpBranding.getToolShortName(toolName);
+  // Assignment is agent-scoped; org/team-token sessions rely on RBAC alone.
+  if (!context.agentId || !shortName) return null;
+  if (ASSIGNMENT_EXEMPT_SHORT_NAMES.has(shortName)) return null;
+
+  const assignedTools = await ToolModel.getMcpToolsByAgent(context.agentId);
+  const isAssigned = assignedTools.some(
+    (tool) => archestraMcpBranding.getToolShortName(tool.name) === shortName,
+  );
+  return isAssigned
+    ? null
+    : errorResult(`Tool '${toolName}' is not assigned to this agent.`);
 }
 
 function resolveArchestraToolName(toolName: string): string | null {

@@ -1,8 +1,16 @@
 import { getSkillPermissionChecker } from "@/auth/skill-permissions";
 import { SkillModel, SkillSandboxModel, SkillTeamModel } from "@/models";
 
+/** Stable reason code for the revocation gate (for logs/metrics, never prose). */
+type MountReadabilityFailureCode =
+  | "skill_read_revoked"
+  | "skill_deleted"
+  | "skill_access_revoked";
+
 /** Result of the revocation gate: ok, or a model-facing reason it failed. */
-type MountReadabilityResult = { ok: true } | { ok: false; reason: string };
+type MountReadabilityResult =
+  | { ok: true }
+  | { ok: false; code: MountReadabilityFailureCode; reason: string };
 
 /**
  * Revocation gate for the materializing sandbox tools. Before a container is
@@ -30,6 +38,7 @@ export async function assertMountedSkillsReadable(params: {
   if (!checker.canRead) {
     return {
       ok: false,
+      code: "skill_read_revoked",
       reason:
         "you no longer have permission to read the skills mounted in this sandbox",
     };
@@ -40,6 +49,7 @@ export async function assertMountedSkillsReadable(params: {
     if (!skill || skill.organizationId !== params.organizationId) {
       return {
         ok: false,
+        code: "skill_deleted",
         reason:
           "a skill mounted in this sandbox no longer exists; start a fresh sandbox to continue",
       };
@@ -53,6 +63,7 @@ export async function assertMountedSkillsReadable(params: {
     if (!hasAccess) {
       return {
         ok: false,
+        code: "skill_access_revoked",
         reason: `you no longer have access to the skill "${skill.name}" mounted in this sandbox`,
       };
     }

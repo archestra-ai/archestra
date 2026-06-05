@@ -80,8 +80,7 @@ const PIP_SHIM_SETUP: &str = "rm -f /usr/local/bin/pip /usr/local/bin/pip3 /usr/
 /// project's default `.venv` is exactly `DEFAULT_VENV_DIR`. model installs via
 /// `uv add` and skill `requirements.txt` installs via `uv pip install --python`
 /// therefore land in the same interpreter that `python3` resolves to.
-const PYPROJECT_SETUP: &str =
-    "printf '[project]\\nname = \"sandbox\"\\nversion = \"0.0.0\"\\nrequires-python = \">=3.12\"\\n' > pyproject.toml";
+const PYPROJECT_SETUP: &str = "printf '[project]\\nname = \"sandbox\"\\nversion = \"0.0.0\"\\nrequires-python = \">=3.12\"\\n' > pyproject.toml";
 
 /// the Dagger engine connection plus its lazily-warmed base image. one per
 /// session; cloned `DaggerConn` handles are cheap (an Arc internally).

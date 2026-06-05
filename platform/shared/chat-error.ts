@@ -270,6 +270,8 @@ export enum ChatErrorCode {
   ServerError = "server_error",
   /** Network/connection issues - retryable */
   NetworkError = "network_error",
+  /** Provider finished cleanly but produced no content - retryable */
+  EmptyResponse = "empty_response",
   /** Catch-all for unrecognized errors */
   Unknown = "unknown",
 }
@@ -295,6 +297,8 @@ export const ChatErrorMessages: Record<ChatErrorCode, string> = {
   [ChatErrorCode.ServerError]: "The AI provider is experiencing issues.",
   [ChatErrorCode.NetworkError]:
     "Connection error. Please check your network and try again.",
+  [ChatErrorCode.EmptyResponse]:
+    "The model returned an empty response. Please try again.",
   [ChatErrorCode.Unknown]: "An unexpected error occurred. Please try again.",
 };
 
@@ -305,6 +309,7 @@ export const RetryableErrorCodes: Set<ChatErrorCode> = new Set([
   ChatErrorCode.RateLimit,
   ChatErrorCode.ServerError,
   ChatErrorCode.NetworkError,
+  ChatErrorCode.EmptyResponse,
 ]);
 
 /**

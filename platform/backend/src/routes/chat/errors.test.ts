@@ -18,6 +18,7 @@ vi.mock("@sentry/node", () => ({
 }));
 
 import {
+  EmptyModelResponseError,
   mapProviderError,
   ProviderError,
   sanitizeChatErrorForFrontend,
@@ -1712,5 +1713,30 @@ describe("ProviderError", () => {
       usageLimitExceeded: true,
       usageLimitEntityType: "organization",
     });
+  });
+});
+
+describe("mapProviderError - EmptyModelResponseError", () => {
+  it("maps a content-filter finish to the non-retryable ContentFiltered card", () => {
+    const result = mapProviderError(
+      new EmptyModelResponseError({
+        finishReason: "content-filter",
+        attempts: 1,
+      }),
+      "openai",
+    );
+
+    expect(result.code).toBe(ChatErrorCode.ContentFiltered);
+    expect(result.isRetryable).toBe(false);
+  });
+
+  it("maps an exhausted stop finish to the retryable EmptyResponse card", () => {
+    const result = mapProviderError(
+      new EmptyModelResponseError({ finishReason: "stop", attempts: 3 }),
+      "openai",
+    );
+
+    expect(result.code).toBe(ChatErrorCode.EmptyResponse);
+    expect(result.isRetryable).toBe(true);
   });
 });

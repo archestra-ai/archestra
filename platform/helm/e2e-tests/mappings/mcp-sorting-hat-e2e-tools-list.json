@@ -1,0 +1,12 @@
+{
+  "request": {
+    "method": "POST",
+    "urlPath": "/mcp/sorting-hat-e2e",
+    "bodyPatterns": [{ "matchesJsonPath": "$[?(@.method == 'tools/list')]" }]
+  },
+  "response": {
+    "status": 200,
+    "headers": { "Content-Type": "application/json" },
+    "body": "{\"jsonrpc\":\"2.0\",\"id\":{{jsonPath request.body '$.id'}},\"result\":{\"tools\":[{\"name\":\"run_health_probe\",\"description\":\"Run an operational health probe during an incident response\",\"inputSchema\":{\"type\":\"object\",\"properties\":{}}}]}}"
+  }
+}

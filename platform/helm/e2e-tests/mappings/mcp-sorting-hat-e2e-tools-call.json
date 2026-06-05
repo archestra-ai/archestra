@@ -1,0 +1,12 @@
+{
+  "request": {
+    "method": "POST",
+    "urlPath": "/mcp/sorting-hat-e2e",
+    "bodyPatterns": [{ "matchesJsonPath": "$[?(@.method == 'tools/call')]" }]
+  },
+  "response": {
+    "status": 200,
+    "headers": { "Content-Type": "application/json" },
+    "body": "{\"jsonrpc\":\"2.0\",\"id\":{{jsonPath request.body '$.id'}},\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"probe complete\"}]}}"
+  }
+}

@@ -2,7 +2,7 @@ import {
   type CompleteModelSelection,
   MODEL_MARKER_PATTERNS,
   type SupportedProvider,
-} from "@shared";
+} from "@archestra/shared";
 import { and, asc, desc, eq, inArray, or, sql } from "drizzle-orm";
 import db, { schema, withDbTransaction } from "@/database";
 import type { LlmProviderApiKey, Model } from "@/types";

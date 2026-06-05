@@ -2,7 +2,7 @@ import {
   hasPersistableAssistantContent,
   hasRenderableAssistantContent,
   stripDanglingToolCalls,
-} from "@shared";
+} from "@archestra/shared";
 import logger from "@/logging";
 import type { ChatMessage, ChatMessagePart } from "@/types";
 import { stripImagesFromMessages } from "./strip-images-from-messages";

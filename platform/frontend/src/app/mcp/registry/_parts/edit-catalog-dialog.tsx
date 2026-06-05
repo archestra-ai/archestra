@@ -1,4 +1,4 @@
-import type { archestraApiTypes } from "@shared";
+import type { archestraApiTypes } from "@archestra/shared";
 import { Loader2, ShieldX } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {

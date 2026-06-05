@@ -1,4 +1,4 @@
-import type { ArchestraToolShortName, Permission } from "@shared";
+import type { ArchestraToolShortName, Permission } from "@archestra/shared";
 import { userHasPermission } from "@/auth/utils";
 import { UserModel } from "@/models";
 import { archestraMcpBranding } from "./branding";

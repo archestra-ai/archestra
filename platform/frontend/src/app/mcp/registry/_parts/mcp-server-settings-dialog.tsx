@@ -1,6 +1,6 @@
 "use client";
 
-import { E2eTestId, type McpDeploymentStatusEntry } from "@shared";
+import { E2eTestId, type McpDeploymentStatusEntry } from "@archestra/shared";
 import {
   AlertCircle,
   Copy,

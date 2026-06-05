@@ -1,6 +1,6 @@
 "use client";
 
-import { WEBSITE_URL } from "@shared";
+import { WEBSITE_URL } from "@archestra/shared";
 import JSZip from "jszip";
 import { Download, ExternalLink, Loader2, TriangleAlert } from "lucide-react";
 import * as React from "react";

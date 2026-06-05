@@ -32,7 +32,7 @@ pnpm knip   # flags unused exports; part of frontend check:ci
 - Frontend `.query.ts` files should never use `fetch()` directly.
 - Run `pnpm codegen:api-client` first to ensure the generated SDK is up to date.
 - Use generated SDK methods instead of manual API calls for type safety and consistency.
-- Reuse API types from `@shared`, especially `archestraApiTypes` types such as `archestraApiTypes.CreateXxxData["body"]` and `archestraApiTypes.GetXxxResponses["200"]`.
+- Reuse API types from `@archestra/shared`, especially `archestraApiTypes` types such as `archestraApiTypes.CreateXxxData["body"]` and `archestraApiTypes.GetXxxResponses["200"]`.
 - Do not define duplicate frontend API types when generated/shared types already exist.
 
 ## Query error handling
@@ -64,5 +64,5 @@ pnpm knip   # flags unused exports; part of frontend check:ci
 
 - Do not hardcode `Archestra` in frontend UI copy.
 - Use `const appName = useAppName();` and interpolate the app name so white-labeled deployments render correctly.
-- Always use `getDocsUrl(DocsPage.PageName, "optional-anchor")` from `@shared` for documentation links.
+- Always use `getDocsUrl(DocsPage.PageName, "optional-anchor")` from `@archestra/shared` for documentation links.
 - Never hardcode documentation URLs.

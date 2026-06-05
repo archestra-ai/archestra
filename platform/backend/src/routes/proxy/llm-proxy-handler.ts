@@ -6,11 +6,6 @@
  */
 
 import {
-  type Context,
-  context as otelContext,
-  propagation,
-} from "@opentelemetry/api";
-import {
   CHAT_API_KEY_ID_HEADER,
   hasArchestraTokenPrefix,
   type InteractionSource,
@@ -18,7 +13,12 @@ import {
   isProviderApiKeyOptional,
   SOURCE_HEADER,
   UNTRUSTED_CONTEXT_HEADER,
-} from "@shared";
+} from "@archestra/shared";
+import {
+  type Context,
+  context as otelContext,
+  propagation,
+} from "@opentelemetry/api";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { LRUCacheManager } from "@/cache-manager";
 import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";

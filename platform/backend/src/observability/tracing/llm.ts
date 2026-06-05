@@ -1,3 +1,4 @@
+import type { InteractionSource, SupportedProvider } from "@archestra/shared";
 import {
   type Context,
   context,
@@ -6,7 +7,6 @@ import {
   SpanStatusCode,
   trace,
 } from "@opentelemetry/api";
-import type { InteractionSource, SupportedProvider } from "@shared";
 import config from "@/config";
 import logger from "@/logging";
 import { SESSION_ID_KEY } from "@/observability/request-context";

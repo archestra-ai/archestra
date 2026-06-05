@@ -1,6 +1,6 @@
 "use client";
 
-import { parseVaultReference } from "@shared";
+import { parseVaultReference } from "@archestra/shared";
 import { Check, KeyRound, Trash2 } from "lucide-react";
 import type {
   FieldArrayWithId,

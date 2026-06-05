@@ -1,5 +1,4 @@
 import { createHash } from "node:crypto";
-import type { ListToolsResult } from "@modelcontextprotocol/sdk/types.js";
 import {
   ARCHESTRA_TOKEN_PREFIX,
   LEGACY_ARCHESTRA_TOKEN_PREFIXES,
@@ -7,7 +6,8 @@ import {
   TOOL_ARTIFACT_WRITE_FULL_NAME,
   TOOL_RUN_TOOL_FULL_NAME,
   TOOL_SEARCH_TOOLS_FULL_NAME,
-} from "@shared";
+} from "@archestra/shared";
+import type { ListToolsResult } from "@modelcontextprotocol/sdk/types.js";
 import { vi } from "vitest";
 import { archestraMcpBranding } from "@/archestra-mcp-server";
 import type * as originalConfigModule from "@/config";

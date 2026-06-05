@@ -8,7 +8,7 @@ import {
   getAgentToolCatalogPillTestId,
   isPlaywrightCatalogItem,
   parseFullToolName,
-} from "@shared";
+} from "@archestra/shared";
 import { useQueries } from "@tanstack/react-query";
 import { Loader2, Pencil, Search, X } from "lucide-react";
 import {

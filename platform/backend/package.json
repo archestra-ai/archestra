@@ -95,7 +95,7 @@
     "@sentry/node": "^10.42.0",
     "@sentry/opentelemetry": "^10.42.0",
     "@sentry/profiling-node": "^10.42.0",
-    "@shared": "workspace:*",
+    "@archestra/shared": "workspace:*",
     "@slack/socket-mode": "^2.0.5",
     "@slack/web-api": "^7.14.1",
     "@smithy/eventstream-codec": "^4.2.11",

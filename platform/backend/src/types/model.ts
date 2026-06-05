@@ -3,7 +3,7 @@ import {
   ModelOutputModalitySchema,
   SupportedEmbeddingDimensionsSchema,
   SupportedProvidersSchema,
-} from "@shared";
+} from "@archestra/shared";
 import {
   createInsertSchema,
   createSelectSchema,
@@ -12,9 +12,15 @@ import {
 import { z } from "zod";
 import { schema } from "@/database";
 
-export type { ModelInputModality, ModelOutputModality } from "@shared";
-// Re-export modality schemas and types from @shared for convenience
-export { ModelInputModalitySchema, ModelOutputModalitySchema } from "@shared";
+export type {
+  ModelInputModality,
+  ModelOutputModality,
+} from "@archestra/shared";
+// Re-export modality schemas and types from @archestra/shared for convenience
+export {
+  ModelInputModalitySchema,
+  ModelOutputModalitySchema,
+} from "@archestra/shared";
 
 /**
  * Fields to extend for drizzle-zod schema generation.

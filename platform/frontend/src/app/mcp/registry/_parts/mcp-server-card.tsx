@@ -6,7 +6,7 @@ import {
   getManageCredentialsButtonTestId,
   MCP_CATALOG_EDIT_QUERY_PARAM,
   type McpDeploymentStatusEntry,
-} from "@shared";
+} from "@archestra/shared";
 import {
   AlertTriangle,
   MessageSquare,

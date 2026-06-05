@@ -5,7 +5,7 @@ import {
   type archestraApiTypes,
   DocsPage,
   getDocsUrl,
-} from "@shared";
+} from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link2, Plus, Trash2 } from "lucide-react";
 import { useState } from "react";

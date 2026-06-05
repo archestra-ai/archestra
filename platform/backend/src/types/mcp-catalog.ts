@@ -4,7 +4,7 @@ import {
   LocalConfigEnvironmentDefaultSchema,
   LocalConfigSchema,
   OAuthConfigSchema,
-} from "@shared";
+} from "@archestra/shared";
 import {
   createInsertSchema,
   createSelectSchema,

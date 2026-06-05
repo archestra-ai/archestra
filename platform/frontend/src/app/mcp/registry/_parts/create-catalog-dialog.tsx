@@ -1,6 +1,6 @@
 "use client";
 
-import type { archestraApiTypes } from "@shared";
+import type { archestraApiTypes } from "@archestra/shared";
 import { ArrowLeft, Copy, Search } from "lucide-react";
 import { useEffect, useState } from "react";
 import { FormDialog } from "@/components/form-dialog";

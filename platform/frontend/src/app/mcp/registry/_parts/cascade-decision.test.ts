@@ -13,7 +13,7 @@
  * exactly the kind of bug the contract is designed to prevent.
  */
 
-import { CASCADE_SCENARIOS, CATALOG_SHAPES } from "@shared";
+import { CASCADE_SCENARIOS, CATALOG_SHAPES } from "@archestra/shared";
 import { describe, expect, test } from "vitest";
 import {
   type CascadeSnapshot,

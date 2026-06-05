@@ -5,7 +5,7 @@ import {
   SLACK_REQUIRED_BOT_SCOPES,
   SLACK_SLASH_COMMANDS,
   TimeInMs,
-} from "@shared";
+} from "@archestra/shared";
 import { SocketModeClient } from "@slack/socket-mode";
 import { type Button, type ColorScheme, WebClient } from "@slack/web-api";
 import {

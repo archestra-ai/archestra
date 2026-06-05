@@ -1,4 +1,4 @@
-import { requiredPagePermissionsMap } from "@shared/access-control";
+import { requiredPagePermissionsMap } from "@archestra/shared/access-control";
 import { usePermissionMap } from "@/lib/auth/auth.query";
 import config from "@/lib/config/config";
 

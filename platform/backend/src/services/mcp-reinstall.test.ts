@@ -34,7 +34,11 @@ vi.mock("@/websocket", () => ({
   broadcastMcpInstallationStatus: vi.fn(),
 }));
 
-import { CASCADE_SCENARIOS, CATALOG_SHAPES, isMetadataOnlyEdit } from "@shared";
+import {
+  CASCADE_SCENARIOS,
+  CATALOG_SHAPES,
+  isMetadataOnlyEdit,
+} from "@archestra/shared";
 import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
 import { InternalMcpCatalogModel, McpServerModel, ToolModel } from "@/models";
 import { beforeEach, describe, expect, test } from "@/test";

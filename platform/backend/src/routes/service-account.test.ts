@@ -1,4 +1,4 @@
-import { ADMIN_ROLE_NAME, ARCHESTRA_TOKEN_PREFIX } from "@shared";
+import { ADMIN_ROLE_NAME, ARCHESTRA_TOKEN_PREFIX } from "@archestra/shared";
 import ConversationModel from "@/models/conversation";
 import ServiceAccountModel from "@/models/service-account";
 import type { FastifyInstanceWithZod } from "@/server";

@@ -2,7 +2,7 @@ import {
   TOOL_CREATE_LLM_PROXY_SHORT_NAME,
   TOOL_EDIT_LLM_PROXY_SHORT_NAME,
   TOOL_GET_LLM_PROXY_SHORT_NAME,
-} from "@shared";
+} from "@archestra/shared";
 import { z } from "zod";
 import {
   AgentScopeSchema,

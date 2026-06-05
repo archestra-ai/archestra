@@ -8,7 +8,7 @@ import {
   type McpLogsErrorMessage,
   type McpLogsMessage,
   type ResourceVisibilityScope,
-} from "@shared";
+} from "@archestra/shared";
 import {
   ArrowDown,
   Check,

@@ -4,7 +4,7 @@ import {
   TOOL_LIST_SKILLS_SHORT_NAME,
   TOOL_READ_SKILL_FILE_SHORT_NAME,
   TOOL_UPDATE_SKILL_SHORT_NAME,
-} from "@shared";
+} from "@archestra/shared";
 import { z } from "zod";
 import {
   getSkillPermissionChecker,

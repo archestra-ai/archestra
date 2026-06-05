@@ -1,5 +1,5 @@
-import type { RouteId } from "@shared";
-import { requiredEndpointPermissionsMap } from "@shared/access-control";
+import type { RouteId } from "@archestra/shared";
+import { requiredEndpointPermissionsMap } from "@archestra/shared/access-control";
 import { type Mock, vi } from "vitest";
 import OrganizationModel from "@/models/organization";
 import type { FastifyInstanceWithZod } from "@/server";

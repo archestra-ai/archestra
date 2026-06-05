@@ -1,4 +1,7 @@
-import { archestraCatalogSdk, type archestraCatalogTypes } from "@shared";
+import {
+  archestraCatalogSdk,
+  type archestraCatalogTypes,
+} from "@archestra/shared";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import type { SelectedCategory } from "@/app/mcp/registry/_parts/CatalogFilters";
 import { handleApiError } from "@/lib/utils";

@@ -1,4 +1,4 @@
-import { archestraApiSdk, type ErrorExtended } from "@shared";
+import { archestraApiSdk, type ErrorExtended } from "@archestra/shared";
 
 import { ServerErrorFallback } from "@/components/error-fallback";
 import {

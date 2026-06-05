@@ -5,7 +5,7 @@ import {
   type ArchestraToolShortName,
   DEFAULT_ARCHESTRA_TOOL_NAMES,
   getArchestraToolShortName,
-} from "@shared";
+} from "@archestra/shared";
 import { getArchestraMcpTools } from "@/archestra-mcp-server";
 import { toolShortNames as knowledgeManagementToolShortNames } from "@/archestra-mcp-server/knowledge-management";
 import { TOOL_PERMISSIONS } from "@/archestra-mcp-server/rbac";

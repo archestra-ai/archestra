@@ -1,5 +1,5 @@
+import { TOOL_RUN_PYTHON_SHORT_NAME } from "@archestra/shared";
 import { trace } from "@opentelemetry/api";
-import { TOOL_RUN_PYTHON_SHORT_NAME } from "@shared";
 import { z } from "zod";
 import { codeRuntimeService } from "@/code-runtime/code-runtime-service";
 import {

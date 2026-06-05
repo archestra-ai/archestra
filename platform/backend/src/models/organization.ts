@@ -1,4 +1,7 @@
-import { DEFAULT_THEME_ID, type OrganizationCustomFont } from "@shared";
+import {
+  DEFAULT_THEME_ID,
+  type OrganizationCustomFont,
+} from "@archestra/shared";
 import { eq } from "drizzle-orm";
 import { CacheKey, cacheManager } from "@/cache-manager";
 import db, { schema } from "@/database";

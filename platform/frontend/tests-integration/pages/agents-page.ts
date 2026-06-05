@@ -1,5 +1,5 @@
+import { E2eTestId } from "@archestra/shared/e2e-test-ids";
 import type { Locator, Page } from "@playwright/test";
-import { E2eTestId } from "@shared/e2e-test-ids";
 
 export class AgentsPage {
   readonly page: Page;

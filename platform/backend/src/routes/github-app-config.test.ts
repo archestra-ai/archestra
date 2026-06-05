@@ -3,8 +3,8 @@ import {
   ADMIN_ROLE_NAME,
   MEMBER_ROLE_NAME,
   type Resource,
-} from "@shared";
-import { requiredEndpointPermissionsMap } from "@shared/access-control";
+} from "@archestra/shared";
+import { requiredEndpointPermissionsMap } from "@archestra/shared/access-control";
 import { userHasPermission } from "@/auth/utils";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import AuditLogModel from "@/models/audit-log";

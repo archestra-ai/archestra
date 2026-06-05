@@ -1,4 +1,7 @@
-import type { ClientWebSocketMessage, ServerWebSocketMessage } from "@shared";
+import type {
+  ClientWebSocketMessage,
+  ServerWebSocketMessage,
+} from "@archestra/shared";
 import config from "@/lib/config/config";
 
 // Combined message type for handlers that receive both directions

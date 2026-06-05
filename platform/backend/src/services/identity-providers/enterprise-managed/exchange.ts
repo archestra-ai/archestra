@@ -1,4 +1,4 @@
-import { isEntraHostname, isOktaHostname } from "@shared";
+import { isEntraHostname, isOktaHostname } from "@archestra/shared";
 import logger from "@/logging";
 import {
   type ExternalIdentityProviderConfig,

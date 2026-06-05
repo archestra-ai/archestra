@@ -1,6 +1,9 @@
 "use client";
 
-import { type archestraApiTypes, isPlaywrightCatalogItem } from "@shared";
+import {
+  type archestraApiTypes,
+  isPlaywrightCatalogItem,
+} from "@archestra/shared";
 import { AlertTriangle } from "lucide-react";
 import {
   lazy,

@@ -979,11 +979,7 @@ class InteractionModel {
           sql`CASE WHEN LENGTH(${schema.interactionsTable.sessionId}) = 36 THEN ${schema.interactionsTable.sessionId}::uuid END = ${schema.conversationsTable.id}`,
         )
         .where(whereClause)
-        .groupBy(
-          sessionGroupExpr,
-          schema.interactionsTable.profileId,
-          schema.agentsTable.name,
-        )
+        .groupBy(sessionGroupExpr)
         .orderBy(desc(max(schema.interactionsTable.createdAt)))
         .limit(pagination.limit)
         .offset(pagination.offset),

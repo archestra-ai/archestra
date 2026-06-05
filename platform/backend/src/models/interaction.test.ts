@@ -1279,6 +1279,78 @@ describe("InteractionModel", () => {
     });
   });
 
+  describe("getSessions aggregation", () => {
+    test("groups a session once when interactions come from multiple profiles", async ({
+      makeAdmin,
+    }) => {
+      const admin = await makeAdmin();
+      const primaryAgent = await AgentModel.create({
+        name: "Primary Agent",
+        teams: [],
+        scope: "org",
+      });
+      const subAgent = await AgentModel.create({
+        name: "Sub Agent",
+        teams: [],
+        scope: "org",
+      });
+
+      await InteractionModel.create({
+        profileId: primaryAgent.id,
+        sessionId: "shared-session",
+        externalAgentId: primaryAgent.id,
+        model: "gpt-4",
+        request: {
+          model: "gpt-4",
+          messages: [{ role: "user", content: "Plan the task" }],
+        },
+        response: {
+          id: "r1",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "gpt-4",
+          choices: [],
+        },
+        type: "openai:chatCompletions",
+      });
+      await InteractionModel.create({
+        profileId: subAgent.id,
+        sessionId: "shared-session",
+        externalAgentId: subAgent.id,
+        model: "gpt-4o",
+        request: {
+          model: "gpt-4o",
+          messages: [{ role: "user", content: "Run the delegated step" }],
+        },
+        response: {
+          id: "r2",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "gpt-4o",
+          choices: [],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      const sessions = await InteractionModel.getSessions(
+        { limit: 100, offset: 0 },
+        admin.id,
+        true,
+        { sessionId: "shared-session" },
+      );
+
+      expect(sessions.data).toHaveLength(1);
+      expect(sessions.pagination.total).toBe(1);
+      expect(sessions.data[0].requestCount).toBe(2);
+      expect(sessions.data[0].models).toEqual(
+        expect.arrayContaining(["gpt-4", "gpt-4o"]),
+      );
+      expect(sessions.data[0].externalAgentIds).toEqual(
+        expect.arrayContaining([primaryAgent.id, subAgent.id]),
+      );
+    });
+  });
+
   describe("getSessions search filtering", () => {
     test("searches by request message content (case insensitive)", async ({
       makeAdmin,

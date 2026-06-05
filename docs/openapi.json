@@ -124792,13 +124792,15 @@
                                   },
                                   "contentSelector": {
                                     "type": "string",
-                                    "minLength": 1
+                                    "minLength": 1,
+                                    "maxLength": 500
                                   },
                                   "excludeSelectors": {
                                     "type": "array",
                                     "items": {
                                       "type": "string",
-                                      "minLength": 1
+                                      "minLength": 1,
+                                      "maxLength": 500
                                     }
                                   },
                                   "maxPages": {
@@ -125991,13 +125993,15 @@
                           },
                           "contentSelector": {
                             "type": "string",
-                            "minLength": 1
+                            "minLength": 1,
+                            "maxLength": 500
                           },
                           "excludeSelectors": {
                             "type": "array",
                             "items": {
                               "type": "string",
-                              "minLength": 1
+                              "minLength": 1,
+                              "maxLength": 500
                             }
                           },
                           "maxPages": {
@@ -126841,13 +126845,15 @@
                             },
                             "contentSelector": {
                               "type": "string",
-                              "minLength": 1
+                              "minLength": 1,
+                              "maxLength": 500
                             },
                             "excludeSelectors": {
                               "type": "array",
                               "items": {
                                 "type": "string",
-                                "minLength": 1
+                                "minLength": 1,
+                                "maxLength": 500
                               }
                             },
                             "maxPages": {
@@ -127991,13 +127997,15 @@
                             },
                             "contentSelector": {
                               "type": "string",
-                              "minLength": 1
+                              "minLength": 1,
+                              "maxLength": 500
                             },
                             "excludeSelectors": {
                               "type": "array",
                               "items": {
                                 "type": "string",
-                                "minLength": 1
+                                "minLength": 1,
+                                "maxLength": 500
                               }
                             },
                             "maxPages": {
@@ -129022,13 +129030,15 @@
                           },
                           "contentSelector": {
                             "type": "string",
-                            "minLength": 1
+                            "minLength": 1,
+                            "maxLength": 500
                           },
                           "excludeSelectors": {
                             "type": "array",
                             "items": {
                               "type": "string",
-                              "minLength": 1
+                              "minLength": 1,
+                              "maxLength": 500
                             }
                           },
                           "maxPages": {
@@ -129873,13 +129883,15 @@
                             },
                             "contentSelector": {
                               "type": "string",
-                              "minLength": 1
+                              "minLength": 1,
+                              "maxLength": 500
                             },
                             "excludeSelectors": {
                               "type": "array",
                               "items": {
                                 "type": "string",
-                                "minLength": 1
+                                "minLength": 1,
+                                "maxLength": 500
                               }
                             },
                             "maxPages": {

@@ -238,8 +238,9 @@ COPY docker/certs/aws-rds-global-bundle.pem /tmp/aws-rds-ca.pem
 COPY docker/certs/gcloud-sql-global.pem /tmp/gcloud-sql-ca.pem
 
 RUN apk --no-cache upgrade && \
-    # Install PostgreSQL 17, pgvector, and supervisord
-    apk add --no-cache postgresql17 postgresql17-contrib postgresql-pgvector su-exec && \
+    # Install PostgreSQL 17, pgvector, supervisord, and git.
+    # git (CLI + http-backend) backs the skill-marketplace smart-HTTP clone endpoint.
+    apk add --no-cache postgresql17 postgresql17-contrib postgresql-pgvector su-exec git && \
     # Combine all CA bundles
     cat /tmp/aws-rds-ca.pem /tmp/gcloud-sql-ca.pem > /etc/ssl/certs/cloud-database-ca-bundle.pem && \
     rm -f /tmp/aws-rds-ca.pem /tmp/gcloud-sql-ca.pem && \

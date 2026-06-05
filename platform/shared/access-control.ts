@@ -26,15 +26,7 @@ export const allAvailableActions: Record<Resource, Action[]> = {
 
   // Agents
   agent: ["read", "create", "update", "delete", "team-admin", "admin"],
-  skill: [
-    "read",
-    "create",
-    "update",
-    "delete",
-    "team-admin",
-    "admin",
-    "execute",
-  ],
+  skill: ["read", "create", "update", "delete", "team-admin", "admin"],
   sandbox: ["execute"],
   agentTrigger: ["read", "create", "update", "delete"],
   scheduledTask: ["read", "create", "update", "delete", "admin"],
@@ -97,7 +89,7 @@ export const allAvailableActions: Record<Resource, Action[]> = {
 export const editorPermissions: Record<Resource, Action[]> = {
   // Agents
   agent: ["read", "create", "update", "delete", "team-admin"],
-  skill: ["read", "create", "update", "delete", "team-admin", "execute"],
+  skill: ["read", "create", "update", "delete", "team-admin"],
   sandbox: ["execute"],
   agentTrigger: ["read", "create", "update", "delete"],
   scheduledTask: ["read", "create", "update", "delete"],
@@ -160,7 +152,7 @@ export const editorPermissions: Record<Resource, Action[]> = {
 export const memberPermissions: Record<Resource, Action[]> = {
   // Agents
   agent: ["read", "create", "update", "delete"],
-  skill: ["read", "create", "update", "delete", "execute"],
+  skill: ["read", "create", "update", "delete"],
   sandbox: ["execute"],
   agentTrigger: [],
   scheduledTask: ["read", "create", "update", "delete"],
@@ -258,7 +250,6 @@ export const permissionDescriptions: Record<string, string> = {
   "skill:team-admin": "Manage team assignments for agent skills",
   "skill:admin":
     "Full administrative control over all agent skills, bypassing team restrictions",
-  "skill:execute": "Execute skill scripts",
   "sandbox:execute":
     "Run commands and upload/download files in code execution sandboxes",
   "agentTrigger:read":

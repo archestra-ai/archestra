@@ -1,5 +1,6 @@
 import type { ArchestraToolShortName, Permission } from "@archestra/shared";
 import { userHasPermission } from "@/auth/utils";
+import logger from "@/logging";
 import { UserModel } from "@/models";
 import { archestraMcpBranding } from "./branding";
 import { errorResult } from "./helpers";
@@ -191,6 +192,16 @@ export async function checkToolPermission(
   );
 
   if (!allowed) {
+    logger.warn(
+      {
+        organizationId: context.organizationId,
+        userId: context.userId,
+        toolName,
+        resource: perm.resource,
+        action: perm.action,
+      },
+      "[ArchestraMCP] rbac denied tool execution",
+    );
     return errorResult(
       `You do not have permission to perform this action (requires ${perm.resource}:${perm.action}).`,
     );

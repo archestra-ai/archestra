@@ -206,7 +206,7 @@ export const OPENROUTER_LATEST_ALIAS_PREFIX = "~";
  * first listed id present in the account is the one marked best.
  */
 export const MODEL_MARKER_PATTERNS: Record<SupportedProvider, string[]> = {
-  anthropic: ["opus-4-8", "opus-4-7"],
+  anthropic: ["opus-4-8", "opus-4-7", "opus", "sonnet"],
   openai: [
     "gpt-5.5-pro",
     "gpt-5.5",
@@ -216,13 +216,23 @@ export const MODEL_MARKER_PATTERNS: Record<SupportedProvider, string[]> = {
     "gpt-4.1",
     "gpt-4o",
   ],
-  gemini: ["gemini-3.1-pro-preview", "gemini-2.5-pro"],
+  gemini: ["gemini-3.1-pro-preview", "gemini-2.5-pro", "flash"],
   cerebras: ["zai-glm-4.7"],
-  cohere: ["command-a-plus-05-2026"],
-  mistral: ["mistral-medium-2604"],
-  perplexity: ["sonar-deep-research", "sonar-reasoning-pro", "sonar-pro"],
-  groq: ["openai/gpt-oss-120b"],
-  xai: ["grok-4.3"],
+  cohere: ["command-a-plus", "command-a", "command-r-plus", "command-r"],
+  mistral: [
+    "mistral-medium-2604",
+    "mistral-large",
+    "mistral-medium",
+    "mistral-small",
+  ],
+  perplexity: [
+    "sonar-deep-research",
+    "sonar-reasoning-pro",
+    "sonar-pro",
+    "sonar",
+  ],
+  groq: ["openai/gpt-oss-120b", "gpt-oss", "llama-4", "llama-3.3"],
+  xai: ["grok-4.3", "grok-4", "grok-3"],
   openrouter: [
     "anthropic/claude-opus-4.8",
     "anthropic/claude-opus-4.7",
@@ -234,11 +244,25 @@ export const MODEL_MARKER_PATTERNS: Record<SupportedProvider, string[]> = {
   ],
   ollama: ["gpt-oss:120b", "llama4:maverick", "llama4:scout", "qwen3:235b"],
   vllm: ["gpt-oss-120b", "llama-4-maverick", "llama-4-scout", "qwen3-235b"],
-  zhipuai: ["glm-5.1"],
-  deepseek: ["deepseek-v4-pro"],
+  zhipuai: ["glm-5.1", "glm-5", "glm-4.7", "glm-4"],
+  deepseek: ["deepseek-v4-pro", "deepseek-v4", "deepseek-v3", "deepseek-chat"],
   minimax: ["minimax-m3", "minimax-m2.7"],
-  azure: ["gpt-5.5"],
-  bedrock: ["anthropic.claude-opus-4-8", "anthropic.claude-opus-4-7"],
+  azure: [
+    "gpt-5.5-pro",
+    "gpt-5.5",
+    "gpt-5.4",
+    "gpt-5.3",
+    "gpt-5",
+    "gpt-4.1",
+    "gpt-4o",
+  ],
+  bedrock: [
+    "anthropic.claude-opus-4-8",
+    "anthropic.claude-opus-4-7",
+    "claude-opus",
+    "claude-sonnet",
+    "amazon.nova-pro",
+  ],
 };
 
 /**

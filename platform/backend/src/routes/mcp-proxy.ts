@@ -13,6 +13,7 @@ import { type Agent, ApiError, UuidIdSchema } from "@/types";
 import {
   createAgentServer,
   createStatelessTransport,
+  ensureRequestSocketDestroySoon,
 } from "./mcp-gateway.utils";
 
 /**
@@ -182,6 +183,7 @@ const mcpProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         reply.hijack();
         hijacked = true;
 
+        ensureRequestSocketDestroySoon(request.raw);
         await transport.handleRequest(
           request.raw as IncomingMessage,
           reply.raw as ServerResponse,

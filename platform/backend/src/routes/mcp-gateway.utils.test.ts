@@ -42,6 +42,7 @@ vi.mock("@/services/jwks-validator", () => ({
 
 const {
   createAgentServer,
+  ensureRequestSocketDestroySoon,
   validateMCPGatewayToken,
   validateOAuthToken,
   validateExternalIdpToken,
@@ -49,6 +50,57 @@ const {
 } = await import("./mcp-gateway.utils");
 
 type TestListToolsHandler = (request: unknown) => Promise<ListToolsResult>;
+
+describe("ensureRequestSocketDestroySoon", () => {
+  test("adds destroySoon to injected request sockets", () => {
+    const destroy = vi.fn();
+    const request = {
+      socket: {
+        destroy,
+      },
+    };
+
+    ensureRequestSocketDestroySoon(request as never);
+
+    const socket = request.socket as typeof request.socket & {
+      destroySoon: () => void;
+    };
+    expect(socket.destroySoon).toBeTypeOf("function");
+    socket.destroySoon();
+    expect(destroy).toHaveBeenCalledOnce();
+  });
+
+  test("preserves sockets that already have destroySoon", () => {
+    const destroySoon = vi.fn();
+    const request = {
+      socket: {
+        destroySoon,
+      },
+    };
+
+    ensureRequestSocketDestroySoon(request as never);
+
+    expect(request.socket.destroySoon).toBe(destroySoon);
+  });
+
+  test("falls back to end when destroy is unavailable", () => {
+    const end = vi.fn();
+    const request = {
+      socket: {
+        end,
+      },
+    };
+
+    ensureRequestSocketDestroySoon(request as never);
+
+    const socket = request.socket as typeof request.socket & {
+      destroySoon: () => void;
+    };
+    expect(socket.destroySoon).toBeTypeOf("function");
+    socket.destroySoon();
+    expect(end).toHaveBeenCalledOnce();
+  });
+});
 
 describe("validateMCPGatewayToken", () => {
   describe("invalid token scenarios", () => {

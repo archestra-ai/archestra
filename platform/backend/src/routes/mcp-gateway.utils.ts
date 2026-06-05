@@ -1,6 +1,14 @@
 import { createHash } from "node:crypto";
 import type { IncomingMessage } from "node:http";
 import {
+  authorizeSortedTool,
+  buildSortingHatMeta,
+  flooTravel,
+  type PatronusCastResult,
+  type SortingHatSortResult,
+  sortTool,
+} from "@archestra/sorting-hat-mcp";
+import {
   ARCHESTRA_MCP_CATALOG_ID,
   hasArchestraTokenPrefix,
   isAgentTool,
@@ -120,6 +128,21 @@ type ResolvedArchestraToken =
   | {
       type: "user";
       token: SelectUserToken;
+    };
+
+type SortingHatGatewayAuthorization =
+  | {
+      allowed: true;
+      sorting: SortingHatSortResult;
+      patronus?: PatronusCastResult;
+      monologue: string[];
+    }
+  | {
+      allowed: false;
+      sorting: SortingHatSortResult;
+      patronus: PatronusCastResult | null;
+      monologue: string[];
+      message: string;
     };
 
 const TOKEN_AUTH_CACHE_TTL_MS = 30_000;
@@ -342,6 +365,23 @@ export async function createAgentServer(
           };
         }
 
+        const sortingHatAuthorization = await evaluateSortingHatAuthorization({
+          agentId: agent.id,
+          toolName: name,
+          tokenAuth,
+        });
+        if (!sortingHatAuthorization.allowed) {
+          return {
+            content: [{ type: "text", text: sortingHatAuthorization.message }],
+            isError: true,
+            _meta: buildSortingHatMeta({
+              sorting: sortingHatAuthorization.sorting,
+              monologue: sortingHatAuthorization.monologue,
+              patronus: sortingHatAuthorization.patronus,
+            }),
+          };
+        }
+
         if (isArchestraTool || isAgentDelegationTool) {
           logger.info(
             {
@@ -381,6 +421,15 @@ export async function createAgentServer(
               return result;
             },
           });
+          const routedCall = flooTravel({
+            fromServer: "sorting-hat-mcp",
+            toServer: mcpServerName,
+            payload: { name, arguments: args || {} },
+          });
+          const responseWithSortingMeta = attachSortingHatMeta(response, {
+            authorization: sortingHatAuthorization,
+            floo: routedCall,
+          });
 
           const durationSeconds = (Date.now() - startTime) / 1000;
           metrics.mcp.reportMcpToolCall({
@@ -393,8 +442,8 @@ export async function createAgentServer(
             isError: false,
             agentLabels: agent.labels,
             requestSizeBytes: args ? JSON.stringify(args).length : undefined,
-            responseSizeBytes: response.content
-              ? JSON.stringify(response.content).length
+            responseSizeBytes: responseWithSortingMeta.content
+              ? JSON.stringify(responseWithSortingMeta.content).length
               : undefined,
           });
 
@@ -419,7 +468,7 @@ export async function createAgentServer(
                 name,
                 arguments: args || {},
               },
-              toolResult: response,
+              toolResult: responseWithSortingMeta,
               userId: tokenAuth?.userId ?? null,
               authMethod: deriveAuthMethod(tokenAuth) ?? null,
             });
@@ -430,7 +479,7 @@ export async function createAgentServer(
             );
           }
 
-          return response;
+          return responseWithSortingMeta;
         }
 
         logger.info(
@@ -452,6 +501,11 @@ export async function createAgentServer(
           name,
           arguments: args || {},
         };
+        const routedCall = flooTravel({
+          fromServer: "sorting-hat-mcp",
+          toServer: mcpServerName,
+          payload: toolCall,
+        });
 
         // Execute the tool call via McpClient with tracing
         const result = await startActiveMcpSpan({
@@ -464,13 +518,17 @@ export async function createAgentServer(
           user: mcpUser,
           callback: async (span) => {
             const r = await mcpClient.executeToolCall(
-              toolCall,
+              routedCall.payload,
               agentId,
               tokenAuth,
             );
             span.setAttribute(ATTR_MCP_IS_ERROR_RESULT, r.isError ?? false);
             return r;
           },
+        });
+        const resultWithSortingMeta = attachSortingHatMeta(result, {
+          authorization: sortingHatAuthorization,
+          floo: routedCall,
         });
 
         const durationSeconds = (Date.now() - startTime) / 1000;
@@ -481,24 +539,26 @@ export async function createAgentServer(
           mcpServerName,
           toolName: name,
           durationSeconds,
-          isError: result.isError ?? false,
+          isError: resultWithSortingMeta.isError ?? false,
           agentLabels: agent.labels,
           requestSizeBytes: args ? JSON.stringify(args).length : undefined,
-          responseSizeBytes: result.content
-            ? JSON.stringify(result.content).length
+          responseSizeBytes: resultWithSortingMeta.content
+            ? JSON.stringify(resultWithSortingMeta.content).length
             : undefined,
         });
 
-        const contentLength = estimateToolResultContentLength(result.content);
+        const contentLength = estimateToolResultContentLength(
+          resultWithSortingMeta.content,
+        );
         logger.info(
           {
             agentId,
             toolName: name,
             resultContentLength: contentLength.length,
             resultContentLengthEstimated: contentLength.isEstimated,
-            isError: result.isError,
+            isError: resultWithSortingMeta.isError,
           },
-          result.isError
+          resultWithSortingMeta.isError
             ? "MCP gateway tool call completed with error result"
             : "MCP gateway tool call completed",
         );
@@ -507,12 +567,17 @@ export async function createAgentServer(
         // When isError is true, we still return the content so the LLM can see
         // the error message and potentially try a different approach
         return {
-          content: Array.isArray(result.content)
-            ? result.content
-            : [{ type: "text", text: JSON.stringify(result.content) }],
-          isError: result.isError,
-          _meta: result._meta,
-          structuredContent: result.structuredContent,
+          content: Array.isArray(resultWithSortingMeta.content)
+            ? resultWithSortingMeta.content
+            : [
+                {
+                  type: "text",
+                  text: JSON.stringify(resultWithSortingMeta.content),
+                },
+              ],
+          isError: resultWithSortingMeta.isError,
+          _meta: resultWithSortingMeta._meta,
+          structuredContent: resultWithSortingMeta.structuredContent,
         };
       } catch (error) {
         const durationSeconds = (Date.now() - startTime) / 1000;
@@ -562,6 +627,53 @@ export function createStatelessTransport(
 
   logger.info({ agentId }, "Stateless transport instance created");
   return transport;
+}
+
+export async function evaluateSortingHatAuthorization(params: {
+  agentId: string;
+  toolName: string;
+  tokenAuth?: TokenAuthContext;
+}): Promise<SortingHatGatewayAuthorization> {
+  const tool = await ToolModel.findByNameForAgent(
+    params.toolName,
+    params.agentId,
+  );
+  const sorting = sortTool({
+    toolName: params.toolName,
+    toolDescription: tool?.description,
+    pleaseNotSlytherin: params.tokenAuth?.pleaseNotSlytherin === true,
+  });
+
+  return authorizeSortedTool({
+    sorting,
+    userId: params.tokenAuth?.userId,
+    charm: "expecto_patronum",
+  });
+}
+
+function attachSortingHatMeta<
+  TResult extends {
+    _meta?: Record<string, unknown>;
+  },
+>(
+  result: TResult,
+  params: {
+    authorization: Extract<SortingHatGatewayAuthorization, { allowed: true }>;
+    floo: ReturnType<typeof flooTravel>;
+  },
+): TResult {
+  return {
+    ...result,
+    _meta: {
+      ...(result._meta ?? {}),
+      ...buildSortingHatMeta({
+        sorting: params.authorization.sorting,
+        monologue: params.authorization.monologue,
+        patronus: params.authorization.patronus,
+        floo: params.floo,
+      }),
+    },
+  };
 }
 
 /**

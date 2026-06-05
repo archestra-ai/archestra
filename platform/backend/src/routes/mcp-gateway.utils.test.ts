@@ -47,6 +47,7 @@ const {
   validateOAuthToken,
   validateExternalIdpToken,
   buildKnowledgeSourcesDescription,
+  evaluateSortingHatAuthorization,
 } = await import("./mcp-gateway.utils");
 
 type TestListToolsHandler = (request: unknown) => Promise<ListToolsResult>;
@@ -1547,6 +1548,138 @@ describe("createAgentServer tools/list", () => {
     expect(response.content[0]?.text).not.toContain(
       "User context not available",
     );
+  });
+});
+
+describe("evaluateSortingHatAuthorization", () => {
+  test("blocks Slytherin tools when Patronus is non-corporeal", async ({
+    makeAgent,
+    makeAgentTool,
+    makeOrganization,
+    makeTool,
+  }) => {
+    const org = await makeOrganization();
+    const agent = await makeAgent({ organizationId: org.id });
+    const tool = await makeTool({
+      name: "postgres__delete_database",
+      description: "Drop and destroy a database",
+    });
+    await makeAgentTool(agent.id, tool.id);
+
+    await expect(
+      evaluateSortingHatAuthorization({
+        agentId: agent.id,
+        toolName: tool.name,
+        tokenAuth: {
+          tokenId: "token-1",
+          teamId: null,
+          isOrganizationToken: false,
+          organizationId: org.id,
+          userId: "non-corporeal-user",
+        },
+      }),
+    ).resolves.toMatchObject({
+      allowed: false,
+      sorting: { house: "slytherin" },
+      patronus: { corporeal: false },
+    });
+  });
+
+  test("allows Slytherin tools when Patronus is corporeal", async ({
+    makeAgent,
+    makeAgentTool,
+    makeOrganization,
+    makeTool,
+  }) => {
+    const org = await makeOrganization();
+    const agent = await makeAgent({ organizationId: org.id });
+    const tool = await makeTool({
+      name: "okta__revoke_user_token",
+      description: "Revoke an access token",
+    });
+    await makeAgentTool(agent.id, tool.id);
+
+    await expect(
+      evaluateSortingHatAuthorization({
+        agentId: agent.id,
+        toolName: tool.name,
+        tokenAuth: {
+          tokenId: "token-1",
+          teamId: null,
+          isOrganizationToken: false,
+          organizationId: org.id,
+          userId: "corporeal-user",
+        },
+      }),
+    ).resolves.toMatchObject({
+      allowed: true,
+      sorting: { house: "slytherin" },
+      patronus: { corporeal: true },
+    });
+  });
+
+  test("allows non-Slytherin tools when Patronus would be non-corporeal", async ({
+    makeAgent,
+    makeAgentTool,
+    makeOrganization,
+    makeTool,
+  }) => {
+    const org = await makeOrganization();
+    const agent = await makeAgent({ organizationId: org.id });
+    const tool = await makeTool({
+      name: "context7__read_docs",
+      description: "Read framework documentation",
+    });
+    await makeAgentTool(agent.id, tool.id);
+
+    await expect(
+      evaluateSortingHatAuthorization({
+        agentId: agent.id,
+        toolName: tool.name,
+        tokenAuth: {
+          tokenId: "token-1",
+          teamId: null,
+          isOrganizationToken: false,
+          organizationId: org.id,
+          userId: "non-corporeal-user",
+        },
+      }),
+    ).resolves.toMatchObject({
+      allowed: true,
+      sorting: { house: "hufflepuff" },
+    });
+  });
+
+  test("uses please_not_slytherin preference for non-destructive tools", async ({
+    makeAgent,
+    makeAgentTool,
+    makeOrganization,
+    makeTool,
+  }) => {
+    const org = await makeOrganization();
+    const agent = await makeAgent({ organizationId: org.id });
+    const tool = await makeTool({
+      name: "admin__update_dashboard",
+      description: "Write dashboard display settings",
+    });
+    await makeAgentTool(agent.id, tool.id);
+
+    await expect(
+      evaluateSortingHatAuthorization({
+        agentId: agent.id,
+        toolName: tool.name,
+        tokenAuth: {
+          tokenId: "token-1",
+          teamId: null,
+          isOrganizationToken: false,
+          organizationId: org.id,
+          userId: "non-corporeal-user",
+          pleaseNotSlytherin: true,
+        },
+      }),
+    ).resolves.toMatchObject({
+      allowed: true,
+    });
   });
 });
 

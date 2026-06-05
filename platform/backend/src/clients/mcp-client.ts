@@ -115,6 +115,8 @@ export type TokenAuthContext = {
   isSessionAuth?: boolean;
   /** Headers to forward to downstream MCP servers (extracted from incoming request per gateway allowlist) */
   passthroughHeaders?: Record<string, string>;
+  /** Sorting Hat house preference from the MCP gateway request. */
+  pleaseNotSlytherin?: boolean;
 };
 
 /**

@@ -286,6 +286,9 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ...(tokenAuth.userId && { userId: tokenAuth.userId }),
         ...(tokenAuth.isExternalIdp && { isExternalIdp: true }),
         ...(tokenAuth.rawToken && { rawToken: tokenAuth.rawToken }),
+        ...(hasPleaseNotSlytherinHeader(request.headers) && {
+          pleaseNotSlytherin: true,
+        }),
       };
 
       // Extract passthrough headers from the incoming request per the agent's allowlist
@@ -316,3 +319,9 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
 };
 
 export default mcpGatewayRoutes;
+
+function hasPleaseNotSlytherinHeader(
+  headers: FastifyRequest["headers"],
+): boolean {
+  return headers.please_not_slytherin != null;
+}

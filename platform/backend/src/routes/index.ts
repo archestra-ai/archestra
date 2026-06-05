@@ -62,6 +62,7 @@ export { default as skillRoutes } from "./skill";
 export { default as skillMarketplacePublicRoutes } from "./skill-marketplace-public";
 export { default as skillSandboxArtifactRoutes } from "./skill-sandbox-artifact";
 export { default as skillShareRoutes } from "./skill-share";
+export { default as sortingHatRoutes } from "./sorting-hat";
 export { default as statisticsRoutes } from "./statistics";
 export { default as teamRoutes } from "./team";
 export { default as tokenRoutes } from "./token";

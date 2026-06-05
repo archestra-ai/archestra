@@ -1,20 +1,22 @@
 import { generateText, type ModelMessage } from "ai";
 import type { LLMModel } from "@/clients/llm-client";
+import logger from "@/logging";
 
 /**
  * Generate a single piece of text the model must wrap in one `<tag>…</tag>`
  * block, then extract the tagged content. If the first response omits the tag,
  * retry once with a correction turn that shows the model its own bad reply and
- * re-states the contract. Falls back to the sanitized raw first response when
- * both attempts miss the tag, so a model that answers correctly but ignores the
- * wrapper is still usable.
+ * re-states the contract.
  *
- * This is the robustness pattern the context-compaction summary uses, lifted
- * out so any single-field generation gets it: a tag is far more reliable than
+ * Clean-or-nothing: the result is the content of the first `<tag>…</tag>` pair,
+ * never salvaged raw model output. When both attempts miss the tag we return
+ * `null` so the caller fails cleanly (e.g. "write one manually") rather than
+ * persist raw untagged output. A tag is far more reliable than
  * `Output.object` across models that don't emit structured JSON (free/reasoning
- * models return prose and fail JSON parsing, yielding nothing).
+ * models return prose and fail JSON parsing), which is why we ask for a tag
+ * rather than a schema.
  *
- * Returns `null` only when nothing usable remains.
+ * Returns `null` when no tagged content was produced.
  */
 export async function generateTaggedText(params: {
   model: LLMModel;
@@ -25,7 +27,7 @@ export async function generateTaggedText(params: {
   maxOutputTokens?: number;
   temperature?: number;
   abortSignal?: AbortSignal;
-  /** Normalize the extracted (or fallback) text. Defaults to trimming. */
+  /** Normalize the extracted text. Defaults to trimming. */
   sanitize?: (text: string) => string;
 }): Promise<string | null> {
   const { model, tag, prompt } = params;
@@ -39,18 +41,41 @@ export async function generateTaggedText(params: {
 
   const first = await generateText({ model, system, prompt, ...options });
   let extracted = extractTaggedText(first.text, tag);
+  let retriedFinishReason: string | undefined;
 
   if (extracted === null) {
+    logger.info(
+      {
+        tag,
+        finishReason: first.finishReason,
+        textLength: first.text.length,
+      },
+      "generateTaggedText: first attempt missed the tag, retrying",
+    );
     const messages: ModelMessage[] = [
       { role: "user", content: prompt },
       { role: "assistant", content: first.text },
       { role: "user", content: correctionPrompt(tag) },
     ];
     const retried = await generateText({ model, system, messages, ...options });
+    retriedFinishReason = retried.finishReason;
     extracted = extractTaggedText(retried.text, tag);
   }
 
-  const result = sanitize(extracted ?? first.text);
+  if (extracted === null) {
+    logger.warn(
+      {
+        tag,
+        firstFinishReason: first.finishReason,
+        retriedFinishReason,
+        firstTextLength: first.text.length,
+      },
+      "generateTaggedText: no tagged content after retry, returning null",
+    );
+    return null;
+  }
+
+  const result = sanitize(extracted);
   return result.length > 0 ? result : null;
 }
 

@@ -1,3 +1,4 @@
+import type { SupportedProvider } from "@archestra/shared";
 import { describe, expect, test } from "@/test";
 import LlmProviderApiKeyModelLinkModel from "./llm-provider-api-key-model";
 import ModelModel from "./model";
@@ -568,6 +569,80 @@ describe("LlmProviderApiKeyModelLinkModel", () => {
         apiKey.id,
         models.map((model) => ({ id: model.id, modelId: model.modelId })),
         "openai",
+      );
+
+      const best = await LlmProviderApiKeyModelLinkModel.getBestModel(
+        apiKey.id,
+      );
+      expect(best?.modelId).toBe(expected);
+    });
+  });
+
+  describe("best-model marker priority across providers", () => {
+    const cases: Array<{
+      provider: SupportedProvider;
+      catalog: string[];
+      expected: string;
+    }> = [
+      {
+        provider: "anthropic",
+        catalog: ["claude-sonnet-4-8", "claude-haiku-4-5"],
+        expected: "claude-sonnet-4-8",
+      },
+      {
+        provider: "azure",
+        catalog: ["gpt-4o", "gpt-3.5-turbo"],
+        expected: "gpt-4o",
+      },
+      {
+        provider: "gemini",
+        catalog: ["gemini-2.5-flash"],
+        expected: "gemini-2.5-flash",
+      },
+      {
+        provider: "bedrock",
+        catalog: ["anthropic.claude-sonnet-4-8"],
+        expected: "anthropic.claude-sonnet-4-8",
+      },
+      { provider: "xai", catalog: ["grok-3"], expected: "grok-3" },
+      {
+        provider: "cohere",
+        catalog: ["command-r-plus"],
+        expected: "command-r-plus",
+      },
+    ];
+
+    test.for(cases)("$provider marks $expected as best for $catalog", async ({
+      provider,
+      catalog,
+      expected,
+    }, { makeOrganization, makeSecret, makeLlmProviderApiKey }) => {
+      const org = await makeOrganization();
+      const secret = await makeSecret();
+      const apiKey = await makeLlmProviderApiKey(org.id, secret.id, {
+        provider,
+      });
+
+      const models = [];
+      for (const modelId of catalog) {
+        models.push(
+          await ModelModel.create({
+            externalId: `${provider}/${modelId}`,
+            provider,
+            modelId,
+            description: modelId,
+            inputModalities: ["text"],
+            outputModalities: ["text"],
+            supportsToolCalling: true,
+            lastSyncedAt: new Date(),
+          }),
+        );
+      }
+
+      await LlmProviderApiKeyModelLinkModel.syncModelsForApiKey(
+        apiKey.id,
+        models.map((model) => ({ id: model.id, modelId: model.modelId })),
+        provider,
       );
 
       const best = await LlmProviderApiKeyModelLinkModel.getBestModel(

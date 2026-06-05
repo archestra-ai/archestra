@@ -11,8 +11,6 @@ import { getPermissionsForUserContext } from "./utils";
 export interface SkillPermissionChecker {
   /** Holds `skill:read` — may view and use skills within their scope. */
   canRead: boolean;
-  /** Holds `skill:execute` — may run skill scripts in a sandboxed runtime. */
-  canExecute: boolean;
   /** Holds `skill:admin` — bypasses scope restrictions. */
   isAdmin: boolean;
   /** Holds `skill:team-admin` — may manage team-scoped skills in their teams. */
@@ -36,7 +34,6 @@ export async function getSkillPermissionChecker(params: {
   const skill = permissions.skill ?? [];
   return {
     canRead: skill.includes("read"),
-    canExecute: skill.includes("execute"),
     isAdmin: skill.includes("admin"),
     isTeamAdmin: skill.includes("team-admin"),
   };

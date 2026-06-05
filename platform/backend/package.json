@@ -53,7 +53,7 @@
     "@aws-sdk/client-s3": "^3.1038.0",
     "@aws-sdk/credential-providers": "^3.1003.0",
     "@azure/identity": "^4.13.0",
-    "@better-auth/api-key": "^1.6.5",
+    "@better-auth/api-key": "^1.6.11",
     "@better-auth/core": "catalog:",
     "@better-auth/oauth-provider": "catalog:",
     "@better-auth/sso": "catalog:",

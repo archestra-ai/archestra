@@ -357,7 +357,7 @@ export type SalesforceCheckpoint = z.infer<typeof SalesforceCheckpointSchema>;
 
 export const WebCrawlerConfigSchema = z.object({
   type: WEB_CRAWLER,
-  startUrl: connectorUrlSchema,
+  startUrl: z.string().transform(ensureProtocol),
   includePathPrefixes: z.array(z.string().min(1)).optional(),
   excludePathPatterns: z.array(z.string().min(1)).optional(),
   contentSelector: z.string().min(1).optional(),

@@ -2,8 +2,8 @@ import { createHash } from "node:crypto";
 import {
   CheerioCrawler,
   type CheerioCrawlingContext,
+  Configuration,
 } from "@crawlee/cheerio";
-import type { AnyNode, Cheerio, CheerioAPI } from "cheerio";
 import type {
   ConnectorCredentials,
   ConnectorDocument,
@@ -35,6 +35,8 @@ type ExtractedPage = {
   content: string;
   canonicalUrl: string;
 };
+type CrawlerCheerioApi = CheerioCrawlingContext["$"];
+type CrawlerCheerioSelection = ReturnType<CrawlerCheerioApi>;
 
 function parseWebCrawlerConfig(
   config: Record<string, unknown>,
@@ -136,7 +138,9 @@ export class WebCrawlerConnector extends BaseConnector {
   private createCrawler(params: {
     config: WebCrawlerConfig;
     onDocument: (document: ConnectorDocument) => void;
-    onSkipped: (item: NonNullable<ConnectorSyncBatch["skipped"]>[number]) => void;
+    onSkipped: (
+      item: NonNullable<ConnectorSyncBatch["skipped"]>[number],
+    ) => void;
   }): CheerioCrawler {
     const startUrl = normalizeCrawlUrl(params.config.startUrl);
     const allowedPathPrefixes = buildAllowedPathPrefixes(
@@ -206,9 +210,7 @@ export class WebCrawlerConnector extends BaseConnector {
           });
         },
       },
-      {
-        persistStorage: false,
-      },
+      new Configuration({ persistStorage: false }),
     );
   }
 }
@@ -225,11 +227,25 @@ function validateParsedConfig(config: WebCrawlerConfig): string | null {
     return error instanceof Error ? error.message : String(error);
   }
 
+  const normalizedStartUrl = normalizeCrawlUrl(config.startUrl);
+  if (
+    !isAllowedUrl({
+      url: normalizedStartUrl,
+      startUrl: normalizedStartUrl,
+      allowedPathPrefixes: buildAllowedPathPrefixes(config, normalizedStartUrl),
+      excludePathPatterns: compileExcludePathPatterns(
+        config.excludePathPatterns,
+      ),
+    })
+  ) {
+    return "Start URL is excluded by the configured crawl scope";
+  }
+
   return null;
 }
 
 function extractPage(params: {
-  $: CheerioAPI;
+  $: CrawlerCheerioApi;
   requestUrl: string;
   config: WebCrawlerConfig;
 }): ExtractedPage {
@@ -265,7 +281,8 @@ async function enqueueAllowedLinks(params: {
   allowedPathPrefixes: string[];
   excludePathPatterns: RegExp[];
 }): Promise<void> {
-  const urls = params.context.$("a[href]")
+  const urls = params.context
+    .$("a[href]")
     .map((_idx, el) => params.context.$(el).attr("href"))
     .get()
     .map((href) => normalizeDiscoveredUrl(href, params.context.request.url))
@@ -286,9 +303,9 @@ async function enqueueAllowedLinks(params: {
 }
 
 function selectContentRoot(
-  $: CheerioAPI,
+  $: CrawlerCheerioApi,
   contentSelector: string | undefined,
-): Cheerio<AnyNode> {
+): CrawlerCheerioSelection {
   if (contentSelector) {
     const selected = $(contentSelector).first();
     if (selected.length > 0) return selected;
@@ -308,7 +325,9 @@ function buildDocument(params: {
   depth: number;
 }): ConnectorDocument {
   return {
-    id: createHash("sha256").update(params.extracted.canonicalUrl).digest("hex"),
+    id: createHash("sha256")
+      .update(params.extracted.canonicalUrl)
+      .digest("hex"),
     title: params.extracted.title,
     content: params.extracted.content,
     sourceUrl: params.extracted.canonicalUrl,
@@ -367,7 +386,7 @@ function isAllowedUrl(params: {
   if (url.origin !== startUrl.origin) return false;
   if (
     !params.allowedPathPrefixes.some((prefix) =>
-      url.pathname.startsWith(prefix),
+      pathMatchesPrefix(url.pathname, prefix),
     )
   ) {
     return false;
@@ -375,6 +394,14 @@ function isAllowedUrl(params: {
 
   return !params.excludePathPatterns.some((pattern) =>
     pattern.test(`${url.pathname}${url.search}`),
+  );
+}
+
+function pathMatchesPrefix(pathname: string, prefix: string): boolean {
+  if (prefix === "/") return true;
+  const normalizedPrefix = prefix.endsWith("/") ? prefix.slice(0, -1) : prefix;
+  return (
+    pathname === normalizedPrefix || pathname.startsWith(`${normalizedPrefix}/`)
   );
 }
 

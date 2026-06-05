@@ -33648,10 +33648,22 @@ export type GetConnectorsResponses = {
                 collectionIds?: Array<string>;
                 batchSize?: number;
             } | {
-                type: 'salesforce' | 'web_crawler';
+                type: 'salesforce';
                 loginUrl: unknown;
                 objects?: Array<string>;
                 advancedObjectConfigJson?: string;
+            } | {
+                type: 'web_crawler';
+                startUrl: string;
+                includePathPrefixes?: Array<string>;
+                excludePathPatterns?: Array<string>;
+                contentSelector?: string;
+                excludeSelectors?: Array<string>;
+                maxPages?: number;
+                maxDepth?: number;
+                batchSize?: number;
+                requestDelayMs?: number;
+                userAgent?: string;
             };
             secretId: string | null;
             schedule: string;
@@ -33803,11 +33815,23 @@ export type CreateConnectorData = {
             collectionIds?: Array<string>;
             batchSize?: number;
         } | {
-            type: 'salesforce' | 'web_crawler';
+            type: 'salesforce';
             loginUrl?: string;
             objects?: Array<string>;
             advancedObjectConfigJson?: string;
-        };
+        } | {
+                type: 'web_crawler';
+                startUrl: string;
+                includePathPrefixes?: Array<string>;
+                excludePathPatterns?: Array<string>;
+                contentSelector?: string;
+                excludeSelectors?: Array<string>;
+                maxPages?: number;
+                maxDepth?: number;
+                batchSize?: number;
+                requestDelayMs?: number;
+                userAgent?: string;
+            };
         credentials?: {
             email?: string;
             apiToken: string;
@@ -34016,11 +34040,23 @@ export type CreateConnectorResponses = {
             collectionIds?: Array<string>;
             batchSize?: number;
         } | {
-            type: 'salesforce' | 'web_crawler';
+            type: 'salesforce';
             loginUrl: unknown;
             objects?: Array<string>;
             advancedObjectConfigJson?: string;
-        };
+        } | {
+                type: 'web_crawler';
+                startUrl: string;
+                includePathPrefixes?: Array<string>;
+                excludePathPatterns?: Array<string>;
+                contentSelector?: string;
+                excludeSelectors?: Array<string>;
+                maxPages?: number;
+                maxDepth?: number;
+                batchSize?: number;
+                requestDelayMs?: number;
+                userAgent?: string;
+            };
         secretId: string | null;
         schedule: string;
         enabled: boolean;
@@ -34321,11 +34357,23 @@ export type GetConnectorResponses = {
             collectionIds?: Array<string>;
             batchSize?: number;
         } | {
-            type: 'salesforce' | 'web_crawler';
+            type: 'salesforce';
             loginUrl: unknown;
             objects?: Array<string>;
             advancedObjectConfigJson?: string;
-        };
+        } | {
+                type: 'web_crawler';
+                startUrl: string;
+                includePathPrefixes?: Array<string>;
+                excludePathPatterns?: Array<string>;
+                contentSelector?: string;
+                excludeSelectors?: Array<string>;
+                maxPages?: number;
+                maxDepth?: number;
+                batchSize?: number;
+                requestDelayMs?: number;
+                userAgent?: string;
+            };
         secretId: string | null;
         schedule: string;
         enabled: boolean;
@@ -34462,11 +34510,23 @@ export type UpdateConnectorData = {
             collectionIds?: Array<string>;
             batchSize?: number;
         } | {
-            type: 'salesforce' | 'web_crawler';
+            type: 'salesforce';
             loginUrl?: string;
             objects?: Array<string>;
             advancedObjectConfigJson?: string;
-        };
+        } | {
+                type: 'web_crawler';
+                startUrl: string;
+                includePathPrefixes?: Array<string>;
+                excludePathPatterns?: Array<string>;
+                contentSelector?: string;
+                excludeSelectors?: Array<string>;
+                maxPages?: number;
+                maxDepth?: number;
+                batchSize?: number;
+                requestDelayMs?: number;
+                userAgent?: string;
+            };
         credentials?: {
             email?: string;
             apiToken: string;
@@ -34676,11 +34736,23 @@ export type UpdateConnectorResponses = {
             collectionIds?: Array<string>;
             batchSize?: number;
         } | {
-            type: 'salesforce' | 'web_crawler';
+            type: 'salesforce';
             loginUrl: unknown;
             objects?: Array<string>;
             advancedObjectConfigJson?: string;
-        };
+        } | {
+                type: 'web_crawler';
+                startUrl: string;
+                includePathPrefixes?: Array<string>;
+                excludePathPatterns?: Array<string>;
+                contentSelector?: string;
+                excludeSelectors?: Array<string>;
+                maxPages?: number;
+                maxDepth?: number;
+                batchSize?: number;
+                requestDelayMs?: number;
+                userAgent?: string;
+            };
         secretId: string | null;
         schedule: string;
         enabled: boolean;

@@ -3,7 +3,7 @@ title: Connectors
 category: Knowledge
 order: 2
 description: Supported connector types, configuration, and management
-lastUpdated: 2026-05-26
+lastUpdated: 2026-06-05
 ---
 
 <!--
@@ -295,6 +295,27 @@ Example advanced config:
 ```
 
 `Id`, `Name`, and `LastModifiedDate` are always included automatically.
+
+## Web Crawler
+
+Crawl static HTML pages from a documentation site or public web property.
+
+**Indexed:** same-host HTML pages discovered from the start URL. The crawler extracts page text, removes common navigation and layout elements, and stores each page with its canonical URL when one is present.
+
+**Authentication:** none in the initial version. The crawler only fetches pages reachable over HTTP(S).
+
+| Field                 | Description                                                                                              |
+| --------------------- | -------------------------------------------------------------------------------------------------------- |
+| Start URL             | First page to crawl. Crawling stays on the same host.                                                    |
+| Include Path Prefixes | Comma-separated paths to crawl, such as `/docs/` or `/guides/`. Defaults to the start URL path.          |
+| Exclude Path Patterns | Comma-separated regular expressions matched against path and query, such as `/search` or `/archive/.*`. |
+| Content Selector      | CSS selector for the page content root. Leave blank to use default document selectors.                   |
+| Exclude Selectors     | Comma-separated CSS selectors to remove before extracting text, such as `.sidebar` or `.toc`.           |
+| Max Pages             | Maximum pages to crawl in one sync (default: `250`).                                                     |
+| Max Depth             | Maximum link depth from the start URL (default: `3`).                                                    |
+| Batch Size            | Documents yielded per sync batch (default: `25`).                                                        |
+| Request Delay         | Optional delay between requests, in milliseconds.                                                        |
+| User Agent            | Optional custom User-Agent header for crawl requests.                                                    |
 
 ## Managing Connectors
 

@@ -84,6 +84,11 @@ const CONNECTOR_DISPLAY_LABELS: Record<ConnectorType, string> = {
   file_upload: CONNECTOR_TYPE_LABELS.file_upload,
 };
 
+const CONNECTOR_DOC_ANCHORS: Partial<Record<ConnectorType, string>> = {
+  gdrive: "google-drive",
+  web_crawler: "web-crawler",
+};
+
 export const CONNECTOR_OPTIONS: ConnectorOption[] = [
   {
     type: "jira",
@@ -300,7 +305,10 @@ export function getConnectorUrlConfig(
 }
 
 export function getConnectorDocsUrl(type: ConnectorType): string | null {
-  return getFrontendDocsUrl(DocsPage.PlatformKnowledgeConnectors, type);
+  return getFrontendDocsUrl(
+    DocsPage.PlatformKnowledgeConnectors,
+    CONNECTOR_DOC_ANCHORS[type] ?? type,
+  );
 }
 
 export function getDefaultConnectorConfig(

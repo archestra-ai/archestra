@@ -12,6 +12,7 @@ import oauthRoutes, {
   generateCodeChallenge,
   generateCodeVerifier,
   getOAuthResource,
+  getOAuthResourceUrl,
   refreshOAuthToken,
   resolveOAuthScopesForAuthorization,
 } from "./oauth";
@@ -94,6 +95,25 @@ describe("OAuth helper functions", () => {
 
     test("returns undefined when no resource fields are configured", () => {
       expect(getOAuthResource({})).toBeUndefined();
+    });
+
+    test("parses api-scheme resource values for proxy token exchange", () => {
+      const resourceUrl = getOAuthResourceUrl({
+        resource: "api://downstream-client-id",
+        server_url: "https://mcp.example.com/mcp",
+      });
+
+      expect(resourceUrl.protocol).toBe("api:");
+      expect(resourceUrl.href).toBe("api://downstream-client-id");
+    });
+
+    test("rejects invalid resource values for proxy token exchange", () => {
+      expect(() =>
+        getOAuthResourceUrl({
+          resource: "downstream-client-id",
+          server_url: "https://mcp.example.com/mcp",
+        }),
+      ).toThrow("Invalid OAuth resource URL");
     });
   });
 

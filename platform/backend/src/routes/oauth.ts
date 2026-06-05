@@ -933,7 +933,7 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
         try {
           // Use MCP SDK's exchangeAuthorization - it handles all discovery and authentication
-          const oauthResource = getOAuthResource(oauthConfig);
+          const oauthResourceUrl = getOAuthResourceUrl(oauthConfig);
           const tokens = await exchangeAuthorization(oauthConfig.server_url, {
             clientInformation: {
               client_id: clientId,
@@ -942,7 +942,7 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
             authorizationCode: code,
             codeVerifier: oauthState.codeVerifier,
             redirectUri,
-            resource: new URL(oauthResource ?? oauthConfig.server_url),
+            resource: oauthResourceUrl,
           });
 
           fastify.log.info("MCP SDK token exchange successful");
@@ -1120,6 +1120,26 @@ export function getOAuthResource(oauthConfig: {
   // Prefer the explicit RFC 8707 resource, then legacy audience configs, then
   // the MCP endpoint URL for existing catalog entries.
   return oauthConfig.resource || oauthConfig.audience || oauthConfig.server_url;
+}
+
+export function getOAuthResourceUrl(oauthConfig: {
+  audience?: string;
+  resource?: string;
+  server_url?: string;
+}): URL {
+  const oauthResource = getOAuthResource(oauthConfig);
+  if (!oauthResource) {
+    throw new ApiError(400, "OAuth resource is not configured");
+  }
+
+  try {
+    return new URL(oauthResource);
+  } catch {
+    throw new ApiError(
+      400,
+      `Invalid OAuth resource URL: ${oauthResource}. Use a full URI such as https://api.example.com or api://client-id.`,
+    );
+  }
 }
 
 export default oauthRoutes;

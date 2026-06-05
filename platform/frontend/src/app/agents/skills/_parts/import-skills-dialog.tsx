@@ -15,6 +15,10 @@ import {
   SearchX,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import {
+  GithubAuthConfigFields,
+  type GithubAuthMethod,
+} from "@/components/github-auth-config-fields";
 import { SearchInput } from "@/components/search-input";
 import { StandardDialog } from "@/components/standard-dialog";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -30,13 +34,6 @@ import {
 } from "@/components/ui/empty";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import {
   Tooltip,
   TooltipContent,
@@ -145,6 +142,13 @@ export function ImportSkillsDialog({
   const handleClose = (isOpen: boolean) => {
     if (!isOpen) reset();
     onOpenChange(isOpen);
+  };
+
+  const handleAuthMethodChange = (value: GithubAuthMethod) => {
+    setAuthMethod(value);
+    if (value === "pat") {
+      setGithubAppConfigId("");
+    }
   };
 
   const handleDiscover = async (overrideRepoUrl?: string) => {
@@ -646,28 +650,21 @@ export function ImportSkillsDialog({
               directories under this path.
             </p>
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="skill-auth-method">
-              Authentication
-              <span className="text-muted-foreground font-normal">
-                (optional)
-              </span>
-            </Label>
-            <Select
-              value={authMethod}
-              onValueChange={(value) =>
-                setAuthMethod(value as "pat" | "github_app")
-              }
-            >
-              <SelectTrigger id="skill-auth-method" className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="pat">Personal Access Token</SelectItem>
-                <SelectItem value="github_app">GitHub App</SelectItem>
-              </SelectContent>
-            </Select>
-            {authMethod === "pat" ? (
+          <GithubAuthConfigFields
+            authMethod={authMethod}
+            onAuthMethodChange={handleAuthMethodChange}
+            githubAppConfigId={githubAppConfigId}
+            onGithubAppConfigIdChange={setGithubAppConfigId}
+            githubAppConfigs={githubAppConfigs}
+            authLabel="Authentication"
+            authOptional
+            configuredDescription={
+              <>
+                Mints a short-lived installation token for this import. Manage
+                configurations in
+              </>
+            }
+            patFields={
               <>
                 <Input
                   id="skill-token"
@@ -693,34 +690,8 @@ export function ImportSkillsDialog({
                   .
                 </p>
               </>
-            ) : githubAppConfigs.length > 0 ? (
-              <>
-                <Select
-                  value={githubAppConfigId}
-                  onValueChange={setGithubAppConfigId}
-                >
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Select a GitHub App configuration" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {githubAppConfigs.map((appConfig) => (
-                      <SelectItem key={appConfig.id} value={appConfig.id}>
-                        {appConfig.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-sm text-muted-foreground">
-                  Mints a short-lived installation token for this import.
-                </p>
-              </>
-            ) : (
-              <p className="text-sm text-muted-foreground">
-                No GitHub App configurations exist yet. Create one under
-                Settings → GitHub Apps.
-              </p>
-            )}
-          </div>
+            }
+          />
           <SkillScopeSelector
             scope={scope}
             onScopeChange={setScope}

@@ -334,7 +334,7 @@ describe("ChatProvider retries", () => {
     });
   });
 
-  it("shows a toast for duplicate active-run submits", async () => {
+  it("reattaches to the active run instead of dead-ending on duplicate active-run submits", async () => {
     render(
       <ChatProvider>
         <RegisterChatSession />
@@ -349,10 +349,13 @@ describe("ChatProvider retries", () => {
       );
     });
 
-    expect(mocks.toastError).toHaveBeenCalledWith(
-      "This conversation already has a response in progress. Stop it before sending another message.",
-    );
+    // A duplicate-run 409 means the backend is still generating (e.g. the
+    // stream connection was severed but the run survived). Reattach to the
+    // live run via the replay endpoint rather than telling the user to stop
+    // a response they cannot see.
+    expect(mocks.resumeStream).toHaveBeenCalledTimes(1);
     expect(mocks.regenerate).not.toHaveBeenCalled();
+    expect(mocks.toastError).not.toHaveBeenCalled();
   });
 });
 

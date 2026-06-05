@@ -63,6 +63,7 @@ import { initAuditRegistry } from "@/middleware/audit-log-registry";
 import OrganizationModel from "@/models/organization";
 import { initializeObservabilityMetrics } from "@/observability";
 import { enrichOpenApiWithRbac } from "@/openapi/enrich-openapi-with-rbac";
+import { activeChatRunService } from "@/services/active-chat-run";
 import { instanceAnalyticsService } from "@/services/instance-analytics";
 import { systemKeyManager } from "@/services/system-key-manager";
 import { skillSandboxRuntimeService } from "@/skills-sandbox/skill-sandbox-runtime-service";
@@ -102,6 +103,7 @@ import {
 
 /** Max time to wait for cleanup operations during graceful shutdown before exiting */
 const SHUTDOWN_CLEANUP_TIMEOUT_MS = 3000;
+const ACTIVE_CHAT_RUN_REAPER_INTERVAL_MS = 60 * 1000;
 
 // Load enterprise routes if license is activated OR if running in codegen mode
 // (codegen mode ensures OpenAPI spec always includes all enterprise routes)
@@ -949,6 +951,12 @@ const startWebServer = async () => {
       });
     }, PROCESSED_EMAIL_CLEANUP_INTERVAL_MS);
 
+    // Safety net for chat runs orphaned 'running' by a hard kill that skipped
+    // graceful shutdown. Runs only on the web server, which owns chat streams.
+    const activeChatRunReaperIntervalId = setInterval(() => {
+      void activeChatRunService.reapStaleRuns();
+    }, ACTIVE_CHAT_RUN_REAPER_INTERVAL_MS);
+
     /**
      * Here we don't expose the metrics endpoint on the main API port, but we do collect metrics
      * inside of this server instance. Metrics are actually exposed on a different port
@@ -1017,6 +1025,7 @@ const startWebServer = async () => {
     registerWebServerShutdown(fastify, {
       emailRenewalIntervalId,
       processedEmailCleanupIntervalId,
+      activeChatRunReaperIntervalId,
     });
   } catch (err) {
     fastify.log.error(err);
@@ -1048,12 +1057,29 @@ function registerWebServerShutdown(
   intervalIds: {
     emailRenewalIntervalId?: NodeJS.Timeout;
     processedEmailCleanupIntervalId?: NodeJS.Timeout;
+    activeChatRunReaperIntervalId?: NodeJS.Timeout;
   } = {},
 ): void {
   const gracefulShutdown = async (signal: string) => {
     fastify.log.info(`Received ${signal}, shutting down gracefully...`);
 
+    // Fail this pod's in-flight chat runs first: a long SSE stream keeps Fastify
+    // connections open, so waiting for fastify.close() risks SIGKILL before the
+    // runs are freed, leaving their conversations blocked until the reaper runs.
+    // This is a single fast UPDATE, bounded so a slow DB cannot stall shutdown.
+    await Promise.race([
+      activeChatRunService.failInFlightRuns().catch((error) => {
+        fastify.log.error({ error }, "Failed to fail in-flight chat runs");
+      }),
+      new Promise<void>((resolve) =>
+        setTimeout(resolve, SHUTDOWN_CLEANUP_TIMEOUT_MS),
+      ),
+    ]);
+
     try {
+      if (intervalIds.activeChatRunReaperIntervalId) {
+        clearInterval(intervalIds.activeChatRunReaperIntervalId);
+      }
       if (metricsServerInstance) {
         await metricsServerInstance.close();
         fastify.log.info("Metrics server closed");

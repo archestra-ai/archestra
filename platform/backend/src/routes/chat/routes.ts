@@ -294,7 +294,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           uploadedByUserId: user.id,
         });
       } catch (error) {
-        await ActiveChatRunModel.markTerminal({
+        await activeChatRunService.markTerminal({
           runId: activeRun.id,
           status: "failed",
           error: error instanceof Error ? error.message : String(error),
@@ -1176,7 +1176,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           chatAbortController.abort();
         }
         stopActiveRunPolling();
-        await ActiveChatRunModel.markTerminal({
+        await activeChatRunService.markTerminal({
           runId: activeRun.id,
           status: "failed",
           error: error instanceof Error ? error.message : String(error),

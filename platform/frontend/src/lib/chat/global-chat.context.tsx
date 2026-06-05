@@ -95,10 +95,9 @@ function isRetryableError(error: Error): boolean {
 }
 
 function isDuplicateActiveRunError(error: Error): boolean {
-  return (
-    error.message.includes("409") ||
-    error.message.includes("already has an active response")
-  );
+  // Match the backend's exact duplicate-run message rather than a bare "409",
+  // which could collide with unrelated error text (e.g. "4096 tokens").
+  return error.message.includes("already has an active response");
 }
 
 function shouldResumeActiveRun(messages: UIMessage[]): boolean {
@@ -429,6 +428,9 @@ function ChatSessionHook({
       ) => void)
     | null
   >(null);
+  // useChat returns clearError, but onError is defined inside the useChat config
+  // (before the hook returns), so reach it through a ref like sendMessageRef.
+  const clearErrorRef = useRef<(() => void) | null>(null);
   // Auto-retry state for transient errors
   const retryCountRef = useRef(0);
   const retryTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -479,6 +481,7 @@ function ChatSessionHook({
     setMessages,
     stop,
     error,
+    clearError,
     addToolResult,
     addToolApprovalResponse,
   } = useChat({
@@ -609,6 +612,9 @@ function ChatSessionHook({
         toast.error(
           "This conversation already has a response in progress. Stop it before sending another message.",
         );
+        // Clear the SDK error so this benign guard does not also render as a
+        // hard inline error panel; the toast is the only surfaced feedback.
+        clearErrorRef.current?.();
         return;
       }
 
@@ -787,6 +793,8 @@ function ChatSessionHook({
 
   // Keep sendMessageRef up-to-date for onFinish callback
   sendMessageRef.current = sendMessage;
+  // Keep clearErrorRef up-to-date for the duplicate-run branch in onError
+  clearErrorRef.current = clearError;
 
   const stableMessages = messagesWithRestoredAssistantParts;
 

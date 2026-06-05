@@ -6,6 +6,7 @@ import {
   type ActiveChatRunNotifier,
   createActiveChatRunNotifier,
 } from "@/services/active-chat-run-notifier";
+import type { ChatActiveRunStatus } from "@/types/chat-active-run";
 
 const EVENT_FLUSH_INTERVAL_MS = 500;
 const EVENT_BATCH_SIZE = 256;
@@ -20,6 +21,9 @@ export const ACTIVE_CHAT_RUN_TERMINAL_REPLAY_GRACE_MS = 2 * 60 * 1000;
  */
 export class ActiveChatRunService {
   private nextTerminalCleanupAt = 0;
+  // Run ids this process created and believes may still be 'running'. Used to
+  // fail only this pod's runs on graceful shutdown (no schema-level pod id).
+  private readonly inFlightRunIds = new Set<string>();
 
   constructor(
     private readonly notifier: ActiveChatRunNotifier,
@@ -36,6 +40,7 @@ export class ActiveChatRunService {
 
     const run = await ActiveChatRunModel.create(params);
     if (run) {
+      this.inFlightRunIds.add(run.id);
       return run;
     }
 
@@ -48,7 +53,54 @@ export class ActiveChatRunService {
       );
     }
 
-    return ActiveChatRunModel.create(params);
+    const retriedRun = await ActiveChatRunModel.create(params);
+    if (retriedRun) {
+      this.inFlightRunIds.add(retriedRun.id);
+    }
+
+    return retriedRun;
+  }
+
+  // Single terminal-transition entry point so the in-flight set stays bounded.
+  async markTerminal(params: {
+    runId: string;
+    status: Exclude<ChatActiveRunStatus, "running">;
+    error?: string | null;
+  }): Promise<void> {
+    this.inFlightRunIds.delete(params.runId);
+    await ActiveChatRunModel.markTerminal(params);
+  }
+
+  // Periodic safety net for runs orphaned by a hard kill (OOM/SIGKILL) that
+  // never reached graceful shutdown. Graceful shutdown handles the common case.
+  async reapStaleRuns(): Promise<void> {
+    try {
+      const reaped =
+        await ActiveChatRunModel.markStaleRunningAsFailed(STALE_RUNNING_MS);
+      if (reaped > 0) {
+        logger.info({ reaped }, "Reaped stale active chat runs");
+      }
+    } catch (error) {
+      logger.warn({ error }, "Failed to reap stale active chat runs");
+    }
+  }
+
+  // Best-effort cleanup on graceful shutdown: fail this pod's still-running runs
+  // so their conversations are not blocked until the stale reaper catches up.
+  async failInFlightRuns(): Promise<number> {
+    const ids = Array.from(this.inFlightRunIds);
+    this.inFlightRunIds.clear();
+
+    const failed = await ActiveChatRunModel.markRunningAsFailedByIds({
+      ids,
+      error: "Server shut down before the chat stream completed.",
+    });
+
+    if (failed > 0) {
+      logger.info({ failed }, "Failed in-flight active chat runs on shutdown");
+    }
+
+    return failed;
   }
 
   async requestStop(params: {
@@ -88,7 +140,7 @@ export class ActiveChatRunService {
 
         await writer.flush();
         const terminal = await params.getTerminalStatus();
-        await ActiveChatRunModel.markTerminal({
+        await this.markTerminal({
           runId: params.runId,
           status: terminal.status,
           error: terminal.error,
@@ -110,7 +162,7 @@ export class ActiveChatRunService {
             "Failed to flush active chat run events after drain error",
           );
         });
-        await ActiveChatRunModel.markTerminal({
+        await this.markTerminal({
           runId: params.runId,
           status: "failed",
           error: error instanceof Error ? error.message : String(error),

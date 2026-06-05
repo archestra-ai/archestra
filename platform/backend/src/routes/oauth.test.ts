@@ -107,6 +107,24 @@ describe("OAuth helper functions", () => {
       expect(resourceUrl.href).toBe("api://downstream-client-id");
     });
 
+    test("uses URL-shaped audience values for proxy token exchange", () => {
+      const resourceUrl = getOAuthResourceUrl({
+        audience: "api://legacy-audience",
+        server_url: "https://mcp.example.com/mcp",
+      });
+
+      expect(resourceUrl.href).toBe("api://legacy-audience");
+    });
+
+    test("falls back to server URL when legacy audience is not URL-shaped", () => {
+      const resourceUrl = getOAuthResourceUrl({
+        audience: "legacy-audience",
+        server_url: "https://mcp.example.com/mcp",
+      });
+
+      expect(resourceUrl.href).toBe("https://mcp.example.com/mcp");
+    });
+
     test("rejects invalid resource values for proxy token exchange", () => {
       expect(() =>
         getOAuthResourceUrl({

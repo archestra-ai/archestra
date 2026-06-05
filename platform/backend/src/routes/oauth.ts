@@ -1127,18 +1127,41 @@ export function getOAuthResourceUrl(oauthConfig: {
   resource?: string;
   server_url?: string;
 }): URL {
-  const oauthResource = getOAuthResource(oauthConfig);
-  if (!oauthResource) {
-    throw new ApiError(400, "OAuth resource is not configured");
+  if (oauthConfig.resource) {
+    return parseOAuthResourceUrl(oauthConfig.resource);
   }
 
-  try {
-    return new URL(oauthResource);
-  } catch {
+  if (oauthConfig.audience) {
+    const audienceUrl = tryParseOAuthResourceUrl(oauthConfig.audience);
+    if (audienceUrl) {
+      return audienceUrl;
+    }
+  }
+
+  if (oauthConfig.server_url) {
+    return parseOAuthResourceUrl(oauthConfig.server_url);
+  }
+
+  throw new ApiError(400, "OAuth resource is not configured");
+}
+
+function parseOAuthResourceUrl(oauthResource: string): URL {
+  const resourceUrl = tryParseOAuthResourceUrl(oauthResource);
+  if (!resourceUrl) {
     throw new ApiError(
       400,
       `Invalid OAuth resource URL: ${oauthResource}. Use a full URI such as https://api.example.com or api://client-id.`,
     );
+  }
+
+  return resourceUrl;
+}
+
+function tryParseOAuthResourceUrl(oauthResource: string): URL | null {
+  try {
+    return new URL(oauthResource);
+  } catch {
+    return null;
   }
 }
 

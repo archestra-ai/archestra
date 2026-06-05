@@ -51,7 +51,10 @@ pub const DEFAULT_APT_PACKAGES: &[&str] = &[
 
 /// venv pre-baked into the warm base, owned by the sandbox user; reused by every
 /// `python3` command so per-call uv installs are layered on (fast) instead of
-/// recreated (slow).
+/// recreated (slow). MUST stay at the uv project's default location
+/// (`{SKILL_SANDBOX_HOME}/.venv`): `uv add` targets the project venv while
+/// `python3` follows `VIRTUAL_ENV`/PATH, so a different path would silently
+/// split the two interpreters.
 const DEFAULT_VENV_DIR: &str = "/home/sandbox/.venv";
 const DEFAULT_PYTHON_REQUIREMENTS: &[&str] = &["numpy", "pandas", "httpx"];
 

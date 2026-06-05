@@ -65,6 +65,11 @@ describe("WebCrawlerConnector", () => {
               <a href="/docs/private.html">Private</a>
               <a href="/blog/post.html">Blog</a>
               <a href="https://external.example.test/docs/outside.html">External</a>
+              <a href="data:text/html,<main>Inline</main>">Data</a>
+              <a href="vbscript:msgbox('x')">VBScript</a>
+              <a href="javascript:alert('x')">JavaScript</a>
+              <a href="mailto:support@example.test">Email</a>
+              <a href="tel:+15555550123">Phone</a>
             </main>
           </body>
         </html>
@@ -127,6 +132,7 @@ describe("WebCrawlerConnector", () => {
       createHash("sha256").update(`${site.url}/docs/install/`).digest("hex"),
     );
     expect(seenUserAgents).toContain("DocsBot/1.0");
+    expect(batches.flatMap((batch) => batch.skipped ?? [])).toEqual([]);
   });
 
   test("respects maxDepth, maxPages, and emits batches with hasMore", async () => {
@@ -163,6 +169,41 @@ describe("WebCrawlerConnector", () => {
     expect(
       batches.flatMap((batch) => batch.documents.map((doc) => doc.title)),
     ).toEqual(["Page 1", "Page 2", "Page 3"]);
+  });
+
+  test("applies the configured delay between serialized requests", async () => {
+    const requestedAt: number[] = [];
+    const recordRequest = (body: string): RouteHandler => (_req, res) => {
+      requestedAt.push(Date.now());
+      sendHtml(res, body);
+    };
+    const site = await createTestSite({
+      "/docs/": recordRequest(
+        html(`
+          <main>
+            <h1>Page 1</h1>
+            <a href="/docs/page-2.html">Page 2</a>
+            <a href="/docs/page-3.html">Page 3</a>
+          </main>
+        `),
+      ),
+      "/docs/page-2.html": recordRequest(
+        html("<main><h1>Page 2</h1></main>"),
+      ),
+      "/docs/page-3.html": recordRequest(
+        html("<main><h1>Page 3</h1></main>"),
+      ),
+    });
+
+    await collectBatches({
+      startUrl: `${site.url}/docs/`,
+      maxDepth: 1,
+      requestDelayMs: 60,
+    });
+
+    expect(requestedAt).toHaveLength(3);
+    expect(requestedAt[1] - requestedAt[0]).toBeGreaterThanOrEqual(45);
+    expect(requestedAt[2] - requestedAt[1]).toBeGreaterThanOrEqual(45);
   });
 
   test("records failed linked pages as skipped items without failing the sync", async () => {

@@ -38,16 +38,6 @@ type ExtractedPage = {
 type CrawlerCheerioApi = CheerioCrawlingContext["$"];
 type CrawlerCheerioSelection = ReturnType<CrawlerCheerioApi>;
 
-function parseWebCrawlerConfig(
-  config: Record<string, unknown>,
-): WebCrawlerConfig | null {
-  const parsed = WebCrawlerConfigSchema.safeParse({
-    type: "web_crawler",
-    ...config,
-  });
-  return parsed.success ? parsed.data : null;
-}
-
 export class WebCrawlerConnector extends BaseConnector {
   type = "web_crawler" as const;
 
@@ -106,6 +96,8 @@ export class WebCrawlerConnector extends BaseConnector {
 
     const documents: ConnectorDocument[] = [];
     const skipped: NonNullable<ConnectorSyncBatch["skipped"]> = [];
+    // Web pages do not expose a uniform item-level updated timestamp, so syncs
+    // use the crawl start time as the full-refresh checkpoint.
     const checkpoint = new Date().toISOString();
     const crawler = this.createCrawler({
       config: parsed,
@@ -150,6 +142,7 @@ export class WebCrawlerConnector extends BaseConnector {
     const excludePathPatterns = compileExcludePathPatterns(
       params.config.excludePathPatterns,
     );
+    let previousRequestCompletedAt = 0;
 
     return new CheerioCrawler(
       {
@@ -159,7 +152,13 @@ export class WebCrawlerConnector extends BaseConnector {
         maxConcurrency: 1,
         requestHandlerTimeoutSecs: 60,
         preNavigationHooks: [
-          (_context, gotOptions) => {
+          async (_context, gotOptions) => {
+            const requestDelayMs = params.config.requestDelayMs ?? 0;
+            const elapsedMs = Date.now() - previousRequestCompletedAt;
+            if (previousRequestCompletedAt > 0 && elapsedMs < requestDelayMs) {
+              await sleep(requestDelayMs - elapsedMs);
+            }
+
             gotOptions.headers = {
               ...gotOptions.headers,
               "User-Agent": params.config.userAgent ?? DEFAULT_USER_AGENT,
@@ -167,42 +166,47 @@ export class WebCrawlerConnector extends BaseConnector {
           },
         ],
         requestHandler: async (context) => {
-          const depth = getRequestDepth(context.request.userData);
-          const extracted = extractPage({
-            $: context.$,
-            requestUrl: context.request.loadedUrl ?? context.request.url,
-            config: params.config,
-          });
-
-          if (!extracted.content) {
-            params.onSkipped({
-              itemId: context.request.url,
-              name: extracted.title || context.request.url,
-              reason: "empty page content",
+          try {
+            const depth = getRequestDepth(context.request.userData);
+            const extracted = extractPage({
+              $: context.$,
+              requestUrl: context.request.loadedUrl ?? context.request.url,
+              config: params.config,
             });
-          } else {
-            params.onDocument(
-              buildDocument({
-                requestUrl: context.request.loadedUrl ?? context.request.url,
-                extracted,
-                depth,
-              }),
-            );
-          }
 
-          if (depth >= (params.config.maxDepth ?? DEFAULT_MAX_DEPTH)) {
-            return;
-          }
+            if (!extracted.content) {
+              params.onSkipped({
+                itemId: context.request.url,
+                name: extracted.title || context.request.url,
+                reason: "empty page content",
+              });
+            } else {
+              params.onDocument(
+                buildDocument({
+                  requestUrl: context.request.loadedUrl ?? context.request.url,
+                  extracted,
+                  depth,
+                }),
+              );
+            }
 
-          await enqueueAllowedLinks({
-            context,
-            startUrl,
-            currentDepth: depth,
-            allowedPathPrefixes,
-            excludePathPatterns,
-          });
+            if (depth >= (params.config.maxDepth ?? DEFAULT_MAX_DEPTH)) {
+              return;
+            }
+
+            await enqueueAllowedLinks({
+              context,
+              startUrl,
+              currentDepth: depth,
+              allowedPathPrefixes,
+              excludePathPatterns,
+            });
+          } finally {
+            previousRequestCompletedAt = Date.now();
+          }
         },
         failedRequestHandler: ({ request, error }) => {
+          previousRequestCompletedAt = Date.now();
           params.onSkipped({
             itemId: request.url,
             name: request.url,
@@ -213,6 +217,16 @@ export class WebCrawlerConnector extends BaseConnector {
       new Configuration({ persistStorage: false }),
     );
   }
+}
+
+function parseWebCrawlerConfig(
+  config: Record<string, unknown>,
+): WebCrawlerConfig | null {
+  const parsed = WebCrawlerConfigSchema.safeParse({
+    type: "web_crawler",
+    ...config,
+  });
+  return parsed.success ? parsed.data : null;
 }
 
 function validateParsedConfig(config: WebCrawlerConfig): string | null {
@@ -409,17 +423,15 @@ function normalizeDiscoveredUrl(
   rawHref: string,
   baseUrl: string,
 ): string | null {
-  if (
-    rawHref.startsWith("#") ||
-    rawHref.startsWith("mailto:") ||
-    rawHref.startsWith("tel:") ||
-    rawHref.startsWith("javascript:")
-  ) {
-    return null;
-  }
+  if (rawHref.startsWith("#")) return null;
 
   try {
-    return normalizeCrawlUrl(new URL(rawHref, baseUrl).href);
+    const resolved = new URL(rawHref, baseUrl);
+    if (resolved.protocol !== "http:" && resolved.protocol !== "https:") {
+      return null;
+    }
+
+    return normalizeCrawlUrl(resolved.href);
   } catch {
     return null;
   }
@@ -443,4 +455,8 @@ function normalizeText(text: string): string {
 
 function getRequestDepth(userData: Record<string, unknown>): number {
   return typeof userData.depth === "number" ? userData.depth : 0;
+}
+
+async function sleep(ms: number): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, ms));
 }

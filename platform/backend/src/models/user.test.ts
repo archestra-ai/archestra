@@ -1,5 +1,5 @@
-import { ADMIN_ROLE_NAME, MEMBER_ROLE_NAME } from "@shared";
-import { predefinedPermissionsMap } from "@shared/access-control";
+import { ADMIN_ROLE_NAME, MEMBER_ROLE_NAME } from "@archestra/shared";
+import { predefinedPermissionsMap } from "@archestra/shared/access-control";
 import { beforeEach, describe, expect, test } from "@/test";
 import MemberModel from "./member";
 import UserModel from "./user";

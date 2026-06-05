@@ -5,7 +5,7 @@ import {
   E2eTestId,
   getAcceptedFileTypes,
   supportsFileUploads,
-} from "@shared";
+} from "@archestra/shared";
 import type { ChatStatus } from "ai";
 import type { FormEvent, KeyboardEvent } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";

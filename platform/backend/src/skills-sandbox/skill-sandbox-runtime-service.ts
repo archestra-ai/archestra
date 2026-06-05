@@ -1,17 +1,20 @@
-import type { ReplayCommand, SnapshotFile } from "@archestra/sandbox-rs";
+import type { ReplayEntry } from "@archestra/sandbox-rs";
 import config from "@/config";
 import logger from "@/logging";
 import {
-  SkillSandboxArtifactModel,
-  SkillSandboxCommandModel,
-  SkillSandboxFileSnapshotModel,
+  ConversationAttachmentModel,
+  SkillInvalidFilePathError,
+  SkillSandboxFileModel,
   SkillSandboxModel,
+  SkillSandboxReplayEventModel,
+  SkillVersionModel,
 } from "@/models";
 import {
   SandboxRuntimeError,
   sandboxRuntimeService,
 } from "@/sandbox-runtime/sandbox-runtime-service";
-import type { SkillSandbox, SkillSandboxFileSnapshot } from "@/types";
+import { assertMountedSkillsReadable } from "@/skills/assert-mounted-skills-readable";
+import type { SkillSandbox } from "@/types";
 import { asSandboxId, type SandboxId } from "@/types";
 import { resolveArtifactMime } from "./mime-sniff";
 import {
@@ -23,9 +26,13 @@ import {
   type ArtifactRef,
   type CommandResult,
   type ExportArtifactParams,
+  type MountRef,
+  type MountSkillParams,
   type RunCommandParams,
   SKILL_SANDBOX_LIMITS,
   SkillSandboxError,
+  type UploadFileParams,
+  type UploadRef,
 } from "./types";
 
 const CONSUMER_ID = "skill-sandbox";
@@ -33,11 +40,13 @@ const CONSUMER_ID = "skill-sandbox";
 // exit status was lost. distinct from any value the wrapped bash subprocess
 // can produce (which is bounded to 0..255).
 const SYNTHETIC_ENGINE_FAILURE_EXIT_CODE = -1;
-// must match `DEFAULT_VENV_PYTHON` in archestra-rs/sandbox-core/src/session.rs; we don't
-// re-export it from the napi crate to avoid coupling the TS adapter to Rust
-// build state.
-const VENV_PYTHON = "/home/sandbox/.venv/bin/python";
 const REQUIREMENTS_FILE = "requirements.txt";
+// reserved at the skill root: the mount synthesizes this from the pinned
+// version body, so a resource file may not occupy it or any subpath of it.
+const SKILL_MANIFEST_FILE = "SKILL.md";
+// where conversation chat attachments are auto-staged inside the container, so
+// the model can read user-provided files without juggling attachment ids.
+const ATTACHMENTS_DIR = `${SKILL_SANDBOX_HOME}/attachments`;
 // covers the cold first install for a typical skill (pillow + a few siblings);
 // subsequent calls hit Dagger's layer cache and finish in ms.
 const REQUIREMENTS_INSTALL_TIMEOUT_SECONDS = 180;
@@ -81,9 +90,12 @@ class SkillSandboxRuntimeService {
 
     return this.runExclusive(params.sandboxId, async () => {
       const sandbox = await this.loadSandbox(params.sandboxId);
+      await this.assertMountsReadable(params.sandboxId, params.caller);
+      // stage chat attachments before building context so they're part of this
+      // run's replay (the model sees them under /home/sandbox/attachments/).
+      const stagingNotices = await stageConversationAttachments(sandbox);
       const cwd = params.cwd ?? sandbox.defaultCwd;
-      const { snapshots, replayCommands, pythonpath } =
-        await this.buildContext(sandbox);
+      const { replayEntries } = await this.buildContext(sandbox);
 
       let executed: Awaited<
         ReturnType<typeof sandboxRuntimeService.runCommand>
@@ -93,9 +105,7 @@ class SkillSandboxRuntimeService {
           command: params.command,
           cwd,
           timeoutSeconds,
-          snapshots,
-          replayCommands,
-          pythonpath,
+          replayEntries,
           outputBytesLimit: config.skillsSandbox.outputBytesLimit,
           fileSizeLimitBytes: config.skillsSandbox.artifactBytesLimit,
           cpuSeconds: config.skillsSandbox.cpuLimit,
@@ -118,9 +128,11 @@ class SkillSandboxRuntimeService {
         throw this.toSkillError(error);
       }
 
-      let row: Awaited<ReturnType<typeof SkillSandboxCommandModel.append>>;
+      let row: Awaited<
+        ReturnType<typeof SkillSandboxReplayEventModel.appendCommand>
+      >;
       try {
-        row = await SkillSandboxCommandModel.append({
+        row = await SkillSandboxReplayEventModel.appendCommand({
           sandboxId: params.sandboxId,
           organizationId: sandbox.organizationId,
           command: params.command,
@@ -148,6 +160,7 @@ class SkillSandboxRuntimeService {
         durationMs: executed.durationMs,
         timedOut: executed.timedOut,
         truncated: executed.truncated,
+        stagingNotices,
       };
     });
   }
@@ -157,23 +170,22 @@ class SkillSandboxRuntimeService {
 
     return this.runExclusive(params.sandboxId, async () => {
       const sandbox = await this.loadSandbox(params.sandboxId);
+      await this.assertMountsReadable(params.sandboxId, params.caller);
+      const stagingNotices = await stageConversationAttachments(sandbox);
       const resolvedPath = resolveArtifactPath({
         path: params.path,
         defaultCwd: sandbox.defaultCwd,
       });
-      const { snapshots, replayCommands, pythonpath } =
-        await this.buildContext(sandbox);
+      const { replayEntries } = await this.buildContext(sandbox);
 
       let artifact: Awaited<
         ReturnType<typeof sandboxRuntimeService.readArtifact>
       >;
       try {
         artifact = await sandboxRuntimeService.readArtifact({
-          snapshots,
-          replayCommands,
+          replayEntries,
           path: resolvedPath,
           defaultCwd: sandbox.defaultCwd,
-          pythonpath,
           // must match runCommand's limit: the command supervisor takes
           // `--out-cap <outputBytesLimit>` in each replayed exec, so a mismatch
           // here invalidates Dagger's per-replay layer cache.
@@ -191,13 +203,13 @@ class SkillSandboxRuntimeService {
         buffer: data,
         claimed: params.mimeType,
       });
-      let row: Awaited<ReturnType<typeof SkillSandboxArtifactModel.create>>;
+      let row: Awaited<ReturnType<typeof SkillSandboxFileModel.createArtifact>>;
       try {
-        row = await SkillSandboxArtifactModel.create({
+        row = await SkillSandboxFileModel.createArtifact({
           sandboxId: params.sandboxId,
-          organizationId: sandbox.organizationId,
           path: resolvedPath,
           mimeType,
+          originalName: null,
           sizeBytes: data.byteLength,
           data,
         });
@@ -213,6 +225,146 @@ class SkillSandboxRuntimeService {
         path: row.path,
         mimeType: row.mimeType,
         sizeBytes: row.sizeBytes,
+        stagingNotices,
+      };
+    });
+  }
+
+  /**
+   * Persist an uploaded file as an ordered replay event. No Dagger work happens
+   * here — the bytes become part of the recipe and are materialized on the next
+   * run/export. Serialized through `runExclusive` so the upload's sequence lands
+   * after any in-flight command's append and before the next run reads context;
+   * otherwise replay order could diverge from execution order.
+   */
+  async uploadFile(params: UploadFileParams): Promise<UploadRef> {
+    this.ensureEnabled();
+
+    return this.runExclusive(params.sandboxId, async () => {
+      const sandbox = await this.loadSandbox(params.sandboxId);
+      const resolvedPath = resolveArtifactPath({
+        path: params.path,
+        defaultCwd: sandbox.defaultCwd,
+      });
+      // reject paths the Rust replay validator would later reject, so a bad
+      // upload fails this call instead of poisoning every future replay.
+      validateUploadPath(resolvedPath);
+
+      const limit = config.skillsSandbox.artifactBytesLimit;
+      if (params.data.byteLength > limit) {
+        throw new SkillSandboxError(
+          `uploaded file is too large (${params.data.byteLength} bytes > ${limit} byte limit)`,
+        );
+      }
+      if (params.data.byteLength === 0) {
+        throw new SkillSandboxError("uploaded file is empty");
+      }
+
+      const mimeType = resolveArtifactMime({
+        buffer: params.data,
+        claimed: params.mimeType,
+      });
+
+      let row: Awaited<
+        ReturnType<typeof SkillSandboxReplayEventModel.appendUpload>
+      >;
+      try {
+        row = await SkillSandboxReplayEventModel.appendUpload({
+          sandboxId: params.sandboxId,
+          path: resolvedPath,
+          mimeType,
+          originalName: params.originalName ?? null,
+          sizeBytes: params.data.byteLength,
+          data: params.data,
+        });
+      } catch (dbError) {
+        throw new SkillSandboxError(
+          `failed to persist upload: ${dbError instanceof Error ? dbError.message : String(dbError)}`,
+        );
+      }
+      // tool uploads carry no sourceAttachmentId, so the conflict path never
+      // fires — a null here means the insert genuinely failed.
+      if (!row) {
+        throw new SkillSandboxError("failed to persist upload");
+      }
+
+      return {
+        uploadId: row.id,
+        sandboxId: params.sandboxId,
+        path: row.path,
+        mimeType: row.mimeType,
+        sizeBytes: row.sizeBytes,
+      };
+    });
+  }
+
+  /**
+   * Mount an immutable skill version into a sandbox: append a `skill_mount`
+   * replay event pinning the version and — if the version ships a
+   * `requirements.txt` — a `uv pip install` command right after it, both in one
+   * transaction so the deps can never be lost. No Dagger work happens here; the
+   * mount becomes part of the recipe and materializes on the next run/export.
+   *
+   * Idempotent and race-safe: `appendSkillMount` inserts under a
+   * `(sandbox_id, skill_id)` unique constraint, so a concurrent or repeated
+   * activation of the same skill is a no-op that returns null. The version's
+   * files are read here to detect requirements and to reject any path that the
+   * Rust replay validator would later refuse.
+   */
+  async mountSkill(params: MountSkillParams): Promise<MountRef | null> {
+    this.ensureEnabled();
+
+    return this.runExclusive(params.sandboxId, async () => {
+      const sandbox = await this.loadSandbox(params.sandboxId);
+
+      const files = await SkillVersionModel.findFiles(
+        params.skill.skillVersionId,
+      );
+      for (const file of files) {
+        validateSkillMountFilePath(params.skill.skillName, file.path);
+      }
+
+      // install the skill's requirements into the shared uv project as a replay
+      // command right after the mount, mirroring how user commands replay. We
+      // use `uv add` (not bare `uv pip install`) so the deps are recorded in
+      // pyproject/uv.lock — otherwise a later model `uv add <pkg>` could prune
+      // them as extraneous on sync. `--project` lets it run from any cwd.
+      const installCommand = files.some((f) => f.path === REQUIREMENTS_FILE)
+        ? {
+            command: `uv add --project ${SKILL_SANDBOX_HOME} --quiet -r ${shellQuote(
+              `${skillRootPath(params.skill.skillName)}/${REQUIREMENTS_FILE}`,
+            )}`,
+            cwd: SKILL_SANDBOX_HOME,
+            timeoutSeconds: REQUIREMENTS_INSTALL_TIMEOUT_SECONDS,
+          }
+        : undefined;
+
+      let mount: Awaited<
+        ReturnType<typeof SkillSandboxReplayEventModel.appendSkillMount>
+      >;
+      try {
+        mount = await SkillSandboxReplayEventModel.appendSkillMount({
+          sandboxId: params.sandboxId,
+          organizationId: sandbox.organizationId,
+          mount: {
+            skillId: params.skill.skillId,
+            skillName: params.skill.skillName,
+            skillVersionId: params.skill.skillVersionId,
+          },
+          installCommand,
+        });
+      } catch (dbError) {
+        throw new SkillSandboxError(
+          `failed to mount skill: ${dbError instanceof Error ? dbError.message : String(dbError)}`,
+        );
+      }
+      // already mounted: ON CONFLICT made the insert a no-op.
+      if (!mount) return null;
+
+      return {
+        mountId: mount.id,
+        sandboxId: params.sandboxId,
+        skillName: params.skill.skillName,
       };
     });
   }
@@ -234,7 +386,7 @@ class SkillSandboxRuntimeService {
     timeoutSeconds: number;
   }): Promise<void> {
     try {
-      await SkillSandboxCommandModel.append({
+      await SkillSandboxReplayEventModel.appendCommand({
         sandboxId: args.sandboxId,
         organizationId: args.organizationId,
         command: args.command,
@@ -267,6 +419,25 @@ class SkillSandboxRuntimeService {
     return sandbox;
   }
 
+  /**
+   * Fail-closed before materializing: every mounted skill must still be readable
+   * by the caller. A revoked or deleted skill stops the run before any bytes
+   * execute (see {@link assertMountedSkillsReadable}).
+   */
+  private async assertMountsReadable(
+    sandboxId: SandboxId,
+    caller: { userId: string; organizationId: string },
+  ): Promise<void> {
+    const result = await assertMountedSkillsReadable({
+      sandboxId,
+      userId: caller.userId,
+      organizationId: caller.organizationId,
+    });
+    if (!result.ok) {
+      throw new SkillSandboxError(result.reason);
+    }
+  }
+
   private resolveTimeout(requested: number | undefined): number {
     const max = config.skillsSandbox.wallClockSeconds;
     if (requested === undefined) return max;
@@ -280,44 +451,70 @@ class SkillSandboxRuntimeService {
   }
 
   private async buildContext(sandbox: SkillSandbox): Promise<{
-    snapshots: SnapshotFile[];
-    replayCommands: ReplayCommand[];
-    pythonpath: string | undefined;
+    replayEntries: ReplayEntry[];
   }> {
-    const [snapshotRows, log] = await Promise.all([
-      SkillSandboxFileSnapshotModel.listBySandbox(sandbox.id),
-      SkillSandboxCommandModel.listBySandbox(sandbox.id),
-    ]);
-    if (snapshotRows.length === 0) {
-      throw new SkillSandboxError(
-        `sandbox ${sandbox.id} has no file snapshots — recreate the sandbox`,
-      );
-    }
+    const log = await SkillSandboxReplayEventModel.listBySandbox(sandbox.id);
     return {
-      snapshots: snapshotRows.map(
-        (snapshot): SnapshotFile => ({
-          skillName: snapshot.skillName,
-          path: snapshot.path,
-          encoding: snapshot.encoding,
-          content: snapshot.content,
-        }),
-      ),
-      // uniform replay: every command (including the requirements-install
-      // setup steps written at create_skill_sandbox time) lives in the
-      // command log. no synthetic "auto-install" prepend here — that lived as
-      // its own code path and broke Dagger cache reuse on every config knob.
-      replayCommands: log.map(
-        (entry): ReplayCommand => ({
-          command: entry.command,
-          // pin replays to defaultCwd when the original entry has no stored
-          // cwd, so the Rust fallback doesn't pick up the live call's cwd
-          // (would break replay determinism and the runCommand↔exportArtifact
-          // cache).
-          cwd: entry.cwd ?? sandbox.defaultCwd,
-          timeoutSeconds: entry.timeoutSeconds,
-        }),
-      ),
-      pythonpath: pythonpathForSandbox(sandbox, snapshotRows),
+      // uniform, ordered replay: every command (including per-skill
+      // requirements-install steps), every uploaded file, and every skill mount
+      // lives in one sequenced log. interleaving is preserved so each step
+      // materializes at exactly its sequence point. an empty log is valid — a
+      // freshly-created default sandbox is just a plain shell.
+      replayEntries: log.map((entry): ReplayEntry => {
+        switch (entry.kind) {
+          case "command":
+            return {
+              kind: "command",
+              command: {
+                command: entry.command.command,
+                // pin replays to defaultCwd when the original entry has no
+                // stored cwd, so the Rust fallback doesn't pick up the live
+                // call's cwd (would break replay determinism and the
+                // runCommand↔exportArtifact cache).
+                cwd: entry.command.cwd ?? sandbox.defaultCwd,
+                timeoutSeconds: entry.command.timeoutSeconds,
+              },
+            };
+          case "upload":
+            return {
+              kind: "file",
+              file: {
+                path: entry.upload.path,
+                encoding: "base64",
+                content: entry.upload.data.toString("base64"),
+              },
+            };
+          case "skill_mount":
+            return {
+              kind: "skill_mount",
+              skillMount: {
+                skillName: entry.mount.skillName,
+                // synthesize the skill dir from the pinned version: SKILL.md
+                // from the version body, plus one entry per version file. The
+                // per-file `skillName` is the mount's name (version files are
+                // skill-agnostic), so paths land under /skills/<skillName>.
+                files: [
+                  {
+                    skillName: entry.mount.skillName,
+                    path: SKILL_MANIFEST_FILE,
+                    encoding: "utf8" as const,
+                    content: entry.content,
+                  },
+                  ...entry.files.map((file) => ({
+                    skillName: entry.mount.skillName,
+                    path: file.path,
+                    encoding: file.encoding,
+                    content: file.content,
+                  })),
+                ],
+              },
+            };
+          default:
+            throw new SkillSandboxError(
+              `replay event for sandbox ${sandbox.id} has an unknown kind ${JSON.stringify(entry)}`,
+            );
+        }
+      }),
     };
   }
 
@@ -434,73 +631,8 @@ function validateCommand(command: string): void {
   }
 }
 
-/**
- * Order skill names primary-first, then the rest alphabetically — so the
- * primary skill's modules and requirements take precedence over same-named
- * ones in secondary skills.
- */
-function orderPrimaryFirst(
-  names: Iterable<string>,
-  primary: string | undefined,
-): string[] {
-  const rest = [...new Set(names)].filter((name) => name !== primary).sort();
-  return primary ? [primary, ...rest] : rest;
-}
-
-function autoInstallCommands(
-  sandbox: SkillSandbox,
-  snapshotRows: SkillSandboxFileSnapshot[],
-): ReplayCommand[] {
-  const namesWithReqs = new Set<string>();
-  let primary: string | undefined;
-  for (const row of snapshotRows) {
-    if (row.path === REQUIREMENTS_FILE) {
-      namesWithReqs.add(row.skillName);
-      if (sandbox.primarySkillId && row.skillId === sandbox.primarySkillId) {
-        primary = row.skillName;
-      }
-    }
-  }
-  if (namesWithReqs.size === 0) return [];
-  return orderPrimaryFirst(namesWithReqs, primary).map(
-    (name): ReplayCommand => {
-      // shell-quote the path: skill names become path segments and may contain
-      // spaces, which would otherwise word-split the `-r` argument.
-      const reqPath = shellQuote(`${skillRootPath(name)}/${REQUIREMENTS_FILE}`);
-      return {
-        command: `uv pip install --python ${VENV_PYTHON} --quiet -r ${reqPath}`,
-        cwd: SKILL_SANDBOX_HOME,
-        timeoutSeconds: REQUIREMENTS_INSTALL_TIMEOUT_SECONDS,
-      };
-    },
-  );
-}
-
 function shellQuote(value: string): string {
   return `'${value.replace(/'/g, "'\\''")}'`;
-}
-
-/**
- * Build the PYTHONPATH for a sandbox: every mounted skill's root, primary
- * first so `import core...` resolves there before any same-named module in a
- * secondary skill. Falls back to the union of snapshot skill names when the
- * primary FK is null (skill was deleted after sandbox creation).
- */
-function pythonpathForSandbox(
-  sandbox: SkillSandbox,
-  snapshotRows: SkillSandboxFileSnapshot[],
-): string | undefined {
-  const skillNames = new Set<string>();
-  let primary: string | undefined;
-  for (const row of snapshotRows) {
-    skillNames.add(row.skillName);
-    if (sandbox.primarySkillId && row.skillId === sandbox.primarySkillId) {
-      primary = row.skillName;
-    }
-  }
-  if (skillNames.size === 0) return undefined;
-  const ordered = orderPrimaryFirst(skillNames, primary);
-  return ordered.map((name) => skillRootPath(name)).join(":");
 }
 
 function resolveArtifactPath(params: {
@@ -535,10 +667,196 @@ function resolveArtifactPath(params: {
   return `${cwd}/${params.path}`;
 }
 
+/**
+ * TS twin of the Rust `validate_upload_path`, run on the already-resolved
+ * absolute path. `resolveArtifactPath` covers null bytes, `..` traversal, and
+ * the under-roots bound; this adds the remaining replay-validator checks (shell
+ * metacharacters, directory targets) so the upload is rejected at the tool call
+ * rather than after it has been persisted as an unreplayable event.
+ */
+function validateUploadPath(path: string): void {
+  if (/["$`\\\n\r]/.test(path)) {
+    throw new SkillSandboxError(`invalid upload path: ${JSON.stringify(path)}`);
+  }
+  if (path.endsWith("/")) {
+    throw new SkillSandboxError(
+      `upload path must be a file, not a directory: ${JSON.stringify(path)}`,
+    );
+  }
+  // the sandbox roots themselves are directories: uploading to one would either
+  // replay-fail forever (/home/sandbox already exists) or shadow /skills with a
+  // regular file and break every later skill mount. reject before it is
+  // persisted as an unreplayable event.
+  if (path === SKILL_SANDBOX_ROOT || path === SKILL_SANDBOX_HOME) {
+    throw new SkillSandboxError(
+      `upload path must be a file, not a directory: ${JSON.stringify(path)}`,
+    );
+  }
+}
+
+/**
+ * Reject a skill resource path before it is persisted as a mount. Beyond the
+ * absolute/`..` checks the Rust replay validator runs, this normalizes away `.`
+ * and empty segments and rejects the whole reserved `SKILL.md` subtree: paths
+ * like `./SKILL.md` (would clobber the synthesized manifest) and
+ * `SKILL.md/injected.txt` (treats the manifest as a directory) pass
+ * create/update input validation but would break every later `run_command`.
+ */
+function validateSkillMountFilePath(skillName: string, path: string): void {
+  const segments = path.split("/").filter((s) => s !== "" && s !== ".");
+  if (
+    path.startsWith("/") ||
+    segments.length === 0 ||
+    segments.some((s) => s === "..") ||
+    segments[0] === SKILL_MANIFEST_FILE
+  ) {
+    throw new SkillInvalidFilePathError(skillName, path);
+  }
+}
+
+/**
+ * Stage the conversation's chat attachments into the default sandbox as upload
+ * replay events under {@link ATTACHMENTS_DIR}, so the model can use files the
+ * user attached without knowing any attachment id. Idempotent and multi-turn
+ * safe: only attachments not already staged (tracked via `source_attachment_id`)
+ * are appended, and the DB-level partial unique index makes a concurrent repeat
+ * a no-op.
+ *
+ * Scope is the sandbox's own conversation — the sandbox was already access-
+ * checked (org + user + conversation) at target resolution, so attachments can
+ * never cross into another conversation. Returns model-visible notices for
+ * attachments skipped (e.g. over the size limit) so a missing file is never
+ * silently assumed present. Pure DB I/O — must run inside the per-sandbox queue.
+ */
+async function stageConversationAttachments(
+  sandbox: SkillSandbox,
+): Promise<string[]> {
+  // only the conversation's default sandbox auto-absorbs attachments; fresh /
+  // explicit sandboxes are opt-in surfaces the caller drives with upload_file.
+  if (!sandbox.isDefault || !sandbox.conversationId) return [];
+
+  const attachments =
+    await ConversationAttachmentModel.findByConversationIdWithoutData(
+      sandbox.conversationId,
+    );
+  if (attachments.length === 0) return [];
+
+  const stagedIds = await SkillSandboxFileModel.listStagedAttachmentIds(
+    sandbox.id,
+  );
+  const { toStage, notices } = planAttachmentStaging({
+    attachments,
+    stagedIds,
+    limit: config.skillsSandbox.artifactBytesLimit,
+  });
+  if (toStage.length === 0) return notices;
+
+  const withData = await ConversationAttachmentModel.findByIdsWithData(
+    toStage.map((a) => a.id),
+  );
+  const dataById = new Map(withData.map((a) => [a.id, a]));
+
+  for (const { id, path } of toStage) {
+    const full = dataById.get(id);
+    // soft-deleted between the metadata read and here — skip; next op re-syncs.
+    if (!full) continue;
+    // sanitized names are always valid; this guards our own path logic and
+    // fails loudly (not silently) if that ever regresses.
+    validateUploadPath(path);
+    await SkillSandboxReplayEventModel.appendUpload({
+      sandboxId: sandbox.id,
+      path,
+      mimeType: full.mimeType,
+      originalName: full.originalName,
+      sizeBytes: full.fileData.byteLength,
+      data: full.fileData,
+      sourceAttachmentId: full.id,
+    });
+  }
+  return notices;
+}
+
+/**
+ * Decide which conversation attachments to stage and where. Pure policy (no
+ * I/O): assigns deterministic paths over the full ordered attachment set, skips
+ * the already-staged ones, and emits a notice for any that exceed `limit`.
+ */
+function planAttachmentStaging(params: {
+  attachments: { id: string; originalName: string | null; fileSize: number }[];
+  stagedIds: Set<string>;
+  limit: number;
+}): { toStage: { id: string; path: string }[]; notices: string[] } {
+  const { attachments, stagedIds, limit } = params;
+  const pathByAttachment = assignAttachmentPaths(attachments);
+  const notices: string[] = [];
+  const toStage: { id: string; path: string }[] = [];
+  for (const attachment of attachments) {
+    if (stagedIds.has(attachment.id)) continue;
+    if (attachment.fileSize > limit) {
+      notices.push(
+        `attachment ${JSON.stringify(attachment.originalName ?? attachment.id)} (${attachment.fileSize} bytes) was not auto-staged into the sandbox: it exceeds the ${limit}-byte file limit. Reference it via its download URL instead.`,
+      );
+      continue;
+    }
+    const path = pathByAttachment.get(attachment.id);
+    if (path) toStage.push({ id: attachment.id, path });
+  }
+  return { toStage, notices };
+}
+
+/**
+ * Map each conversation attachment to a deterministic, shell-safe absolute path
+ * under {@link ATTACHMENTS_DIR}. Duplicate sanitized names get a short
+ * attachment-id suffix; the input order (created_at, id) is stable, so a given
+ * attachment always resolves to the same path across turns.
+ */
+function assignAttachmentPaths(
+  attachments: { id: string; originalName: string | null }[],
+): Map<string, string> {
+  const used = new Set<string>();
+  const paths = new Map<string, string>();
+  for (const attachment of attachments) {
+    const safe = sanitizeAttachmentName(attachment.originalName, attachment.id);
+    let name = safe;
+    if (used.has(name)) {
+      const short = attachment.id.slice(0, 8);
+      const dot = safe.lastIndexOf(".");
+      name =
+        dot > 0
+          ? `${safe.slice(0, dot)}-${short}${safe.slice(dot)}`
+          : `${safe}-${short}`;
+    }
+    used.add(name);
+    paths.set(attachment.id, `${ATTACHMENTS_DIR}/${name}`);
+  }
+  return paths;
+}
+
+/**
+ * Reduce a caller-supplied filename to a single shell-safe path segment: keep
+ * only `[A-Za-z0-9._-]`, drop any directory prefix and leading dots (so `..`
+ * can't escape), and fall back to the attachment id when nothing usable remains.
+ */
+function sanitizeAttachmentName(
+  originalName: string | null,
+  attachmentId: string,
+): string {
+  const base = (originalName ?? "").split("/").pop() ?? "";
+  const cleaned = base.replace(/[^A-Za-z0-9._-]/g, "_").replace(/^\.+/, "");
+  if (cleaned === "") {
+    return `attachment-${attachmentId.slice(0, 8)}`;
+  }
+  return cleaned;
+}
+
 /** @public — exported for tests */
 export const __internals = {
   resolveArtifactPath,
+  validateUploadPath,
+  validateSkillMountFilePath,
+  stageConversationAttachments,
+  planAttachmentStaging,
+  assignAttachmentPaths,
+  sanitizeAttachmentName,
   asSandboxId,
-  pythonpathForSandbox,
-  autoInstallCommands,
 };

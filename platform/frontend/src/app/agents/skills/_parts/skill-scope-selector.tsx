@@ -1,6 +1,6 @@
 "use client";
 
-import type { ResourceVisibilityScope } from "@shared";
+import type { ResourceVisibilityScope } from "@archestra/shared";
 import { Globe, User, Users } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import { MultiSelectCombobox } from "@/components/ui/multi-select-combobox";

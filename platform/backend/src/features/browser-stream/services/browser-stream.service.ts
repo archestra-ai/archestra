@@ -6,7 +6,7 @@ import {
   MCP_SERVER_TOOL_NAME_SEPARATOR,
   PLAYWRIGHT_MCP_CATALOG_ID,
   TimeInMs,
-} from "@shared";
+} from "@archestra/shared";
 import { LRUCacheManager } from "@/cache-manager";
 import { selectMCPGatewayToken } from "@/clients/chat-mcp-client";
 import mcpClient from "@/clients/mcp-client";

@@ -7,7 +7,7 @@ import {
   TOOL_LIST_SKILLS_FULL_NAME,
   TOOL_READ_SKILL_FILE_FULL_NAME,
   TOOL_UPDATE_SKILL_FULL_NAME,
-} from "@shared";
+} from "@archestra/shared";
 import { SkillFileModel, SkillModel } from "@/models";
 import { beforeEach, describe, expect, test } from "@/test";
 import type { Agent, InsertSkill, InsertSkillFile } from "@/types";

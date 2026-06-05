@@ -1,4 +1,4 @@
-import { BUILT_IN_AGENT_IDS } from "@shared";
+import { BUILT_IN_AGENT_IDS } from "@archestra/shared";
 import { eq } from "drizzle-orm";
 import { type Mock, vi } from "vitest";
 import {

@@ -13,7 +13,7 @@ import {
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
   type TokenUsage,
-} from "@shared";
+} from "@archestra/shared";
 import {
   convertToModelMessages,
   createUIMessageStream,
@@ -117,6 +117,7 @@ import {
   sanitizeChatErrorForFrontend,
 } from "./errors";
 import { injectSkillActivation } from "./inject-skill-activation";
+import { applyPromptCacheBreakpoints } from "./normalization/apply-prompt-cache";
 import { cloneAttachmentsForFork } from "./normalization/clone-attachments-for-fork";
 import { extractInlineAttachments } from "./normalization/extract-inline-attachments";
 import { materializeAttachments } from "./normalization/materialize-attachments";
@@ -494,6 +495,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   organizationId,
                   userId: user.id,
                   agentId: conversation.agentId ?? undefined,
+                  conversationId,
                 })
               : (messages as ChatMessage[]);
 
@@ -740,10 +742,13 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   });
                 }
 
-                const modelMessages = await buildModelMessagesForProvider({
-                  messages: compactionResult.messages,
+                const modelMessages = applyPromptCacheBreakpoints({
                   provider,
-                  conversationId,
+                  messages: await buildModelMessagesForProvider({
+                    messages: compactionResult.messages,
+                    provider,
+                    conversationId,
+                  }),
                 });
                 const streamTextConfig: Parameters<typeof streamText>[0] = {
                   model,

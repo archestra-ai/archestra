@@ -1,4 +1,4 @@
-import { LINKED_IDP_SSO_MODE } from "@shared";
+import { LINKED_IDP_SSO_MODE } from "@archestra/shared";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useParams, useSearchParams } from "next/navigation";

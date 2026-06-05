@@ -1,4 +1,4 @@
-import { ADMIN_ROLE_NAME } from "@shared";
+import { ADMIN_ROLE_NAME } from "@archestra/shared";
 import config from "@/config";
 import { knowledgeSourceAccessControlService } from "@/knowledge-base";
 import {
@@ -1751,7 +1751,9 @@ describe("knowledge base routes", () => {
 
 describe("knowledge base permission configuration", () => {
   test("member permissions only allow read and query for knowledgeSource", async () => {
-    const { memberPermissions } = await import("@shared/access-control");
+    const { memberPermissions } = await import(
+      "@archestra/shared/access-control"
+    );
     expect(memberPermissions.knowledgeSource).toEqual(["read", "query"]);
     expect(memberPermissions.knowledgeSource).not.toContain("create");
     expect(memberPermissions.knowledgeSource).not.toContain("update");
@@ -1759,7 +1761,9 @@ describe("knowledge base permission configuration", () => {
   });
 
   test("admin permissions include full CRUD for knowledgeSource", async () => {
-    const { adminPermissions } = await import("@shared/access-control");
+    const { adminPermissions } = await import(
+      "@archestra/shared/access-control"
+    );
     expect(adminPermissions.knowledgeSource).toContain("read");
     expect(adminPermissions.knowledgeSource).toContain("create");
     expect(adminPermissions.knowledgeSource).toContain("update");
@@ -1769,9 +1773,9 @@ describe("knowledge base permission configuration", () => {
 
   test("knowledge base routes require correct permissions", async () => {
     const { requiredEndpointPermissionsMap } = await import(
-      "@shared/access-control"
+      "@archestra/shared/access-control"
     );
-    const { RouteId } = await import("@shared");
+    const { RouteId } = await import("@archestra/shared");
 
     // Read routes require knowledgeSource:read
     expect(requiredEndpointPermissionsMap[RouteId.GetKnowledgeBases]).toEqual({
@@ -1827,9 +1831,9 @@ describe("knowledge base permission configuration", () => {
 
   test("member cannot have create, update, or delete access to knowledge base routes", async () => {
     const { memberPermissions, requiredEndpointPermissionsMap } = await import(
-      "@shared/access-control"
+      "@archestra/shared/access-control"
     );
-    const { RouteId } = await import("@shared");
+    const { RouteId } = await import("@archestra/shared");
 
     const memberKbActions = memberPermissions.knowledgeSource;
 

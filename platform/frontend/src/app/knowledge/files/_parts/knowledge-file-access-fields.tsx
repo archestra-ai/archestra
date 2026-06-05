@@ -1,6 +1,6 @@
 "use client";
 
-import type { ResourceVisibilityScope } from "@shared";
+import type { ResourceVisibilityScope } from "@archestra/shared";
 import { Globe, User, Users } from "lucide-react";
 import { useEffect, useMemo, useRef } from "react";
 import { AgentSelector } from "@/components/agent-selector";

@@ -1,6 +1,9 @@
 "use client";
 
-import { type StatisticsTimeFrame, StatisticsTimeFrameSchema } from "@shared";
+import {
+  type StatisticsTimeFrame,
+  StatisticsTimeFrameSchema,
+} from "@archestra/shared";
 import { format } from "date-fns";
 import { Calendar as CalendarIcon, Clock } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";

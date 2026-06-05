@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { SupportedProvider } from "@shared";
+import type { SupportedProvider } from "@archestra/shared";
 import type {
   ChunkProcessingResult,
   CommonToolCall,

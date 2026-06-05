@@ -1,4 +1,4 @@
-import { IncomingEmailSecurityModeSchema } from "@shared";
+import { IncomingEmailSecurityModeSchema } from "@archestra/shared";
 import { z } from "zod";
 import {
   AgentScopeSchema,

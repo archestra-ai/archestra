@@ -1,6 +1,6 @@
 // biome-ignore-all lint/suspicious/noTemplateCurlyInString: Test file checks for placeholder strings in YAML output
 
-import type { EnvironmentVariableSchema } from "@shared";
+import type { EnvironmentVariableSchema } from "@archestra/shared";
 import { describe, expect, test } from "vitest";
 import type { z } from "zod";
 import {

@@ -122,16 +122,18 @@ export { default as siteNotificationsTable } from "./site-notification";
 export { default as skillsTable } from "./skill";
 export { default as skillFilesTable } from "./skill-file";
 export { default as skillSandboxesTable } from "./skill-sandbox";
-export { default as skillSandboxArtifactsTable } from "./skill-sandbox-artifact";
 export { default as skillSandboxCommandsTable } from "./skill-sandbox-command";
-export { default as skillSandboxFileSnapshotsTable } from "./skill-sandbox-file-snapshot";
-export { default as skillSandboxSkillsTable } from "./skill-sandbox-skill";
+export { default as skillSandboxFilesTable } from "./skill-sandbox-file";
+export { default as skillSandboxReplayEventsTable } from "./skill-sandbox-replay-event";
+export { default as skillSandboxSkillMountsTable } from "./skill-sandbox-skill-mount";
 export {
   default as skillShareLinksTable,
   skillShareLinkSkillsTable,
 } from "./skill-share-link";
 export { default as skillShareLinkRevisionsTable } from "./skill-share-link-revision";
 export { default as skillTeamsTable } from "./skill-team";
+export { default as skillVersionsTable } from "./skill-version";
+export { default as skillVersionFilesTable } from "./skill-version-file";
 export { default as tasksTable } from "./task";
 export { team as teamsTable, teamMember as teamMembersTable } from "./team";
 export { default as teamExternalGroupsTable } from "./team-external-group";

@@ -8,7 +8,7 @@ import {
   resourceCategories,
   resourceLabels,
   roleDescriptions,
-} from "@shared";
+} from "@archestra/shared";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Download, Eye } from "lucide-react";
 import { useEffect, useState } from "react";

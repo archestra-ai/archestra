@@ -1,6 +1,10 @@
 "use client";
 
-import { type AgentType, type archestraApiTypes, E2eTestId } from "@shared";
+import {
+  type AgentType,
+  type archestraApiTypes,
+  E2eTestId,
+} from "@archestra/shared";
 import type { ColumnDef, SortingState } from "@tanstack/react-table";
 import { ChevronDown, ChevronUp, Plus, Upload } from "lucide-react";
 import { useRouter } from "next/navigation";

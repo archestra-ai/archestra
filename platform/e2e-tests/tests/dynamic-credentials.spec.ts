@@ -1,4 +1,4 @@
-import { archestraApiSdk } from "@shared";
+import { archestraApiSdk } from "@archestra/shared";
 import {
   DEFAULT_TEAM_NAME,
   ENGINEERING_TEAM_NAME,

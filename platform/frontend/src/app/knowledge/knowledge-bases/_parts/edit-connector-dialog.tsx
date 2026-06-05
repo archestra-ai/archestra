@@ -1,6 +1,9 @@
 "use client";
 
-import { type archestraApiTypes, getConnectorNamePlaceholder } from "@shared";
+import {
+  type archestraApiTypes,
+  getConnectorNamePlaceholder,
+} from "@archestra/shared";
 import { ChevronDown } from "lucide-react";
 import { useEffect, useState } from "react";
 import { type Path, useForm } from "react-hook-form";

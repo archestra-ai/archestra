@@ -1,4 +1,4 @@
-import { SecretsManagerType } from "@shared";
+import { SecretsManagerType } from "@archestra/shared";
 import { vi } from "vitest";
 import config from "@/config";
 import SecretModel from "@/models/secret";

@@ -1,4 +1,4 @@
-import type { ReplayCommand, SnapshotFile } from "@archestra/sandbox-rs";
+import type { ReplayEntry } from "@archestra/sandbox-rs";
 import {
   context as otelContext,
   propagation as otelPropagation,
@@ -54,10 +54,7 @@ interface RunCommandParams extends LimitOverrides {
   command: string;
   cwd: string;
   timeoutSeconds: number;
-  snapshots?: SnapshotFile[];
-  replayCommands?: ReplayCommand[];
-  /** colon-joined absolute paths added to PYTHONPATH inside the container. */
-  pythonpath?: string;
+  replayEntries?: ReplayEntry[];
 }
 
 interface RunCommandResult {
@@ -77,10 +74,7 @@ interface ReadArtifactParams extends LimitOverrides {
    * directory as the original run.
    */
   defaultCwd: string;
-  snapshots?: SnapshotFile[];
-  replayCommands?: ReplayCommand[];
-  /** mirrors `RunCommandParams.pythonpath`. */
-  pythonpath?: string;
+  replayEntries?: ReplayEntry[];
 }
 
 interface ReadArtifactResult {
@@ -153,13 +147,11 @@ class SandboxRuntimeService {
       return await this.withBackstop(params.timeoutSeconds, () =>
         runSandbox({
           traceparent: getTraceparent(),
-          snapshots: params.snapshots ?? [],
-          replayCommands: params.replayCommands ?? [],
+          replayEntries: params.replayEntries ?? [],
           limits: this.limits(params),
           command: params.command,
           cwd: params.cwd,
           timeoutSeconds: params.timeoutSeconds,
-          pythonpath: params.pythonpath,
         }),
       );
     } catch (error) {
@@ -177,12 +169,10 @@ class SandboxRuntimeService {
       return await this.withBackstop(ARTIFACT_BUDGET_SECONDS, () =>
         readArtifact({
           traceparent: getTraceparent(),
-          snapshots: params.snapshots ?? [],
-          replayCommands: params.replayCommands ?? [],
+          replayEntries: params.replayEntries ?? [],
           limits: this.limits(params),
           path: params.path,
           defaultCwd: params.defaultCwd,
-          pythonpath: params.pythonpath,
         }),
       );
     } catch (error) {

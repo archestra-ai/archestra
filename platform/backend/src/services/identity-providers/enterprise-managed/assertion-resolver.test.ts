@@ -1,4 +1,4 @@
-import { OAUTH_TOKEN_TYPE } from "@shared";
+import { OAUTH_TOKEN_TYPE } from "@archestra/shared";
 import { describe, expect, test } from "@/test";
 import { resolveEnterpriseAssertion } from "./assertion-resolver";
 

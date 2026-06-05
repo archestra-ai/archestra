@@ -2,7 +2,6 @@
 //! session, and materialises each request into a content-addressed container
 //! chain. all `dagger_sdk` usage is contained in this module.
 
-use std::collections::BTreeMap;
 use std::env;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -28,7 +27,10 @@ use crate::validation::{
     SKILL_SANDBOX_HOME, SKILL_SANDBOX_ROOT, SKILL_SANDBOX_USER, format_artifact_error, shell_quote,
     skill_root_path, validate_artifact_path, validate_cwd, validate_snapshot_file_path,
 };
-use crate::{ArtifactBytes, CommandExecution, EngineFault, Result, SandboxError, SnapshotFile};
+use crate::{
+    ArtifactBytes, CommandExecution, EngineFault, ReplayInputFile, ReplayStep, Result,
+    SandboxError, SnapshotFile,
+};
 
 /// debian + python + uv + node + npm + common cli, warmed once per process.
 /// override with `ARCHESTRA_DAGGER_RUNTIME_IMAGE` for a custom debian-based base.
@@ -49,9 +51,11 @@ pub const DEFAULT_APT_PACKAGES: &[&str] = &[
 
 /// venv pre-baked into the warm base, owned by the sandbox user; reused by every
 /// `python3` command so per-call uv installs are layered on (fast) instead of
-/// recreated (slow).
+/// recreated (slow). MUST stay at the uv project's default location
+/// (`{SKILL_SANDBOX_HOME}/.venv`): `uv add` targets the project venv while
+/// `python3` follows `VIRTUAL_ENV`/PATH, so a different path would silently
+/// split the two interpreters.
 const DEFAULT_VENV_DIR: &str = "/home/sandbox/.venv";
-const DEFAULT_VENV_PYTHON: &str = "/home/sandbox/.venv/bin/python";
 const DEFAULT_PYTHON_REQUIREMENTS: &[&str] = &["numpy", "pandas", "httpx"];
 
 const SESSION_READY_TIMEOUT: Duration = Duration::from_secs(60);
@@ -69,7 +73,14 @@ const ARTIFACT_NOT_FOUND_EXIT_CODE: isize = 66;
 /// `pip3` instead — and the follow-up `cp pip pip3` would refuse with
 /// "are the same file". kept as a const so it shows up verbatim in build
 /// logs and survives `cargo fmt`.
-const PIP_SHIM_SETUP: &str = "rm -f /usr/local/bin/pip /usr/local/bin/pip3 /usr/local/bin/pip3.12 && printf '%s\\n' '#!/bin/sh' 'echo \"error: pip is disabled in this sandbox. Use \\\"uv add <pkg>\\\" instead.\" >&2' 'exit 1' > /usr/local/bin/pip && chmod +x /usr/local/bin/pip && ln -s pip /usr/local/bin/pip3 && ln -s pip /usr/local/bin/pip3.12";
+const PIP_SHIM_SETUP: &str = "rm -f /usr/local/bin/pip /usr/local/bin/pip3 /usr/local/bin/pip3.12 && printf '%s\\n' '#!/bin/sh' 'echo \"error: pip is disabled in this sandbox. Use \\\"uv add --project /home/sandbox <pkg>\\\" instead.\" >&2' 'exit 1' > /usr/local/bin/pip && chmod +x /usr/local/bin/pip && ln -s pip /usr/local/bin/pip3 && ln -s pip /usr/local/bin/pip3.12";
+
+/// minimal uv project written into the sandbox home so `uv add <pkg>` works:
+/// uv refuses to add to a non-project ("No `pyproject.toml` found"), and the
+/// project's default `.venv` is exactly `DEFAULT_VENV_DIR`. model installs via
+/// `uv add` and skill `requirements.txt` installs (also `uv add --project … -r`)
+/// therefore land in the same interpreter that `python3` resolves to.
+const PYPROJECT_SETUP: &str = "printf '[project]\\nname = \"sandbox\"\\nversion = \"0.0.0\"\\nrequires-python = \">=3.12\"\\n' > pyproject.toml";
 
 /// the Dagger engine connection plus its lazily-warmed base image. one per
 /// session; cloned `DaggerConn` handles are cheap (an Arc internally).
@@ -95,8 +106,7 @@ impl SandboxBackend for DaggerBackend {
         fields(
             cwd = %req.cwd,
             command.len = req.command.len(),
-            snapshots = req.snapshots.len(),
-            replay.len = req.replay_commands.len(),
+            replay.len = req.replay_steps.len(),
             timeout_s = req.timeout_seconds,
             exit_code = tracing::field::Empty,
             duration_ms = tracing::field::Empty,
@@ -140,8 +150,7 @@ impl SandboxBackend for DaggerBackend {
         skip_all,
         fields(
             path = %req.path,
-            snapshots = req.snapshots.len(),
-            replay.len = req.replay_commands.len(),
+            replay.len = req.replay_steps.len(),
             size_bytes = tracing::field::Empty,
         )
     )]
@@ -152,18 +161,16 @@ impl SandboxBackend for DaggerBackend {
         let warm = self.ensure_warm().await?;
         // replay must use the same cwd as the original run, otherwise commands
         // recorded with `cwd: None` materialise in the wrong directory and
-        // subsequent artifact reads can't find their files. pythonpath forwards
-        // for the same reason: replayed `python` invocations need the same
-        // module search path as the live ones.
+        // subsequent artifact reads can't find their files. skill mounts in the
+        // replay log re-apply their files and re-extend PYTHONPATH at their
+        // sequence point, so module imports resolve identically to the live run.
         let run = RunRequest {
-            snapshots: req.snapshots,
-            replay_commands: req.replay_commands,
+            replay_steps: req.replay_steps,
             limits: req.limits.clone(),
             command: String::new(),
             cwd: req.default_cwd,
             timeout_seconds: 0,
             traceparent: None,
-            pythonpath: req.pythonpath,
         };
         let materialized = materialize(warm, &run).await?;
         let bytes_limit = u64::from(req.limits.file_size_limit_bytes);
@@ -302,6 +309,16 @@ pub(crate) async fn spawn() -> Result<Arc<SessionHandle>> {
     }
 }
 
+/// warm-base user-setup command: scaffold the uv project, create the venv at
+/// `DEFAULT_VENV_DIR`, and seed defaults via `uv add`. runs from the home dir so
+/// uv discovers the freshly written `pyproject.toml`. pure so the scaffolding
+/// stays under test without a live engine.
+fn warm_base_user_setup(py_requirements: &str) -> String {
+    format!(
+        "cd {SKILL_SANDBOX_HOME} && {PYPROJECT_SETUP} && uv venv --python python3 {DEFAULT_VENV_DIR} && uv add {py_requirements}"
+    )
+}
+
 #[tracing::instrument(name = "sandbox.warm_base.build", skip_all, fields(image = tracing::field::Empty))]
 async fn build_warm_base(client: &DaggerConn) -> Result<Container> {
     let image = env::var("ARCHESTRA_DAGGER_RUNTIME_IMAGE")
@@ -318,10 +335,9 @@ async fn build_warm_base(client: &DaggerConn) -> Result<Container> {
     let root_setup = format!(
         "apt-get update -qq && apt-get install -y --no-install-recommends {apt_packages} && rm -rf /var/lib/apt/lists/* && mkdir -p {SKILL_SANDBOX_HOME} {SKILL_SANDBOX_ROOT} && chown -R 1000:1000 {SKILL_SANDBOX_HOME} {SKILL_SANDBOX_ROOT} && {PIP_SHIM_SETUP}"
     );
-    // user setup: uv venv + default python packages, owned by sandbox user.
-    let user_setup = format!(
-        "uv venv --python python3 {DEFAULT_VENV_DIR} && uv pip install --python {DEFAULT_VENV_PYTHON} {py_requirements}"
-    );
+    // user setup: scaffold the uv project, create the venv, seed default
+    // packages with `uv add` (same path the model uses), owned by sandbox user.
+    let user_setup = warm_base_user_setup(&py_requirements);
     client
         .container()
         .from(&image)
@@ -354,56 +370,132 @@ async fn build_warm_base(client: &DaggerConn) -> Result<Container> {
 #[tracing::instrument(
     name = "sandbox.materialize",
     skip_all,
-    fields(snapshots = req.snapshots.len(), replay.len = req.replay_commands.len())
+    fields(replay.len = req.replay_steps.len())
 )]
 async fn materialize(warm: Container, req: &RunRequest) -> Result<Container> {
     let mut container = warm;
 
-    if !req.snapshots.is_empty() {
-        let mut by_skill: BTreeMap<String, Vec<&SnapshotFile>> = BTreeMap::new();
-        for f in &req.snapshots {
-            by_skill.entry(f.skill_name.clone()).or_default().push(f);
-        }
-        for (skill_name, files) in by_skill {
-            let root = skill_root_path(&skill_name)?;
-            for f in files {
-                container = apply_snapshot_file(container, &root, f)?;
+    // replay re-applies every prior step on each call (commands re-execute,
+    // uploads re-write their bytes, skill mounts re-write their files and extend
+    // PYTHONPATH): per-call cost is O(history). we lean on Dagger's
+    // content-addressed layer cache to keep the wall-clock cost near-zero when
+    // the prefix is unchanged. mounts are append-only, so activating a skill
+    // mid-conversation never changes a prior layer's parent — the cache holds.
+    //
+    // replay steps are historical data, validated when first accepted; trusting
+    // them here keeps the log replayable. Live `req.cwd` is validated at the
+    // entry points; upload/mount paths and encodings are re-validated when the
+    // entry is converted to a `ReplayStep`.
+    let mut pythonpath_entries: Vec<String> = Vec::new();
+    for (index, step) in req.replay_steps.iter().enumerate() {
+        match step {
+            ReplayStep::Command(entry) => {
+                // each command is wrapped with its own `with_workdir` so cwd
+                // switches happen via Dagger's container layer (no shell `cd`).
+                let cwd = entry.cwd.as_deref().unwrap_or(&req.cwd);
+                let argv = supervised_argv(&entry.command, entry.timeout_seconds, &req.limits);
+                container = container
+                    .with_workdir(cwd)
+                    .with_exec_opts(argv, any_exit_opts());
+            }
+            ReplayStep::File(file) => {
+                container = apply_upload_file(container, index, file)?;
+            }
+            ReplayStep::SkillMount(mount) => {
+                let root = skill_root_path(&mount.skill_name)?;
+                for file in &mount.files {
+                    container = apply_snapshot_file(container, &root, file)?;
+                }
+                // chown this skill's tree; with_new_file writes as root.
+                container = container
+                    .with_user("root")
+                    .with_exec(vec![
+                        "sh".to_string(),
+                        "-c".to_string(),
+                        format!("chown -R {SKILL_SANDBOX_USER} {}", shell_quote(&root)),
+                    ])
+                    .with_user(SKILL_SANDBOX_USER);
+                // extend PYTHONPATH as a layer at this sequence point so commands
+                // after the mount can import the skill. commands before it are
+                // byte-identical to before this mount existed -> cache holds.
+                if !pythonpath_entries.iter().any(|e| e == &root) {
+                    pythonpath_entries.push(root);
+                    container =
+                        container.with_env_variable("PYTHONPATH", pythonpath_entries.join(":"));
+                }
             }
         }
-        // re-chown skill files; with_new_file writes as root.
-        container = container
-            .with_user("root")
-            .with_exec(vec![
-                "sh".to_string(),
-                "-c".to_string(),
-                format!("chown -R {SKILL_SANDBOX_USER} {SKILL_SANDBOX_ROOT}"),
-            ])
-            .with_user(SKILL_SANDBOX_USER);
-    }
-
-    if let Some(pythonpath) = &req.pythonpath {
-        container = container.with_env_variable("PYTHONPATH", pythonpath);
-    }
-
-    // replay re-executes every prior command on each call: per-call cost is
-    // O(history). we lean on Dagger's content-addressed layer cache to keep
-    // the wall-clock cost near-zero when the prefix is unchanged. if cache
-    // misses become a real concern, key a per-sandbox materialised container
-    // off the log hash and replay only the new delta.
-    for entry in &req.replay_commands {
-        // replay cwds are historical data: they were validated when first
-        // accepted and trusting them here keeps pre-existing sandboxes with
-        // legacy cwds usable. Live `req.cwd` is validated at the entry points.
-        // each command is wrapped with its own `with_workdir` so cwd switches
-        // happen via Dagger's container layer (no shell `cd` needed).
-        let cwd = entry.cwd.as_deref().unwrap_or(&req.cwd);
-        let argv = supervised_argv(&entry.command, entry.timeout_seconds, &req.limits);
-        container = container
-            .with_workdir(cwd)
-            .with_exec_opts(argv, any_exit_opts());
     }
 
     Ok(container)
+}
+
+/// write an uploaded file at its absolute path. runs as root so it works even
+/// when parent dirs must be created, then hands the file (and every parent dir
+/// it created) to the sandbox user and removes the staged bytes.
+///
+/// `index` is the upload's position in the replay step list; it keys a reserved
+/// `/tmp` staging path so the raw bytes never land under the user-visible
+/// sandbox roots — replaying an upload can't clobber a file an earlier command
+/// created next to the target. each step removes its own staged file.
+fn apply_upload_file(
+    container: Container,
+    index: usize,
+    file: &ReplayInputFile,
+) -> Result<Container> {
+    let temp_path = format!("/tmp/.archestra-upload-{index}");
+    let decode = match file.encoding.as_str() {
+        "base64" => format!(
+            "base64 -d {} > {}",
+            shell_quote(&temp_path),
+            shell_quote(&file.path),
+        ),
+        "utf8" => format!("cp {} {}", shell_quote(&temp_path), shell_quote(&file.path)),
+        other => {
+            return Err(SandboxError::InvalidInput(format!(
+                "unsupported upload encoding: {other}"
+            )));
+        }
+    };
+    // create each missing parent dir shallowest-first and chown only the ones
+    // we create, so commands running as the sandbox user can write siblings in
+    // a fresh upload dir. pre-existing dirs (the sandbox roots) are untouched.
+    let mut create_parents = String::new();
+    for dir in ancestor_dirs(&file.path) {
+        let quoted = shell_quote(&dir);
+        create_parents.push_str(&format!(
+            "[ -d {quoted} ] || {{ mkdir {quoted} && chown {SKILL_SANDBOX_USER} {quoted}; }} && "
+        ));
+    }
+    let script = format!(
+        "{create_parents}{decode} && chown {user} {target} && rm -f {temp}",
+        user = SKILL_SANDBOX_USER,
+        target = shell_quote(&file.path),
+        temp = shell_quote(&temp_path),
+    );
+    Ok(container
+        .with_user("root")
+        .with_new_file(&temp_path, &file.content)
+        .with_exec(vec!["bash".to_string(), "-c".to_string(), script])
+        .with_user(SKILL_SANDBOX_USER))
+}
+
+/// absolute parent directories of `path`, shallowest first, excluding the root
+/// `/` and the file itself — e.g. `/home/sandbox/a/b.txt` yields `/home`,
+/// `/home/sandbox`, `/home/sandbox/a`. assumes an absolute, traversal-free path
+/// (guaranteed by `validate_upload_path` before the step is built).
+fn ancestor_dirs(path: &str) -> Vec<String> {
+    let components: Vec<&str> = path.split('/').filter(|s| !s.is_empty()).collect();
+    let mut acc = String::new();
+    components
+        .iter()
+        .take(components.len().saturating_sub(1))
+        .map(|component| {
+            acc.push('/');
+            acc.push_str(component);
+            acc.clone()
+        })
+        .collect()
 }
 
 fn apply_snapshot_file(container: Container, root: &str, file: &SnapshotFile) -> Result<Container> {
@@ -612,5 +704,38 @@ mod tests {
 
         let generic = domain_error("connection reset", None);
         assert_eq!(classify_engine_fault(&generic), EngineFault::Unreachable);
+    }
+
+    #[test]
+    fn warm_base_user_setup_scaffolds_uv_project() {
+        let cmd = warm_base_user_setup("numpy pandas");
+        // must run in the project dir so `uv add` can discover pyproject.toml.
+        assert!(cmd.starts_with("cd /home/sandbox &&"));
+        assert!(cmd.contains("pyproject.toml"));
+        assert!(cmd.contains("uv venv --python python3 /home/sandbox/.venv"));
+        // deps seeded via the same `uv add` path the model uses.
+        assert!(cmd.contains("uv add numpy pandas"));
+        assert!(!cmd.contains("uv pip install"));
+    }
+
+    #[test]
+    fn pip_shim_directs_to_project_scoped_uv_add() {
+        // the shim is the model's only feedback when it reaches for pip; it must
+        // point at a command that actually works from any cwd.
+        assert!(PIP_SHIM_SETUP.contains("uv add --project /home/sandbox <pkg>"));
+    }
+
+    #[test]
+    fn ancestor_dirs_lists_parents_shallowest_first() {
+        assert_eq!(
+            ancestor_dirs("/home/sandbox/a/b.txt"),
+            vec!["/home", "/home/sandbox", "/home/sandbox/a"]
+        );
+        assert_eq!(
+            ancestor_dirs("/home/sandbox/input.csv"),
+            vec!["/home", "/home/sandbox"]
+        );
+        // a file directly under root `/` has no parent dir to create.
+        assert_eq!(ancestor_dirs("/file"), Vec::<String>::new());
     }
 }

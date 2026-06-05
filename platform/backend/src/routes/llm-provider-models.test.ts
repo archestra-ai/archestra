@@ -1,4 +1,4 @@
-import { TimeInMs } from "@shared";
+import { TimeInMs } from "@archestra/shared";
 import { vi } from "vitest";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
 import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";

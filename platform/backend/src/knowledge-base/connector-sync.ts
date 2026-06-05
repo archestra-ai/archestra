@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { ModelInputModality } from "@shared";
+import type { ModelInputModality } from "@archestra/shared";
 import type pino from "pino";
 import defaultLogger from "@/logging";
 import {

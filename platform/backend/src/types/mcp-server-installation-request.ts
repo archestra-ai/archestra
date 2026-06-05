@@ -1,4 +1,4 @@
-import { LocalConfigSchema, OAuthConfigSchema } from "@shared";
+import { LocalConfigSchema, OAuthConfigSchema } from "@archestra/shared";
 import {
   createInsertSchema,
   createSelectSchema,

@@ -2,7 +2,7 @@ import {
   archestraApiSdk,
   type archestraApiTypes,
   SecretsManagerType,
-} from "@shared";
+} from "@archestra/shared";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { handleApiError } from "./utils";
 

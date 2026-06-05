@@ -1,4 +1,4 @@
-import { SupportedProvidersSchema } from "@shared";
+import { SupportedProvidersSchema } from "@archestra/shared";
 import {
   createInsertSchema,
   createSelectSchema,

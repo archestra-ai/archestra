@@ -1,7 +1,7 @@
 import {
   InteractionSourceSchema,
   SupportedProvidersDiscriminatorSchema,
-} from "@shared";
+} from "@archestra/shared";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";

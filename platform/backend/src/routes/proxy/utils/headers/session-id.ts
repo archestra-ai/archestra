@@ -1,4 +1,4 @@
-import { SESSION_ID_HEADER } from "@shared";
+import { SESSION_ID_HEADER } from "@archestra/shared";
 import { getHeaderValue, parseMetaHeader } from "./meta-header";
 
 const OPENWEBUI_CHAT_ID_HEADER = "x-openwebui-chat-id";

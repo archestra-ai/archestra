@@ -2,8 +2,9 @@
  * biome-ignore-all lint/correctness/noEmptyPattern: oddly enough in extend below this is required
  * see https://vitest.dev/guide/test-context.html#extend-test-context
  */
+
+import type { SupportedProvider } from "@archestra/shared";
 import { type APIRequestContext, test as base } from "@playwright/test";
-import type { SupportedProvider } from "@shared";
 import {
   ADMIN_EMAIL,
   ADMIN_PASSWORD,

@@ -10,7 +10,7 @@
  *
  * @see https://docs.perplexity.ai/api-reference/chat-completions-post
  */
-import { ArchestraInternalErrorCode } from "@shared";
+import { ArchestraInternalErrorCode } from "@archestra/shared";
 import { get } from "lodash-es";
 import OpenAIProvider from "openai";
 import type {

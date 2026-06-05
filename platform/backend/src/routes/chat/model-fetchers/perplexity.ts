@@ -1,4 +1,4 @@
-import { PERPLEXITY_MODELS } from "@shared";
+import { PERPLEXITY_MODELS } from "@archestra/shared";
 import type { ModelInfo } from "./types";
 
 export async function fetchPerplexityModels(): Promise<ModelInfo[]> {

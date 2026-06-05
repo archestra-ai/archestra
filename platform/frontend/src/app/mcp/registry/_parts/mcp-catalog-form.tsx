@@ -1,7 +1,7 @@
 "use client";
 
+import { type archestraApiTypes, DocsPage } from "@archestra/shared";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { type archestraApiTypes, DocsPage } from "@shared";
 import {
   Ban,
   Code,
@@ -349,7 +349,6 @@ export function McpCatalogForm({
           fieldName: undefined,
           headerName: "Authorization",
           promptOnInstallation: true,
-          promptOnPreset: false,
           required: true,
           value: "",
           description: "",
@@ -1889,6 +1888,30 @@ export function McpCatalogForm({
 
                                 <FormField
                                   control={form.control}
+                                  name="oauthConfig.resource"
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormLabel>Protected Resource</FormLabel>
+                                      <FormControl>
+                                        <Input
+                                          placeholder="https://api.example.com or api://client-id"
+                                          className="font-mono"
+                                          {...field}
+                                        />
+                                      </FormControl>
+                                      <FormDescription>
+                                        Optional OAuth resource/audience sent in
+                                        the authorization request. Leave blank
+                                        to use the Default Audience, if set, or
+                                        the MCP endpoint URL.
+                                      </FormDescription>
+                                      <FormMessage />
+                                    </FormItem>
+                                  )}
+                                />
+
+                                <FormField
+                                  control={form.control}
                                   name="oauthConfig.scopes"
                                   render={({ field }) => (
                                     <FormItem>
@@ -2478,7 +2501,6 @@ type AdditionalHeader = {
   description?: string;
   includeBearerPrefix?: boolean;
   promptOnInstallation?: boolean;
-  promptOnPreset?: boolean;
 };
 
 /**
@@ -2511,7 +2533,6 @@ function deriveAdditionalHeaders(userConfig: unknown): AdditionalHeader[] {
         cfg.promptOnInstallation === undefined
           ? true
           : Boolean(cfg.promptOnInstallation),
-      promptOnPreset: Boolean(cfg.promptOnPreset),
     });
   }
   return out;
@@ -2564,10 +2585,10 @@ function additionalHeadersChangeRequiresReinstall(
     if ((p.headerName ?? "") !== (n.headerName ?? "")) return true; // Routing
     if (Boolean(p.sensitive) !== Boolean(n.sensitive)) return true; // Storage
     // Static header value rotation. `value` only matters at runtime
-    // when the header is fully static (no install or preset prompt) —
-    // for prompted headers it's just a placeholder.
-    const wasStatic = !p.promptOnInstallation && !p.promptOnPreset;
-    const isStatic = !n.promptOnInstallation && !n.promptOnPreset;
+    // when the header is fully static (no install prompt) — for prompted
+    // headers it's just a placeholder.
+    const wasStatic = !p.promptOnInstallation;
+    const isStatic = !n.promptOnInstallation;
     if (wasStatic && isStatic && (p.value ?? "") !== (n.value ?? "")) {
       return true;
     }
@@ -2690,14 +2711,9 @@ function readHeaderRowAsDraft(
 ): HeaderDraft {
   const row = form.getValues(`additionalHeaders.${index}`);
   const promptOnInstallation = Boolean(row?.promptOnInstallation);
-  const promptOnPreset = Boolean(row?.promptOnPreset);
   return {
     headerName: row?.headerName ?? "",
-    scope: promptOnInstallation
-      ? "installation"
-      : promptOnPreset
-        ? "preset"
-        : "static",
+    scope: promptOnInstallation ? "installation" : "static",
     required: Boolean(row?.required),
     value: row?.value ?? "",
     description: row?.description ?? "",
@@ -2725,7 +2741,6 @@ function headerDraftToRow(draft: HeaderDraft) {
     fieldName: undefined,
     headerName: draft.headerName,
     promptOnInstallation: draft.scope === "installation",
-    promptOnPreset: draft.scope === "preset",
     required: draft.scope === "installation" ? draft.required : false,
     value: draft.scope === "static" ? draft.value : "",
     description: draft.description,
@@ -2750,7 +2765,6 @@ function applyHeaderDraftToRow(
     );
   set("headerName", draft.headerName);
   set("promptOnInstallation", draft.scope === "installation");
-  set("promptOnPreset", draft.scope === "preset");
   set("required", draft.scope === "installation" ? draft.required : false);
   set("value", draft.scope === "static" ? draft.value : "");
   set("description", draft.description);

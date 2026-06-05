@@ -1,6 +1,6 @@
 "use client";
 
-import type { AgentScope, archestraApiTypes } from "@shared";
+import type { AgentScope, archestraApiTypes } from "@archestra/shared";
 import {
   Bot,
   CheckIcon,

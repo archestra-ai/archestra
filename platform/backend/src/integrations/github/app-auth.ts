@@ -1,5 +1,5 @@
 import { createPrivateKey } from "node:crypto";
-import { TimeInMs } from "@shared";
+import { TimeInMs } from "@archestra/shared";
 import { SignJWT } from "jose";
 import { LRUCacheManager } from "@/cache-manager";
 

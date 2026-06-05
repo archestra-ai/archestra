@@ -1,4 +1,4 @@
-import { hasPersistableAssistantContent } from "@shared";
+import { hasPersistableAssistantContent } from "@archestra/shared";
 import {
   and,
   desc,

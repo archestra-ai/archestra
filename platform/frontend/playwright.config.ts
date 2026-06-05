@@ -41,7 +41,11 @@ export default defineConfig({
   workers: 1,
   forbidOnly: IS_CI,
   retries: IS_CI ? 2 : 0,
-  timeout: 60_000,
+  // Generous timeouts: the suite runs against `next dev`, which compiles each
+  // route on first request and re-renders lazily. On loaded CI runners that
+  // cold path routinely exceeds a 10s assertion budget (the same render is
+  // near-instant locally), so the first test to touch a route would flake.
+  timeout: 90_000,
   reporter: IS_CI
     ? [["github"], ["html", { open: "never" }]]
     : [["list"], ["html", { open: "never" }]],
@@ -50,10 +54,10 @@ export default defineConfig({
     trace: "on-first-retry",
     screenshot: "only-on-failure",
     video: "retain-on-failure",
-    actionTimeout: 15_000,
-    navigationTimeout: 30_000,
+    actionTimeout: 20_000,
+    navigationTimeout: 45_000,
   },
-  expect: { timeout: 10_000 },
+  expect: { timeout: 30_000 },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
   webServer: {
     command: `next dev -H 127.0.0.1 -p ${INT_TESTS_PORT}`,

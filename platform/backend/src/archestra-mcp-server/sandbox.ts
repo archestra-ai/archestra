@@ -472,6 +472,16 @@ async function resolveTarget(params: {
       sandbox.userId !== userCtx.userId ||
       sandbox.conversationId !== conversationId
     ) {
+      logger.warn(
+        {
+          organizationId: userCtx.organizationId,
+          userId: userCtx.userId,
+          conversationId,
+          targetId: target.id,
+          reason: "out_of_scope_sandbox_id",
+        },
+        "[Sandbox] rejected out-of-scope sandbox id",
+      );
       return { error: `No accessible sandbox with id ${target.id} exists.` };
     }
     return { sandboxId: asSandboxId(sandbox.id) };
@@ -560,6 +570,15 @@ async function loadUploadSource(params: {
     }
     case "chat_attachment": {
       if (!conversationId) {
+        logger.warn(
+          {
+            organizationId: userCtx.organizationId,
+            userId: userCtx.userId,
+            attachmentId: source.attachmentId,
+            reason: "no_conversation_context",
+          },
+          "[Sandbox] rejected chat_attachment upload",
+        );
         return {
           error:
             "chat_attachment uploads require a conversation context; use a base64 or text source instead.",
@@ -569,11 +588,31 @@ async function loadUploadSource(params: {
         source.attachmentId,
       );
       if (!attachment || attachment.organizationId !== userCtx.organizationId) {
+        logger.warn(
+          {
+            organizationId: userCtx.organizationId,
+            userId: userCtx.userId,
+            conversationId,
+            attachmentId: source.attachmentId,
+            reason: "attachment_not_found_or_wrong_org",
+          },
+          "[Sandbox] rejected chat_attachment upload",
+        );
         return {
           error: `No accessible attachment with id ${source.attachmentId} exists.`,
         };
       }
       if (attachment.conversationId !== conversationId) {
+        logger.warn(
+          {
+            organizationId: userCtx.organizationId,
+            userId: userCtx.userId,
+            conversationId,
+            attachmentId: source.attachmentId,
+            reason: "cross_conversation_attachment",
+          },
+          "[Sandbox] rejected chat_attachment upload",
+        );
         return {
           error:
             "That attachment belongs to a different conversation and cannot be used here.",

@@ -749,11 +749,9 @@ describe("transformFormToApiData", () => {
   });
 
   describe("round-trips the `sensitive` flag on additional headers", () => {
-    // Test 1 from the recommendation: form → API → form preserves
-    // `sensitive`. Covers both preset-scoped (where the flag is the only
-    // routing signal between `preset_field_values` and `preset_secret_id`)
-    // and installation-scoped (where the flag controls input masking but
-    // doesn't change storage).
+    // form → API → form preserves the `sensitive` flag on installation-scoped
+    // headers (where the flag controls input masking but doesn't change
+    // storage).
     type AdditionalHeader = NonNullable<
       McpCatalogFormValues["additionalHeaders"]
     >[number];

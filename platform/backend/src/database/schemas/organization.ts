@@ -221,20 +221,17 @@ const organizationsTable = pgTable("organization", {
   >(),
 
   /**
-   * Custom label admins choose for the child-configuration entity of every
-   * catalog item (internally still called "preset"). When both singular and
-   * plural are set, the catalog UI replaces "Preset"/"presets" copy.
-   *
-   * Deprecated/read-only: the registry admin UI and the write endpoints that
-   * set these were removed. Existing values are still read; no new writes.
+   * Legacy preset columns (feature removed) — retained inert (non-destructive,
+   * no migration) and no longer read or written. Held admin-chosen singular/
+   * plural labels that the catalog UI used to override "Preset"/"presets" copy.
    */
   presetEntityName: text("preset_entity_name"),
   presetEntityNamePlural: text("preset_entity_name_plural"),
 
   /**
-   * Custom display label for the implicit "default" preset row (parent catalog
-   * item). NULL falls back to "Default" in the UI. Deprecated/read-only — the
-   * write endpoint was removed.
+   * Legacy preset column (feature removed) — retained inert. Held the custom
+   * display label for the implicit "default" preset row. No longer read or
+   * written.
    */
   presetEntityDefaultLabel: text("preset_entity_default_label"),
 
@@ -292,10 +289,9 @@ const organizationsTable = pgTable("organization", {
     .default(false),
 
   /**
-   * Validation regex applied to default-scoped field values when installing an
-   * MCP server (mirrors `mcp_preset_entries.validation_regex` for the implicit
-   * default row). Stored without delimiters or flags. NULL disables validation.
-   * Deprecated/read-only — the write endpoint was removed.
+   * Legacy preset column (feature removed) — retained inert. Held a validation
+   * regex (no delimiters/flags) applied to default-scoped field values at
+   * install time. No longer read or written.
    */
   presetEntityDefaultValidationRegex: text(
     "preset_entity_default_validation_regex",

@@ -86,8 +86,8 @@ describe("access-control", () => {
 
   describe("sandbox artifact route", () => {
     // the download_file tool (sandbox:execute) hands out this artifact URL, so
-    // the fetch route must require the same permission — otherwise a role with
-    // sandbox:execute but not skill:execute gets a 403 on a URL it just earned.
+    // the fetch route must require the same permission — otherwise a role that
+    // produced an artifact gets a 403 on a URL it just earned.
     test("getSkillSandboxArtifact requires sandbox:execute", () => {
       const required =
         requiredEndpointPermissionsMap[RouteId.GetSkillSandboxArtifact];

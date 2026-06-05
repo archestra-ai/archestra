@@ -555,6 +555,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
       });
       const usesGithubAppConfig = appConfigRef !== null;
+      const requiresCredentials = body.connectorType !== "web_crawler";
       if (appConfigRef && body.config.type === "github") {
         // the App config owns the host the installation token is minted against,
         // so it is the single source of truth for the connector's API host
@@ -562,11 +563,13 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       let secretId: string | null = null;
-      if (usesGithubAppConfig) {
+      if (usesGithubAppConfig || !requiresCredentials) {
         if (body.credentials) {
           throw new ApiError(
             400,
-            "GitHub App connectors must not include inline credentials",
+            usesGithubAppConfig
+              ? "GitHub App connectors must not include inline credentials"
+              : "Web Crawler connectors must not include inline credentials",
           );
         }
       } else {
@@ -800,6 +803,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
       });
       const usesGithubAppConfig = appConfigRef !== null;
+      const requiresCredentials = connector.connectorType !== "web_crawler";
       if (appConfigRef && body.config?.type === "github") {
         // the App config owns the host the installation token is minted against
         body.config.githubUrl = appConfigRef.githubUrl;
@@ -839,6 +843,12 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "GitHub App connectors must not include inline credentials",
         );
       }
+      if (!requiresCredentials && body.credentials) {
+        throw new ApiError(
+          400,
+          "Web Crawler connectors must not include inline credentials",
+        );
+      }
       const wasGithubApp =
         connector.config.type === "github" &&
         connector.config.authMethod === "github_app";
@@ -858,7 +868,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       let nextSecretId = connector.secretId;
       let secretToDeleteAfterUpdate: string | null = null;
-      if (usesGithubAppConfig) {
+      if (usesGithubAppConfig || !requiresCredentials) {
         // defer dropping the connector's own inline secret until the update has
         // been persisted, so a later failure can't orphan the connector
         if (connector.secretId) {

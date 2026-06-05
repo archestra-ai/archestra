@@ -127,6 +127,7 @@ export function CreateConnectorDialog({
     const usesGithubApp =
       values.connectorType === "github" &&
       (values.config as { authMethod?: string }).authMethod === "github_app";
+    const requiresCredentials = values.connectorType !== "web_crawler";
     const result = await createConnector.mutateAsync({
       name: values.name,
       description: values.description || null,
@@ -134,7 +135,7 @@ export function CreateConnectorDialog({
       teamIds: visibility === "team-scoped" ? teamIds : [],
       connectorType: values.connectorType,
       config: config as archestraApiTypes.CreateConnectorData["body"]["config"],
-      ...(usesGithubApp
+      ...(usesGithubApp || !requiresCredentials
         ? {}
         : {
             credentials: {

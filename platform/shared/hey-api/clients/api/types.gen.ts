@@ -11785,7 +11785,7 @@ export type ImportAgentData = {
             /**
              * Connector type (e.g. confluence, github)
              */
-            connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'file_upload' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce';
+            connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'file_upload' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler';
         }>;
     };
     path?: never;
@@ -12771,7 +12771,7 @@ export type ExportAgentResponses = {
             /**
              * Connector type (e.g. confluence, github)
              */
-            connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'file_upload' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce';
+            connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'file_upload' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler';
         }>;
     };
 };
@@ -32974,7 +32974,7 @@ export type GetKnowledgeBasesResponses = {
             connectors: Array<{
                 id: string;
                 name: string;
-                connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'file_upload' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce';
+                connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'file_upload' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler';
             }>;
             totalDocsIndexed: number;
             assignedAgents: Array<{
@@ -33452,7 +33452,7 @@ export type GetConnectorsData = {
         offset?: number;
         knowledgeBaseId?: string;
         search?: string;
-        connectorType?: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'file_upload' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce';
+        connectorType?: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'file_upload' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler';
     };
     url: '/api/connectors';
 };
@@ -33534,7 +33534,7 @@ export type GetConnectorsResponses = {
             description: string | null;
             visibility: 'org-wide' | 'team-scoped';
             teamIds: Array<string>;
-            connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'file_upload' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce';
+            connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'file_upload' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler';
             config: {
                 type: 'jira';
                 jiraBaseUrl: unknown;
@@ -33648,7 +33648,7 @@ export type GetConnectorsResponses = {
                 collectionIds?: Array<string>;
                 batchSize?: number;
             } | {
-                type: 'salesforce';
+                type: 'salesforce' | 'web_crawler';
                 loginUrl: unknown;
                 objects?: Array<string>;
                 advancedObjectConfigJson?: string;
@@ -33689,7 +33689,7 @@ export type CreateConnectorData = {
         description?: string | null;
         visibility?: 'org-wide' | 'team-scoped';
         teamIds?: Array<string>;
-        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'file_upload' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce';
+        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'file_upload' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler';
         config: {
             type: 'jira';
             jiraBaseUrl: string;
@@ -33803,7 +33803,7 @@ export type CreateConnectorData = {
             collectionIds?: Array<string>;
             batchSize?: number;
         } | {
-            type: 'salesforce';
+            type: 'salesforce' | 'web_crawler';
             loginUrl?: string;
             objects?: Array<string>;
             advancedObjectConfigJson?: string;
@@ -33902,7 +33902,7 @@ export type CreateConnectorResponses = {
         description: string | null;
         visibility: 'org-wide' | 'team-scoped';
         teamIds: Array<string>;
-        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'file_upload' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce';
+        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'file_upload' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler';
         config: {
             type: 'jira';
             jiraBaseUrl: unknown;
@@ -34016,7 +34016,7 @@ export type CreateConnectorResponses = {
             collectionIds?: Array<string>;
             batchSize?: number;
         } | {
-            type: 'salesforce';
+            type: 'salesforce' | 'web_crawler';
             loginUrl: unknown;
             objects?: Array<string>;
             advancedObjectConfigJson?: string;
@@ -34207,7 +34207,7 @@ export type GetConnectorResponses = {
         description: string | null;
         visibility: 'org-wide' | 'team-scoped';
         teamIds: Array<string>;
-        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'file_upload' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce';
+        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'file_upload' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler';
         config: {
             type: 'jira';
             jiraBaseUrl: unknown;
@@ -34321,7 +34321,7 @@ export type GetConnectorResponses = {
             collectionIds?: Array<string>;
             batchSize?: number;
         } | {
-            type: 'salesforce';
+            type: 'salesforce' | 'web_crawler';
             loginUrl: unknown;
             objects?: Array<string>;
             advancedObjectConfigJson?: string;
@@ -34462,7 +34462,7 @@ export type UpdateConnectorData = {
             collectionIds?: Array<string>;
             batchSize?: number;
         } | {
-            type: 'salesforce';
+            type: 'salesforce' | 'web_crawler';
             loginUrl?: string;
             objects?: Array<string>;
             advancedObjectConfigJson?: string;
@@ -34562,7 +34562,7 @@ export type UpdateConnectorResponses = {
         description: string | null;
         visibility: 'org-wide' | 'team-scoped';
         teamIds: Array<string>;
-        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'file_upload' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce';
+        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'file_upload' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler';
         config: {
             type: 'jira';
             jiraBaseUrl: unknown;
@@ -34676,7 +34676,7 @@ export type UpdateConnectorResponses = {
             collectionIds?: Array<string>;
             batchSize?: number;
         } | {
-            type: 'salesforce';
+            type: 'salesforce' | 'web_crawler';
             loginUrl: unknown;
             objects?: Array<string>;
             advancedObjectConfigJson?: string;
@@ -34796,7 +34796,7 @@ export type GetConnectorDocumentsResponses = {
             chunkCount: number;
             createdAt: string;
             updatedAt: string;
-            connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'file_upload' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce';
+            connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'file_upload' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler';
         }>;
         pagination: {
             currentPage: number;
@@ -34993,7 +34993,7 @@ export type GetConnectorDocumentResponses = {
         chunkCount: number;
         createdAt: string;
         updatedAt: string;
-        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'file_upload' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce';
+        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'file_upload' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler';
     };
 };
 

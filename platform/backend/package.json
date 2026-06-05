@@ -59,6 +59,7 @@
     "@better-auth/sso": "catalog:",
     "@archestra/sandbox-rs": "workspace:*",
     "@chonkiejs/core": "^0.0.7",
+    "@crawlee/cheerio": "3.14.1",
     "@fastify/cors": "^11.1.0",
     "@fastify/formbody": "^8.0.2",
     "@fastify/http-proxy": "^11.4.4",

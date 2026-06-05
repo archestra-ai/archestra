@@ -22,6 +22,9 @@ export function transformConfigArrayFields(
     "tagsToSkip",
     "objects",
     "collectionIds",
+    "includePathPrefixes",
+    "excludePathPatterns",
+    "excludeSelectors",
   ];
   for (const key of stringArrayFields) {
     if (typeof result[key] === "string") {

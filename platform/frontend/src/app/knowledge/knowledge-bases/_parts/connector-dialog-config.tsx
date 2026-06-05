@@ -32,6 +32,7 @@ import { OutlineConfigFields } from "./outline-config-fields";
 import { SalesforceConfigFields } from "./salesforce-config-fields";
 import { ServiceNowConfigFields } from "./servicenow-config-fields";
 import { SharePointConfigFields } from "./sharepoint-config-fields";
+import { WebCrawlerConfigFields } from "./web-crawler-config-fields";
 
 export type ConnectorType =
   archestraApiTypes.CreateConnectorData["body"]["connectorType"];
@@ -79,6 +80,7 @@ const CONNECTOR_DISPLAY_LABELS: Record<ConnectorType, string> = {
   outline: CONNECTOR_TYPE_LABELS.outline,
   onedrive: CONNECTOR_TYPE_LABELS.onedrive ?? "OneDrive",
   salesforce: CONNECTOR_TYPE_LABELS.salesforce ?? "Salesforce",
+  web_crawler: CONNECTOR_TYPE_LABELS.web_crawler,
   file_upload: CONNECTOR_TYPE_LABELS.file_upload,
 };
 
@@ -153,6 +155,11 @@ export const CONNECTOR_OPTIONS: ConnectorOption[] = [
     label: CONNECTOR_DISPLAY_LABELS.salesforce,
     description: "Sync CRM objects from Salesforce",
   },
+  {
+    type: "web_crawler",
+    label: CONNECTOR_DISPLAY_LABELS.web_crawler,
+    description: "Crawl and sync static HTML pages",
+  },
 ];
 
 const CONNECTOR_URL_CONFIGS: Record<ConnectorType, ConnectorUrlConfig | null> =
@@ -219,6 +226,12 @@ const CONNECTOR_URL_CONFIGS: Record<ConnectorType, ConnectorUrlConfig | null> =
       description:
         "Use https://login.salesforce.com for production and https://test.salesforce.com for sandbox.",
     },
+    web_crawler: {
+      fieldName: "config.startUrl",
+      label: "Start URL",
+      placeholder: "https://docs.example.com/",
+      description: "First page to crawl. Crawling stays on the same host.",
+    },
     file_upload: null,
   };
 
@@ -244,6 +257,7 @@ const CREATE_ADVANCED_CONFIG_FIELDS: Record<
   onedrive: ({ form }) => <OneDriveConfigFields form={form} />,
   outline: ({ form }) => <OutlineConfigFields form={form} />,
   salesforce: ({ form }) => <SalesforceConfigFields form={form} />,
+  web_crawler: ({ form }) => <WebCrawlerConfigFields form={form} />,
   file_upload: () => null,
 };
 
@@ -313,6 +327,7 @@ export function getDefaultConnectorConfig(
     onedrive: { type, userIds: "", recursive: true },
     outline: { type, outlineUrl: "https://app.getoutline.com" },
     salesforce: { type, loginUrl: "https://login.salesforce.com" },
+    web_crawler: { type, maxPages: 250, maxDepth: 3, batchSize: 25 },
     file_upload: { type },
   };
 
@@ -358,6 +373,7 @@ export function getConnectorCredentialConfig(params: {
     asana: "Personal Access Token",
     onedrive: "Client Secret",
     salesforce: "Password + Security Token",
+    web_crawler: undefined,
     file_upload: undefined,
   };
 
@@ -379,6 +395,7 @@ export function getConnectorCredentialConfig(params: {
       asana: "Your personal access token",
       onedrive: "Your Azure AD client secret",
       salesforce: "Your Salesforce password followed by your security token",
+      web_crawler: undefined,
       file_upload: undefined,
     };
 
@@ -400,6 +417,7 @@ export function getConnectorCredentialConfig(params: {
     asana: "Leave empty to keep existing token",
     file_upload: undefined,
     onedrive: "Leave empty to keep existing token",
+    web_crawler: undefined,
   };
 
   const apiTokenRequiredMessages: Record<ConnectorType, string | undefined> = {
@@ -419,6 +437,7 @@ export function getConnectorCredentialConfig(params: {
     asana: "Personal access token is required",
     onedrive: "Client secret is required",
     salesforce: "Password and security token are required",
+    web_crawler: undefined,
     file_upload: undefined,
   };
 
@@ -863,6 +882,7 @@ const INLINE_CONFIG_FIELDS: Record<
     </>
   ),
   outline: () => <></>,
+  web_crawler: () => <></>,
   salesforce: ({ form, mode }) => (
     <FormField
       control={form.control}

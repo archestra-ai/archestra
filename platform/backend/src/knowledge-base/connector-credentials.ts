@@ -10,7 +10,8 @@ import {
 /**
  * Resolve the runtime credentials a connector authenticates with. GitHub App
  * connectors reference a shared github_app_configs row (App metadata + private
- * key secret); every other connector uses its own attached secret.
+ * key secret); credentialless connectors receive an empty credential object;
+ * every other connector uses its own attached secret.
  */
 export async function resolveConnectorCredentials(
   connector: Pick<
@@ -24,6 +25,10 @@ export async function resolveConnectorCredentials(
       githubAppConfigId,
       organizationId: connector.organizationId,
     });
+  }
+
+  if (connector.config.type === "web_crawler") {
+    return { apiToken: "" };
   }
 
   return loadSecretCredentials(connector.secretId);

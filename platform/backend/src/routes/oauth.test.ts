@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { type Mock, vi } from "vitest";
 import { cacheManager } from "@/cache-manager";
+import { secretManager } from "@/secrets-manager";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -11,6 +12,7 @@ import oauthRoutes, {
   generateCodeChallenge,
   generateCodeVerifier,
   getOAuthResource,
+  refreshOAuthToken,
   resolveOAuthScopesForAuthorization,
 } from "./oauth";
 
@@ -569,5 +571,57 @@ describe("OAuth routes", () => {
     expect(authorizationUrl.searchParams.get("resource")).not.toBe(
       "https://mcp.example.com/mcp",
     );
+  });
+
+  test("includes configured OAuth resource when refreshing access tokens", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      name: "Refresh Resource Split MCP",
+      serverType: "remote",
+      serverUrl: "https://mcp.example.com/mcp",
+      oauthConfig: {
+        name: "Refresh Resource Split MCP",
+        server_url: "https://mcp.example.com/mcp",
+        resource: "https://mcp.example.com",
+        grant_type: "authorization_code",
+        auth_server_url: "https://login.example.com/tenant/v2.0",
+        authorization_endpoint:
+          "https://login.example.com/tenant/oauth2/v2.0/authorize",
+        token_endpoint: "https://login.example.com/tenant/oauth2/v2.0/token",
+        client_id: "public-client-id",
+        client_secret: "public-client-secret",
+        redirect_uris: ["http://localhost:3000/oauth-callback"],
+        scopes: ["api://downstream-app/Tools.Read"],
+        default_scopes: ["api://downstream-app/Tools.Read"],
+        supports_resource_metadata: false,
+      },
+    });
+    const secret = await secretManager().createSecret(
+      {
+        refresh_token: "stored-refresh-token",
+        access_token: "old-access-token",
+      },
+      "refresh-resource-token",
+      true,
+    );
+
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        access_token: "new-access-token",
+        refresh_token: "new-refresh-token",
+        expires_in: 3600,
+      }),
+    }) as Mock;
+    globalThis.fetch = fetchMock;
+
+    await expect(refreshOAuthToken(secret.id, catalog.id)).resolves.toBe(true);
+
+    const requestBody = fetchMock.mock.calls.at(-1)?.[1]
+      ?.body as URLSearchParams;
+    expect(requestBody.get("grant_type")).toBe("refresh_token");
+    expect(requestBody.get("refresh_token")).toBe("stored-refresh-token");
+    expect(requestBody.get("resource")).toBe("https://mcp.example.com");
   });
 });

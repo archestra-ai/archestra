@@ -2149,7 +2149,6 @@ function isInstallDiscoveryAuthError(error: unknown): boolean {
     lower.includes("authentication failed") ||
     lower.includes("authentication required") ||
     (lower.includes("missing") && lower.includes("authorization header")) ||
-    lower.includes("missing required authorization header") ||
     lower.includes("invalid authorization header") ||
     lower.includes("invalid token") ||
     lower.includes("access denied") ||

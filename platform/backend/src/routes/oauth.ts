@@ -566,6 +566,7 @@ export async function refreshOAuthToken(
       return false;
     }
 
+    const oauthResource = getOAuthResource(oauthConfig);
     logger.info(
       {
         secretId,
@@ -591,6 +592,9 @@ export async function refreshOAuthToken(
         client_id: clientId,
         ...(clientSecret && {
           client_secret: clientSecret,
+        }),
+        ...(oauthResource && {
+          resource: oauthResource,
         }),
       }),
     });

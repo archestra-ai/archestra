@@ -51,6 +51,7 @@ const uiTestMatch = [
   "**/invitation.spec.ts",
   "**/llm-provider-api-keys.spec.ts",
   "**/mcp-catalog-clone.spec.ts",
+  "**/mcp-catalog-promote-to-team.spec.ts",
   "**/mcp-install.spec.ts",
   "**/quickstart.spec.ts",
   "**/skill-share.spec.ts",

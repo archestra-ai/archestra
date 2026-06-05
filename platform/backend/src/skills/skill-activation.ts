@@ -34,7 +34,7 @@ export function formatSkillActivation({
   files: Pick<SkillFile, "path" | "kind">[];
   /**
    * Whether the sandbox tools are usable for this caller (feature enabled +
-   * `skill:execute`). When false, omit the sandbox hint so we never point the
+   * `sandbox:execute`). When false, omit the sandbox hint so we never point the
    * model at tools that would just refuse.
    */
   canRunSandbox: boolean;

@@ -1,0 +1,40 @@
+{
+  "name": "Windmill MCP Server",
+  "version": "0.1.0",
+  "description": "Create, run, and manage Windmill workflows from AI agents. Flows are displayed as interactive MCP Apps inside Archestra, giving users a visual node-editor to inspect and modify their automation pipelines.",
+  "instructions": "## Getting Started\n\n1. Configure the three required environment variables below\n2. Use `windmill_list_flows` to browse available workflows\n3. Use `windmill_run_flow` to trigger a workflow with custom inputs\n4. Use `windmill_get_job` to poll the job status\n5. Open `windmill_get_flow` to view a flow — Archestra renders the Windmill visual editor as an interactive MCP App\n\n## Example: Get data from Confluence and send an email\n\n```\n1. windmill_list_flows → find your flow path\n2. windmill_run_flow_and_wait path='f/team/confluence_to_email'\n   args={\"space\": \"DOCS\", \"recipient\": \"alice@example.com\"}\n```\n\n## Available Tools\n\n- `windmill_list_flows` — list all flows in your workspace\n- `windmill_get_flow` — get flow definition + open visual editor as MCP App\n- `windmill_run_flow` — trigger a flow, returns job ID\n- `windmill_run_flow_and_wait` — trigger a flow and wait for result\n- `windmill_get_job` — check job status / retrieve result\n- `windmill_list_jobs` — list recent completed jobs\n- `windmill_list_scripts` — list all scripts in the workspace",
+  "repository": "https://github.com/archestra-ai/archestra",
+  "serverType": "local",
+  "localConfig": {
+    "dockerImage": "ghcr.io/archestra-ai/windmill-mcp:latest",
+    "command": "python",
+    "arguments": ["-m", "windmill_mcp.server"],
+    "environment": [
+      {
+        "key": "WINDMILL_BASE_URL",
+        "type": "plain_text",
+        "promptOnInstallation": true,
+        "required": true,
+        "description": "Base URL of your Windmill instance (e.g. https://app.windmill.dev or http://localhost:8000)"
+      },
+      {
+        "key": "WINDMILL_TOKEN",
+        "type": "secret",
+        "promptOnInstallation": true,
+        "required": true,
+        "description": "Windmill API token. Generate one at: Windmill → Account → Tokens → Add token"
+      },
+      {
+        "key": "WINDMILL_WORKSPACE",
+        "type": "plain_text",
+        "promptOnInstallation": true,
+        "required": true,
+        "description": "Windmill workspace slug (e.g. 'my-org' or 'admins')"
+      }
+    ],
+    "transportType": "stdio"
+  },
+  "userConfig": {},
+  "requiresAuth": false,
+  "mcpApps": true
+}

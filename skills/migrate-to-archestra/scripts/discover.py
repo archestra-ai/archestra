@@ -1,15 +1,18 @@
 # /// script
-# requires-python = ">=3.11"
-# dependencies = ["pyyaml>=6", "pydantic>=2"]
+# requires-python = ">=3.10"
+# dependencies = []
 # ///
 """discover an agentic setup and emit a structured, secret-redacted inventory.
 
-pure parsing: no network, no code execution, no judgment. the model consumes the
-inventory and decides the migration plan. stdio package resolution and remote-mcp
-reachability are intentionally NOT checked here -- they first surface at apply time.
+pure parsing: no network, no code execution, no judgment. the model consumes the inventory
+and decides the migration plan. stdio package resolution and remote-mcp reachability are
+intentionally NOT checked here -- they first surface at apply time.
+
+zero third-party dependencies: frontmatter is parsed by the bundled frontmatter module and
+the typed shapes come from contracts, so this runs on a stock python>=3.10 with no install.
 
 usage:
-    uv run discover.py <source_dir> [--out inventory.json]
+    python3 discover.py <source_dir> [--out inventory.json]
 """
 
 from __future__ import annotations
@@ -20,30 +23,60 @@ import json
 import re
 import sys
 from pathlib import Path
-from typing import Any, Literal
 
-import yaml
-from pydantic import BaseModel
-
-SCHEMA_VERSION = 1
-ItemKind = Literal[
-    "claude_md", "subagent", "skill", "command", "local_tool", "mcp_server", "hook", "openclaw"
-]
-
-# key names whose values are redacted from structured config (never code/prose bodies).
-_SECRET_KEY = re.compile(r"(key|token|secret|password|passwd|api[_-]?key|authorization|credential)", re.I)
-# value shapes that look like credentials even under an innocuous key.
-_SECRET_VALUE = re.compile(r"^(sk-|gh[psoru]_|xox[baprs]-|AIza|ya29\.|eyJ[A-Za-z0-9_-]{10,})")
-# credential-shaped tokens embedded anywhere in a string (commands, prose, code).
-_SECRET_TOKEN = re.compile(
-    r"(sk-[A-Za-z0-9_-]{8,}|gh[psoru]_[A-Za-z0-9]{8,}|xox[baprs]-[A-Za-z0-9-]{8,}"
-    r"|AIza[A-Za-z0-9_-]{8,}|ya29\.[A-Za-z0-9_-]{8,}|eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)"
+from contracts import SECRET_KEY_RE as _SECRET_KEY
+from contracts import SECRET_TOKEN_RE as _SECRET_TOKEN
+from contracts import SECRET_VALUE_RE as _SECRET_VALUE
+from contracts import (
+    BundledFile,
+    ClaudeMdData,
+    ClaudeMdItem,
+    CommandData,
+    CommandItem,
+    FrontMatter,
+    HookData,
+    HookIntent,
+    HookItem,
+    Inventory,
+    JsonValue,
+    LocalToolData,
+    LocalToolItem,
+    McpServerData,
+    McpServerItem,
+    OpenclawData,
+    OpenclawItem,
+    ServerType,
+    SkillData,
+    SkillItem,
+    SubagentData,
+    SubagentItem,
+    as_array,
+    as_object,
+    require_dict,
+    to_jsonable,
 )
+from frontmatter import parse_frontmatter
+
+# events whose hooks can block the action -- candidates for a tool-invocation policy.
+_BLOCKING_EVENTS = {"PreToolUse", "UserPromptSubmit", "PreCompact", "Stop", "SubagentStop"}
+
+
+def _is_secret_value(value: str) -> bool:
+    # a prefix that looks like a credential, OR a credential-shaped token embedded anywhere.
+    return bool(_SECRET_VALUE.match(value) or _SECRET_TOKEN.search(value))
 
 
 def _redact_inline(text: str) -> str:
     """replace credential-shaped tokens inside a config string (e.g. a hook command)."""
     return _SECRET_TOKEN.sub("<redacted>", text)
+
+
+def _redact_value(value: str, ref: str, sink: list[str]) -> str:
+    """redact a single structured-config string if it looks like a credential; record the ref."""
+    if _is_secret_value(value):
+        sink.append(ref)
+        return "<redacted>"
+    return value
 
 
 def _warn_if_secret(text: str, ref: str, warnings: list[str]) -> None:
@@ -53,38 +86,13 @@ def _warn_if_secret(text: str, ref: str, warnings: list[str]) -> None:
         warnings.append(f"possible secret left intact in {ref} -- review before sharing the inventory")
 
 
-class BundledFile(BaseModel):
-    path: str
-    content: str
-    encoding: Literal["utf8", "base64"]
-
-
-class InventoryItem(BaseModel):
-    id: str
-    kind: ItemKind
-    name: str
-    path: str
-    summary: str = ""
-    data: dict[str, Any] = {}
-    files: list[BundledFile] = []
-    redacted_refs: list[str] = []
-
-
-class Inventory(BaseModel):
-    schema_version: int = SCHEMA_VERSION
-    source_root: str
-    items: list[InventoryItem] = []
-    unknowns: list[str] = []
-    warnings: list[str] = []
-
-
-def _redact(value: Any, ref: str, sink: list[str]) -> Any:
+def _redact(value: JsonValue, ref: str, sink: list[str]) -> JsonValue:
     """recursively replace secret-looking values; record where each redaction happened."""
     match value:
         case dict():
-            out = {}
+            out: dict[str, JsonValue] = {}
             for k, v in value.items():
-                if isinstance(v, str) and (_SECRET_KEY.search(k) or _SECRET_VALUE.match(v)):
+                if isinstance(v, str) and (_SECRET_KEY.search(k) or _is_secret_value(v)):
                     out[k] = "<redacted>"
                     sink.append(f"{ref}#{k}")
                 else:
@@ -92,21 +100,25 @@ def _redact(value: Any, ref: str, sink: list[str]) -> Any:
             return out
         case list():
             return [_redact(v, f"{ref}[{i}]", sink) for i, v in enumerate(value)]
-        case str() if _SECRET_VALUE.match(value):
+        case str() if _is_secret_value(value):
             sink.append(ref)
             return "<redacted>"
         case _:
             return value
 
 
-def _parse_frontmatter(text: str) -> tuple[dict[str, Any], str]:
-    """split a markdown doc into (yaml frontmatter dict, body)."""
-    if text.startswith("---"):
-        parts = text.split("---", 2)
-        if len(parts) == 3:
-            meta = yaml.safe_load(parts[1]) or {}
-            return (meta if isinstance(meta, dict) else {}, parts[2].lstrip("\n"))
-    return {}, text
+def _meta_str(meta: FrontMatter, key: str) -> str | None:
+    value = meta.get(key)
+    return value if isinstance(value, str) else None
+
+
+def _as_opt_str(value: JsonValue) -> str | None:
+    return value if isinstance(value, str) else None
+
+
+def _as_str_list(value: JsonValue) -> list[str]:
+    arr = as_array(value)
+    return [v for v in arr if isinstance(v, str)] if arr is not None else []
 
 
 def _read_bundled(path: Path, rel_to: Path) -> BundledFile:
@@ -118,17 +130,27 @@ def _read_bundled(path: Path, rel_to: Path) -> BundledFile:
         return BundledFile(path=rel, content=base64.b64encode(raw).decode("ascii"), encoding="base64")
 
 
-# events whose hooks can block the action -- candidates for a tool-invocation policy.
-_BLOCKING_EVENTS = {"PreToolUse", "UserPromptSubmit", "PreCompact", "Stop", "SubagentStop"}
-
-
-def _classify_hook(event: str, command: str) -> str:
-    """advisory intent hint for the model: a deterministic guard vs passive logging.
-    the guard logic often lives in a referenced script we don't read, so this is a HINT --
-    the model must inspect the hook before deciding to translate it to a policy."""
+def _classify_hook(event: str, command: str) -> HookIntent:
+    """advisory intent hint for the model: a deterministic guard vs passive logging. the guard
+    logic often lives in a referenced script we don't read, so this is a HINT -- the model must
+    inspect the hook before deciding to translate it to a policy."""
     if event in _BLOCKING_EVENTS or re.search(r"sys\.exit\(\s*2\s*\)|exit 2", command):
         return "guard"
     return "passive"
+
+
+def _redact_env(name: str, env_raw: JsonValue, sink: list[str]) -> dict[str, str]:
+    out: dict[str, str] = {}
+    env_obj = as_object(env_raw)
+    if env_obj is None:
+        return out
+    for key, value in env_obj.items():
+        if isinstance(value, str) and (_SECRET_KEY.search(key) or _is_secret_value(value)):
+            out[key] = "<redacted>"
+            sink.append(f"mcp:{name}#env#{key}")
+        else:
+            out[key] = value if isinstance(value, str) else json.dumps(value)
+    return out
 
 
 def discover(root: Path) -> Inventory:
@@ -138,68 +160,79 @@ def discover(root: Path) -> Inventory:
     def mark(p: Path) -> None:
         seen.add(p.resolve())
 
+    def read(path: Path) -> str:
+        return path.read_text(encoding="utf-8", errors="replace")
+
+    def note_unparsed(doc_unparsed: list[str], rel: str) -> None:
+        for line in doc_unparsed:
+            inv.unknowns.append(f"{rel} (unparsed frontmatter: {line.strip()})")
+
     # 1. root CLAUDE.md -> primary agent
     for cm in (root / "CLAUDE.md", root / ".claude" / "CLAUDE.md"):
         if cm.is_file():
-            meta, body = _parse_frontmatter(cm.read_text(encoding="utf-8", errors="replace"))
+            doc = parse_frontmatter(read(cm))
             rel = cm.relative_to(root).as_posix()
-            _warn_if_secret(body, rel, inv.warnings)
-            inv.items.append(InventoryItem(
-                id="claude_md", kind="claude_md", name=root.name or "primary", path=rel,
+            note_unparsed(doc.unparsed_lines, rel)
+            _warn_if_secret(doc.body, rel, inv.warnings)
+            inv.items.append(ClaudeMdItem(
+                id="claude_md", name=root.name or "primary", path=rel,
                 summary="root orchestration prompt -> primary agent system prompt",
-                data={"body": body, "frontmatter": meta},
+                data=ClaudeMdData(body=doc.body, frontmatter=doc.frontmatter),
             ))
             mark(cm)
             break
 
     # 2. subagents -> skills (preferred)
     for f in sorted((root / ".claude" / "agents").glob("*.md")):
-        meta, body = _parse_frontmatter(f.read_text(encoding="utf-8", errors="replace"))
-        name = str(meta.get("name") or f.stem)
-        tools = meta.get("tools")
+        doc = parse_frontmatter(read(f))
+        name = _meta_str(doc.frontmatter, "name") or f.stem
         rel = f.relative_to(root).as_posix()
-        _warn_if_secret(body, rel, inv.warnings)
-        inv.items.append(InventoryItem(
-            id=f"subagent:{name}", kind="subagent", name=name, path=rel,
-            summary=str(meta.get("description") or "")[:200],
-            data={"description": meta.get("description"), "tools": tools, "body": body},
+        note_unparsed(doc.unparsed_lines, rel)
+        _warn_if_secret(doc.body, rel, inv.warnings)
+        description = _meta_str(doc.frontmatter, "description")
+        tools = doc.frontmatter.get("tools")
+        inv.items.append(SubagentItem(
+            id=f"subagent:{name}", name=name, path=rel, summary=(description or "")[:200],
+            data=SubagentData(body=doc.body, description=description, tools=tools),
         ))
         mark(f)
 
     # 3. skills -> skills (clean)
     for skill_md in sorted((root / ".claude" / "skills").glob("*/SKILL.md")):
         skill_dir = skill_md.parent
-        meta, _ = _parse_frontmatter(skill_md.read_text(encoding="utf-8", errors="replace"))
-        name = str(meta.get("name") or skill_dir.name)
+        content = read(skill_md)
+        doc = parse_frontmatter(content)
+        name = _meta_str(doc.frontmatter, "name") or skill_dir.name
+        rel = skill_md.relative_to(root).as_posix()
+        note_unparsed(doc.unparsed_lines, rel)
         files = [
             _read_bundled(p, skill_dir)
             for p in sorted(skill_dir.rglob("*"))
             if p.is_file() and p != skill_md
         ]
-        content = skill_md.read_text(encoding="utf-8", errors="replace")
-        _warn_if_secret(content, skill_md.relative_to(root).as_posix(), inv.warnings)
+        _warn_if_secret(content, rel, inv.warnings)
         for bf in files:
             if bf.encoding == "utf8":
                 _warn_if_secret(bf.content, f"{skill_dir.relative_to(root).as_posix()}/{bf.path}", inv.warnings)
-        inv.items.append(InventoryItem(
-            id=f"skill:{name}", kind="skill", name=name, path=skill_md.relative_to(root).as_posix(),
-            summary=str(meta.get("description") or "")[:200],
-            data={"content": content, "frontmatter": meta},
-            files=files,
+        inv.items.append(SkillItem(
+            id=f"skill:{name}", name=name, path=rel,
+            summary=(_meta_str(doc.frontmatter, "description") or "")[:200],
+            data=SkillData(content=content, frontmatter=doc.frontmatter), files=files,
         ))
         for p in skill_dir.rglob("*"):
             mark(p)
 
     # 4. slash commands -> skills (best-effort)
     for f in sorted((root / ".claude" / "commands").glob("*.md")):
-        meta, body = _parse_frontmatter(f.read_text(encoding="utf-8", errors="replace"))
-        name = str(meta.get("name") or f.stem)
+        doc = parse_frontmatter(read(f))
+        name = _meta_str(doc.frontmatter, "name") or f.stem
         rel = f.relative_to(root).as_posix()
-        _warn_if_secret(body, rel, inv.warnings)
-        inv.items.append(InventoryItem(
-            id=f"command:{name}", kind="command", name=name, path=rel,
-            summary=str(meta.get("description") or "")[:200],
-            data={"frontmatter": meta, "body": body},
+        note_unparsed(doc.unparsed_lines, rel)
+        _warn_if_secret(doc.body, rel, inv.warnings)
+        inv.items.append(CommandItem(
+            id=f"command:{name}", name=name, path=rel,
+            summary=(_meta_str(doc.frontmatter, "description") or "")[:200],
+            data=CommandData(body=doc.body, frontmatter=doc.frontmatter),
         ))
         mark(f)
 
@@ -208,68 +241,53 @@ def discover(root: Path) -> Inventory:
         bundled = _read_bundled(f, root)
         if bundled.encoding == "utf8":
             _warn_if_secret(bundled.content, bundled.path, inv.warnings)
-        inv.items.append(InventoryItem(
-            id=f"local_tool:{f.stem}", kind="local_tool", name=f.stem,
-            path=f.relative_to(root).as_posix(),
+        entry = f.relative_to(root).as_posix()
+        inv.items.append(LocalToolItem(
+            id=f"local_tool:{f.stem}", name=f.stem, path=entry,
             summary=f"local python tool {f.name} -> skill wrapping the script",
-            data={"entrypoint": f.relative_to(root).as_posix()}, files=[bundled],
+            data=LocalToolData(entrypoint=entry), files=[bundled],
         ))
         mark(f)
 
-    # 6. mcp servers from .mcp.json and settings*.json
+    # 6. mcp servers + hooks from .mcp.json and settings*.json
     for cfg_path in (root / ".mcp.json", root / ".claude" / "settings.json",
                      root / ".claude" / "settings.local.json"):
         if not cfg_path.is_file():
             continue
         mark(cfg_path)
+        rel = cfg_path.relative_to(root).as_posix()
         try:
-            cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
+            parsed_cfg: JsonValue = json.loads(read(cfg_path))
         except json.JSONDecodeError:
-            inv.unknowns.append(f"{cfg_path.relative_to(root).as_posix()} (invalid json)")
+            inv.unknowns.append(f"{rel} (invalid json)")
             continue
-        for name, spec in (cfg.get("mcpServers") or {}).items():
-            refs: list[str] = []
-            server_type = "remote" if spec.get("url") else "local"
-            data = _redact(
-                {"transport": server_type, "command": spec.get("command"),
-                 "args": spec.get("args") or [], "env": spec.get("env") or {}, "url": spec.get("url")},
-                f"mcp:{name}", refs,
-            )
-            inv.items.append(InventoryItem(
-                id=f"mcp:{name}", kind="mcp_server", name=name,
-                path=cfg_path.relative_to(root).as_posix(),
-                summary=f"{server_type} mcp server -> catalog item (+ optional install)",
-                data=data, redacted_refs=refs,
-            ))
-        # 6b. hooks live in settings.json
-        for event, entries in (cfg.get("hooks") or {}).items():
-            for i, entry in enumerate(entries if isinstance(entries, list) else []):
-                for j, h in enumerate(entry.get("hooks", [])):
-                    cmd = _redact_inline(str(h.get("command", "")))
-                    intent = _classify_hook(event, cmd)
-                    inv.items.append(InventoryItem(
-                        id=f"hook:{event}:{i}:{j}", kind="hook", name=f"{event}#{i}.{j}",
-                        path=cfg_path.relative_to(root).as_posix(),
-                        summary=f"{event} hook ({intent})",
-                        data={"event": event, "matcher": entry.get("matcher"),
-                              "command": cmd, "intent": intent},
-                    ))
+        cfg = as_object(parsed_cfg)
+        if cfg is None:
+            inv.unknowns.append(f"{rel} (not a json object)")
+            continue
+        _discover_mcp_servers(inv, cfg.get("mcpServers"), rel)
+        _discover_hooks(inv, cfg.get("hooks"), rel)
 
     # 7. openclaw config -> report-only (schema unverified)
     for oc in (root / "openclaw.json", root / ".openclaw" / "openclaw.json"):
         if oc.is_file():
             mark(oc)
-            refs2: list[str] = []
+            rel = oc.relative_to(root).as_posix()
             try:
-                raw = json.loads(oc.read_text(encoding="utf-8"))
+                parsed_oc: JsonValue = json.loads(read(oc))
             except json.JSONDecodeError:
-                inv.unknowns.append(f"{oc.relative_to(root).as_posix()} (invalid json)")
+                inv.unknowns.append(f"{rel} (invalid json)")
                 continue
-            inv.items.append(InventoryItem(
-                id="openclaw", kind="openclaw", name="openclaw",
-                path=oc.relative_to(root).as_posix(),
+            raw = as_object(parsed_oc)
+            if raw is None:
+                inv.unknowns.append(f"{rel} (not a json object)")
+                continue
+            refs: list[str] = []
+            config = require_dict(_redact(raw, "openclaw", refs), ctx="openclaw")
+            inv.items.append(OpenclawItem(
+                id="openclaw", name="openclaw", path=rel,
                 summary="openclaw runtime config -> report-only (manual migration)",
-                data=_redact(raw, "openclaw", refs2), redacted_refs=refs2,
+                data=OpenclawData(config=config), redacted_refs=refs,
             ))
 
     # 8. unrecognized files under .claude/ -> surface for the model
@@ -280,6 +298,67 @@ def discover(root: Path) -> Inventory:
                 inv.unknowns.append(p.relative_to(root).as_posix())
 
     return inv
+
+
+def _discover_mcp_servers(inv: Inventory, servers: JsonValue, rel: str) -> None:
+    servers_obj = as_object(servers)
+    if servers_obj is None:
+        return
+    for name, spec in servers_obj.items():
+        spec_obj = as_object(spec)
+        if spec_obj is None:
+            inv.unknowns.append(f"{rel} (mcpServers.{name} is not an object)")
+            continue
+        refs: list[str] = []
+        url = _as_opt_str(spec_obj.get("url"))
+        server_type: ServerType = "remote" if url else "local"
+        command = _as_opt_str(spec_obj.get("command"))
+        # command/args/url are structured config -> redact embedded secrets (env handled below).
+        if command is not None:
+            command = _redact_value(command, f"mcp:{name}#command", refs)
+        if url is not None:
+            url = _redact_value(url, f"mcp:{name}#url", refs)
+        args = [_redact_value(a, f"mcp:{name}#args[{i}]", refs)
+                for i, a in enumerate(_as_str_list(spec_obj.get("args")))]
+        inv.items.append(McpServerItem(
+            id=f"mcp:{name}", name=name, path=rel,
+            summary=f"{server_type} mcp server -> catalog item (+ optional install)",
+            data=McpServerData(
+                transport=server_type, command=command, args=args,
+                env=_redact_env(name, spec_obj.get("env"), refs), url=url,
+            ),
+            redacted_refs=refs,
+        ))
+
+
+def _discover_hooks(inv: Inventory, hooks: JsonValue, rel: str) -> None:
+    hooks_obj = as_object(hooks)
+    if hooks_obj is None:
+        return
+    for event, entries in hooks_obj.items():
+        entries_arr = as_array(entries)
+        if entries_arr is None:
+            continue
+        for i, entry in enumerate(entries_arr):
+            entry_obj = as_object(entry)
+            if entry_obj is None:
+                continue
+            matcher = _as_opt_str(entry_obj.get("matcher"))
+            handlers_arr = as_array(entry_obj.get("hooks"))
+            if handlers_arr is None:
+                continue
+            for j, h in enumerate(handlers_arr):
+                h_obj = as_object(h)
+                if h_obj is None:
+                    continue
+                raw_command = h_obj.get("command")
+                command = _redact_inline(raw_command if isinstance(raw_command, str) else "")
+                intent = _classify_hook(event, command)
+                inv.items.append(HookItem(
+                    id=f"hook:{event}:{i}:{j}", name=f"{event}#{i}.{j}", path=rel,
+                    summary=f"{event} hook ({intent})",
+                    data=HookData(event=event, matcher=matcher, command=command, intent=intent),
+                ))
 
 
 def main() -> int:
@@ -294,7 +373,7 @@ def main() -> int:
         return 1
 
     inv = discover(root)
-    args.out.write_text(inv.model_dump_json(indent=2), encoding="utf-8")
+    args.out.write_text(json.dumps(to_jsonable(inv), indent=2), encoding="utf-8")
     kinds = sorted({it.kind for it in inv.items})
     print(f"discovered {len(inv.items)} items ({', '.join(kinds) or 'none'}); "
           f"{len(inv.unknowns)} unknown; {len(inv.warnings)} warning(s); wrote {args.out}")

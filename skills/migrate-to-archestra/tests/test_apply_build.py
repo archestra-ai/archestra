@@ -1,101 +1,138 @@
 """offline tests for the deterministic decision->payload builder."""
 from pathlib import Path
+from typing import Any
 
 import pytest
-
 import yaml
 
-from apply import Decision, _build_payload, _item_index, _redacted_for_print
+from apply import (
+    BuiltAgent,
+    BuiltCatalog,
+    BuiltInstall,
+    BuiltLlmKey,
+    BuiltPolicy,
+    BuiltSkill,
+    _build_payload,
+    _redacted_for_print,
+)
+from archestra_client import LlmKeyCreate
+from contracts import ContractError, Decision, Item, SkillItem
 from discover import discover
 
 FIXTURE = Path(__file__).parent / "fixtures" / "sample-setup"
 
 
 @pytest.fixture(scope="module")
-def index():
+def index() -> dict[str, Item]:
     inv = discover(FIXTURE)
-    return _item_index(inv.model_dump())
+    return {it.id: it for it in inv.items}
 
 
-def _decide(index, source_id, target_kind, **kw):
-    d = Decision(source_id=source_id, target_kind=target_kind, scope="personal", **kw)
-    return _build_payload(d, index[source_id])
+def _decide(index: dict[str, Item], source_id: str, target_kind: str, **kw: Any):
+    decision = Decision(source_id=source_id, target_kind=target_kind, scope="personal", **kw)
+    return _build_payload(decision, index[source_id])
 
 
-def test_claude_md_builds_agent(index):
-    name, payload = _decide(index, "claude_md", "agent")
-    assert payload["agentType"] == "agent"
-    assert payload["scope"] == "personal"
-    assert "note assistant" in payload["systemPrompt"].lower()
+def test_claude_md_builds_agent(index: dict[str, Item]) -> None:
+    _, built = _decide(index, "claude_md", "agent")
+    assert isinstance(built, BuiltAgent)
+    assert built.payload.agentType == "agent"
+    assert built.payload.scope == "personal"
+    assert built.payload.systemPrompt is not None
+    assert "note assistant" in built.payload.systemPrompt.lower()
 
 
-def test_subagent_builds_skill_with_allowlist_note(index):
-    name, payload = _decide(index, "subagent:fact-checker", "skill")
-    fm = yaml.safe_load(payload["content"].split("---", 2)[1])
+def test_subagent_builds_skill_with_allowlist_note(index: dict[str, Item]) -> None:
+    _, built = _decide(index, "subagent:fact-checker", "skill")
+    assert isinstance(built, BuiltSkill)
+    fm = yaml.safe_load(built.payload.content.split("---", 2)[1])
     assert fm["name"] == "fact-checker"
-    assert "not enforced" in payload["content"].lower()
-    assert "Read, Bash, Skill" in payload["content"]
+    assert "not enforced" in built.payload.content.lower()
+    assert "Read, Bash, Skill" in built.payload.content
 
 
-def test_skill_is_verbatim(index):
-    name, payload = _decide(index, "skill:summarize-text", "skill")
-    assert payload["content"] == index["skill:summarize-text"]["data"]["content"]
-    assert {f["path"] for f in payload["files"]} == {"reference.md"}
+def test_skill_is_verbatim(index: dict[str, Item]) -> None:
+    _, built = _decide(index, "skill:summarize-text", "skill")
+    assert isinstance(built, BuiltSkill)
+    source = index["skill:summarize-text"]
+    assert isinstance(source, SkillItem)
+    assert built.payload.content == source.data.content
+    assert {f.path for f in built.payload.files} == {"reference.md"}
 
 
-def test_local_tool_builds_skill_bundling_script(index):
-    name, payload = _decide(index, "local_tool:word_count", "skill")
-    assert "python3 tools/word_count.py" in payload["content"]
-    assert payload["files"][0]["path"] == "tools/word_count.py"
+def test_local_tool_builds_skill_bundling_script(index: dict[str, Item]) -> None:
+    _, built = _decide(index, "local_tool:word_count", "skill")
+    assert isinstance(built, BuiltSkill)
+    assert "python3 tools/word_count.py" in built.payload.content
+    assert built.payload.files[0].path == "tools/word_count.py"
 
 
-def test_remote_mcp_builds_remote_catalog(index):
-    name, payload = _decide(index, "mcp:weather", "mcp_catalog")
-    assert payload["serverType"] == "remote"
-    assert payload["remoteConfig"]["url"] == "https://mcp.example.com/weather"
+def test_remote_mcp_builds_remote_catalog(index: dict[str, Item]) -> None:
+    _, built = _decide(index, "mcp:weather", "mcp_catalog")
+    assert isinstance(built, BuiltCatalog)
+    assert built.payload.serverType == "remote"
+    assert built.payload.remoteConfig is not None
+    assert built.payload.remoteConfig.url == "https://mcp.example.com/weather"
 
 
-def test_stdio_mcp_redacted_env_becomes_prompted_secret(index):
-    name, payload = _decide(index, "mcp:github", "mcp_catalog")
-    assert payload["serverType"] == "local"
-    env = {e["key"]: e for e in payload["localConfig"]["environment"]}
-    assert env["GITHUB_TOKEN"]["type"] == "secret"
-    assert env["GITHUB_TOKEN"]["promptOnInstallation"] is True
-    assert "value" not in env["GITHUB_TOKEN"]  # secret value not carried
+def test_stdio_mcp_redacted_env_becomes_prompted_secret(index: dict[str, Item]) -> None:
+    _, built = _decide(index, "mcp:github", "mcp_catalog")
+    assert isinstance(built, BuiltCatalog)
+    assert built.payload.serverType == "local"
+    assert built.payload.localConfig is not None
+    env = {e.key: e for e in built.payload.localConfig.environment}
+    assert env["GITHUB_TOKEN"].type == "secret"
+    assert env["GITHUB_TOKEN"].promptOnInstallation is True
+    assert env["GITHUB_TOKEN"].value is None  # secret value not carried
 
 
-def test_llm_key_requires_user_supplied_secret(index):
-    # openclaw item exists but is report-only; build an llm_key from it requires answers.
-    with pytest.raises(ValueError, match="apiKey"):
-        _decide(index, "openclaw", "llm_key")
-    name, payload = _decide(index, "openclaw", "llm_key",
-                            user_answers={"apiKey": "sk-ant-real", "provider": "anthropic"})
-    assert payload["apiKey"] == "sk-ant-real"
-    assert payload["provider"] == "anthropic"
+def test_llm_key_requires_user_supplied_secret(index: dict[str, Item]) -> None:
+    # provider present but apiKey missing -> the apiKey requirement is what fails.
+    with pytest.raises(ContractError, match="apiKey"):
+        _decide(index, "openclaw", "llm_key", user_answers={"provider": "anthropic"})
+    _, built = _decide(index, "openclaw", "llm_key",
+                       user_answers={"apiKey": "sk-ant-real", "provider": "anthropic"})
+    assert isinstance(built, BuiltLlmKey)
+    assert built.payload.apiKey == "sk-ant-real"
+    assert built.payload.provider == "anthropic"
 
 
-def test_generated_frontmatter_is_valid_yaml_with_hostile_name(index):
+def test_llm_key_rejects_unknown_provider(index: dict[str, Item]) -> None:
+    with pytest.raises(ContractError, match="provider"):
+        _decide(index, "openclaw", "llm_key",
+                user_answers={"apiKey": "sk-ant-real", "provider": "not-a-provider"})
+
+
+def test_generated_frontmatter_is_valid_yaml_with_hostile_name(index: dict[str, Item]) -> None:
     # a subagent name with yaml-significant chars must not break the frontmatter.
-    item = dict(index["subagent:fact-checker"])
-    d = Decision(source_id="subagent:fact-checker", target_kind="skill", scope="personal",
-                 name_override='evil: name "with" #chars')
-    _, payload = _build_payload(d, item)
-    fm = payload["content"].split("---", 2)[1]
+    _, built = _build_payload(
+        Decision(source_id="subagent:fact-checker", target_kind="skill", scope="personal",
+                 name_override='evil: name "with" #chars'),
+        index["subagent:fact-checker"],
+    )
+    assert isinstance(built, BuiltSkill)
+    fm = built.payload.content.split("---", 2)[1]
     assert yaml.safe_load(fm)["name"] == 'evil: name "with" #chars'
 
 
-def test_dry_run_redaction_hides_user_secrets():
-    assert _redacted_for_print("llm_key", {"apiKey": "sk-real", "provider": "anthropic"})["apiKey"] == "<redacted>"
-    out = _redacted_for_print("mcp_install", {"environmentValues": {"GITHUB_TOKEN": "ghp_real"}})
-    assert out["environmentValues"]["GITHUB_TOKEN"] == "<redacted>"
+def test_dry_run_redaction_hides_user_secrets() -> None:
+    llm = _redacted_for_print(BuiltLlmKey(LlmKeyCreate(
+        provider="anthropic", scope="personal", apiKey="sk-real", name="k")))
+    assert llm["apiKey"] == "<redacted>"
+    install = _redacted_for_print(BuiltInstall(
+        catalog_name="fs", scope="personal", environment_values={"GITHUB_TOKEN": "ghp_real"}))
+    env = install["environmentValues"]
+    assert isinstance(env, dict)
+    assert env["GITHUB_TOKEN"] == "<redacted>"
 
 
-def test_tool_policy_requires_extracted_semantics(index):
-    with pytest.raises(ValueError, match="tool_policy requires"):
+def test_tool_policy_requires_extracted_semantics(index: dict[str, Item]) -> None:
+    with pytest.raises(ContractError, match="user_answers"):
         _decide(index, "hook:PreToolUse:0:0", "tool_policy")
-    name, payload = _decide(index, "hook:PreToolUse:0:0", "tool_policy",
-                            user_answers={"tool_name": "shell", "key": "command",
-                                          "operator": "regex", "value": "rm\\s+-rf\\s+/"})
-    assert payload["tool_name"] == "shell"
-    assert payload["conditions"][0]["operator"] == "regex"
-    assert payload["action"] == "block_always"
+    _, built = _decide(index, "hook:PreToolUse:0:0", "tool_policy",
+                       user_answers={"tool_name": "shell", "key": "command",
+                                     "operator": "regex", "value": "rm\\s+-rf\\s+/"})
+    assert isinstance(built, BuiltPolicy)
+    assert built.tool_name == "shell"
+    assert built.conditions[0].operator == "regex"
+    assert built.action == "block_always"

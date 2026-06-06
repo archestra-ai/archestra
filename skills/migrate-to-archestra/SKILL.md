@@ -7,11 +7,14 @@ license: Apache-2.0
 # Migrate an agentic setup to Archestra
 
 You migrate a user's agentic setup into Archestra. The mechanical, deterministic work lives in
-bundled Python helpers (run via `uv`); you own the judgment: mapping decisions, asking the user where
-ambiguous, and writing the final report.
+bundled Python helpers; you own the judgment: mapping decisions, asking the user where ambiguous,
+and writing the final report.
 
 `$SKILL_DIR` below is the directory containing this file. The helpers are at `$SKILL_DIR/scripts/`.
-They declare their own deps inline, so plain `uv run "$SKILL_DIR/scripts/<x>.py"` just works.
+They are **zero-dependency** and target **Python ≥3.10**, so on a stock interpreter (no `uv`, no
+`pip install`, no network) `python3 "$SKILL_DIR/scripts/<x>.py"` just works — important for locked-down
+or air-gapped enterprise hosts. `uv run "$SKILL_DIR/scripts/<x>.py"` also works if `uv` is present; the
+examples below use `python3` since it needs nothing installed.
 
 The spine — three JSON artifacts, with you applying judgment in the middle:
 
@@ -37,10 +40,13 @@ also available if you want to sanity-check the API surface.
 ## Step 2 — Discover the source setup
 Ask for the source directory (default: the current working directory). Run:
 ```bash
-uv run "$SKILL_DIR/scripts/discover.py" <source_dir> --out inventory.json
+python3 "$SKILL_DIR/scripts/discover.py" <source_dir> --out inventory.json
 ```
 This emits a **secret-redacted** inventory (it never writes credentials to the file). Read
-`inventory.json`. For items you'll map, skim the relevant bodies. Note anything in `unknowns`.
+`inventory.json`. For items you'll map, skim the relevant bodies. Note anything in `unknowns` — that
+includes any frontmatter line the parser refused to interpret (it supports `key: value` scalars,
+inline `[a, b]` lists, and `- item` block lists; block scalars `|`/`>`, nested maps, anchors, and
+comments are reported here rather than guessed, so read the raw file for those rare cases).
 
 ## Step 3 — Map and ask
 Using `references/entity-mapping.md`, turn the inventory into `migration_plan.json`:
@@ -72,11 +78,11 @@ Always show the user the plan (what will be created, at what scope) and get appr
 ## Step 4 — Apply
 Dry-run first (offline; builds + validates every payload, touches no network):
 ```bash
-uv run "$SKILL_DIR/scripts/apply.py" --inventory inventory.json --plan migration_plan.json --dry-run
+python3 "$SKILL_DIR/scripts/apply.py" --inventory inventory.json --plan migration_plan.json --dry-run
 ```
 Fix any `invalid` ops (they print the validation error), then apply for real:
 ```bash
-uv run "$SKILL_DIR/scripts/apply.py" --inventory inventory.json --plan migration_plan.json --out migration_result.json
+python3 "$SKILL_DIR/scripts/apply.py" --inventory inventory.json --plan migration_plan.json --out migration_result.json
 ```
 `apply.py` is idempotent (skips entities that already exist), records each op's real outcome, calls
 `enable-defaults` so the primary agent sees the skills, and exits non-zero if any op failed/was invalid.
@@ -90,7 +96,15 @@ scripts don't read that setting, so tell the user to verify it in Archestra sett
 `warnings` from the inventory (possible secrets left intact in migrated bodies). Summarize for the user
 what migrated and what still needs hands-on work.
 
-## Tests
+## Contributor tooling (not needed to *run* the skill)
+The shipped scripts are zero-dependency; the lines below are only for developing/testing them.
+Dev deps (`pytest`, `pyyaml`, `ty`, `ruff`) are pinned in `pyproject.toml` under the `dev` group.
 ```bash
-cd "$SKILL_DIR" && uv run --with pytest --with pyyaml --with pydantic --with httpx python -m pytest tests/ -q
+cd "$SKILL_DIR"
+uv run --group dev python -m pytest tests/ -q   # tests (incl. the ty + ruff gates)
+uv run --group dev ty check                      # Astral type checker, the typing gate
+uv run --group dev ruff check                    # Astral linter
 ```
+`ty` is the enforced typing gate (it matches an Astral dev loop). It is a young checker, so a few
+validation helpers carry explicit `cast`s where it cannot yet narrow a membership check — mypy would
+consider those redundant, which is why mypy is not the gate.

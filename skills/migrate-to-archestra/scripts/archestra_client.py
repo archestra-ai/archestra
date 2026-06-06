@@ -1,44 +1,47 @@
 # /// script
-# requires-python = ">=3.11"
-# dependencies = ["httpx>=0.27", "pydantic>=2"]
+# requires-python = ">=3.10"
+# dependencies = []
 # ///
-"""thin, typed REST client for the archestra platform api.
+"""thin, typed, zero-dependency REST client for the archestra platform api.
 
-this module is intentionally a *thin* wrapper: it does request/response plumbing and
-typed payloads, but holds no idempotency or migration logic (that lives in apply.py).
-every non-2xx response raises ArchestraApiError verbatim -- no silent error handling.
+this module does request/response plumbing and typed payloads only -- no idempotency or
+migration logic (that lives in apply.py). every non-2xx response raises ArchestraApiError
+verbatim, and a 3xx redirect is treated as an error rather than silently followed (the base
+URL is fixed and user-supplied, so a redirect is unexpected and could change a POST's method).
+
+HTTP is the standard library's urllib. a private opener owns a cookie jar so the session
+cookie set by sign_in carries to mint_api_key (httpx.Client did this implicitly).
 """
 
 from __future__ import annotations
 
+import http.client
+import http.cookiejar
+import json
 import time
-from typing import Any, Literal
-from urllib.parse import urljoin
+import urllib.error
+import urllib.parse
+import urllib.request
+from dataclasses import dataclass, field
+from typing import Literal
 
-import httpx
-from pydantic import BaseModel, ConfigDict
+from contracts import (
+    ConditionOperator,
+    JsonValue,
+    PolicyAction,
+    Provider,
+    Scope,
+    ServerType,
+    require_dict,
+    require_str_field,
+    to_jsonable,
+)
 
-Scope = Literal["personal", "team", "org"]
-ServerType = Literal["local", "remote"]
-Provider = Literal["anthropic", "openai", "gemini", "azure", "bedrock", "vertex"]
-PolicyAction = Literal[
-    "allow_when_context_is_untrusted",
-    "block_when_context_is_untrusted",
-    "block_always",
-    "require_approval",
-]
-ConditionOperator = Literal[
-    "equal", "notEqual", "contains", "notContains", "startsWith", "endsWith", "regex"
-]
-
-
-class _Payload(BaseModel):
-    """base for request bodies: forbid unknown fields so typos fail locally, not on the wire."""
-
-    model_config = ConfigDict(extra="forbid")
+# --- request payloads (frozen dataclasses; mypy/ty replaces pydantic's extra="forbid") ----
 
 
-class AgentCreate(_Payload):
+@dataclass(frozen=True)
+class AgentCreate:
     name: str
     scope: Scope
     agentType: Literal["agent"] = "agent"
@@ -47,20 +50,23 @@ class AgentCreate(_Payload):
     icon: str | None = None
 
 
-class SkillFile(_Payload):
+@dataclass(frozen=True)
+class SkillFile:
     path: str
     content: str
     encoding: Literal["utf8", "base64"] = "utf8"
 
 
-class SkillCreate(_Payload):
+@dataclass(frozen=True)
+class SkillCreate:
     content: str
     scope: Scope
-    files: list[SkillFile] = []
+    files: list[SkillFile] = field(default_factory=list)
     teamIds: list[str] | None = None
 
 
-class McpEnvVar(_Payload):
+@dataclass(frozen=True)
+class McpEnvVar:
     key: str
     type: Literal["plain_text", "secret", "boolean", "number"] = "plain_text"
     value: str | None = None
@@ -69,17 +75,20 @@ class McpEnvVar(_Payload):
     description: str | None = None
 
 
-class LocalConfig(_Payload):
+@dataclass(frozen=True)
+class LocalConfig:
     command: str
-    arguments: list[str] = []
-    environment: list[McpEnvVar] = []
+    arguments: list[str] = field(default_factory=list)
+    environment: list[McpEnvVar] = field(default_factory=list)
 
 
-class RemoteConfig(_Payload):
+@dataclass(frozen=True)
+class RemoteConfig:
     url: str
 
 
-class CatalogCreate(_Payload):
+@dataclass(frozen=True)
+class CatalogCreate:
     name: str
     serverType: ServerType
     scope: Scope
@@ -88,14 +97,16 @@ class CatalogCreate(_Payload):
     remoteConfig: RemoteConfig | None = None
 
 
-class McpInstall(_Payload):
+@dataclass(frozen=True)
+class McpInstall:
     catalogId: str
     scope: Scope
-    environmentValues: dict[str, str] = {}
-    agentIds: list[str] = []
+    environmentValues: dict[str, str] = field(default_factory=dict)
+    agentIds: list[str] = field(default_factory=list)
 
 
-class LlmKeyCreate(_Payload):
+@dataclass(frozen=True)
+class LlmKeyCreate:
     provider: Provider
     scope: Scope
     apiKey: str
@@ -104,21 +115,43 @@ class LlmKeyCreate(_Payload):
     isPrimary: bool | None = None
 
 
-class PolicyCondition(_Payload):
+@dataclass(frozen=True)
+class PolicyCondition:
     key: str
     operator: ConditionOperator
     value: str
 
 
-class ToolInvocationPolicyCreate(_Payload):
+@dataclass(frozen=True)
+class ToolInvocationPolicyCreate:
     toolId: str
     conditions: list[PolicyCondition]
     action: PolicyAction
     reason: str | None = None
 
 
+def to_payload(obj: object) -> dict[str, JsonValue]:
+    """serialize a payload dataclass to a JSON body, recursively dropping None-valued keys
+    (matching pydantic's exclude_none) while preserving False/0/empty-list/empty-dict."""
+    body = require_dict(_drop_none(to_jsonable(obj)), ctx="payload")
+    return body
+
+
+def _drop_none(value: JsonValue) -> JsonValue:
+    match value:
+        case dict():
+            return {k: _drop_none(v) for k, v in value.items() if v is not None}
+        case list():
+            return [_drop_none(v) for v in value]
+        case _:
+            return value
+
+
+# --- errors --------------------------------------------------------------------------------
+
+
 class ArchestraApiError(RuntimeError):
-    """a non-2xx response. carries the full body so failures are never opaque."""
+    """a non-2xx response (or an unexpected redirect). carries the full body."""
 
     def __init__(self, method: str, url: str, status: int, body: str) -> None:
         super().__init__(f"{method} {url} -> {status}: {body}")
@@ -128,153 +161,208 @@ class ArchestraApiError(RuntimeError):
         self.body = body
 
 
+class _RaiseOnRedirect(urllib.request.HTTPRedirectHandler):
+    """turn any 3xx into an HTTPError instead of following it -- a redirect on a fixed,
+    user-supplied base URL is unexpected and must not silently rewrite a POST to a GET."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):  # type: ignore[no-untyped-def]
+        raise urllib.error.HTTPError(req.full_url, code, f"unexpected redirect to {newurl}", headers, fp)
+
+
+# --- client --------------------------------------------------------------------------------
+
+
 class ArchestraClient:
-    """talks to a single archestra instance. auth is either a session cookie
-    (after sign_in) or an api key sent as the raw Authorization header (no Bearer)."""
+    """talks to a single archestra instance. auth is either a session cookie (after sign_in)
+    or an api key sent as the raw Authorization header (no Bearer)."""
 
     def __init__(self, base_url: str, api_key: str | None = None, timeout: float = 30.0) -> None:
         self.base_url = base_url.rstrip("/") + "/"
-        headers = {"Authorization": api_key} if api_key else {}
-        self._http = httpx.Client(timeout=timeout, headers=headers, follow_redirects=True)
-
-    def close(self) -> None:
-        self._http.close()
+        self.timeout = timeout
+        self._auth = api_key
+        self._jar = http.cookiejar.CookieJar()
+        self._opener = urllib.request.build_opener(
+            urllib.request.HTTPCookieProcessor(self._jar),
+            _RaiseOnRedirect(),
+        )
 
     def __enter__(self) -> "ArchestraClient":
         return self
 
     def __exit__(self, *exc: object) -> None:
-        self.close()
+        self._opener.close()
 
-    def _request(self, method: str, path: str, **kwargs: Any) -> Any:
-        url = urljoin(self.base_url, path.lstrip("/"))
-        resp = self._http.request(method, url, **kwargs)
-        if resp.status_code // 100 != 2:
-            raise ArchestraApiError(method, url, resp.status_code, resp.text)
-        if resp.headers.get("content-type", "").startswith("application/json"):
-            return resp.json()
-        return resp.text
+    def _url(self, path: str, params: dict[str, str] | None = None) -> str:
+        url = urllib.parse.urljoin(self.base_url, path.lstrip("/"))
+        if params:
+            url = f"{url}?{urllib.parse.urlencode(params)}"
+        return url
 
-    # --- connectivity & auth -------------------------------------------------
+    def _request(
+        self, method: str, path: str, *,
+        params: dict[str, str] | None = None,
+        json_body: dict[str, JsonValue] | None = None,
+    ) -> JsonValue:
+        url = self._url(path, params)
+        headers = {"Accept-Encoding": "identity"}  # no gzip we won't decode
+        if self._auth:
+            headers["Authorization"] = self._auth
+        data: bytes | None = None
+        if json_body is not None:
+            data = json.dumps(json_body).encode("utf-8")
+            headers["Content-Type"] = "application/json"
+        req = urllib.request.Request(url, data=data, headers=headers, method=method)
+        try:
+            with self._opener.open(req, timeout=self.timeout) as resp:
+                return _decode_body(resp.read(), resp.headers)
+        except urllib.error.HTTPError as exc:
+            raise ArchestraApiError(method, url, exc.code, _decode_error(exc)) from exc
 
-    def wait_ready(self, timeout_s: float = 180.0, interval_s: float = 3.0) -> dict[str, Any]:
+    # --- connectivity & auth ---------------------------------------------------------------
+
+    def wait_ready(self, timeout_s: float = 180.0, interval_s: float = 3.0) -> dict[str, JsonValue]:
         """poll GET /ready until the database is connected. raises on timeout."""
         deadline = time.monotonic() + timeout_s
-        last: str = "no response"
+        last = "no response"
         while time.monotonic() < deadline:
             try:
-                resp = self._http.get(urljoin(self.base_url, "ready"))
-                if resp.status_code == 200:
-                    data = resp.json()
-                    if data.get("database") == "connected":
-                        return data
-                    last = f"200 but not connected: {data}"
-                else:
-                    last = f"{resp.status_code}: {resp.text}"
-            except (httpx.HTTPError, ValueError) as e:
-                last = str(e)
+                body = self._request("GET", "ready")
+            except ArchestraApiError as exc:
+                # a 4xx is a misconfiguration (wrong base URL / auth) -> fail fast, don't spin.
+                # 5xx is transient during boot -> keep polling.
+                if 400 <= exc.status < 500:
+                    raise
+                last = str(exc)
+            except (urllib.error.URLError, json.JSONDecodeError) as exc:
+                last = str(exc)
+            else:
+                if isinstance(body, dict) and body.get("database") == "connected":
+                    return body
+                last = f"reachable but not connected: {body}"
             time.sleep(interval_s)
         raise TimeoutError(f"archestra not ready after {timeout_s}s; last: {last}")
 
     def sign_in(self, email: str, password: str) -> None:
-        """better-auth email sign-in; persists the session cookie on this client."""
-        self._request("POST", "/api/auth/sign-in/email", json={"email": email, "password": password})
+        """better-auth email sign-in; the session cookie persists on this client's jar."""
+        self._request("POST", "/api/auth/sign-in/email", json_body={"email": email, "password": password})
 
     def mint_api_key(self, name: str) -> str:
         """create an api key for the signed-in user and switch this client to use it.
         the key value is only returned once by the server."""
-        body = self._request("POST", "/api/api-keys", json={"name": name})
-        key = body.get("key")
-        if not key:
-            raise RuntimeError(f"/api/api-keys returned no key: {body}")
-        self._http.headers["Authorization"] = key
+        body = require_dict(
+            self._request("POST", "/api/api-keys", json_body={"name": name}),
+            ctx="POST /api/api-keys",
+        )
+        key = require_str_field(body, "key", ctx="POST /api/api-keys")
+        self._auth = key
         return key
 
-    # --- agents --------------------------------------------------------------
+    # --- agents ----------------------------------------------------------------------------
 
-    def list_agents(self, name: str | None = None, scope: Scope | None = None) -> list[dict[str, Any]]:
+    def list_agents(self, name: str | None = None, scope: Scope | None = None) -> list[dict[str, JsonValue]]:
         params = {k: v for k, v in {"name": name, "scope": scope}.items() if v is not None}
         return _items(self._request("GET", "/api/agents", params=params))
 
-    def create_agent(self, payload: AgentCreate) -> dict[str, Any]:
-        return self._request("POST", "/api/agents", json=payload.model_dump(exclude_none=True))
+    def create_agent(self, payload: AgentCreate) -> dict[str, JsonValue]:
+        return require_dict(self._request("POST", "/api/agents", json_body=to_payload(payload)),
+                            ctx="POST /api/agents")
 
-    # --- skills --------------------------------------------------------------
+    # --- skills ----------------------------------------------------------------------------
 
-    def list_skills(self, search: str | None = None) -> list[dict[str, Any]]:
+    def list_skills(self, search: str | None = None) -> list[dict[str, JsonValue]]:
         params = {"search": search} if search else {}
         return _items(self._request("GET", "/api/skills", params=params))
 
-    def create_skill(self, payload: SkillCreate) -> dict[str, Any]:
-        return self._request("POST", "/api/skills", json=payload.model_dump(exclude_none=True))
+    def create_skill(self, payload: SkillCreate) -> dict[str, JsonValue]:
+        return require_dict(self._request("POST", "/api/skills", json_body=to_payload(payload)),
+                            ctx="POST /api/skills")
 
-    def enable_skill_defaults(self) -> dict[str, Any]:
+    def enable_skill_defaults(self) -> None:
         """enable org skill tools (list_skills/activate_skill/read_skill_file) and backfill
         them onto existing agents. idempotent."""
-        return self._request("POST", "/api/skills/enable-defaults")
+        self._request("POST", "/api/skills/enable-defaults")
 
-    # --- mcp catalog & install ----------------------------------------------
+    # --- mcp catalog & install -------------------------------------------------------------
 
-    def list_catalog(self) -> list[dict[str, Any]]:
+    def list_catalog(self) -> list[dict[str, JsonValue]]:
         return _items(self._request("GET", "/api/internal_mcp_catalog"))
 
-    def create_catalog_item(self, payload: CatalogCreate) -> dict[str, Any]:
-        return self._request(
-            "POST", "/api/internal_mcp_catalog", json=payload.model_dump(exclude_none=True)
-        )
+    def create_catalog_item(self, payload: CatalogCreate) -> dict[str, JsonValue]:
+        return require_dict(self._request("POST", "/api/internal_mcp_catalog", json_body=to_payload(payload)),
+                            ctx="POST /api/internal_mcp_catalog")
 
-    def list_mcp_servers(self, catalog_id: str | None = None) -> list[dict[str, Any]]:
+    def list_mcp_servers(self, catalog_id: str | None = None) -> list[dict[str, JsonValue]]:
         params = {"catalogId": catalog_id} if catalog_id else {}
         return _items(self._request("GET", "/api/mcp_server", params=params))
 
-    def install_mcp_server(self, payload: McpInstall) -> dict[str, Any]:
-        return self._request("POST", "/api/mcp_server", json=payload.model_dump(exclude_none=True))
+    def install_mcp_server(self, payload: McpInstall) -> dict[str, JsonValue]:
+        return require_dict(self._request("POST", "/api/mcp_server", json_body=to_payload(payload)),
+                            ctx="POST /api/mcp_server")
 
-    # --- llm provider keys ---------------------------------------------------
+    # --- llm provider keys -----------------------------------------------------------------
 
-    def list_llm_keys(
-        self, search: str | None = None, provider: Provider | None = None
-    ) -> list[dict[str, Any]]:
+    def list_llm_keys(self, search: str | None = None, provider: Provider | None = None) -> list[dict[str, JsonValue]]:
         params = {k: v for k, v in {"search": search, "provider": provider}.items() if v is not None}
         return _items(self._request("GET", "/api/llm-provider-api-keys", params=params))
 
-    def create_llm_key(self, payload: LlmKeyCreate) -> dict[str, Any]:
-        return self._request(
-            "POST", "/api/llm-provider-api-keys", json=payload.model_dump(exclude_none=True)
-        )
+    def create_llm_key(self, payload: LlmKeyCreate) -> dict[str, JsonValue]:
+        return require_dict(self._request("POST", "/api/llm-provider-api-keys", json_body=to_payload(payload)),
+                            ctx="POST /api/llm-provider-api-keys")
 
-    # --- tools & policies ----------------------------------------------------
+    # --- tools & policies ------------------------------------------------------------------
 
-    def list_tools(self, search: str | None = None) -> list[dict[str, Any]]:
+    def list_tools(self, search: str | None = None) -> list[dict[str, JsonValue]]:
         params = {"search": search} if search else {}
         return _items(self._request("GET", "/api/tools", params=params))
 
-    def list_tool_invocation_policies(self, tool_id: str | None = None) -> list[dict[str, Any]]:
+    def list_tool_invocation_policies(self, tool_id: str | None = None) -> list[dict[str, JsonValue]]:
         items = _items(self._request("GET", "/api/autonomy-policies/tool-invocation"))
         return [p for p in items if tool_id is None or p.get("toolId") == tool_id]
 
-    def create_tool_invocation_policy(self, payload: ToolInvocationPolicyCreate) -> dict[str, Any]:
-        return self._request(
-            "POST",
-            "/api/autonomy-policies/tool-invocation",
-            json=payload.model_dump(exclude_none=True),
+    def create_tool_invocation_policy(self, payload: ToolInvocationPolicyCreate) -> dict[str, JsonValue]:
+        return require_dict(
+            self._request("POST", "/api/autonomy-policies/tool-invocation", json_body=to_payload(payload)),
+            ctx="POST /api/autonomy-policies/tool-invocation",
         )
 
 
-def _items(body: Any) -> list[dict[str, Any]]:
+# --- response decoding & shape helpers -----------------------------------------------------
+
+
+def _decode_body(raw: bytes, headers: http.client.HTTPMessage) -> JsonValue:
+    charset = headers.get_content_charset() or "utf-8"
+    text = raw.decode(charset, errors="replace")
+    if headers.get_content_type() == "application/json":
+        return json.loads(text) if text.strip() else None
+    return text
+
+
+def _decode_error(exc: urllib.error.HTTPError) -> str:
+    raw = exc.read()
+    charset = exc.headers.get_content_charset() if exc.headers else None
+    return raw.decode(charset or "utf-8", errors="replace")
+
+
+def _items(body: JsonValue) -> list[dict[str, JsonValue]]:
     """unwrap a list endpoint's response (bare array or {items|data: [...]} envelope).
 
-    raises loudly on an unrecognized shape rather than returning [] -- a silent empty
-    list would make idempotency checks miss existing entities and create duplicates.
-    existence checks always pass a name/search filter, so results stay within one page;
-    pagination beyond the first page is therefore not followed here by design.
+    raises loudly on an unrecognized shape rather than returning [] -- a silent empty list
+    would make idempotency checks miss existing entities and create duplicates. existence
+    checks always pass a name/search filter, so results stay within one page; pagination
+    beyond the first page is therefore not followed here by design.
     """
     match body:
         case list():
-            return body
+            rows = body
         case {"items": list() as items}:
-            return items
+            rows = items
         case {"data": list() as items}:
-            return items
+            rows = items
         case _:
             raise ValueError(f"unexpected list-response shape: {type(body).__name__}: {str(body)[:200]}")
+    out: list[dict[str, JsonValue]] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            raise ValueError(f"unexpected list item (not an object): {type(row).__name__}")
+        out.append(row)
+    return out

@@ -41,7 +41,9 @@ For an existing instance, ask the user for their own credentials — never assum
 2. Mint an API key (returned exactly once).
 3. Send it as the raw `Authorization: <key>` header (no `Bearer`).
 
-The client encapsulates this:
+The client (`archestra_client.py`) is zero-dependency — it uses stdlib `urllib` with a cookie jar
+(so the sign-in session cookie carries to the key-mint call) and does **not** follow redirects (a 3xx
+on the fixed base URL is surfaced as an error, never silently followed). It encapsulates the flow:
 ```python
 from archestra_client import ArchestraClient
 c = ArchestraClient("http://localhost:9000")

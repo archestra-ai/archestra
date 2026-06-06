@@ -6,7 +6,7 @@ import {
   E2eTestId,
 } from "@archestra/shared";
 import type { ColumnDef, SortingState } from "@tanstack/react-table";
-import { ChevronDown, ChevronUp, Plus, Upload } from "lucide-react";
+import { ChevronDown, ChevronUp, Plus, Sparkles, Upload } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -48,6 +48,7 @@ import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import { useTeams } from "@/lib/teams/team.query";
+import { AgentTemplatesCatalog } from "./_parts/agent-templates-catalog";
 import { AgentActions } from "./agent-actions";
 import { ConvertToSkillDialog } from "./convert-to-skill-dialog";
 
@@ -189,6 +190,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
   type AgentData = archestraApiTypes.GetAgentsResponses["200"]["data"][number];
 
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [isTemplatesOpen, setIsTemplatesOpen] = useState(false);
   const [connectingAgent, setConnectingAgent] = useState<{
     id: string;
     name: string;
@@ -523,6 +525,14 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
             <PermissionButton
               variant="outline"
               permissions={{ agent: ["create"] }}
+              onClick={() => setIsTemplatesOpen(true)}
+            >
+              <Sparkles className="mr-2 h-4 w-4" />
+              Templates
+            </PermissionButton>
+            <PermissionButton
+              variant="outline"
+              permissions={{ agent: ["create"] }}
               onClick={() => setIsImportDialogOpen(true)}
             >
               <Upload className="mr-2 h-4 w-4" />
@@ -594,6 +604,11 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
               onCreated={() => {
                 setIsCreateDialogOpen(false);
               }}
+            />
+
+            <AgentTemplatesCatalog
+              open={isTemplatesOpen}
+              onOpenChange={setIsTemplatesOpen}
             />
 
             {connectingAgent && (

@@ -17,7 +17,7 @@ import {
   Users,
 } from "lucide-react";
 import Link from "next/link";
-import type { ReactNode } from "react";
+import type { ClipboardEvent, ReactNode } from "react";
 import { lazy, useEffect, useMemo, useRef, useState } from "react";
 import { type UseFormReturn, useFieldArray, useForm } from "react-hook-form";
 import { AgentIconPicker } from "@/components/agent-icon-picker";
@@ -97,6 +97,7 @@ import {
   transformCatalogItemToFormValues,
   transformFormToApiData,
 } from "./mcp-catalog-form.utils";
+import { parseMcpServerConfigJson } from "./mcp-config-json-parser";
 
 const ExternalSecretSelector = lazy(
   () =>
@@ -613,10 +614,57 @@ export function McpCatalogForm({
   const showByosOption = useFeature("byosEnabled");
 
   // Use field array for environment variables
-  const { fields, append, remove } = useFieldArray({
+  const { fields, append, remove, replace } = useFieldArray({
     control: form.control,
     name: "localConfig.environment",
   });
+
+  // Issue #3859: let users paste a full MCP server JSON config (the format every
+  // catalog hands out) into the Arguments field and auto-fill Command /
+  // Arguments / Env / Transport at once, instead of retyping line-by-line. If
+  // the pasted text isn't a recognisable JSON config we do nothing and let the
+  // textarea handle the paste normally.
+  const handleArgumentsPaste = (event: ClipboardEvent<HTMLTextAreaElement>) => {
+    const pasted = event.clipboardData.getData("text");
+    const parsed = parseMcpServerConfigJson(pasted);
+    if (!parsed) return;
+
+    event.preventDefault();
+
+    if (parsed.command !== undefined) {
+      form.setValue("localConfig.command", parsed.command, {
+        shouldDirty: true,
+      });
+    }
+    form.setValue(
+      "localConfig.arguments",
+      (parsed.arguments ?? []).join("\n"),
+      {
+        shouldDirty: true,
+      },
+    );
+    if (parsed.transportType) {
+      form.setValue("localConfig.transportType", parsed.transportType, {
+        shouldDirty: true,
+      });
+    }
+    if (parsed.environment && parsed.environment.length > 0) {
+      // Placeholder values (e.g. "<token>", "YOUR_KEY_HERE") become secret
+      // fields the installer is prompted for; literal values are kept as-is.
+      replace(
+        parsed.environment.map((envVar) => ({
+          key: envVar.key,
+          type: envVar.isPlaceholder
+            ? ("secret" as const)
+            : ("plain_text" as const),
+          value: envVar.isPlaceholder ? "" : envVar.value,
+          promptOnInstallation: envVar.isPlaceholder,
+          required: envVar.isPlaceholder,
+          description: "",
+        })),
+      );
+    }
+  };
 
   // Use field array for envFrom (existing K8s Secrets/ConfigMaps)
   const {
@@ -1185,8 +1233,17 @@ export function McpCatalogForm({
                             placeholder={`/path/to/server.js\n--verbose`}
                             className="font-mono min-h-20"
                             {...field}
+                            onPaste={handleArgumentsPaste}
                           />
                         </FormControl>
+                        <FormDescription>
+                          One argument per line. Tip: paste a full MCP server
+                          JSON config (e.g.{" "}
+                          <code>{`{"command":"npx","args":[…],"env":{…}}`}</code>{" "}
+                          or an <code>mcpServers</code> snippet) and the
+                          Command, Arguments, Env, and Transport fields will be
+                          filled in automatically.
+                        </FormDescription>
                         <FormMessage />
                       </FormItem>
                     )}

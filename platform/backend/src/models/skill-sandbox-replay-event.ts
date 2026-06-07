@@ -1,5 +1,10 @@
+import { randomUUID } from "node:crypto";
 import { asc, eq, inArray, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
+import {
+  getSandboxFileStorage,
+  storageFilename,
+} from "@/skills-sandbox/file-storage";
 import type {
   InsertSkillSandboxCommand,
   SkillSandboxCommand,
@@ -94,10 +99,32 @@ class SkillSandboxReplayEventModel {
   static async appendUpload(
     upload: UploadInput,
   ): Promise<SkillSandboxFile | null> {
+    // id is generated app-side (not by the column default) because the
+    // storage adapter needs it before the insert: Phase 2's filesystem
+    // provider uses it to derive a collision-free object key.
+    const fileId = randomUUID();
+    const stored = await getSandboxFileStorage().put({
+      sandboxId: upload.sandboxId,
+      fileId,
+      kind: "upload",
+      filename: storageFilename({
+        originalName: upload.originalName,
+        path: upload.path,
+      }),
+      data: upload.data,
+    });
+    const dbData = stored.dbData;
+    if (!dbData) {
+      throw new Error("sandbox file storage returned no dbData for db rows");
+    }
+    // NOTE (Phase 2): when the insert below no-ops on the attachment-staging
+    // conflict, an external provider must best-effort storage.delete() the
+    // just-written object. The db provider has nothing to clean up.
     return await db.transaction(async (tx) => {
       const [row] = await tx
         .insert(schema.skillSandboxFilesTable)
         .values({
+          id: fileId,
           kind: "upload",
           sandboxId: upload.sandboxId,
           path: upload.path,
@@ -105,7 +132,7 @@ class SkillSandboxReplayEventModel {
           originalName: upload.originalName,
           sourceAttachmentId: upload.sourceAttachmentId ?? null,
           sizeBytes: upload.sizeBytes,
-          data: upload.data,
+          data: dbData,
         })
         .onConflictDoNothing({
           target: [

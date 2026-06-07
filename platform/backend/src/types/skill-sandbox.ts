@@ -99,6 +99,38 @@ export type SkillSandboxFile = z.infer<typeof SelectSkillSandboxFileSchema>;
 export type InsertSkillSandboxFile = z.infer<
   typeof InsertSkillSandboxFileSchema
 >;
+
+/**
+ * One row of a user's artifact listing as the model returns it. `filename` is
+ * already derived (`original_name ?? basename(path)`); `storageProvider` /
+ * `objectKey` let the filesystem provider match a row to an on-disk file.
+ */
+export type SandboxArtifactRow = {
+  id: string;
+  filename: string;
+  mimeType: string;
+  sizeBytes: number;
+  createdAt: Date;
+  storageProvider: SkillSandboxFileStorageProvider;
+  objectKey: string | null;
+};
+
+/**
+ * One file as the X-Files surfaces render it. `id` is the artifact row id used
+ * for download via `/api/skill-sandbox/artifacts/:id`; it is null (and
+ * `downloadable` false) for filesystem files that were added by hand and have
+ * no row.
+ */
+export const SandboxFileListItemSchema = z.object({
+  id: z.string().uuid().nullable(),
+  filename: z.string(),
+  mimeType: z.string(),
+  sizeBytes: z.number().int().nonnegative(),
+  createdAt: z.date(),
+  downloadable: z.boolean(),
+});
+
+export type SandboxFileListItem = z.infer<typeof SandboxFileListItemSchema>;
 export type SkillSandboxReplayEvent = z.infer<
   typeof SelectSkillSandboxReplayEventSchema
 >;

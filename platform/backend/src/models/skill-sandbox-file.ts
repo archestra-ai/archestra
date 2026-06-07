@@ -1,11 +1,15 @@
 import { randomUUID } from "node:crypto";
-import { and, asc, eq, isNotNull } from "drizzle-orm";
+import { and, asc, desc, eq, isNotNull } from "drizzle-orm";
 import db, { schema } from "@/database";
 import {
   getSandboxFileStorage,
   storageFilename,
 } from "@/skills-sandbox/file-storage";
-import type { InsertSkillSandboxFile, SkillSandboxFile } from "@/types";
+import type {
+  InsertSkillSandboxFile,
+  SandboxArtifactRow,
+  SkillSandboxFile,
+} from "@/types";
 import { normalizeByteaField } from "@/utils/normalize-bytea";
 
 /** Artifact row without its bytes — what the Files panel needs to list outputs. */
@@ -135,6 +139,62 @@ class SkillSandboxFileModel {
         ),
       );
     return row ? normalizeByteaField(row, "data") : null;
+  }
+
+  /**
+   * All of a user's artifact files (newest first). Scoped to the user + org via
+   * the owning sandbox; pass `conversationId` to narrow to one conversation.
+   * Returns metadata only — never the `data` bytea.
+   */
+  static async listUserArtifacts(params: {
+    organizationId: string;
+    userId: string;
+    conversationId?: string;
+  }): Promise<SandboxArtifactRow[]> {
+    const filters = [
+      eq(schema.skillSandboxFilesTable.kind, "artifact"),
+      eq(schema.skillSandboxesTable.userId, params.userId),
+      eq(schema.skillSandboxesTable.organizationId, params.organizationId),
+    ];
+    if (params.conversationId) {
+      filters.push(
+        eq(schema.skillSandboxesTable.conversationId, params.conversationId),
+      );
+    }
+    const rows = await db
+      .select({
+        id: schema.skillSandboxFilesTable.id,
+        originalName: schema.skillSandboxFilesTable.originalName,
+        path: schema.skillSandboxFilesTable.path,
+        mimeType: schema.skillSandboxFilesTable.mimeType,
+        sizeBytes: schema.skillSandboxFilesTable.sizeBytes,
+        createdAt: schema.skillSandboxFilesTable.createdAt,
+        storageProvider: schema.skillSandboxFilesTable.storageProvider,
+        objectKey: schema.skillSandboxFilesTable.objectKey,
+      })
+      .from(schema.skillSandboxFilesTable)
+      .innerJoin(
+        schema.skillSandboxesTable,
+        eq(
+          schema.skillSandboxFilesTable.sandboxId,
+          schema.skillSandboxesTable.id,
+        ),
+      )
+      .where(and(...filters))
+      .orderBy(desc(schema.skillSandboxFilesTable.createdAt));
+
+    return rows.map((row) => ({
+      id: row.id,
+      filename: storageFilename({
+        originalName: row.originalName,
+        path: row.path,
+      }),
+      mimeType: row.mimeType,
+      sizeBytes: row.sizeBytes,
+      createdAt: row.createdAt,
+      storageProvider: row.storageProvider,
+      objectKey: row.objectKey,
+    }));
   }
 
   /**

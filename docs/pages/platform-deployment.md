@@ -853,7 +853,7 @@ The following environment variables can be used to configure Archestra Platform.
   - **Warning:** Do not change this value after deployment. Rotating this secret will invalidate all user sessions (forcing re-login), make existing encrypted secrets unreadable, break JWT signing (JWKS private keys are encrypted with this secret), and break two-factor authentication for enrolled users.
 
 - **`ARCHESTRA_AUTH_ADMIN_EMAIL`** - Email address for the default Archestra Admin user, created on startup.
-  - Default: `admin@localhost.ai`
+  - Default: `admin@example.com`
 
 - **`ARCHESTRA_AUTH_ADMIN_PASSWORD`** - Password for the default Archestra Admin user. Set once on first-run.
   - Default: `password`

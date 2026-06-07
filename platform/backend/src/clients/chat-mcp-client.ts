@@ -17,6 +17,7 @@ import {
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type {
+  CallToolResult,
   ContentBlock,
   EmbeddedResource,
 } from "@modelcontextprotocol/sdk/types.js";
@@ -1029,11 +1030,15 @@ export async function getChatMcpTools({
                     // Return errors as tool-result text so the LLM can read
                     // and recover, instead of throwing (which surfaces as a
                     // fatal chat error). Matches executeMcpTool behavior.
-                    return archestraResponse.content
-                      .map((item) =>
-                        item.type === "text" ? item.text : JSON.stringify(item),
-                      )
-                      .join("\n");
+                    // When run_tool dispatches to an interactive tool, attach
+                    // that tool's MCP App UI resource so the frontend renders it
+                    // (the model still only sees the plain-text summary).
+                    return await buildArchestraToolOutput({
+                      response: archestraResponse,
+                      toolName: mcpTool.name,
+                      toolArguments,
+                      agentId,
+                    });
                   }
 
                   // Execute non-Archestra tools via shared helper with browser sync
@@ -1711,6 +1716,82 @@ async function executeMcpTool(ctx: ToolExecutionContext): Promise<{
     })),
     structuredContent: result.structuredContent,
     rawContent: mcpContent,
+  };
+}
+
+/**
+ * Resolves the tool whose definition carries the MCP App UI resource. For a
+ * direct call this is the tool itself; for a run_tool dispatch it is the target
+ * tool named in `tool_args` — run_tool itself has no UI resource, so without
+ * this the interactive app never renders when invoked indirectly.
+ */
+function resolveRunToolTargetName(toolName: string, args: unknown): string {
+  const shortName = archestraMcpBranding.getToolShortName(toolName);
+  if (shortName !== TOOL_RUN_TOOL_SHORT_NAME || !isRecord(args)) {
+    return toolName;
+  }
+  const targetToolName = args.tool_name;
+  return typeof targetToolName === "string" && targetToolName.length > 0
+    ? targetToolName
+    : toolName;
+}
+
+/**
+ * Builds the chat tool output for an Archestra tool result. Returns plain text
+ * for the common case; when run_tool dispatched to an interactive tool, returns
+ * the rich shape (with `_meta.ui.resourceUri` from the target tool's definition)
+ * so the frontend renders the MCP App — mirroring how `executeMcpTool` enriches
+ * directly-called tools.
+ * @public — exported for testability
+ */
+export async function buildArchestraToolOutput(params: {
+  response: CallToolResult;
+  toolName: string;
+  toolArguments: unknown;
+  agentId: string;
+}): Promise<
+  | string
+  | {
+      content: string;
+      _meta?: Record<string, unknown>;
+      structuredContent?: Record<string, unknown>;
+      rawContent?: ContentBlock[];
+    }
+> {
+  const { response, toolName, toolArguments, agentId } = params;
+  const text = response.content
+    .map((item) => (item.type === "text" ? item.text : JSON.stringify(item)))
+    .join("\n");
+
+  const targetToolName = resolveRunToolTargetName(toolName, toolArguments);
+  if (targetToolName === toolName) {
+    // Not a run_tool dispatch — no UI resource to attach.
+    return text;
+  }
+
+  let resourceUri: string | undefined;
+  try {
+    const toolDef = await ToolModel.findByNameForAgent(targetToolName, agentId);
+    resourceUri = (
+      toolDef?.meta as { _meta?: { ui?: McpUiToolMeta } } | undefined
+    )?._meta?.ui?.resourceUri;
+  } catch (error) {
+    logger.debug(
+      { error, targetToolName, agentId },
+      "Failed to fetch dispatched tool definition meta",
+    );
+  }
+  if (!resourceUri) {
+    return text;
+  }
+
+  return {
+    content: text,
+    _meta: { ...response._meta, ui: { resourceUri } },
+    structuredContent: response.structuredContent as
+      | Record<string, unknown>
+      | undefined,
+    rawContent: response.content as ContentBlock[],
   };
 }
 

@@ -64,7 +64,11 @@ export async function suggestSkillDescription(params: {
       tag: "description",
       system: SKILL_DESCRIPTION_SYSTEM_PROMPT,
       prompt: buildSkillDescriptionPrompt(agent),
-      maxOutputTokens: 512,
+      // generous headroom so a reasoning model doesn't spend its whole budget
+      // on hidden reasoning and leave the tagged answer truncated or empty. The
+      // proxy forwards this value verbatim, so it stays within the output
+      // ceiling common chat models accept; the answer itself is one short line.
+      maxOutputTokens: 4096,
       sanitize: sanitizeDescription,
     });
   } catch (error) {

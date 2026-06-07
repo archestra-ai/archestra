@@ -1241,6 +1241,14 @@ function isRenderableMcpAppHtml(html: string): boolean {
 
   const parser = new DOMParser();
   const document = parser.parseFromString(trimmedHtml, "text/html");
+
+  // A script anywhere in the document (commonly a <head> module script that
+  // mounts the app into an otherwise-empty <body>, e.g. Excalidraw) can build
+  // the UI at runtime, so the resource is renderable even with an empty body.
+  if (document.querySelector("script")) {
+    return true;
+  }
+
   const body = document.body;
 
   if (body.textContent?.trim()) {
@@ -1250,7 +1258,6 @@ function isRenderableMcpAppHtml(html: string): boolean {
   return Boolean(
     body.querySelector(
       [
-        "script",
         "canvas",
         "svg",
         "img",

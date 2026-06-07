@@ -90,7 +90,9 @@ export class FilesystemSandboxFileStorage {
    * Publish the temp file at the final name, counting up on collision:
    * `name.ext`, `name (1).ext`, `name (2).ext`, ... Each attempt is an atomic
    * `link(2)`; EEXIST means the name is taken (concurrent writer or an earlier
-   * file), so try the next counter.
+   * file), so try the next counter. The counter fills the lowest free slot — a
+   * deleted `name (1).ext` is reused before a new `(3)` — matching OS
+   * Downloads-folder behavior.
    */
   private async publish(params: {
     tempPath: string;
@@ -111,13 +113,21 @@ export class FilesystemSandboxFileStorage {
         if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
       }
     }
-    // pathological folder (COUNTER_LIMIT same-name files): unique fallback.
-    const key = join(
+    // pathological folder (COUNTER_LIMIT same-name files): file-id fallback,
+    // then a random suffix if even that name is taken.
+    const fallback = join(
       params.relDir,
       `${base}-${params.fileId.slice(0, 8)}${ext}`,
     );
-    await link(params.tempPath, join(this.root, key));
-    return key;
+    try {
+      await link(params.tempPath, join(this.root, fallback));
+      return fallback;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+    }
+    const random = join(params.relDir, `${base}-${randomUUID()}${ext}`);
+    await link(params.tempPath, join(this.root, random));
+    return random;
   }
 }
 

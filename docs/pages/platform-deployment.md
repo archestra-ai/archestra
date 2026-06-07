@@ -835,22 +835,22 @@ The following environment variables can be used to configure Archestra Platform.
 
 #### Agent Skills Sandbox File Storage
 
-By default, sandbox file bytes (`upload_file` inputs and `download_file` artifacts) are stored as Postgres `bytea`. Set the provider to `filesystem` to write them as plain files under a directory you control, so you can browse, copy, or post-process them with standard tools outside Archestra.
+By default, sandbox file bytes (`upload_file` inputs and `download_file` artifacts) are stored as Postgres `bytea`. Set the provider to `filesystem` to write **artifacts** as plain files into a per-user folder you control — each user's folder is their outbox: everything in it is theirs to browse, copy, or post-process with standard tools outside Archestra. Uploads always stay in Postgres regardless of the provider, because sandbox replay re-reads them on every container rebuild.
 
-- **`ARCHESTRA_SKILLS_SANDBOX_FILE_STORAGE_PROVIDER`** - Where sandbox file bytes are stored.
+- **`ARCHESTRA_SKILLS_SANDBOX_FILE_STORAGE_PROVIDER`** - Where artifact bytes are stored.
   - Default: `db`
   - Values: `db`, `filesystem`
 
-- **`ARCHESTRA_SKILLS_SANDBOX_FILE_STORAGE_PATH`** - Root directory for sandbox files.
+- **`ARCHESTRA_SKILLS_SANDBOX_FILE_STORAGE_PATH`** - Root directory for artifact files.
   - Required when `ARCHESTRA_SKILLS_SANDBOX_FILE_STORAGE_PROVIDER=filesystem`
-  - Files land at `<path>/<sandboxId>/uploads/<filename>` and `<path>/<sandboxId>/artifacts/<filename>`
+  - Artifacts land flat at `<path>/<userId>/<filename>` (the `users.id` UUID). Same-name collisions count up Downloads-style: `report.txt`, `report (1).txt`, `report (2).txt`.
 
 **Operational notes:**
 
-- `artifacts/` holds skill outputs — safe to copy, move, or delete at any time.
-- `uploads/` holds the inputs that replay reproduces each sandbox run. Deleting or editing a file there breaks that sandbox's replay; the run fails with an explicit error naming the missing file.
-- Deleted sandboxes leave their folder behind; no automatic GC runs. Operators are responsible for cleaning up orphaned `<sandboxId>/` directories.
-- Switching the provider only affects new files. Existing rows continue reading from wherever they were originally written (mixed mode is permanent).
+- Everything in a user folder is an exported artifact — safe to copy, move, or delete at any time. Deleting one only breaks re-downloading that artifact through the UI (the API returns 404 with a clear error); sandboxes and replay are unaffected.
+- Uploads never appear on disk. An uploaded file lives inside the sandbox container (and in Postgres for replay); it lands in the user folder only when the agent exports it via `download_file`.
+- No automatic GC runs; deleted users/sandboxes leave files behind. Operators own cleanup.
+- Switching the provider only affects new artifacts. Existing rows continue reading from wherever they were originally written (per-row dispatch).
 
 **Kubernetes wiring:**
 

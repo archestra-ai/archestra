@@ -5,7 +5,12 @@ import { SkillSandboxFileModel, SkillSandboxModel } from "@/models";
 import { getSandboxFileStorage } from "@/skills-sandbox/file-storage";
 import { SandboxFileMissingError } from "@/skills-sandbox/file-storage-filesystem";
 import { isInlineSafeImageMime } from "@/skills-sandbox/mime-sniff";
-import { ApiError } from "@/types";
+import { skillSandboxArtifactService } from "@/skills-sandbox/skill-sandbox-artifact-service";
+import {
+  ApiError,
+  constructResponseSchema,
+  SandboxFileListItemSchema,
+} from "@/types";
 
 /**
  * Serves bytes from `skill_sandbox_files` (kind `artifact`) back to the browser so the UI
@@ -89,6 +94,43 @@ const skillSandboxArtifactRoutes: FastifyPluginAsyncZod = async (fastify) => {
         .header("Cache-Control", "private, max-age=300");
       return reply.send(data);
     },
+  );
+
+  fastify.get(
+    "/api/skill-sandbox/conversations/:conversationId/artifacts",
+    {
+      schema: {
+        operationId: RouteId.GetSkillSandboxConversationArtifacts,
+        description:
+          "List the artifact files produced in a conversation's sandbox.",
+        tags: ["Skills"],
+        params: z.object({ conversationId: z.string().uuid() }),
+        response: constructResponseSchema(z.array(SandboxFileListItemSchema)),
+      },
+    },
+    async ({ params: { conversationId }, organizationId, user }) =>
+      skillSandboxArtifactService.listForConversation({
+        organizationId,
+        userId: user.id,
+        conversationId,
+      }),
+  );
+
+  fastify.get(
+    "/api/skill-sandbox/files",
+    {
+      schema: {
+        operationId: RouteId.GetSkillSandboxFiles,
+        description: "List all of the calling user's sandbox artifact files.",
+        tags: ["Skills"],
+        response: constructResponseSchema(z.array(SandboxFileListItemSchema)),
+      },
+    },
+    async ({ organizationId, user }) =>
+      skillSandboxArtifactService.listAllForUser({
+        organizationId,
+        userId: user.id,
+      }),
   );
 };
 

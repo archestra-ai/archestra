@@ -234,3 +234,74 @@ describe("GET /api/skill-sandbox/artifacts/:artifactId", () => {
     });
   });
 });
+
+describe("X-Files list routes", () => {
+  let app: FastifyInstanceWithZod;
+  let user: User;
+  let organizationId: string;
+
+  beforeEach(async ({ makeOrganization, makeUser }) => {
+    user = await makeUser();
+    organizationId = (await makeOrganization()).id;
+    app = createFastifyInstance();
+    app.addHook("onRequest", async (request) => {
+      (request as typeof request & { user: unknown }).user = user;
+      (request as typeof request & { organizationId: string }).organizationId =
+        organizationId;
+    });
+    const { default: skillSandboxArtifactRoutes } = await import(
+      "./skill-sandbox-artifact"
+    );
+    await app.register(skillSandboxArtifactRoutes);
+  });
+  afterEach(async () => {
+    await app.close();
+  });
+
+  test("GET /api/skill-sandbox/files lists the user's artifacts (db mode, downloadable)", async () => {
+    const sandbox = await SkillSandboxModel.create({
+      organizationId,
+      userId: user.id,
+      conversationId: null,
+      defaultCwd: "/sandbox",
+    });
+    await seedArtifact({
+      sandboxId: sandbox.id,
+      userId: user.id,
+      organizationId,
+      mimeType: "text/plain",
+      data: Buffer.from("hi"),
+      path: "/sandbox/skills/example/out.txt",
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/skill-sandbox/files",
+    });
+    expect(response.statusCode).toBe(200);
+    const body =
+      response.json<
+        Array<{ filename: string; downloadable: boolean; id: string | null }>
+      >();
+    expect(body).toHaveLength(1);
+    expect(body[0]).toMatchObject({ filename: "out.txt", downloadable: true });
+    expect(body[0].id).toBeTruthy();
+  });
+
+  test("GET conversation artifacts returns [] for a conversation with no sandbox files", async ({
+    makeAgent,
+    makeConversation,
+  }) => {
+    const agent = await makeAgent({ organizationId });
+    const conv = await makeConversation(agent.id, {
+      userId: user.id,
+      organizationId,
+    });
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/skill-sandbox/conversations/${conv.id}/artifacts`,
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual([]);
+  });
+});

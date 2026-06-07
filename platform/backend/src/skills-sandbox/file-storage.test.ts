@@ -1,12 +1,16 @@
-import { describe, expect, test } from "@/test";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import config from "@/config";
+import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { SkillSandboxFile } from "@/types";
 import { getSandboxFileStorage, storageFilename } from "./file-storage";
 
 describe("getSandboxFileStorage (db provider)", () => {
   const storage = getSandboxFileStorage();
 
-  test("is the db provider", () => {
-    expect(storage.name).toBe("db");
+  test("is the storage router", () => {
+    expect(storage.name).toBe("router");
   });
 
   test("put echoes bytes back as dbData with no objectKey", async () => {
@@ -20,6 +24,7 @@ describe("getSandboxFileStorage (db provider)", () => {
     });
     expect(stored.objectKey).toBeNull();
     expect(stored.dbData).toBe(data);
+    expect(stored.provider).toBe("db");
   });
 
   test("get returns row bytes as a Buffer when pg returns Buffer", async () => {
@@ -38,8 +43,52 @@ describe("getSandboxFileStorage (db provider)", () => {
     expect(bytes.toString()).toBe("abc");
   });
 
-  test("delete is a no-op", async () => {
-    await expect(storage.delete("anything")).resolves.toBeUndefined();
+  test("delete is a no-op for db blobs", async () => {
+    await expect(
+      storage.delete({ provider: "db", objectKey: null }),
+    ).resolves.toBeUndefined();
+  });
+});
+
+describe("getSandboxFileStorage routing", () => {
+  let root: string;
+  const original = { ...config.skillsSandbox.fileStorage };
+
+  beforeEach(async () => {
+    root = await mkdtemp(join(tmpdir(), "sandbox-router-"));
+  });
+
+  afterEach(async () => {
+    config.skillsSandbox.fileStorage.provider = original.provider;
+    config.skillsSandbox.fileStorage.path = original.path;
+    await rm(root, { recursive: true, force: true });
+  });
+
+  test("put follows the configured provider", async () => {
+    config.skillsSandbox.fileStorage.provider = "filesystem";
+    config.skillsSandbox.fileStorage.path = root;
+    const stored = await getSandboxFileStorage().put({
+      sandboxId: "11111111-2222-3333-4444-555555555555",
+      fileId: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+      kind: "artifact",
+      filename: "via-router.txt",
+      data: Buffer.from("routed"),
+    });
+    expect(stored.provider).toBe("filesystem");
+    expect(stored.dbData).toBeNull();
+    expect(stored.objectKey).toContain("via-router.txt");
+  });
+
+  test("get resolves per row, not per config", async () => {
+    // config says filesystem, but a db-provider row still reads from bytea
+    config.skillsSandbox.fileStorage.provider = "filesystem";
+    config.skillsSandbox.fileStorage.path = root;
+    const bytes = await getSandboxFileStorage().get({
+      storageProvider: "db",
+      data: Buffer.from("from-bytea"),
+      objectKey: null,
+    } as SkillSandboxFile);
+    expect(bytes.toString()).toBe("from-bytea");
   });
 });
 

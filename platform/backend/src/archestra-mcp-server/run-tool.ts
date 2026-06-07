@@ -10,6 +10,7 @@ import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import { evaluateSingleMcpToolInvocationPolicy } from "@/guardrails/tool-invocation";
 import logger from "@/logging";
+import { ToolModel } from "@/models";
 import { archestraMcpBranding } from "./branding";
 import {
   defineArchestraTool,
@@ -84,11 +85,29 @@ const registry = defineArchestraTools([
         return executeArchestraTool(resolvedName, args.tool_args, context);
       }
 
-      // Third-party MCP Gateway path.
+      // Third-party MCP Gateway path. Hallucinated archestra-prefixed names and
+      // bogus agent-<id> delegations are handled by the "archestra" route above
+      // (executeArchestraTool / checkToolAssignedToAgent), not this check.
       if (!context.agentId) {
         return errorResult(
           `${TOOL_RUN_TOOL_SHORT_NAME} requires agent context to dispatch to third-party MCP tools`,
         );
+      }
+
+      // Reject hallucinated or unassigned tool names before policy evaluation.
+      // The policy gate below already requires exact membership in
+      // getMcpToolsByAgent (see evaluatePolicies), so checking the same set here
+      // is regression-safe; it lets us return an actionable recovery message
+      // instead of the misleading "not enabled for this conversation" refusal
+      // (which implies the tool exists). In search_and_run_only mode the
+      // intended recovery is search_tools, so we point the model there.
+      const assignedTools = await ToolModel.getMcpToolsByAgent(context.agentId);
+      if (!assignedTools.some((tool) => tool.name === resolvedName)) {
+        logger.info(
+          { agentId: context.agentId, requestedName, resolvedName },
+          `${TOOL_RUN_TOOL_SHORT_NAME} dispatched to an unavailable tool`,
+        );
+        return errorResult(unavailableThirdPartyToolMessage(resolvedName));
       }
 
       const toolInput = args.tool_args ?? {};
@@ -136,3 +155,32 @@ const registry = defineArchestraTools([
 
 export const toolEntries = registry.toolEntries;
 export const tools = registry.tools;
+
+// === Internal helpers ===
+
+/**
+ * Recovery-oriented message for a third-party `tool_name` that is not assigned
+ * to the agent (hallucinated or simply not enabled). Mirrors the spirit of the
+ * chat route's UNAVAILABLE_TOOL_ERROR_MESSAGE but steers the model at
+ * search_tools, the intended discovery path in search_and_run_only mode.
+ *
+ * Uses branded tool names (`archestraMcpBranding.getToolName`) so the names here
+ * match exactly what the model sees in its tool list and system prompt — a
+ * custom-branded org exposes these tools under a different prefix, and naming
+ * the canonical `archestra__*` form would point the model at a tool it cannot
+ * see, defeating the recovery loop.
+ */
+function unavailableThirdPartyToolMessage(toolName: string): string {
+  const searchToolsName = archestraMcpBranding.getToolName(
+    TOOL_SEARCH_TOOLS_SHORT_NAME,
+  );
+  const runToolName = archestraMcpBranding.getToolName(
+    TOOL_RUN_TOOL_SHORT_NAME,
+  );
+  return (
+    `No tool named "${toolName}" is available to this agent. It may not exist ` +
+    `or is not assigned to this conversation. Call ${searchToolsName} with a ` +
+    "description of the capability you need to find the exact tool name, then " +
+    `call ${runToolName} again. Do not guess tool names.`
+  );
+}

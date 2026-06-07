@@ -638,7 +638,7 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
       "Some available tools are not listed upfront",
     );
     expect(systemPrompt).toContain(
-      `use \`${archestraMcpBranding.getToolName(TOOL_SEARCH_TOOLS_SHORT_NAME)}\` to find relevant tools`,
+      `call \`${archestraMcpBranding.getToolName(TOOL_SEARCH_TOOLS_SHORT_NAME)}\` to find relevant tools`,
     );
     expect(systemPrompt).toContain(
       `then call \`${archestraMcpBranding.getToolName(TOOL_RUN_TOOL_SHORT_NAME)}\``,
@@ -680,7 +680,7 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
       "Some available tools are not listed upfront",
     );
     expect(systemPrompt).toContain(
-      `use \`${archestraMcpBranding.getToolName(TOOL_SEARCH_TOOLS_SHORT_NAME)}\` to find relevant tools`,
+      `call \`${archestraMcpBranding.getToolName(TOOL_SEARCH_TOOLS_SHORT_NAME)}\` to find relevant tools`,
     );
     expect(systemPrompt).toContain(
       `then call \`${archestraMcpBranding.getToolName(TOOL_RUN_TOOL_SHORT_NAME)}\``,
@@ -719,10 +719,10 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
 
     const systemPrompt = mockStreamText.mock.calls[0]?.[0].system;
     expect(systemPrompt).toContain(
-      "use `custom_ops__search_tools` to find relevant tools",
+      "call `custom_ops__search_tools` to find relevant tools",
     );
     expect(systemPrompt).toContain("then call `custom_ops__run_tool`");
-    expect(systemPrompt).not.toContain("use `search_tools`");
+    expect(systemPrompt).not.toContain("call `search_tools`");
     expect(systemPrompt).not.toContain("then call `run_tool`");
   });
 

@@ -145,6 +145,9 @@ class SkillSandboxFileModel {
    * All of a user's artifact files (newest first). Scoped to the user + org via
    * the owning sandbox; pass `conversationId` to narrow to one conversation.
    * Returns metadata only — never the `data` bytea.
+   *
+   * `created_at` is millisecond-resolution with no monotonic tiebreak, so the
+   * relative order of artifacts written in the same millisecond is not stable.
    */
   static async listUserArtifacts(params: {
     organizationId: string;

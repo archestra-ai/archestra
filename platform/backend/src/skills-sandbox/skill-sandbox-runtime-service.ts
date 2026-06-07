@@ -228,6 +228,7 @@ class SkillSandboxRuntimeService {
       try {
         row = await SkillSandboxFileModel.createArtifact({
           sandboxId: params.sandboxId,
+          userId: sandbox.userId,
           path: resolvedPath,
           mimeType,
           originalName: null,
@@ -291,6 +292,7 @@ class SkillSandboxRuntimeService {
       try {
         row = await SkillSandboxReplayEventModel.appendUpload({
           sandboxId: params.sandboxId,
+          userId: sandbox.userId,
           path: resolvedPath,
           mimeType,
           originalName: params.originalName ?? null,
@@ -938,6 +940,7 @@ async function stageConversationAttachments(
     validateUploadPath(path);
     await SkillSandboxReplayEventModel.appendUpload({
       sandboxId: sandbox.id,
+      userId: sandbox.userId,
       path,
       mimeType: full.mimeType,
       originalName: full.originalName,

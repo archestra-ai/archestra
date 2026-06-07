@@ -24,6 +24,7 @@ async function seedSandbox(params: { organizationId: string; userId: string }) {
 
 async function seedArtifact(params: {
   sandboxId: string;
+  userId: string;
   organizationId: string;
   mimeType: string;
   data: Buffer;
@@ -31,6 +32,7 @@ async function seedArtifact(params: {
 }) {
   return await SkillSandboxFileModel.createArtifact({
     sandboxId: params.sandboxId,
+    userId: params.userId,
     path: params.path ?? "/sandbox/skills/example/out.png",
     mimeType: params.mimeType,
     originalName: null,
@@ -72,6 +74,7 @@ describe("GET /api/skill-sandbox/artifacts/:artifactId", () => {
     });
     const artifact = await seedArtifact({
       sandboxId: sandbox.id,
+      userId: user.id,
       organizationId,
       mimeType: "image/png",
       data: PNG_FAKE,
@@ -103,6 +106,7 @@ describe("GET /api/skill-sandbox/artifacts/:artifactId", () => {
     );
     const artifact = await seedArtifact({
       sandboxId: sandbox.id,
+      userId: user.id,
       organizationId,
       mimeType: "image/svg+xml",
       data: svgPayload,
@@ -132,6 +136,7 @@ describe("GET /api/skill-sandbox/artifacts/:artifactId", () => {
     });
     const artifact = await seedArtifact({
       sandboxId: otherSandbox.id,
+      userId: otherUser.id,
       organizationId: otherOrg.id,
       mimeType: "image/png",
       data: PNG_FAKE,
@@ -161,6 +166,7 @@ describe("GET /api/skill-sandbox/artifacts/:artifactId", () => {
     });
     const artifact = await seedArtifact({
       sandboxId: sandbox.id,
+      userId: user.id,
       organizationId,
       mimeType: "application/pdf",
       data: Buffer.from("%PDF-1.4 ..."),
@@ -203,6 +209,7 @@ describe("GET /api/skill-sandbox/artifacts/:artifactId", () => {
       });
       const artifact = await seedArtifact({
         sandboxId: sandbox.id,
+        userId: user.id,
         organizationId,
         mimeType: "text/plain",
         data: Buffer.from("soon deleted"),

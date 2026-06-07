@@ -18,6 +18,8 @@ import { normalizeByteaField } from "@/utils/normalize-bytea";
 /** Bytes for an uploaded input file, written into the replay log. */
 interface UploadInput {
   sandboxId: string;
+  /** Sandbox owner — names the per-user storage folder. Not a column. */
+  userId: string;
   path: string;
   mimeType: string;
   originalName: string | null;
@@ -105,7 +107,7 @@ class SkillSandboxReplayEventModel {
     // provider uses it to derive a collision-free object key.
     const fileId = randomUUID();
     const stored = await getSandboxFileStorage().put({
-      sandboxId: upload.sandboxId,
+      userId: upload.userId,
       fileId,
       kind: "upload",
       filename: storageFilename({
@@ -149,9 +151,9 @@ class SkillSandboxReplayEventModel {
       });
       return normalizeByteaField(inserted, "data");
     });
-    // the insert no-opped (attachment already staged) but external bytes were
-    // already written — remove the orphan; failure here only leaks a file.
-    // (delete dispatches per blob: a db blob is a no-op.)
+    // the insert no-opped (attachment already staged). Uploads route to the
+    // db provider today, so this delete is a no-op — kept because it
+    // dispatches per blob and stays correct if upload routing ever changes.
     if (!row) {
       try {
         await getSandboxFileStorage().delete(stored);

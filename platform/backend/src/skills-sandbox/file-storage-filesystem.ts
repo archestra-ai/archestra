@@ -4,15 +4,21 @@ import { extname, join } from "node:path";
 import type { SkillSandboxFile } from "@/types";
 
 /**
- * Sandbox file bytes as plain files under a configured root:
- * `<root>/<sandboxId>/{uploads|artifacts}/<filename>`. Built for operators who
- * mount the root (e.g. a PVC) and browse it with a normal file manager —
- * artifacts are free to take; uploads are replay inputs (deleting or editing
- * one breaks that sandbox's reproducibility).
+ * Counter cap for Downloads-style collision names. Past this, fall back to a
+ * file-id suffix (unique by construction) so publish always terminates.
+ */
+const COUNTER_LIMIT = 1000;
+
+/**
+ * Sandbox file bytes as plain files under a configured root, one flat folder
+ * per user: `<root>/<userId>/<filename>`. The folder is the user's artifacts
+ * outbox — everything in it is theirs to browse, copy, or delete. Uploads
+ * never land here: the router keeps them in Postgres because replay re-reads
+ * them on every container rebuild.
  *
  * Writes are crash-safe and never overwrite: bytes land in a temp file, then
- * `link(2)` publishes them at the final name — EEXIST (concurrent writer or
- * earlier file with the same name) retries once with a file-id suffix.
+ * `link(2)` publishes them at the final name — on EEXIST the name counts up
+ * Downloads-style (`report.txt`, `report (1).txt`, `report (2).txt`, ...).
  *
  * POC: filenames are used as-is (no sanitization) and object keys are trusted
  * from the DB (no root-escape check). Add both before any multi-tenant or
@@ -24,7 +30,7 @@ export class FilesystemSandboxFileStorage {
   constructor(private readonly root: string) {}
 
   async put(params: {
-    sandboxId: string;
+    userId: string;
     fileId: string;
     kind: "upload" | "artifact";
     filename: string;
@@ -34,9 +40,8 @@ export class FilesystemSandboxFileStorage {
     objectKey: string | null;
     dbData: Buffer | null;
   }> {
-    const dir = params.kind === "upload" ? "uploads" : "artifacts";
     const name = params.filename || "file";
-    const relDir = join(params.sandboxId, dir);
+    const relDir = params.userId;
     await mkdir(join(this.root, relDir), { recursive: true });
 
     const tempPath = join(this.root, relDir, `.${randomUUID()}.tmp`);
@@ -81,26 +86,38 @@ export class FilesystemSandboxFileStorage {
     }
   }
 
-  /** Publish the temp file at the final name; suffix with the file id on collision. */
+  /**
+   * Publish the temp file at the final name, counting up on collision:
+   * `name.ext`, `name (1).ext`, `name (2).ext`, ... Each attempt is an atomic
+   * `link(2)`; EEXIST means the name is taken (concurrent writer or an earlier
+   * file), so try the next counter.
+   */
   private async publish(params: {
     tempPath: string;
     relDir: string;
     name: string;
     fileId: string;
   }): Promise<string> {
-    const primaryKey = join(params.relDir, params.name);
-    try {
-      await link(params.tempPath, join(this.root, primaryKey));
-      return primaryKey;
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
-    }
     const ext = extname(params.name);
     const base = params.name.slice(0, params.name.length - ext.length);
-    const suffixed = `${base}-${params.fileId.slice(0, 8)}${ext}`;
-    const suffixedKey = join(params.relDir, suffixed);
-    await link(params.tempPath, join(this.root, suffixedKey));
-    return suffixedKey;
+    for (let counter = 0; counter < COUNTER_LIMIT; counter++) {
+      const candidate =
+        counter === 0 ? params.name : `${base} (${counter})${ext}`;
+      const key = join(params.relDir, candidate);
+      try {
+        await link(params.tempPath, join(this.root, key));
+        return key;
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+      }
+    }
+    // pathological folder (COUNTER_LIMIT same-name files): unique fallback.
+    const key = join(
+      params.relDir,
+      `${base}-${params.fileId.slice(0, 8)}${ext}`,
+    );
+    await link(params.tempPath, join(this.root, key));
+    return key;
   }
 }
 

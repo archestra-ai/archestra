@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import config from "@/config";
@@ -16,7 +16,7 @@ describe("getSandboxFileStorage (db provider)", () => {
   test("put echoes bytes back as dbData with no objectKey", async () => {
     const data = Buffer.from("hello sandbox");
     const stored = await storage.put({
-      sandboxId: "00000000-0000-0000-0000-000000000001",
+      userId: "00000000-0000-0000-0000-000000000001",
       fileId: "00000000-0000-0000-0000-000000000002",
       kind: "artifact",
       filename: "out.txt",
@@ -64,11 +64,11 @@ describe("getSandboxFileStorage routing", () => {
     await rm(root, { recursive: true, force: true });
   });
 
-  test("put follows the configured provider", async () => {
+  test("put routes artifacts to the configured provider", async () => {
     config.skillsSandbox.fileStorage.provider = "filesystem";
     config.skillsSandbox.fileStorage.path = root;
     const stored = await getSandboxFileStorage().put({
-      sandboxId: "11111111-2222-3333-4444-555555555555",
+      userId: "11111111-2222-3333-4444-555555555555",
       fileId: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
       kind: "artifact",
       filename: "via-router.txt",
@@ -76,7 +76,27 @@ describe("getSandboxFileStorage routing", () => {
     });
     expect(stored.provider).toBe("filesystem");
     expect(stored.dbData).toBeNull();
-    expect(stored.objectKey).toContain("via-router.txt");
+    expect(stored.objectKey).toBe(
+      "11111111-2222-3333-4444-555555555555/via-router.txt",
+    );
+  });
+
+  test("put routes uploads to db even when filesystem is configured", async () => {
+    config.skillsSandbox.fileStorage.provider = "filesystem";
+    config.skillsSandbox.fileStorage.path = root;
+    const data = Buffer.from("replay input");
+    const stored = await getSandboxFileStorage().put({
+      userId: "11111111-2222-3333-4444-555555555555",
+      fileId: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+      kind: "upload",
+      filename: "in.csv",
+      data,
+    });
+    expect(stored.provider).toBe("db");
+    expect(stored.dbData).toBe(data);
+    expect(stored.objectKey).toBeNull();
+    // and the storage root was never touched
+    expect(await readdir(root)).toEqual([]);
   });
 
   test("get resolves per row, not per config", async () => {

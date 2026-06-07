@@ -30,23 +30,26 @@ class SkillSandboxFileModel {
       "kind" | "data" | "storageProvider" | "objectKey"
     > & {
       data: Buffer;
+      /** Sandbox owner — names the per-user storage folder. Not a column. */
+      userId: string;
     },
   ): Promise<SkillSandboxFile> {
+    const { userId, ...fileFields } = artifact;
     // id is generated app-side (not by the column default) because the
-    // storage adapter needs it before the insert: Phase 2's filesystem
-    // provider uses it to derive a collision-free object key.
+    // storage adapter needs it before the insert: the filesystem provider
+    // uses it as the collision fallback for the object key.
     const fileId = randomUUID();
     const stored = await getSandboxFileStorage().put({
-      sandboxId: artifact.sandboxId,
+      userId,
       fileId,
       kind: "artifact",
-      filename: storageFilename({ originalName: null, path: artifact.path }),
-      data: artifact.data,
+      filename: storageFilename({ originalName: null, path: fileFields.path }),
+      data: fileFields.data,
     });
     const [row] = await db
       .insert(schema.skillSandboxFilesTable)
       .values({
-        ...artifact,
+        ...fileFields,
         id: fileId,
         kind: "artifact",
         data: stored.dbData,

@@ -5,7 +5,10 @@ import { FilesystemSandboxFileStorage } from "./file-storage-filesystem";
 /**
  * Storage for sandbox file bytes (`skill_sandbox_files`), behind one router:
  *
- *   - `put` writes through the CONFIGURED provider
+ *   - `put` dispatches on file kind first: uploads ALWAYS go to the db
+ *     provider — replay re-reads them on every container rebuild, so they
+ *     must outlive anything a user can do to the storage folder. Artifacts
+ *     follow the CONFIGURED provider
  *     (ARCHESTRA_SKILLS_SANDBOX_FILE_STORAGE_PROVIDER; default `db` = bytea).
  *   - `get` resolves PER ROW via `storage_provider`, so rows written before a
  *     config change keep reading from where their bytes actually are.
@@ -19,7 +22,8 @@ export interface SandboxFileStorage {
 
   /** Persist bytes for a new file row. Exactly one of objectKey/dbData is set. */
   put(params: {
-    sandboxId: string;
+    /** Sandbox owner — names the per-user folder of the filesystem provider. */
+    userId: string;
     fileId: string;
     kind: "upload" | "artifact";
     filename: string;
@@ -71,7 +75,7 @@ class DbSandboxFileStorage implements SandboxFileStorage {
   readonly name = "db" as const;
 
   async put(params: {
-    sandboxId: string;
+    userId: string;
     fileId: string;
     kind: "upload" | "artifact";
     filename: string;
@@ -108,6 +112,11 @@ class SandboxFileStorageRouter implements SandboxFileStorage {
   async put(
     params: Parameters<SandboxFileStorage["put"]>[0],
   ): Promise<StoredSandboxBlob> {
+    // uploads are replay inputs: replay must re-read them for every container
+    // rebuild, so they live in Postgres regardless of the configured provider.
+    if (params.kind === "upload") {
+      return dbProvider.put(params);
+    }
     if (config.skillsSandbox.fileStorage.provider === "filesystem") {
       return this.getFilesystem().put(params);
     }

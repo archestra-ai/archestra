@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { SkillSandboxFile } from "@/types";
 import { FilesystemSandboxFileStorage } from "./file-storage-filesystem";
 
-const SANDBOX_ID = "11111111-2222-3333-4444-555555555555";
+const USER_ID = "11111111-2222-3333-4444-555555555555";
 const FILE_ID = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
 
 describe("FilesystemSandboxFileStorage", () => {
@@ -29,87 +29,98 @@ describe("FilesystemSandboxFileStorage", () => {
     } as SkillSandboxFile;
   }
 
-  test("put writes an artifact under <sandboxId>/artifacts and returns the key", async () => {
-    const stored = await storage.put({
-      sandboxId: SANDBOX_ID,
-      fileId: FILE_ID,
-      kind: "artifact",
-      filename: "report.pdf",
-      data: Buffer.from("pdf-bytes"),
-    });
+  function putParams(params: {
+    filename: string;
+    data: Buffer;
+    fileId?: string;
+  }) {
+    return {
+      userId: USER_ID,
+      fileId: params.fileId ?? FILE_ID,
+      kind: "artifact" as const,
+      filename: params.filename,
+      data: params.data,
+    };
+  }
+
+  test("put writes flat under <userId>/ and returns the key", async () => {
+    const stored = await storage.put(
+      putParams({ filename: "report.pdf", data: Buffer.from("pdf-bytes") }),
+    );
     expect(stored).toEqual({
       provider: "filesystem",
-      objectKey: `${SANDBOX_ID}/artifacts/report.pdf`,
+      objectKey: `${USER_ID}/report.pdf`,
       dbData: null,
     });
     const onDisk = await readFile(join(root, stored.objectKey ?? ""));
     expect(onDisk.toString()).toBe("pdf-bytes");
   });
 
-  test("put writes uploads under <sandboxId>/uploads", async () => {
-    const stored = await storage.put({
-      sandboxId: SANDBOX_ID,
-      fileId: FILE_ID,
-      kind: "upload",
-      filename: "data.csv",
-      data: Buffer.from("a,b"),
-    });
-    expect(stored.objectKey).toBe(`${SANDBOX_ID}/uploads/data.csv`);
-  });
-
-  test("put suffixes on filename collision instead of overwriting", async () => {
-    const first = await storage.put({
-      sandboxId: SANDBOX_ID,
-      fileId: FILE_ID,
-      kind: "artifact",
-      filename: "out.txt",
-      data: Buffer.from("first"),
-    });
-    const second = await storage.put({
-      sandboxId: SANDBOX_ID,
-      fileId: "ffffffff-0000-1111-2222-333333333333",
-      kind: "artifact",
-      filename: "out.txt",
-      data: Buffer.from("second"),
-    });
-    expect(second.objectKey).toBe(`${SANDBOX_ID}/artifacts/out-ffffffff.txt`);
-    // both files exist with their own content
+  test("collisions count up Downloads-style", async () => {
+    const first = await storage.put(
+      putParams({ filename: "out.txt", data: Buffer.from("v1") }),
+    );
+    const second = await storage.put(
+      putParams({
+        filename: "out.txt",
+        data: Buffer.from("v2"),
+        fileId: "ffffffff-0000-1111-2222-333333333333",
+      }),
+    );
+    const third = await storage.put(
+      putParams({
+        filename: "out.txt",
+        data: Buffer.from("v3"),
+        fileId: "eeeeeeee-0000-1111-2222-333333333333",
+      }),
+    );
+    expect(first.objectKey).toBe(`${USER_ID}/out.txt`);
+    expect(second.objectKey).toBe(`${USER_ID}/out (1).txt`);
+    expect(third.objectKey).toBe(`${USER_ID}/out (2).txt`);
+    // every version keeps its own content
     expect((await readFile(join(root, first.objectKey ?? ""))).toString()).toBe(
-      "first",
+      "v1",
     );
     expect(
       (await readFile(join(root, second.objectKey ?? ""))).toString(),
-    ).toBe("second");
+    ).toBe("v2");
+    expect((await readFile(join(root, third.objectKey ?? ""))).toString()).toBe(
+      "v3",
+    );
+  });
+
+  test("counter handles extension-less names", async () => {
+    await storage.put(putParams({ filename: "notes", data: Buffer.from("a") }));
+    const second = await storage.put(
+      putParams({
+        filename: "notes",
+        data: Buffer.from("b"),
+        fileId: "ffffffff-0000-1111-2222-333333333333",
+      }),
+    );
+    expect(second.objectKey).toBe(`${USER_ID}/notes (1)`);
   });
 
   test("put leaves no temp files behind", async () => {
-    await storage.put({
-      sandboxId: SANDBOX_ID,
-      fileId: FILE_ID,
-      kind: "artifact",
-      filename: "out.txt",
-      data: Buffer.from("x"),
-    });
-    const files = await readdir(join(root, SANDBOX_ID, "artifacts"));
+    await storage.put(
+      putParams({ filename: "out.txt", data: Buffer.from("x") }),
+    );
+    const files = await readdir(join(root, USER_ID));
     expect(files).toEqual(["out.txt"]);
   });
 
   test("get reads bytes back via the object key", async () => {
-    const stored = await storage.put({
-      sandboxId: SANDBOX_ID,
-      fileId: FILE_ID,
-      kind: "upload",
-      filename: "in.bin",
-      data: Buffer.from([1, 2, 3]),
-    });
+    const stored = await storage.put(
+      putParams({ filename: "in.bin", data: Buffer.from([1, 2, 3]) }),
+    );
     const bytes = await storage.get(fileRow(stored.objectKey ?? ""));
     expect([...bytes]).toEqual([1, 2, 3]);
   });
 
   test("get throws a clear error when the backing file is missing", async () => {
-    await expect(
-      storage.get(fileRow(`${SANDBOX_ID}/artifacts/gone.txt`)),
-    ).rejects.toThrow(/gone\.txt/);
+    await expect(storage.get(fileRow(`${USER_ID}/gone.txt`))).rejects.toThrow(
+      /gone\.txt/,
+    );
   });
 
   test("get throws when the row has no object key", async () => {
@@ -122,18 +133,14 @@ describe("FilesystemSandboxFileStorage", () => {
   });
 
   test("delete removes the file and tolerates a missing one", async () => {
-    const stored = await storage.put({
-      sandboxId: SANDBOX_ID,
-      fileId: FILE_ID,
-      kind: "artifact",
-      filename: "tmp.txt",
-      data: Buffer.from("x"),
-    });
+    const stored = await storage.put(
+      putParams({ filename: "tmp.txt", data: Buffer.from("x") }),
+    );
     await storage.delete(stored.objectKey ?? "");
     await expect(
       storage.delete(stored.objectKey ?? ""),
     ).resolves.toBeUndefined();
-    const files = await readdir(join(root, SANDBOX_ID, "artifacts"));
+    const files = await readdir(join(root, USER_ID));
     expect(files).toEqual([]);
   });
 });

@@ -225,6 +225,7 @@ describe("SkillSandboxReplayEventModel", () => {
     });
     const upload = await SkillSandboxReplayEventModel.appendUpload({
       sandboxId: sandbox.id,
+      userId: user.id,
       path: "/home/sandbox/input.csv",
       mimeType: "text/csv",
       originalName: "input.csv",
@@ -381,6 +382,7 @@ describe("SkillSandboxReplayEventModel", () => {
     });
     const artifact = await SkillSandboxFileModel.createArtifact({
       sandboxId: sandbox.id,
+      userId: user.id,
       path: "out/report.txt",
       mimeType: "text/plain",
       originalName: null,
@@ -418,6 +420,7 @@ describe("SkillSandboxFileModel (artifacts)", () => {
     const payload = Buffer.from("hello, world", "utf8");
     const artifact = await SkillSandboxFileModel.createArtifact({
       sandboxId: sandbox.id,
+      userId: user.id,
       path: "out/report.txt",
       mimeType: "text/plain",
       originalName: null,
@@ -446,6 +449,7 @@ describe("SkillSandboxFileModel (artifacts)", () => {
     });
     const upload = await SkillSandboxReplayEventModel.appendUpload({
       sandboxId: sandbox.id,
+      userId: user.id,
       path: "/home/sandbox/in.csv",
       mimeType: "text/csv",
       originalName: null,
@@ -493,6 +497,7 @@ describe("Cascade behavior", () => {
     });
     const artifact = await SkillSandboxFileModel.createArtifact({
       sandboxId: sandbox.id,
+      userId: user.id,
       path: "out/a.txt",
       mimeType: "text/plain",
       originalName: null,

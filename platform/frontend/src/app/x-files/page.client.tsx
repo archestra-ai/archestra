@@ -52,6 +52,7 @@ function XFilesList() {
           </a>
         ) : (
           <span
+            role="img"
             className="text-muted-foreground/50"
             title="Added outside Archestra — open it from the storage folder"
             aria-label={`${row.original.filename} was added outside Archestra; download unavailable`}

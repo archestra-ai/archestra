@@ -116,10 +116,9 @@ class DbSandboxFileStorage implements SandboxFileStorage {
     objectKey: string | null;
   }): Promise<void> {}
 
-  async listUserFiles(params: {
-    userId: string;
-    rows: SandboxArtifactRow[];
-  }): Promise<SandboxFileListItem[]> {
+  async listUserFiles(
+    params: Parameters<SandboxFileStorage["listUserFiles"]>[0],
+  ): Promise<SandboxFileListItem[]> {
     // the rows ARE the listing — there is no folder to reconcile against.
     return params.rows.map((row) => ({
       id: row.id,
@@ -170,10 +169,9 @@ class SandboxFileStorageRouter implements SandboxFileStorage {
     return this.getFilesystem().delete(blob.objectKey);
   }
 
-  async listUserFiles(params: {
-    userId: string;
-    rows: SandboxArtifactRow[];
-  }): Promise<SandboxFileListItem[]> {
+  async listUserFiles(
+    params: Parameters<SandboxFileStorage["listUserFiles"]>[0],
+  ): Promise<SandboxFileListItem[]> {
     if (config.skillsSandbox.fileStorage.provider === "filesystem") {
       return this.getFilesystem().listUserFiles(params);
     }

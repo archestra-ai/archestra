@@ -2,6 +2,7 @@ import { RouteId } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { SkillSandboxFileModel, SkillSandboxModel } from "@/models";
+import { getSandboxFileStorage } from "@/skills-sandbox/file-storage";
 import { isInlineSafeImageMime } from "@/skills-sandbox/mime-sniff";
 import { ApiError } from "@/types";
 
@@ -64,8 +65,9 @@ const skillSandboxArtifactRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ? artifact.mimeType
         : "application/octet-stream";
 
-      // findArtifactById normalizes bytea to Buffer at the model boundary
-      const data = artifact.data;
+      // read through the storage adapter so this route keeps working once
+      // artifact bytes can live outside the data column (Phase 2).
+      const data = await getSandboxFileStorage().get(artifact);
 
       reply
         .header("Content-Type", contentType)

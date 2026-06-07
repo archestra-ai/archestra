@@ -304,4 +304,50 @@ describe("X-Files list routes", () => {
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual([]);
   });
+
+  test("GET /api/skill-sandbox/files never returns another user's files", async ({
+    makeUser,
+    makeOrganization,
+  }) => {
+    // the request is authenticated as `user`/`organizationId` (the harness).
+    const mineSandbox = await SkillSandboxModel.create({
+      organizationId,
+      userId: user.id,
+      conversationId: null,
+      defaultCwd: "/sandbox",
+    });
+    await seedArtifact({
+      sandboxId: mineSandbox.id,
+      userId: user.id,
+      organizationId,
+      mimeType: "text/plain",
+      data: Buffer.from("mine"),
+      path: "/sandbox/skills/example/mine.txt",
+    });
+
+    const otherUser = await makeUser({ email: "x-files-other@test.com" });
+    const otherOrg = await makeOrganization();
+    const theirSandbox = await SkillSandboxModel.create({
+      organizationId: otherOrg.id,
+      userId: otherUser.id,
+      conversationId: null,
+      defaultCwd: "/sandbox",
+    });
+    await seedArtifact({
+      sandboxId: theirSandbox.id,
+      userId: otherUser.id,
+      organizationId: otherOrg.id,
+      mimeType: "text/plain",
+      data: Buffer.from("theirs"),
+      path: "/sandbox/skills/example/theirs.txt",
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/skill-sandbox/files",
+    });
+    expect(response.statusCode).toBe(200);
+    const body = response.json<Array<{ filename: string }>>();
+    expect(body.map((f) => f.filename)).toEqual(["mine.txt"]);
+  });
 });

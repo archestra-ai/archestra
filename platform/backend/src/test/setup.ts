@@ -18,6 +18,7 @@ import { PGlite } from "@electric-sql/pglite";
 import { vector } from "@electric-sql/pglite/vector";
 import { drizzle } from "drizzle-orm/pglite";
 import { afterAll, afterEach, beforeAll, beforeEach, vi } from "vitest";
+import config from "../config.js";
 import { getMigrationsSql, SNAPSHOT_PATH_ENV } from "./migrations-helper.js";
 
 // Disable Sentry for tests - set BEFORE any config modules are loaded
@@ -34,6 +35,16 @@ process.env.ARCHESTRA_CHAT_ACTIVE_RUN_POLLING_COMPATIBILITY_ENABLED = "true";
 
 // Set auth secret for tests
 process.env.ARCHESTRA_AUTH_SECRET = "auth-secret-unit-tests-32-chars!";
+
+// Pin sandbox file storage to the `db` default for the whole suite. The suite
+// must be deterministic regardless of the operator's ambient
+// ARCHESTRA_SKILLS_SANDBOX_FILE_STORAGE_* env (a dev `.env` selecting
+// `filesystem` would otherwise route artifacts to disk and never write inline
+// bytes), and must NEVER write test files into a real outbox folder. Describes
+// that intentionally exercise filesystem mode save/restore this object
+// themselves, so this default composes with them.
+config.skillsSandbox.fileStorage.provider = "db";
+config.skillsSandbox.fileStorage.path = undefined;
 
 // Vitest file workers can stack multiple process-level exit listeners during
 // backend test setup/teardown; raise the cap slightly to avoid noisy warnings.

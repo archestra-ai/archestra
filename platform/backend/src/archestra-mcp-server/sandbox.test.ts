@@ -693,7 +693,7 @@ describe("sandbox tools (runtime enabled)", () => {
         expect(uploads).toHaveLength(1);
         const [only] = uploads;
         if (only.kind !== "upload") throw new Error("expected an upload event");
-        expect(only.upload.data!.toString("utf8")).toBe(bytes.toString("utf8"));
+        expect(only.upload.data?.toString("utf8")).toBe(bytes.toString("utf8"));
         expect(only.upload.path).toBe("/home/sandbox/data/input.csv");
       });
 

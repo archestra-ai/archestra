@@ -18,6 +18,7 @@ import { assertMountedSkillsReadable } from "@/skills/assert-mounted-skills-read
 import type { SkillSandbox } from "@/types";
 import { asSandboxId, type SandboxId } from "@/types";
 import { shellQuote } from "@/utils/shell-quote";
+import { getSandboxFileStorage } from "./file-storage";
 import { resolveArtifactMime } from "./mime-sniff";
 import {
   SKILL_SANDBOX_ATTACHMENTS_DIR,
@@ -524,67 +525,70 @@ class SkillSandboxRuntimeService {
     replayEntries: ReplayEntry[];
   }> {
     const log = await SkillSandboxReplayEventModel.listBySandbox(sandbox.id);
+    const storage = getSandboxFileStorage();
     return {
       // uniform, ordered replay: every command (including per-skill
       // requirements-install steps), every uploaded file, and every skill mount
       // lives in one sequenced log. interleaving is preserved so each step
       // materializes at exactly its sequence point. an empty log is valid — a
       // freshly-created default sandbox is just a plain shell.
-      replayEntries: log.map((entry): ReplayEntry => {
-        switch (entry.kind) {
-          case "command":
-            return {
-              kind: "command",
-              command: {
-                command: entry.command.command,
-                // pin replays to defaultCwd when the original entry has no
-                // stored cwd, so the Rust fallback doesn't pick up the live
-                // call's cwd (would break replay determinism and the
-                // runCommand↔exportArtifact cache).
-                cwd: entry.command.cwd ?? sandbox.defaultCwd,
-                timeoutSeconds: entry.command.timeoutSeconds,
-              },
-            };
-          case "upload":
-            return {
-              kind: "file",
-              file: {
-                path: entry.upload.path,
-                encoding: "base64",
-                content: entry.upload.data.toString("base64"),
-              },
-            };
-          case "skill_mount":
-            return {
-              kind: "skill_mount",
-              skillMount: {
-                skillName: entry.mount.skillName,
-                // synthesize the skill dir from the pinned version: SKILL.md
-                // from the version body, plus one entry per version file. The
-                // per-file `skillName` is the mount's name (version files are
-                // skill-agnostic), so paths land under /skills/<skillName>.
-                files: [
-                  {
-                    skillName: entry.mount.skillName,
-                    path: SKILL_MANIFEST_FILE,
-                    encoding: "utf8" as const,
-                    content: entry.content,
-                  },
-                  ...entry.files.map((file) => ({
-                    skillName: entry.mount.skillName,
-                    path: file.path,
-                    encoding: file.encoding,
-                    content: file.content,
-                  })),
-                ],
-              },
-            };
-          default:
-            throw new SkillSandboxError(
-              `replay event for sandbox ${sandbox.id} has an unknown kind ${JSON.stringify(entry)}`,
-            );
-        }
-      }),
+      replayEntries: await Promise.all(
+        log.map(async (entry): Promise<ReplayEntry> => {
+          switch (entry.kind) {
+            case "command":
+              return {
+                kind: "command",
+                command: {
+                  command: entry.command.command,
+                  // pin replays to defaultCwd when the original entry has no
+                  // stored cwd, so the Rust fallback doesn't pick up the live
+                  // call's cwd (would break replay determinism and the
+                  // runCommand↔exportArtifact cache).
+                  cwd: entry.command.cwd ?? sandbox.defaultCwd,
+                  timeoutSeconds: entry.command.timeoutSeconds,
+                },
+              };
+            case "upload":
+              return {
+                kind: "file",
+                file: {
+                  path: entry.upload.path,
+                  encoding: "base64",
+                  content: (await storage.get(entry.upload)).toString("base64"),
+                },
+              };
+            case "skill_mount":
+              return {
+                kind: "skill_mount",
+                skillMount: {
+                  skillName: entry.mount.skillName,
+                  // synthesize the skill dir from the pinned version: SKILL.md
+                  // from the version body, plus one entry per version file. The
+                  // per-file `skillName` is the mount's name (version files are
+                  // skill-agnostic), so paths land under /skills/<skillName>.
+                  files: [
+                    {
+                      skillName: entry.mount.skillName,
+                      path: SKILL_MANIFEST_FILE,
+                      encoding: "utf8" as const,
+                      content: entry.content,
+                    },
+                    ...entry.files.map((file) => ({
+                      skillName: entry.mount.skillName,
+                      path: file.path,
+                      encoding: file.encoding,
+                      content: file.content,
+                    })),
+                  ],
+                },
+              };
+            default:
+              throw new SkillSandboxError(
+                `replay event for sandbox ${sandbox.id} has an unknown kind ${JSON.stringify(entry)}`,
+              );
+          }
+        }),
+      ),
     };
   }
 

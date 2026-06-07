@@ -475,6 +475,38 @@ describe("LimitsPage", () => {
     expect(row).toHaveTextContent("Next reset: Jan 15");
   });
 
+  it("shows current usage details with limit kind and reset countdown", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-15T12:00:00.000Z"));
+    mockUseLimits.mockReturnValue({
+      data: [
+        {
+          id: "limit-1",
+          entityType: "organization",
+          entityId: "org-1",
+          limitType: "token_cost",
+          limitValue: 1000,
+          model: null,
+          mcpServerName: null,
+          toolName: null,
+          cleanupInterval: "1m",
+          lastCleanup: "2026-01-01T12:00:00.000Z",
+          createdAt: "2026-01-01",
+          updatedAt: "2026-01-01",
+          modelUsage: [{ model: "gpt-4o", cost: 750 }],
+        },
+      ],
+      isPending: false,
+    });
+
+    render(<LimitsPage />);
+
+    const row = screen.getByTestId("data-table-row-limit-1");
+    expect(row).toHaveTextContent("$750 / $1,000 (75.0%)");
+    expect(row).toHaveTextContent("Limit kind: Token cost");
+    expect(row).toHaveTextContent("Resets in 17d");
+  });
+
   it("shows multiple model badges for limits with multiple models", () => {
     const models = getLimitModels({
       id: "limit-1",

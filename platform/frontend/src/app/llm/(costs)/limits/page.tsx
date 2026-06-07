@@ -520,20 +520,37 @@ export default function LimitsPage() {
         minSize: 160,
         cell: ({ row }) => {
           const usage = getUsageStatus(row.original);
+          const cleanupInterval =
+            (row.original.cleanupInterval as LimitCleanupInterval | null) ??
+            DEFAULT_LIMIT_CLEANUP_INTERVAL;
+          const reset = getNextLimitReset(
+            row.original.lastCleanup,
+            cleanupInterval,
+          );
+          const usageText = `${formatCurrencyWhole(usage.actualUsage)} / ${formatCurrencyWhole(usage.actualLimit)} (${usage.percentage.toFixed(1)}%)`;
           return (
             <div className="w-[180px]">
-              <Progress
-                value={Math.min(usage.percentage, 100)}
-                className={
-                  usage.status === "danger"
-                    ? "bg-red-100"
-                    : usage.status === "warning"
-                      ? "bg-orange-100"
-                      : undefined
-                }
-              />
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Progress
+                    value={Math.min(usage.percentage, 100)}
+                    className={
+                      usage.status === "danger"
+                        ? "bg-red-100"
+                        : usage.status === "warning"
+                          ? "bg-orange-100"
+                          : undefined
+                    }
+                  />
+                </TooltipTrigger>
+                <TooltipContent className="space-y-1 text-xs">
+                  <div>{usageText}</div>
+                  <div>Limit kind: Token cost</div>
+                  <div>{reset.label}</div>
+                </TooltipContent>
+              </Tooltip>
               <p className="mt-1 text-left text-xs text-muted-foreground">
-                {`${formatCurrencyWhole(usage.actualUsage)} / ${formatCurrencyWhole(usage.actualLimit)} (${usage.percentage.toFixed(1)}%)`}
+                {usageText}
               </p>
             </div>
           );

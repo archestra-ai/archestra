@@ -45,8 +45,14 @@ class WindmillClient:
         self._raise_for_status(resp)
         return resp.json()
 
-    async def _post(self, path: str, json: Any = None) -> Any:
-        resp = await self._client.post(path, json=json)
+    async def _post(self, path: str, json: Any = None, timeout: float | None = None) -> Any:
+        """POST helper.
+
+        Args:
+            timeout: Per-request timeout in seconds. When provided it overrides
+                     the client-level default (30 s) for this call only.
+        """
+        resp = await self._client.post(path, json=json, timeout=timeout)
         self._raise_for_status(resp)
         # Some endpoints return plain text (job ID)
         content_type = resp.headers.get("content-type", "")
@@ -90,10 +96,16 @@ class WindmillClient:
     async def run_flow_and_wait(
         self, path: str, args: dict[str, Any] | None = None, timeout: int = 60
     ) -> dict:
-        """Trigger a flow and block until it completes (up to `timeout` seconds)."""
+        """Trigger a flow and block until it completes (up to `timeout` seconds).
+
+        The per-request timeout is set to ``timeout`` seconds, overriding the
+        client-level 30 s default so flows that take up to 60 s complete
+        successfully instead of raising ``ReadTimeout``.
+        """
         result = await self._post(
             f"/api/w/{self.workspace}/jobs/run_wait_result/f/{path}",
             json=args or {},
+            timeout=float(timeout),
         )
         return result  # type: ignore[return-value]
 
@@ -104,18 +116,22 @@ class WindmillClient:
     async def list_jobs(self, page: int = 1, per_page: int = 20) -> list[dict]:
         """Return recent completed jobs."""
         return await self._get(
-            f"/api/w/{self.workspace}/jobs/completed/list",
+            f"/api/w/{self.workspace}/jobs_u/completed/list",
             page=page,
             per_page=per_page,
         )
 
     async def get_job(self, job_id: str) -> dict:
-        """Return a job (running or completed)."""
-        return await self._get(f"/api/w/{self.workspace}/jobs/get/{job_id}")
+        """Return a job (running or completed).
+
+        Uses the /jobs_u/ (user-accessible) endpoint — /jobs/ is admin-only
+        and returns 404 for regular user tokens.
+        """
+        return await self._get(f"/api/w/{self.workspace}/jobs_u/get/{job_id}")
 
     async def get_job_result(self, job_id: str) -> Any:
         """Return the result payload of a completed job."""
-        return await self._get(f"/api/w/{self.workspace}/jobs/{job_id}/result")
+        return await self._get(f"/api/w/{self.workspace}/jobs_u/completed/result/{job_id}")
 
     # ------------------------------------------------------------------
     # Scripts

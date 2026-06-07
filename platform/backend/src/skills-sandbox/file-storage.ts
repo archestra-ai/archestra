@@ -1,5 +1,9 @@
 import config from "@/config";
-import type { SkillSandboxFile } from "@/types";
+import type {
+  SandboxArtifactRow,
+  SandboxFileListItem,
+  SkillSandboxFile,
+} from "@/types";
 import { FilesystemSandboxFileStorage } from "./file-storage-filesystem";
 
 /**
@@ -42,6 +46,17 @@ interface SandboxFileStorage {
     provider: "db" | "filesystem";
     objectKey: string | null;
   }): Promise<void>;
+
+  /**
+   * List a user's artifact files. `rows` is the storage-agnostic metadata the
+   * model already fetched; the db provider returns it as the listing (there is
+   * no folder), the filesystem provider treats the on-disk directory as the
+   * source of truth.
+   */
+  listUserFiles(params: {
+    userId: string;
+    rows: SandboxArtifactRow[];
+  }): Promise<SandboxFileListItem[]>;
 }
 
 /** Where a new file's bytes were persisted. */
@@ -100,6 +115,21 @@ class DbSandboxFileStorage implements SandboxFileStorage {
     provider: "db" | "filesystem";
     objectKey: string | null;
   }): Promise<void> {}
+
+  async listUserFiles(params: {
+    userId: string;
+    rows: SandboxArtifactRow[];
+  }): Promise<SandboxFileListItem[]> {
+    // the rows ARE the listing — there is no folder to reconcile against.
+    return params.rows.map((row) => ({
+      id: row.id,
+      filename: row.filename,
+      mimeType: row.mimeType,
+      sizeBytes: row.sizeBytes,
+      createdAt: row.createdAt,
+      downloadable: true,
+    }));
+  }
 }
 
 class SandboxFileStorageRouter implements SandboxFileStorage {
@@ -138,6 +168,16 @@ class SandboxFileStorageRouter implements SandboxFileStorage {
     // the row (nothing external to remove), filesystem bytes get unlinked.
     if (blob.provider !== "filesystem" || !blob.objectKey) return;
     return this.getFilesystem().delete(blob.objectKey);
+  }
+
+  async listUserFiles(params: {
+    userId: string;
+    rows: SandboxArtifactRow[];
+  }): Promise<SandboxFileListItem[]> {
+    if (config.skillsSandbox.fileStorage.provider === "filesystem") {
+      return this.getFilesystem().listUserFiles(params);
+    }
+    return dbProvider.listUserFiles(params);
   }
 
   private getFilesystem(): FilesystemSandboxFileStorage {

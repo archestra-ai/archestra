@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import config from "@/config";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
-import type { SkillSandboxFile } from "@/types";
+import type { SandboxArtifactRow, SkillSandboxFile } from "@/types";
 import { getSandboxFileStorage, storageFilename } from "./file-storage";
 
 describe("getSandboxFileStorage (db provider)", () => {
@@ -142,5 +142,64 @@ describe("storageFilename", () => {
 
   test("falls back to 'file' when the path has no basename", () => {
     expect(storageFilename({ originalName: null, path: "/" })).toBe("file");
+  });
+});
+
+describe("SandboxFileStorageRouter.listUserFiles (db provider)", () => {
+  const original = { ...config.skillsSandbox.fileStorage };
+  beforeEach(() => {
+    config.skillsSandbox.fileStorage.provider = "db";
+    config.skillsSandbox.fileStorage.path = undefined;
+  });
+  afterEach(() => {
+    config.skillsSandbox.fileStorage.provider = original.provider;
+    config.skillsSandbox.fileStorage.path = original.path;
+  });
+
+  test("maps rows to items, all downloadable, in input order", async () => {
+    const rows: SandboxArtifactRow[] = [
+      {
+        id: "11111111-1111-1111-1111-111111111111",
+        filename: "a.txt",
+        mimeType: "text/plain",
+        sizeBytes: 3,
+        createdAt: new Date("2026-01-02T00:00:00Z"),
+        storageProvider: "db",
+        objectKey: null,
+      },
+      {
+        id: "22222222-2222-2222-2222-222222222222",
+        filename: "b.png",
+        mimeType: "image/png",
+        sizeBytes: 9,
+        createdAt: new Date("2026-01-01T00:00:00Z"),
+        storageProvider: "db",
+        objectKey: null,
+      },
+    ];
+
+    const items = await getSandboxFileStorage().listUserFiles({
+      userId: "user-1",
+      rows,
+    });
+
+    expect(items).toEqual([
+      {
+        id: rows[0].id,
+        filename: "a.txt",
+        mimeType: "text/plain",
+        sizeBytes: 3,
+        createdAt: rows[0].createdAt,
+        downloadable: true,
+      },
+      {
+        id: rows[1].id,
+        filename: "b.png",
+        mimeType: "image/png",
+        sizeBytes: 9,
+        createdAt: rows[1].createdAt,
+        downloadable: true,
+      },
+    ]);
   });
 });

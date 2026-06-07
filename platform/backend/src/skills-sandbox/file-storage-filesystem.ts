@@ -1,7 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { link, mkdir, readFile, rm, unlink, writeFile } from "node:fs/promises";
 import { extname, join } from "node:path";
-import type { SkillSandboxFile } from "@/types";
+import type {
+  SandboxArtifactRow,
+  SandboxFileListItem,
+  SkillSandboxFile,
+} from "@/types";
 
 /**
  * Counter cap for Downloads-style collision names. Past this, fall back to a
@@ -84,6 +88,14 @@ export class FilesystemSandboxFileStorage {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
       throw error;
     }
+  }
+
+  async listUserFiles(_params: {
+    userId: string;
+    rows: SandboxArtifactRow[];
+  }): Promise<SandboxFileListItem[]> {
+    // Stub — replaced with directory-driven listing in the next task.
+    return [];
   }
 
   /**

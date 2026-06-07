@@ -7,8 +7,11 @@ import type { SkillSandboxFile } from "@/types";
  * `put` returns an `objectKey` instead of `dbData` and `get` resolves per-row
  * via the `storage_provider` column.
  * See docs/superpowers/specs/2026-06-07-sandbox-file-storage-design.md.
+ *
+ * Not exported yet: callers depend on `getSandboxFileStorage()` only. Phase 2
+ * exports the interface when the filesystem provider (its own file) implements it.
  */
-export interface SandboxFileStorage {
+interface SandboxFileStorage {
   readonly name: "db" | "filesystem";
 
   /** Persist bytes for a new file row. Exactly one of objectKey/dbData is set. */

@@ -41,8 +41,9 @@ process.env.ARCHESTRA_AUTH_SECRET = "auth-secret-unit-tests-32-chars!";
 // ARCHESTRA_SKILLS_SANDBOX_FILE_STORAGE_* env (a dev `.env` selecting
 // `filesystem` would otherwise route artifacts to disk and never write inline
 // bytes), and must NEVER write test files into a real outbox folder. Describes
-// that intentionally exercise filesystem mode save/restore this object
-// themselves, so this default composes with them.
+// that intentionally exercise filesystem mode snapshot and restore
+// `config.skillsSandbox.fileStorage` themselves, so they revert to this pinned
+// `db` baseline after each test.
 config.skillsSandbox.fileStorage.provider = "db";
 config.skillsSandbox.fileStorage.path = undefined;
 

@@ -31,6 +31,9 @@ class SkillSandboxFileModel {
     // storage adapter needs it before the insert: Phase 2's filesystem
     // provider uses it to derive a collision-free object key.
     const fileId = randomUUID();
+    if (!artifact.data) {
+      throw new Error("createArtifact requires data bytes");
+    }
     const stored = await getSandboxFileStorage().put({
       sandboxId: artifact.sandboxId,
       fileId,

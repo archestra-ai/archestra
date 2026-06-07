@@ -16,6 +16,15 @@ export type SkillSandboxReplayEventKind = z.infer<
 export const SkillSandboxFileKindSchema = z.enum(["upload", "artifact"]);
 export type SkillSandboxFileKind = z.infer<typeof SkillSandboxFileKindSchema>;
 
+/** Where a sandbox file's bytes live: Postgres bytea or an external filesystem. */
+export const SkillSandboxFileStorageProviderSchema = z.enum([
+  "db",
+  "filesystem",
+]);
+export type SkillSandboxFileStorageProvider = z.infer<
+  typeof SkillSandboxFileStorageProviderSchema
+>;
+
 export const SelectSkillSandboxSchema = createSelectSchema(
   schema.skillSandboxesTable,
 );
@@ -38,11 +47,19 @@ export const InsertSkillSandboxCommandSchema = createInsertSchema(
 
 export const SelectSkillSandboxFileSchema = createSelectSchema(
   schema.skillSandboxFilesTable,
-  { kind: SkillSandboxFileKindSchema },
+  {
+    kind: SkillSandboxFileKindSchema,
+    storageProvider: SkillSandboxFileStorageProviderSchema,
+  },
 );
 export const InsertSkillSandboxFileSchema = createInsertSchema(
   schema.skillSandboxFilesTable,
-  { kind: SkillSandboxFileKindSchema },
+  {
+    kind: SkillSandboxFileKindSchema,
+    // optional: DB column has DEFAULT 'db', so callers may omit it when
+    // inserting db-provider rows.
+    storageProvider: SkillSandboxFileStorageProviderSchema.optional(),
+  },
 ).omit({
   id: true,
   createdAt: true,

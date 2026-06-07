@@ -66,6 +66,11 @@ class DbSandboxFileStorage implements SandboxFileStorage {
   }
 
   async get(file: SkillSandboxFile): Promise<Buffer> {
+    if (file.data == null) {
+      throw new Error(
+        `sandbox file ${file.id} has storage_provider 'db' but no data bytes`,
+      );
+    }
     // pg returns bytea as Buffer; PGlite returns Uint8Array. Callers rely on
     // Buffer semantics, so normalize at the read boundary.
     if (Buffer.isBuffer(file.data)) return file.data;

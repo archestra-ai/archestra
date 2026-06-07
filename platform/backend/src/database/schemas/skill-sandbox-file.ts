@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+  check,
   customType,
   index,
   integer,
@@ -10,7 +11,10 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
-import type { SkillSandboxFileKind } from "@/types/skill-sandbox";
+import type {
+  SkillSandboxFileKind,
+  SkillSandboxFileStorageProvider,
+} from "@/types/skill-sandbox";
 import skillSandboxesTable from "./skill-sandbox";
 
 const bytea = customType<{ data: Buffer; driverParam: Buffer }>({
@@ -32,8 +36,9 @@ const bytea = customType<{ data: Buffer; driverParam: Buffer }>({
  *     `download_file`. Sandboxes are ephemeral, so artifacts are how generated
  *     files survive a Dagger cache flush.
  *
- * `data bytea` is the only column that changes when moving to an external object
- * store: swap it for an `object_key text` and a storage adapter in the model.
+ * Bytes live in `data` (when `storage_provider = 'db'`) or on the filesystem
+ * under `object_key` (when `storage_provider = 'filesystem'`), per the operator
+ * config; mixed-mode rows are supported permanently.
  */
 const skillSandboxFilesTable = pgTable(
   "skill_sandbox_files",
@@ -63,7 +68,18 @@ const skillSandboxFilesTable = pgTable(
      */
     sourceAttachmentId: uuid("source_attachment_id"),
     sizeBytes: integer("size_bytes").notNull(),
-    data: bytea("data").notNull(),
+    /**
+     * Bytes when storage_provider = 'db'. Null when they live externally —
+     * then `object_key` points at them instead (XOR enforced below).
+     */
+    data: bytea("data"),
+    /** Which storage backend holds this row's bytes. */
+    storageProvider: text("storage_provider")
+      .$type<SkillSandboxFileStorageProvider>()
+      .notNull()
+      .default("db"),
+    /** Path relative to the configured storage root; filesystem rows only. */
+    objectKey: text("object_key"),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   },
   (table) => [
@@ -81,6 +97,15 @@ const skillSandboxFilesTable = pgTable(
     uniqueIndex("skill_sandbox_files_sandbox_attachment_uidx")
       .on(table.sandboxId, table.sourceAttachmentId)
       .where(sql`${table.sourceAttachmentId} IS NOT NULL`),
+    // exactly one byte location per row: bytea for 'db', object_key for
+    // 'filesystem'. A row violating this is unreadable, so reject at write time.
+    check(
+      "skill_sandbox_files_storage_payload_chk",
+      sql`(
+        (${table.storageProvider} = 'db' AND ${table.data} IS NOT NULL AND ${table.objectKey} IS NULL)
+        OR (${table.storageProvider} = 'filesystem' AND ${table.objectKey} IS NOT NULL AND ${table.data} IS NULL)
+      )`,
+    ),
   ],
 );
 

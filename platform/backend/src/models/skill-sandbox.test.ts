@@ -268,7 +268,7 @@ describe("SkillSandboxReplayEventModel", () => {
     }
     expect(a.command.id).toBe(commandA.id);
     expect(u.upload.id).toBe(upload.id);
-    expect(u.upload.data.toString("utf8")).toBe("a,b");
+    expect(u.upload.data!.toString("utf8")).toBe("a,b");
     expect(m.mount.skillName).toBe("alpha");
     // SKILL.md is carried as the version body; requirements.txt as a version file.
     expect(m.content).toBe("# alpha");
@@ -429,7 +429,7 @@ describe("SkillSandboxFileModel (artifacts)", () => {
     if (!fetched) throw new Error("artifact not found");
     expect(fetched.kind).toBe("artifact");
     expect(fetched.path).toBe("out/report.txt");
-    expect(Buffer.from(fetched.data).toString("utf8")).toBe("hello, world");
+    expect(Buffer.from(fetched.data!).toString("utf8")).toBe("hello, world");
   });
 
   test("findArtifactById ignores upload-kind rows", async ({

@@ -2,7 +2,7 @@
   "openapi": "3.0.0",
   "info": {
     "title": "Archestra",
-    "version": "1.2.58"
+    "version": "1.2.59"
   },
   "components": {
     "schemas": {
@@ -39757,6 +39757,12 @@
                               "enum": [
                                 "salesforce"
                               ]
+                            },
+                            {
+                              "type": "string",
+                              "enum": [
+                                "web_crawler"
+                              ]
                             }
                           ],
                           "description": "Connector type (e.g. confluence, github)"
@@ -43616,6 +43622,12 @@
                                 "type": "string",
                                 "enum": [
                                   "salesforce"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "web_crawler"
                                 ]
                               }
                             ],
@@ -60651,6 +60663,28 @@
                                 "required": [
                                   "toolResult"
                                 ]
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "cachePoint": {
+                                    "type": "object",
+                                    "properties": {
+                                      "type": {
+                                        "type": "string"
+                                      },
+                                      "ttl": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "type"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "cachePoint"
+                                ]
                               }
                             ]
                           }
@@ -60731,6 +60765,28 @@
                           },
                           "required": [
                             "guardContent"
+                          ]
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "cachePoint": {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string"
+                                },
+                                "ttl": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "type"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "cachePoint"
                           ]
                         }
                       ]
@@ -61864,6 +61920,28 @@
                                 "required": [
                                   "toolResult"
                                 ]
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "cachePoint": {
+                                    "type": "object",
+                                    "properties": {
+                                      "type": {
+                                        "type": "string"
+                                      },
+                                      "ttl": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "type"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "cachePoint"
+                                ]
                               }
                             ]
                           }
@@ -61944,6 +62022,28 @@
                           },
                           "required": [
                             "guardContent"
+                          ]
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "cachePoint": {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string"
+                                },
+                                "ttl": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "type"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "cachePoint"
                           ]
                         }
                       ]
@@ -63087,6 +63187,28 @@
                                 "required": [
                                   "toolResult"
                                 ]
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "cachePoint": {
+                                    "type": "object",
+                                    "properties": {
+                                      "type": {
+                                        "type": "string"
+                                      },
+                                      "ttl": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "type"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "cachePoint"
+                                ]
                               }
                             ]
                           }
@@ -63167,6 +63289,28 @@
                           },
                           "required": [
                             "guardContent"
+                          ]
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "cachePoint": {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string"
+                                },
+                                "ttl": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "type"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "cachePoint"
                           ]
                         }
                       ]
@@ -63855,6 +63999,28 @@
                                 "required": [
                                   "toolResult"
                                 ]
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "cachePoint": {
+                                    "type": "object",
+                                    "properties": {
+                                      "type": {
+                                        "type": "string"
+                                      },
+                                      "ttl": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "type"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "cachePoint"
+                                ]
                               }
                             ]
                           }
@@ -63935,6 +64101,28 @@
                           },
                           "required": [
                             "guardContent"
+                          ]
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "cachePoint": {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string"
+                                },
+                                "ttl": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "type"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "cachePoint"
                           ]
                         }
                       ]
@@ -64633,6 +64821,28 @@
                                 "required": [
                                   "toolResult"
                                 ]
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "cachePoint": {
+                                    "type": "object",
+                                    "properties": {
+                                      "type": {
+                                        "type": "string"
+                                      },
+                                      "ttl": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "type"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "cachePoint"
+                                ]
                               }
                             ]
                           }
@@ -64713,6 +64923,28 @@
                           },
                           "required": [
                             "guardContent"
+                          ]
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "cachePoint": {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string"
+                                },
+                                "ttl": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "type"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "cachePoint"
                           ]
                         }
                       ]
@@ -65861,6 +66093,28 @@
                                 "required": [
                                   "toolResult"
                                 ]
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "cachePoint": {
+                                    "type": "object",
+                                    "properties": {
+                                      "type": {
+                                        "type": "string"
+                                      },
+                                      "ttl": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "type"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "cachePoint"
+                                ]
                               }
                             ]
                           }
@@ -65941,6 +66195,28 @@
                           },
                           "required": [
                             "guardContent"
+                          ]
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "cachePoint": {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string"
+                                },
+                                "ttl": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "type"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "cachePoint"
                           ]
                         }
                       ]
@@ -81671,7 +81947,7 @@
                         "orchestratorK8sRuntime": {
                           "type": "boolean"
                         },
-                        "codeRuntime": {
+                        "sandbox": {
                           "type": "boolean"
                         },
                         "agentSkillsEnabled": {
@@ -81763,7 +82039,7 @@
                       },
                       "required": [
                         "orchestratorK8sRuntime",
-                        "codeRuntime",
+                        "sandbox",
                         "agentSkillsEnabled",
                         "byosEnabled",
                         "byosVaultKvVersion",
@@ -92110,6 +92386,30 @@
                                                   "toolResult"
                                                 ],
                                                 "additionalProperties": false
+                                              },
+                                              {
+                                                "type": "object",
+                                                "properties": {
+                                                  "cachePoint": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                      "type": {
+                                                        "type": "string"
+                                                      },
+                                                      "ttl": {
+                                                        "type": "string"
+                                                      }
+                                                    },
+                                                    "required": [
+                                                      "type"
+                                                    ],
+                                                    "additionalProperties": false
+                                                  }
+                                                },
+                                                "required": [
+                                                  "cachePoint"
+                                                ],
+                                                "additionalProperties": false
                                               }
                                             ]
                                           }
@@ -92176,6 +92476,30 @@
                                           },
                                           "required": [
                                             "guardContent"
+                                          ],
+                                          "additionalProperties": false
+                                        },
+                                        {
+                                          "type": "object",
+                                          "properties": {
+                                            "cachePoint": {
+                                              "type": "object",
+                                              "properties": {
+                                                "type": {
+                                                  "type": "string"
+                                                },
+                                                "ttl": {
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "type"
+                                              ],
+                                              "additionalProperties": false
+                                            }
+                                          },
+                                          "required": [
+                                            "cachePoint"
                                           ],
                                           "additionalProperties": false
                                         }
@@ -92867,6 +93191,30 @@
                                                   "toolResult"
                                                 ],
                                                 "additionalProperties": false
+                                              },
+                                              {
+                                                "type": "object",
+                                                "properties": {
+                                                  "cachePoint": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                      "type": {
+                                                        "type": "string"
+                                                      },
+                                                      "ttl": {
+                                                        "type": "string"
+                                                      }
+                                                    },
+                                                    "required": [
+                                                      "type"
+                                                    ],
+                                                    "additionalProperties": false
+                                                  }
+                                                },
+                                                "required": [
+                                                  "cachePoint"
+                                                ],
+                                                "additionalProperties": false
                                               }
                                             ]
                                           }
@@ -92933,6 +93281,30 @@
                                           },
                                           "required": [
                                             "guardContent"
+                                          ],
+                                          "additionalProperties": false
+                                        },
+                                        {
+                                          "type": "object",
+                                          "properties": {
+                                            "cachePoint": {
+                                              "type": "object",
+                                              "properties": {
+                                                "type": {
+                                                  "type": "string"
+                                                },
+                                                "ttl": {
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "type"
+                                              ],
+                                              "additionalProperties": false
+                                            }
+                                          },
+                                          "required": [
+                                            "cachePoint"
                                           ],
                                           "additionalProperties": false
                                         }
@@ -104833,6 +105205,30 @@
                                             "toolResult"
                                           ],
                                           "additionalProperties": false
+                                        },
+                                        {
+                                          "type": "object",
+                                          "properties": {
+                                            "cachePoint": {
+                                              "type": "object",
+                                              "properties": {
+                                                "type": {
+                                                  "type": "string"
+                                                },
+                                                "ttl": {
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "type"
+                                              ],
+                                              "additionalProperties": false
+                                            }
+                                          },
+                                          "required": [
+                                            "cachePoint"
+                                          ],
+                                          "additionalProperties": false
                                         }
                                       ]
                                     }
@@ -104899,6 +105295,30 @@
                                     },
                                     "required": [
                                       "guardContent"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "cachePoint": {
+                                        "type": "object",
+                                        "properties": {
+                                          "type": {
+                                            "type": "string"
+                                          },
+                                          "ttl": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "type"
+                                        ],
+                                        "additionalProperties": false
+                                      }
+                                    },
+                                    "required": [
+                                      "cachePoint"
                                     ],
                                     "additionalProperties": false
                                   }
@@ -105590,6 +106010,30 @@
                                             "toolResult"
                                           ],
                                           "additionalProperties": false
+                                        },
+                                        {
+                                          "type": "object",
+                                          "properties": {
+                                            "cachePoint": {
+                                              "type": "object",
+                                              "properties": {
+                                                "type": {
+                                                  "type": "string"
+                                                },
+                                                "ttl": {
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "type"
+                                              ],
+                                              "additionalProperties": false
+                                            }
+                                          },
+                                          "required": [
+                                            "cachePoint"
+                                          ],
+                                          "additionalProperties": false
                                         }
                                       ]
                                     }
@@ -105656,6 +106100,30 @@
                                     },
                                     "required": [
                                       "guardContent"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "cachePoint": {
+                                        "type": "object",
+                                        "properties": {
+                                          "type": {
+                                            "type": "string"
+                                          },
+                                          "ttl": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "type"
+                                        ],
+                                        "additionalProperties": false
+                                      }
+                                    },
+                                    "required": [
+                                      "cachePoint"
                                     ],
                                     "additionalProperties": false
                                   }
@@ -113494,6 +113962,9 @@
                           "audience": {
                             "type": "string"
                           },
+                          "resource": {
+                            "type": "string"
+                          },
                           "redirect_uris": {
                             "type": "array",
                             "items": {
@@ -114347,6 +114818,9 @@
                       "audience": {
                         "type": "string"
                       },
+                      "resource": {
+                        "type": "string"
+                      },
                       "redirect_uris": {
                         "type": "array",
                         "items": {
@@ -114901,6 +115375,9 @@
                           "type": "string"
                         },
                         "audience": {
+                          "type": "string"
+                        },
+                        "resource": {
                           "type": "string"
                         },
                         "redirect_uris": {
@@ -115772,6 +116249,9 @@
                         "audience": {
                           "type": "string"
                         },
+                        "resource": {
+                          "type": "string"
+                        },
                         "redirect_uris": {
                           "type": "array",
                           "items": {
@@ -116609,6 +117089,9 @@
                       "audience": {
                         "type": "string"
                       },
+                      "resource": {
+                        "type": "string"
+                      },
                       "redirect_uris": {
                         "type": "array",
                         "items": {
@@ -117165,6 +117648,9 @@
                           "type": "string"
                         },
                         "audience": {
+                          "type": "string"
+                        },
+                        "resource": {
                           "type": "string"
                         },
                         "redirect_uris": {
@@ -121550,6 +122036,12 @@
                                       "enum": [
                                         "salesforce"
                                       ]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": [
+                                        "web_crawler"
+                                      ]
                                     }
                                   ]
                                 }
@@ -123527,6 +124019,12 @@
                   "enum": [
                     "salesforce"
                   ]
+                },
+                {
+                  "type": "string",
+                  "enum": [
+                    "web_crawler"
+                  ]
                 }
               ]
             },
@@ -123666,6 +124164,12 @@
                                 "type": "string",
                                 "enum": [
                                   "salesforce"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "web_crawler"
                                 ]
                               }
                             ]
@@ -124261,6 +124765,74 @@
                                   "loginUrl"
                                 ],
                                 "additionalProperties": false
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "type": {
+                                    "type": "string",
+                                    "enum": [
+                                      "web_crawler"
+                                    ]
+                                  },
+                                  "startUrl": {},
+                                  "includePathPrefixes": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    }
+                                  },
+                                  "excludePathPatterns": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    }
+                                  },
+                                  "contentSelector": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 500
+                                  },
+                                  "excludeSelectors": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 500
+                                    }
+                                  },
+                                  "maxPages": {
+                                    "type": "integer",
+                                    "minimum": 1,
+                                    "maximum": 10000
+                                  },
+                                  "maxDepth": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 50
+                                  },
+                                  "batchSize": {
+                                    "type": "integer",
+                                    "minimum": 1,
+                                    "maximum": 100
+                                  },
+                                  "requestDelayMs": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 10000
+                                  },
+                                  "userAgent": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  }
+                                },
+                                "required": [
+                                  "type",
+                                  "startUrl"
+                                ],
+                                "additionalProperties": false
                               }
                             ]
                           },
@@ -124794,6 +125366,12 @@
                         "type": "string",
                         "enum": [
                           "salesforce"
+                        ]
+                      },
+                      {
+                        "type": "string",
+                        "enum": [
+                          "web_crawler"
                         ]
                       }
                     ]
@@ -125386,6 +125964,75 @@
                         "required": [
                           "type"
                         ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "web_crawler"
+                            ]
+                          },
+                          "startUrl": {
+                            "type": "string"
+                          },
+                          "includePathPrefixes": {
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "minLength": 1
+                            }
+                          },
+                          "excludePathPatterns": {
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "minLength": 1
+                            }
+                          },
+                          "contentSelector": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 500
+                          },
+                          "excludeSelectors": {
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 500
+                            }
+                          },
+                          "maxPages": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 10000
+                          },
+                          "maxDepth": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 50
+                          },
+                          "batchSize": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 100
+                          },
+                          "requestDelayMs": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 10000
+                          },
+                          "userAgent": {
+                            "type": "string",
+                            "minLength": 1
+                          }
+                        },
+                        "required": [
+                          "type",
+                          "startUrl"
+                        ]
                       }
                     ]
                   },
@@ -125570,6 +126217,12 @@
                           "type": "string",
                           "enum": [
                             "salesforce"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "web_crawler"
                           ]
                         }
                       ]
@@ -126163,6 +126816,74 @@
                           "required": [
                             "type",
                             "loginUrl"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "web_crawler"
+                              ]
+                            },
+                            "startUrl": {},
+                            "includePathPrefixes": {
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            },
+                            "excludePathPatterns": {
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            },
+                            "contentSelector": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 500
+                            },
+                            "excludeSelectors": {
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 500
+                              }
+                            },
+                            "maxPages": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 10000
+                            },
+                            "maxDepth": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 50
+                            },
+                            "batchSize": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 100
+                            },
+                            "requestDelayMs": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 10000
+                            },
+                            "userAgent": {
+                              "type": "string",
+                              "minLength": 1
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "startUrl"
                           ],
                           "additionalProperties": false
                         }
@@ -126649,6 +127370,12 @@
                           "enum": [
                             "salesforce"
                           ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "web_crawler"
+                          ]
                         }
                       ]
                     },
@@ -127241,6 +127968,74 @@
                           "required": [
                             "type",
                             "loginUrl"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "web_crawler"
+                              ]
+                            },
+                            "startUrl": {},
+                            "includePathPrefixes": {
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            },
+                            "excludePathPatterns": {
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            },
+                            "contentSelector": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 500
+                            },
+                            "excludeSelectors": {
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 500
+                              }
+                            },
+                            "maxPages": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 10000
+                            },
+                            "maxDepth": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 50
+                            },
+                            "batchSize": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 100
+                            },
+                            "requestDelayMs": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 10000
+                            },
+                            "userAgent": {
+                              "type": "string",
+                              "minLength": 1
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "startUrl"
                           ],
                           "additionalProperties": false
                         }
@@ -128206,6 +129001,75 @@
                         "required": [
                           "type"
                         ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "web_crawler"
+                            ]
+                          },
+                          "startUrl": {
+                            "type": "string"
+                          },
+                          "includePathPrefixes": {
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "minLength": 1
+                            }
+                          },
+                          "excludePathPatterns": {
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "minLength": 1
+                            }
+                          },
+                          "contentSelector": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 500
+                          },
+                          "excludeSelectors": {
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 500
+                            }
+                          },
+                          "maxPages": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 10000
+                          },
+                          "maxDepth": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 50
+                          },
+                          "batchSize": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 100
+                          },
+                          "requestDelayMs": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 10000
+                          },
+                          "userAgent": {
+                            "type": "string",
+                            "minLength": 1
+                          }
+                        },
+                        "required": [
+                          "type",
+                          "startUrl"
+                        ]
                       }
                     ]
                   },
@@ -128391,6 +129255,12 @@
                           "type": "string",
                           "enum": [
                             "salesforce"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "web_crawler"
                           ]
                         }
                       ]
@@ -128984,6 +129854,74 @@
                           "required": [
                             "type",
                             "loginUrl"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "web_crawler"
+                              ]
+                            },
+                            "startUrl": {},
+                            "includePathPrefixes": {
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            },
+                            "excludePathPatterns": {
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            },
+                            "contentSelector": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 500
+                            },
+                            "excludeSelectors": {
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 500
+                              }
+                            },
+                            "maxPages": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 10000
+                            },
+                            "maxDepth": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 50
+                            },
+                            "batchSize": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 100
+                            },
+                            "requestDelayMs": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 10000
+                            },
+                            "userAgent": {
+                              "type": "string",
+                              "minLength": 1
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "startUrl"
                           ],
                           "additionalProperties": false
                         }
@@ -129812,6 +130750,12 @@
                                 "enum": [
                                   "salesforce"
                                 ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "web_crawler"
+                                ]
                               }
                             ]
                           }
@@ -130313,6 +131257,12 @@
                           "type": "string",
                           "enum": [
                             "salesforce"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "web_crawler"
                           ]
                         }
                       ]
@@ -143980,6 +144930,9 @@
                                   "audience": {
                                     "type": "string"
                                   },
+                                  "resource": {
+                                    "type": "string"
+                                  },
                                   "redirect_uris": {
                                     "type": "array",
                                     "items": {
@@ -144659,6 +145612,9 @@
                               "audience": {
                                 "type": "string"
                               },
+                              "resource": {
+                                "type": "string"
+                              },
                               "redirect_uris": {
                                 "type": "array",
                                 "items": {
@@ -145037,6 +145993,9 @@
                                   "type": "string"
                                 },
                                 "audience": {
+                                  "type": "string"
+                                },
+                                "resource": {
                                   "type": "string"
                                 },
                                 "redirect_uris": {
@@ -145748,6 +146707,9 @@
                                 "audience": {
                                   "type": "string"
                                 },
+                                "resource": {
+                                  "type": "string"
+                                },
                                 "redirect_uris": {
                                   "type": "array",
                                   "items": {
@@ -146430,6 +147392,9 @@
                               "audience": {
                                 "type": "string"
                               },
+                              "resource": {
+                                "type": "string"
+                              },
                               "redirect_uris": {
                                 "type": "array",
                                 "items": {
@@ -146859,6 +147824,9 @@
                                   "type": "string"
                                 },
                                 "audience": {
+                                  "type": "string"
+                                },
+                                "resource": {
                                   "type": "string"
                                 },
                                 "redirect_uris": {
@@ -147859,6 +148827,9 @@
                                 "audience": {
                                   "type": "string"
                                 },
+                                "resource": {
+                                  "type": "string"
+                                },
                                 "redirect_uris": {
                                   "type": "array",
                                   "items": {
@@ -148581,6 +149552,9 @@
                                   "type": "string"
                                 },
                                 "audience": {
+                                  "type": "string"
+                                },
+                                "resource": {
                                   "type": "string"
                                 },
                                 "redirect_uris": {
@@ -149309,6 +150283,9 @@
                                   "type": "string"
                                 },
                                 "audience": {
+                                  "type": "string"
+                                },
+                                "resource": {
                                   "type": "string"
                                 },
                                 "redirect_uris": {
@@ -187961,6 +188938,11 @@
                           "content": {
                             "type": "string"
                           },
+                          "latestVersion": {
+                            "type": "integer",
+                            "minimum": -2147483648,
+                            "maximum": 2147483647
+                          },
                           "license": {
                             "nullable": true,
                             "type": "string"
@@ -188041,6 +189023,7 @@
                           "name",
                           "description",
                           "content",
+                          "latestVersion",
                           "license",
                           "compatibility",
                           "allowedTools",
@@ -188449,6 +189432,11 @@
                     "content": {
                       "type": "string"
                     },
+                    "latestVersion": {
+                      "type": "integer",
+                      "minimum": -2147483648,
+                      "maximum": 2147483647
+                    },
                     "license": {
                       "nullable": true,
                       "type": "string"
@@ -188575,6 +189563,7 @@
                     "name",
                     "description",
                     "content",
+                    "latestVersion",
                     "license",
                     "compatibility",
                     "allowedTools",
@@ -188909,6 +189898,11 @@
                         "content": {
                           "type": "string"
                         },
+                        "latestVersion": {
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
                         "license": {
                           "nullable": true,
                           "type": "string"
@@ -189035,6 +190029,7 @@
                         "name",
                         "description",
                         "content",
+                        "latestVersion",
                         "license",
                         "compatibility",
                         "allowedTools",
@@ -189682,6 +190677,11 @@
                     "content": {
                       "type": "string"
                     },
+                    "latestVersion": {
+                      "type": "integer",
+                      "minimum": -2147483648,
+                      "maximum": 2147483647
+                    },
                     "license": {
                       "nullable": true,
                       "type": "string"
@@ -189808,6 +190808,7 @@
                     "name",
                     "description",
                     "content",
+                    "latestVersion",
                     "license",
                     "compatibility",
                     "allowedTools",
@@ -190177,6 +191178,11 @@
                     "content": {
                       "type": "string"
                     },
+                    "latestVersion": {
+                      "type": "integer",
+                      "minimum": -2147483648,
+                      "maximum": 2147483647
+                    },
                     "license": {
                       "nullable": true,
                       "type": "string"
@@ -190303,6 +191309,7 @@
                     "name",
                     "description",
                     "content",
+                    "latestVersion",
                     "license",
                     "compatibility",
                     "allowedTools",
@@ -191151,6 +192158,11 @@
                     "content": {
                       "type": "string"
                     },
+                    "latestVersion": {
+                      "type": "integer",
+                      "minimum": -2147483648,
+                      "maximum": 2147483647
+                    },
                     "license": {
                       "nullable": true,
                       "type": "string"
@@ -191277,6 +192289,7 @@
                     "name",
                     "description",
                     "content",
+                    "latestVersion",
                     "license",
                     "compatibility",
                     "allowedTools",
@@ -192948,6 +193961,11 @@
                           "content": {
                             "type": "string"
                           },
+                          "latestVersion": {
+                            "type": "integer",
+                            "minimum": -2147483648,
+                            "maximum": 2147483647
+                          },
                           "license": {
                             "nullable": true,
                             "type": "string"
@@ -193002,6 +194020,7 @@
                           "name",
                           "description",
                           "content",
+                          "latestVersion",
                           "license",
                           "compatibility",
                           "allowedTools",
@@ -193275,7 +194294,7 @@
         "tags": [
           "Skills"
         ],
-        "description": "Stream the raw bytes of a skill sandbox artifact. Inline for known-safe raster images; download for everything else.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`skill:execute`: Execute skill scripts",
+        "description": "Stream the raw bytes of a skill sandbox artifact. Inline for known-safe raster images; download for everything else.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`sandbox:execute`: Run commands and upload/download files in code execution sandboxes",
         "parameters": [
           {
             "schema": {
@@ -193296,7 +194315,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "skill:execute"
+            "sandbox:execute"
           ]
         }
       }

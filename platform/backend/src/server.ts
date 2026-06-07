@@ -51,7 +51,6 @@ import {
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { fastifyAuthPlugin } from "@/auth";
 import { cacheManager } from "@/cache-manager";
-import { codeRuntimeService } from "@/code-runtime/code-runtime-service";
 import config, { shouldRunWebServer, shouldRunWorker } from "@/config";
 import { initializeDatabase, isDatabaseHealthy } from "@/database";
 import { seedRequiredStartingData } from "@/database/seed";
@@ -907,9 +906,6 @@ const startWebServer = async () => {
     startMcpServerRuntime(fastify);
 
     // Start the sandboxed code runtime in the background (non-blocking pre-warm).
-    codeRuntimeService.init().catch((error) => {
-      logger.error({ err: error }, "Failed to initialize code runtime");
-    });
     skillSandboxRuntimeService.init().catch((error) => {
       logger.error(
         { err: error },
@@ -1077,8 +1073,7 @@ function registerWebServerShutdown(
 
       cacheManager.shutdown();
 
-      // Stop accepting new code-runtime / skill-sandbox runs
-      await codeRuntimeService.shutdown();
+      // Stop accepting new skill-sandbox runs
       await skillSandboxRuntimeService.shutdown();
 
       if (shouldRunWorker) {
@@ -1163,9 +1158,6 @@ const startWorker = async () => {
     taskQueueService.startWorker();
 
     // Pre-warm the code runtime so scheduled agents avoid a cold first run.
-    codeRuntimeService.init().catch((error) => {
-      logger.error({ err: error }, "Failed to initialize code runtime");
-    });
     skillSandboxRuntimeService.init().catch((error) => {
       logger.error(
         { err: error },
@@ -1223,7 +1215,6 @@ const startWorker = async () => {
       try {
         await healthServer.close();
         cacheManager.shutdown();
-        await codeRuntimeService.shutdown();
         await skillSandboxRuntimeService.shutdown();
         await taskQueueService.stopWorker();
         clearTimeout(forceExitTimeout);

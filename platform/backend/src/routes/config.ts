@@ -6,12 +6,12 @@ import { getEmailProviderInfo } from "@/agents/incoming-email";
 import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
 import { isBedrockIamAuthEnabled } from "@/clients/bedrock-credentials";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
-import { codeRuntimeService } from "@/code-runtime/code-runtime-service";
 import config from "@/config";
 import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
 import logger from "@/logging";
 import { OrganizationModel } from "@/models";
 import { getByosVaultKvVersion, isByosEnabled } from "@/secrets-manager";
+import { skillSandboxRuntimeService } from "@/skills-sandbox/skill-sandbox-runtime-service";
 import { EmailProviderTypeSchema, type GlobalToolPolicy } from "@/types";
 import { PUBLIC_CONFIG_PATH } from "./route-paths";
 
@@ -53,7 +53,7 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
             }),
             features: z.strictObject({
               orchestratorK8sRuntime: z.boolean(),
-              codeRuntime: z.boolean(),
+              sandbox: z.boolean(),
               agentSkillsEnabled: z.boolean(),
               byosEnabled: z.boolean(),
               byosVaultKvVersion: z.enum(["1", "2"]).nullable(),
@@ -99,7 +99,7 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
         },
         features: {
           orchestratorK8sRuntime: McpServerRuntimeManager.isEnabled,
-          codeRuntime: codeRuntimeService.isEnabled,
+          sandbox: skillSandboxRuntimeService.isEnabled,
           agentSkillsEnabled: config.agents.skillsEnabled,
           byosEnabled: isByosEnabled(),
           byosVaultKvVersion: getByosVaultKvVersion(),

@@ -70,6 +70,7 @@ describe("transformFormToApiData", () => {
         client_id: "client-id",
         client_secret: "client-secret",
         audience: "",
+        resource: "https://mcp.example.com",
         redirect_uris: "https://app.example.com/oauth-callback",
         scopes: "read:jira-work",
         supports_resource_metadata: true,
@@ -111,6 +112,7 @@ describe("transformFormToApiData", () => {
       server_url: "https://mcp.example.com",
       auth_server_url: "https://auth.example.com",
       authorization_endpoint: "https://legacy-idp.example.com/oauth/authorize",
+      resource: "https://mcp.example.com",
       well_known_url:
         "https://auth.example.com/.well-known/openid-configuration",
       resource_metadata_url:
@@ -698,6 +700,7 @@ describe("transformFormToApiData", () => {
         client_id: "id",
         client_secret: "secret",
         audience: "",
+        resource: "",
         redirect_uris: "https://app.example.com/oauth-callback",
         scopes: "",
         supports_resource_metadata: true,
@@ -746,11 +749,9 @@ describe("transformFormToApiData", () => {
   });
 
   describe("round-trips the `sensitive` flag on additional headers", () => {
-    // Test 1 from the recommendation: form → API → form preserves
-    // `sensitive`. Covers both preset-scoped (where the flag is the only
-    // routing signal between `preset_field_values` and `preset_secret_id`)
-    // and installation-scoped (where the flag controls input masking but
-    // doesn't change storage).
+    // form → API → form preserves the `sensitive` flag on installation-scoped
+    // headers (where the flag controls input masking but doesn't change
+    // storage).
     type AdditionalHeader = NonNullable<
       McpCatalogFormValues["additionalHeaders"]
     >[number];

@@ -133,16 +133,15 @@ const toolGroups: Record<ArchestraToolShortName, ToolGroup> = {
   search_tools: ToolGroup.Meta,
   run_tool: ToolGroup.Meta,
 
-  run_python: ToolGroup.CodeExecution,
   list_skills: ToolGroup.Skills,
   activate_skill: ToolGroup.Skills,
   read_skill_file: ToolGroup.Skills,
   create_skill: ToolGroup.Skills,
   update_skill: ToolGroup.Skills,
 
-  create_skill_sandbox: ToolGroup.SkillSandbox,
-  run_skill_command: ToolGroup.SkillSandbox,
-  get_skill_sandbox_artifact: ToolGroup.SkillSandbox,
+  run_command: ToolGroup.SkillSandbox,
+  download_file: ToolGroup.SkillSandbox,
+  upload_file: ToolGroup.SkillSandbox,
 };
 
 // === Script entry point ===

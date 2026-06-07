@@ -5026,7 +5026,7 @@ export const importGithubSkills = <ThrowOnError extends boolean = false>(options
  *
  * Authorization:
  *
- * `skill:execute`: Execute skill scripts
+ * `sandbox:execute`: Run commands and upload/download files in code execution sandboxes
  */
 export const getSkillSandboxArtifact = <ThrowOnError extends boolean = false>(options: Options<GetSkillSandboxArtifactData, ThrowOnError>) => (options.client ?? client).get<GetSkillSandboxArtifactResponses, unknown, ThrowOnError>({ url: '/api/skill-sandbox/artifacts/{artifactId}', ...options });
 

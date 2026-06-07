@@ -6,6 +6,8 @@ import {
   POLICY_CONFIG_SYSTEM_PROMPT,
 } from "@archestra/shared";
 import { and, eq } from "drizzle-orm";
+import { afterEach } from "vitest";
+import config from "@/config";
 import db, { schema } from "@/database";
 import { SkillFileModel, SkillModel } from "@/models";
 import AgentModel from "@/models/agent";
@@ -15,7 +17,7 @@ import {
   builtInSkillVersion,
 } from "@/skills/built-in-skills";
 import { describe, expect, test } from "@/test";
-import { syncBuiltInAgents, syncBuiltInSkills } from "./seed";
+import { decideEnvSeed, syncBuiltInAgents, syncBuiltInSkills } from "./seed";
 
 const [BASE_SKILL] = BUILT_IN_SKILLS;
 
@@ -281,5 +283,68 @@ describe("syncBuiltInSkills", () => {
       sourceRef,
     });
     expect(preserved?.content).toBe("EDITED BY USER");
+  });
+});
+
+describe("decideEnvSeed", () => {
+  const originals = {
+    vllm: config.llm.vllm.baseUrl,
+    azure: config.llm.azure.baseUrl,
+    openai: config.llm.openai.baseUrl,
+    bedrock: config.llm.bedrock.baseUrl,
+  };
+
+  afterEach(() => {
+    config.llm.vllm.baseUrl = originals.vllm;
+    config.llm.azure.baseUrl = originals.azure;
+    config.llm.openai.baseUrl = originals.openai;
+    config.llm.bedrock.baseUrl = originals.bedrock;
+  });
+
+  test("skips vLLM when no base URL is configured", () => {
+    config.llm.vllm.baseUrl = undefined;
+    expect(decideEnvSeed("vllm").kind).toBe("skip");
+  });
+
+  test("creates vLLM with the base URL persisted when configured", () => {
+    config.llm.vllm.baseUrl = "https://vllm.example.com/v1";
+    expect(decideEnvSeed("vllm")).toEqual({
+      kind: "create",
+      persistedBaseUrl: "https://vllm.example.com/v1",
+    });
+  });
+
+  test("skips Azure when no base URL is configured", () => {
+    config.llm.azure.baseUrl = "";
+    expect(decideEnvSeed("azure").kind).toBe("skip");
+  });
+
+  test("treats a whitespace-only base URL as not configured", () => {
+    config.llm.azure.baseUrl = "   ";
+    expect(decideEnvSeed("azure").kind).toBe("skip");
+  });
+
+  test("creates Azure with the base URL persisted when configured", () => {
+    config.llm.azure.baseUrl = "https://my-resource.openai.azure.com/openai";
+    expect(decideEnvSeed("azure")).toEqual({
+      kind: "create",
+      persistedBaseUrl: "https://my-resource.openai.azure.com/openai",
+    });
+  });
+
+  test("creates a normal provider without persisting its base URL", () => {
+    config.llm.openai.baseUrl = "https://api.openai.com/v1";
+    expect(decideEnvSeed("openai")).toEqual({
+      kind: "create",
+      persistedBaseUrl: null,
+    });
+  });
+
+  test("creates Bedrock without a base URL (region fallback)", () => {
+    config.llm.bedrock.baseUrl = "";
+    expect(decideEnvSeed("bedrock")).toEqual({
+      kind: "create",
+      persistedBaseUrl: null,
+    });
   });
 });

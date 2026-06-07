@@ -36,7 +36,7 @@ export function isArtifactRef(value: unknown): value is ArtifactRef {
 }
 
 /**
- * Render an artifact from `get_skill_sandbox_artifact`: inline preview for
+ * Render a file from `download_file`: inline preview for
  * known-safe raster images, download button for everything else (SVG, PDF,
  * binaries — anything the backend serves with Content-Disposition:
  * attachment).

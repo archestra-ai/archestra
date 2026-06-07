@@ -36,7 +36,6 @@ import {
 import { useInvalidateToolAssignmentQueries } from "@/lib/agent-tools.hook";
 import { useAssignTool, useUnassignTool } from "@/lib/agent-tools.query";
 import { useProfileToolsWithIds } from "@/lib/chat/chat.query";
-import { useFeature } from "@/lib/config/config.query";
 import { useArchestraMcpIdentity } from "@/lib/mcp/archestra-mcp-server";
 import {
   fetchCatalogTools,
@@ -220,7 +219,6 @@ const AgentToolsEditorContent = forwardRef<
 
   const { data: organization } = useOrganization();
   const skillToolsEnabled = organization?.skillToolsEnabled === true;
-  const codeRuntimeEnabled = useFeature("codeRuntime");
 
   // Pre-select default Archestra tools when creating a new agent (no agentId).
   // When the org has opted into skills, also pre-select the skill tools so the
@@ -228,7 +226,6 @@ const AgentToolsEditorContent = forwardRef<
   useEffect(() => {
     if (agentId) return; // Only for new agent creation
     if (defaultToolsInitializedRef.current) return; // Only initialize once
-    if (codeRuntimeEnabled === undefined) return;
 
     const toolsByCatalogIndex = toolCountQueries.map(
       (q) => (q?.data as CatalogTool[] | undefined) ?? undefined,
@@ -238,7 +235,6 @@ const AgentToolsEditorContent = forwardRef<
       toolsByCatalogIndex,
       {
         includeSkillTools: skillToolsEnabled,
-        includeCodeRuntimeTools: codeRuntimeEnabled,
       },
     );
     if (!result) return;
@@ -261,7 +257,6 @@ const AgentToolsEditorContent = forwardRef<
     toolCountQueries,
     onSelectedCountChange,
     skillToolsEnabled,
-    codeRuntimeEnabled,
   ]);
 
   // Calculate total selected count from pending changes

@@ -18,6 +18,7 @@ const ASANA = z.literal("asana");
 const OUTLINE = z.literal("outline");
 const LINEAR = z.literal("linear");
 const SALESFORCE = z.literal("salesforce");
+const WEB_CRAWLER = z.literal("web_crawler");
 
 export const ConnectorTypeSchema = z.union([
   JIRA,
@@ -35,6 +36,7 @@ export const ConnectorTypeSchema = z.union([
   LINEAR,
   OUTLINE,
   SALESFORCE,
+  WEB_CRAWLER,
 ]);
 export type ConnectorType = z.infer<typeof ConnectorTypeSchema>;
 
@@ -351,6 +353,36 @@ export const SalesforceCheckpointSchema = z.object({
 });
 export type SalesforceCheckpoint = z.infer<typeof SalesforceCheckpointSchema>;
 
+// ===== Web Crawler Config & Checkpoint =====
+
+export const WebCrawlerConfigSchema = z.object({
+  type: WEB_CRAWLER,
+  startUrl: z
+    .string()
+    .refine(hasAllowedWebCrawlerStartUrlScheme, {
+      message: "startUrl must use HTTP or HTTPS",
+    })
+    .transform(ensureProtocol)
+    .refine(isValidUrl, { message: "startUrl must be a valid URL" })
+    .refine(isHttpUrl, { message: "startUrl must use HTTP or HTTPS" }),
+  includePathPrefixes: z.array(z.string().min(1)).optional(),
+  excludePathPatterns: z.array(z.string().min(1)).optional(),
+  contentSelector: z.string().min(1).max(500).optional(),
+  excludeSelectors: z.array(z.string().min(1).max(500)).optional(),
+  maxPages: z.number().int().min(1).max(10_000).optional(),
+  maxDepth: z.number().int().min(0).max(50).optional(),
+  batchSize: z.number().int().min(1).max(100).optional(),
+  requestDelayMs: z.number().int().min(0).max(10_000).optional(),
+  userAgent: z.string().min(1).optional(),
+});
+export type WebCrawlerConfig = z.infer<typeof WebCrawlerConfigSchema>;
+
+export const WebCrawlerCheckpointSchema = z.object({
+  type: WEB_CRAWLER,
+  lastSyncedAt: z.string().optional(),
+});
+export type WebCrawlerCheckpoint = z.infer<typeof WebCrawlerCheckpointSchema>;
+
 // ===== Discriminated Unions =====
 
 // ===== Dropbox Config & Checkpoint =====
@@ -427,6 +459,7 @@ export const ConnectorConfigSchema = z.discriminatedUnion("type", [
   LinearConfigSchema,
   OutlineConfigSchema,
   SalesforceConfigSchema,
+  WebCrawlerConfigSchema,
 ]);
 export type ConnectorConfig = z.infer<typeof ConnectorConfigSchema>;
 
@@ -446,6 +479,7 @@ export const ConnectorCheckpointSchema = z.discriminatedUnion("type", [
   LinearCheckpointSchema,
   OutlineCheckpointSchema,
   SalesforceCheckpointSchema,
+  WebCrawlerCheckpointSchema,
 ]);
 export type ConnectorCheckpoint = z.infer<typeof ConnectorCheckpointSchema>;
 
@@ -502,6 +536,33 @@ export interface ConnectorSyncBatch {
 function ensureProtocol(url: string): string {
   if (/^[a-z][a-z0-9+.-]*:\/\//i.test(url)) return url;
   return `https://${url}`;
+}
+
+function hasAllowedWebCrawlerStartUrlScheme(url: string): boolean {
+  if (/^https?:\/\//i.test(url)) return true;
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(url)) return false;
+  if (/^[a-z][a-z0-9+.-]*:/i.test(url)) {
+    return /^(?:localhost|[a-z0-9.-]*\.[a-z0-9.-]+):\d+(?:[/?#]|$)/i.test(url);
+  }
+  return true;
+}
+
+function isValidUrl(url: string): boolean {
+  try {
+    new URL(url);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function isHttpUrl(url: string): boolean {
+  try {
+    const protocol = new URL(url).protocol;
+    return protocol === "http:" || protocol === "https:";
+  } catch {
+    return false;
+  }
 }
 
 function stripTrailingSlashes(url: string): string {

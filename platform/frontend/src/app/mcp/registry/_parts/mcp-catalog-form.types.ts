@@ -31,6 +31,7 @@ export const oauthConfigSchema = z
     client_id: z.string().optional().or(z.literal("")),
     client_secret: z.string().optional().or(z.literal("")),
     audience: z.string().optional().or(z.literal("")),
+    resource: z.string().optional().or(z.literal("")),
     redirect_uris: z.string().optional().or(z.literal("")),
     scopes: z.string().optional().or(z.literal("")),
     supports_resource_metadata: z.boolean(),

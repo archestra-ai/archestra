@@ -1,9 +1,39 @@
+import {
+  ConversationAttachmentModel,
+  SkillSandboxModel,
+  SkillSandboxReplayEventModel,
+} from "@/models";
 import { afterEach, describe, expect, test, vi } from "@/test";
 import {
   __internals,
   skillSandboxRuntimeService,
 } from "./skill-sandbox-runtime-service";
 import { SkillSandboxError } from "./types";
+
+async function seedAttachment(params: {
+  organizationId: string;
+  conversationId: string;
+  userId: string;
+  name: string;
+  data: Buffer;
+}) {
+  return ConversationAttachmentModel.create({
+    organizationId: params.organizationId,
+    conversationId: params.conversationId,
+    uploadedByUserId: params.userId,
+    originalName: params.name,
+    mimeType: "application/octet-stream",
+    fileSize: params.data.byteLength,
+    contentHash: ConversationAttachmentModel.computeContentHash(params.data),
+    fileData: params.data,
+  });
+}
+
+function uploadPaths(
+  log: Awaited<ReturnType<typeof SkillSandboxReplayEventModel.listBySandbox>>,
+): string[] {
+  return log.flatMap((e) => (e.kind === "upload" ? [e.upload.path] : []));
+}
 
 describe("skillSandboxRuntimeService", () => {
   afterEach(() => {
@@ -19,6 +49,7 @@ describe("skillSandboxRuntimeService", () => {
     await expect(
       skillSandboxRuntimeService.runCommand({
         sandboxId: __internals.asSandboxId(crypto.randomUUID()),
+        caller: { userId: "u", organizationId: "o" },
         command: "echo hi",
       }),
     ).rejects.toBeInstanceOf(SkillSandboxError);
@@ -28,6 +59,7 @@ describe("skillSandboxRuntimeService", () => {
     await expect(
       skillSandboxRuntimeService.exportArtifact({
         sandboxId: __internals.asSandboxId(crypto.randomUUID()),
+        caller: { userId: "u", organizationId: "o" },
         path: "out/report.txt",
       }),
     ).rejects.toBeInstanceOf(SkillSandboxError);
@@ -53,6 +85,7 @@ describe("skillSandboxRuntimeService", () => {
     await expect(
       enabled.runCommand({
         sandboxId: __internals.asSandboxId(crypto.randomUUID()),
+        caller: { userId: "u", organizationId: "o" },
         command: "echo hi",
         timeoutSeconds,
       }),
@@ -74,6 +107,7 @@ describe("skillSandboxRuntimeService", () => {
     await expect(
       enabled.runCommand({
         sandboxId: __internals.asSandboxId(crypto.randomUUID()),
+        caller: { userId: "u", organizationId: "o" },
         command: "   ",
       }),
     ).rejects.toThrow("command must be a non-empty string");
@@ -98,7 +132,12 @@ describe("skillSandboxRuntimeService", () => {
     // (N+1)th is rejected immediately by the queue-length guard before any await.
     const calls = Array.from(
       { length: SKILL_SANDBOX_LIMITS.maxSandboxQueueLength + 1 },
-      () => enabled.runCommand({ sandboxId, command: "echo hi" }),
+      () =>
+        enabled.runCommand({
+          sandboxId,
+          caller: { userId: "u", organizationId: "o" },
+          command: "echo hi",
+        }),
     );
     const results = await Promise.allSettled(calls);
     // use message check rather than instanceof: vi.resetModules creates a fresh
@@ -184,98 +223,278 @@ describe("__internals", () => {
     ).toThrow("artifact path must be under");
   });
 
-  test("pythonpathForSandbox puts primary first, then alphabetical secondaries", () => {
-    const sandbox = makeFakeSandbox({ primarySkillId: "skill-b-id" });
-    const snapshots = [
-      makeSnapshotRow("skill-a-id", "skill-a"),
-      makeSnapshotRow("skill-b-id", "skill-b"),
-      makeSnapshotRow("skill-c-id", "skill-c"),
-    ];
-    expect(__internals.pythonpathForSandbox(sandbox, snapshots)).toBe(
-      "/skills/skill-b:/skills/skill-a:/skills/skill-c",
+  test("validateUploadPath rejects directory and sandbox-root targets", () => {
+    // the resolved roots themselves are directories: persisting an upload to
+    // one would replay-fail forever or shadow /skills and break skill mounts.
+    for (const root of ["/skills", "/home/sandbox"]) {
+      expect(() => __internals.validateUploadPath(root)).toThrow(
+        "must be a file, not a directory",
+      );
+    }
+    expect(() => __internals.validateUploadPath("/skills/")).toThrow(
+      "must be a file, not a directory",
+    );
+    // a real file under a root is accepted.
+    expect(() =>
+      __internals.validateUploadPath("/skills/alpha/input.csv"),
+    ).not.toThrow();
+  });
+
+  test("validateSkillMountFilePath rejects the reserved SKILL.md subtree", () => {
+    // the mount synthesizes SKILL.md from the pinned version body; a resource
+    // file at that path (in any normalized form) or under it would clobber the
+    // manifest or replay-fail, breaking every later run_command.
+    for (const reserved of [
+      "SKILL.md",
+      "./SKILL.md",
+      "SKILL.md/injected.txt",
+      "./SKILL.md/injected.txt",
+    ]) {
+      expect(() =>
+        __internals.validateSkillMountFilePath("alpha", reserved),
+      ).toThrow("invalid file path");
+    }
+    // absolute paths, traversal, and degenerate paths stay rejected.
+    for (const bad of ["/etc/passwd", "../escape", ".", "scripts/../../x"]) {
+      expect(() =>
+        __internals.validateSkillMountFilePath("alpha", bad),
+      ).toThrow("invalid file path");
+    }
+    // a SKILL.md nested under a subdirectory is fine — only the root is reserved.
+    for (const ok of ["references/a.md", "scripts/run.py", "docs/SKILL.md"]) {
+      expect(() =>
+        __internals.validateSkillMountFilePath("alpha", ok),
+      ).not.toThrow();
+    }
+  });
+
+  test("sanitizeAttachmentName strips unsafe chars and directory/leading dots", () => {
+    const { sanitizeAttachmentName } = __internals;
+    expect(sanitizeAttachmentName("pi mc.gif", "id")).toBe("pi_mc.gif");
+    expect(sanitizeAttachmentName('a"b`$c.png', "id")).toBe("a_b__c.png");
+    expect(sanitizeAttachmentName("dir/sub/f.csv", "id")).toBe("f.csv");
+    // leading dots can't escape; ".." reduces to nothing -> id fallback.
+    expect(sanitizeAttachmentName("..", "abcd1234efgh")).toBe(
+      "attachment-abcd1234",
+    );
+    expect(sanitizeAttachmentName(null, "abcd1234efgh")).toBe(
+      "attachment-abcd1234",
     );
   });
 
-  test("pythonpathForSandbox falls back to alphabetical when primary is missing", () => {
-    const sandbox = makeFakeSandbox({ primarySkillId: null });
-    const snapshots = [
-      makeSnapshotRow("skill-z-id", "skill-z"),
-      makeSnapshotRow("skill-a-id", "skill-a"),
-    ];
-    expect(__internals.pythonpathForSandbox(sandbox, snapshots)).toBe(
-      "/skills/skill-a:/skills/skill-z",
+  test("assignAttachmentPaths suffixes duplicate names deterministically", () => {
+    const paths = __internals.assignAttachmentPaths([
+      { id: "1111aaaabbbb", originalName: "out.png" },
+      { id: "2222ccccdddd", originalName: "out.png" },
+      { id: "3333eeeeffff", originalName: "notes.txt" },
+    ]);
+    // first claim keeps the plain name; the collision gets an id suffix before
+    // the extension; unique names are untouched.
+    expect(paths.get("1111aaaabbbb")).toBe("/home/sandbox/attachments/out.png");
+    expect(paths.get("2222ccccdddd")).toBe(
+      "/home/sandbox/attachments/out-2222cccc.png",
+    );
+    expect(paths.get("3333eeeeffff")).toBe(
+      "/home/sandbox/attachments/notes.txt",
     );
   });
 
-  test("autoInstallCommands emits one uv install per skill with requirements.txt, primary first", () => {
-    const sandbox = makeFakeSandbox({ primarySkillId: "skill-b-id" });
-    const snapshots = [
-      makeSnapshotRow("skill-a-id", "skill-a", "SKILL.md"),
-      makeSnapshotRow("skill-a-id", "skill-a", "requirements.txt"),
-      makeSnapshotRow("skill-b-id", "skill-b", "SKILL.md"),
-      makeSnapshotRow("skill-b-id", "skill-b", "requirements.txt"),
-      makeSnapshotRow("skill-c-id", "skill-c", "SKILL.md"),
-      // no requirements.txt — skipped
+  test("planAttachmentStaging skips staged ids and flags oversize with a notice", () => {
+    const attachments = [
+      { id: "a", originalName: "small.csv", fileSize: 10 },
+      { id: "b", originalName: "huge.bin", fileSize: 999 },
+      { id: "c", originalName: "done.txt", fileSize: 5 },
     ];
-    const installs = __internals.autoInstallCommands(sandbox, snapshots);
-    expect(installs.map((c) => c.command)).toEqual([
-      "uv pip install --python /home/sandbox/.venv/bin/python --quiet -r '/skills/skill-b/requirements.txt'",
-      "uv pip install --python /home/sandbox/.venv/bin/python --quiet -r '/skills/skill-a/requirements.txt'",
-    ]);
-    expect(installs.every((c) => c.cwd === "/home/sandbox")).toBe(true);
-    expect(installs.every((c) => c.timeoutSeconds === 180)).toBe(true);
-  });
-
-  test("autoInstallCommands shell-quotes skill names containing spaces", () => {
-    const sandbox = makeFakeSandbox({ primarySkillId: "skill-a-id" });
-    const snapshots = [
-      makeSnapshotRow("skill-a-id", "My Skill", "requirements.txt"),
-    ];
-    const installs = __internals.autoInstallCommands(sandbox, snapshots);
-    expect(installs.map((c) => c.command)).toEqual([
-      "uv pip install --python /home/sandbox/.venv/bin/python --quiet -r '/skills/My Skill/requirements.txt'",
-    ]);
-  });
-
-  test("autoInstallCommands returns [] when no skill ships requirements.txt", () => {
-    const sandbox = makeFakeSandbox({ primarySkillId: "skill-a-id" });
-    const snapshots = [
-      makeSnapshotRow("skill-a-id", "skill-a", "SKILL.md"),
-      makeSnapshotRow("skill-a-id", "skill-a", "core/util.py"),
-    ];
-    expect(__internals.autoInstallCommands(sandbox, snapshots)).toEqual([]);
+    const { toStage, notices } = __internals.planAttachmentStaging({
+      attachments,
+      stagedIds: new Set(["c"]),
+      limit: 100,
+    });
+    // c already staged -> skipped; b over the limit -> notice, not staged.
+    expect(toStage.map((s) => s.id)).toEqual(["a"]);
+    expect(toStage[0]?.path).toBe("/home/sandbox/attachments/small.csv");
+    expect(notices).toHaveLength(1);
+    expect(notices[0]).toContain("huge.bin");
+    expect(notices[0]).toContain("exceeds");
   });
 });
 
-function makeFakeSandbox(overrides: {
-  primarySkillId: string | null;
-}): import("@/types").SkillSandbox {
-  return {
-    id: "sandbox-1",
-    organizationId: "org-1",
-    userId: "user-1",
-    conversationId: null,
-    agentId: null,
-    primarySkillId: overrides.primarySkillId,
-    defaultCwd: "/skills/skill-b",
-    createdAt: new Date(),
-  };
-}
+describe("stageConversationAttachments (db)", () => {
+  test("stages conversation attachments as ordered upload replay events", async ({
+    makeOrganization,
+    makeUser,
+    makeAgent,
+    makeConversation,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const agent = await makeAgent({ organizationId: org.id });
+    const conversation = await makeConversation(agent.id, {
+      userId: user.id,
+      organizationId: org.id,
+    });
+    if (!conversation) throw new Error("conversation seed failed");
 
-function makeSnapshotRow(
-  skillId: string,
-  skillName: string,
-  path: string = "SKILL.md",
-): import("@/types").SkillSandboxFileSnapshot {
-  return {
-    id: `snap-${skillId}-${path}`,
-    sandboxId: "sandbox-1",
-    organizationId: "org-1",
-    skillId,
-    skillName,
-    path,
-    encoding: "utf8",
-    content: "",
-    createdAt: new Date(),
-  };
-}
+    await seedAttachment({
+      organizationId: org.id,
+      conversationId: conversation.id,
+      userId: user.id,
+      name: "pi mc.gif",
+      data: Buffer.from("GIF89a-bytes"),
+    });
+
+    const sandbox = await SkillSandboxModel.findOrCreateDefault({
+      organizationId: org.id,
+      userId: user.id,
+      conversationId: conversation.id,
+      defaultCwd: "/home/sandbox",
+    });
+
+    const notices = await __internals.stageConversationAttachments(sandbox);
+    expect(notices).toEqual([]);
+
+    const log = await SkillSandboxReplayEventModel.listBySandbox(sandbox.id);
+    const uploads = log.filter((e) => e.kind === "upload");
+    expect(uploads).toHaveLength(1);
+    const [upload] = uploads;
+    if (upload?.kind !== "upload") throw new Error("expected an upload event");
+    // filename is sanitized (space -> underscore) and lands under the dir.
+    expect(upload.upload.path).toBe("/home/sandbox/attachments/pi_mc.gif");
+    expect(upload.upload.data.toString("utf8")).toBe("GIF89a-bytes");
+    expect(upload.upload.sourceAttachmentId).not.toBeNull();
+  });
+
+  test("is idempotent and picks up attachments added on a later turn", async ({
+    makeOrganization,
+    makeUser,
+    makeAgent,
+    makeConversation,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const agent = await makeAgent({ organizationId: org.id });
+    const conversation = await makeConversation(agent.id, {
+      userId: user.id,
+      organizationId: org.id,
+    });
+    if (!conversation) throw new Error("conversation seed failed");
+
+    await seedAttachment({
+      organizationId: org.id,
+      conversationId: conversation.id,
+      userId: user.id,
+      name: "first.csv",
+      data: Buffer.from("a,b"),
+    });
+    const sandbox = await SkillSandboxModel.findOrCreateDefault({
+      organizationId: org.id,
+      userId: user.id,
+      conversationId: conversation.id,
+      defaultCwd: "/home/sandbox",
+    });
+
+    await __internals.stageConversationAttachments(sandbox);
+    // a second pass over the same set must not double-stage.
+    await __internals.stageConversationAttachments(sandbox);
+    expect(
+      uploadPaths(await SkillSandboxReplayEventModel.listBySandbox(sandbox.id)),
+    ).toEqual(["/home/sandbox/attachments/first.csv"]);
+
+    // a new attachment arrives mid-conversation; the next pass stages just it.
+    await seedAttachment({
+      organizationId: org.id,
+      conversationId: conversation.id,
+      userId: user.id,
+      name: "second.csv",
+      data: Buffer.from("c,d"),
+    });
+    await __internals.stageConversationAttachments(sandbox);
+    expect(
+      uploadPaths(
+        await SkillSandboxReplayEventModel.listBySandbox(sandbox.id),
+      ).sort(),
+    ).toEqual([
+      "/home/sandbox/attachments/first.csv",
+      "/home/sandbox/attachments/second.csv",
+    ]);
+  });
+
+  test("does not auto-stage a fresh (non-default) sandbox", async ({
+    makeOrganization,
+    makeUser,
+    makeAgent,
+    makeConversation,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const agent = await makeAgent({ organizationId: org.id });
+    const conversation = await makeConversation(agent.id, {
+      userId: user.id,
+      organizationId: org.id,
+    });
+    if (!conversation) throw new Error("conversation seed failed");
+    await seedAttachment({
+      organizationId: org.id,
+      conversationId: conversation.id,
+      userId: user.id,
+      name: "x.bin",
+      data: Buffer.from("x"),
+    });
+
+    const fresh = await SkillSandboxModel.create({
+      organizationId: org.id,
+      userId: user.id,
+      conversationId: conversation.id,
+      defaultCwd: "/home/sandbox",
+      isDefault: false,
+    });
+    expect(await __internals.stageConversationAttachments(fresh)).toEqual([]);
+    expect(
+      uploadPaths(await SkillSandboxReplayEventModel.listBySandbox(fresh.id)),
+    ).toEqual([]);
+  });
+
+  test("never pulls another conversation's attachments", async ({
+    makeOrganization,
+    makeUser,
+    makeAgent,
+    makeConversation,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const agent = await makeAgent({ organizationId: org.id });
+    const convA = await makeConversation(agent.id, {
+      userId: user.id,
+      organizationId: org.id,
+    });
+    const convB = await makeConversation(agent.id, {
+      userId: user.id,
+      organizationId: org.id,
+    });
+    if (!convA || !convB) throw new Error("conversation seed failed");
+
+    // attachment lives in conversation B only.
+    await seedAttachment({
+      organizationId: org.id,
+      conversationId: convB.id,
+      userId: user.id,
+      name: "secret.txt",
+      data: Buffer.from("nope"),
+    });
+
+    const sandboxA = await SkillSandboxModel.findOrCreateDefault({
+      organizationId: org.id,
+      userId: user.id,
+      conversationId: convA.id,
+      defaultCwd: "/home/sandbox",
+    });
+    expect(await __internals.stageConversationAttachments(sandboxA)).toEqual(
+      [],
+    );
+    expect(
+      uploadPaths(
+        await SkillSandboxReplayEventModel.listBySandbox(sandboxA.id),
+      ),
+    ).toEqual([]);
+  });
+});

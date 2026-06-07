@@ -11,13 +11,17 @@ import {
   PLAYWRIGHT_MCP_ICON,
   PLAYWRIGHT_MCP_SERVER_NAME,
   POLICY_CONFIG_SYSTEM_PROMPT,
+  PROVIDERS_REQUIRING_BASE_URL,
   type PredefinedRoleName,
   type SupportedProvider,
   SupportedProviders,
   testMcpServerCommand,
 } from "@archestra/shared";
 import { and, eq, inArray, isNull } from "drizzle-orm";
-import config, { getProviderEnvApiKey } from "@/config";
+import config, {
+  getProviderConfiguredBaseUrl,
+  getProviderEnvApiKey,
+} from "@/config";
 import db, { schema, withDbTransaction } from "@/database";
 import logger from "@/logging";
 import {
@@ -505,6 +509,15 @@ async function seedChatApiKeysFromEnv(): Promise<void> {
       continue;
     }
 
+    const decision = decideEnvSeed(provider);
+    if (decision.kind === "skip") {
+      logger.warn(
+        { provider },
+        `Skipping env-seeded provider: ${decision.reason}`,
+      );
+      continue;
+    }
+
     // Check if API key already exists for this provider
     const existing = await LlmProviderApiKeyModel.findByScope(
       org.id,
@@ -514,7 +527,12 @@ async function seedChatApiKeysFromEnv(): Promise<void> {
 
     if (existing) {
       // Sync models if not already synced
-      await syncModelsForApiKey(existing.id, provider, apiKeyValue);
+      await syncModelsForApiKey(
+        existing.id,
+        provider,
+        apiKeyValue,
+        decision.persistedBaseUrl,
+      );
       continue;
     }
 
@@ -533,6 +551,8 @@ async function seedChatApiKeysFromEnv(): Promise<void> {
       scope: "org",
       userId: null,
       teamId: null,
+      baseUrl: decision.persistedBaseUrl,
+      isPrimary: true,
     });
 
     logger.info(
@@ -540,24 +560,65 @@ async function seedChatApiKeysFromEnv(): Promise<void> {
       "Created chat API key from environment variable",
     );
 
-    // Sync models from provider
-    await syncModelsForApiKey(apiKey.id, provider, apiKeyValue);
+    // Sync models from provider. persistedBaseUrl carries the required endpoint for
+    // azure/vllm (so their fetchers hit the right host) and null elsewhere (the
+    // fetchers fall back to their own default — unchanged from before).
+    await syncModelsForApiKey(
+      apiKey.id,
+      provider,
+      apiKeyValue,
+      decision.persistedBaseUrl,
+    );
   }
 }
 
+type EnvSeedDecision =
+  | { kind: "skip"; reason: string }
+  | { kind: "create"; persistedBaseUrl: string | null };
+
 /**
- * Sync models for an API key.
+ * Decide how to seed a provider whose env API key is set. Pure (config-only, no IO)
+ * so the gap-handling logic is unit-testable without DB or network.
+ *
+ * @public — unit-tested in seed.test.ts
+ */
+export function decideEnvSeed(provider: SupportedProvider): EnvSeedDecision {
+  const baseUrl = getProviderConfiguredBaseUrl(provider);
+
+  if (PROVIDERS_REQUIRING_BASE_URL.has(provider) && baseUrl === undefined) {
+    return { kind: "skip", reason: "required base URL is not configured" };
+  }
+
+  // Persist the base URL only for providers that require one (azure/vllm): it pins
+  // the required infra endpoint on the key, same as a manual UI add. Other providers
+  // keep null so a later ARCHESTRA_*_BASE_URL change still takes effect via the
+  // runtime fallback (the per-key URL is preferred over config when set).
+  return {
+    kind: "create",
+    persistedBaseUrl: PROVIDERS_REQUIRING_BASE_URL.has(provider)
+      ? (baseUrl ?? null)
+      : null,
+  };
+}
+
+/**
+ * Sync models for an API key. Bedrock's fetcher throws without a base URL; that is
+ * caught here so a key-only/IAM Bedrock seed still creates a usable key (chat falls
+ * back to the us-east-1 region) — its model list just stays empty until a base URL
+ * is configured.
  */
 async function syncModelsForApiKey(
   apiKeyId: string,
   provider: SupportedProvider,
   apiKeyValue: string,
+  baseUrl?: string | null,
 ): Promise<void> {
   try {
     await modelSyncService.syncModelsForApiKey({
       apiKeyId,
       provider,
       apiKeyValue,
+      baseUrl,
     });
     logger.info({ provider, apiKeyId }, "Synced models for API key");
   } catch (error) {

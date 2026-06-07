@@ -1883,6 +1883,30 @@ export function McpCatalogForm({
 
                                 <FormField
                                   control={form.control}
+                                  name="oauthConfig.resource"
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormLabel>Protected Resource</FormLabel>
+                                      <FormControl>
+                                        <Input
+                                          placeholder="https://api.example.com or api://client-id"
+                                          className="font-mono"
+                                          {...field}
+                                        />
+                                      </FormControl>
+                                      <FormDescription>
+                                        Optional OAuth resource/audience sent in
+                                        the authorization request. Leave blank
+                                        to use the Default Audience, if set, or
+                                        the MCP endpoint URL.
+                                      </FormDescription>
+                                      <FormMessage />
+                                    </FormItem>
+                                  )}
+                                />
+
+                                <FormField
+                                  control={form.control}
                                   name="oauthConfig.scopes"
                                   render={({ field }) => (
                                     <FormItem>

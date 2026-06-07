@@ -12,9 +12,9 @@ import {
 } from "@/auth/skill-permissions";
 import logger from "@/logging";
 import {
-  SkillFileModel,
   SkillModel,
   SkillTeamModel,
+  SkillVersionModel,
   TeamModel,
 } from "@/models";
 import {
@@ -35,6 +35,10 @@ import {
 } from "@/skills/skill-activation";
 import { isSkillSandboxAvailableForAgent } from "@/skills/skill-sandbox-availability";
 import {
+  resolveActivationVersion,
+  resolveEffectiveSkillVersion,
+} from "@/skills/skill-version-resolution";
+import {
   isSkillNameConflict,
   refineUniqueFilePaths,
 } from "@/skills/validation";
@@ -53,11 +57,10 @@ import type { ArchestraContext } from "./types";
  * `list_skills`, `activate_skill`, and `read_skill_file` implement the
  * progressive-disclosure tiers of the Agent Skills spec: `list_skills` returns
  * the catalog, `activate_skill` returns a named skill's SKILL.md body, and
- * bundled resource files are fetched individually via `read_skill_file`. To
- * execute a skill's scripts or shell commands, the sandbox tools
- * (`create_skill_sandbox`, `run_skill_command`, `get_skill_sandbox_artifact`)
- * materialize the selected skills into an isolated container and run commands
- * from the skill root.
+ * bundled resource files are fetched individually via `read_skill_file`.
+ * Activating a skill also mounts it into the conversation's code sandbox (when
+ * the sandbox feature + `sandbox:execute` are present), so its scripts become
+ * runnable under `/skills` via `run_command`.
  *
  * `create_skill` and `update_skill` let an agent author skills during a
  * conversation. Chat-authored skills are always `personal` to their author;
@@ -204,11 +207,31 @@ const registry = defineArchestraTools([
         );
       }
 
-      const files = await SkillFileModel.findBySkillId(skill.id);
+      const canRunSandbox = await canRunSkillSandbox(ctx, context.agent.id);
+
+      // resolve the effective version and, when the sandbox is usable, pin it by
+      // mounting it under /skills. The same version drives the response and the
+      // mount, so the model never sees bytes that differ from what run_command
+      // will execute. Idempotent per skill per sandbox.
+      const activation = await resolveActivationVersion({
+        skill,
+        organizationId: ctx.organizationId,
+        userId: ctx.userId,
+        conversationId: context.conversationId,
+        canRunSandbox,
+      });
+      if (!activation) {
+        return errorResult(`Skill "${skill.name}" has no readable version.`);
+      }
+      const { version, mounted } = activation;
+      const files = await SkillVersionModel.findFiles(version.id);
+
       logger.info(
         {
           organizationId: ctx.organizationId,
           skillName: skill.name,
+          version: version.version,
+          mounted,
           fileCount: files.length,
         },
         "[Skills] Skill activated",
@@ -216,9 +239,18 @@ const registry = defineArchestraTools([
 
       return successResult(
         formatSkillActivation({
-          skill,
+          skill: {
+            name: skill.name,
+            content: version.content,
+            compatibility: skill.compatibility,
+            allowedTools: skill.allowedTools,
+            templated: skill.templated,
+          },
           files,
-          canRunSandbox: await canRunSkillSandbox(ctx, context.agent.id),
+          // only advertise sandbox runnability when this skill's bytes are
+          // actually mounted under /skills/<name> (not when a same-named skill
+          // won the path).
+          canRunSandbox: mounted,
           promptContext: skill.templated
             ? await buildSkillActivationPromptContext({
                 userId: ctx.userId,
@@ -236,7 +268,7 @@ const registry = defineArchestraTools([
       "Read a bundled resource file from a skill. Paths come from the " +
       "<skill_resources> list returned by activate_skill. This returns file " +
       "text for inspection only — to execute a script or run shell commands, " +
-      "create a sandbox with create_skill_sandbox and call run_skill_command.",
+      "use run_command (activated skills are available under /skills).",
     schema: ReadSkillFileSchema,
     async handler({ args, context }) {
       const ctx = requireOrgContext(context);
@@ -249,7 +281,18 @@ const registry = defineArchestraTools([
         return errorResult(`No skill named "${args.skill}" exists.`);
       }
 
-      const file = await SkillFileModel.findBySkillAndPath(skill.id, args.path);
+      // read from the effective version (the mounted one if mounted, else
+      // latest) so read_skill_file shows the same bytes as activation + the
+      // sandbox.
+      const version = await resolveEffectiveSkillVersion({
+        skill,
+        organizationId: ctx.organizationId,
+        userId: ctx.userId,
+        conversationId: context.conversationId,
+      });
+      const file = version
+        ? await SkillVersionModel.findFileByPath(version.id, args.path)
+        : null;
       if (!file) {
         return errorResult(
           `Skill "${args.skill}" has no file at "${args.path}".`,
@@ -425,12 +468,11 @@ async function canRunSkillSandbox(
   ctx: SkillReadContext,
   agentId: string | undefined,
 ): Promise<boolean> {
-  if (ctx.userId === undefined) return false;
-  const checker = await getSkillPermissionChecker({
+  return isSkillSandboxAvailableForAgent({
     userId: ctx.userId,
     organizationId: ctx.organizationId,
+    agentId,
   });
-  return isSkillSandboxAvailableForAgent({ checker, agentId });
 }
 
 /**
@@ -584,15 +626,16 @@ async function listSkillCatalog(
     .join("\n");
 
   // only advertise the sandbox path when it would actually work: the feature
-  // is enabled, the caller can execute skills, and the sandbox tools are
+  // is enabled, the caller has sandbox:execute, and the sandbox tools are
   // assigned to this agent (so they appear in its tools/list).
   const instructions = (await isSkillSandboxAvailableForAgent({
-    checker,
+    userId: ctx.userId,
+    organizationId: ctx.organizationId,
     agentId,
   }))
     ? "Call activate_skill with one of these names to load its instructions. " +
-      "To run a skill's scripts or shell commands, create_skill_sandbox with " +
-      "the skill name, then run_skill_command."
+      "Activating a skill mounts it in your sandbox under /skills, so you can " +
+      "then run its scripts or shell commands with run_command."
     : "Call activate_skill with one of these names to load its instructions.";
 
   return successResult(

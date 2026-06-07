@@ -55,6 +55,7 @@ const CONNECTOR_TYPE_OPTIONS = [
   "github",
   "gitlab",
   "servicenow",
+  "web_crawler",
 ] as ConnectorType[];
 
 function formatAgentType(agentType: string): string {

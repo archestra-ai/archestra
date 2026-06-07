@@ -18,7 +18,7 @@ export function makeConfig(
     },
     features: {
       orchestratorK8sRuntime: false,
-      codeRuntime: false,
+      sandbox: false,
       agentSkillsEnabled: false,
       byosEnabled: false,
       byosVaultKvVersion: "1",

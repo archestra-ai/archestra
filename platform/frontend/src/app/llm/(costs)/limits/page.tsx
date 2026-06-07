@@ -494,15 +494,21 @@ export default function LimitsPage() {
           const cleanupInterval =
             (row.original.cleanupInterval as LimitCleanupInterval | null) ??
             DEFAULT_LIMIT_CLEANUP_INTERVAL;
+          const reset = getNextLimitReset(
+            row.original.lastCleanup,
+            cleanupInterval,
+          );
           return (
             <div className="space-y-0.5">
               <div>{CLEANUP_INTERVAL_LABELS[cleanupInterval]}</div>
-              <div className="text-xs text-muted-foreground">
-                {formatNextLimitReset(
-                  row.original.lastCleanup,
-                  cleanupInterval,
-                )}
-              </div>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Badge variant="outline" className="cursor-default text-xs">
+                    {reset.label}
+                  </Badge>
+                </TooltipTrigger>
+                <TooltipContent>{reset.description}</TooltipContent>
+              </Tooltip>
             </div>
           );
         },
@@ -959,35 +965,78 @@ export function getLimitModels(limit: LimitData): string[] {
     : [];
 }
 
-function formatNextLimitReset(
+function getNextLimitReset(
   lastCleanup: LimitData["lastCleanup"],
   cleanupInterval: LimitCleanupInterval,
-): string {
+): { label: string; description: string } {
+  const nextReset = getNextLimitResetDate(lastCleanup, cleanupInterval);
+  if (!nextReset) {
+    return {
+      label: "Resets on check",
+      description: "This limit has not been cleaned up yet.",
+    };
+  }
+
+  if (Number.isNaN(nextReset.getTime())) {
+    return {
+      label: "Reset unavailable",
+      description: "The reset schedule could not be calculated.",
+    };
+  }
+
+  return {
+    label: formatResetCountdown(nextReset),
+    description: `Next reset: ${formatResetDate(nextReset)}`,
+  };
+}
+
+function getNextLimitResetDate(
+  lastCleanup: LimitData["lastCleanup"],
+  cleanupInterval: LimitCleanupInterval,
+): Date | null {
   if (isCalendarCleanupInterval(cleanupInterval)) {
-    return formatResetDate(
-      getNextCalendarResetDate(new Date(), cleanupInterval),
-    );
+    return getNextCalendarResetDate(new Date(), cleanupInterval);
   }
 
   if (!lastCleanup) {
-    return "Resets on next check";
+    return null;
   }
 
-  const nextReset = addCleanupInterval(new Date(lastCleanup), cleanupInterval);
-  if (Number.isNaN(nextReset.getTime())) {
-    return "Reset schedule unavailable";
+  return addCleanupInterval(new Date(lastCleanup), cleanupInterval);
+}
+
+function formatResetCountdown(date: Date): string {
+  const diffMs = date.getTime() - Date.now();
+  if (diffMs <= 0) {
+    return "Reset due";
   }
 
-  return formatResetDate(nextReset);
+  const diffMinutes = Math.ceil(diffMs / 60_000);
+  if (diffMinutes < 60) {
+    return `Resets in ${diffMinutes}m`;
+  }
+
+  const diffHours = Math.ceil(diffMinutes / 60);
+  if (diffHours < 48) {
+    return `Resets in ${diffHours}h`;
+  }
+
+  const diffDays = Math.ceil(diffHours / 24);
+  if (diffDays < 60) {
+    return `Resets in ${diffDays}d`;
+  }
+
+  const diffMonths = Math.ceil(diffDays / 30);
+  return `Resets in ${diffMonths}mo`;
 }
 
 function formatResetDate(date: Date): string {
-  return `Resets ${date.toLocaleDateString(undefined, {
+  return date.toLocaleDateString(undefined, {
     month: "short",
     day: "numeric",
     year:
       date.getFullYear() === new Date().getFullYear() ? undefined : "numeric",
-  })}`;
+  });
 }
 
 function addCleanupInterval(

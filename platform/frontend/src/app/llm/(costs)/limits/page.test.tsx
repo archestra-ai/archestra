@@ -380,6 +380,8 @@ describe("LimitsPage", () => {
   });
 
   it("shows the next reset date for rolling monthly limits", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-20T12:00:00.000Z"));
     mockUseLimits.mockReturnValue({
       data: [
         {
@@ -405,7 +407,8 @@ describe("LimitsPage", () => {
 
     const row = screen.getByTestId("data-table-row-limit-1");
     expect(row).toHaveTextContent("Rolling month");
-    expect(row).toHaveTextContent("Resets Feb 15");
+    expect(row).toHaveTextContent("Resets in 26d");
+    expect(row).toHaveTextContent("Next reset: Feb 15");
   });
 
   it("shows the next reset date for calendar monthly limits", () => {
@@ -436,7 +439,40 @@ describe("LimitsPage", () => {
 
     const row = screen.getByTestId("data-table-row-limit-1");
     expect(row).toHaveTextContent("Calendar month");
-    expect(row).toHaveTextContent("Resets Feb 1");
+    expect(row).toHaveTextContent("Resets in 17d");
+    expect(row).toHaveTextContent("Next reset: Feb 1");
+  });
+
+  it("shows an overdue reset badge when the cleanup window has elapsed", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-15T14:00:00.000Z"));
+    mockUseLimits.mockReturnValue({
+      data: [
+        {
+          id: "limit-1",
+          entityType: "organization",
+          entityId: "org-1",
+          limitType: "token_cost",
+          limitValue: 1000,
+          model: null,
+          mcpServerName: null,
+          toolName: null,
+          cleanupInterval: "1h",
+          lastCleanup: "2026-01-15T12:00:00.000Z",
+          createdAt: "2026-01-01",
+          updatedAt: "2026-01-01",
+          modelUsage: [],
+        },
+      ],
+      isPending: false,
+    });
+
+    render(<LimitsPage />);
+
+    const row = screen.getByTestId("data-table-row-limit-1");
+    expect(row).toHaveTextContent("Rolling hour");
+    expect(row).toHaveTextContent("Reset due");
+    expect(row).toHaveTextContent("Next reset: Jan 15");
   });
 
   it("shows multiple model badges for limits with multiple models", () => {

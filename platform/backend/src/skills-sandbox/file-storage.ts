@@ -17,7 +17,7 @@ import { FilesystemSandboxFileStorage } from "./file-storage-filesystem";
  *
  * See docs/superpowers/specs/2026-06-07-sandbox-file-storage-design.md.
  */
-export interface SandboxFileStorage {
+interface SandboxFileStorage {
   readonly name: "db" | "filesystem" | "router";
 
   /** Persist bytes for a new file row. Exactly one of objectKey/dbData is set. */
@@ -45,7 +45,7 @@ export interface SandboxFileStorage {
 }
 
 /** Where a new file's bytes were persisted. */
-export interface StoredSandboxBlob {
+interface StoredSandboxBlob {
   provider: "db" | "filesystem";
   objectKey: string | null;
   dbData: Buffer | null;

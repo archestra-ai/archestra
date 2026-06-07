@@ -7,6 +7,18 @@ import type { SkillSandboxFile } from "@/types";
 import { getSandboxFileStorage, storageFilename } from "./file-storage";
 
 describe("getSandboxFileStorage (db provider)", () => {
+  const original = { ...config.skillsSandbox.fileStorage };
+
+  beforeEach(() => {
+    config.skillsSandbox.fileStorage.provider = "db";
+    config.skillsSandbox.fileStorage.path = undefined;
+  });
+
+  afterEach(() => {
+    config.skillsSandbox.fileStorage.provider = original.provider;
+    config.skillsSandbox.fileStorage.path = original.path;
+  });
+
   const storage = getSandboxFileStorage();
 
   test("is the storage router", () => {

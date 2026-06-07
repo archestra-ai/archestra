@@ -14,6 +14,7 @@ import {
   Bug,
   Cable,
   Database,
+  FolderOpen,
   Github,
   type LucideIcon,
   MessageCircle,
@@ -221,6 +222,12 @@ const contentNavGroups: NavGroup[] = [
         icon: Cable,
         customIsActive: (pathname: string) =>
           pathname.startsWith("/connection"),
+      },
+      {
+        title: "X-Files",
+        url: "/x-files",
+        icon: FolderOpen,
+        customIsActive: (pathname: string) => pathname.startsWith("/x-files"),
       },
     ],
   },
@@ -469,6 +476,8 @@ export function AppSidebar() {
 
   // Skills are gated behind the ARCHESTRA_AGENTS_SKILLS_ENABLED env var.
   const skillsEnabled = useFeature("agentSkillsEnabled") === true;
+  // X-Files (sandbox artifacts) are gated behind the sandbox feature flag.
+  const sandboxEnabled = useFeature("sandbox") === true;
 
   // Filter nav groups based on connect permissions and feature flags
   const filteredNavGroups = React.useMemo(() => {
@@ -477,6 +486,7 @@ export function AppSidebar() {
       items: group.items
         .filter((item) => {
           if (item.title === "Connect" && !showConnect) return false;
+          if (item.title === "X-Files" && !sandboxEnabled) return false;
           return true;
         })
         .map((item) =>
@@ -490,7 +500,7 @@ export function AppSidebar() {
             : item,
         ),
     }));
-  }, [showConnect, skillsEnabled]);
+  }, [showConnect, skillsEnabled, sandboxEnabled]);
 
   // Build additional links for UserButton popout menu
   const userMenuLinks = React.useMemo(() => {

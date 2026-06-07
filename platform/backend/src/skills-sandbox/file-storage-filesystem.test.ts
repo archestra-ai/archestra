@@ -235,4 +235,48 @@ describe("FilesystemSandboxFileStorage.listUserFiles", () => {
     const missing = await storage.listUserFiles({ userId: "never", rows: [] });
     expect(missing).toEqual([]);
   });
+
+  test("returns matched files newest-first by row createdAt", async () => {
+    const older = await storage.put({
+      userId,
+      fileId: "00000000-0000-0000-0000-0000000000b1",
+      kind: "artifact",
+      filename: "older.txt",
+      data: Buffer.from("o"),
+    });
+    const newer = await storage.put({
+      userId,
+      fileId: "00000000-0000-0000-0000-0000000000b2",
+      kind: "artifact",
+      filename: "newer.txt",
+      data: Buffer.from("n"),
+    });
+
+    const items = await storage.listUserFiles({
+      userId,
+      rows: [
+        row({
+          filename: "older.txt",
+          objectKey: older.objectKey,
+          createdAt: new Date("2026-01-01T00:00:00Z"),
+        }),
+        row({
+          filename: "newer.txt",
+          objectKey: newer.objectKey,
+          createdAt: new Date("2026-02-01T00:00:00Z"),
+        }),
+      ],
+    });
+
+    expect(items.map((i) => i.filename)).toEqual(["newer.txt", "older.txt"]);
+  });
+
+  test("skips subdirectories (only regular files are listed)", async () => {
+    await mkdir(join(root, userId, "nested"), { recursive: true });
+    await writeFile(join(root, userId, "flat.txt"), "x");
+
+    const items = await storage.listUserFiles({ userId, rows: [] });
+
+    expect(items.map((i) => i.filename)).toEqual(["flat.txt"]);
+  });
 });

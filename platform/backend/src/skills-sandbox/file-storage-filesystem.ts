@@ -126,8 +126,20 @@ export class FilesystemSandboxFileStorage {
 
     const items: SandboxFileListItem[] = [];
     for (const entry of entries) {
+      // `entry.isFile()` reflects the directory entry's OWN type, so symlinks
+      // (and subdirectories) report `isFile() === false` and are skipped here
+      // before any stat — no link is ever followed off the folder.
       if (!entry.isFile() || entry.name.startsWith(".")) continue;
-      const stats = await stat(join(dir, entry.name));
+      // The folder is user-writable, so a file can vanish between readdir and
+      // stat. Treat a now-missing entry as absent (the directory is the truth)
+      // rather than failing the whole listing.
+      const stats = await stat(join(dir, entry.name)).catch(
+        (error: NodeJS.ErrnoException) => {
+          if (error.code === "ENOENT") return null;
+          throw error;
+        },
+      );
+      if (!stats) continue;
       const match = rowByKey.get(`${params.userId}/${entry.name}`);
       items.push(
         match

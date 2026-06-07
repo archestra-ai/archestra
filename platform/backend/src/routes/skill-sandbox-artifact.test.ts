@@ -1,3 +1,7 @@
+import { mkdtemp, rm, unlink } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import config from "@/config";
 import { SkillSandboxFileModel, SkillSandboxModel } from "@/models";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
@@ -174,5 +178,52 @@ describe("GET /api/skill-sandbox/artifacts/:artifactId", () => {
     // the header stays parseable. wrapping quotes around filename are fine.
     expect(cd).toMatch(/^attachment; filename="[^"\\]*"$/);
     expect(cd).toContain(".pdf");
+  });
+
+  describe("SandboxFileMissingError → 404", () => {
+    let fsRoot: string;
+    const original = { ...config.skillsSandbox.fileStorage };
+
+    beforeEach(async () => {
+      fsRoot = await mkdtemp(join(tmpdir(), "sandbox-art-404-"));
+      config.skillsSandbox.fileStorage.provider = "filesystem";
+      config.skillsSandbox.fileStorage.path = fsRoot;
+    });
+
+    afterEach(async () => {
+      config.skillsSandbox.fileStorage.provider = original.provider;
+      config.skillsSandbox.fileStorage.path = original.path;
+      await rm(fsRoot, { recursive: true, force: true });
+    });
+
+    test("returns 404 with 'Artifact data is no longer available' when the backing file is deleted", async () => {
+      const sandbox = await seedSandbox({
+        organizationId,
+        userId: user.id,
+      });
+      const artifact = await seedArtifact({
+        sandboxId: sandbox.id,
+        organizationId,
+        mimeType: "text/plain",
+        data: Buffer.from("soon deleted"),
+        path: "/sandbox/skills/example/ephemeral.txt",
+      });
+      // confirm the artifact was written as filesystem-mode
+      expect(artifact.storageProvider).toBe("filesystem");
+      if (!artifact.objectKey) throw new Error("expected filesystem objectKey");
+
+      // remove the backing file from disk to simulate operator deletion
+      await unlink(join(fsRoot, artifact.objectKey));
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/skill-sandbox/artifacts/${artifact.id}`,
+      });
+
+      expect(response.statusCode).toBe(404);
+      expect(
+        response.json<{ error: { message: string } }>().error.message,
+      ).toBe("Artifact data is no longer available");
+    });
   });
 });

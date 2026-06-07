@@ -137,7 +137,6 @@ function AddApiKeyDialog({
   const formValues = form.watch();
   const isValid =
     formValues.apiKey !== LLM_PROVIDER_API_KEY_PLACEHOLDER &&
-    formValues.name &&
     (formValues.scope !== "team" || formValues.teamId) &&
     (byosEnabled
       ? formValues.vaultSecretPath && formValues.vaultSecretKey

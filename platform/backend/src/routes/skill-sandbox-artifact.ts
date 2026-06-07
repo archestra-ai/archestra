@@ -3,6 +3,7 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { SkillSandboxFileModel, SkillSandboxModel } from "@/models";
 import { getSandboxFileStorage } from "@/skills-sandbox/file-storage";
+import { SandboxFileMissingError } from "@/skills-sandbox/file-storage-filesystem";
 import { isInlineSafeImageMime } from "@/skills-sandbox/mime-sniff";
 import { ApiError } from "@/types";
 
@@ -65,9 +66,19 @@ const skillSandboxArtifactRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ? artifact.mimeType
         : "application/octet-stream";
 
-      // read through the storage adapter so this route keeps working once
-      // artifact bytes can live outside the data column (Phase 2).
-      const data = await getSandboxFileStorage().get(artifact);
+      // byte normalization (pg Buffer vs PGlite Uint8Array) lives in the
+      // storage adapter, which also resolves rows whose bytes live outside
+      // the data column (storage_provider = 'filesystem').
+      let data: Buffer;
+      try {
+        data = await getSandboxFileStorage().get(artifact);
+      } catch (error) {
+        if (error instanceof SandboxFileMissingError) {
+          // metadata exists but the backing file was removed from the folder
+          throw new ApiError(404, "Artifact data is no longer available");
+        }
+        throw error;
+      }
 
       reply
         .header("Content-Type", contentType)

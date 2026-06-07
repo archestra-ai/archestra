@@ -1,11 +1,21 @@
 import { randomUUID } from "node:crypto";
-import { link, mkdir, readFile, rm, unlink, writeFile } from "node:fs/promises";
+import {
+  link,
+  mkdir,
+  readdir,
+  readFile,
+  rm,
+  stat,
+  unlink,
+  writeFile,
+} from "node:fs/promises";
 import { extname, join } from "node:path";
 import type {
   SandboxArtifactRow,
   SandboxFileListItem,
   SkillSandboxFile,
 } from "@/types";
+import { mimeFromExtension } from "./mime-from-extension";
 
 /**
  * Counter cap for Downloads-style collision names. Past this, fall back to a
@@ -90,12 +100,57 @@ export class FilesystemSandboxFileStorage {
     }
   }
 
-  async listUserFiles(_params: {
+  /**
+   * List the user's folder as the source of truth. Each disk file is matched to
+   * a row by object_key (`<userId>/<filename>`) to borrow its id/mime; files
+   * with no row are listed non-downloadable. Rows with no disk file are dropped.
+   */
+  async listUserFiles(params: {
     userId: string;
     rows: SandboxArtifactRow[];
   }): Promise<SandboxFileListItem[]> {
-    // Stub — replaced with directory-driven listing in the next task.
-    return [];
+    const dir = join(this.root, params.userId);
+    let entries: Awaited<ReturnType<typeof readDirEntries>>;
+    try {
+      entries = await readDirEntries(dir);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
+      throw error;
+    }
+
+    const rowByKey = new Map(
+      params.rows
+        .filter((r) => r.objectKey)
+        .map((r) => [r.objectKey as string, r]),
+    );
+
+    const items: SandboxFileListItem[] = [];
+    for (const entry of entries) {
+      if (!entry.isFile() || entry.name.startsWith(".")) continue;
+      const stats = await stat(join(dir, entry.name));
+      const match = rowByKey.get(`${params.userId}/${entry.name}`);
+      items.push(
+        match
+          ? {
+              id: match.id,
+              filename: entry.name,
+              mimeType: match.mimeType,
+              sizeBytes: stats.size,
+              createdAt: match.createdAt,
+              downloadable: true,
+            }
+          : {
+              id: null,
+              filename: entry.name,
+              mimeType: mimeFromExtension(entry.name),
+              sizeBytes: stats.size,
+              createdAt: stats.mtime,
+              downloadable: false,
+            },
+      );
+    }
+    items.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+    return items;
   }
 
   /**
@@ -141,6 +196,15 @@ export class FilesystemSandboxFileStorage {
     await link(params.tempPath, join(this.root, random));
     return random;
   }
+}
+
+/**
+ * Read a directory's entries as `Dirent`s. A standalone helper so the
+ * `withFileTypes: true` overload is resolved here and callers infer the
+ * string-`Dirent[]` return without pinning the wrong `readdir` overload.
+ */
+function readDirEntries(dir: string) {
+  return readdir(dir, { withFileTypes: true });
 }
 
 /** Bytes for this row exist in metadata but not on disk (deleted/moved externally). */

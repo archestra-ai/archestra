@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { asc, eq, inArray, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
+import logger from "@/logging";
 import {
   getSandboxFileStorage,
   storageFilename,
@@ -113,15 +114,8 @@ class SkillSandboxReplayEventModel {
       }),
       data: upload.data,
     });
-    const dbData = stored.dbData;
-    if (!dbData) {
-      throw new Error("sandbox file storage returned no dbData for db rows");
-    }
-    // NOTE (Phase 2): when the insert below no-ops on the attachment-staging
-    // conflict, an external provider must best-effort storage.delete() the
-    // just-written object. The db provider has nothing to clean up.
-    return await db.transaction(async (tx) => {
-      const [row] = await tx
+    const row = await db.transaction(async (tx) => {
+      const [inserted] = await tx
         .insert(schema.skillSandboxFilesTable)
         .values({
           id: fileId,
@@ -132,7 +126,9 @@ class SkillSandboxReplayEventModel {
           originalName: upload.originalName,
           sourceAttachmentId: upload.sourceAttachmentId ?? null,
           sizeBytes: upload.sizeBytes,
-          data: dbData,
+          data: stored.dbData,
+          storageProvider: stored.provider,
+          objectKey: stored.objectKey,
         })
         .onConflictDoNothing({
           target: [
@@ -143,16 +139,30 @@ class SkillSandboxReplayEventModel {
         })
         .returning();
       // already staged: ON CONFLICT made the insert a no-op.
-      if (!row) return null;
+      if (!inserted) return null;
       const sequence = await allocateSequence(tx, upload.sandboxId);
       await tx.insert(schema.skillSandboxReplayEventsTable).values({
         sandboxId: upload.sandboxId,
         sequence,
         kind: "upload",
-        fileId: row.id,
+        fileId: inserted.id,
       });
-      return normalizeByteaField(row, "data");
+      return normalizeByteaField(inserted, "data");
     });
+    // the insert no-opped (attachment already staged) but external bytes were
+    // already written — remove the orphan; failure here only leaks a file.
+    // (delete dispatches per blob: a db blob is a no-op.)
+    if (!row) {
+      try {
+        await getSandboxFileStorage().delete(stored);
+      } catch (error) {
+        logger.warn(
+          { objectKey: stored.objectKey, error },
+          "failed to clean up orphaned sandbox upload bytes after staging conflict",
+        );
+      }
+    }
+    return row;
   }
 
   /**

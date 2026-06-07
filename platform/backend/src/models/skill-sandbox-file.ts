@@ -25,15 +25,17 @@ type SkillSandboxArtifactMeta = {
  */
 class SkillSandboxFileModel {
   static async createArtifact(
-    artifact: Omit<InsertSkillSandboxFile, "kind">,
+    artifact: Omit<
+      InsertSkillSandboxFile,
+      "kind" | "data" | "storageProvider" | "objectKey"
+    > & {
+      data: Buffer;
+    },
   ): Promise<SkillSandboxFile> {
     // id is generated app-side (not by the column default) because the
     // storage adapter needs it before the insert: Phase 2's filesystem
     // provider uses it to derive a collision-free object key.
     const fileId = randomUUID();
-    if (!artifact.data) {
-      throw new Error("createArtifact requires data bytes");
-    }
     const stored = await getSandboxFileStorage().put({
       sandboxId: artifact.sandboxId,
       fileId,
@@ -41,13 +43,16 @@ class SkillSandboxFileModel {
       filename: storageFilename({ originalName: null, path: artifact.path }),
       data: artifact.data,
     });
-    const dbData = stored.dbData;
-    if (!dbData) {
-      throw new Error("sandbox file storage returned no dbData for db rows");
-    }
     const [row] = await db
       .insert(schema.skillSandboxFilesTable)
-      .values({ ...artifact, id: fileId, kind: "artifact", data: dbData })
+      .values({
+        ...artifact,
+        id: fileId,
+        kind: "artifact",
+        data: stored.dbData,
+        storageProvider: stored.provider,
+        objectKey: stored.objectKey,
+      })
       .returning();
     if (!row) {
       throw new Error("failed to insert sandbox artifact");

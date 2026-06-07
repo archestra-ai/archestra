@@ -52669,6 +52669,184 @@ export type GetSkillSandboxArtifactResponses = {
     200: unknown;
 };
 
+export type GetSkillSandboxConversationArtifactsData = {
+    body?: never;
+    path: {
+        conversationId: string;
+    };
+    query?: never;
+    url: '/api/skill-sandbox/conversations/{conversationId}/artifacts';
+};
+
+export type GetSkillSandboxConversationArtifactsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetSkillSandboxConversationArtifactsError = GetSkillSandboxConversationArtifactsErrors[keyof GetSkillSandboxConversationArtifactsErrors];
+
+export type GetSkillSandboxConversationArtifactsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string | null;
+        filename: string;
+        mimeType: string;
+        sizeBytes: number;
+        createdAt: string;
+        downloadable: boolean;
+    }>;
+};
+
+export type GetSkillSandboxConversationArtifactsResponse = GetSkillSandboxConversationArtifactsResponses[keyof GetSkillSandboxConversationArtifactsResponses];
+
+export type GetSkillSandboxFilesData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/skill-sandbox/files';
+};
+
+export type GetSkillSandboxFilesErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetSkillSandboxFilesError = GetSkillSandboxFilesErrors[keyof GetSkillSandboxFilesErrors];
+
+export type GetSkillSandboxFilesResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string | null;
+        filename: string;
+        mimeType: string;
+        sizeBytes: number;
+        createdAt: string;
+        downloadable: boolean;
+    }>;
+};
+
+export type GetSkillSandboxFilesResponse = GetSkillSandboxFilesResponses[keyof GetSkillSandboxFilesResponses];
+
 export type GetSkillShareLinksData = {
     body?: never;
     path?: never;

@@ -534,6 +534,8 @@ export const RouteId = {
   GetSkillSourceRepos: "getSkillSourceRepos",
   EnableSkillToolDefaults: "enableSkillToolDefaults",
   GetSkillSandboxArtifact: "getSkillSandboxArtifact",
+  GetSkillSandboxConversationArtifacts: "getSkillSandboxConversationArtifacts",
+  GetSkillSandboxFiles: "getSkillSandboxFiles",
 
   // Audit Log Routes
   GetAuditLogs: "getAuditLogs",

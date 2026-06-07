@@ -1240,6 +1240,8 @@ export const requiredEndpointPermissionsMap: Partial<
   // matches the `download_file` tool (sandbox:execute) that hands out this
   // URL, so a role allowed to produce an artifact can also fetch it.
   [RouteId.GetSkillSandboxArtifact]: { sandbox: ["execute"] },
+  [RouteId.GetSkillSandboxConversationArtifacts]: { sandbox: ["execute"] },
+  [RouteId.GetSkillSandboxFiles]: { sandbox: ["execute"] },
 
   // Audit Log Routes
   [RouteId.GetAuditLogs]: {
@@ -1291,6 +1293,9 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   // Chat
   "/chat": { chat: ["read"] },
   "/chat/[conversationId]": { chat: ["read"] },
+
+  // X-Files
+  "/x-files": { sandbox: ["execute"] },
 
   // Agents
   "/agents": { agent: ["read"] },

@@ -95,14 +95,17 @@ const registry = defineArchestraTools([
       }
 
       // Reject hallucinated or unassigned tool names before policy evaluation.
-      // The policy gate below already requires exact membership in
-      // getMcpToolsByAgent (see evaluatePolicies), so checking the same set here
-      // is regression-safe; it lets us return an actionable recovery message
+      // The policy gate below already requires exact membership in this same
+      // assigned-tool set (see evaluatePolicies), so checking it here is
+      // regression-safe; it lets us return an actionable recovery message
       // instead of the misleading "not enabled for this conversation" refusal
       // (which implies the tool exists). In search_and_run_only mode the
-      // intended recovery is search_tools, so we point the model there.
-      const assignedTools = await ToolModel.getMcpToolsByAgent(context.agentId);
-      if (!assignedTools.some((tool) => tool.name === resolvedName)) {
+      // intended recovery is search_tools, so we point the model there. The set
+      // is passed into the gate below so it is fetched only once.
+      const assignedToolNames = await ToolModel.getAssignedToolNames(
+        context.agentId,
+      );
+      if (!assignedToolNames.has(resolvedName)) {
         logger.info(
           { agentId: context.agentId, requestedName, resolvedName },
           `${TOOL_RUN_TOOL_SHORT_NAME} dispatched to an unavailable tool`,
@@ -111,6 +114,7 @@ const registry = defineArchestraTools([
       }
 
       const toolInput = args.tool_args ?? {};
+      // Reuse the set computed above so the policy gate does not re-query it.
       const policyBlock = await evaluateSingleMcpToolInvocationPolicy({
         agentId: context.agentId,
         toolName: resolvedName,
@@ -118,6 +122,7 @@ const registry = defineArchestraTools([
         organizationId: context.organizationId,
         contextIsTrusted: context.contextIsTrusted ?? true,
         enforceApprovalRequired: !context.approvalRequiredPoliciesHandled,
+        enabledToolNames: assignedToolNames,
       });
       if (policyBlock) {
         return errorResult(policyBlock.refusalMessage);

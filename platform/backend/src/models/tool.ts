@@ -581,6 +581,16 @@ class ToolModel {
   }
 
   /**
+   * Names of the MCP tools assigned to an agent, as a membership set. Single
+   * source of truth for "is tool X enabled for this agent" checks, shared by the
+   * run_tool dispatch pre-check and the tool-invocation guardrail.
+   */
+  static async getAssignedToolNames(agentId: string): Promise<Set<string>> {
+    const tools = await ToolModel.getMcpToolsByAgent(agentId);
+    return new Set(tools.map((tool) => tool.name));
+  }
+
+  /**
    * Bulk create tools for an MCP server (catalog-based tools)
    * Fetches existing tools in a single query, then bulk inserts only new tools
    * Returns all tools (existing + newly created) to avoid N+1 queries

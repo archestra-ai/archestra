@@ -293,4 +293,64 @@ test.describe("MCP environment validation rule", () => {
       varDialog.getByRole("button", { name: "Add variable" }),
     ).toBeEnabled();
   });
+
+  test("the header dialog blocks a value that violates the rule", async ({
+    page,
+    mcpRegistryPage,
+    mswControl,
+  }) => {
+    // Headers (a separate dialog from env vars) are edited on remote servers
+    // and persist as userConfig defaults — so the same rule applies.
+    const item = makeCatalogItem({
+      id: "test-catalog-header",
+      name: "header-test",
+      serverType: "remote",
+      serverUrl: "https://example.test/mcp",
+    });
+
+    await mswControl.use({
+      method: "get",
+      url: "/api/internal_mcp_catalog",
+      body: [item],
+    });
+    await mswControl.use({
+      method: "get",
+      url: "/api/organization",
+      body: orgWithDefaultRule(BLOCK_PROD),
+    });
+
+    await mcpRegistryPage.goto();
+    await expect(mcpRegistryPage.heading).toBeVisible();
+    await mcpRegistryPage.settingsButtonFor("header-test").click();
+
+    const editor = page.getByRole("dialog", { name: /header-test Settings/i });
+    await expect(editor).toBeVisible();
+    await editor.getByRole("button", { name: "Add Header" }).click();
+
+    const headerDialog = page.getByRole("dialog", { name: /Add header/i });
+    await expect(headerDialog).toBeVisible();
+    await headerDialog.locator("#header-name").fill("X-Upstream");
+    // Switch scope to Static so the value input appears.
+    await headerDialog
+      .getByTestId(E2eTestId.PromptOnInstallationCheckbox)
+      .click();
+    await page.getByRole("option", { name: "Static" }).click();
+
+    const valueInput = headerDialog.locator("#header-value");
+    await valueInput.fill("https://production.example.com");
+    await expect(
+      headerDialog.getByText(/does not match the Default validation rule/i),
+    ).toBeVisible();
+    await expect(
+      headerDialog.getByRole("button", { name: "Add header" }),
+    ).toBeDisabled();
+
+    await valueInput.fill("https://staging.example.com");
+    await expect(
+      headerDialog.getByText(/does not match the Default validation rule/i),
+    ).toBeHidden();
+    await expect(
+      headerDialog.getByRole("button", { name: "Add header" }),
+    ).toBeEnabled();
+  });
 });

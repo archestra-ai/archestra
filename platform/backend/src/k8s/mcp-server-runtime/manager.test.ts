@@ -1528,6 +1528,18 @@ describe("McpServerRuntimeManager", () => {
 });
 
 describe("McpServerRuntimeManager.listDockerRegistrySecrets", () => {
+  function dockerConfigData(registryServers: string[]) {
+    return {
+      ".dockerconfigjson": Buffer.from(
+        JSON.stringify({
+          auths: Object.fromEntries(
+            registryServers.map((server) => [server, { auth: "redacted" }]),
+          ),
+        }),
+      ).toString("base64"),
+    };
+  }
+
   test("returns empty array when k8sApi is not initialized", async () => {
     const { McpServerRuntimeManager } = await import("./manager");
     const manager = new McpServerRuntimeManager();
@@ -1573,6 +1585,7 @@ describe("McpServerRuntimeManager.listDockerRegistrySecrets", () => {
               "team-id": "team-a",
             },
           },
+          data: dockerConfigData(["registry-b.example.com"]),
         },
         {
           metadata: {
@@ -1583,6 +1596,7 @@ describe("McpServerRuntimeManager.listDockerRegistrySecrets", () => {
               "team-id": "team-b",
             },
           },
+          data: dockerConfigData(["registry-a.example.com"]),
         },
       ],
     });
@@ -1592,8 +1606,14 @@ describe("McpServerRuntimeManager.listDockerRegistrySecrets", () => {
 
     const result = await manager.listDockerRegistrySecrets({ isAdmin: true });
     expect(result).toEqual([
-      { name: "regcred-team-a" },
-      { name: "regcred-team-b" },
+      {
+        name: "regcred-team-a",
+        registryServers: ["registry-b.example.com"],
+      },
+      {
+        name: "regcred-team-b",
+        registryServers: ["registry-a.example.com"],
+      },
     ]);
 
     expect(mockListSecrets).toHaveBeenCalledWith(
@@ -1644,7 +1664,7 @@ describe("McpServerRuntimeManager.listDockerRegistrySecrets", () => {
     const result = await manager.listDockerRegistrySecrets({
       teamIds: ["team-a"],
     });
-    expect(result).toEqual([{ name: "regcred-team-a" }]);
+    expect(result).toEqual([{ name: "regcred-team-a", registryServers: [] }]);
   });
 
   test("non-admin with no teams sees no secrets", async () => {
@@ -1671,6 +1691,74 @@ describe("McpServerRuntimeManager.listDockerRegistrySecrets", () => {
 
     const result = await manager.listDockerRegistrySecrets({ teamIds: [] });
     expect(result).toEqual([]);
+  });
+
+  test("returns sorted registry servers parsed from docker config json", async () => {
+    const { McpServerRuntimeManager } = await import("./manager");
+    const manager = new McpServerRuntimeManager();
+
+    (manager as unknown as { k8sApi: unknown }).k8sApi = {
+      listNamespacedSecret: vi.fn().mockResolvedValue({
+        items: [
+          {
+            metadata: {
+              name: "regcred-private",
+              labels: {
+                app: "mcp-server",
+                type: "regcred",
+                "team-id": "team-a",
+              },
+            },
+            data: dockerConfigData([
+              "z.registry.example.com",
+              "a.registry.example.com",
+            ]),
+          },
+        ],
+      }),
+    };
+
+    const result = await manager.listDockerRegistrySecrets({
+      teamIds: ["team-a"],
+    });
+
+    expect(result).toEqual([
+      {
+        name: "regcred-private",
+        registryServers: ["a.registry.example.com", "z.registry.example.com"],
+      },
+    ]);
+  });
+
+  test("returns empty registry server list when docker config json is invalid", async () => {
+    const { McpServerRuntimeManager } = await import("./manager");
+    const manager = new McpServerRuntimeManager();
+
+    (manager as unknown as { k8sApi: unknown }).k8sApi = {
+      listNamespacedSecret: vi.fn().mockResolvedValue({
+        items: [
+          {
+            metadata: {
+              name: "regcred-private",
+              labels: {
+                app: "mcp-server",
+                type: "regcred",
+                "team-id": "team-a",
+              },
+            },
+            data: {
+              ".dockerconfigjson": Buffer.from("not-json").toString("base64"),
+            },
+          },
+        ],
+      }),
+    };
+
+    const result = await manager.listDockerRegistrySecrets({
+      teamIds: ["team-a"],
+    });
+
+    expect(result).toEqual([{ name: "regcred-private", registryServers: [] }]);
   });
 });
 

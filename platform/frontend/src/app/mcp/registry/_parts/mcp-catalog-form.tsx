@@ -687,6 +687,41 @@ export function McpCatalogForm({
 
   // Fetch available k8s docker-registry secrets for the "existing" dropdown
   const { data: k8sSecrets = [] } = useK8sImagePullSecrets();
+  const imagePullSecretItems = useMemo(
+    () =>
+      k8sSecrets.map((secret) => {
+        const registryLabel = formatRegistryServers(secret.registryServers);
+        const primaryLabel = registryLabel || secret.name;
+        const secondaryLabel = registryLabel ? secret.name : undefined;
+
+        return {
+          value: secret.name,
+          label: primaryLabel,
+          searchText: [secret.name, ...secret.registryServers].join(" "),
+          content: (
+            <span className="block min-w-0">
+              <span className="block truncate font-medium">{primaryLabel}</span>
+              {secondaryLabel ? (
+                <span className="block truncate text-xs text-muted-foreground">
+                  {secondaryLabel}
+                </span>
+              ) : null}
+            </span>
+          ),
+          selectedContent: (
+            <span className="block min-w-0">
+              <span className="block truncate">{primaryLabel}</span>
+              {secondaryLabel ? (
+                <span className="block truncate text-xs text-muted-foreground">
+                  {secondaryLabel}
+                </span>
+              ) : null}
+            </span>
+          ),
+        };
+      }),
+    [k8sSecrets],
+  );
 
   // Update form values when BYOS paths/keys change
   useEffect(() => {
@@ -1473,14 +1508,14 @@ export function McpCatalogForm({
                           <SearchableSelect
                             value={watchField("name")}
                             onValueChange={(val) => setField("name", val)}
-                            items={k8sSecrets.map((s) => ({
-                              value: s.name,
-                              label: s.name,
-                            }))}
+                            items={imagePullSecretItems}
                             placeholder="Select a secret..."
                             searchPlaceholder="Search secrets..."
                             allowCustom
+                            multiline
                             className="w-full"
+                            contentClassName="w-[min(var(--radix-popover-trigger-width),calc(100vw-2rem))]"
+                            emptyMessage="No image pull secrets found."
                           />
                         ) : (
                           <div className="grid grid-cols-2 gap-3">
@@ -2800,4 +2835,17 @@ function applyHeaderDraftToRow(
   set("description", draft.description);
   set("includeBearerPrefix", draft.includeBearerPrefix);
   set("sensitive", draft.scope === "static" ? false : draft.sensitive);
+}
+
+function formatRegistryServers(registryServers: string[]): string {
+  if (registryServers.length === 0) {
+    return "";
+  }
+
+  const [firstRegistry, ...remainingRegistries] = registryServers;
+  if (remainingRegistries.length === 0) {
+    return firstRegistry;
+  }
+
+  return `${firstRegistry} +${remainingRegistries.length} more`;
 }

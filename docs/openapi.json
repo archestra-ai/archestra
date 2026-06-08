@@ -121466,10 +121466,17 @@
                     "properties": {
                       "name": {
                         "type": "string"
+                      },
+                      "registryServers": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
                       }
                     },
                     "required": [
-                      "name"
+                      "name",
+                      "registryServers"
                     ],
                     "additionalProperties": false
                   }

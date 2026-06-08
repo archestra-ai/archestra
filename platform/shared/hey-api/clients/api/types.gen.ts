@@ -32219,6 +32219,7 @@ export type GetK8sImagePullSecretsResponses = {
      */
     200: Array<{
         name: string;
+        registryServers: Array<string>;
     }>;
 };
 

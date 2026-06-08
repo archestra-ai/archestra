@@ -40,6 +40,10 @@ type NetworkPolicyResolutionCache = {
   environmentsById: Map<string, EnvironmentRow>;
   organizationsById: Map<string, OrganizationRow>;
 };
+type DockerRegistrySecretSummary = {
+  name: string;
+  registryServers: string[];
+};
 
 /**
  * McpServerRuntimeManager manages MCP servers running in Kubernetes.
@@ -1165,7 +1169,7 @@ export class McpServerRuntimeManager {
   async listDockerRegistrySecrets(options?: {
     isAdmin?: boolean;
     teamIds?: string[];
-  }): Promise<Array<{ name: string }>> {
+  }): Promise<DockerRegistrySecretSummary[]> {
     if (!this.k8sApi) {
       return [];
     }
@@ -1194,7 +1198,10 @@ export class McpServerRuntimeManager {
       }
 
       return filtered
-        .map((s) => ({ name: s.metadata?.name ?? "" }))
+        .map((s) => ({
+          name: s.metadata?.name ?? "",
+          registryServers: getDockerConfigRegistryServers(s),
+        }))
         .filter((s) => s.name.length > 0);
     } catch (error) {
       logger.warn(
@@ -1389,6 +1396,34 @@ export class McpServerRuntimeManager {
 
 function uniqueStrings(values: string[]): string[] {
   return Array.from(new Set(values));
+}
+
+function getDockerConfigRegistryServers(secret: k8s.V1Secret): string[] {
+  const encodedDockerConfig = secret.data?.[".dockerconfigjson"];
+  if (!encodedDockerConfig) {
+    return [];
+  }
+
+  try {
+    const dockerConfig = JSON.parse(
+      Buffer.from(encodedDockerConfig, "base64").toString("utf8"),
+    );
+    if (
+      !dockerConfig ||
+      typeof dockerConfig !== "object" ||
+      !("auths" in dockerConfig) ||
+      !dockerConfig.auths ||
+      typeof dockerConfig.auths !== "object" ||
+      Array.isArray(dockerConfig.auths)
+    ) {
+      return [];
+    }
+
+    return Object.keys(dockerConfig.auths).sort((a, b) => a.localeCompare(b));
+  } catch (error) {
+    logger.warn({ err: error }, "Failed to parse docker-registry secret data");
+    return [];
+  }
 }
 
 export default new McpServerRuntimeManager();

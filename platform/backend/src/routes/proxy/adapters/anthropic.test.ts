@@ -1,3 +1,4 @@
+import AnthropicProvider from "@anthropic-ai/sdk";
 import { describe, expect, test } from "@/test";
 import type { Anthropic } from "@/types";
 import { anthropicAdapterFactory } from "./anthropic";
@@ -440,5 +441,140 @@ describe("AnthropicRequestAdapter", () => {
         { type: "text", text: "[Image omitted due to size]" },
       ]);
     });
+  });
+});
+
+describe("anthropicAdapterFactory.executeStream", () => {
+  function sseEvent(event: string, data: unknown): string {
+    return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+  }
+
+  // builds a real Anthropic client whose transport returns a canned SSE body,
+  // so the real SDK stream parsing runs without hitting the network.
+  function clientWithSseBody(body: string): AnthropicProvider {
+    const fakeFetch = (async () =>
+      new Response(body, {
+        status: 200,
+        headers: { "content-type": "text/event-stream" },
+      })) as unknown as typeof globalThis.fetch;
+    return new AnthropicProvider({ apiKey: "test-key", fetch: fakeFetch });
+  }
+
+  // partial_json fragments that concatenate into more than one JSON value. The
+  // SDK's messages.stream() helper eagerly partial-parses the accumulated buffer
+  // and throws on this; the raw create() stream must tolerate it.
+  test("does not throw when tool input deltas concatenate into two JSON values", async () => {
+    const body =
+      sseEvent("message_start", {
+        type: "message_start",
+        message: {
+          id: "msg_1",
+          type: "message",
+          role: "assistant",
+          model: "claude-3-5-sonnet-20241022",
+          content: [],
+          stop_reason: null,
+          stop_sequence: null,
+          usage: { input_tokens: 1, output_tokens: 1 },
+        },
+      }) +
+      sseEvent("content_block_start", {
+        type: "content_block_start",
+        index: 0,
+        content_block: {
+          type: "tool_use",
+          id: "toolu_1",
+          name: "do_thing",
+          input: {},
+        },
+      }) +
+      sseEvent("content_block_delta", {
+        type: "content_block_delta",
+        index: 0,
+        delta: { type: "input_json_delta", partial_json: '{"city":"SF"}' },
+      }) +
+      sseEvent("content_block_delta", {
+        type: "content_block_delta",
+        index: 0,
+        delta: { type: "input_json_delta", partial_json: '{"unit":"c"}' },
+      }) +
+      sseEvent("content_block_stop", { type: "content_block_stop", index: 0 }) +
+      sseEvent("message_delta", {
+        type: "message_delta",
+        delta: { stop_reason: "tool_use", stop_sequence: null },
+        usage: { output_tokens: 2 },
+      }) +
+      sseEvent("message_stop", { type: "message_stop" });
+
+    const client = clientWithSseBody(body);
+    const stream = await anthropicAdapterFactory.executeStream(
+      client,
+      createMockRequest([{ role: "user", content: "hi" }]),
+    );
+
+    const adapter = anthropicAdapterFactory.createStreamAdapter();
+    for await (const event of stream) {
+      adapter.processChunk(event);
+    }
+
+    const response = adapter.toProviderResponse();
+    const toolUse = response.content.find((block) => block.type === "tool_use");
+    expect(toolUse).toBeDefined();
+    // malformed accumulated arguments fall back to empty input rather than crashing.
+    expect((toolUse as { input: unknown }).input).toEqual({});
+  });
+
+  test("parses tool input from well-formed incremental deltas", async () => {
+    const body =
+      sseEvent("message_start", {
+        type: "message_start",
+        message: {
+          id: "msg_2",
+          type: "message",
+          role: "assistant",
+          model: "claude-3-5-sonnet-20241022",
+          content: [],
+          stop_reason: null,
+          stop_sequence: null,
+          usage: { input_tokens: 1, output_tokens: 1 },
+        },
+      }) +
+      sseEvent("content_block_start", {
+        type: "content_block_start",
+        index: 0,
+        content_block: {
+          type: "tool_use",
+          id: "toolu_2",
+          name: "do_thing",
+          input: {},
+        },
+      }) +
+      sseEvent("content_block_delta", {
+        type: "content_block_delta",
+        index: 0,
+        delta: { type: "input_json_delta", partial_json: '{"city":' },
+      }) +
+      sseEvent("content_block_delta", {
+        type: "content_block_delta",
+        index: 0,
+        delta: { type: "input_json_delta", partial_json: '"SF"}' },
+      }) +
+      sseEvent("content_block_stop", { type: "content_block_stop", index: 0 }) +
+      sseEvent("message_stop", { type: "message_stop" });
+
+    const client = clientWithSseBody(body);
+    const stream = await anthropicAdapterFactory.executeStream(
+      client,
+      createMockRequest([{ role: "user", content: "hi" }]),
+    );
+
+    const adapter = anthropicAdapterFactory.createStreamAdapter();
+    for await (const event of stream) {
+      adapter.processChunk(event);
+    }
+
+    const response = adapter.toProviderResponse();
+    const toolUse = response.content.find((block) => block.type === "tool_use");
+    expect((toolUse as { input: unknown }).input).toEqual({ city: "SF" });
   });
 });

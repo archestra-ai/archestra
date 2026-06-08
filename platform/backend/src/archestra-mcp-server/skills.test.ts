@@ -1,10 +1,12 @@
 // biome-ignore-all lint/suspicious/noExplicitAny: test
 import {
   ADMIN_ROLE_NAME,
+  getArchestraToolFullName,
   MEMBER_ROLE_NAME,
   TOOL_ACTIVATE_SKILL_FULL_NAME,
   TOOL_CREATE_SKILL_FULL_NAME,
   TOOL_LIST_SKILLS_FULL_NAME,
+  TOOL_LIST_SKILLS_SHORT_NAME,
   TOOL_READ_SKILL_FILE_FULL_NAME,
   TOOL_UPDATE_SKILL_FULL_NAME,
 } from "@archestra/shared";
@@ -13,6 +15,7 @@ import { beforeEach, describe, expect, test } from "@/test";
 import type { Agent, InsertSkill, InsertSkillFile } from "@/types";
 import {
   type ArchestraContext,
+  archestraMcpBranding,
   executeArchestraTool,
   getArchestraMcpTools,
 } from ".";
@@ -147,6 +150,38 @@ describe("skill tool execution", () => {
       (result._meta as { archestraError?: { code?: string } } | undefined)
         ?.archestraError?.code,
     ).toBe("unknown_skill");
+  });
+
+  test("unknown-skill recovery steers to the branded tool name under white-labeling", async () => {
+    const config = (await import("@/config")).default;
+    const original = config.enterpriseFeatures.fullWhiteLabeling;
+    (
+      config.enterpriseFeatures as { fullWhiteLabeling: boolean }
+    ).fullWhiteLabeling = true;
+    archestraMcpBranding.syncFromOrganization({
+      appName: "Acme Copilot",
+      iconLogo: null,
+    });
+
+    try {
+      const result = await executeArchestraTool(
+        TOOL_ACTIVATE_SKILL_FULL_NAME,
+        { name: "does-not-exist" },
+        context,
+      );
+
+      const brandedListSkills = getArchestraToolFullName(
+        TOOL_LIST_SKILLS_SHORT_NAME,
+        { appName: "Acme Copilot", fullWhiteLabeling: true },
+      );
+      expect(brandedListSkills).not.toBe(TOOL_LIST_SKILLS_FULL_NAME);
+      expect(textOf(result)).toContain(brandedListSkills);
+    } finally {
+      archestraMcpBranding.syncFromOrganization(null);
+      (
+        config.enterpriseFeatures as { fullWhiteLabeling: boolean }
+      ).fullWhiteLabeling = original;
+    }
   });
 
   test("read_skill_file returns a bundled resource file", async () => {

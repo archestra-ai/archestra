@@ -508,7 +508,11 @@ function unwrapSchema(schema: ZodType): ZodType {
   return current;
 }
 
-/** Walk a schema down an issue path (object keys, array indices) or bail. */
+// Walk a schema down an issue path (object keys, array indices) or bail. Only
+// object/array containers are traversed; a path that descends through a union's
+// variants (a discriminated union nested inside another union's option) returns
+// null and the caller falls back to the plain message. No such schema exists in
+// the tool surface today, and the fallback is graceful (never throws).
 function navigateSchema(root: ZodType, path: PropertyKey[]): ZodType | null {
   let current = unwrapSchema(root);
   for (const segment of path) {
@@ -544,21 +548,38 @@ function enumerateDiscriminatorValues(
   if (path[path.length - 1] !== discriminator) return null;
   const union = navigateSchema(root, path.slice(0, -1));
   const def = union ? defOf(union) : undefined;
-  if (!def || def.discriminator !== discriminator || !def.options) return null;
+  if (
+    !def ||
+    def.discriminator !== discriminator ||
+    !Array.isArray(def.options)
+  )
+    return null;
 
   const values: string[] = [];
   for (const option of def.options) {
     const field = defOf(unwrapSchema(option))?.shape?.[discriminator];
     const literals = field ? defOf(unwrapSchema(field))?.values : undefined;
-    if (!literals) continue;
+    // each option must declare its discriminator as a renderable literal; a
+    // z.enum (which uses `entries`, not `values`) or anything exotic makes the
+    // menu incomplete, so bail to the plain message rather than mislead.
+    if (!Array.isArray(literals) || literals.length === 0) return null;
     for (const value of literals) {
-      if (typeof value === "string") values.push(value);
+      if (!isRenderableLiteral(value)) return null;
+      values.push(typeof value === "string" ? `"${value}"` : String(value));
     }
   }
   if (values.length === 0) return null;
-  return `set "${discriminator}" to one of: ${values
-    .map((value) => `"${value}"`)
-    .join(", ")}`;
+  return `set "${discriminator}" to one of: ${values.join(", ")}`;
+}
+
+function isRenderableLiteral(
+  value: unknown,
+): value is string | number | boolean {
+  return (
+    typeof value === "string" ||
+    typeof value === "number" ||
+    typeof value === "boolean"
+  );
 }
 
 function formatIssuePath(path: PropertyKey[] | undefined): string {

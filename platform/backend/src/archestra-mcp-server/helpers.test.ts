@@ -153,4 +153,43 @@ describe("formatZodErrorWithSchema", () => {
     expect(message).toContain("name:");
     expect(message).not.toContain('set "');
   });
+
+  test("renders non-string discriminator literals", () => {
+    const schema = z.discriminatedUnion("v", [
+      z.strictObject({ v: z.literal(1), a: z.string() }),
+      z.strictObject({ v: z.literal(2), b: z.string() }),
+    ]);
+    const error = parseError(schema, {});
+    expect(formatZodErrorWithSchema(error, schema)).toBe(
+      'v: set "v" to one of: 1, 2',
+    );
+  });
+
+  test("bails to the plain message for a non-literal (enum) discriminator", () => {
+    const schema = z.discriminatedUnion("kind", [
+      z.strictObject({ kind: z.enum(["a", "b"]), x: z.string() }),
+      z.strictObject({ kind: z.literal("c"), y: z.string() }),
+    ]);
+    const error = parseError(schema, {});
+    // an incomplete menu would mislead, so we fall back rather than list a subset.
+    expect(formatZodErrorWithSchema(error, schema)).not.toContain('set "kind"');
+  });
+
+  test("falls back gracefully for a union nested inside a union option", () => {
+    const schema = z.discriminatedUnion("outer", [
+      z.strictObject({
+        outer: z.literal("nested"),
+        inner: z.discriminatedUnion("type", [
+          z.strictObject({ type: z.literal("a"), a: z.string() }),
+          z.strictObject({ type: z.literal("b"), b: z.string() }),
+        ]),
+      }),
+      z.strictObject({ outer: z.literal("flat"), n: z.number() }),
+    ]);
+    // the inner discriminator failure sits at ["inner","type"]; navigateSchema
+    // cannot descend through the outer union's variant, so it must not throw and
+    // must leave a usable (plain) message.
+    const error = parseError(schema, { outer: "nested", inner: {} });
+    expect(() => formatZodErrorWithSchema(error, schema)).not.toThrow();
+  });
 });

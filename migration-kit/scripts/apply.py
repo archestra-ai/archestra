@@ -362,8 +362,18 @@ def _redacted_for_print(built: Built) -> dict[str, JsonValue]:
             return {"catalog_name": built.catalog_name, "scope": built.scope,
                     "teamId": built.team_id, "agentIds": built.agent_ids,
                     "environmentValues": {k: "<redacted>" for k in built.environment_values}}
-        case BuiltAgent(payload) | BuiltSkill(payload) | BuiltCatalog(payload):
+        case BuiltAgent(payload) | BuiltSkill(payload):
             return to_payload(payload)
+        case BuiltCatalog(payload):
+            shown = to_payload(payload)
+            local = shown.get("localConfig")
+            if isinstance(local, dict):
+                env = local.get("environment")
+                if isinstance(env, list):
+                    for item in env:
+                        if isinstance(item, dict) and "value" in item:
+                            item["value"] = "<redacted>"
+            return shown
         case BuiltPolicy():
             return {"tool_name": built.tool_name,
                     "conditions": [to_jsonable(c) for c in built.conditions],
@@ -381,17 +391,11 @@ def _preview_detail(built: Built) -> str:
         case BuiltCatalog(payload):
             match payload.serverType:
                 case "remote":
-                    url = payload.serverUrl or "<missing url>"
-                    return f"scope={payload.scope}; remote MCP catalog item; url={url}"
+                    return f"scope={payload.scope}; remote MCP catalog item"
                 case "local":
                     local = payload.localConfig
                     command = local.command if local else "<missing command>"
-                    env = local.environment if local else []
-                    secret_count = sum(1 for item in env if item.type == "secret")
-                    return (
-                        f"scope={payload.scope}; local MCP catalog item; command={command}; "
-                        f"prompted_secrets={secret_count}"
-                    )
+                    return f"scope={payload.scope}; local MCP catalog item; command={command}"
         case BuiltInstall():
             team = f"; team_id={built.team_id}" if built.team_id else ""
             return (

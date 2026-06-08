@@ -20,7 +20,7 @@ from apply import (
     _redacted_for_print,
     main,
 )
-from archestra_client import LlmKeyCreate
+from archestra_client import CatalogCreate, LlmKeyCreate, LocalConfig, McpEnvVar
 from contracts import ContractError, Decision, Item, SkillItem, to_jsonable
 from discover import discover
 
@@ -194,7 +194,20 @@ def test_dry_run_redaction_hides_user_secrets() -> None:
     env = install["environmentValues"]
     assert isinstance(env, dict)
     assert env["GITHUB_TOKEN"] == "<redacted>"
-
+    catalog = _redacted_for_print(BuiltCatalog(CatalogCreate(
+        name="github",
+        serverType="local",
+        scope="personal",
+        localConfig=LocalConfig(command="npx", environment=[
+            McpEnvVar(key="GITHUB_TOKEN", type="secret", value="ghp_real"),
+        ]),
+    )))
+    local = catalog["localConfig"]
+    assert isinstance(local, dict)
+    catalog_env = local["environment"]
+    assert isinstance(catalog_env, list)
+    assert isinstance(catalog_env[0], dict)
+    assert catalog_env[0]["value"] == "<redacted>"
 
 def test_tool_policy_requires_extracted_semantics(index: dict[str, Item]) -> None:
     with pytest.raises(ContractError, match="user_answers"):

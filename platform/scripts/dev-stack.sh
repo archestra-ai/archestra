@@ -113,14 +113,26 @@ EOF
     namespace="archestra-dev-${sanitized}"
   fi
 
+  # Reuse this worktree's previously-assigned ports when they're still usable,
+  # so restarts keep the same URLs (stable bookmarks / SSH tunnels). Only reuse
+  # once this .env has already been through a parallel `up`, detected by the
+  # ARCHESTRA_TILT_PORT marker — a var only this script writes, so it's absent
+  # in the .env just auto-copied from the main worktree. Without that gate a
+  # first run would reuse the inherited main-stack defaults (e.g. backend :9000)
+  # and collide with the main stack. The backend port has no dedicated var — it
+  # lives inside ARCHESTRA_INTERNAL_API_BASE_URL — so recover it from the URL's
+  # trailing :port.
+  local prior_parallel=false
+  [ -n "$(read_env_var ARCHESTRA_TILT_PORT "$env_file")" ] && prior_parallel=true
+
   local frontend_port backend_port metrics_port pg_port pg_metrics_port int_tests_port tilt_port
-  frontend_port=$(pick_port)
-  backend_port=$(pick_port)
-  metrics_port=$(pick_port)
-  pg_port=$(pick_port)
-  pg_metrics_port=$(pick_port)
-  int_tests_port=$(pick_port)
-  tilt_port=$(pick_port)
+  frontend_port=$(resolve_port "$(persisted_port ARCHESTRA_FRONTEND_PORT "$env_file" "$prior_parallel")")
+  backend_port=$(resolve_port "$(persisted_port ARCHESTRA_INTERNAL_API_BASE_URL "$env_file" "$prior_parallel" | sed -E 's#.*:([0-9]+).*#\1#')")
+  metrics_port=$(resolve_port "$(persisted_port ARCHESTRA_METRICS_PORT "$env_file" "$prior_parallel")")
+  pg_port=$(resolve_port "$(persisted_port ARCHESTRA_POSTGRES_HOST_PORT "$env_file" "$prior_parallel")")
+  pg_metrics_port=$(resolve_port "$(persisted_port ARCHESTRA_POSTGRES_METRICS_HOST_PORT "$env_file" "$prior_parallel")")
+  int_tests_port=$(resolve_port "$(persisted_port ARCHESTRA_FRONTEND_INT_TESTS_PORT "$env_file" "$prior_parallel")")
+  tilt_port=$(resolve_port "$(persisted_port ARCHESTRA_TILT_PORT "$env_file" "$prior_parallel")")
 
   echo "→ Rewriting $env_file with parallel-instance overrides" >&2
   # ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE is overridden too so MCP server pods
@@ -145,6 +157,7 @@ EOF
   ARCHESTRA_POSTGRES_METRICS_HOST_PORT="$pg_metrics_port" \
   ARCHESTRA_FRONTEND_PORT="$frontend_port" \
   ARCHESTRA_FRONTEND_INT_TESTS_PORT="$int_tests_port" \
+  ARCHESTRA_TILT_PORT="$tilt_port" \
   python3 - "$env_file" <<'PYEOF'
 import os, re, sys
 keys = [
@@ -159,6 +172,7 @@ keys = [
   "ARCHESTRA_POSTGRES_METRICS_HOST_PORT",
   "ARCHESTRA_FRONTEND_PORT",
   "ARCHESTRA_FRONTEND_INT_TESTS_PORT",
+  "ARCHESTRA_TILT_PORT",
 ]
 overrides = {k: os.environ[k] for k in keys}
 path = sys.argv[1]
@@ -237,6 +251,7 @@ cmd_down() {
   done
 
   require_platform_cwd
+  local platform_dir; platform_dir="$(pwd)"
   local worktree_dir; worktree_dir="$(cd .. && pwd)"
   local pid_file="$worktree_dir/.dev-stack.pid"
 
@@ -257,6 +272,34 @@ cmd_down() {
 
   echo "→ Running tilt down" >&2
   tilt down || echo "⚠ tilt down reported errors" >&2
+
+  # The local dev-server processes (next-server, backend) can briefly outlive
+  # `tilt down` and keep their host ports bound. Wait (bounded) for this stack's
+  # persisted ports to be released so an immediate `up` reuses them instead of
+  # seeing them taken and re-randomizing. Times out gracefully — a port still
+  # held by something else just gets reallocated on the next `up`.
+  local env_file="$platform_dir/.env"
+  local stack_ports
+  stack_ports=$( {
+    read_env_var ARCHESTRA_FRONTEND_PORT "$env_file"
+    read_env_var ARCHESTRA_INTERNAL_API_BASE_URL "$env_file" | sed -E 's#.*:([0-9]+).*#\1#'
+    read_env_var ARCHESTRA_METRICS_PORT "$env_file"
+    read_env_var ARCHESTRA_POSTGRES_HOST_PORT "$env_file"
+    read_env_var ARCHESTRA_POSTGRES_METRICS_HOST_PORT "$env_file"
+    read_env_var ARCHESTRA_FRONTEND_INT_TESTS_PORT "$env_file"
+  } | grep -E '^[0-9]+$' || true)
+  if [ -n "$stack_ports" ]; then
+    local j p all_free
+    for j in $(seq 1 15); do
+      all_free=true
+      for p in $stack_ports; do
+        port_is_free "$p" || { all_free=false; break; }
+      done
+      [ "$all_free" = true ] && break
+      sleep 1
+    done
+  fi
+
   echo "✅ Parallel dev stack stopped." >&2
 }
 
@@ -318,6 +361,55 @@ cmd_hydrate() {
 
 pick_port() {
   python3 -c 'import socket; s=socket.socket(); s.bind(("",0)); print(s.getsockname()[1]); s.close()'
+}
+
+# Read a single VAR=value from an env file (last assignment wins, value verbatim).
+# Prints nothing if the file or key is absent.
+read_env_var() {
+  local key="$1" file="$2"
+  [ -f "$file" ] || return 0
+  grep -E "^[[:space:]]*${key}[[:space:]]*=" "$file" | tail -n1 | sed -E "s/^[[:space:]]*${key}[[:space:]]*=//"
+}
+
+# Persisted port candidate for reuse: value of key $1 in env file $2, but only
+# when $3 == "true" (this .env was already parallelized). Empty otherwise, so
+# the caller allocates a fresh port instead of reusing an inherited main default.
+persisted_port() {
+  [ "$3" = true ] && read_env_var "$1" "$2"
+}
+
+port_is_free() {
+  python3 - "$1" <<'PYEOF'
+import socket, sys
+s = socket.socket()
+# SO_REUSEADDR mirrors how the dev servers themselves bind, so a port lingering
+# in TIME_WAIT from this stack's own just-stopped process reads as free (the
+# server can rebind it) rather than as taken. An actively-LISTENING port still
+# fails to bind, so genuine conflicts are still detected.
+s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+try:
+    s.bind(("", int(sys.argv[1])))
+    ok = True
+except OSError:
+    ok = False
+finally:
+    s.close()
+sys.exit(0 if ok else 1)
+PYEOF
+}
+
+# Keep parallel-stack ports stable across restarts: reuse the port already
+# persisted in .env when it's a usable parallel port — numeric, not the default
+# 3000 (which belongs to a plain `tilt up`), and currently free. Otherwise fall
+# back to a fresh OS-assigned free port (which the .env rewrite then persists).
+# $1 = candidate value previously read from .env (may be empty/non-numeric).
+resolve_port() {
+  local candidate="$1"
+  if [[ "$candidate" =~ ^[0-9]+$ ]] && [ "$candidate" != "3000" ] && port_is_free "$candidate"; then
+    echo "$candidate"
+  else
+    pick_port
+  fi
 }
 
 if [ $# -lt 1 ]; then usage 1; fi

@@ -47,13 +47,9 @@ export const OpenAiModelsListResponseSchema = z.object({
 });
 
 /**
- * Resolve the real upstream provider key for a virtual-key-aware `GET /models`
- * request on a provider-specific proxy route.
- *
- * `arch_*` tokens are validated and swapped for the mapped provider key (rate
- * limited per IP); any other token is treated as a raw provider key so the
- * route keeps the blind-passthrough behavior it had before the dedicated
- * handler existed.
+ * Resolve the upstream provider key for a `GET /models` request: an `arch_*`
+ * virtual key is validated (rate limited per IP) and swapped for its mapped
+ * provider key; any other token is used as a raw provider key.
  */
 export interface ResolvedProxyModelsKey {
   apiKey: string;

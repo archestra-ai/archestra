@@ -1,8 +1,11 @@
 import {
   MCP_APPS_EXTENSION_ID,
   MCP_ENTERPRISE_AUTH_EXTENSION_ID,
+  TOOL_ACTIVATE_SKILL_FULL_NAME,
   TOOL_ARTIFACT_WRITE_FULL_NAME,
   TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON,
+  TOOL_LIST_SKILLS_FULL_NAME,
+  TOOL_READ_SKILL_FILE_FULL_NAME,
   TOOL_RUN_TOOL_FULL_NAME,
   TOOL_SEARCH_TOOLS_FULL_NAME,
 } from "@archestra/shared";
@@ -876,7 +879,7 @@ describe("MCP Gateway (stateless mode)", () => {
     expect(text).toContain("Blocked for this team");
   });
 
-  test("hides directly assigned tools from tools/list when toolExposureMode is search_and_run_only", async ({
+  test("keeps only meta and always-exposed tools in tools/list when toolExposureMode is search_and_run_only", async ({
     makeAgent,
     makeOrganization,
     seedAndAssignArchestraTools,
@@ -930,7 +933,13 @@ describe("MCP Gateway (stateless mode)", () => {
       .json()
       .result.tools.map((tool: { name: string }) => tool.name);
     expect(toolNames.sort()).toEqual(
-      [TOOL_RUN_TOOL_FULL_NAME, TOOL_SEARCH_TOOLS_FULL_NAME].sort(),
+      [
+        TOOL_ACTIVATE_SKILL_FULL_NAME,
+        TOOL_LIST_SKILLS_FULL_NAME,
+        TOOL_READ_SKILL_FILE_FULL_NAME,
+        TOOL_RUN_TOOL_FULL_NAME,
+        TOOL_SEARCH_TOOLS_FULL_NAME,
+      ].sort(),
     );
     expect(toolNames).not.toContain(TOOL_ARTIFACT_WRITE_FULL_NAME);
   });

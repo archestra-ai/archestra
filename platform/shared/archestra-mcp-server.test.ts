@@ -83,12 +83,14 @@ describe("archestra MCP tool names", () => {
     expect(isAgentTool("archestra__whoami")).toBe(false);
   });
 
-  test("flags the skill discover/activate/read/run path as always-exposed", () => {
+  test("flags the skill and sandbox runtime path as always-exposed", () => {
     for (const shortName of [
       "list_skills",
       "activate_skill",
       "read_skill_file",
       "run_command",
+      "download_file",
+      "upload_file",
     ]) {
       expect(isAlwaysExposedArchestraToolShortName(shortName)).toBe(true);
     }
@@ -108,12 +110,10 @@ describe("archestra MCP tool names", () => {
     ).toBe(true);
   });
 
-  test("does not flag skill-authoring, file-transfer, or unrelated tools", () => {
+  test("does not flag skill-authoring or unrelated tools", () => {
     for (const shortName of [
       "create_skill",
       "update_skill",
-      "download_file",
-      "upload_file",
       "whoami",
       "search_tools",
       "run_tool",

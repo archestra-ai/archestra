@@ -373,17 +373,19 @@ export const SKILL_ARCHESTRA_TOOL_SHORT_NAMES = [
 ] as const satisfies readonly ArchestraToolShortName[];
 
 /**
- * Tools that stay top-level in `tools/list` regardless of an agent's
- * `toolExposureMode`. Skills are a progressive-disclosure mechanism, so hiding
- * their discover/activate/read/run path behind `search_tools`/`run_tool` would
- * defeat the point — the model would have to search just to learn skills exist.
- * Mirrors the harness keeping skill invocation out of its deferred-tool search.
+ * tools that stay top-level in `tools/list` regardless of an agent's
+ * exposure mode. skills and sandbox runtime interaction are
+ * progressive-disclosure mechanisms, so hiding their discover/activate/read/run
+ * and file-transfer path behind `search_tools`/`run_tool` would make the common
+ * runtime flow depend on deferred tool loading.
  */
 export const ALWAYS_EXPOSED_ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_LIST_SKILLS_SHORT_NAME,
   TOOL_ACTIVATE_SKILL_SHORT_NAME,
   TOOL_READ_SKILL_FILE_SHORT_NAME,
   TOOL_RUN_COMMAND_SHORT_NAME,
+  TOOL_DOWNLOAD_FILE_SHORT_NAME,
+  TOOL_UPLOAD_FILE_SHORT_NAME,
 ] as const satisfies readonly ArchestraToolShortName[];
 
 const ALWAYS_EXPOSED_ARCHESTRA_TOOL_SHORT_NAME_SET: ReadonlySet<string> =

@@ -68,7 +68,7 @@ Required RBAC permission: `agent:create`
 | `labels[].key` | `string` | Yes |  |
 | `labels[].value` | `string` | Yes |  |
 | `teams` | `string[]` | No | Team IDs to attach when creating a team-scoped resource. |
-| `toolExposureMode` | `"full" \| "search_and_run_only"` | No | How tools should be loaded for MCP clients and models. Use 'search_and_run_only' to keep the initial tool list small while letting search_tools find assigned tools and run_tool execute them. The skill discovery/activation tools (list_skills, activate_skill, read_skill_file) and run_command stay directly available in both modes. |
+| `toolExposureMode` | `"full" \| "search_and_run_only"` | No | How tools should be loaded for MCP clients and models. Use 'search_and_run_only' to keep the initial tool list small while letting search_tools find assigned tools and run_tool execute them. Assigned skill discovery/activation tools (list_skills, activate_skill, read_skill_file) and sandbox runtime tools (run_command, download_file, upload_file) stay directly available in both modes. |
 | `description` | `string \| null` | No | Optional human-readable description of the agent. |
 | `icon` | `string \| null` | No | Optional emoji icon for the agent. |
 | `knowledgeBaseIds` | `string[]` | No | Knowledge base IDs to assign to the agent. Use get_knowledge_bases first when you need to look up IDs by name. |
@@ -214,7 +214,7 @@ Required RBAC permission: `llmProxy:create`
 | `labels[].key` | `string` | Yes |  |
 | `labels[].value` | `string` | Yes |  |
 | `teams` | `string[]` | No | Team IDs to attach when creating a team-scoped resource. |
-| `toolExposureMode` | `"full" \| "search_and_run_only"` | No | How tools should be loaded for MCP clients and models. Use 'search_and_run_only' to keep the initial tool list small while letting search_tools find assigned tools and run_tool execute them. The skill discovery/activation tools (list_skills, activate_skill, read_skill_file) and run_command stay directly available in both modes. |
+| `toolExposureMode` | `"full" \| "search_and_run_only"` | No | How tools should be loaded for MCP clients and models. Use 'search_and_run_only' to keep the initial tool list small while letting search_tools find assigned tools and run_tool execute them. Assigned skill discovery/activation tools (list_skills, activate_skill, read_skill_file) and sandbox runtime tools (run_command, download_file, upload_file) stay directly available in both modes. |
 
 
 #### get_llm_proxy

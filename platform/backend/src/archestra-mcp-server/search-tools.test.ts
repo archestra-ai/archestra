@@ -2,11 +2,14 @@
 import {
   TOOL_ACTIVATE_SKILL_FULL_NAME,
   TOOL_CREATE_SKILL_FULL_NAME,
+  TOOL_DOWNLOAD_FILE_FULL_NAME,
   TOOL_LIST_SKILLS_FULL_NAME,
   TOOL_READ_SKILL_FILE_FULL_NAME,
+  TOOL_RUN_COMMAND_FULL_NAME,
   TOOL_RUN_TOOL_FULL_NAME,
   TOOL_SEARCH_TOOLS_FULL_NAME,
   TOOL_UPDATE_SKILL_FULL_NAME,
+  TOOL_UPLOAD_FILE_FULL_NAME,
 } from "@archestra/shared";
 import { describe, expect, test } from "@/test";
 import type { ArchestraContext } from ".";
@@ -164,49 +167,83 @@ describe("search_tools", () => {
     });
   });
 
-  test("excludes the always-exposed skill path but keeps authoring tools searchable", async ({
+  test("excludes always-exposed tools but keeps authoring tools searchable", async ({
     makeAgent,
     makeMember,
     makeOrganization,
     makeUser,
     seedAndAssignArchestraTools,
   }) => {
-    const org = await makeOrganization();
-    const user = await makeUser();
-    await makeMember(user.id, org.id, { role: "admin" });
-    const agent = await makeAgent({
-      name: "Skill Search Agent",
-      organizationId: org.id,
-    });
-    await seedAndAssignArchestraTools(agent.id);
+    const config = (await import("@/config")).default;
+    const originalSandboxEnabled = config.skillsSandbox.enabled;
+    (config.skillsSandbox as { enabled: boolean }).enabled = true;
 
-    const context: ArchestraContext = {
-      agent: { id: agent.id, name: agent.name },
-      agentId: agent.id,
-      organizationId: org.id,
-      userId: user.id,
-    };
+    try {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      await makeMember(user.id, org.id, { role: "admin" });
+      const agent = await makeAgent({
+        name: "Skill Search Agent",
+        organizationId: org.id,
+      });
+      await seedAndAssignArchestraTools(agent.id);
 
-    const result = await executeArchestraTool(
-      TOOL_SEARCH_TOOLS_FULL_NAME,
-      { query: "skill", limit: 20 },
-      context,
-    );
+      const context: ArchestraContext = {
+        agent: { id: agent.id, name: agent.name },
+        agentId: agent.id,
+        organizationId: org.id,
+        userId: user.id,
+      };
 
-    expect(result.isError).toBe(false);
-    const structuredContent =
-      result.structuredContent as SearchToolsStructuredContent;
-    const returnedToolNames = structuredContent.tools.map(
-      (tool) => tool.toolName,
-    );
+      const result = await executeArchestraTool(
+        TOOL_SEARCH_TOOLS_FULL_NAME,
+        { query: "skill", limit: 20 },
+        context,
+      );
 
-    // the discover/activate/read path is always top-level, so never searchable
-    expect(returnedToolNames).not.toContain(TOOL_LIST_SKILLS_FULL_NAME);
-    expect(returnedToolNames).not.toContain(TOOL_ACTIVATE_SKILL_FULL_NAME);
-    expect(returnedToolNames).not.toContain(TOOL_READ_SKILL_FILE_FULL_NAME);
-    // authoring tools stay search-gated, so they remain discoverable
-    expect(returnedToolNames).toContain(TOOL_CREATE_SKILL_FULL_NAME);
-    expect(returnedToolNames).toContain(TOOL_UPDATE_SKILL_FULL_NAME);
+      expect(result.isError).toBe(false);
+      const structuredContent =
+        result.structuredContent as SearchToolsStructuredContent;
+      const returnedToolNames = structuredContent.tools.map(
+        (tool) => tool.toolName,
+      );
+
+      // the runtime path is always top-level, so never searchable
+      expect(returnedToolNames).not.toContain(TOOL_LIST_SKILLS_FULL_NAME);
+      expect(returnedToolNames).not.toContain(TOOL_ACTIVATE_SKILL_FULL_NAME);
+      expect(returnedToolNames).not.toContain(TOOL_READ_SKILL_FILE_FULL_NAME);
+      expect(returnedToolNames).not.toContain(TOOL_RUN_COMMAND_FULL_NAME);
+      expect(returnedToolNames).not.toContain(TOOL_DOWNLOAD_FILE_FULL_NAME);
+      expect(returnedToolNames).not.toContain(TOOL_UPLOAD_FILE_FULL_NAME);
+      // authoring tools stay search-gated, so they remain discoverable
+      expect(returnedToolNames).toContain(TOOL_CREATE_SKILL_FULL_NAME);
+      expect(returnedToolNames).toContain(TOOL_UPDATE_SKILL_FULL_NAME);
+
+      const runtimeResult = await executeArchestraTool(
+        TOOL_SEARCH_TOOLS_FULL_NAME,
+        { query: "download upload command sandbox file", limit: 20 },
+        context,
+      );
+
+      expect(runtimeResult.isError).toBe(false);
+      const runtimeStructuredContent =
+        runtimeResult.structuredContent as SearchToolsStructuredContent;
+      const runtimeReturnedToolNames = runtimeStructuredContent.tools.map(
+        (tool) => tool.toolName,
+      );
+      expect(runtimeReturnedToolNames).not.toContain(
+        TOOL_RUN_COMMAND_FULL_NAME,
+      );
+      expect(runtimeReturnedToolNames).not.toContain(
+        TOOL_DOWNLOAD_FILE_FULL_NAME,
+      );
+      expect(runtimeReturnedToolNames).not.toContain(
+        TOOL_UPLOAD_FILE_FULL_NAME,
+      );
+    } finally {
+      (config.skillsSandbox as { enabled: boolean }).enabled =
+        originalSandboxEnabled;
+    }
   });
 
   test("returns an error without agent context", async () => {

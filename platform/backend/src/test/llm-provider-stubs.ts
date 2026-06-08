@@ -89,8 +89,12 @@ export function createOpenAiTestClient(options: OpenAiStubOptions = {}) {
 export function createAnthropicTestClient(options: AnthropicStubOptions = {}) {
   return {
     messages: {
-      create: async () =>
-        ({
+      create: async (params: Anthropic.Messages.MessageCreateParams) => {
+        if (params.stream) {
+          return createAnthropicStream(options);
+        }
+
+        return {
           id: "msg-test-anthropic",
           type: "message",
           container: null,
@@ -111,7 +115,8 @@ export function createAnthropicTestClient(options: AnthropicStubOptions = {}) {
             cache_creation_input_tokens: 0,
             cache_read_input_tokens: 0,
           },
-        }) as unknown as Anthropic.Message,
+        } as unknown as Anthropic.Message;
+      },
       stream: () => createAnthropicStream(options),
     },
   };

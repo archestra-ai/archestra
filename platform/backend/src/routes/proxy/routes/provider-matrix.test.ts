@@ -672,6 +672,109 @@ function createAnthropicHarness(options: HarnessOptions = {}) {
   const model = options.model ?? "claude-3-5-sonnet-20241022";
   const text = options.text ?? "Mocked Anthropic response";
 
+  function createStreamEvents(): AsyncIterable<Anthropic.Messages.MessageStreamEvent> {
+    const events: Anthropic.Messages.MessageStreamEvent[] = [
+      {
+        type: "message_start",
+        message: {
+          id: "msg_stream",
+          type: "message",
+          container: null,
+          role: "assistant",
+          content: [],
+          model,
+          stop_reason: null,
+          stop_sequence: null,
+          usage: {
+            input_tokens: usage.inputTokens,
+            output_tokens: usage.outputTokens,
+            cache_creation_input_tokens: 0,
+            cache_read_input_tokens: 0,
+          } as Anthropic.Messages.Usage,
+        },
+      },
+    ];
+
+    if (options.streamingToolCall) {
+      events.push(
+        {
+          type: "content_block_start",
+          index: 0,
+          content_block: {
+            type: "tool_use",
+            id: "toolu_123",
+            caller: { type: "direct" },
+            name: options.streamingToolCall.name,
+            input: {},
+          },
+        },
+        {
+          type: "content_block_delta",
+          index: 0,
+          delta: {
+            type: "input_json_delta",
+            partial_json: options.streamingToolCall.arguments,
+          },
+        },
+        {
+          type: "content_block_stop",
+          index: 0,
+        },
+        {
+          type: "message_delta",
+          delta: {
+            container: null,
+            stop_reason: "tool_use",
+            stop_sequence: null,
+          },
+          usage: {
+            output_tokens: usage.outputTokens,
+          } as Anthropic.Messages.Usage,
+        },
+        {
+          type: "message_stop",
+        },
+      );
+    } else {
+      events.push(
+        {
+          type: "content_block_start",
+          index: 0,
+          content_block: {
+            type: "text",
+            text: "",
+            citations: [],
+          },
+        },
+        {
+          type: "content_block_delta",
+          index: 0,
+          delta: { type: "text_delta", text },
+        },
+        {
+          type: "content_block_stop",
+          index: 0,
+        },
+        {
+          type: "message_delta",
+          delta: {
+            container: null,
+            stop_reason: "end_turn",
+            stop_sequence: null,
+          },
+          usage: {
+            output_tokens: usage.outputTokens,
+          } as Anthropic.Messages.Usage,
+        },
+        {
+          type: "message_stop",
+        },
+      );
+    }
+
+    return createAsyncIterable(events);
+  }
+
   return {
     requests,
     client: {
@@ -679,6 +782,10 @@ function createAnthropicHarness(options: HarnessOptions = {}) {
         create: async (request: Record<string, unknown>) => {
           requests.push(request);
           options.onRequest?.(request);
+          if (request.stream === true) {
+            return createStreamEvents();
+          }
+
           return {
             id: "msg_nonstream",
             type: "message",
@@ -707,107 +814,7 @@ function createAnthropicHarness(options: HarnessOptions = {}) {
         stream: (request: Record<string, unknown>) => {
           requests.push(request);
           options.onRequest?.(request);
-
-          const events: Anthropic.Messages.MessageStreamEvent[] = [
-            {
-              type: "message_start",
-              message: {
-                id: "msg_stream",
-                type: "message",
-                container: null,
-                role: "assistant",
-                content: [],
-                model,
-                stop_reason: null,
-                stop_sequence: null,
-                usage: {
-                  input_tokens: usage.inputTokens,
-                  output_tokens: usage.outputTokens,
-                  cache_creation_input_tokens: 0,
-                  cache_read_input_tokens: 0,
-                } as Anthropic.Messages.Usage,
-              },
-            },
-          ];
-
-          if (options.streamingToolCall) {
-            events.push(
-              {
-                type: "content_block_start",
-                index: 0,
-                content_block: {
-                  type: "tool_use",
-                  id: "toolu_123",
-                  caller: { type: "direct" },
-                  name: options.streamingToolCall.name,
-                  input: {},
-                },
-              },
-              {
-                type: "content_block_delta",
-                index: 0,
-                delta: {
-                  type: "input_json_delta",
-                  partial_json: options.streamingToolCall.arguments,
-                },
-              },
-              {
-                type: "content_block_stop",
-                index: 0,
-              },
-              {
-                type: "message_delta",
-                delta: {
-                  container: null,
-                  stop_reason: "tool_use",
-                  stop_sequence: null,
-                },
-                usage: {
-                  output_tokens: usage.outputTokens,
-                } as Anthropic.Messages.Usage,
-              },
-              {
-                type: "message_stop",
-              },
-            );
-          } else {
-            events.push(
-              {
-                type: "content_block_start",
-                index: 0,
-                content_block: {
-                  type: "text",
-                  text: "",
-                  citations: [],
-                },
-              },
-              {
-                type: "content_block_delta",
-                index: 0,
-                delta: { type: "text_delta", text },
-              },
-              {
-                type: "content_block_stop",
-                index: 0,
-              },
-              {
-                type: "message_delta",
-                delta: {
-                  container: null,
-                  stop_reason: "end_turn",
-                  stop_sequence: null,
-                },
-                usage: {
-                  output_tokens: usage.outputTokens,
-                } as Anthropic.Messages.Usage,
-              },
-              {
-                type: "message_stop",
-              },
-            );
-          }
-
-          return createAsyncIterable(events);
+          return createStreamEvents();
         },
       },
     },

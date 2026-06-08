@@ -46,17 +46,17 @@ export const OpenAiModelsListResponseSchema = z.object({
   ),
 });
 
-/**
- * Resolve the upstream provider key for a `GET /models` request: an `arch_*`
- * virtual key is validated (rate limited per IP) and swapped for its mapped
- * provider key; any other token is used as a raw provider key.
- */
 export interface ResolvedProxyModelsKey {
   apiKey: string;
   baseUrl: string | undefined;
   extraHeaders: Record<string, string> | null;
 }
 
+/**
+ * Resolve the upstream provider key for a `GET /models` request: an `arch_*`
+ * virtual key is validated (rate limited per IP) and swapped for its mapped
+ * provider key; any other token is used as a raw provider key.
+ */
 export async function resolveProxyModelsApiKey(params: {
   request: Pick<FastifyRequest, "ip">;
   provider: SupportedProvider;
@@ -71,8 +71,8 @@ export async function resolveProxyModelsApiKey(params: {
     );
   }
 
-  // A raw provider key forwards as-is, with no per-key extra headers — the same
-  // contract handleLLMProxy applies to raw-bearer calls (no chat_api_key row).
+  // Raw keys carry no per-key extra headers, matching the inference path's
+  // raw-bearer branch (no parent provider-key row to read them from).
   if (!hasArchestraTokenPrefix(token)) {
     return { apiKey: token, baseUrl: undefined, extraHeaders: null };
   }
@@ -83,8 +83,8 @@ export async function resolveProxyModelsApiKey(params: {
     if (!resolved.apiKey) {
       throw new ApiError(401, `Could not resolve an API key for ${provider}.`);
     }
-    // Per-key extra headers (e.g. gateway RBAC headers) are stored on the
-    // parent provider key, mirroring how handleLLMProxy applies them.
+    // Per-key extra headers (e.g. gateway RBAC headers) live on the parent
+    // provider key, applied here the same way the inference path applies them.
     const providerKey = resolved.chatApiKeyId
       ? await LlmProviderApiKeyModel.findById(resolved.chatApiKeyId)
       : null;

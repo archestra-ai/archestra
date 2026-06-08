@@ -124,10 +124,10 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   /**
-   * Virtual-key-aware model listing. This dedicated handler shadows the blind
-   * http-proxy passthrough — which forwards an `arch_*` virtual key verbatim to
-   * api.anthropic.com and 401s — resolving the virtual key to its real upstream
-   * key and returning Anthropic's native models shape.
+   * Lists Anthropic models for a virtual or raw key. A dedicated route is
+   * needed so it takes precedence over this prefix's catch-all http-proxy,
+   * which would otherwise forward an `arch_*` key to api.anthropic.com
+   * unresolved and 401. Returns Anthropic's native models shape.
    */
   async function handleListModels(
     request: FastifyRequest,

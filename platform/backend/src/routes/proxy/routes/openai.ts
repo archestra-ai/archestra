@@ -215,10 +215,10 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   /**
-   * Virtual-key-aware model listing. This dedicated handler shadows the blind
-   * http-proxy passthrough — which forwards an `arch_*` virtual key verbatim to
-   * api.openai.com and 401s — resolving the virtual key to its real upstream
-   * key and returning OpenAI's native models shape.
+   * Lists OpenAI models for a virtual or raw key. A dedicated route is needed
+   * so it takes precedence over this prefix's catch-all http-proxy, which
+   * would otherwise forward an `arch_*` key to api.openai.com unresolved and
+   * 401. Returns OpenAI's native models shape.
    */
   async function handleListModels(
     request: FastifyRequest,

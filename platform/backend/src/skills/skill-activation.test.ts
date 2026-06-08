@@ -88,6 +88,8 @@ describe("formatSkillActivation", () => {
     expect(result).toContain("run_command");
     expect(result).toContain("download_file");
     expect(result).toContain("upload_file");
+    // nudge to use the skill's own modules instead of re-implementing them.
+    expect(result).toContain("before re-implementing");
     expect(result).not.toMatch(/not executed/i);
   });
 

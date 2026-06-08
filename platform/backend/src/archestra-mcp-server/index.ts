@@ -21,6 +21,7 @@ import {
   type ArchestraRuntimeToolEntry,
   errorResult,
   formatZodError,
+  formatZodErrorWithSchema,
   structuredToolErrorResult,
 } from "./helpers";
 import {
@@ -301,7 +302,10 @@ function validateToolArgs(
 
   return {
     error: errorResult(
-      `Validation error in ${toolName}: ${formatZodError(parsed.error)}`,
+      `Validation error in ${toolName}: ${formatZodErrorWithSchema(
+        parsed.error,
+        schema,
+      )}`,
     ),
   };
 }

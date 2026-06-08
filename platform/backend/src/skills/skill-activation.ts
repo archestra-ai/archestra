@@ -65,7 +65,9 @@ export function formatSkillActivation({
       ? `\n<skill_resources>\n${files
           .map((file) => `${escapeXmlText(file.path)} (${file.kind})`)
           .join("\n")}\n</skill_resources>\n` +
-        "Inspect any resource with read_skill_file." +
+        "Inspect any resource with read_skill_file before re-implementing — " +
+        "prefer importing and running the skill's own modules over rewriting " +
+        "them." +
         sandboxHint
       : "";
 

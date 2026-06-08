@@ -429,6 +429,25 @@ describe("sandbox tools (runtime enabled)", () => {
       expect(structuredOf<{ uploadId: string }>(result).uploadId).toBe("up-1");
     });
 
+    test("enumerates the source variants when the discriminator is missing", async () => {
+      const ctx = await makeConversationCtx();
+      const uploadSpy = vi.spyOn(skillSandboxRuntimeService, "uploadFile");
+      // the failure from the transcript: a model guessing the source shape gets
+      // an opaque "source.type: Invalid input" and never recovers.
+      const result = await executeArchestraTool(
+        TOOL_UPLOAD_FILE_FULL_NAME,
+        { path: "out.py", source: { text: "print('hi')" } },
+        ctx,
+      );
+      expect(result.isError).toBe(true);
+      const text = textOf(result);
+      expect(text).toContain("Validation error in");
+      expect(text).toContain(
+        'source.type: set "type" to one of: "chat_attachment", "base64", "text"',
+      );
+      expect(uploadSpy).not.toHaveBeenCalled();
+    });
+
     test("rejects a chat attachment from another conversation", async () => {
       const ctx = await makeConversationCtx();
       const elsewhere = await ConversationModel.create({

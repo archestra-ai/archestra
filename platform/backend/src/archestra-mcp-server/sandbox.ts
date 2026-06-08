@@ -211,8 +211,12 @@ const UploadFileSchema = z
           "/home/sandbox, or relative to the sandbox's working directory.",
       ),
     source: UploadSourceSchema.describe(
-      "Where the file bytes come from: a chat attachment, inline base64, or " +
-        "inline text.",
+      'Where the file bytes come from — a tagged union; set "type": ' +
+        '{ "type": "text", "text": "..." } for inline UTF-8 text, ' +
+        '{ "type": "base64", "dataBase64": "..." } for raw inline bytes, or ' +
+        '{ "type": "chat_attachment", "attachmentId": "..." } to copy a file ' +
+        "the user attached. Use this to place input bytes; to create a file " +
+        "the sandbox will then run or read, write it with run_command instead.",
     ),
     target: SandboxTargetSchema,
   })

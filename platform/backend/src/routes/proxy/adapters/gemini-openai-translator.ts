@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { Gemini, OpenAi } from "@/types";
+import { sanitizeGeminiToolSchema } from "./gemini-schema";
 import {
   parseJsonObject,
   stringifyTextContent,
@@ -139,7 +140,11 @@ export function openaiToGemini(req: OpenAiRequest): {
           .map((tool) => ({
             name: tool.function.name,
             description: tool.function.description ?? "",
-            parameters: tool.function.parameters,
+            // Gemini rejects non-string enums; same sanitizer the native Gemini
+            // adapter applies, shared so this OpenAI-compatible path can't 400.
+            parameters: sanitizeGeminiToolSchema(
+              tool.function.parameters,
+            ) as typeof tool.function.parameters,
           })),
       },
     ];

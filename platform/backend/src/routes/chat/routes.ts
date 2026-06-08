@@ -179,7 +179,7 @@ function buildLoadToolsWhenNeededSystemPrompt(): string {
     TOOL_RUN_TOOL_SHORT_NAME,
   );
 
-  return `Some available tools are not listed upfront and must be discovered. If the visible tools do not fit the task, call \`${searchToolsName}\` to find relevant tools, then call \`${runToolName}\` with a tool name it returned. Never invent or guess a tool name: only pass \`${runToolName}\` a tool name that \`${searchToolsName}\` returned or that appeared verbatim earlier in this conversation. If you do not have an exact name, call \`${searchToolsName}\` first rather than guessing.`;
+  return `Some available tools are not listed upfront and must be discovered. If the visible tools do not fit the task, call \`${searchToolsName}\` to find relevant tools, then call \`${runToolName}\` with a tool name it returned. Only pass \`${runToolName}\` a tool name that \`${searchToolsName}\` returned or that appeared verbatim earlier in this conversation; if you do not have an exact name, call \`${searchToolsName}\` first.`;
 }
 
 const UNAVAILABLE_TOOL_ERROR_MESSAGE =

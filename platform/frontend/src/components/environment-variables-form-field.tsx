@@ -70,6 +70,12 @@ interface EnvironmentVariablesFormFieldProps<TFieldValues extends FieldValues> {
   disablePromptOnInstallation?: boolean;
   /** Tooltip message shown when the "Prompt on each installation" checkbox is disabled */
   disablePromptOnInstallationReason?: string;
+  /**
+   * Optional validator for a static plain-text value (e.g. an environment's
+   * allowlist regex). Forwarded to the add/edit dialog to show an inline error
+   * and block confirm. Returns an error message, or null when allowed.
+   */
+  validateValue?: (value: string) => string | null;
   /** Optional envFrom field array for injecting env from K8s Secrets/ConfigMaps */
   envFrom?: {
     // biome-ignore lint/suspicious/noExplicitAny: Generic field array types require any for flexibility
@@ -110,6 +116,7 @@ export function EnvironmentVariablesFormField<
   secretKeysWithStoredValue,
   disablePromptOnInstallation = false,
   disablePromptOnInstallationReason,
+  validateValue,
   envFrom,
 }: EnvironmentVariablesFormFieldProps<TFieldValues>) {
   const [dialogOpenForEnvIndex, setDialogOpenForEnvIndex] = useState<
@@ -229,6 +236,7 @@ export function EnvironmentVariablesFormField<
         useExternalSecretsManager={useExternalSecretsManager}
         disableInstallation={disablePromptOnInstallation}
         disableInstallationReason={disablePromptOnInstallationReason}
+        validateValue={validateValue}
         onClose={() => setEnvVarDialog(null)}
         onConfirm={(draft) => {
           if (envVarDialog?.mode === "add") {

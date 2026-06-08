@@ -44,10 +44,12 @@ import {
   refineUniqueFilePaths,
 } from "@/skills/validation";
 import { ApiError, type Skill, SkillFileEncodingSchema } from "@/types";
+import { archestraMcpBranding } from "./branding";
 import {
   defineArchestraTool,
   defineArchestraTools,
   errorResult,
+  structuredToolErrorResult,
   successResult,
 } from "./helpers";
 import type { ArchestraContext } from "./types";
@@ -203,9 +205,7 @@ const registry = defineArchestraTools([
 
       const skill = await findAccessibleSkill(ctx, args.name);
       if (!skill) {
-        return errorResult(
-          `No skill named "${args.name}" exists. Call list_skills to see available skills.`,
-        );
+        return unknownSkillError(args.name);
       }
 
       const canRunSandbox = await canRunSkillSandbox(ctx, context.agent.id);
@@ -279,7 +279,7 @@ const registry = defineArchestraTools([
 
       const skill = await findAccessibleSkill(ctx, args.skill);
       if (!skill) {
-        return errorResult(`No skill named "${args.skill}" exists.`);
+        return unknownSkillError(args.skill);
       }
 
       // read from the effective version (the mounted one if mounted, else
@@ -295,9 +295,16 @@ const registry = defineArchestraTools([
         ? await SkillVersionModel.findFileByPath(version.id, args.path)
         : null;
       if (!file) {
-        return errorResult(
-          `Skill "${args.skill}" has no file at "${args.path}".`,
+        const activateSkillName = archestraMcpBranding.getToolName(
+          TOOL_ACTIVATE_SKILL_SHORT_NAME,
         );
+        return structuredToolErrorResult({
+          error: {
+            type: "tool_state",
+            code: "unknown_skill_file",
+            message: `Skill "${args.skill}" has no file at "${args.path}". Check the <skill_resources> list returned by ${activateSkillName} for the available file paths.`,
+          },
+        });
       }
 
       if (file.encoding === "base64") {
@@ -386,9 +393,7 @@ const registry = defineArchestraTools([
 
       const skill = await findAccessibleSkill(ctx, args.name);
       if (!skill) {
-        return errorResult(
-          `No skill named "${args.name}" exists. Call list_skills to see available skills.`,
-        );
+        return unknownSkillError(args.name);
       }
 
       // read access (findAccessibleSkill) is not enough to modify a skill —
@@ -437,6 +442,21 @@ const registry = defineArchestraTools([
 ] as const);
 
 // ===== Internal helpers =====
+
+// recovery errors steer the model by a tool's exposed (branded) name, so a
+// white-label org receives a name the model can actually call back.
+function unknownSkillError(skillName: string) {
+  const listSkillsName = archestraMcpBranding.getToolName(
+    TOOL_LIST_SKILLS_SHORT_NAME,
+  );
+  return structuredToolErrorResult({
+    error: {
+      type: "tool_state",
+      code: "unknown_skill",
+      message: `No skill named "${skillName}" exists. Call ${listSkillsName} to see available skills.`,
+    },
+  });
+}
 
 interface UserContext {
   organizationId: string;

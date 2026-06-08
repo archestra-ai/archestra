@@ -65,7 +65,7 @@ import {
 } from "@/lib/auth/oauth-session";
 import { useInternalMcpCatalog } from "@/lib/mcp/internal-mcp-catalog.query";
 import { useDeleteMcpServer, useMcpServers } from "@/lib/mcp/mcp-server.query";
-import { useTeams } from "@/lib/teams/team.query";
+import { useMyTeams } from "@/lib/teams/team.query";
 import { type DeploymentState, DeploymentStatusDot } from "./deployment-status";
 
 interface ManageUsersDialogProps {
@@ -157,7 +157,7 @@ export function ManageUsersContent({
   const currentUserId = session?.user?.id;
 
   // Get user's teams and permissions for re-authentication checks
-  const { data: userTeams } = useTeams();
+  const { data: userTeams } = useMyTeams();
   const { data: hasTeamAdminPermission } = useHasPermissions({
     team: ["admin"],
   });

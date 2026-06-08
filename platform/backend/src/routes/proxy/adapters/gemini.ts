@@ -41,6 +41,7 @@ import {
   isMcpImageBlock,
 } from "../utils/mcp-image";
 import { unwrapToolContent } from "../utils/unwrap-tool-content";
+import { sanitizeGeminiToolSchema } from "./gemini-schema";
 
 // =============================================================================
 // TYPE ALIASES
@@ -1203,6 +1204,14 @@ function sdkResponseToRestResponse(
   } as Gemini.Types.GenerateContentResponse;
 }
 
+// Strip Gemini-incompatible JSON-schema constructs (non-string enums) from a
+// function declaration schema field before handing it to the SDK. Returns the
+// input untouched when absent.
+function sanitizeFdSchema<T>(schema: T): T {
+  if (schema === undefined || schema === null) return schema;
+  return sanitizeGeminiToolSchema(schema) as T;
+}
+
 /**
  * Convert a Gemini REST-style GenerateContentRequest body into the SDK's
  * GenerateContentParameters shape. The SDK and REST shapes differ significantly:
@@ -1212,8 +1221,11 @@ function sdkResponseToRestResponse(
  *
  * Note: Gemini SDK and REST API have different schemas. See:
  * https://ai.google.dev/api/generate-content
+ *
+ * @public — exercised by gemini.test.ts to verify tool-schema sanitization on
+ * the outbound path.
  */
-function restToSdkGenerateContentParams(
+export function restToSdkGenerateContentParams(
   body: Partial<Gemini.Types.GenerateContentRequest>,
   model: string,
   mergedTools?: Gemini.Types.Tool[] | undefined,
@@ -1266,10 +1278,10 @@ function restToSdkGenerateContentParams(
           name: fd.name,
           description: fd.description,
           behavior: mappedBehavior,
-          parameters: fd.parameters,
-          parametersJsonSchema: fd.parametersJsonSchema,
-          response: fd.response,
-          responseJsonSchema: fd.responseJsonSchema,
+          parameters: sanitizeFdSchema(fd.parameters),
+          parametersJsonSchema: sanitizeFdSchema(fd.parametersJsonSchema),
+          response: sanitizeFdSchema(fd.response),
+          responseJsonSchema: sanitizeFdSchema(fd.responseJsonSchema),
         };
       });
 

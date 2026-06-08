@@ -28,6 +28,7 @@ import type {
   Tool,
 } from "@modelcontextprotocol/sdk/types.js";
 import QuickLRU from "quick-lru";
+import { unavailableThirdPartyToolMessage } from "@/archestra-mcp-server/tool-recovery-messages";
 import { LRUCacheManager } from "@/cache-manager";
 import config from "@/config";
 import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
@@ -1137,11 +1138,20 @@ class McpClient {
     const tool = mcpTools[0];
 
     if (!tool) {
+      const message = unavailableThirdPartyToolMessage(toolCall.name);
       return {
         error: await this.createErrorResult(
           toolCall,
           agentId,
-          "Tool not found or not assigned to agent",
+          message,
+          "unknown",
+          undefined,
+          {
+            type: "tool_state",
+            code: "unknown_tool",
+            message,
+            toolName: toolCall.name,
+          },
         ),
       };
     }

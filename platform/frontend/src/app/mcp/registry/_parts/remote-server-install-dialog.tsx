@@ -19,7 +19,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useFeature } from "@/lib/config/config.query";
+import { useEnvironments } from "@/lib/environment.query";
+import { useDefaultEnvironment } from "@/lib/organization.query";
 import { useTeamsWithVaultFolders } from "@/lib/teams/team.query";
+import {
+  compileValidationRegex,
+  toFieldValueType,
+  validateFieldAgainstRegex,
+} from "./environment-validation-helpers";
 import {
   type McpServerInstallScope,
   SelectMcpServerCredentialTypeAndTeams,
@@ -124,6 +131,8 @@ export function RemoteServerInstallDialog({
   const byosEnabled = useFeature("byosEnabled");
   const { data: teamsWithVault } = useTeamsWithVaultFolders();
   const vaultTeams = teamsWithVault?.filter((t) => t.vaultPath);
+  const { data: environmentList } = useEnvironments();
+  const defaultEnvironment = useDefaultEnvironment();
   const userConfig =
     (catalogItem?.userConfig as UserConfigType | null | undefined) || {};
   const hasPromptSensitiveFields = Object.values(userConfig).some(
@@ -271,6 +280,34 @@ export function RemoteServerInstallDialog({
 
   const isValid = !hasConfig || (isNonSensitiveValid && isSensitiveValid);
 
+  // Resolve the governing environment's allowlist regex (the env the catalog
+  // item is bound to, or the org default when unbound) and compile it once.
+  const boundEnvironment = catalogItem.environmentId
+    ? environmentList?.environments.find(
+        (e) => e.id === catalogItem.environmentId,
+      )
+    : null;
+  const environmentName = boundEnvironment?.name ?? defaultEnvironment.name;
+  const validationRegex = compileValidationRegex(
+    boundEnvironment
+      ? boundEnvironment.validationRegex
+      : defaultEnvironment.validationRegex,
+  );
+  const configRegexError = (
+    fieldName: string,
+    type: string | undefined,
+  ): string | null =>
+    validateFieldAgainstRegex({
+      value: configValues[fieldName] ?? "",
+      regex: validationRegex,
+      valueType: toFieldValueType(type),
+      environmentName,
+    });
+  const hasRegexErrors = Object.entries(promptableUserConfig).some(
+    ([fieldName, cfg]) =>
+      !cfg.sensitive && configRegexError(fieldName, cfg.type) !== null,
+  );
+
   return (
     <StandardFormDialog
       open={isOpen}
@@ -312,7 +349,10 @@ export function RemoteServerInstallDialog({
             >
               Cancel
             </Button>
-            <Button type="submit" disabled={!isValid || isInstalling}>
+            <Button
+              type="submit"
+              disabled={!isValid || hasRegexErrors || isInstalling}
+            >
               {isInstalling
                 ? isReauth
                   ? "Updating..."
@@ -498,8 +538,20 @@ export function RemoteServerInstallDialog({
                     }
                     min={fieldConfig.min}
                     max={fieldConfig.max}
+                    aria-invalid={
+                      !fieldConfig.sensitive &&
+                      configRegexError(fieldName, fieldConfig.type)
+                        ? true
+                        : undefined
+                    }
                   />
                 )}
+                {!fieldConfig.sensitive &&
+                  configRegexError(fieldName, fieldConfig.type) && (
+                    <p className="text-xs text-destructive">
+                      {configRegexError(fieldName, fieldConfig.type)}
+                    </p>
+                  )}
               </div>
             ),
           )}

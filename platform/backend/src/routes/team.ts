@@ -33,6 +33,13 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tags: ["Teams"],
         querystring: PaginationQuerySchema.extend({
           name: z.string().optional(),
+          // When true, always return only the teams the caller is a member of,
+          // even for team:admins. Resource team-assignment pickers use this so a
+          // team:admin who isn't a member of a team isn't offered teams they
+          // can't actually assign to (the resource routes require membership).
+          mine: z
+            .preprocess((val) => val === "true" || val === true, z.boolean())
+            .optional(),
         }),
         response: constructResponseSchema(
           createPaginatedResponseSchema(SelectTeamSchema),
@@ -40,14 +47,14 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
-      const { limit, offset, name } = request.query;
+      const { limit, offset, name, mine } = request.query;
       const { success: isTeamAdmin } = await hasPermission(
         { team: ["admin"] },
         request.headers,
       );
 
-      // Non-team admins only see teams they're members of
-      if (!isTeamAdmin) {
+      // Members (and anyone passing ?mine) only see teams they belong to.
+      if (!isTeamAdmin || mine) {
         const result = await TeamModel.getUserTeamsPaginated({
           userId: request.user.id,
           limit,

@@ -23804,6 +23804,7 @@ export type ListEnvironmentsResponses = {
                 allowedDomains: Array<string>;
                 allowedCidrs: Array<string>;
             } | null;
+            validationRegex: string | null;
             restricted: boolean;
             sortOrder: number;
             createdAt: string;
@@ -23828,6 +23829,7 @@ export type CreateEnvironmentData = {
             allowedCidrs?: Array<string>;
         } | null;
         restricted?: boolean;
+        validationRegex?: string | null;
     };
     path?: never;
     query?: never;
@@ -23915,6 +23917,7 @@ export type CreateEnvironmentResponses = {
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
         } | null;
+        validationRegex: string | null;
         restricted: boolean;
         sortOrder: number;
         createdAt: string;
@@ -24021,6 +24024,7 @@ export type UpdateEnvironmentData = {
             allowedCidrs?: Array<string>;
         } | null;
         restricted?: boolean;
+        validationRegex?: string | null;
     };
     path: {
         id: string;
@@ -24110,6 +24114,7 @@ export type UpdateEnvironmentResponses = {
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
         } | null;
+        validationRegex: string | null;
         restricted: boolean;
         sortOrder: number;
         createdAt: string;
@@ -45081,6 +45086,7 @@ export type GetOrganizationResponses = {
             allowedCidrs: Array<string>;
         } | null;
         defaultEnvironmentRestricted: boolean;
+        defaultEnvironmentValidationRegex: string | null;
         skillToolsEnabled: boolean;
         skillSlashCommandsEnabled: boolean;
     };
@@ -45369,6 +45375,7 @@ export type UpdateAppearanceSettingsResponses = {
             allowedCidrs: Array<string>;
         } | null;
         defaultEnvironmentRestricted: boolean;
+        defaultEnvironmentValidationRegex: string | null;
         skillToolsEnabled: boolean;
         skillSlashCommandsEnabled: boolean;
     };
@@ -45528,6 +45535,7 @@ export type UpdateSecuritySettingsResponses = {
             allowedCidrs: Array<string>;
         } | null;
         defaultEnvironmentRestricted: boolean;
+        defaultEnvironmentValidationRegex: string | null;
         skillToolsEnabled: boolean;
         skillSlashCommandsEnabled: boolean;
     };
@@ -45690,6 +45698,7 @@ export type UpdateLlmSettingsResponses = {
             allowedCidrs: Array<string>;
         } | null;
         defaultEnvironmentRestricted: boolean;
+        defaultEnvironmentValidationRegex: string | null;
         skillToolsEnabled: boolean;
         skillSlashCommandsEnabled: boolean;
     };
@@ -45851,6 +45860,7 @@ export type UpdateAgentSettingsResponses = {
             allowedCidrs: Array<string>;
         } | null;
         defaultEnvironmentRestricted: boolean;
+        defaultEnvironmentValidationRegex: string | null;
         skillToolsEnabled: boolean;
         skillSlashCommandsEnabled: boolean;
     };
@@ -46019,6 +46029,7 @@ export type UpdateConnectionSettingsResponses = {
             allowedCidrs: Array<string>;
         } | null;
         defaultEnvironmentRestricted: boolean;
+        defaultEnvironmentValidationRegex: string | null;
         skillToolsEnabled: boolean;
         skillSlashCommandsEnabled: boolean;
     };
@@ -46038,6 +46049,7 @@ export type UpdateDefaultEnvironmentData = {
             allowedCidrs?: Array<string>;
         } | null;
         restricted?: boolean;
+        validationRegex?: string | null;
     };
     path?: never;
     query?: never;
@@ -46186,6 +46198,7 @@ export type UpdateDefaultEnvironmentResponses = {
             allowedCidrs: Array<string>;
         } | null;
         defaultEnvironmentRestricted: boolean;
+        defaultEnvironmentValidationRegex: string | null;
         skillToolsEnabled: boolean;
         skillSlashCommandsEnabled: boolean;
     };
@@ -46345,6 +46358,7 @@ export type UpdateAuthSettingsResponses = {
             allowedCidrs: Array<string>;
         } | null;
         defaultEnvironmentRestricted: boolean;
+        defaultEnvironmentValidationRegex: string | null;
         skillToolsEnabled: boolean;
         skillSlashCommandsEnabled: boolean;
     };
@@ -46506,6 +46520,7 @@ export type UpdateKnowledgeSettingsResponses = {
             allowedCidrs: Array<string>;
         } | null;
         defaultEnvironmentRestricted: boolean;
+        defaultEnvironmentValidationRegex: string | null;
         skillToolsEnabled: boolean;
         skillSlashCommandsEnabled: boolean;
     };
@@ -46662,6 +46677,7 @@ export type DropEmbeddingConfigResponses = {
             allowedCidrs: Array<string>;
         } | null;
         defaultEnvironmentRestricted: boolean;
+        defaultEnvironmentValidationRegex: string | null;
         skillToolsEnabled: boolean;
         skillSlashCommandsEnabled: boolean;
     };
@@ -46907,6 +46923,7 @@ export type CompleteOnboardingResponses = {
             allowedCidrs: Array<string>;
         } | null;
         defaultEnvironmentRestricted: boolean;
+        defaultEnvironmentValidationRegex: string | null;
         skillToolsEnabled: boolean;
         skillSlashCommandsEnabled: boolean;
     };
@@ -52474,6 +52491,7 @@ export type GetTeamsData = {
         limit?: number;
         offset?: number;
         name?: string;
+        mine?: boolean;
     };
     url: '/api/teams';
 };

@@ -84,11 +84,15 @@ import {
 } from "@/lib/mcp/mcp-form-autocomplete";
 import { useDefaultEnvironment } from "@/lib/organization.query";
 import { useGetSecret } from "@/lib/secrets.query";
-import { useTeams } from "@/lib/teams/team.query";
+import { useAssignableTeams } from "@/lib/teams/team.query";
 import {
   type CascadeSnapshot,
   computeCascadeOutcome,
 } from "./cascade-decision";
+import {
+  compileValidationRegex,
+  validateFieldAgainstRegex,
+} from "./environment-validation-helpers";
 import {
   formSchema,
   type McpCatalogFormValues,
@@ -525,7 +529,12 @@ export function McpCatalogForm({
     mcpRegistry: ["team-admin"],
   });
   const { data: canReadTeams } = useHasPermissions({ team: ["read"] });
-  const { data: teams } = useTeams();
+  // All teams for a full admin, otherwise only the user's own teams (the only
+  // ones the backend lets a non-admin assign).
+  const { data: teams } = useAssignableTeams({
+    isResourceAdmin: !!isAdmin,
+    enabled: !!canReadTeams,
+  });
   const { data: environmentList } = useEnvironments();
   const environments = environmentList?.environments;
   // Deploying to a restricted environment needs environment:deploy-to-restricted;
@@ -544,6 +553,30 @@ export function McpCatalogForm({
   );
   const hasCustomEnvironmentOptions = accessibleEnvironments.length > 0;
   const canManageEnvironments = hasEnvAdmin ?? false;
+  // Validate static config values (env vars + headers) against the rule of the
+  // environment this item is bound to (or the org default when unbound), so a
+  // forbidden value is flagged inline and can't be saved. Passed to both
+  // EnvironmentVariablesFormField instances below.
+  const watchedEnvironmentId = form.watch("environmentId");
+  const boundEnvironment = watchedEnvironmentId
+    ? environments?.find((e) => e.id === watchedEnvironmentId)
+    : null;
+  const boundEnvironmentName =
+    boundEnvironment?.name ?? defaultEnvironment.name;
+  const boundValidationRegex = compileValidationRegex(
+    boundEnvironment
+      ? boundEnvironment.validationRegex
+      : defaultEnvironment.validationRegex,
+  );
+  const validateConfigValue = boundValidationRegex
+    ? (value: string): string | null =>
+        validateFieldAgainstRegex({
+          value,
+          regex: boundValidationRegex,
+          valueType: "string",
+          environmentName: boundEnvironmentName,
+        })
+    : undefined;
   const currentScope = form.watch("scope");
   const canShareWithTeams = (isAdmin ?? false) || (isTeamAdmin ?? false);
   // Shared items are one-way: an item that is already team/org-scoped cannot be
@@ -1296,6 +1329,7 @@ export function McpCatalogForm({
                   remove={remove}
                   fieldNamePrefix="localConfig.environment"
                   form={form}
+                  validateValue={validateConfigValue}
                   useExternalSecretsManager={showByosOption}
                   secretKeysWithStoredValue={storedSecretKeys}
                   disablePromptOnInstallation={isMultitenant}
@@ -2289,6 +2323,7 @@ export function McpCatalogForm({
                     additionalHeaderFields.length,
                     headerDialog?.mode === "edit" ? headerDialog.index : null,
                   )}
+                  validateValue={validateConfigValue}
                   onClose={() => setHeaderDialog(null)}
                   onConfirm={(draft) => {
                     if (headerDialog?.mode === "add") {

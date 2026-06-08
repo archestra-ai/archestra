@@ -2,6 +2,7 @@
 import {
   ARCHESTRA_MCP_SERVER_NAME,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
+  TOOL_GET_MCP_SERVERS_SHORT_NAME,
 } from "@archestra/shared";
 import { EnvironmentModel, InternalMcpCatalogModel } from "@/models";
 import { createEnvironment } from "@/services/environments/environment";
@@ -171,6 +172,18 @@ describe("mcp server tool execution", () => {
     const names = parsed.map((t: any) => t.name);
     expect(names).toContain("test_tool_1");
     expect(names).toContain("test_tool_2");
+  });
+
+  test("get_mcp_server_tools steers an unknown id at the listing tool", async () => {
+    const result = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}get_mcp_server_tools`,
+      { mcpServerId: "00000000-0000-4000-8000-000000000abc" },
+      mockContext,
+    );
+    expect(result.isError).toBe(true);
+    const text = (result.content[0] as any).text;
+    expect(text).toContain("not found or you don't have access");
+    expect(text).toContain(TOOL_GET_MCP_SERVERS_SHORT_NAME);
   });
 
   test("edit_mcp_description updates an existing catalog item", async ({

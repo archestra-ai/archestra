@@ -2,6 +2,7 @@
 import {
   ARCHESTRA_MCP_SERVER_NAME,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
+  TOOL_LIST_AGENTS_SHORT_NAME,
 } from "@archestra/shared";
 import { and, eq } from "drizzle-orm";
 import db, { schema } from "@/database";
@@ -9,6 +10,7 @@ import { AgentKnowledgeBaseModel, AgentModel } from "@/models";
 import { beforeEach, describe, expect, test } from "@/test";
 import type { Agent } from "@/types";
 import { type ArchestraContext, executeArchestraTool } from ".";
+import { archestraMcpBranding } from "./branding";
 
 describe("agent tool execution", () => {
   let testAgent: Agent;
@@ -549,6 +551,9 @@ describe("agent RBAC visibility", () => {
 
     expect(result.isError).toBe(true);
     expect((result.content[0] as any).text).toContain("not found");
+    expect((result.content[0] as any).text).toContain(
+      archestraMcpBranding.getToolName(TOOL_LIST_AGENTS_SHORT_NAME),
+    );
   });
 });
 

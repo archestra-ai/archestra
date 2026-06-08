@@ -18,7 +18,7 @@ import {
 } from "@/components/visibility-selector";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useMcpServers } from "@/lib/mcp/mcp-server.query";
-import { useTeams } from "@/lib/teams/team.query";
+import { useAssignableTeams } from "@/lib/teams/team.query";
 
 export type McpServerInstallScope = "personal" | "team" | "org";
 
@@ -66,7 +66,6 @@ export function SelectMcpServerCredentialTypeAndTeams({
   onCanInstallChange,
   preselectedTeamId,
 }: SelectMcpServerCredentialTypeAndTeamsProps) {
-  const { data: teams, isLoading: isLoadingTeams } = useTeams();
   const { data: installedServers } = useMcpServers();
   const { data: session } = useSession();
   const currentUserId = session?.user?.id;
@@ -80,6 +79,10 @@ export function SelectMcpServerCredentialTypeAndTeams({
   // WHY: mcpServerInstallation:admin gates org-wide installations
   const { data: isMcpServerAdmin } = useHasPermissions({
     mcpServerInstallation: ["admin"],
+  });
+  // All teams for an install admin, otherwise only the teams the user belongs to.
+  const { data: teams, isLoading: isLoadingTeams } = useAssignableTeams({
+    isResourceAdmin: !!isMcpServerAdmin,
   });
 
   const { hasPersonalInstallation, teamsWithInstallation, hasOrgInstallation } =

@@ -271,6 +271,16 @@ const organizationsTable = pgTable("organization", {
     .default(false),
 
   /**
+   * ALLOWLIST regex (JS source, no delimiters/flags) for the implicit "default"
+   * environment (internal_mcp_catalog.environment_id = null). User-supplied
+   * config values are allowed only if they MATCH. NULL disables. Mirrors
+   * `environment.validation_regex` for the default scope.
+   */
+  defaultEnvironmentValidationRegex: text(
+    "default_environment_validation_regex",
+  ),
+
+  /**
    * When true, the Agent Skill tools (`list_skills`, `activate_skill`,
    * `read_skill_file`) are assigned to every agent in the org and added to all
    * new agents. Flipped on

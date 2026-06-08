@@ -9,7 +9,7 @@ import {
   VisibilitySelector,
 } from "@/components/visibility-selector";
 import { useHasPermissions } from "@/lib/auth/auth.query";
-import { useTeams } from "@/lib/teams/team.query";
+import { useAssignableTeams } from "@/lib/teams/team.query";
 
 /**
  * Scope picker for the skill editor: personal / team / org. Mirrors the agent
@@ -28,10 +28,12 @@ export function SkillScopeSelector({
   teamIds: string[];
   onTeamIdsChange: (ids: string[]) => void;
 }) {
-  const { data: teams } = useTeams();
   const { data: isSkillAdmin } = useHasPermissions({ skill: ["admin"] });
   const { data: isSkillTeamAdmin } = useHasPermissions({
     skill: ["team-admin"],
+  });
+  const { data: teams } = useAssignableTeams({
+    isResourceAdmin: !!isSkillAdmin,
   });
   const canShareTeams = isSkillAdmin || isSkillTeamAdmin;
   const hasNoTeams = (teams ?? []).length === 0;

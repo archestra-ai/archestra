@@ -3,6 +3,7 @@ import {
   isAgentTool,
   TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON,
   TOOL_INVOCATION_DISABLED_FOR_CONVERSATION_REASON,
+  TOOL_SEARCH_TOOLS_SHORT_NAME,
 } from "@archestra/shared";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import logger from "@/logging";
@@ -171,7 +172,13 @@ export const evaluatePolicies = async (
   // If any tools were disabled, return distinct message about them
   if (disabledToolNames.length > 0) {
     const toolList = disabledToolNames.join(", ");
-    const message = `I attempted to use the tools "${toolList}", but they are not enabled for this conversation.`;
+    const searchToolsName = archestraMcpBranding.getToolName(
+      TOOL_SEARCH_TOOLS_SHORT_NAME,
+    );
+    const message =
+      `The tools "${toolList}" are not enabled for this conversation and were ` +
+      `not run. Do not call them again here. Use a tool that is available to ` +
+      `you, or call ${searchToolsName} to discover the tools you can use.`;
     const reason = TOOL_INVOCATION_DISABLED_FOR_CONVERSATION_REASON;
     return {
       refusalMessage: message,

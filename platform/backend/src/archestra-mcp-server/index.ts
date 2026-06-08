@@ -21,6 +21,7 @@ import {
   type ArchestraRuntimeToolEntry,
   errorResult,
   formatZodError,
+  structuredToolErrorResult,
 } from "./helpers";
 import {
   toolEntries as identityToolEntries,
@@ -166,7 +167,7 @@ export async function executeArchestraTool(
   if (!toolEntry) {
     throw {
       code: -32601,
-      message: `Tool '${toolName}' not found`,
+      message: `No tool named "${toolName}" exists. ${toolDiscoverySteer()}`,
     };
   }
 
@@ -225,9 +226,25 @@ async function checkToolAssignedToAgent(
   const isAssigned = assignedTools.some(
     (tool) => archestraMcpBranding.getToolShortName(tool.name) === shortName,
   );
-  return isAssigned
-    ? null
-    : errorResult(`Tool '${toolName}' is not assigned to this agent.`);
+  if (isAssigned) return null;
+  return structuredToolErrorResult({
+    error: {
+      type: "tool_state",
+      code: "tool_not_assigned",
+      message: `Tool "${toolName}" is not assigned to this agent. ${toolDiscoverySteer()}`,
+      toolName,
+    },
+  });
+}
+
+// Recovery steer pointing a model at the tool-discovery path. Branded so the
+// names match what the model sees (custom-branded orgs use a different prefix);
+// mirrors run-tool's unavailableThirdPartyToolMessage.
+function toolDiscoverySteer(): string {
+  const searchToolsName = archestraMcpBranding.getToolName(
+    TOOL_SEARCH_TOOLS_SHORT_NAME,
+  );
+  return `Call ${searchToolsName} to discover the tools available to you, then use an exact name it returns. Do not guess tool names.`;
 }
 
 function resolveArchestraToolName(toolName: string): string | null {

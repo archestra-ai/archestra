@@ -521,6 +521,7 @@ export function useDefaultEnvironment() {
     description: organization?.defaultEnvironmentDescription ?? null,
     networkPolicy: organization?.defaultNetworkPolicy ?? null,
     restricted: organization?.defaultEnvironmentRestricted ?? false,
+    validationRegex: organization?.defaultEnvironmentValidationRegex ?? null,
   };
 }
 

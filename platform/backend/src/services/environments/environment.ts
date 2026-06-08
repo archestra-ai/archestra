@@ -6,6 +6,7 @@ import {
   type EnvironmentList,
   type UpdateEnvironment,
 } from "@/types";
+import { validateValuesAgainstRegex } from "@/utils/validate-values-against-regex";
 
 // === Public API ===
 
@@ -35,6 +36,7 @@ export async function createEnvironment(params: {
     namespace: data.namespace ?? null,
     networkPolicy: data.networkPolicy ?? null,
     restricted: data.restricted,
+    validationRegex: data.validationRegex ?? null,
   });
 }
 
@@ -59,6 +61,7 @@ export async function updateEnvironment(params: {
     namespace: data.namespace,
     networkPolicy: data.networkPolicy,
     restricted: data.restricted,
+    validationRegex: data.validationRegex,
   });
   if (!updated) {
     throw new ApiError(404, "Environment not found");
@@ -109,6 +112,33 @@ export async function assertCanAssignEnvironment(params: {
   }
 }
 
+/**
+ * Enforce a catalog item's governing environment regex against one or more sets
+ * of user-supplied config values. No-op when the resolved regex is null. Throws
+ * `ApiError(400)` (without echoing the pattern) on the first mismatch.
+ */
+export async function assertValuesMatchEnvironmentRegex(params: {
+  environmentId: string | null | undefined;
+  organizationId: string;
+  valueSets: Array<Record<string, unknown> | null | undefined>;
+}): Promise<void> {
+  const { environmentId, organizationId, valueSets } = params;
+
+  const { regex, label } = await resolveEnvironmentValidationRegex({
+    environmentId,
+    organizationId,
+  });
+  if (!regex) return;
+
+  try {
+    for (const values of valueSets) {
+      validateValuesAgainstRegex(values, regex, label);
+    }
+  } catch (e) {
+    throw new ApiError(400, (e as Error).message);
+  }
+}
+
 export async function deleteEnvironment(params: {
   id: string;
   organizationId: string;
@@ -137,4 +167,37 @@ export async function deleteEnvironment(params: {
   if (!deleted) {
     throw new ApiError(404, "Environment not found");
   }
+}
+
+// === Internal helpers ===
+
+/**
+ * Resolve the allowlist validation regex governing a catalog item, plus the
+ * human-readable label to name in errors. A set `environmentId` resolves to
+ * that environment's rule; a null/undefined one falls back to the org's default
+ * environment (`defaultEnvironmentValidationRegex`), mirroring how
+ * `assertCanAssignEnvironment` treats the implicit default.
+ */
+async function resolveEnvironmentValidationRegex(params: {
+  environmentId: string | null | undefined;
+  organizationId: string;
+}): Promise<{ regex: string | null; label: string }> {
+  const { environmentId, organizationId } = params;
+
+  if (!environmentId) {
+    const organization = await OrganizationModel.getById(organizationId);
+    return {
+      regex: organization?.defaultEnvironmentValidationRegex ?? null,
+      label: organization?.defaultEnvironmentName ?? "Default",
+    };
+  }
+
+  const environment = await EnvironmentModel.findByIdForOrganization(
+    environmentId,
+    organizationId,
+  );
+  return {
+    regex: environment?.validationRegex ?? null,
+    label: environment?.name ?? "Default",
+  };
 }

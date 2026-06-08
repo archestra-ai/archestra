@@ -2,7 +2,7 @@
   "openapi": "3.0.0",
   "info": {
     "title": "Archestra",
-    "version": "1.2.59"
+    "version": "1.2.60"
   },
   "components": {
     "schemas": {
@@ -83727,6 +83727,10 @@
                             ],
                             "additionalProperties": false
                           },
+                          "validationRegex": {
+                            "nullable": true,
+                            "type": "string"
+                          },
                           "restricted": {
                             "type": "boolean"
                           },
@@ -83756,6 +83760,7 @@
                           "description",
                           "namespace",
                           "networkPolicy",
+                          "validationRegex",
                           "restricted",
                           "sortOrder",
                           "createdAt",
@@ -84086,6 +84091,11 @@
                   },
                   "restricted": {
                     "type": "boolean"
+                  },
+                  "validationRegex": {
+                    "nullable": true,
+                    "type": "string",
+                    "maxLength": 1000
                   }
                 },
                 "required": [
@@ -84163,6 +84173,10 @@
                       ],
                       "additionalProperties": false
                     },
+                    "validationRegex": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "restricted": {
                       "type": "boolean"
                     },
@@ -84187,6 +84201,7 @@
                     "description",
                     "namespace",
                     "networkPolicy",
+                    "validationRegex",
                     "restricted",
                     "sortOrder",
                     "createdAt",
@@ -84506,6 +84521,11 @@
                   },
                   "restricted": {
                     "type": "boolean"
+                  },
+                  "validationRegex": {
+                    "nullable": true,
+                    "type": "string",
+                    "maxLength": 1000
                   }
                 }
               }
@@ -84592,6 +84612,10 @@
                       ],
                       "additionalProperties": false
                     },
+                    "validationRegex": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "restricted": {
                       "type": "boolean"
                     },
@@ -84616,6 +84640,7 @@
                     "description",
                     "namespace",
                     "networkPolicy",
+                    "validationRegex",
                     "restricted",
                     "sortOrder",
                     "createdAt",
@@ -170104,6 +170129,10 @@
                     "defaultEnvironmentRestricted": {
                       "type": "boolean"
                     },
+                    "defaultEnvironmentValidationRegex": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "skillToolsEnabled": {
                       "type": "boolean"
                     },
@@ -170165,6 +170194,7 @@
                     "defaultEnvironmentDescription",
                     "defaultNetworkPolicy",
                     "defaultEnvironmentRestricted",
+                    "defaultEnvironmentValidationRegex",
                     "skillToolsEnabled",
                     "skillSlashCommandsEnabled"
                   ],
@@ -171012,6 +171042,10 @@
                     "defaultEnvironmentRestricted": {
                       "type": "boolean"
                     },
+                    "defaultEnvironmentValidationRegex": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "skillToolsEnabled": {
                       "type": "boolean"
                     },
@@ -171073,6 +171107,7 @@
                     "defaultEnvironmentDescription",
                     "defaultNetworkPolicy",
                     "defaultEnvironmentRestricted",
+                    "defaultEnvironmentValidationRegex",
                     "skillToolsEnabled",
                     "skillSlashCommandsEnabled"
                   ],
@@ -172192,6 +172227,10 @@
                     "defaultEnvironmentRestricted": {
                       "type": "boolean"
                     },
+                    "defaultEnvironmentValidationRegex": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "skillToolsEnabled": {
                       "type": "boolean"
                     },
@@ -172253,6 +172292,7 @@
                     "defaultEnvironmentDescription",
                     "defaultNetworkPolicy",
                     "defaultEnvironmentRestricted",
+                    "defaultEnvironmentValidationRegex",
                     "skillToolsEnabled",
                     "skillSlashCommandsEnabled"
                   ],
@@ -172986,6 +173026,10 @@
                     "defaultEnvironmentRestricted": {
                       "type": "boolean"
                     },
+                    "defaultEnvironmentValidationRegex": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "skillToolsEnabled": {
                       "type": "boolean"
                     },
@@ -173047,6 +173091,7 @@
                     "defaultEnvironmentDescription",
                     "defaultNetworkPolicy",
                     "defaultEnvironmentRestricted",
+                    "defaultEnvironmentValidationRegex",
                     "skillToolsEnabled",
                     "skillSlashCommandsEnabled"
                   ],
@@ -173763,6 +173808,10 @@
                     "defaultEnvironmentRestricted": {
                       "type": "boolean"
                     },
+                    "defaultEnvironmentValidationRegex": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "skillToolsEnabled": {
                       "type": "boolean"
                     },
@@ -173824,6 +173873,7 @@
                     "defaultEnvironmentDescription",
                     "defaultNetworkPolicy",
                     "defaultEnvironmentRestricted",
+                    "defaultEnvironmentValidationRegex",
                     "skillToolsEnabled",
                     "skillSlashCommandsEnabled"
                   ],
@@ -174602,6 +174652,10 @@
                     "defaultEnvironmentRestricted": {
                       "type": "boolean"
                     },
+                    "defaultEnvironmentValidationRegex": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "skillToolsEnabled": {
                       "type": "boolean"
                     },
@@ -174663,6 +174717,7 @@
                     "defaultEnvironmentDescription",
                     "defaultNetworkPolicy",
                     "defaultEnvironmentRestricted",
+                    "defaultEnvironmentValidationRegex",
                     "skillToolsEnabled",
                     "skillSlashCommandsEnabled"
                   ],
@@ -174979,6 +175034,11 @@
                   },
                   "restricted": {
                     "type": "boolean"
+                  },
+                  "validationRegex": {
+                    "nullable": true,
+                    "type": "string",
+                    "maxLength": 1000
                   }
                 }
               }
@@ -175416,6 +175476,10 @@
                     "defaultEnvironmentRestricted": {
                       "type": "boolean"
                     },
+                    "defaultEnvironmentValidationRegex": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "skillToolsEnabled": {
                       "type": "boolean"
                     },
@@ -175477,6 +175541,7 @@
                     "defaultEnvironmentDescription",
                     "defaultNetworkPolicy",
                     "defaultEnvironmentRestricted",
+                    "defaultEnvironmentValidationRegex",
                     "skillToolsEnabled",
                     "skillSlashCommandsEnabled"
                   ],
@@ -176180,6 +176245,10 @@
                     "defaultEnvironmentRestricted": {
                       "type": "boolean"
                     },
+                    "defaultEnvironmentValidationRegex": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "skillToolsEnabled": {
                       "type": "boolean"
                     },
@@ -176241,6 +176310,7 @@
                     "defaultEnvironmentDescription",
                     "defaultNetworkPolicy",
                     "defaultEnvironmentRestricted",
+                    "defaultEnvironmentValidationRegex",
                     "skillToolsEnabled",
                     "skillSlashCommandsEnabled"
                   ],
@@ -176957,6 +177027,10 @@
                     "defaultEnvironmentRestricted": {
                       "type": "boolean"
                     },
+                    "defaultEnvironmentValidationRegex": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "skillToolsEnabled": {
                       "type": "boolean"
                     },
@@ -177018,6 +177092,7 @@
                     "defaultEnvironmentDescription",
                     "defaultNetworkPolicy",
                     "defaultEnvironmentRestricted",
+                    "defaultEnvironmentValidationRegex",
                     "skillToolsEnabled",
                     "skillSlashCommandsEnabled"
                   ],
@@ -177701,6 +177776,10 @@
                     "defaultEnvironmentRestricted": {
                       "type": "boolean"
                     },
+                    "defaultEnvironmentValidationRegex": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "skillToolsEnabled": {
                       "type": "boolean"
                     },
@@ -177762,6 +177841,7 @@
                     "defaultEnvironmentDescription",
                     "defaultNetworkPolicy",
                     "defaultEnvironmentRestricted",
+                    "defaultEnvironmentValidationRegex",
                     "skillToolsEnabled",
                     "skillSlashCommandsEnabled"
                   ],
@@ -178758,6 +178838,10 @@
                     "defaultEnvironmentRestricted": {
                       "type": "boolean"
                     },
+                    "defaultEnvironmentValidationRegex": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "skillToolsEnabled": {
                       "type": "boolean"
                     },
@@ -178819,6 +178903,7 @@
                     "defaultEnvironmentDescription",
                     "defaultNetworkPolicy",
                     "defaultEnvironmentRestricted",
+                    "defaultEnvironmentValidationRegex",
                     "skillToolsEnabled",
                     "skillSlashCommandsEnabled"
                   ],
@@ -198690,6 +198775,14 @@
             },
             "in": "query",
             "name": "name",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "boolean"
+            },
+            "in": "query",
+            "name": "mine",
             "required": false
           }
         ],

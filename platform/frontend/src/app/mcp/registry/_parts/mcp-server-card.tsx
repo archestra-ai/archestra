@@ -61,7 +61,7 @@ import {
 } from "@/lib/mcp/internal-mcp-catalog.query";
 import { useMcpServers } from "@/lib/mcp/mcp-server.query";
 import { useDefaultEnvironment } from "@/lib/organization.query";
-import { useTeams } from "@/lib/teams/team.query";
+import { useAssignableTeams } from "@/lib/teams/team.query";
 import { useCanModifyCatalogItem } from "./catalog-edit-access";
 import {
   clearCatalogEditParam,
@@ -202,7 +202,14 @@ export function McpServerCard({
 
   // Fetch all MCP servers to get installations for logs dropdown
   const { data: allMcpServers } = useMcpServers();
-  const { data: teams } = useTeams();
+  // Teams the user may install a shared connection for: any team for an install
+  // admin, otherwise only the teams they belong to.
+  const { data: isMcpServerInstallAdmin } = useHasPermissions({
+    mcpServerInstallation: ["admin"],
+  });
+  const { data: teams } = useAssignableTeams({
+    isResourceAdmin: !!isMcpServerInstallAdmin,
+  });
 
   // Compute if user can create new installation (personal or team)
   // This is used to determine if the Connect button should be shown

@@ -17,6 +17,7 @@ import {
   defineArchestraTools,
   errorResult,
 } from "./helpers";
+import { unavailableThirdPartyToolMessage } from "./tool-recovery-messages";
 
 const RunToolArgsSchema = z
   .object({
@@ -160,32 +161,3 @@ const registry = defineArchestraTools([
 
 export const toolEntries = registry.toolEntries;
 export const tools = registry.tools;
-
-// === Internal helpers ===
-
-/**
- * Recovery-oriented message for a third-party `tool_name` that is not assigned
- * to the agent (hallucinated or simply not enabled). Mirrors the spirit of the
- * chat route's UNAVAILABLE_TOOL_ERROR_MESSAGE but steers the model at
- * search_tools, the intended discovery path in search_and_run_only mode.
- *
- * Uses branded tool names (`archestraMcpBranding.getToolName`) so the names here
- * match exactly what the model sees in its tool list and system prompt — a
- * custom-branded org exposes these tools under a different prefix, and naming
- * the canonical `archestra__*` form would point the model at a tool it cannot
- * see, defeating the recovery loop.
- */
-function unavailableThirdPartyToolMessage(toolName: string): string {
-  const searchToolsName = archestraMcpBranding.getToolName(
-    TOOL_SEARCH_TOOLS_SHORT_NAME,
-  );
-  const runToolName = archestraMcpBranding.getToolName(
-    TOOL_RUN_TOOL_SHORT_NAME,
-  );
-  return (
-    `No tool named "${toolName}" is available to this agent. It may not exist ` +
-    `or is not assigned to this conversation. Call ${searchToolsName} with a ` +
-    "description of the capability you need to find the exact tool name, then " +
-    `call ${runToolName} again. Do not guess tool names.`
-  );
-}

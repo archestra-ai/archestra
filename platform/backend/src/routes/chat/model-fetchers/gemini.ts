@@ -2,6 +2,7 @@ import { createGoogleGenAIClient } from "@/clients/gemini-client";
 import config from "@/config";
 import logger from "@/logging";
 import type { Gemini } from "@/types";
+import { joinBaseUrl } from "@/utils/base-url";
 import type { ModelInfo } from "./types";
 
 export async function fetchGeminiModels(
@@ -10,7 +11,10 @@ export async function fetchGeminiModels(
   extraHeaders?: Record<string, string> | null,
 ): Promise<ModelInfo[]> {
   const baseUrl = baseUrlOverride || config.llm.gemini.baseUrl;
-  const url = `${baseUrl}/v1beta/models?key=${encodeURIComponent(apiKey)}&pageSize=100`;
+  const url = joinBaseUrl(
+    baseUrl,
+    `/v1beta/models?key=${encodeURIComponent(apiKey)}&pageSize=100`,
+  );
 
   const response = await fetch(url, {
     headers: extraHeaders ?? undefined,

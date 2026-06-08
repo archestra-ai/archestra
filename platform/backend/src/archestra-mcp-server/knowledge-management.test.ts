@@ -3,6 +3,8 @@
 import {
   ARCHESTRA_MCP_SERVER_NAME,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
+  TOOL_GET_KNOWLEDGE_BASES_SHORT_NAME,
+  TOOL_GET_KNOWLEDGE_CONNECTORS_SHORT_NAME,
 } from "@archestra/shared";
 import { vi } from "vitest";
 import {
@@ -13,6 +15,7 @@ import { KbChunkModel, KbDocumentModel, TeamModel } from "@/models";
 import { beforeEach, describe, expect, test } from "@/test";
 import type { Agent, KnowledgeBase, KnowledgeBaseConnector } from "@/types";
 import { type ArchestraContext, executeArchestraTool } from ".";
+import { archestraMcpBranding } from "./branding";
 
 const t = (name: string) =>
   `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${name}`;
@@ -581,6 +584,12 @@ describe("knowledge-management tool execution", () => {
       );
       expect(result.isError).toBe(true);
       expect((result.content[0] as any).text).toContain("not found");
+      expect((result.content[0] as any).text).toContain(
+        archestraMcpBranding.getToolName(TOOL_GET_KNOWLEDGE_BASES_SHORT_NAME),
+      );
+      expect((result._meta as any)?.archestraError?.code).toBe(
+        "unknown_knowledge_base",
+      );
     });
 
     test("update_knowledge_base returns error when no fields provided", async () => {
@@ -747,6 +756,14 @@ describe("knowledge-management tool execution", () => {
       );
       expect(result.isError).toBe(true);
       expect((result.content[0] as any).text).toContain("not found");
+      expect((result.content[0] as any).text).toContain(
+        archestraMcpBranding.getToolName(
+          TOOL_GET_KNOWLEDGE_CONNECTORS_SHORT_NAME,
+        ),
+      );
+      expect((result._meta as any)?.archestraError?.code).toBe(
+        "unknown_knowledge_connector",
+      );
     });
 
     test("update_knowledge_connector returns error when no fields", async () => {

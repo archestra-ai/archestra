@@ -112,7 +112,9 @@ export async function handleDelegation(
   );
 
   if (!delegation) {
-    return errorResult("Agent not found or not configured for delegation.");
+    return errorResult(
+      `No delegation is configured for "${toolName}". Use an exact agent delegation tool name (${AGENT_TOOL_PREFIX}*) from your tools list. Do not guess delegation names.`,
+    );
   }
 
   // Check user access when a real caller is available. The caller user can be

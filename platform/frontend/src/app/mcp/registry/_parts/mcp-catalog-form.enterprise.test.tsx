@@ -52,6 +52,8 @@ vi.mock("@/lib/auth/identity-provider-read.query", () => ({
 
 vi.mock("@/lib/teams/team.query", () => ({
   useTeams: vi.fn(() => ({ data: [] })),
+  useMyTeams: vi.fn(() => ({ data: [] })),
+  useAssignableTeams: vi.fn(() => ({ data: [] })),
 }));
 
 vi.mock("@/lib/mcp/internal-mcp-catalog.query", () => ({

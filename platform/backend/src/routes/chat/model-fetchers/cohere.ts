@@ -1,5 +1,6 @@
 import config from "@/config";
 import logger from "@/logging";
+import { joinBaseUrl } from "@/utils/base-url";
 import type { ModelInfo } from "./types";
 
 export async function fetchCohereModels(
@@ -8,7 +9,7 @@ export async function fetchCohereModels(
   extraHeaders?: Record<string, string> | null,
 ): Promise<ModelInfo[]> {
   const baseUrl = baseUrlOverride || config.llm.cohere.baseUrl;
-  const url = `${baseUrl}/v2/models`;
+  const url = joinBaseUrl(baseUrl, "/v2/models");
 
   const response = await fetch(url, {
     headers: {

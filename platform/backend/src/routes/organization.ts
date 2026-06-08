@@ -325,6 +325,7 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         defaultEnvironmentNamespace: string | null;
         defaultNetworkPolicy: typeof body.networkPolicy;
         defaultEnvironmentRestricted: boolean;
+        defaultEnvironmentValidationRegex: string | null;
       }> = {};
       if ("name" in body) {
         data.defaultEnvironmentName = body.name ?? null;
@@ -340,6 +341,9 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
       if ("restricted" in body) {
         data.defaultEnvironmentRestricted = body.restricted ?? false;
+      }
+      if ("validationRegex" in body) {
+        data.defaultEnvironmentValidationRegex = body.validationRegex ?? null;
       }
 
       const organization = await OrganizationModel.patch(organizationId, data);

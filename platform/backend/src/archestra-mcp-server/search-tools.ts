@@ -103,9 +103,11 @@ type SearchCandidate = {
 };
 
 // search_tools only runs in search_and_run_only mode. The meta tools and the
-// always-exposed runtime path are already top-level there, so returning them as
-// search results would be redundant noise.
-const EXCLUDED_SHORT_NAMES = new Set<string>([
+// always-exposed runtime tools (skills + sandbox) are already top-level there,
+// so returning them as search results would be redundant noise. This set spans
+// both categories — not just meta tools — so it gates search-result membership,
+// not "is this a meta tool".
+const EXCLUDED_FROM_SEARCH_SHORT_NAMES = new Set<string>([
   TOOL_SEARCH_TOOLS_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
   ...ALWAYS_EXPOSED_ARCHESTRA_TOOL_SHORT_NAMES,
@@ -185,7 +187,7 @@ async function getSearchableTools(params: {
   const filteredAssignedTools = assignedTools.filter(
     (tool) =>
       permittedNames.has(tool.name) &&
-      !isExcludedArchestraMetaTool(tool.name) &&
+      !isExcludedFromSearchResults(tool.name) &&
       !tool.name.startsWith("agent__"),
   );
 
@@ -443,9 +445,9 @@ function visitSchema(
   }
 }
 
-function isExcludedArchestraMetaTool(toolName: string): boolean {
+function isExcludedFromSearchResults(toolName: string): boolean {
   const shortName = archestraMcpBranding.getToolShortName(toolName);
-  return shortName != null && EXCLUDED_SHORT_NAMES.has(shortName);
+  return shortName != null && EXCLUDED_FROM_SEARCH_SHORT_NAMES.has(shortName);
 }
 
 function formatArchestraToolTitle(toolName: string): string | null {

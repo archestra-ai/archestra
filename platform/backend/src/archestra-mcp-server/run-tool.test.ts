@@ -186,6 +186,9 @@ describe("run_tool", () => {
     expect((result.content[0] as any).text).toContain(
       "is not assigned to this agent",
     );
+    expect((result._meta?.archestraError as any)?.code).toBe(
+      "tool_not_assigned",
+    );
     expect(mcpClient.executeToolCall).not.toHaveBeenCalled();
   });
 

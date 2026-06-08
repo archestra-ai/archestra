@@ -1197,18 +1197,15 @@ export const anthropicAdapterFactory: LLMProvider<
     request: AnthropicRequest,
   ): Promise<AsyncIterable<AnthropicStreamChunk>> {
     const anthropicClient = client as AnthropicProvider;
-    const stream = anthropicClient.messages.stream({
+    // use the raw create() stream rather than the messages.stream() helper: the
+    // helper eagerly partial-parses accumulated input_json_delta fragments and
+    // throws (unguarded) when a non-conformant upstream emits deltas that
+    // concatenate into more than one JSON value. we do our own guarded tool-call
+    // accumulation in processChunk, so the raw event stream is all we need.
+    return anthropicClient.messages.create({
       ...request,
+      stream: true,
     } as AnthropicProvider.Messages.MessageCreateParamsStreaming);
-
-    // Return async iterable that yields stream events
-    return {
-      [Symbol.asyncIterator]: async function* () {
-        for await (const event of stream) {
-          yield event;
-        }
-      },
-    };
   },
 
   extractInternalCode(error: unknown): ArchestraInternalErrorCode | undefined {

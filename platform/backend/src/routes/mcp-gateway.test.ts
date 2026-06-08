@@ -3,11 +3,14 @@ import {
   MCP_ENTERPRISE_AUTH_EXTENSION_ID,
   TOOL_ACTIVATE_SKILL_FULL_NAME,
   TOOL_ARTIFACT_WRITE_FULL_NAME,
+  TOOL_DOWNLOAD_FILE_FULL_NAME,
   TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON,
   TOOL_LIST_SKILLS_FULL_NAME,
   TOOL_READ_SKILL_FILE_FULL_NAME,
+  TOOL_RUN_COMMAND_FULL_NAME,
   TOOL_RUN_TOOL_FULL_NAME,
   TOOL_SEARCH_TOOLS_FULL_NAME,
+  TOOL_UPLOAD_FILE_FULL_NAME,
 } from "@archestra/shared";
 import Fastify, { type FastifyInstance } from "fastify";
 import {
@@ -15,7 +18,7 @@ import {
   validatorCompiler,
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
-import { TeamTokenModel } from "@/models";
+import { TeamTokenModel, UserTokenModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import mcpGatewayRoutes from "./mcp-gateway";
 
@@ -942,6 +945,83 @@ describe("MCP Gateway (stateless mode)", () => {
       ].sort(),
     );
     expect(toolNames).not.toContain(TOOL_ARTIFACT_WRITE_FULL_NAME);
+  });
+
+  test("also keeps sandbox runtime tools top-level in tools/list when the sandbox feature is enabled", async ({
+    makeAgent,
+    makeMember,
+    makeOrganization,
+    makeUser,
+    seedAndAssignArchestraTools,
+  }) => {
+    const config = (await import("@/config")).default;
+    const originalSandboxEnabled = config.skillsSandbox.enabled;
+    (config.skillsSandbox as { enabled: boolean }).enabled = true;
+
+    try {
+      const org = await makeOrganization();
+      // sandbox tools are gated by sandbox:execute — authenticate as an admin so
+      // RBAC does not strip them before exposure filtering runs.
+      const adminUser = await makeUser();
+      await makeMember(adminUser.id, org.id, { role: "admin" });
+      const agent = await makeAgent({
+        organizationId: org.id,
+        agentType: "mcp_gateway",
+        toolExposureMode: "search_and_run_only",
+      });
+      await seedAndAssignArchestraTools(agent.id);
+
+      const token = await UserTokenModel.create(adminUser.id, org.id);
+
+      const initResponse = await app.inject({
+        method: "POST",
+        url: `/v1/mcp/${agent.id}`,
+        headers: makeMcpHeaders(token.value),
+        payload: {
+          jsonrpc: "2.0",
+          method: "initialize",
+          params: {
+            protocolVersion: "2024-11-05",
+            capabilities: {},
+            clientInfo: { name: "test-client", version: "1.0.0" },
+          },
+          id: 1,
+        },
+      });
+      expect(initResponse.statusCode).toBe(200);
+
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/mcp/${agent.id}`,
+        headers: makeMcpHeaders(token.value),
+        payload: {
+          jsonrpc: "2.0",
+          method: "tools/list",
+          params: {},
+          id: 2,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const toolNames = response
+        .json()
+        .result.tools.map((tool: { name: string }) => tool.name);
+      expect(toolNames.sort()).toEqual(
+        [
+          TOOL_ACTIVATE_SKILL_FULL_NAME,
+          TOOL_DOWNLOAD_FILE_FULL_NAME,
+          TOOL_LIST_SKILLS_FULL_NAME,
+          TOOL_READ_SKILL_FILE_FULL_NAME,
+          TOOL_RUN_COMMAND_FULL_NAME,
+          TOOL_RUN_TOOL_FULL_NAME,
+          TOOL_SEARCH_TOOLS_FULL_NAME,
+          TOOL_UPLOAD_FILE_FULL_NAME,
+        ].sort(),
+      );
+    } finally {
+      (config.skillsSandbox as { enabled: boolean }).enabled =
+        originalSandboxEnabled;
+    }
   });
 
   test("exposes implicit search_tools and run_tool without manual assignment when toolExposureMode is search_and_run_only", async ({

@@ -3,6 +3,7 @@ import {
   type UserSystemPromptContext,
 } from "@archestra/shared";
 import { TeamModel, UserModel } from "@/models";
+import { SKILL_SANDBOX_ATTACHMENTS_DIR } from "@/skills-sandbox/runtime-image";
 import { renderSystemPrompt } from "@/templating";
 import type { Skill, SkillFile } from "@/types";
 
@@ -57,7 +58,7 @@ export function formatSkillActivation({
       `/<script>\`); pass cwd: ${skillRoot} when a script reads bundled files ` +
       "by relative path. Python is the uv project venv at /home/sandbox " +
       "(`python3`) — install packages with `uv add --project /home/sandbox " +
-      "<pkg>`. Files the user attached are under /home/sandbox/attachments/. " +
+      `<pkg>\`. Files the user attached are under ${SKILL_SANDBOX_ATTACHMENTS_DIR}/. ` +
       "Use download_file to retrieve generated files, upload_file to add inputs."
     : "";
   const resources =

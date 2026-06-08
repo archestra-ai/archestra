@@ -7,7 +7,10 @@ import { z } from "zod";
 import config from "@/config";
 import logger from "@/logging";
 import { ConversationAttachmentModel, SkillSandboxModel } from "@/models";
-import { SKILL_SANDBOX_HOME } from "@/skills-sandbox/runtime-image";
+import {
+  SKILL_SANDBOX_ATTACHMENTS_DIR,
+  SKILL_SANDBOX_HOME,
+} from "@/skills-sandbox/runtime-image";
 import { skillSandboxRuntimeService } from "@/skills-sandbox/skill-sandbox-runtime-service";
 import {
   SKILL_SANDBOX_LIMITS,
@@ -239,10 +242,9 @@ const registry = defineArchestraTools([
       "Execute a shell command in the conversation's code sandbox (Debian, " +
       "working dir /home/sandbox). Created on first use and persists across " +
       "calls — files written by one command are visible to the next. Python " +
-      "runs in a uv project at /home/sandbox: `python3` is the project venv " +
-      "(numpy, pandas, httpx preinstalled); install more with " +
-      "`uv add --project /home/sandbox <pkg>` (pip is disabled). Files the user " +
-      "attached to the chat are auto-staged under /home/sandbox/attachments/. " +
+      "runs in a uv project at /home/sandbox: `python3` is the project venv; " +
+      "install packages with `uv add --project /home/sandbox <pkg>` (pip is " +
+      `disabled). Files the user attached to the chat are auto-staged under ${SKILL_SANDBOX_ATTACHMENTS_DIR}/. ` +
       "Activated skills live under /skills and are on PYTHONPATH, so their " +
       "modules import directly. Returns stdout, stderr, " +
       "exit code, and timing (text only — use download_file for generated " +
@@ -363,10 +365,9 @@ const registry = defineArchestraTools([
       "Upload a file into the conversation's sandbox from a chat attachment, " +
       "inline base64, or inline text. The bytes become part of the sandbox " +
       "recipe, so the file is present on every later run_command and " +
-      "download_file call. Note: files the user attached to the chat are " +
-      "already auto-staged under /home/sandbox/attachments/ — use this tool to " +
-      "write inline content, place a file at a specific path, or upload into a " +
-      "non-default sandbox. Requires `sandbox:execute`.",
+      `download_file call. Note: files the user attached to the chat are already auto-staged under ${SKILL_SANDBOX_ATTACHMENTS_DIR}/ — use this tool ` +
+      "to write inline content, place a file at a specific path, or upload " +
+      "into a non-default sandbox. Requires `sandbox:execute`.",
     schema: UploadFileSchema,
     outputSchema: UploadFileOutputSchema,
     async handler({ args, context }) {

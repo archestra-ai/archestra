@@ -19,6 +19,7 @@ import type { SkillSandbox } from "@/types";
 import { asSandboxId, type SandboxId } from "@/types";
 import { resolveArtifactMime } from "./mime-sniff";
 import {
+  SKILL_SANDBOX_ATTACHMENTS_DIR,
   SKILL_SANDBOX_HOME,
   SKILL_SANDBOX_ROOT,
   skillRootPath,
@@ -45,9 +46,9 @@ const REQUIREMENTS_FILE = "requirements.txt";
 // reserved at the skill root: the mount synthesizes this from the pinned
 // version body, so a resource file may not occupy it or any subpath of it.
 const SKILL_MANIFEST_FILE = "SKILL.md";
-// where conversation chat attachments are auto-staged inside the container, so
-// the model can read user-provided files without juggling attachment ids.
-const ATTACHMENTS_DIR = `${SKILL_SANDBOX_HOME}/attachments`;
+// re-exported alias kept for the {@link} references below; the staging dir is
+// defined alongside the other container paths in runtime-image.
+const ATTACHMENTS_DIR = SKILL_SANDBOX_ATTACHMENTS_DIR;
 // covers the cold first install for a typical skill (pillow + a few siblings);
 // subsequent calls hit Dagger's layer cache and finish in ms.
 const REQUIREMENTS_INSTALL_TIMEOUT_SECONDS = 180;

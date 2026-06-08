@@ -17,6 +17,7 @@
 #   dev-stack.sh up           [--detach] [--namespace NAME]
 #   dev-stack.sh down
 #   dev-stack.sh hydrate
+#   dev-stack.sh status
 #
 # `up`:   without --detach, execs `tilt up` in the foreground (Ctrl+C stops
 #         it). With --detach, runs Tilt in the background via nohup, writes
@@ -33,6 +34,12 @@
 #         `up --detach` finishes. Idempotent via ON CONFLICT DO NOTHING —
 #         re-runs top up new rows main has gained without deleting
 #         anything you added by hand.
+#
+# `status`:
+#         lists every git worktree and whether its frontend is responding,
+#         with the URL. Read-only — starts/stops nothing. The main worktree
+#         shows on :3000; parallel worktrees show their persisted
+#         ARCHESTRA_FRONTEND_PORT. Run from any worktree's platform/ dir.
 #
 # `--namespace` overrides the auto-derived K8s namespace (default:
 # `archestra-dev-<sanitized-branch-name>`).
@@ -359,6 +366,75 @@ cmd_hydrate() {
     pnpm --filter @backend db:hydrate-from
 }
 
+cmd_status() {
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      -h|--help) usage 0 ;;
+      *)         echo "unknown arg: $1" >&2; usage 1 ;;
+    esac
+  done
+
+  local bold='' dim='' green='' reset=''
+  if [ -t 1 ]; then
+    bold=$'\033[1m'; dim=$'\033[2m'; green=$'\033[32m'; reset=$'\033[0m'
+  fi
+
+  # Parse `git worktree list --porcelain` into parallel path/branch arrays. Each
+  # worktree is a "worktree <path>" line followed by branch/detached lines and a
+  # blank separator; the main worktree is listed first.
+  local -a paths=() branches=()
+  local path="" branch="" line
+  while IFS= read -r line; do
+    case "$line" in
+      "worktree "*)
+        [ -n "$path" ] && { paths+=("$path"); branches+=("${branch:-(detached)}"); }
+        path="${line#worktree }"; branch="" ;;
+      "branch refs/heads/"*) branch="${line#branch refs/heads/}" ;;
+    esac
+  done < <(git worktree list --porcelain 2>/dev/null)
+  [ -n "$path" ] && { paths+=("$path"); branches+=("${branch:-(detached)}"); }
+
+  if [ "${#paths[@]}" -eq 0 ]; then
+    echo "No git worktrees found (run from inside the repo)." >&2
+    exit 1
+  fi
+
+  # Resolve each worktree's frontend port and liveness. Only the main worktree
+  # (index 0, plain `tilt up`) defaults to :3000; a non-main worktree without a
+  # persisted ARCHESTRA_FRONTEND_PORT has no parallel stack, so don't probe :3000
+  # for it and falsely report the main frontend as its own.
+  local -a names=() urls=() up=()
+  local i port name_w=0 branch_w=0
+  for i in "${!paths[@]}"; do
+    names[i]="$(basename "${paths[i]}")"
+    port="$(read_env_var ARCHESTRA_FRONTEND_PORT "${paths[i]}/platform/.env" || true)"
+    if ! [[ "$port" =~ ^[0-9]+$ ]]; then
+      [ "$i" -eq 0 ] && port=3000 || port=""
+    fi
+    if [ -n "$port" ] && curl -sf -o /dev/null --max-time 2 "http://localhost:${port}/" 2>/dev/null; then
+      up[i]=1
+    else
+      up[i]=0
+    fi
+    urls[i]="${port:+http://localhost:${port}}"
+    urls[i]="${urls[i]:-(no parallel stack)}"
+    [ "${#names[i]}" -gt "$name_w" ] && name_w="${#names[i]}"
+    [ "${#branches[i]}" -gt "$branch_w" ] && branch_w="${#branches[i]}"
+  done
+
+  printf '%s\n' "${bold}Archestra frontends${reset}"
+  local glyph tag color name_pad branch_pad
+  for i in "${!paths[@]}"; do
+    if [ "${up[i]}" -eq 1 ]; then glyph="${green}●${reset}"; color=""; else glyph="${dim}○${reset}"; color="$dim"; fi
+    [ "$i" -eq 0 ] && tag="${bold}[main]${reset}" || tag="      "
+    printf -v name_pad   '%-*s' "$name_w"   "${names[i]}"
+    printf -v branch_pad '%-*s' "$branch_w" "${branches[i]}"
+    printf ' %s  %s%s%s  %s  %s%s%s  %s%s%s\n' \
+      "$glyph" "$color" "$name_pad" "$reset" "$tag" \
+      "$color" "$branch_pad" "$reset" "$color" "${urls[i]}" "$reset"
+  done
+}
+
 pick_port() {
   python3 -c 'import socket; s=socket.socket(); s.bind(("",0)); print(s.getsockname()[1]); s.close()'
 }
@@ -418,6 +494,7 @@ case "$subcommand" in
   up)             cmd_up "$@" ;;
   down)           cmd_down "$@" ;;
   hydrate)        cmd_hydrate "$@" ;;
+  status)         cmd_status "$@" ;;
   -h|--help) usage 0 ;;
   *)         echo "unknown subcommand: $subcommand" >&2; usage 1 ;;
 esac

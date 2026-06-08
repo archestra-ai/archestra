@@ -1,13 +1,22 @@
 import { RouteId } from "@archestra/shared";
 import fastifyHttpProxy from "@fastify/http-proxy";
+import type { FastifyRequest } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import config from "@/config";
 import logger from "@/logging";
+import { fetchAnthropicModels } from "@/routes/chat/model-fetchers/anthropic";
 import { Anthropic, constructResponseSchema, UuidIdSchema } from "@/types";
 import { anthropicAdapterFactory } from "../adapters";
 import { PROXY_API_PREFIX, PROXY_BODY_LIMIT } from "../common";
 import { handleLLMProxy } from "../llm-proxy-handler";
+import {
+  AnthropicModelsHeadersSchema,
+  AnthropicModelsListResponseSchema,
+  extractAnthropicToken,
+  resolveProxyModelsApiKey,
+  toAnthropicModelsList,
+} from "./proxy-model-listing";
 import { createProxyPreHandler } from "./proxy-prehandler";
 
 const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
@@ -112,6 +121,57 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         anthropicAdapterFactory,
       );
     },
+  );
+
+  /**
+   * Virtual-key-aware model listing so the proxy can be registered as an
+   * Anthropic Model Provider in another Archestra instance. The dedicated
+   * handler shadows the blind http-proxy passthrough (which would forward the
+   * `arch_*` key verbatim to api.anthropic.com and 401), resolves the virtual
+   * key to the real upstream key, and returns Anthropic's native models shape.
+   */
+  async function handleListModels(
+    request: FastifyRequest,
+    agentId: string | undefined,
+  ) {
+    const { apiKey, baseUrl, extraHeaders } = await resolveProxyModelsApiKey({
+      request,
+      provider: "anthropic",
+      token: extractAnthropicToken(request.headers),
+    });
+    logger.debug({ agentId }, "[UnifiedProxy] Listing Anthropic models");
+    return toAnthropicModelsList(
+      await fetchAnthropicModels(apiKey, baseUrl, extraHeaders),
+    );
+  }
+
+  fastify.get(
+    `${ANTHROPIC_PREFIX}/v1/models`,
+    {
+      schema: {
+        operationId: RouteId.AnthropicListModelsWithDefaultAgent,
+        description: "List Anthropic models (default agent)",
+        tags: ["LLM Proxy"],
+        headers: AnthropicModelsHeadersSchema,
+        response: constructResponseSchema(AnthropicModelsListResponseSchema),
+      },
+    },
+    async (request) => handleListModels(request, undefined),
+  );
+
+  fastify.get(
+    `${ANTHROPIC_PREFIX}/:agentId/v1/models`,
+    {
+      schema: {
+        operationId: RouteId.AnthropicListModelsWithAgent,
+        description: "List Anthropic models (specific agent)",
+        tags: ["LLM Proxy"],
+        params: z.object({ agentId: UuidIdSchema }),
+        headers: AnthropicModelsHeadersSchema,
+        response: constructResponseSchema(AnthropicModelsListResponseSchema),
+      },
+    },
+    async (request) => handleListModels(request, request.params.agentId),
   );
 };
 

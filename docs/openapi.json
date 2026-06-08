@@ -50400,6 +50400,644 @@
         }
       }
     },
+    "/v1/anthropic/v1/models": {
+      "get": {
+        "operationId": "anthropicListModelsWithDefaultAgent",
+        "tags": [
+          "LLM Proxy"
+        ],
+        "description": "List Anthropic models (default agent)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "x-api-key",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "authorization",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "anthropic-version",
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "model"
+                            ]
+                          },
+                          "id": {
+                            "type": "string"
+                          },
+                          "display_name": {
+                            "type": "string"
+                          },
+                          "created_at": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "type",
+                          "id",
+                          "display_name"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "has_more": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "has_more"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/anthropic/{agentId}/v1/models": {
+      "get": {
+        "operationId": "anthropicListModelsWithAgent",
+        "tags": [
+          "LLM Proxy"
+        ],
+        "description": "List Anthropic models (specific agent)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+            },
+            "in": "path",
+            "name": "agentId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "x-api-key",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "authorization",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "anthropic-version",
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "model"
+                            ]
+                          },
+                          "id": {
+                            "type": "string"
+                          },
+                          "display_name": {
+                            "type": "string"
+                          },
+                          "created_at": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "type",
+                          "id",
+                          "display_name"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "has_more": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "has_more"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/api-keys": {
       "get": {
         "operationId": "getApiKeys",
@@ -163606,6 +164244,620 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/OpenAiChatCompletionResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/openai/models": {
+      "get": {
+        "operationId": "openAiListModelsWithDefaultAgent",
+        "tags": [
+          "LLM Proxy"
+        ],
+        "description": "List OpenAI models (default agent)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "authorization",
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "object": {
+                      "type": "string",
+                      "enum": [
+                        "list"
+                      ]
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "object": {
+                            "type": "string",
+                            "enum": [
+                              "model"
+                            ]
+                          },
+                          "created": {
+                            "type": "number"
+                          },
+                          "owned_by": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "object",
+                          "created",
+                          "owned_by"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "object",
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/openai/{agentId}/models": {
+      "get": {
+        "operationId": "openAiListModelsWithAgent",
+        "tags": [
+          "LLM Proxy"
+        ],
+        "description": "List OpenAI models (specific agent)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+            },
+            "in": "path",
+            "name": "agentId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "authorization",
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "object": {
+                      "type": "string",
+                      "enum": [
+                        "list"
+                      ]
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "object": {
+                            "type": "string",
+                            "enum": [
+                              "model"
+                            ]
+                          },
+                          "created": {
+                            "type": "number"
+                          },
+                          "owned_by": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "object",
+                          "created",
+                          "owned_by"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "object",
+                    "data"
+                  ],
+                  "additionalProperties": false
                 }
               }
             }

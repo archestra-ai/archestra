@@ -49,14 +49,16 @@ export function formatSkillActivation({
     skill.templated && promptContext
       ? (renderSystemPrompt(skill.content, promptContext) ?? skill.content)
       : skill.content;
+  const skillRoot = `/skills/${escapeXmlText(skill.name)}`;
   const sandboxHint = canRunSandbox
-    ? " This skill is now mounted in your sandbox under /skills/" +
-      `${escapeXmlText(skill.name)}. To execute a script or shell command from ` +
-      "it, call run_command (its modules are importable). Python is the uv " +
-      "project venv at /home/sandbox — install packages with " +
-      "`uv add --project /home/sandbox <pkg>`. Files the user attached are under " +
-      "/home/sandbox/attachments/. Use download_file to retrieve generated " +
-      "files, upload_file to add inputs."
+    ? ` This skill is mounted in your sandbox at ${skillRoot}, which is on ` +
+      "PYTHONPATH — import its modules directly with run_command, no sys.path " +
+      `edits needed. Run a bundled script via run_command (\`python3 ${skillRoot}` +
+      `/<script>\`); pass cwd: ${skillRoot} when a script reads bundled files ` +
+      "by relative path. Python is the uv project venv at /home/sandbox " +
+      "(`python3`) — install packages with `uv add --project /home/sandbox " +
+      "<pkg>`. Files the user attached are under /home/sandbox/attachments/. " +
+      "Use download_file to retrieve generated files, upload_file to add inputs."
     : "";
   const resources =
     files.length > 0

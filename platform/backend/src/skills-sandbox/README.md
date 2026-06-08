@@ -98,6 +98,12 @@ pyproject/uv.lock and a later model `uv add` cannot prune them. `uv add` is a
 replayed network command, so version resolution can drift across cold replays —
 pin versions when determinism matters.
 
+Each mounted skill root (`/skills/<name>`) is appended to `PYTHONPATH` at its
+mount step (in `archestra-rs/sandbox-core/src/backends/dagger.rs`), so a skill's
+modules import directly from anywhere — no `sys.path` edits. The default cwd
+stays `/home/sandbox` (never the skill root), so a bundled script that reads its
+own files by relative path must be run with `cwd: /skills/<name>`.
+
 Dagger's layer cache keeps the hot path fast; on a cold cache replay is slower
 but still deterministic for deterministic commands. Non-deterministic commands
 (network calls, time/RNG) are accepted as a v1 limitation — the recorded

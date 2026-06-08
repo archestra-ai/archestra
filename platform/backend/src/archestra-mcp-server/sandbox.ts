@@ -242,7 +242,8 @@ const registry = defineArchestraTools([
       "(numpy, pandas, httpx preinstalled); install more with " +
       "`uv add --project /home/sandbox <pkg>` (pip is disabled). Files the user " +
       "attached to the chat are auto-staged under /home/sandbox/attachments/. " +
-      "Activated skills are runnable under /skills. Returns stdout, stderr, " +
+      "Activated skills live under /skills and are on PYTHONPATH, so their " +
+      "modules import directly. Returns stdout, stderr, " +
       "exit code, and timing (text only — use download_file for generated " +
       "files). Requires `sandbox:execute`.",
     schema: RunCommandSchema,

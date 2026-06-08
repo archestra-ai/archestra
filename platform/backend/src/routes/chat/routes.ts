@@ -307,6 +307,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
             organizationId,
             userId: conversationUserId,
             fields: { prompt: latestUserPrompt },
+            messages: messages as ChatMessage[],
           });
           if (result.decision === "block") {
             throw new ApiError(422, result.reason ?? "Prompt blocked by hook");
@@ -342,6 +343,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
             organizationId,
             userId: conversationUserId,
             fields: { source: "startup", model: sessionStartModel },
+            messages: messages as ChatMessage[],
           });
           // SessionStart cannot block; only its injected context is used.
           hookSessionContext = result.injectedContext;
@@ -1181,6 +1183,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                         organizationId,
                         userId: conversationUserId,
                         fields: { stop_hook_active: false },
+                        messages: finalMessages as unknown as ChatMessage[],
                       });
                       hookRunCollector.push(
                         ...toCollectedRuns(stopResult.runs, {

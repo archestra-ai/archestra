@@ -1,7 +1,12 @@
 import config from "@/config";
-import { HookFileModel, SkillSandboxModel } from "@/models";
+import logger from "@/logging";
+import { HookFileModel, MessageModel, SkillSandboxModel } from "@/models";
 import { SKILL_SANDBOX_HOME } from "@/skills-sandbox/runtime-image";
+import { skillSandboxRuntimeService } from "@/skills-sandbox/skill-sandbox-runtime-service";
+import type { ChatMessage } from "@/types";
 import type { HookEvent } from "@/types/hook";
+import { asSandboxId } from "@/types/skill-sandbox";
+import { messagesToClaudeTranscript } from "./claude-transcript";
 import type { HookRunDetail } from "./hook-run-parts";
 import { runHookScript } from "./hook-runner";
 
@@ -14,6 +19,14 @@ export interface FireParams {
   userId: string;
   /** Event-specific payload fields, e.g. { prompt } or { tool_name, tool_input }. */
   fields: Record<string, unknown>;
+  /**
+   * In-flight conversation used to materialize the Claude-format transcript
+   * exposed to scripts as `transcript_path`. When omitted, the dispatcher loads
+   * persisted history from the DB. The chat route passes the request messages
+   * (history + current prompt) for prompt/session events and the final messages
+   * for Stop.
+   */
+  messages?: ChatMessage[];
 }
 
 /** @public — consumed by the chat route + MCP client wiring (Task 8). */
@@ -64,12 +77,27 @@ class HookDispatcherService {
     });
 
     const hookEventName = HOOK_EVENT_NAMES[params.event];
+
+    // Best-effort: materialize a Claude-format transcript into the sandbox so
+    // scripts can read it via `transcript_path`. A failure here must never block
+    // hook execution, so it is caught and the path is simply omitted.
+    let transcriptPath: string | undefined;
+    try {
+      transcriptPath = await writeTranscript(params, sandbox.id);
+    } catch (error) {
+      logger.warn(
+        { err: error, conversationId: params.conversationId },
+        "[Hooks] transcript write failed — proceeding without transcript_path",
+      );
+    }
+
     const payload = {
       ...params.fields,
       session_id: params.conversationId,
       cwd: SKILL_SANDBOX_HOME,
       permission_mode: "default",
       hook_event_name: hookEventName,
+      ...(transcriptPath ? { transcript_path: transcriptPath } : {}),
     };
 
     const injected: string[] = [];
@@ -124,3 +152,46 @@ const HOOK_EVENT_NAMES: Record<HookEvent, string> = {
   post_tool_use: "PostToolUse",
   stop: "Stop",
 };
+
+// SYNTH transcript fields with no real Archestra source (see claude-transcript).
+const SYNTH_TRANSCRIPT_MODEL = "claude"; // real model is in the SessionStart payload
+const SYNTH_TRANSCRIPT_VERSION = "archestra";
+
+/**
+ * Build the Claude-format transcript for this fire and upload it into the
+ * sandbox at a stable per-conversation path, overwriting the previous version.
+ * Each fire re-uploads (a durable replay event, like the per-fire payload) so
+ * the transcript reflects current state; returns the path, or undefined when
+ * there is nothing to write yet (empty conversation). Uses the caller-supplied
+ * messages when present, else persisted history from the DB.
+ */
+async function writeTranscript(
+  params: FireParams,
+  sandboxId: string,
+): Promise<string | undefined> {
+  const messages =
+    params.messages ?? (await loadConversationMessages(params.conversationId));
+  const jsonl = messagesToClaudeTranscript(messages, {
+    sessionId: params.conversationId,
+    cwd: SKILL_SANDBOX_HOME,
+    model: SYNTH_TRANSCRIPT_MODEL,
+    version: SYNTH_TRANSCRIPT_VERSION,
+    timestamp: new Date().toISOString(),
+  });
+  if (!jsonl) return undefined;
+  const path = `${SKILL_SANDBOX_HOME}/transcript/${params.conversationId}.jsonl`;
+  await skillSandboxRuntimeService.uploadFile({
+    sandboxId: asSandboxId(sandboxId),
+    path,
+    data: Buffer.from(jsonl, "utf8"),
+  });
+  return path;
+}
+
+/** Persisted conversation history as `ChatMessage[]` (the stored UIMessage JSON). */
+async function loadConversationMessages(
+  conversationId: string,
+): Promise<ChatMessage[]> {
+  const rows = await MessageModel.findByConversation(conversationId);
+  return rows.map((row) => row.content as ChatMessage);
+}

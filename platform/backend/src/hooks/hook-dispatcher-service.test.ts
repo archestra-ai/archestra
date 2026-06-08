@@ -371,4 +371,82 @@ describe("hookDispatcherService", () => {
       defaultCwd: "/home/sandbox",
     });
   });
+
+  // -----------------------------------------------------------------------
+  // 7. Transcript: fire materializes a Claude-format transcript + path
+  // -----------------------------------------------------------------------
+  test("writes a Claude-format transcript to the sandbox from supplied messages", async ({
+    makeOrganization,
+    makeUser,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const agent = await makeAgent({ organizationId: org.id });
+    const conversationId = crypto.randomUUID();
+
+    await HookFileModel.create({
+      organizationId: org.id,
+      agentId: agent.id,
+      event: "user_prompt_submit",
+      fileName: "notify.py",
+      content: "print('ok')",
+      requirements: [],
+    });
+
+    vi.spyOn(SkillSandboxModel, "findOrCreateDefault").mockResolvedValue({
+      id: crypto.randomUUID(),
+      organizationId: org.id,
+      userId: user.id,
+      conversationId,
+      defaultCwd: "/home/sandbox",
+      isDefault: true,
+      nextReplaySequence: 0,
+      createdAt: new Date(),
+    });
+    vi.mocked(skillSandboxRuntimeService.runCommand).mockResolvedValue({
+      commandId: "cmd-1",
+      sandboxId: "s" as never,
+      command: "",
+      cwd: null,
+      stdout: "",
+      stderr: "",
+      exitCode: 0,
+      durationMs: 5,
+      timedOut: false,
+      truncated: false,
+      stagingNotices: [],
+    });
+    vi.mocked(skillSandboxRuntimeService.uploadFile).mockResolvedValue({
+      uploadId: "up-1",
+      sandboxId: "s" as never,
+      path: "",
+      mimeType: "application/json",
+      sizeBytes: 0,
+    });
+
+    await hookDispatcherService.fire({
+      event: "user_prompt_submit",
+      conversationId,
+      agentId: agent.id,
+      organizationId: org.id,
+      userId: user.id,
+      fields: { prompt: "hello" },
+      messages: [
+        { id: "u1", role: "user", parts: [{ type: "text", text: "hello" }] },
+      ],
+    });
+
+    // The transcript is uploaded first (before the per-fire script/payload).
+    const firstUpload = vi.mocked(skillSandboxRuntimeService.uploadFile).mock
+      .calls[0][0];
+    expect(firstUpload.path).toBe(
+      `/home/sandbox/transcript/${conversationId}.jsonl`,
+    );
+    const transcript = (firstUpload.data as Buffer).toString("utf8");
+    expect(JSON.parse(transcript.trim()).message).toEqual({
+      role: "user",
+      content: [{ type: "text", text: "hello" }],
+    });
+  });
 });

@@ -28,15 +28,19 @@ dev = [
 python-version = "3.10"
 
 [tool.ty.src]
-include = ["scripts"]
+include = ["scripts", "install.py"]
 
 [tool.ruff]
 line-length = 120
 target-version = "py310"
-src = ["scripts"]
+src = ["scripts", "install.py"]
 # the fixture is a deliberately-imperfect sample of a *user's* setup, not our code.
 extend-exclude = ["tests/fixtures"]
 
 [tool.ruff.lint]
 # pyflakes (unused imports/vars, dead code) + pycodestyle errors + isort.
 select = ["F", "E", "I"]
+
+[tool.ruff.lint.per-file-ignores]
+# the module docstring carries a copy-paste `curl … | python3` URL that can't be wrapped.
+"install.py" = ["E501"]

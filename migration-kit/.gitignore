@@ -4,7 +4,6 @@ __pycache__/
 .venv/
 .ty_cache/
 .ruff_cache/
-uv.lock
 inventory.json
 migration_plan.json
 migration_result.json

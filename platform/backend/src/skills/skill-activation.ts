@@ -51,9 +51,9 @@ export function formatSkillActivation({
       : skill.content;
   const skillRoot = `/skills/${escapeXmlText(skill.name)}`;
   const sandboxHint = canRunSandbox
-    ? ` This skill is mounted in your sandbox at ${skillRoot}, which is on ` +
-      "PYTHONPATH — import its modules directly with run_command, no sys.path " +
-      `edits needed. Run a bundled script via run_command (\`python3 ${skillRoot}` +
+    ? ` This skill is mounted in your sandbox at ${skillRoot} and is on ` +
+      "PYTHONPATH, so its modules import directly in run_command (no path " +
+      `setup of any kind). Run a bundled script via run_command (\`python3 ${skillRoot}` +
       `/<script>\`); pass cwd: ${skillRoot} when a script reads bundled files ` +
       "by relative path. Python is the uv project venv at /home/sandbox " +
       "(`python3`) — install packages with `uv add --project /home/sandbox " +

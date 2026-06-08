@@ -1221,8 +1221,11 @@ function sanitizeFdSchema<T>(schema: T): T {
  *
  * Note: Gemini SDK and REST API have different schemas. See:
  * https://ai.google.dev/api/generate-content
+ *
+ * @public — exercised by gemini.test.ts to verify tool-schema sanitization on
+ * the outbound path.
  */
-function restToSdkGenerateContentParams(
+export function restToSdkGenerateContentParams(
   body: Partial<Gemini.Types.GenerateContentRequest>,
   model: string,
   mergedTools?: Gemini.Types.Tool[] | undefined,

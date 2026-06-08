@@ -17,6 +17,7 @@ const SINGLE_SUBSCHEMA_KEYS = [
   "if",
   "then",
   "else",
+  "unevaluatedItems",
 ] as const;
 
 // keywords whose value is a map of named subschemas
@@ -26,6 +27,9 @@ const SUBSCHEMA_MAP_KEYS = [
   "$defs",
   "definitions",
   "dependentSchemas",
+  // draft-07 `dependencies` may hold subschemas (or property-name arrays, which
+  // pass through the walk unchanged)
+  "dependencies",
 ] as const;
 
 // keywords whose value is an array of subschemas
@@ -60,7 +64,7 @@ function normalizeEnum(node: SchemaObject): void {
   delete node.enum;
 
   if (node.type === undefined && enumValues.length > 0) {
-    node.type = inferType(enumValues[0]);
+    node.type = inferType(enumValues);
   }
 
   if (enumValues.length > 0) {
@@ -105,21 +109,25 @@ function recurseSubschemas(node: SchemaObject): void {
   }
 }
 
-function inferType(value: unknown): string {
-  switch (typeof value) {
-    case "boolean":
-      return "boolean";
-    case "number":
-      return Number.isInteger(value) ? "integer" : "number";
-    case "object":
-      return Array.isArray(value) ? "array" : "object";
-    default:
-      return "string";
+// Infer a single JSON-schema type for a dropped non-string enum. `string` is the
+// safe fallback for empty/null-only/heterogeneous value sets (always valid for
+// Gemini), so we only commit to a narrower type when every value agrees.
+function inferType(values: unknown[]): string {
+  const nonNull = values.filter((v) => v !== null);
+  if (nonNull.length === 0) return "string";
+  if (nonNull.every((v) => typeof v === "boolean")) return "boolean";
+  if (nonNull.every((v) => typeof v === "number")) {
+    return nonNull.every((v) => Number.isInteger(v)) ? "integer" : "number";
   }
+  if (nonNull.every((v) => Array.isArray(v))) return "array";
+  if (nonNull.every((v) => typeof v === "object")) return "object";
+  return "string";
 }
 
 function appendConstraint(description: unknown, values: unknown[]): string {
-  const rendered = values.map((v) => `\`${JSON.stringify(v)}\``);
+  const rendered = values.map((v) =>
+    typeof v === "string" ? `\`${v}\`` : `\`${JSON.stringify(v)}\``,
+  );
   const note =
     rendered.length === 1
       ? `Value must be ${rendered[0]}.`

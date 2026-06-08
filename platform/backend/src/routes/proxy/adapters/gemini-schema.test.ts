@@ -87,7 +87,48 @@ describe("sanitizeGeminiToolSchema", () => {
       sanitizeGeminiToolSchema({ type: "string", enum: ["a", 1] }),
     ).toEqual({
       type: "string",
-      description: 'Value must be one of: `"a"`, `1`.',
+      description: "Value must be one of: `a`, `1`.",
+    });
+  });
+
+  it("infers a safe type for null-only and heterogeneous untyped enums", () => {
+    // typeof null === "object" must not leak as type "object"
+    expect(sanitizeGeminiToolSchema({ enum: [null] })).toEqual({
+      type: "string",
+      description: "Value must be `null`.",
+    });
+    // mixed value types fall back to string rather than the first value's type
+    expect(sanitizeGeminiToolSchema({ enum: [1, "a"] })).toEqual({
+      type: "string",
+      description: "Value must be one of: `1`, `a`.",
+    });
+    // all-float numeric set stays number, not integer
+    expect(sanitizeGeminiToolSchema({ enum: [1, 1.5] })).toEqual({
+      type: "number",
+      description: "Value must be one of: `1`, `1.5`.",
+    });
+  });
+
+  it("recurses into dependencies and unevaluatedItems subschemas", () => {
+    expect(
+      sanitizeGeminiToolSchema({
+        type: "object",
+        dependencies: {
+          a: { type: "boolean", enum: [true] },
+          b: ["c"],
+        },
+        unevaluatedItems: { type: "boolean", enum: [false] },
+      }),
+    ).toEqual({
+      type: "object",
+      dependencies: {
+        a: { type: "boolean", description: "Value must be `true`." },
+        b: ["c"],
+      },
+      unevaluatedItems: {
+        type: "boolean",
+        description: "Value must be `false`.",
+      },
     });
   });
 

@@ -6,7 +6,10 @@
  * 2. recordBlockedToolSpans is called when tool invocation policies block tool calls
  */
 
-import { CHAT_API_KEY_ID_HEADER } from "@archestra/shared";
+import {
+  CHAT_API_KEY_ID_HEADER,
+  PROVIDER_BASE_URL_HEADER,
+} from "@archestra/shared";
 import Fastify, { type FastifyInstance } from "fastify";
 import {
   serializerCompiler,
@@ -15,7 +18,11 @@ import {
 } from "fastify-type-provider-zod";
 import { vi } from "vitest";
 import type { PolicyBlockResult } from "@/guardrails/tool-invocation";
-import { LlmProviderApiKeyModel, ModelModel } from "@/models";
+import {
+  LlmProviderApiKeyModel,
+  ModelModel,
+  VirtualApiKeyModel,
+} from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import {
   createAnthropicTestClient,
@@ -23,6 +30,7 @@ import {
   createOpenAiTestClient,
 } from "@/test/llm-provider-stubs";
 import type { Agent } from "@/types";
+import { ApiError } from "@/types";
 
 // Mock prom-client at module level (like llm-metrics.test.ts)
 const counterInc = vi.fn();
@@ -91,6 +99,7 @@ import {
   geminiAdapterFactory,
   openaiAdapterFactory,
 } from "./adapters";
+import { virtualKeyRateLimiter } from "./llm-proxy-auth";
 import anthropicProxyRoutes from "./routes/anthropic";
 import azureProxyRoutes from "./routes/azure";
 import geminiProxyRoutes from "./routes/gemini";
@@ -852,12 +861,31 @@ describe("LLM Proxy Handler — CHAT_API_KEY_ID_HEADER fallback", () => {
     app = Fastify().withTypeProvider<ZodTypeProvider>();
     app.setValidatorCompiler(validatorCompiler);
     app.setSerializerCompiler(serializerCompiler);
+    app.setErrorHandler((error, _request, reply) => {
+      if (error instanceof ApiError) {
+        return reply
+          .status(error.statusCode)
+          .send({ error: { message: error.message, type: error.type } });
+      }
+      return reply.status(500).send({
+        error: {
+          message: error instanceof Error ? error.message : String(error),
+          type: "api_internal_server_error",
+        },
+      });
+    });
 
     vi.spyOn(openaiAdapterFactory, "createClient").mockImplementation(
       (apiKey, options) => {
         createClientSpy(apiKey, options);
         return createOpenAiTestClient({}) as never;
       },
+    );
+    // The cache-backed rate limiter isn't started under PGLite tests; stub it
+    // so the virtual-key validation path exercises auth, not cache I/O.
+    vi.spyOn(virtualKeyRateLimiter, "check").mockResolvedValue(undefined);
+    vi.spyOn(virtualKeyRateLimiter, "recordFailure").mockResolvedValue(
+      undefined,
     );
 
     testAgent = await makeAgent({ name: "Test Extra Headers Agent" });
@@ -1022,6 +1050,162 @@ describe("LLM Proxy Handler — CHAT_API_KEY_ID_HEADER fallback", () => {
       expect.objectContaining({
         baseUrl: "https://runtime.example.com/openai/v1",
       }),
+    );
+  });
+
+  test("loopback chat forward of a non-local arch_ secret forwards it to the provider base URL", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const apiKey = await LlmProviderApiKeyModel.create({
+      organizationId: org.id,
+      secretId: null,
+      name: "Downstream Archestra proxy key",
+      provider: "openai",
+      scope: "org",
+      userId: null,
+      teamId: null,
+    });
+    const foreignVirtualKey = `arch_${"f".repeat(64)}`;
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${testAgent.id}/chat/completions`,
+      remoteAddress: "127.0.0.1",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${foreignVirtualKey}`,
+        [CHAT_API_KEY_ID_HEADER]: apiKey.id,
+        [PROVIDER_BASE_URL_HEADER]: "https://downstream.example.com/v1/openai",
+      },
+      payload: {
+        model: "gpt-4o",
+        messages: [{ role: "user", content: "Hello!" }],
+        stream: false,
+      },
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(createClientSpy).toHaveBeenCalledWith(
+      foreignVirtualKey,
+      expect.objectContaining({
+        baseUrl: "https://downstream.example.com/v1/openai",
+      }),
+    );
+  });
+
+  test("non-loopback request with a non-local arch_ secret is still rejected with 401", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const apiKey = await LlmProviderApiKeyModel.create({
+      organizationId: org.id,
+      secretId: null,
+      name: "Downstream Archestra proxy key",
+      provider: "openai",
+      scope: "org",
+      userId: null,
+      teamId: null,
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${testAgent.id}/chat/completions`,
+      remoteAddress: "203.0.113.5",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer arch_${"f".repeat(64)}`,
+        [CHAT_API_KEY_ID_HEADER]: apiKey.id,
+        [PROVIDER_BASE_URL_HEADER]: "https://downstream.example.com/v1/openai",
+      },
+      payload: {
+        model: "gpt-4o",
+        messages: [{ role: "user", content: "Hello!" }],
+        stream: false,
+      },
+    });
+
+    expect(response.statusCode).toBe(401);
+    expect(createClientSpy).not.toHaveBeenCalled();
+  });
+
+  test("loopback chat forward of a non-local arch_ secret WITHOUT a provider base URL is still rejected with 401", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const apiKey = await LlmProviderApiKeyModel.create({
+      organizationId: org.id,
+      secretId: null,
+      name: "Downstream Archestra proxy key",
+      provider: "openai",
+      scope: "org",
+      userId: null,
+      teamId: null,
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${testAgent.id}/chat/completions`,
+      remoteAddress: "127.0.0.1",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer arch_${"f".repeat(64)}`,
+        [CHAT_API_KEY_ID_HEADER]: apiKey.id,
+      },
+      payload: {
+        model: "gpt-4o",
+        messages: [{ role: "user", content: "Hello!" }],
+        stream: false,
+      },
+    });
+
+    expect(response.statusCode).toBe(401);
+    expect(createClientSpy).not.toHaveBeenCalled();
+  });
+
+  test("loopback chat forward of a VALID local virtual key still resolves it locally", async ({
+    makeOrganization,
+    makeSecret,
+  }) => {
+    const org = await makeOrganization();
+    const secret = await makeSecret({ secret: { apiKey: "sk-resolved-real" } });
+    const providerKey = await LlmProviderApiKeyModel.create({
+      organizationId: org.id,
+      secretId: secret.id,
+      name: "Local OpenAI key behind a virtual key",
+      provider: "openai",
+      scope: "org",
+      userId: null,
+      teamId: null,
+    });
+    const { value: localVirtualKey } = await VirtualApiKeyModel.create({
+      name: "local-vk",
+      providerApiKeys: [
+        { provider: "openai", providerApiKeyId: providerKey.id },
+      ],
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${testAgent.id}/chat/completions`,
+      remoteAddress: "127.0.0.1",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${localVirtualKey}`,
+        [CHAT_API_KEY_ID_HEADER]: providerKey.id,
+      },
+      payload: {
+        model: "gpt-4o",
+        messages: [{ role: "user", content: "Hello!" }],
+        stream: false,
+      },
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    // Resolved to the real provider secret, NOT forwarded as the arch_ token.
+    expect(createClientSpy).toHaveBeenCalledWith(
+      "sk-resolved-real",
+      expect.any(Object),
     );
   });
 });

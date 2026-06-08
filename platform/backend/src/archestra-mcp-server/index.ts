@@ -66,6 +66,7 @@ import {
   toolEntries as toolAssignmentToolEntries,
   tools as toolAssignmentTools,
 } from "./tool-assignment";
+import { toolDiscoverySteer } from "./tool-recovery-messages";
 import type { ArchestraContext } from "./types";
 
 export { archestraMcpBranding } from "./branding";
@@ -235,16 +236,6 @@ async function checkToolAssignedToAgent(
       toolName,
     },
   });
-}
-
-// Recovery steer pointing a model at the tool-discovery path. Branded so the
-// names match what the model sees (custom-branded orgs use a different prefix);
-// mirrors run-tool's unavailableThirdPartyToolMessage.
-function toolDiscoverySteer(): string {
-  const searchToolsName = archestraMcpBranding.getToolName(
-    TOOL_SEARCH_TOOLS_SHORT_NAME,
-  );
-  return `Call ${searchToolsName} to discover the tools available to you, then use an exact name it returns. Do not guess tool names.`;
 }
 
 function resolveArchestraToolName(toolName: string): string | null {

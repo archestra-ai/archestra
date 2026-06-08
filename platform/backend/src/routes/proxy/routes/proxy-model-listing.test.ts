@@ -116,6 +116,44 @@ describe("provider-specific proxy GET /models (virtual-key-aware)", () => {
     );
   });
 
+  test("anthropic: discovery targets the provider's canonical baseUrl, not the inference override", async ({
+    makeOrganization,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    vi.mocked(fetchAnthropicModels).mockResolvedValue(ANTHROPIC_MODELS);
+    const app = await buildApp(anthropicProxyRoutes);
+
+    const org = await makeOrganization();
+    const secret = await makeSecret({ secret: { apiKey: "sk-ant-real" } });
+    // A custom inference gateway that does not serve /models: discovery must use
+    // baseUrl, never inferenceBaseUrl.
+    const providerKey = await makeLlmProviderApiKey(org.id, secret.id, {
+      provider: "anthropic",
+      baseUrl: "https://discovery.example.com",
+      inferenceBaseUrl: "https://inference.example.com",
+    });
+    const { value } = await VirtualApiKeyModel.create({
+      name: "vk-anthropic-discovery-base",
+      providerApiKeys: [
+        { provider: "anthropic", providerApiKeyId: providerKey.id },
+      ],
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/v1/anthropic/${randomUUID()}/v1/models`,
+      headers: { "x-api-key": value },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(fetchAnthropicModels).toHaveBeenCalledWith(
+      "sk-ant-real",
+      "https://discovery.example.com",
+      null,
+    );
+  });
+
   test("anthropic: default-agent route lists models", async ({
     makeOrganization,
     makeSecret,

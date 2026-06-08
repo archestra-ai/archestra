@@ -104,12 +104,15 @@ export class ActiveChatRunService {
   // so their conversations are not blocked until the stale reaper catches up.
   async failInFlightRuns(): Promise<number> {
     const ids = Array.from(this.inFlightRunIds);
-    this.inFlightRunIds.clear();
 
     const failed = await ActiveChatRunModel.markRunningAsFailedByIds({
       ids,
       error: "Server shut down before the chat stream completed.",
     });
+
+    // Clear only after the write resolves (mirrors markTerminal): if it throws,
+    // the ids are retained so the stale-run reaper still fails them later.
+    this.inFlightRunIds.clear();
 
     if (failed > 0) {
       logger.info({ failed }, "Failed in-flight active chat runs on shutdown");

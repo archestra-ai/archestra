@@ -88,9 +88,13 @@ export async function resolveProxyModelsApiKey(params: {
     const providerKey = resolved.chatApiKeyId
       ? await LlmProviderApiKeyModel.findById(resolved.chatApiKeyId)
       : null;
+    // Model discovery targets the provider's canonical base URL, not the
+    // inference override: `resolved.baseUrl` is coalesce(inferenceBaseUrl,
+    // baseUrl), and a custom inference gateway may not serve `/models`. Fall
+    // back to the provider default (undefined) when no base is configured.
     return {
       apiKey: resolved.apiKey,
-      baseUrl: resolved.baseUrl,
+      baseUrl: providerKey?.baseUrl ?? undefined,
       extraHeaders: providerKey?.extraHeaders ?? null,
     };
   } catch (error) {

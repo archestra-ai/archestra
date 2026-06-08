@@ -110,9 +110,13 @@ export class ActiveChatRunService {
       error: "Server shut down before the chat stream completed.",
     });
 
-    // Clear only after the write resolves (mirrors markTerminal): if it throws,
-    // the ids are retained so the stale-run reaper still fails them later.
-    this.inFlightRunIds.clear();
+    // Remove only the snapshotted ids, and only after the write resolves
+    // (mirrors markTerminal): on throw the ids are retained for the stale-run
+    // reaper, and a run registered concurrently during the shutdown window is
+    // left to its own registerCreatedRun/markTerminal rather than clobbered.
+    for (const id of ids) {
+      this.inFlightRunIds.delete(id);
+    }
 
     if (failed > 0) {
       logger.info({ failed }, "Failed in-flight active chat runs on shutdown");

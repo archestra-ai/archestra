@@ -154,6 +154,44 @@ describe("provider-specific proxy GET /models (virtual-key-aware)", () => {
     );
   });
 
+  test("anthropic: discovery falls back to the provider default when only inferenceBaseUrl is set", async ({
+    makeOrganization,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    vi.mocked(fetchAnthropicModels).mockResolvedValue(ANTHROPIC_MODELS);
+    const app = await buildApp(anthropicProxyRoutes);
+
+    const org = await makeOrganization();
+    const secret = await makeSecret({ secret: { apiKey: "sk-ant-real" } });
+    // baseUrl null + inferenceBaseUrl set: discovery must not borrow the
+    // inference override; it falls back to the provider default (undefined).
+    const providerKey = await makeLlmProviderApiKey(org.id, secret.id, {
+      provider: "anthropic",
+      baseUrl: null,
+      inferenceBaseUrl: "https://inference.example.com",
+    });
+    const { value } = await VirtualApiKeyModel.create({
+      name: "vk-anthropic-inference-only",
+      providerApiKeys: [
+        { provider: "anthropic", providerApiKeyId: providerKey.id },
+      ],
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/v1/anthropic/${randomUUID()}/v1/models`,
+      headers: { "x-api-key": value },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(fetchAnthropicModels).toHaveBeenCalledWith(
+      "sk-ant-real",
+      undefined,
+      null,
+    );
+  });
+
   test("anthropic: default-agent route lists models", async ({
     makeOrganization,
     makeSecret,

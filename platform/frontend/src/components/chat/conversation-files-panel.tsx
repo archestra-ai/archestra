@@ -79,21 +79,30 @@ export function ConversationFilesPanel({
     }
   }, [selectedId, hasArtifact, newestGeneratedId]);
 
-  // Surface a freshly created generated file (download_file) by selecting it,
-  // the way the artifact pops when written. The first loaded set is captured
-  // without surfacing, so existing files aren't auto-opened over the artifact.
+  // Follow the latest produced output: when the artifact is (re)written switch
+  // back to it, when a download_file output is created switch to that file — the
+  // same "pop" the artifact does. The first loaded set is captured as a baseline
+  // so existing files/artifact don't hijack the view when the panel opens.
+  const prevArtifactRef = useRef<string | null | undefined>(undefined);
   const seenGeneratedRef = useRef<Set<string> | null>(null);
   useEffect(() => {
     if (!filesLoaded) return;
     const ids = generatedKey ? generatedKey.split("|") : [];
-    const prev = seenGeneratedRef.current;
+    const prevGenerated = seenGeneratedRef.current;
+    const prevArtifact = prevArtifactRef.current;
     seenGeneratedRef.current = new Set(ids);
-    if (prev === null) return; // first loaded render — capture only
-    const fresh = ids.filter((id) => !prev.has(id));
+    prevArtifactRef.current = artifact;
+    if (prevGenerated === null) return; // baseline only — default handles open
+
+    if (hasArtifact && artifact !== prevArtifact) {
+      setSelectedId("artifact");
+      return;
+    }
+    const fresh = ids.filter((id) => !prevGenerated.has(id));
     if (fresh.length > 0) {
       setSelectedId(fresh[fresh.length - 1]);
     }
-  }, [filesLoaded, generatedKey]);
+  }, [filesLoaded, generatedKey, artifact, hasArtifact]);
 
   // The artifact is rendered once and kept mounted whenever it exists, so its
   // row's "Download as PDF" button has rendered content to print even when the

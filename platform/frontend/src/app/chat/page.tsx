@@ -1323,13 +1323,17 @@ export function ChatPageContent({
     queryClient,
   ]);
 
-  // Refresh the Files list whenever the chat settles to "ready" — that's the
-  // initial open and the end of every turn, so any `download_file` outputs
-  // persisted during the turn show up once it finishes.
+  // Refresh the Files list and the conversation (for the artifact) whenever the
+  // chat settles to "ready" — the initial open and the end of every turn. This
+  // surfaces `download_file` outputs and picks up a rewritten artifact, so the
+  // Files panel can follow the latest output.
   useEffect(() => {
     if (!conversationId || status !== "ready") return;
     queryClient.invalidateQueries({
       queryKey: ["conversation-files", conversationId],
+    });
+    queryClient.invalidateQueries({
+      queryKey: ["conversation", conversationId],
     });
   }, [status, conversationId, queryClient]);
 

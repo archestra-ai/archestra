@@ -204,9 +204,13 @@ const registry = defineArchestraTools([
 
       const skill = await findAccessibleSkill(ctx, args.name);
       if (!skill) {
-        return errorResult(
-          `No skill named "${args.name}" exists. Call list_skills to see available skills.`,
-        );
+        return structuredToolErrorResult({
+          error: {
+            type: "tool_state",
+            code: "unknown_skill",
+            message: `No skill named "${args.name}" exists. Call list_skills to see available skills.`,
+          },
+        });
       }
 
       const canRunSandbox = await canRunSkillSandbox(ctx, context.agent.id);
@@ -397,9 +401,13 @@ const registry = defineArchestraTools([
 
       const skill = await findAccessibleSkill(ctx, args.name);
       if (!skill) {
-        return errorResult(
-          `No skill named "${args.name}" exists. Call list_skills to see available skills.`,
-        );
+        return structuredToolErrorResult({
+          error: {
+            type: "tool_state",
+            code: "unknown_skill",
+            message: `No skill named "${args.name}" exists. Call list_skills to see available skills.`,
+          },
+        });
       }
 
       // read access (findAccessibleSkill) is not enough to modify a skill —

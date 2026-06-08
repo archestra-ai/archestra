@@ -143,6 +143,10 @@ describe("skill tool execution", () => {
 
     expect(result.isError).toBe(true);
     expect(textOf(result)).toContain("does-not-exist");
+    expect(
+      (result._meta as { archestraError?: { code?: string } } | undefined)
+        ?.archestraError?.code,
+    ).toBe("unknown_skill");
   });
 
   test("read_skill_file returns a bundled resource file", async () => {
@@ -444,6 +448,10 @@ describe("skill tool execution", () => {
 
     expect(result.isError).toBe(true);
     expect(textOf(result)).toContain("does-not-exist");
+    expect(
+      (result._meta as { archestraError?: { code?: string } } | undefined)
+        ?.archestraError?.code,
+    ).toBe("unknown_skill");
   });
 
   test("update_skill denies a non-admin editing an org-scoped skill", async ({

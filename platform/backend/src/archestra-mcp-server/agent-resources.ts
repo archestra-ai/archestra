@@ -1,3 +1,4 @@
+import { TOOL_LIST_AGENTS_SHORT_NAME } from "@archestra/shared";
 import { z } from "zod";
 import {
   getAgentTypePermissionChecker,
@@ -22,6 +23,7 @@ import {
   ToolExposureModeSchema,
   UuidIdSchema,
 } from "@/types";
+import { archestraMcpBranding } from "./branding";
 import {
   assignSubAgentDelegations,
   assignToolAssignments,
@@ -407,7 +409,12 @@ export async function handleGetResource<
     }
 
     if (!record) {
-      return errorResult(`${getLabel} not found`);
+      // only agents have a discovery tool; proxies/gateways have no list tool.
+      const steer =
+        expectedType === "agent"
+          ? ` Call ${archestraMcpBranding.getToolName(TOOL_LIST_AGENTS_SHORT_NAME)} to find the exact id or name.`
+          : "";
+      return errorResult(`${getLabel} not found.${steer}`);
     }
 
     if (record.agentType !== expectedType) {

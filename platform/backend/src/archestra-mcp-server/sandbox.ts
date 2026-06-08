@@ -482,7 +482,9 @@ async function resolveTarget(params: {
         },
         "[Sandbox] rejected out-of-scope sandbox id",
       );
-      return { error: `No accessible sandbox with id ${target.id} exists.` };
+      return {
+        error: `No accessible sandbox with id ${target.id} exists. Omit \`target\` to use the conversation's default sandbox, or pass \`target: { fresh: true }\` to create a new one.`,
+      };
     }
     return { sandboxId: asSandboxId(sandbox.id) };
   }

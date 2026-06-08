@@ -195,6 +195,11 @@ describe("skill tool execution", () => {
 
     expect(result.isError).toBe(true);
     expect(textOf(result)).toContain("MISSING.md");
+    expect(textOf(result)).toContain("activate_skill");
+    expect(
+      (result._meta as { archestraError?: { code?: string } } | undefined)
+        ?.archestraError?.code,
+    ).toBe("unknown_skill_file");
   });
 
   test("skill tools are denied without skill:read", async ({ makeUser }) => {

@@ -275,8 +275,13 @@ describe("McpClient", () => {
       expect(result).toMatchObject({
         id: "call_123",
         isError: true,
-        error: expect.stringContaining("Tool not found"),
+        error: expect.stringContaining("No tool named"),
       });
+      expect(result.error).toContain("Do not guess tool names");
+      expect(
+        (result._meta as { archestraError?: { code?: string } } | undefined)
+          ?.archestraError?.code,
+      ).toBe("unknown_tool");
     });
 
     test("declares MCP Apps and enterprise auth extensions during initialize", async () => {
@@ -4402,7 +4407,7 @@ describe("McpClient", () => {
         const result = await mcpClient.executeToolCall(toolCall, agentId);
 
         expect(result.isError).toBe(true);
-        expect(result.error).toContain("Tool not found");
+        expect(result.error).toContain("No tool named");
       });
     });
 

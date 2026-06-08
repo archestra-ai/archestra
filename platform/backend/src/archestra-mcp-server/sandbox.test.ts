@@ -287,6 +287,7 @@ describe("sandbox tools (runtime enabled)", () => {
       );
       expect(result.isError).toBe(true);
       expect(textOf(result)).toContain("No accessible sandbox");
+      expect(textOf(result)).toContain("fresh: true");
     });
 
     test("target {id} owned by another user is rejected", async ({

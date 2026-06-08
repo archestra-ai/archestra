@@ -48,6 +48,7 @@ import {
   defineArchestraTool,
   defineArchestraTools,
   errorResult,
+  structuredToolErrorResult,
   successResult,
 } from "./helpers";
 import type { ArchestraContext } from "./types";
@@ -279,7 +280,13 @@ const registry = defineArchestraTools([
 
       const skill = await findAccessibleSkill(ctx, args.skill);
       if (!skill) {
-        return errorResult(`No skill named "${args.skill}" exists.`);
+        return structuredToolErrorResult({
+          error: {
+            type: "tool_state",
+            code: "unknown_skill",
+            message: `No skill named "${args.skill}" exists. Call list_skills to see available skills.`,
+          },
+        });
       }
 
       // read from the effective version (the mounted one if mounted, else
@@ -295,9 +302,13 @@ const registry = defineArchestraTools([
         ? await SkillVersionModel.findFileByPath(version.id, args.path)
         : null;
       if (!file) {
-        return errorResult(
-          `Skill "${args.skill}" has no file at "${args.path}".`,
-        );
+        return structuredToolErrorResult({
+          error: {
+            type: "tool_state",
+            code: "unknown_skill_file",
+            message: `Skill "${args.skill}" has no file at "${args.path}". Check the <skill_resources> list returned by activate_skill for the available file paths.`,
+          },
+        });
       }
 
       if (file.encoding === "base64") {

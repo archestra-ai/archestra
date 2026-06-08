@@ -118,7 +118,6 @@ COPY backend/package.json backend/
 COPY frontend/package.json frontend/
 COPY shared/package.json shared/
 COPY archestra-rs/sandbox-rs/package.json archestra-rs/sandbox-rs/
-COPY patches/ patches/
 
 # Install all dependencies
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile
@@ -311,7 +310,6 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
 COPY backend/package.json backend/
 COPY frontend/package.json frontend/
 COPY archestra-rs/sandbox-rs/package.json archestra-rs/sandbox-rs/
-COPY patches/ patches/
 COPY docker/scripts/docker-banner.sh /app/docker-banner.sh
 COPY docker/scripts/docker-entrypoint.sh /docker-entrypoint.sh
 COPY docker/supervisord/supervisord.conf /etc/supervisord.conf

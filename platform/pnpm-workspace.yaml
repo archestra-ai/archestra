@@ -7,7 +7,7 @@ packages:
   - "e2e-tests"
 
 catalog:
-  ai: ^6.0.82
+  ai: ^6.0.193
   better-auth: 1.6.11
   "@better-auth/core": 1.6.11
   "@better-auth/oauth-provider": 1.6.11
@@ -65,9 +65,6 @@ overrides:
   yaml: '>=2.8.3'
   '@opentelemetry/exporter-prometheus': 0.217.0
   '@opentelemetry/sdk-node': 0.217.0
-patchedDependencies:
-  ai@6.0.90: patches/ai@6.0.90.patch
-
 packageExtensions:
   '@hookform/resolvers@*':
     dependencies:

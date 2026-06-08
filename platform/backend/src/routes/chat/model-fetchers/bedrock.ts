@@ -6,7 +6,7 @@ import {
 } from "@/clients/bedrock-credentials";
 import config from "@/config";
 import logger from "@/logging";
-import { joinBaseUrl } from "./base-url";
+import { joinBaseUrl } from "@/utils/base-url";
 import type { ModelInfo } from "./types";
 
 export async function fetchBedrockModels(

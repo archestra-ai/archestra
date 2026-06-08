@@ -1,5 +1,5 @@
 import config from "@/config";
-import { joinBaseUrl } from "./base-url";
+import { joinBaseUrl } from "@/utils/base-url";
 import { fetchModelsWithBearerAuth } from "./openai-compatible";
 import type { ModelInfo } from "./types";
 

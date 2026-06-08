@@ -5,7 +5,7 @@ import {
 import config from "@/config";
 import logger from "@/logging";
 import type { Anthropic } from "@/types";
-import { joinBaseUrl } from "./base-url";
+import { joinBaseUrl } from "@/utils/base-url";
 import type { ModelInfo } from "./types";
 
 export async function fetchAnthropicModels(

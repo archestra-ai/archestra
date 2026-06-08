@@ -2,7 +2,7 @@ import { createGoogleGenAIClient } from "@/clients/gemini-client";
 import config from "@/config";
 import logger from "@/logging";
 import type { Gemini } from "@/types";
-import { joinBaseUrl } from "./base-url";
+import { joinBaseUrl } from "@/utils/base-url";
 import type { ModelInfo } from "./types";
 
 export async function fetchGeminiModels(

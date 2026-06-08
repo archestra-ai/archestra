@@ -1,7 +1,7 @@
 import { z } from "zod";
 import config from "@/config";
 import logger from "@/logging";
-import { joinBaseUrl } from "./base-url";
+import { joinBaseUrl } from "@/utils/base-url";
 import { fetchModelsWithBearerAuth } from "./openai-compatible";
 import type { FetchedModelCapabilities, ModelInfo } from "./types";
 

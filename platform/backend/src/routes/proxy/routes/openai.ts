@@ -215,11 +215,10 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   /**
-   * Virtual-key-aware model listing so the proxy can be registered as an OpenAI
-   * Model Provider in another Archestra instance. The dedicated handler shadows
-   * the blind http-proxy passthrough (which would forward the `arch_*` key
-   * verbatim to api.openai.com and 401), resolves the virtual key to the real
-   * upstream key, and returns OpenAI's native models shape.
+   * Virtual-key-aware model listing. This dedicated handler shadows the blind
+   * http-proxy passthrough — which forwards an `arch_*` virtual key verbatim to
+   * api.openai.com and 401s — resolving the virtual key to its real upstream
+   * key and returning OpenAI's native models shape.
    */
   async function handleListModels(
     request: FastifyRequest,

@@ -124,11 +124,10 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   /**
-   * Virtual-key-aware model listing so the proxy can be registered as an
-   * Anthropic Model Provider in another Archestra instance. The dedicated
-   * handler shadows the blind http-proxy passthrough (which would forward the
-   * `arch_*` key verbatim to api.anthropic.com and 401), resolves the virtual
-   * key to the real upstream key, and returns Anthropic's native models shape.
+   * Virtual-key-aware model listing. This dedicated handler shadows the blind
+   * http-proxy passthrough — which forwards an `arch_*` virtual key verbatim to
+   * api.anthropic.com and 401s — resolving the virtual key to its real upstream
+   * key and returning Anthropic's native models shape.
    */
   async function handleListModels(
     request: FastifyRequest,

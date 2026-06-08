@@ -2831,9 +2831,11 @@ describe("checkLimitsBeforeRequest cleanup integration", () => {
       300,
     );
 
-    // Set old lastCleanup (far in the past)
+    // First day of the previous calendar month, so the default calendar_month
+    // cleanup fires regardless of today's day-of-month.
     const oldDate = new Date();
-    oldDate.setDate(oldDate.getDate() - 7);
+    oldDate.setDate(1);
+    oldDate.setMonth(oldDate.getMonth() - 1);
     await LimitModel.patch(oldLimit.id, { lastCleanup: oldDate });
 
     // Set recent lastCleanup (just now)

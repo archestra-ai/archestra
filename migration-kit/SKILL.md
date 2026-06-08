@@ -70,11 +70,17 @@ You author **decisions only** — never raw API payloads; `apply.py` builds and 
 
 Use `AskUserQuestion` only for genuine ambiguities, e.g.:
 - the single default scope (`personal`/`team`/`org`), plus any per-item exceptions;
+- if any decision uses `team` scope, which concrete Archestra team ids should own it. Put them in
+  `user_answers.teamIds`; otherwise use `personal` or `org` scope. Team-scoped agents, skills, and
+  MCP catalog items use `teamIds`; team-scoped MCP installs and LLM keys use `teamId` (or the single
+  value from `teamIds`). A team-scoped decision with no team id is invalid and `apply.py` will not
+  touch the network;
 - whether each subagent should be a `skill` (default) or a full `agent`;
 - whether to also **install** each MCP server now (`mcp_install`) or just register the catalog item
   (installing a local stdio server spins a K8s pod). If you emit both a `mcp_catalog` and a
   `mcp_install` decision for one server, give them the **same** `name`/`name_override` — the install
-  resolves its catalog item by name;
+  resolves its catalog item by name. `apply.py` attaches installs to the primary migrated agent by
+  default; use `user_answers.agentIds` only for extra explicit agent assignments;
 - which LLM keys to migrate — and have the user paste each secret into `user_answers.apiKey`
   (with `provider`). Never read a secret out of their files.
 - for each `guard` hook, extract its semantics into `user_answers`
@@ -119,7 +125,10 @@ Fix any `invalid` ops (they print the validation error), then apply for real:
 python3 "$SKILL_DIR/scripts/apply.py" --inventory inventory.json --plan migration_plan.json --out migration_result.json
 ```
 `apply.py` is idempotent (skips entities that already exist), records each op's real outcome, calls
-`enable-defaults` so the primary agent sees the skills, and exits non-zero if any op failed/was invalid.
+`enable-defaults` so the primary agent sees the skills, and best-effort assigns sandbox tools
+(`run_command`, `upload_file`, `download_file`) to migrated agents. Sandbox assignment failures are
+non-blocking warnings because some Archestra installs do not enable the sandbox runtime yet. The script
+exits non-zero if any op failed/was invalid.
 
 ## Step 5 — Report
 From `migration_result.json`, write `report.md` using `references/report-template.md`. The report is

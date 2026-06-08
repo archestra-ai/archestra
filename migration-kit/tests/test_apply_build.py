@@ -1,4 +1,8 @@
 """offline tests for the deterministic decision->payload builder."""
+import json
+import sys
+import threading
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from typing import Any
 
@@ -14,9 +18,10 @@ from apply import (
     BuiltSkill,
     _build_payload,
     _redacted_for_print,
+    main,
 )
 from archestra_client import LlmKeyCreate
-from contracts import ContractError, Decision, Item, SkillItem
+from contracts import ContractError, Decision, Item, SkillItem, to_jsonable
 from discover import discover
 
 FIXTURE = Path(__file__).parent / "fixtures" / "sample-setup"
@@ -60,6 +65,29 @@ def test_skill_is_verbatim(index: dict[str, Item]) -> None:
     assert {f.path for f in built.payload.files} == {"reference.md"}
 
 
+def test_team_scoped_skill_requires_team_ids(index: dict[str, Item]) -> None:
+    with pytest.raises(ContractError, match="teamIds"):
+        _build_payload(
+            Decision(source_id="skill:summarize-text", target_kind="skill", scope="team"),
+            index["skill:summarize-text"],
+        )
+
+
+def test_team_scoped_skill_carries_team_ids(index: dict[str, Item]) -> None:
+    _, built = _build_payload(
+        Decision(
+            source_id="skill:summarize-text",
+            target_kind="skill",
+            scope="team",
+            user_answers={"teamIds": ["team-a", "team-b", "team-a"]},
+        ),
+        index["skill:summarize-text"],
+    )
+    assert isinstance(built, BuiltSkill)
+    assert built.payload.scope == "team"
+    assert built.payload.teamIds == ["team-a", "team-b"]
+
+
 def test_local_tool_builds_skill_bundling_script(index: dict[str, Item]) -> None:
     _, built = _decide(index, "local_tool:word_count", "skill")
     assert isinstance(built, BuiltSkill)
@@ -71,8 +99,50 @@ def test_remote_mcp_builds_remote_catalog(index: dict[str, Item]) -> None:
     _, built = _decide(index, "mcp:weather", "mcp_catalog")
     assert isinstance(built, BuiltCatalog)
     assert built.payload.serverType == "remote"
-    assert built.payload.remoteConfig is not None
-    assert built.payload.remoteConfig.url == "https://mcp.example.com/weather"
+    assert built.payload.serverUrl == "https://mcp.example.com/weather"
+
+
+def test_team_scoped_agent_carries_team_ids(index: dict[str, Item]) -> None:
+    _, built = _build_payload(
+        Decision(
+            source_id="claude_md",
+            target_kind="agent",
+            scope="team",
+            user_answers={"teamIds": ["team-a", "team-b"]},
+        ),
+        index["claude_md"],
+    )
+    assert isinstance(built, BuiltAgent)
+    assert built.payload.teams == ["team-a", "team-b"]
+
+
+def test_team_scoped_install_uses_single_team_id(index: dict[str, Item]) -> None:
+    _, built = _build_payload(
+        Decision(
+            source_id="mcp:github",
+            target_kind="mcp_install",
+            scope="team",
+            user_answers={"teamIds": ["team-a"], "agentIds": ["agent-a"]},
+        ),
+        index["mcp:github"],
+    )
+    assert isinstance(built, BuiltInstall)
+    assert built.team_id == "team-a"
+    assert built.agent_ids == ["agent-a"]
+
+
+def test_team_scoped_llm_key_carries_team_id(index: dict[str, Item]) -> None:
+    _, built = _build_payload(
+        Decision(
+            source_id="openclaw",
+            target_kind="llm_key",
+            scope="team",
+            user_answers={"provider": "anthropic", "apiKey": "sk-ant-real", "teamId": "team-a"},
+        ),
+        index["openclaw"],
+    )
+    assert isinstance(built, BuiltLlmKey)
+    assert built.payload.teamId == "team-a"
 
 
 def test_stdio_mcp_redacted_env_becomes_prompted_secret(index: dict[str, Item]) -> None:
@@ -120,7 +190,7 @@ def test_dry_run_redaction_hides_user_secrets() -> None:
         provider="anthropic", scope="personal", apiKey="sk-real", name="k")))
     assert llm["apiKey"] == "<redacted>"
     install = _redacted_for_print(BuiltInstall(
-        catalog_name="fs", scope="personal", environment_values={"GITHUB_TOKEN": "ghp_real"}))
+        catalog_name="fs", scope="personal", environment_values={"GITHUB_TOKEN": "ghp_real"}, agent_ids=[]))
     env = install["environmentValues"]
     assert isinstance(env, dict)
     assert env["GITHUB_TOKEN"] == "<redacted>"
@@ -131,8 +201,60 @@ def test_tool_policy_requires_extracted_semantics(index: dict[str, Item]) -> Non
         _decide(index, "hook:PreToolUse:0:0", "tool_policy")
     _, built = _decide(index, "hook:PreToolUse:0:0", "tool_policy",
                        user_answers={"tool_name": "shell", "key": "command",
-                                     "operator": "regex", "value": "rm\\s+-rf\\s+/"})
+                                      "operator": "regex", "value": "rm\\s+-rf\\s+/"})
     assert isinstance(built, BuiltPolicy)
     assert built.tool_name == "shell"
     assert built.conditions[0].operator == "regex"
     assert built.action == "block_always"
+
+
+def test_real_apply_preflight_invalid_plan_makes_no_network(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    requests: list[str] = []
+
+    class Handler(BaseHTTPRequestHandler):
+        def log_message(self, *args: object) -> None:
+            pass
+
+        def do_GET(self) -> None:
+            requests.append(f"GET {self.path}")
+            self.send_response(500)
+            self.end_headers()
+
+        def do_POST(self) -> None:
+            requests.append(f"POST {self.path}")
+            self.send_response(500)
+            self.end_headers()
+
+    server = HTTPServer(("127.0.0.1", 0), Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        inventory_path = tmp_path / "inventory.json"
+        plan_path = tmp_path / "migration_plan.json"
+        result_path = tmp_path / "migration_result.json"
+        inventory_path.write_text(json.dumps(to_jsonable(discover(FIXTURE))), encoding="utf-8")
+        plan_path.write_text(json.dumps({
+            "schema_version": 1,
+            "default_scope": "team",
+            "decisions": [
+                {"source_id": "claude_md", "target_kind": "agent", "scope": "team"},
+                {"source_id": "skill:summarize-text", "target_kind": "skill", "scope": "team"},
+            ],
+        }), encoding="utf-8")
+
+        monkeypatch.setenv("ARCHESTRA_BASE_URL", f"http://127.0.0.1:{server.server_address[1]}")
+        monkeypatch.setenv("ARCHESTRA_API_KEY", "arch_test")
+        monkeypatch.setattr(sys, "argv", [
+            "apply.py",
+            "--inventory", str(inventory_path),
+            "--plan", str(plan_path),
+            "--out", str(result_path),
+        ])
+
+        assert main() == 1
+        assert requests == []
+        result = json.loads(result_path.read_text(encoding="utf-8"))
+        assert result["summary"] == {"invalid": 2}
+    finally:
+        server.shutdown()
+        thread.join()

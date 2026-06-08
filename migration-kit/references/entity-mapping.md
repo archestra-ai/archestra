@@ -24,12 +24,19 @@ same `name`/`name_override`: the install resolves its catalog item **by name**, 
 
 ## Scope
 Ask for ONE default migration scope up front (default `personal`); use per-decision overrides only as
-exceptions. Keep the primary agent and its skills in the same scope so the agent can see them.
+exceptions. Keep the primary agent and its skills in the same scope so the agent can see them. If that
+scope is `team`, agent/skill/catalog decisions must include `user_answers.teamIds`; MCP installs and
+LLM keys must include `user_answers.teamId` (or exactly one `teamIds` value). Otherwise choose
+`personal` or `org` instead. `apply.py` rejects team-scoped decisions without team ids before making
+network calls.
 
 ## Skill visibility
 After creating skills/agents, `apply.py` calls `POST /api/skills/enable-defaults` once, which enables the
 org `archestra__{list_skills,activate_skill,read_skill_file}` tools and backfills them onto agents — that
 is how the primary agent gains access to the migrated skills (there is no agent↔skill junction).
+It also tries to assign sandbox tools (`run_command`, `upload_file`, `download_file`) to migrated agents
+so bundled local tools can run from activated skills. Missing/disabled sandbox support is reported as a
+non-blocking warning.
 
 ## Hooks → tool policies (the nuance)
 A deterministic `PreToolUse` guard (e.g. "block Bash commands matching `rm -rf /`") maps exactly to a

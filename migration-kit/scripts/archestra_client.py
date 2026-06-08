@@ -48,6 +48,7 @@ class AgentCreate:
     systemPrompt: str | None = None
     description: str | None = None
     icon: str | None = None
+    teams: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -83,18 +84,14 @@ class LocalConfig:
 
 
 @dataclass(frozen=True)
-class RemoteConfig:
-    url: str
-
-
-@dataclass(frozen=True)
 class CatalogCreate:
     name: str
     serverType: ServerType
     scope: Scope
     description: str | None = None
+    serverUrl: str | None = None
     localConfig: LocalConfig | None = None
-    remoteConfig: RemoteConfig | None = None
+    teams: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -103,6 +100,7 @@ class McpInstall:
     scope: Scope
     environmentValues: dict[str, str] = field(default_factory=dict)
     agentIds: list[str] = field(default_factory=list)
+    teamId: str | None = None
 
 
 @dataclass(frozen=True)
@@ -113,6 +111,7 @@ class LlmKeyCreate:
     name: str | None = None
     baseUrl: str | None = None
     isPrimary: bool | None = None
+    teamId: str | None = None
 
 
 @dataclass(frozen=True)
@@ -314,6 +313,12 @@ class ArchestraClient:
     def list_tools(self, search: str | None = None) -> list[dict[str, JsonValue]]:
         params = {"search": search} if search else {}
         return _items(self._request("GET", "/api/tools", params=params))
+
+    def bulk_assign_tools(self, assignments: list[dict[str, JsonValue]]) -> dict[str, JsonValue]:
+        return require_dict(
+            self._request("POST", "/api/agents/tools/bulk-assign", json_body={"assignments": assignments}),
+            ctx="POST /api/agents/tools/bulk-assign",
+        )
 
     def list_tool_invocation_policies(self, tool_id: str | None = None) -> list[dict[str, JsonValue]]:
         items = _items(self._request("GET", "/api/autonomy-policies/tool-invocation"))

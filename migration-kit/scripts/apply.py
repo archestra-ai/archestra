@@ -39,7 +39,6 @@ from archestra_client import (
     McpEnvVar,
     McpInstall,
     PolicyCondition,
-    RemoteConfig,
     SkillCreate,
     SkillFile,
     ToolInvocationPolicyCreate,
@@ -67,6 +66,7 @@ from contracts import (
     parse_plan,
     require_answer,
     require_dict,
+    require_list,
     require_operator,
     require_provider,
     require_str_field,
@@ -122,6 +122,8 @@ class BuiltInstall:
     catalog_name: str
     scope: Scope
     environment_values: dict[str, str]
+    agent_ids: list[str]
+    team_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -183,7 +185,9 @@ def _skill_content_for(item: Item, name: str) -> tuple[str, list[SkillFile]]:
             entry = item.data.entrypoint
             body = (
                 f"# {name}\n\nThis skill wraps the local python tool `{entry}`, bundled below.\n\n"
-                f"## Usage\nRun the bundled script:\n```bash\npython3 {entry}\n```\n"
+                "## Usage\nAfter activating this skill, run the bundled script in the skill sandbox:\n"
+                f"```bash\npython3 {entry}\n```\n"
+                f"Use `run_command` with `cwd` set to `/skills/{name}` when sandbox tools are available.\n"
             )
             return emit_frontmatter(name, f"Run the bundled {entry} script.") + body, files
         case _:
@@ -210,6 +214,48 @@ def _env_var(key: str, value: str) -> McpEnvVar:
     )
 
 
+def _str_answers(value: object, *, ctx: str) -> list[str]:
+    out: list[str] = []
+    for i, item in enumerate(require_list(value, ctx=ctx)):
+        if not isinstance(item, str) or not item:
+            raise ContractError(f"{ctx}[{i}]: expected a non-empty string")
+        if item not in out:
+            out.append(item)
+    return out
+
+
+def _team_ids(decision: Decision, *, ctx: str) -> list[str] | None:
+    if decision.scope != "team":
+        return None
+    raw = decision.user_answers.get("teamIds")
+    if raw is None:
+        team_id = decision.user_answers.get("teamId")
+        if isinstance(team_id, str) and team_id:
+            return [team_id]
+        raise ContractError(
+            f"{decision.source_id}: team-scoped {decision.target_kind} requires user_answers.teamIds; "
+            "choose personal/org scope if no concrete Archestra team should own it"
+        )
+    team_ids = _str_answers(raw, ctx=f"{ctx}.teamIds")
+    if not team_ids:
+        raise ContractError(f"{ctx}.teamIds: team-scoped {decision.target_kind} requires at least one team id")
+    return team_ids
+
+
+def _team_id(decision: Decision, *, ctx: str) -> str | None:
+    if decision.scope != "team":
+        return None
+    raw = decision.user_answers.get("teamId")
+    if isinstance(raw, str) and raw:
+        return raw
+    team_ids = _team_ids(decision, ctx=ctx)
+    if team_ids is None:
+        return None
+    if len(team_ids) != 1:
+        raise ContractError(f"{ctx}.teamIds: {decision.target_kind} supports exactly one team id")
+    return team_ids[0]
+
+
 def _build_install_env(answers: dict[str, JsonValue], *, ctx: str) -> dict[str, str]:
     raw = answers.get("environmentValues")
     if raw is None:
@@ -217,6 +263,13 @@ def _build_install_env(answers: dict[str, JsonValue], *, ctx: str) -> dict[str, 
     # json-encode non-string values (not str()) so lists/bools serialize predictably.
     return {k: v if isinstance(v, str) else json.dumps(v)
             for k, v in require_dict(raw, ctx=f"{ctx}.environmentValues").items()}
+
+
+def _build_agent_ids(answers: dict[str, JsonValue], *, ctx: str) -> list[str]:
+    raw = answers.get("agentIds")
+    if raw is None:
+        return []
+    return _str_answers(raw, ctx=f"{ctx}.agentIds")
 
 
 def _build_payload(decision: Decision, item: Item) -> tuple[str, Built]:
@@ -232,11 +285,17 @@ def _build_payload(decision: Decision, item: Item) -> tuple[str, Built]:
             return name, BuiltAgent(AgentCreate(
                 name=name, scope=decision.scope, systemPrompt=body,
                 description=description or "Migrated from CLAUDE.md",
+                teams=_team_ids(decision, ctx=ctx) or [],
             ))
 
         case "skill":
             content, files = _skill_content_for(item, name)
-            return name, BuiltSkill(SkillCreate(content=content, scope=decision.scope, files=files))
+            return name, BuiltSkill(SkillCreate(
+                content=content,
+                scope=decision.scope,
+                files=files,
+                teamIds=_team_ids(decision, ctx=ctx),
+            ))
 
         case "mcp_catalog":
             if not isinstance(item, McpServerItem):
@@ -246,12 +305,13 @@ def _build_payload(decision: Decision, item: Item) -> tuple[str, Built]:
                 if not data.url:
                     raise ContractError(f"{decision.source_id}: remote mcp server has no url")
                 cfg = CatalogCreate(name=name, serverType="remote", scope=decision.scope,
-                                    remoteConfig=RemoteConfig(url=data.url))
+                                    serverUrl=data.url, teams=_team_ids(decision, ctx=ctx) or [])
             else:
                 env = [_env_var(k, v) for k, v in data.env.items()]
                 cfg = CatalogCreate(name=name, serverType="local", scope=decision.scope,
                                     localConfig=LocalConfig(command=data.command or "",
-                                                            arguments=data.args, environment=env))
+                                                            arguments=data.args, environment=env),
+                                    teams=_team_ids(decision, ctx=ctx) or [])
             return name, BuiltCatalog(cfg)
 
         case "mcp_install":
@@ -259,15 +319,20 @@ def _build_payload(decision: Decision, item: Item) -> tuple[str, Built]:
             return name, BuiltInstall(
                 catalog_name=name, scope=decision.scope,
                 environment_values=_build_install_env(answers, ctx=ctx),
+                agent_ids=_build_agent_ids(answers, ctx=ctx),
+                team_id=_team_id(decision, ctx=ctx),
             )
 
         case "llm_key":
             provider = require_provider(answers, ctx=ctx)
             api_key = require_answer(answers, "apiKey", ctx=ctx)
             is_primary = answers.get("isPrimary")
+            base_url = answers.get("baseUrl")
             return name, BuiltLlmKey(LlmKeyCreate(
                 provider=provider, scope=decision.scope, apiKey=api_key, name=name,
                 isPrimary=is_primary if isinstance(is_primary, bool) else None,
+                baseUrl=base_url if isinstance(base_url, str) and base_url else None,
+                teamId=_team_id(decision, ctx=ctx),
             ))
 
         case "tool_policy":
@@ -295,6 +360,7 @@ def _redacted_for_print(built: Built) -> dict[str, JsonValue]:
             return shown
         case BuiltInstall():
             return {"catalog_name": built.catalog_name, "scope": built.scope,
+                    "teamId": built.team_id, "agentIds": built.agent_ids,
                     "environmentValues": {k: "<redacted>" for k in built.environment_values}}
         case BuiltAgent(payload) | BuiltSkill(payload) | BuiltCatalog(payload):
             return to_payload(payload)
@@ -309,11 +375,13 @@ def _preview_detail(built: Built) -> str:
         case BuiltAgent(payload):
             return f"scope={payload.scope}; inherits org default model"
         case BuiltSkill(payload):
+            if payload.scope == "team":
+                return f"scope=team; team_ids={len(payload.teamIds or [])}; bundled_files={len(payload.files)}"
             return f"scope={payload.scope}; bundled_files={len(payload.files)}"
         case BuiltCatalog(payload):
             match payload.serverType:
                 case "remote":
-                    url = payload.remoteConfig.url if payload.remoteConfig else "<missing url>"
+                    url = payload.serverUrl or "<missing url>"
                     return f"scope={payload.scope}; remote MCP catalog item; url={url}"
                 case "local":
                     local = payload.localConfig
@@ -325,9 +393,10 @@ def _preview_detail(built: Built) -> str:
                         f"prompted_secrets={secret_count}"
                     )
         case BuiltInstall():
+            team = f"; team_id={built.team_id}" if built.team_id else ""
             return (
                 f"scope={built.scope}; catalog={built.catalog_name}; "
-                f"supplied_env_values={len(built.environment_values)}"
+                f"agent_ids={len(built.agent_ids)}{team}; supplied_env_values={len(built.environment_values)}"
             )
         case BuiltLlmKey(payload):
             return f"scope={payload.scope}; provider={payload.provider}; api_key=<redacted>"
@@ -347,20 +416,29 @@ def _execute(client: ArchestraClient, decision: Decision, name: str, built: Buil
 
     match built:
         case BuiltAgent(payload):
-            if client.list_agents(name=name, scope=payload.scope):
-                return op("skipped", detail="agent with this name+scope already exists")
+            existing = client.list_agents(name=name, scope=payload.scope)
+            if existing:
+                return op("skipped", archestra_id=require_str_field(existing[0], "id", ctx="agent"),
+                          detail="agent with this name+scope already exists")
             created = client.create_agent(payload)
             return op("created", archestra_id=require_str_field(created, "id", ctx="agent create response"))
 
         case BuiltSkill(payload):
-            if any(s.get("name") == name for s in client.list_skills(search=name)):
-                return op("skipped", detail="skill with this name already exists")
+            existing = [
+                s for s in client.list_skills(search=name)
+                if s.get("name") == name and s.get("scope") == payload.scope
+            ]
+            if existing:
+                return op("skipped", archestra_id=require_str_field(existing[0], "id", ctx="skill"),
+                          detail="skill with this name+scope already exists")
             created = client.create_skill(payload)
             return op("created", archestra_id=require_str_field(created, "id", ctx="skill create response"))
 
         case BuiltCatalog(payload):
-            if any(c.get("name") == name for c in client.list_catalog()):
-                return op("skipped", detail="catalog item with this name already exists")
+            existing = [c for c in client.list_catalog() if c.get("name") == name and c.get("scope") == payload.scope]
+            if existing:
+                return op("skipped", archestra_id=require_str_field(existing[0], "id", ctx="catalog item"),
+                          detail="catalog item with this name+scope already exists")
             created = client.create_catalog_item(payload)
             return op("created", archestra_id=require_str_field(created, "id", ctx="catalog create response"))
 
@@ -369,17 +447,24 @@ def _execute(client: ArchestraClient, decision: Decision, name: str, built: Buil
             if catalog is None:
                 return op("failed", error=f"no catalog item named {built.catalog_name} to install")
             catalog_id = require_str_field(catalog, "id", ctx="catalog item")
-            # disambiguate existing installs by (catalogId, scope) -- the finest grain the api exposes.
-            if any(s.get("scope") == built.scope for s in client.list_mcp_servers(catalog_id=catalog_id)):
-                return op("skipped", detail="an install of this catalog item at this scope already exists")
+            existing = _matching_installs(client.list_mcp_servers(catalog_id=catalog_id), built)
+            if existing:
+                return op("skipped", archestra_id=require_str_field(existing[0], "id", ctx="mcp server"),
+                          detail="an install of this catalog item at this scope already exists")
             created = client.install_mcp_server(McpInstall(
                 catalogId=catalog_id, scope=built.scope, environmentValues=built.environment_values,
+                agentIds=built.agent_ids, teamId=built.team_id,
             ))
             return op("created", archestra_id=require_str_field(created, "id", ctx="install response"))
 
         case BuiltLlmKey(payload):
-            if any(k.get("name") == name for k in client.list_llm_keys(search=name, provider=payload.provider)):
-                return op("skipped", detail="llm key with this name+provider already exists")
+            existing = [
+                k for k in client.list_llm_keys(search=name, provider=payload.provider)
+                if k.get("name") == name and k.get("scope") == payload.scope and k.get("teamId") == payload.teamId
+            ]
+            if existing:
+                return op("skipped", archestra_id=require_str_field(existing[0], "id", ctx="llm key"),
+                          detail="llm key with this name+provider+scope already exists")
             created = client.create_llm_key(payload)
             return op("created", archestra_id=require_str_field(created, "id", ctx="llm key create response"))
 
@@ -401,6 +486,16 @@ def _execute(client: ArchestraClient, decision: Decision, name: str, built: Buil
                 toolId=tool_id, conditions=built.conditions, action=built.action, reason=built.reason,
             ))
             return op("created", archestra_id=require_str_field(created, "id", ctx="policy create response"))
+
+
+def _matching_installs(servers: list[dict[str, JsonValue]], built: BuiltInstall) -> list[dict[str, JsonValue]]:
+    match built.scope:
+        case "personal":
+            return [s for s in servers if s.get("scope") == "personal"]
+        case "team":
+            return [s for s in servers if s.get("scope") == "team" and s.get("teamId") == built.team_id]
+        case "org":
+            return [s for s in servers if s.get("scope") == "org"]
 
 
 @dataclass(frozen=True)
@@ -444,6 +539,10 @@ def main() -> int:
     if args.dry_run:
         return _finish(_run_dry(built, verbose=args.verbose), args.out)
 
+    if any(_invalid_build(b) for b in built):
+        print("error: migration plan has invalid operations; no network changes were made", file=sys.stderr)
+        return _finish(_run_preflight(built, verbose=args.verbose), args.out)
+
     base_url = os.environ.get("ARCHESTRA_BASE_URL")
     api_key = os.environ.get("ARCHESTRA_API_KEY")
     if not base_url or not api_key:
@@ -454,17 +553,25 @@ def main() -> int:
 
 
 def _run_dry(built: list[_Built], *, verbose: bool) -> list[ResultOp]:
+    return _run_validation(built, verbose=verbose, label="dry-run")
+
+
+def _run_preflight(built: list[_Built], *, verbose: bool) -> list[ResultOp]:
+    return _run_validation(built, verbose=verbose, label="preflight")
+
+
+def _run_validation(built: list[_Built], *, verbose: bool, label: str) -> list[ResultOp]:
     results: list[ResultOp] = []
     for b in built:
         if b.built is None:
             result = _nonmigrate_or_invalid(b)
             detail = result.detail or result.error or ""
             suffix = f" -- {detail}" if detail else ""
-            print(f"[dry-run] {_outcome_label(result.outcome)}: {b.decision.target_kind}: {b.name}{suffix}")
+            print(f"[{label}] {_outcome_label(result.outcome)}: {b.decision.target_kind}: {b.name}{suffix}")
             results.append(result)
             continue
         detail = _preview_detail(b.built)
-        print(f"[dry-run] {_outcome_label('planned')}: {b.decision.target_kind}: {b.name} -- {detail}")
+        print(f"[{label}] {_outcome_label('planned')}: {b.decision.target_kind}: {b.name} -- {detail}")
         if verbose:
             shown = _redacted_for_print(b.built)
             print(json.dumps(shown, indent=2))
@@ -473,20 +580,40 @@ def _run_dry(built: list[_Built], *, verbose: bool) -> list[ResultOp]:
     return results
 
 
+def _invalid_build(b: _Built) -> bool:
+    return b.decision.action == "migrate" and b.built is None
+
+
 def _run_apply(built: list[_Built], base_url: str, api_key: str) -> list[ResultOp]:
     results: list[ResultOp] = []
     created_skill_or_agent = False
+    agent_ids: list[str] = []
+    primary_agent_id: str | None = None
     with ArchestraClient(base_url, api_key=api_key) as client:
         for b in built:
             if b.built is None:
                 results.append(_nonmigrate_or_invalid(b))
                 continue
+            built_op = b.built
+            if isinstance(built_op, BuiltInstall) and not built_op.agent_ids and primary_agent_id:
+                built_op = BuiltInstall(
+                    catalog_name=built_op.catalog_name,
+                    scope=built_op.scope,
+                    environment_values=built_op.environment_values,
+                    agent_ids=[primary_agent_id],
+                    team_id=built_op.team_id,
+                )
             try:
-                op = _execute(client, b.decision, b.name, b.built)
+                op = _execute(client, b.decision, b.name, built_op)
             except (ArchestraApiError, ContractError) as exc:
                 op = ResultOp(source_id=b.decision.source_id, target_kind=b.decision.target_kind,
                               name=b.name, outcome="failed", error=str(exc))
             results.append(op)
+            if op.target_kind == "agent" and op.outcome in ("created", "skipped") and op.archestra_id:
+                if op.archestra_id not in agent_ids:
+                    agent_ids.append(op.archestra_id)
+                if primary_agent_id is None or op.source_id == "claude_md":
+                    primary_agent_id = op.archestra_id
             if op.target_kind in ("skill", "agent") and op.outcome in ("created", "skipped"):
                 created_skill_or_agent = True
 
@@ -498,7 +625,64 @@ def _run_apply(built: list[_Built], base_url: str, api_key: str) -> list[ResultO
             except ArchestraApiError as exc:
                 results.append(ResultOp(source_id="-", target_kind="skill_defaults", name="enable-defaults",
                                         outcome="failed", error=str(exc)))
+        if agent_ids:
+            results.append(_enable_sandbox_tools(client, agent_ids))
     return results
+
+
+def _enable_sandbox_tools(client: ArchestraClient, agent_ids: list[str]) -> ResultOp:
+    short_names = ("run_command", "upload_file", "download_file")
+    try:
+        tools = client.list_tools()
+    except (ArchestraApiError, ValueError) as exc:
+        return _sandbox_warning(f"could not list sandbox tools: {exc}")
+
+    resolved: dict[str, str] = {}
+    for short_name in short_names:
+        match_ = next(
+            (t for t in tools if t.get("name") == short_name or str(t.get("name", "")).endswith(f"__{short_name}")),
+            None,
+        )
+        if match_ is not None:
+            try:
+                resolved[short_name] = require_str_field(match_, "id", ctx=f"sandbox tool {short_name}")
+            except ContractError as exc:
+                return _sandbox_warning(str(exc))
+
+    missing = [name for name in short_names if name not in resolved]
+    if missing:
+        return _sandbox_warning("sandbox tools not available to assign: " + ", ".join(missing))
+
+    assignments: list[dict[str, JsonValue]] = [
+        {"agentId": agent_id, "toolId": tool_id}
+        for agent_id in agent_ids
+        for tool_id in resolved.values()
+    ]
+    try:
+        result = client.bulk_assign_tools(assignments)
+    except (ArchestraApiError, ValueError) as exc:
+        return _sandbox_warning(f"could not assign sandbox tools: {exc}")
+
+    failed = result.get("failed")
+    if isinstance(failed, list) and failed:
+        return _sandbox_warning(f"sandbox tool assignment had failures: {json.dumps(failed)}")
+    return ResultOp(
+        source_id="-",
+        target_kind="sandbox_tools",
+        name="enable-sandbox-tools",
+        outcome="created",
+        detail=f"assigned sandbox tools to {len(agent_ids)} migrated agent(s)",
+    )
+
+
+def _sandbox_warning(detail: str) -> ResultOp:
+    return ResultOp(
+        source_id="-",
+        target_kind="sandbox_tools",
+        name="enable-sandbox-tools",
+        outcome="manual",
+        detail=f"warning: {detail}",
+    )
 
 
 def _nonmigrate_or_invalid(b: _Built) -> ResultOp:

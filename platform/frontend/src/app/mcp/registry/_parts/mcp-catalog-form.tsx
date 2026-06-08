@@ -1,8 +1,9 @@
 "use client";
 
-import { type archestraApiTypes, DocsPage } from "@archestra/shared";
+import { type archestraApiTypes, DocsPage, E2eTestId } from "@archestra/shared";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
+  AlertTriangle,
   Ban,
   Code,
   ExternalLink,
@@ -119,7 +120,16 @@ interface McpCatalogFormProps {
   onSubmit: (values: McpCatalogFormValues) => void | Promise<void>;
   footer?:
     | React.ReactNode
-    | ((opts: { isDirty: boolean; onReset: () => void }) => React.ReactNode);
+    | ((opts: {
+        isDirty: boolean;
+        onReset: () => void;
+        /**
+         * True when stored config values violate the bound environment's
+         * validation rule — the footer's Save button should disable on it.
+         * Saving is also guarded internally, but disabling gives a visible cue.
+         */
+        hasBlockingErrors: boolean;
+      }) => React.ReactNode);
   nameDisabled?: boolean;
   catalogButton?: React.ReactNode;
   /** Optional banner/notice rendered at the very top of the form body. */
@@ -572,6 +582,44 @@ export function McpCatalogForm({
           environmentName: boundEnvironmentName,
         })
     : undefined;
+  // Already-stored static values that violate the bound environment's rule —
+  // e.g. after switching the item to a stricter environment. The add/edit
+  // dialogs block typing a bad value, but a value entered under a laxer
+  // environment only surfaces here, where it blocks Save until fixed.
+  //
+  // Only scan the fields actually live for the current server type: env vars
+  // for local, headers for remote. A local server submits no headers and a
+  // remote one submits no localConfig.environment, so scanning the inactive
+  // (and hidden) set would block Save on a field the user can't even see.
+  const watchedEnvVars = form.watch("localConfig.environment");
+  const watchedHeaders = form.watch("additionalHeaders");
+  const envRuleViolations: string[] = [];
+  if (validateConfigValue) {
+    if (currentServerType === "local") {
+      for (const envVar of watchedEnvVars ?? []) {
+        if (
+          envVar.type === "plain_text" &&
+          !envVar.promptOnInstallation &&
+          envVar.value &&
+          validateConfigValue(envVar.value)
+        ) {
+          envRuleViolations.push(envVar.key);
+        }
+      }
+    } else {
+      for (const header of watchedHeaders ?? []) {
+        if (
+          !header.promptOnInstallation &&
+          !header.sensitive &&
+          header.value &&
+          validateConfigValue(header.value)
+        ) {
+          envRuleViolations.push(header.headerName);
+        }
+      }
+    }
+  }
+  const hasEnvRuleViolations = envRuleViolations.length > 0;
   const currentScope = form.watch("scope");
   const canShareWithTeams = (isAdmin ?? false) || (isTeamAdmin ?? false);
   // Shared items are one-way: an item that is already team/org-scoped cannot be
@@ -758,6 +806,10 @@ export function McpCatalogForm({
   };
 
   const handleSubmit = async (values: McpCatalogFormValues) => {
+    // Stored values may violate the bound environment's rule (e.g. after an
+    // environment switch). The Save button is disabled in that state, but guard
+    // here too so an Enter-key submit can't bypass it.
+    if (hasEnvRuleViolations) return;
     // Cascade-confirm decision delegated to a pure function so it can be
     // matrix-tested without rendering, and so frontend + backend share
     // the same decision tree shape. See `cascade-decision.ts`.
@@ -962,7 +1014,10 @@ export function McpCatalogForm({
                             )
                           }
                         >
-                          <SelectTrigger className="w-full">
+                          <SelectTrigger
+                            className="w-full"
+                            data-testid={E2eTestId.SelectEnvironment}
+                          >
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent position="popper">
@@ -1001,6 +1056,29 @@ export function McpCatalogForm({
                   );
                 }}
               />
+              {hasEnvRuleViolations && (
+                <div
+                  role="alert"
+                  className="flex items-start gap-3 rounded-md border border-amber-500/40 bg-amber-50/40 p-3 text-sm dark:bg-amber-950/20"
+                >
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-500" />
+                  <div className="space-y-1 text-foreground/90">
+                    <div className="font-semibold text-foreground">
+                      {envRuleViolations.length} value
+                      {envRuleViolations.length === 1 ? "" : "s"} not allowed in
+                      “{boundEnvironmentName}”
+                    </div>
+                    <div>
+                      Edit or remove{" "}
+                      {envRuleViolations.length === 1 ? "it" : "them"}, or
+                      choose another environment, before saving:{" "}
+                      <span className="font-mono">
+                        {envRuleViolations.join(", ")}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
               {mode === "create" && (
                 <div className="space-y-2">
                   <Label>Server Type</Label>
@@ -2386,6 +2464,7 @@ export function McpCatalogForm({
               form.reset();
               setLabels(labelsBaseline);
             },
+            hasBlockingErrors: hasEnvRuleViolations,
           })
         ) : (
           footer

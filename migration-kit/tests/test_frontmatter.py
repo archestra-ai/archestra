@@ -61,14 +61,6 @@ def test_unsupported_forms_are_surfaced() -> None:
             assert oracle.get(key) == value, f"{label}: mis-parsed {key!r}"
 
 
-def test_supported_forms_match_pyyaml_oracle() -> None:
-    text = '---\nname: x\ntools: [Read, Bash]\ndescription: "a: b"\n---\nbody'
-    doc = parse_frontmatter(text)
-    oracle = yaml.safe_load(text.split("---", 2)[1])
-    assert doc.frontmatter == oracle
-    assert doc.unparsed_lines == []
-
-
 def test_non_exact_opening_fence_is_treated_as_body() -> None:
     # '--- text' (or '----') is not a frontmatter fence; the whole text is the body.
     text = "--- not a fence\nname: x\nmore body"

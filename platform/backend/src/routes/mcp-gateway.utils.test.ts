@@ -3,9 +3,15 @@ import {
   ARCHESTRA_TOKEN_PREFIX,
   LEGACY_ARCHESTRA_TOKEN_PREFIXES,
   OAUTH_TOKEN_ID_PREFIX,
+  TOOL_ACTIVATE_SKILL_FULL_NAME,
   TOOL_ARTIFACT_WRITE_FULL_NAME,
+  TOOL_CREATE_SKILL_FULL_NAME,
+  TOOL_LIST_SKILLS_FULL_NAME,
+  TOOL_READ_SKILL_FILE_FULL_NAME,
   TOOL_RUN_TOOL_FULL_NAME,
   TOOL_SEARCH_TOOLS_FULL_NAME,
+  TOOL_UPDATE_SKILL_FULL_NAME,
+  TOOL_WHOAMI_FULL_NAME,
 } from "@archestra/shared";
 import type { ListToolsResult } from "@modelcontextprotocol/sdk/types.js";
 import { vi } from "vitest";
@@ -1435,6 +1441,67 @@ describe("createAgentServer tools/list", () => {
         (tool) => tool.name === TOOL_ARTIFACT_WRITE_FULL_NAME,
       ),
     ).toBe(false);
+  });
+
+  test("keeps assigned skill discover/activate/read tools top-level in search_and_run_only", async ({
+    makeAgent,
+    makeMember,
+    makeOrganization,
+    makeUser,
+    seedAndAssignArchestraTools,
+  }) => {
+    const org = await makeOrganization();
+    const adminUser = await makeUser();
+    await makeMember(adminUser.id, org.id, { role: "admin" });
+    const agent = await makeAgent({
+      organizationId: org.id,
+      toolExposureMode: "search_and_run_only",
+    });
+    await seedAndAssignArchestraTools(agent.id);
+
+    const { server } = await createAgentServer(agent.id, {
+      tokenId: `${OAUTH_TOKEN_ID_PREFIX}${crypto.randomUUID()}`,
+      teamId: null,
+      isOrganizationToken: false,
+      organizationId: org.id,
+      isUserToken: true,
+      userId: adminUser.id,
+    });
+    const listToolsHandler = (
+      server.server as unknown as {
+        _requestHandlers: Map<string, TestListToolsHandler>;
+      }
+    )._requestHandlers.get("tools/list");
+
+    expect(listToolsHandler).toBeDefined();
+    if (!listToolsHandler) {
+      throw new Error("Expected tools/list handler to be registered");
+    }
+
+    const response = await listToolsHandler({
+      method: "tools/list",
+      params: {},
+    });
+    const names = new Set(response.tools.map((tool) => tool.name));
+
+    // meta tools and the skill discover/activate/read path stay top-level
+    for (const exposed of [
+      TOOL_SEARCH_TOOLS_FULL_NAME,
+      TOOL_RUN_TOOL_FULL_NAME,
+      TOOL_LIST_SKILLS_FULL_NAME,
+      TOOL_ACTIVATE_SKILL_FULL_NAME,
+      TOOL_READ_SKILL_FILE_FULL_NAME,
+    ]) {
+      expect(names.has(exposed)).toBe(true);
+    }
+    // authoring + unrelated tools remain hidden behind search_tools/run_tool
+    for (const hidden of [
+      TOOL_CREATE_SKILL_FULL_NAME,
+      TOOL_UPDATE_SKILL_FULL_NAME,
+      TOOL_WHOAMI_FULL_NAME,
+    ]) {
+      expect(names.has(hidden)).toBe(false);
+    }
   });
 
   test("adds assigned MCP server context to search_tools description", async ({

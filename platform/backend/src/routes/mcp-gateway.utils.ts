@@ -4,6 +4,7 @@ import {
   ARCHESTRA_MCP_CATALOG_ID,
   hasArchestraTokenPrefix,
   isAgentTool,
+  isAlwaysExposedArchestraToolShortName,
   MCP_APPS_SERVER_EXTENSION_CAPABILITIES,
   MCP_ENTERPRISE_AUTH_EXTENSION_CAPABILITIES,
   OAUTH_TOKEN_ID_PREFIX,
@@ -1409,10 +1410,12 @@ function filterExposedTools(params: {
 }) {
   const { toolExposureMode, tools } = params;
   return tools.filter((tool) => {
-    const isMetaTool = isArchestraMetaTool(tool.name);
+    // `search_and_run_only` normally hides every tool behind search_tools/run_tool,
+    // but the meta tools themselves and the always-exposed skill path must stay
+    // top-level. `full` mode hides only the meta tools.
     return toolExposureMode === "search_and_run_only"
-      ? isMetaTool
-      : !isMetaTool;
+      ? isArchestraMetaTool(tool.name) || isAlwaysExposedTool(tool.name)
+      : !isArchestraMetaTool(tool.name);
   });
 }
 
@@ -1537,4 +1540,9 @@ function isArchestraMetaTool(toolName: string) {
     shortName === TOOL_SEARCH_TOOLS_SHORT_NAME ||
     shortName === TOOL_RUN_TOOL_SHORT_NAME
   );
+}
+
+function isAlwaysExposedTool(toolName: string) {
+  const shortName = archestraMcpBranding.getToolShortName(toolName);
+  return shortName !== null && isAlwaysExposedArchestraToolShortName(shortName);
 }

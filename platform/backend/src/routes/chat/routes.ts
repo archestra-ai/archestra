@@ -10,6 +10,7 @@ import {
   RouteId,
   type SupportedProvider,
   TimeInMs,
+  TOOL_ACTIVATE_SKILL_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
   type TokenUsage,
@@ -70,6 +71,7 @@ import {
   ACTIVE_CHAT_RUN_TERMINAL_REPLAY_GRACE_MS,
   activeChatRunService,
 } from "@/services/active-chat-run";
+import { buildSkillCatalogPrompt } from "@/skills/skill-catalog-prompt";
 import {
   promptNeedsRendering,
   renderSystemPrompt,
@@ -423,10 +425,23 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
             ? buildLoadToolsWhenNeededSystemPrompt()
             : "";
 
+        // eagerly list the agent's skills in the prompt (like Claude Code /
+        // opencode), but only when the agent can actually activate them.
+        const skillCatalogPrompt =
+          archestraMcpBranding.getToolName(TOOL_ACTIVATE_SKILL_SHORT_NAME) in
+          mcpTools
+            ? await buildSkillCatalogPrompt({
+                organizationId,
+                userId: user.id,
+                agentId,
+              })
+            : null;
+
         systemPrompt =
           [
             toolLoadingInstructions,
             renderedPrompt,
+            skillCatalogPrompt,
             toolDenialInstruction,
             toolResultInstructions,
           ]

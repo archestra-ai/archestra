@@ -1,7 +1,12 @@
 // biome-ignore-all lint/suspicious/noExplicitAny: test assertions inspect tool payloads dynamically
 import {
+  TOOL_ACTIVATE_SKILL_FULL_NAME,
+  TOOL_CREATE_SKILL_FULL_NAME,
+  TOOL_LIST_SKILLS_FULL_NAME,
+  TOOL_READ_SKILL_FILE_FULL_NAME,
   TOOL_RUN_TOOL_FULL_NAME,
   TOOL_SEARCH_TOOLS_FULL_NAME,
+  TOOL_UPDATE_SKILL_FULL_NAME,
 } from "@archestra/shared";
 import { describe, expect, test } from "@/test";
 import type { ArchestraContext } from ".";
@@ -157,6 +162,51 @@ describe("search_tools", () => {
       total: 0,
       tools: [],
     });
+  });
+
+  test("excludes the always-exposed skill path but keeps authoring tools searchable", async ({
+    makeAgent,
+    makeMember,
+    makeOrganization,
+    makeUser,
+    seedAndAssignArchestraTools,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "admin" });
+    const agent = await makeAgent({
+      name: "Skill Search Agent",
+      organizationId: org.id,
+    });
+    await seedAndAssignArchestraTools(agent.id);
+
+    const context: ArchestraContext = {
+      agent: { id: agent.id, name: agent.name },
+      agentId: agent.id,
+      organizationId: org.id,
+      userId: user.id,
+    };
+
+    const result = await executeArchestraTool(
+      TOOL_SEARCH_TOOLS_FULL_NAME,
+      { query: "skill", limit: 20 },
+      context,
+    );
+
+    expect(result.isError).toBe(false);
+    const structuredContent =
+      result.structuredContent as SearchToolsStructuredContent;
+    const returnedToolNames = structuredContent.tools.map(
+      (tool) => tool.toolName,
+    );
+
+    // the discover/activate/read path is always top-level, so never searchable
+    expect(returnedToolNames).not.toContain(TOOL_LIST_SKILLS_FULL_NAME);
+    expect(returnedToolNames).not.toContain(TOOL_ACTIVATE_SKILL_FULL_NAME);
+    expect(returnedToolNames).not.toContain(TOOL_READ_SKILL_FILE_FULL_NAME);
+    // authoring tools stay search-gated, so they remain discoverable
+    expect(returnedToolNames).toContain(TOOL_CREATE_SKILL_FULL_NAME);
+    expect(returnedToolNames).toContain(TOOL_UPDATE_SKILL_FULL_NAME);
   });
 
   test("returns an error without agent context", async () => {

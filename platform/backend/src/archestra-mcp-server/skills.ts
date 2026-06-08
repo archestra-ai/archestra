@@ -33,6 +33,7 @@ import {
   escapeXmlText,
   formatSkillActivation,
 } from "@/skills/skill-activation";
+import { buildSkillCatalogPrompt } from "@/skills/skill-catalog-prompt";
 import { isSkillSandboxAvailableForAgent } from "@/skills/skill-sandbox-availability";
 import {
   resolveActivationVersion,
@@ -591,56 +592,17 @@ async function listSkillCatalog(
   ctx: SkillReadContext,
   agentId: string | undefined,
 ) {
-  const checker =
-    ctx.userId !== undefined
-      ? await getSkillPermissionChecker({
-          userId: ctx.userId,
-          organizationId: ctx.organizationId,
-        })
-      : null;
-  const isSkillAdmin = checker?.isAdmin ?? false;
-  const accessibleSkillIds = isSkillAdmin
-    ? undefined
-    : await SkillTeamModel.getUserAccessibleSkillIds({
-        organizationId: ctx.organizationId,
-        userId: ctx.userId,
-      });
-
-  const skills = await SkillModel.findByOrganization({
+  const catalog = await buildSkillCatalogPrompt({
     organizationId: ctx.organizationId,
-    accessibleSkillIds,
+    userId: ctx.userId,
+    agentId,
   });
-  if (skills.length === 0) {
+  if (catalog === null) {
     return successResult(
       "No skills are available in this organization. Skills can be added under Agents → Skills.",
     );
   }
-
-  const catalog = skills
-    .map(
-      (skill) =>
-        `<skill name="${escapeXmlAttr(skill.name)}">${escapeXmlText(
-          skill.description,
-        )}</skill>`,
-    )
-    .join("\n");
-
-  // only advertise the sandbox path when it would actually work: the feature
-  // is enabled, the caller has sandbox:execute, and the sandbox tools are
-  // assigned to this agent (so they appear in its tools/list).
-  const instructions = (await isSkillSandboxAvailableForAgent({
-    userId: ctx.userId,
-    organizationId: ctx.organizationId,
-    agentId,
-  }))
-    ? "Call activate_skill with one of these names to load its instructions. " +
-      "Activating a skill mounts it in your sandbox under /skills, so you can " +
-      "then run its scripts or shell commands with run_command."
-    : "Call activate_skill with one of these names to load its instructions.";
-
-  return successResult(
-    `<available_skills>\n${catalog}\n</available_skills>\n${instructions}`,
-  );
+  return successResult(catalog);
 }
 
 export const toolEntries = registry.toolEntries;

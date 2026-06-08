@@ -1,11 +1,13 @@
 import {
+  ADMIN_ROLE_NAME,
+  TOOL_ACTIVATE_SKILL_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
 } from "@archestra/shared";
 import { NoSuchToolError } from "ai";
 import { vi } from "vitest";
 import { archestraMcpBranding } from "@/archestra-mcp-server";
-import { MessageModel } from "@/models";
+import { MessageModel, SkillModel } from "@/models";
 import ActiveChatRunModel from "@/models/chat-active-run";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
@@ -757,6 +759,97 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
     expect(systemPrompt).not.toContain(
       "Some available tools are not listed upfront",
     );
+  });
+
+  test("lists the agent's skills in the system prompt when it can activate them", async ({
+    makeMember,
+  }) => {
+    await makeMember(user.id, organizationId, { role: ADMIN_ROLE_NAME });
+    await SkillModel.createWithFiles({
+      skill: {
+        organizationId,
+        name: "pdf-processing",
+        description: "Extract text from PDF files.",
+        content: "# PDF Processing\nUse pdftotext.",
+        metadata: {},
+        sourceType: "manual",
+        scope: "org",
+      },
+      files: [],
+    });
+    const { AgentModel } = await import("@/models");
+    await AgentModel.update(agentId, { systemPrompt: "You are helpful." });
+    mockGetChatMcpTools.mockResolvedValue({
+      [archestraMcpBranding.getToolName(TOOL_ACTIVATE_SKILL_SHORT_NAME)]: {
+        description: "Activate a skill",
+        inputSchema: { jsonSchema: { type: "object", properties: {} } },
+      },
+    });
+    mockStreamText.mockClear();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/chat",
+      payload: {
+        id: conversationId,
+        messages: [
+          {
+            id: "msg-1",
+            role: "user",
+            parts: [{ type: "text", text: "hello" }],
+          },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+
+    const systemPrompt = mockStreamText.mock.calls[0]?.[0].system;
+    expect(systemPrompt).toContain("<available_skills>");
+    expect(systemPrompt).toContain("pdf-processing");
+    expect(systemPrompt).toContain("You are helpful.");
+  });
+
+  test("omits the skill catalog when the agent has no skill tools", async ({
+    makeMember,
+  }) => {
+    await makeMember(user.id, organizationId, { role: ADMIN_ROLE_NAME });
+    await SkillModel.createWithFiles({
+      skill: {
+        organizationId,
+        name: "pdf-processing",
+        description: "Extract text from PDF files.",
+        content: "# PDF Processing",
+        metadata: {},
+        sourceType: "manual",
+        scope: "org",
+      },
+      files: [],
+    });
+    // beforeEach resets getChatMcpTools to {}, so no activate_skill is exposed
+    mockStreamText.mockClear();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/chat",
+      payload: {
+        id: conversationId,
+        messages: [
+          {
+            id: "msg-1",
+            role: "user",
+            parts: [{ type: "text", text: "hello" }],
+          },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+
+    const systemPrompt = mockStreamText.mock.calls[0]?.[0].system;
+    expect(systemPrompt ?? "").not.toContain("<available_skills>");
   });
 
   test("strips dangling tool parts when persisting a stopped turn", async () => {

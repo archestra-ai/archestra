@@ -50,7 +50,7 @@ describe("hookDispatcherService", () => {
       fields: { tool_name: "bash", tool_input: {} },
     });
 
-    expect(result).toEqual({ decision: "proceed" });
+    expect(result).toEqual({ decision: "proceed", runs: [] });
     expect(spyFind).not.toHaveBeenCalled();
     expect(skillSandboxRuntimeService.runCommand).not.toHaveBeenCalled();
   });
@@ -122,6 +122,16 @@ describe("hookDispatcherService", () => {
 
     expect(result.decision).toBe("block");
     expect(result.reason).toBe("tool not allowed");
+    // The blocking run is reported (mapped for inline display); the second
+    // hook never ran, so it is absent.
+    expect(result.runs).toEqual([
+      {
+        hookEventName: "PreToolUse",
+        fileName: "a_first.py",
+        outcome: "blocked",
+        exitCode: 2,
+      },
+    ]);
     // Only one run — second hook was never invoked.
     expect(skillSandboxRuntimeService.runCommand).toHaveBeenCalledTimes(1);
   });
@@ -254,7 +264,16 @@ describe("hookDispatcherService", () => {
       fields: { tool_name: "bash", tool_input: {} },
     });
 
-    expect(result).toEqual({ decision: "proceed" });
+    expect(result.decision).toBe("proceed");
+    // fail-open still reports the run that errored, mapped for inline display.
+    expect(result.runs).toEqual([
+      {
+        hookEventName: "PreToolUse",
+        fileName: "flaky.py",
+        outcome: "error",
+        exitCode: null,
+      },
+    ]);
   });
 
   // -----------------------------------------------------------------------
@@ -282,7 +301,7 @@ describe("hookDispatcherService", () => {
       fields: {},
     });
 
-    expect(result).toEqual({ decision: "proceed" });
+    expect(result).toEqual({ decision: "proceed", runs: [] });
     expect(spyFind).not.toHaveBeenCalled();
     expect(skillSandboxRuntimeService.runCommand).not.toHaveBeenCalled();
   });

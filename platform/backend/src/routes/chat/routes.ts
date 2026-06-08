@@ -48,6 +48,11 @@ import config from "@/config";
 import { withDbTransaction } from "@/database";
 import { browserStreamFeature } from "@/features/browser-stream/services/browser-stream.feature";
 import { hookDispatcherService } from "@/hooks/hook-dispatcher-service";
+import {
+  applyHookRunsToMessages,
+  type CollectedHookRun,
+  toCollectedRuns,
+} from "@/hooks/hook-run-parts";
 import { extractAndIngestDocuments } from "@/knowledge-base";
 import { fileUploadManager } from "@/knowledge-base/file-upload/file-upload-manager";
 import logger from "@/logging";
@@ -276,6 +281,10 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Context returned by hooks is appended to the system prompt below.
       let hookSessionContext: string | undefined;
       let hookPromptContext: string | undefined;
+      // Inline hook-run debug entries collected across this turn (UserPromptSubmit
+      // / SessionStart at the top, Pre/PostToolUse around their tool calls, Stop at
+      // the end) and spliced into the assistant message in onFinish.
+      const hookRunCollector: CollectedHookRun[] = [];
       // The conversation's user id (the sandbox is keyed per org/user/conversation).
       const conversationUserId = conversation.userId;
 
@@ -303,6 +312,9 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
             throw new ApiError(422, result.reason ?? "Prompt blocked by hook");
           }
           hookPromptContext = result.injectedContext;
+          hookRunCollector.push(
+            ...toCollectedRuns(result.runs, { kind: "turn-start" }),
+          );
         } catch (error) {
           // A deliberate block must surface as 422; only fail open on unexpected
           // dispatcher errors.
@@ -333,6 +345,9 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           });
           // SessionStart cannot block; only its injected context is used.
           hookSessionContext = result.injectedContext;
+          hookRunCollector.push(
+            ...toCollectedRuns(result.runs, { kind: "turn-start" }),
+          );
         } catch (error) {
           logger.warn(
             { error, conversationId },
@@ -465,6 +480,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
             delegationChain: agentId,
             abortSignal: chatAbortController.signal,
             user: { id: user.id, email: user.email, name: user.name },
+            hookRunCollector,
           }),
           getChatMcpToolUiResourceUris(conversation.agentId),
         ]);
@@ -1154,18 +1170,34 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                     removeAbortListeners();
                     stopActiveRunPolling();
 
-                    // Stop lifecycle hook: fire-and-forget so it cannot delay or
-                    // break the turn's completion. Fails open on any error.
-                    hookDispatcherService
-                      .fire({
+                    // Stop lifecycle hook: awaited here (post-stream, so it can't
+                    // delay the user-visible response) to collect its run for
+                    // inline display. Fails open on any error.
+                    try {
+                      const stopResult = await hookDispatcherService.fire({
                         event: "stop",
                         conversationId,
                         agentId,
                         organizationId,
                         userId: conversationUserId,
                         fields: { stop_hook_active: false },
-                      })
-                      .catch(() => {});
+                      });
+                      hookRunCollector.push(
+                        ...toCollectedRuns(stopResult.runs, {
+                          kind: "turn-end",
+                        }),
+                      );
+                    } catch {
+                      // a Stop-hook failure must never break turn completion
+                    }
+
+                    // Splice the turn's collected hook runs into the assistant
+                    // message(s) as inline `data-hook-run` parts before persisting,
+                    // so they survive refresh and sit at their lifecycle position.
+                    const messagesToPersist = applyHookRunsToMessages(
+                      finalMessages as unknown as ChatMessage[],
+                      hookRunCollector,
+                    );
 
                     // Only persist if not already persisted by onError
                     if (!messagesPersisted && conversationId) {
@@ -1177,12 +1209,12 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                           await persistRegeneratedTurn({
                             conversationId,
                             requestMessages: messages,
-                            finalMessages,
+                            finalMessages: messagesToPersist,
                           });
                         } else {
                           await persistNewMessages(
                             conversationId,
-                            finalMessages,
+                            messagesToPersist,
                             "onFinish",
                           );
                         }

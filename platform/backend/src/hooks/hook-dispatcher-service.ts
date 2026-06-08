@@ -2,6 +2,7 @@ import config from "@/config";
 import { HookFileModel, SkillSandboxModel } from "@/models";
 import { SKILL_SANDBOX_HOME } from "@/skills-sandbox/runtime-image";
 import type { HookEvent } from "@/types/hook";
+import type { HookRunDetail } from "./hook-run-parts";
 import { runHookScript } from "./hook-runner";
 
 /** @public — consumed by the chat route + MCP client wiring (Task 8). */
@@ -20,6 +21,13 @@ export interface FireResult {
   decision: "proceed" | "block";
   reason?: string;
   injectedContext?: string;
+  /**
+   * One entry per hook script that actually ran, in execution order (a block
+   * stops the loop, so later scripts are absent). `fire()` always populates it;
+   * optional only so existing stubs that predate it still type-check. The chat
+   * layer turns these into inline `data-hook-run` entries; others ignore it.
+   */
+  runs?: HookRunDetail[];
 }
 
 class HookDispatcherService {
@@ -39,14 +47,14 @@ class HookDispatcherService {
    * First "blocked" outcome short-circuits; remaining hooks are not run.
    */
   async fire(params: FireParams): Promise<FireResult> {
-    if (!this.isEnabled) return { decision: "proceed" };
+    if (!this.isEnabled) return { decision: "proceed", runs: [] };
 
     const enabled = await HookFileModel.listEnabledByAgent(
       params.agentId,
       params.organizationId,
     );
     const scripts = enabled.filter((h) => h.event === params.event);
-    if (scripts.length === 0) return { decision: "proceed" };
+    if (scripts.length === 0) return { decision: "proceed", runs: [] };
 
     const sandbox = await SkillSandboxModel.findOrCreateDefault({
       organizationId: params.organizationId,
@@ -55,15 +63,19 @@ class HookDispatcherService {
       defaultCwd: SKILL_SANDBOX_HOME,
     });
 
+    const hookEventName = HOOK_EVENT_NAMES[params.event];
     const payload = {
       ...params.fields,
       session_id: params.conversationId,
       cwd: SKILL_SANDBOX_HOME,
       permission_mode: "default",
-      hook_event_name: HOOK_EVENT_NAMES[params.event],
+      hook_event_name: hookEventName,
     };
 
     const injected: string[] = [];
+    // One detail per script that actually ran, in execution order; surfaced as
+    // inline `data-hook-run` entries by the chat layer.
+    const runs: HookRunDetail[] = [];
     for (const hookFile of scripts) {
       const r = await runHookScript({
         sandboxId: sandbox.id,
@@ -74,10 +86,17 @@ class HookDispatcherService {
         hookFile,
         payload,
       });
+      runs.push({
+        hookEventName,
+        fileName: hookFile.fileName,
+        outcome: r.outcome,
+        exitCode: r.exitCode,
+      });
       if (r.outcome === "blocked") {
         return {
           decision: "block",
           reason: r.stderr.trim() || "Blocked by hook",
+          runs,
         };
       }
       if (r.outcome === "proceeded" && r.stdout.trim()) {
@@ -88,6 +107,7 @@ class HookDispatcherService {
     return {
       decision: "proceed",
       injectedContext: injected.length ? injected.join("\n") : undefined,
+      runs,
     };
   }
 }

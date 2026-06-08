@@ -33,6 +33,7 @@ import { CacheKey, LRUCacheManager } from "@/cache-manager";
 import mcpClient, { type TokenAuthContext } from "@/clients/mcp-client";
 import config from "@/config";
 import { hookDispatcherService } from "@/hooks/hook-dispatcher-service";
+import { type CollectedHookRun, toCollectedRuns } from "@/hooks/hook-run-parts";
 import logger from "@/logging";
 import {
   AgentModel,
@@ -793,6 +794,7 @@ export async function getChatMcpTools({
   user,
   blockOnApprovalRequired,
   scheduleTriggerRunId,
+  hookRunCollector,
 }: {
   agentName: string;
   agentId: string;
@@ -816,6 +818,8 @@ export async function getChatMcpTools({
   blockOnApprovalRequired?: boolean;
   /** Schedule trigger run ID — enables artifact_write to target the run */
   scheduleTriggerRunId?: string;
+  /** Per-turn sink for inline `data-hook-run` entries (chat path only). */
+  hookRunCollector?: CollectedHookRun[];
 }): Promise<Record<string, Tool>> {
   const toolCacheKey = getToolCacheKey(agentId, userId, conversationId);
   const shouldUseToolCache = !abortSignal;
@@ -984,11 +988,13 @@ export async function getChatMcpTools({
                     organizationId,
                     userId,
                     conversationId,
+                    hookRunCollector,
                   };
                   const preBlockReason = await firePreToolUseHook({
                     ctx: hookCtx,
                     toolName: mcpTool.name,
                     toolInput: toolArguments,
+                    toolCallId: options.toolCallId,
                   });
                   if (preBlockReason !== null) {
                     span.setAttribute(ATTR_MCP_IS_ERROR_RESULT, true);
@@ -1099,6 +1105,7 @@ export async function getChatMcpTools({
                     toolName: mcpTool.name,
                     toolInput: toolArguments,
                     toolResponse: toolResultText(toolResult),
+                    toolCallId: options.toolCallId,
                   });
                   return postFeedback
                     ? appendHookFeedbackToToolResult(toolResult, postFeedback)
@@ -2124,6 +2131,12 @@ interface ToolHookContext {
   /** Conversation user id — the default sandbox is keyed per org/user/conversation. */
   userId: string;
   conversationId?: string;
+  /**
+   * Per-turn sink the chat route drains into inline `data-hook-run` entries.
+   * Pre/PostToolUse runs are appended here, tagged with the tool call's id so
+   * they render next to that tool call. Absent for non-chat callers.
+   */
+  hookRunCollector?: CollectedHookRun[];
 }
 
 /**
@@ -2136,8 +2149,9 @@ async function firePreToolUseHook(params: {
   ctx: ToolHookContext;
   toolName: string;
   toolInput: unknown;
+  toolCallId?: string;
 }): Promise<string | null> {
-  const { ctx, toolName, toolInput } = params;
+  const { ctx, toolName, toolInput, toolCallId } = params;
   if (!ctx.conversationId) {
     return null;
   }
@@ -2150,6 +2164,16 @@ async function firePreToolUseHook(params: {
       userId: ctx.userId,
       fields: { tool_name: toolName, tool_input: toolInput ?? {} },
     });
+    // Record the run for inline display, anchored before this tool call.
+    if (ctx.hookRunCollector && toolCallId) {
+      ctx.hookRunCollector.push(
+        ...toCollectedRuns(
+          result.runs,
+          { kind: "tool-pre", toolCallId },
+          toolName,
+        ),
+      );
+    }
     if (result.decision === "block") {
       return result.reason ?? null;
     }
@@ -2181,8 +2205,9 @@ async function firePostToolUseHook(params: {
   toolName: string;
   toolInput: unknown;
   toolResponse: string;
+  toolCallId?: string;
 }): Promise<string | null> {
-  const { ctx, toolName, toolInput, toolResponse } = params;
+  const { ctx, toolName, toolInput, toolResponse, toolCallId } = params;
   if (!ctx.conversationId) {
     return null;
   }
@@ -2199,6 +2224,16 @@ async function firePostToolUseHook(params: {
         tool_response: toolResponse.slice(0, POST_TOOL_USE_RESPONSE_CAP),
       },
     });
+    // Record the run for inline display, anchored after this tool call.
+    if (ctx.hookRunCollector && toolCallId) {
+      ctx.hookRunCollector.push(
+        ...toCollectedRuns(
+          result.runs,
+          { kind: "tool-post", toolCallId },
+          toolName,
+        ),
+      );
+    }
     // Phase 1: only a blocking hook's stderr becomes [hook feedback].
     // injectedContext (stdout on proceed) does not reach the model in this phase.
     if (result.decision === "block" && result.reason) {

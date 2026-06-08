@@ -1180,3 +1180,43 @@ describe("title generation integration", () => {
     );
   });
 });
+
+describe("extractLatestUserPromptText", () => {
+  it("returns the text of the last user message, joining its text parts", () => {
+    const text = __test.extractLatestUserPromptText([
+      { role: "user", parts: [{ type: "text", text: "first" }] },
+      { role: "assistant", parts: [{ type: "text", text: "reply" }] },
+      {
+        role: "user",
+        parts: [
+          { type: "text", text: "line one" },
+          { type: "text", text: "line two" },
+        ],
+      },
+    ] as ChatMessage[]);
+
+    expect(text).toBe("line one\nline two");
+  });
+
+  it("ignores non-text parts when extracting the prompt", () => {
+    const text = __test.extractLatestUserPromptText([
+      {
+        role: "user",
+        parts: [
+          { type: "file", url: "data:..." },
+          { type: "text", text: "the prompt" },
+        ],
+      },
+    ] as ChatMessage[]);
+
+    expect(text).toBe("the prompt");
+  });
+
+  it("returns an empty string when there is no user message", () => {
+    const text = __test.extractLatestUserPromptText([
+      { role: "assistant", parts: [{ type: "text", text: "hi" }] },
+    ] as ChatMessage[]);
+
+    expect(text).toBe("");
+  });
+});

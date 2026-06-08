@@ -1247,6 +1247,20 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.UpdateSiteNotification]: { siteNotification: ["update"] },
   [RouteId.DeleteSiteNotification]: { siteNotification: ["delete"] },
 
+  // Hook File Routes
+  [RouteId.GetHooks]: {
+    agent: ["read"],
+  },
+  [RouteId.CreateHook]: {
+    agent: ["update"],
+  },
+  [RouteId.UpdateHook]: {
+    agent: ["update"],
+  },
+  [RouteId.DeleteHook]: {
+    agent: ["update"],
+  },
+
   // MCP Gateway Routes - available to all authenticated users
   [RouteId.McpGatewayGet]: {}, // Server discovery endpoint
   [RouteId.McpGatewayPost]: {}, // JSON-RPC endpoint for resources/read and tools/call

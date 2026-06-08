@@ -57677,3 +57677,381 @@ export type GetTeamVaultSecretKeysResponses = {
 };
 
 export type GetTeamVaultSecretKeysResponse = GetTeamVaultSecretKeysResponses[keyof GetTeamVaultSecretKeysResponses];
+
+export type GetHooksData = {
+    body?: never;
+    path?: never;
+    query: {
+        agentId: string;
+    };
+    url: '/api/hooks';
+};
+
+export type GetHooksErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetHooksError = GetHooksErrors[keyof GetHooksErrors];
+
+export type GetHooksResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        organizationId: string;
+        agentId: string;
+        event: 'session_start' | 'user_prompt_submit' | 'pre_tool_use' | 'post_tool_use' | 'stop';
+        fileName: string;
+        content: string;
+        requirements: Array<string>;
+        enabled: boolean;
+        createdAt: string;
+        updatedAt: string;
+    }>;
+};
+
+export type GetHooksResponse = GetHooksResponses[keyof GetHooksResponses];
+
+export type CreateHookData = {
+    body: {
+        agentId: string;
+        event: 'session_start' | 'user_prompt_submit' | 'pre_tool_use' | 'post_tool_use' | 'stop';
+        fileName: string;
+        content: string;
+        requirements?: Array<string>;
+        enabled?: boolean;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/hooks';
+};
+
+export type CreateHookErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type CreateHookError = CreateHookErrors[keyof CreateHookErrors];
+
+export type CreateHookResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        agentId: string;
+        event: 'session_start' | 'user_prompt_submit' | 'pre_tool_use' | 'post_tool_use' | 'stop';
+        fileName: string;
+        content: string;
+        requirements: Array<string>;
+        enabled: boolean;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type CreateHookResponse = CreateHookResponses[keyof CreateHookResponses];
+
+export type DeleteHookData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/hooks/{id}';
+};
+
+export type DeleteHookErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type DeleteHookError = DeleteHookErrors[keyof DeleteHookErrors];
+
+export type DeleteHookResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type DeleteHookResponse = DeleteHookResponses[keyof DeleteHookResponses];
+
+export type UpdateHookData = {
+    body: {
+        event?: 'session_start' | 'user_prompt_submit' | 'pre_tool_use' | 'post_tool_use' | 'stop';
+        fileName?: string;
+        content?: string;
+        requirements?: Array<string>;
+        enabled?: boolean;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/hooks/{id}';
+};
+
+export type UpdateHookErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type UpdateHookError = UpdateHookErrors[keyof UpdateHookErrors];
+
+export type UpdateHookResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        agentId: string;
+        event: 'session_start' | 'user_prompt_submit' | 'pre_tool_use' | 'post_tool_use' | 'stop';
+        fileName: string;
+        content: string;
+        requirements: Array<string>;
+        enabled: boolean;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type UpdateHookResponse = UpdateHookResponses[keyof UpdateHookResponses];

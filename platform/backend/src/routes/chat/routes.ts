@@ -47,6 +47,7 @@ import {
 import config from "@/config";
 import { withDbTransaction } from "@/database";
 import { browserStreamFeature } from "@/features/browser-stream/services/browser-stream.feature";
+import { hookDispatcherService } from "@/hooks/hook-dispatcher-service";
 import { extractAndIngestDocuments } from "@/knowledge-base";
 import { fileUploadManager } from "@/knowledge-base/file-upload/file-upload-manager";
 import logger from "@/logging";
@@ -268,6 +269,78 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
 
+      // Lifecycle hooks (UserPromptSubmit / SessionStart). Cheap no-op when the
+      // agent has no hooks or the sandbox is disabled. Fired before createRun so
+      // a blocking hook never acquires/leaks an active run. Every fire is wrapped
+      // try/catch and fails open — hooks must never break chat.
+      // Context returned by hooks is appended to the system prompt below.
+      let hookSessionContext: string | undefined;
+      let hookPromptContext: string | undefined;
+      // The conversation's user id (the sandbox is keyed per org/user/conversation).
+      const conversationUserId = conversation.userId;
+
+      // First turn = no prior assistant turn exists in the incoming thread.
+      // True for a brand-new conversation; false once the model has replied.
+      const isFirstTurn = !(messages as ChatMessage[]).some(
+        (message) => message?.role === "assistant",
+      );
+
+      // UserPromptSubmit only on a genuine user submit (skip regenerate).
+      if (trigger !== "regenerate-message") {
+        const latestUserPrompt = extractLatestUserPromptText(
+          messages as ChatMessage[],
+        );
+        try {
+          const result = await hookDispatcherService.fire({
+            event: "user_prompt_submit",
+            conversationId,
+            agentId: conversation.agentId,
+            organizationId,
+            userId: conversationUserId,
+            fields: { prompt: latestUserPrompt },
+          });
+          if (result.decision === "block") {
+            throw new ApiError(422, result.reason ?? "Prompt blocked by hook");
+          }
+          hookPromptContext = result.injectedContext;
+        } catch (error) {
+          // A deliberate block must surface as 422; only fail open on unexpected
+          // dispatcher errors.
+          if (error instanceof ApiError) {
+            throw error;
+          }
+          logger.warn(
+            { error, conversationId },
+            "UserPromptSubmit hook dispatch failed, proceeding",
+          );
+        }
+      }
+
+      if (isFirstTurn) {
+        try {
+          // Resolve the model id for the SessionStart payload. Dereferences the
+          // conversation's model_id FK (env/config fallback if unset).
+          const { model: sessionStartModel } = await resolveConversationModel(
+            conversation.modelId,
+          );
+          const result = await hookDispatcherService.fire({
+            event: "session_start",
+            conversationId,
+            agentId: conversation.agentId,
+            organizationId,
+            userId: conversationUserId,
+            fields: { source: "startup", model: sessionStartModel },
+          });
+          // SessionStart cannot block; only its injected context is used.
+          hookSessionContext = result.injectedContext;
+        } catch (error) {
+          logger.warn(
+            { error, conversationId },
+            "SessionStart hook dispatch failed, proceeding",
+          );
+        }
+      }
+
       const activeRun = await activeChatRunService.createRun({
         conversationId,
         userId: user.id,
@@ -452,6 +525,9 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
             skillCatalogPrompt,
             toolDenialInstruction,
             toolResultInstructions,
+            // Context returned by SessionStart / UserPromptSubmit hooks.
+            hookSessionContext,
+            hookPromptContext,
           ]
             .filter(Boolean)
             .join("\n\n") || undefined;
@@ -1077,6 +1153,19 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   onFinish: async ({ messages: finalMessages }) => {
                     removeAbortListeners();
                     stopActiveRunPolling();
+
+                    // Stop lifecycle hook: fire-and-forget so it cannot delay or
+                    // break the turn's completion. Fails open on any error.
+                    hookDispatcherService
+                      .fire({
+                        event: "stop",
+                        conversationId,
+                        agentId,
+                        organizationId,
+                        userId: conversationUserId,
+                        fields: { stop_hook_active: false },
+                      })
+                      .catch(() => {});
 
                     // Only persist if not already persisted by onError
                     if (!messagesPersisted && conversationId) {
@@ -2536,6 +2625,29 @@ export function extractFirstMessages(messages: unknown[]): ExtractedMessages {
   return { firstUserMessage, firstAssistantMessage };
 }
 
+/**
+ * Extracts the text of the latest user message from a chat thread, joining all
+ * its text parts. Returns an empty string when no user message has text.
+ * Used to populate the UserPromptSubmit lifecycle hook payload.
+ */
+function extractLatestUserPromptText(messages: ChatMessage[]): string {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const message = messages[i];
+    if (message?.role !== "user") {
+      continue;
+    }
+    const text = (message.parts ?? [])
+      .filter(
+        (part): part is ChatMessagePart & { text: string } =>
+          part?.type === "text" && typeof part.text === "string",
+      )
+      .map((part) => part.text)
+      .join("\n");
+    return text;
+  }
+  return "";
+}
+
 export function buildChatStopConditions() {
   return [
     stepCountIs(500),
@@ -3614,6 +3726,7 @@ async function validateChatApiKeyAccess(
 
 export const __test = {
   buildModelMessagesForProvider,
+  extractLatestUserPromptText,
   getMessagesNotYetPersisted,
   getMessagesWithChangedContent,
   persistNewMessages,

@@ -14,6 +14,7 @@ export { default as configRoutes } from "./config";
 export { default as environmentRoutes } from "./environment";
 export { default as githubAppConfigRoutes } from "./github-app-config";
 export { default as healthRoutes } from "./health";
+export { default as hookRoutes } from "./hook";
 export { default as incomingEmailRoutes } from "./incoming-email";
 export { default as interactionRoutes } from "./interaction";
 export { default as internalMcpCatalogRoutes } from "./internal-mcp-catalog";

@@ -290,16 +290,37 @@ class SkillSandboxRuntimeService {
           originalName: params.originalName ?? null,
           sizeBytes: params.data.byteLength,
           data: params.data,
+          sourceAttachmentId: params.dedupeId ?? null,
         });
       } catch (dbError) {
         throw new SkillSandboxError(
           `failed to persist upload: ${dbError instanceof Error ? dbError.message : String(dbError)}`,
         );
       }
-      // tool uploads carry no sourceAttachmentId, so the conflict path never
-      // fires — a null here means the insert genuinely failed.
+      // null means the ON CONFLICT index fired and the insert was a no-op.
+      // When dedupeId is set this is intentional idempotency — look up the
+      // already-staged row and return its ref. Without dedupeId there is no
+      // dedup key, so a null here is a genuine failure.
       if (!row) {
-        throw new SkillSandboxError("failed to persist upload");
+        if (!params.dedupeId) {
+          throw new SkillSandboxError("failed to persist upload");
+        }
+        const existing = await SkillSandboxFileModel.findUploadByDedupeId(
+          params.sandboxId,
+          params.dedupeId,
+        );
+        if (!existing) {
+          throw new SkillSandboxError(
+            "failed to persist upload: dedup conflict but existing row not found",
+          );
+        }
+        return {
+          uploadId: existing.id,
+          sandboxId: params.sandboxId,
+          path: existing.path,
+          mimeType: existing.mimeType,
+          sizeBytes: existing.sizeBytes,
+        };
       }
 
       return {

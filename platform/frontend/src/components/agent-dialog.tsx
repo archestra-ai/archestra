@@ -38,6 +38,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { ConnectorTypeIcon } from "@/app/knowledge/knowledge-bases/_parts/connector-icons";
 import { AgentBadge } from "@/components/agent-badge";
+import { AgentHooksEditor } from "@/components/agent-hooks-editor";
 import type { AgentIconVariant } from "@/components/agent-icon";
 import { AgentIconPicker } from "@/components/agent-icon-picker";
 import {
@@ -1691,6 +1692,11 @@ export function AgentDialog({
                     </div>
                   )}
                 </div>
+              )}
+
+              {/* Hooks (internal agents only, existing agents only) */}
+              {isInternalAgent && !isBuiltIn && agent?.id && (
+                <AgentHooksEditor agentId={agent.id} />
               )}
 
               {/* Section 4: Access & LLM */}

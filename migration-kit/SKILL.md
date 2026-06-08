@@ -1,14 +1,16 @@
 ---
 name: migrate-to-archestra
-description: Migrate an existing agentic setup (Claude Code project — skills, subagents, slash commands, hooks, MCP servers, CLAUDE.md, local python tools, optional openclaw config) into an Archestra instance. Use when the user wants to move, port, or migrate their Claude/agentic setup to Archestra.
+description: Migrate an existing agentic PoC/pilot (Claude Code project files, MCP configs, hooks, local tools, openclaw config, or similar hand-rolled setup artifacts) into an Archestra instance. Use when the user wants to move, port, or convert an existing agentic setup into an Archestra pilot.
 license: Apache-2.0
 ---
 
-# Migrate an agentic setup to Archestra
+# Migrate an agentic PoC to Archestra
 
-You migrate a user's agentic setup into Archestra. The mechanical, deterministic work lives in
-bundled Python helpers; you own the judgment: mapping decisions, asking the user where ambiguous,
-and writing the final report.
+You migrate a user's existing agentic PoC or pilot into Archestra. The skill itself runs in Claude
+Code, but the source setup may be a messy mix of Claude Code-style files, MCP config, local scripts,
+hooks, openclaw config, and other pilot artifacts. The mechanical, deterministic work lives in
+bundled Python helpers; you own the product judgment: mapping decisions, asking the user where
+ambiguous, getting approval on a preview, and writing the final report.
 
 `$SKILL_DIR` below is the directory containing this file. The helpers are at `$SKILL_DIR/scripts/`.
 They are **zero-dependency** and target **Python ≥3.10**, so on a stock interpreter (no `uv`, no
@@ -24,7 +26,8 @@ discover.py → inventory.json → [you map + ask the user] → migration_plan.j
 ```
 
 Read `references/entity-mapping.md` before mapping, `references/archestra-api.md` for payload facts,
-and `references/install.md` for connecting/installing. Do them as you reach each step, not all upfront.
+`references/install.md` for connecting/installing, and `references/report-template.md` before writing
+the report. Do them as you reach each step, not all upfront.
 
 ## Step 1 — Connect to / install Archestra
 Ask whether the user has an existing instance or wants a local docker one. Follow
@@ -47,6 +50,12 @@ This emits a **secret-redacted** inventory (it never writes credentials to the f
 includes any frontmatter line the parser refused to interpret (it supports `key: value` scalars,
 inline `[a, b]` lists, and `- item` block lists; block scalars `|`/`>`, nested maps, anchors, and
 comments are reported here rather than guessed, so read the raw file for those rare cases).
+
+After reading the inventory, summarize it in product terms before mapping:
+- likely to migrate cleanly;
+- needs user choice or review;
+- report-only/manual follow-up;
+- secret redactions or content warnings.
 
 ## Step 3 — Map and ask
 Using `references/entity-mapping.md`, turn the inventory into `migration_plan.json`:
@@ -73,7 +82,32 @@ Use `AskUserQuestion` only for genuine ambiguities, e.g.:
 
 Mark passive hooks and openclaw as `action:"manual"` with a `notes` explanation.
 
-Always show the user the plan (what will be created, at what scope) and get approval before applying.
+Always show the user a concise preview and get explicit approval before applying. Use this shape:
+
+```markdown
+## Migration Preview
+
+Ready to create
+| Source | Archestra target | Scope | Notes |
+| --- | --- | --- | --- |
+
+Needs your decision
+| Source | Choice | Recommendation |
+| --- | --- | --- |
+
+Manual after migration
+| Source | Why manual | Follow-up |
+| --- | --- | --- |
+
+Behavior changes to expect
+- <only list differences that apply>
+
+Secrets/safety notes
+- <redactions and warnings, never secret values>
+```
+
+Keep the preview short enough for a pilot owner to approve. Do not show raw API payloads unless the
+user asks.
 
 ## Step 4 — Apply
 Dry-run first (offline; builds + validates every payload, touches no network):
@@ -88,13 +122,13 @@ python3 "$SKILL_DIR/scripts/apply.py" --inventory inventory.json --plan migratio
 `enable-defaults` so the primary agent sees the skills, and exits non-zero if any op failed/was invalid.
 
 ## Step 5 — Report
-From `migration_result.json`, write `report.md` with the sections defined in
-`references/entity-mapping.md` (Migrated / Skipped / Failed / Manual migration needed / Behavioral
-differences). For unresolved `guard` hooks, include the exact policy JSON to paste once a target tool
-exists. Tool-invocation policies only enforce when the org `globalToolPolicy` is `restrictive`; the
-scripts don't read that setting, so tell the user to verify it in Archestra settings. Also surface any
-`warnings` from the inventory (possible secrets left intact in migrated bodies). Summarize for the user
-what migrated and what still needs hands-on work.
+From `migration_result.json`, write `report.md` using `references/report-template.md`. The report is
+for deciding whether the converted pilot is ready to try in Archestra, not for producing an exhaustive
+command transcript. For unresolved `guard` hooks, include the exact policy JSON to paste once a target
+tool exists. Tool-invocation policies only enforce when the org `globalToolPolicy` is `restrictive`;
+the scripts don't read that setting, so tell the user to verify it in Archestra settings. Also surface
+any `warnings` from the inventory (possible secrets left intact in migrated bodies). Summarize for the
+user what migrated, what to test first, and what still needs hands-on work.
 
 ## Contributor tooling (not needed to *run* the skill)
 The shipped scripts are zero-dependency; the lines below are only for developing/testing them.

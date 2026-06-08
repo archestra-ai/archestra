@@ -50,10 +50,7 @@ are not Archestra tools, so a guard on `Bash` has no target. Therefore:
 - **Artifact/filename conventions** enforced only by prompt rules carry over as prose, not as code.
 - **Local stdio MCP servers** are registered but only run if installed (opt-in) and resolvable in the cluster.
 
-## Report (`report.md`) — write these sections
-1. **Migrated** — table of created entities (kind, name, Archestra id).
-2. **Skipped (already existed)** — idempotent no-ops.
-3. **Failed** — with the verbatim API error.
-4. **Manual migration needed** — each hook/openclaw/unresolved item with concrete next steps (and, for
-   guards, the exact policy JSON to paste once a target tool exists).
-5. **Behavioral differences** — from the list above, only the ones that actually apply.
+## Report (`report.md`)
+Use `references/report-template.md`. The report should help a pilot owner decide what is ready to try
+in Archestra, what was skipped or failed, and what still needs hands-on follow-up. Include behavioral
+differences from the list above only when they apply to the actual migration.

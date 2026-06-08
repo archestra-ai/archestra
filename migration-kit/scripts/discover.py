@@ -20,8 +20,10 @@ from __future__ import annotations
 import argparse
 import base64
 import json
+import os
 import re
 import sys
+from collections import Counter
 from pathlib import Path
 
 from contracts import SECRET_KEY_RE as _SECRET_KEY
@@ -59,6 +61,12 @@ from frontmatter import parse_frontmatter
 
 # events whose hooks can block the action -- candidates for a tool-invocation policy.
 _BLOCKING_EVENTS = {"PreToolUse", "UserPromptSubmit", "PreCompact", "Stop", "SubagentStop"}
+
+
+def _style(text: str, code: str) -> str:
+    if sys.stdout.isatty() and "NO_COLOR" not in os.environ:
+        return f"\033[{code}m{text}\033[0m"
+    return text
 
 
 def _is_secret_value(value: str) -> bool:
@@ -361,6 +369,38 @@ def _discover_hooks(inv: Inventory, hooks: JsonValue, rel: str) -> None:
                 ))
 
 
+def _kind_counts(inv: Inventory) -> str:
+    counts = Counter(it.kind for it in inv.items)
+    return ", ".join(f"{kind}={count}" for kind, count in sorted(counts.items())) or "none"
+
+
+def _print_summary(inv: Inventory, out: Path) -> None:
+    likely = sum(1 for it in inv.items if it.kind in {"claude_md", "skill", "command", "local_tool"})
+    review = sum(
+        1 for it in inv.items
+        if it.kind in {"subagent", "mcp_server"} or (isinstance(it, HookItem) and it.data.intent == "guard")
+    )
+    manual = sum(
+        1 for it in inv.items
+        if it.kind == "openclaw" or (isinstance(it, HookItem) and it.data.intent == "passive")
+    ) + len(inv.unknowns)
+    redacted = sum(len(it.redacted_refs) for it in inv.items)
+
+    print(_style(f"🔎 discovered {len(inv.items)} items; wrote {out}", "36;1"))
+    print(f"  inventory: {_kind_counts(inv)}")
+    print(f"  {_style('✅ likely migrates', '32;1')}: {likely} item(s) (agent prompt, skills, commands, local tools)")
+    print(f"  {_style('⚠️  needs review', '33;1')}: {review} item(s) (subagents, MCP install choices, guard hooks)")
+    print(f"  {_style('🛠️  manual/report-only', '34;1')}: {manual} item(s) (passive hooks, openclaw, unknown files)")
+    safety = f"{redacted} structured value(s) redacted; {len(inv.warnings)} content warning(s)"
+    print(f"  {_style('🔐 safety', '35;1')}: {safety}")
+    for unknown in inv.unknowns:
+        print(f"  unknown: {unknown}")
+    for warning in inv.warnings:
+        print(f"  warning: {warning}")
+    print(_style("➡️  next: ask the migrate-to-archestra skill to draft a preview plan from this inventory.", "36;1"))
+    print("      approve that plan before running apply.py against Archestra.")
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="discover an agentic setup into an inventory")
     ap.add_argument("source_dir", type=Path)
@@ -374,11 +414,7 @@ def main() -> int:
 
     inv = discover(root)
     args.out.write_text(json.dumps(to_jsonable(inv), indent=2), encoding="utf-8")
-    kinds = sorted({it.kind for it in inv.items})
-    print(f"discovered {len(inv.items)} items ({', '.join(kinds) or 'none'}); "
-          f"{len(inv.unknowns)} unknown; {len(inv.warnings)} warning(s); wrote {args.out}")
-    for w in inv.warnings:
-        print(f"  warning: {w}", file=sys.stderr)
+    _print_summary(inv, args.out)
     return 0
 
 

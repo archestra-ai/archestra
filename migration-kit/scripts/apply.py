@@ -80,6 +80,25 @@ _ORDER: dict[str, int] = {
 }
 
 
+def _style(text: str, code: str) -> str:
+    if sys.stdout.isatty() and "NO_COLOR" not in os.environ:
+        return f"\033[{code}m{text}\033[0m"
+    return text
+
+
+def _outcome_label(outcome: Outcome) -> str:
+    match outcome:
+        case "planned" | "created":
+            return _style(outcome, "32;1")
+        case "manual":
+            return _style(outcome, "34;1")
+        case "skipped":
+            return _style(outcome, "36;1")
+        case "invalid" | "failed":
+            return _style(outcome, "31;1")
+    raise ContractError(f"unknown outcome: {outcome}")
+
+
 # --- built operations: a typed union of what _build_payload produces ----------------------
 
 
@@ -285,6 +304,38 @@ def _redacted_for_print(built: Built) -> dict[str, JsonValue]:
                     "action": built.action, "reason": built.reason}
 
 
+def _preview_detail(built: Built) -> str:
+    match built:
+        case BuiltAgent(payload):
+            return f"scope={payload.scope}; inherits org default model"
+        case BuiltSkill(payload):
+            return f"scope={payload.scope}; bundled_files={len(payload.files)}"
+        case BuiltCatalog(payload):
+            match payload.serverType:
+                case "remote":
+                    url = payload.remoteConfig.url if payload.remoteConfig else "<missing url>"
+                    return f"scope={payload.scope}; remote MCP catalog item; url={url}"
+                case "local":
+                    local = payload.localConfig
+                    command = local.command if local else "<missing command>"
+                    env = local.environment if local else []
+                    secret_count = sum(1 for item in env if item.type == "secret")
+                    return (
+                        f"scope={payload.scope}; local MCP catalog item; command={command}; "
+                        f"prompted_secrets={secret_count}"
+                    )
+        case BuiltInstall():
+            return (
+                f"scope={built.scope}; catalog={built.catalog_name}; "
+                f"supplied_env_values={len(built.environment_values)}"
+            )
+        case BuiltLlmKey(payload):
+            return f"scope={payload.scope}; provider={payload.provider}; api_key=<redacted>"
+        case BuiltPolicy():
+            return f"tool={built.tool_name}; action={built.action}; conditions={len(built.conditions)}"
+    raise ContractError("unreachable built operation")
+
+
 # --- execution (network, idempotent) -----------------------------------------------------
 
 
@@ -366,6 +417,7 @@ def main() -> int:
     ap.add_argument("--plan", type=Path, required=True)
     ap.add_argument("--out", type=Path, default=Path("migration_result.json"))
     ap.add_argument("--dry-run", action="store_true", help="build+validate payloads, touch no network")
+    ap.add_argument("--verbose", action="store_true", help="with --dry-run, also print redacted raw payloads")
     args = ap.parse_args()
 
     inventory = parse_inventory(json.loads(args.inventory.read_text(encoding="utf-8")))
@@ -390,7 +442,7 @@ def main() -> int:
     built.sort(key=lambda b: _ORDER.get(b.decision.target_kind, 99))
 
     if args.dry_run:
-        return _finish(_run_dry(built), args.out)
+        return _finish(_run_dry(built, verbose=args.verbose), args.out)
 
     base_url = os.environ.get("ARCHESTRA_BASE_URL")
     api_key = os.environ.get("ARCHESTRA_API_KEY")
@@ -401,14 +453,21 @@ def main() -> int:
     return _finish(_run_apply(built, base_url, api_key), args.out)
 
 
-def _run_dry(built: list[_Built]) -> list[ResultOp]:
+def _run_dry(built: list[_Built], *, verbose: bool) -> list[ResultOp]:
     results: list[ResultOp] = []
     for b in built:
         if b.built is None:
-            results.append(_nonmigrate_or_invalid(b))
+            result = _nonmigrate_or_invalid(b)
+            detail = result.detail or result.error or ""
+            suffix = f" -- {detail}" if detail else ""
+            print(f"[dry-run] {_outcome_label(result.outcome)}: {b.decision.target_kind}: {b.name}{suffix}")
+            results.append(result)
             continue
-        shown = _redacted_for_print(b.built)
-        print(f"[dry-run] {b.decision.target_kind}: {b.name}\n{json.dumps(shown, indent=2)}")
+        detail = _preview_detail(b.built)
+        print(f"[dry-run] {_outcome_label('planned')}: {b.decision.target_kind}: {b.name} -- {detail}")
+        if verbose:
+            shown = _redacted_for_print(b.built)
+            print(json.dumps(shown, indent=2))
         results.append(ResultOp(source_id=b.decision.source_id, target_kind=b.decision.target_kind,
                                 name=b.name, outcome="planned"))
     return results

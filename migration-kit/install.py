@@ -6,14 +6,16 @@
 
 it downloads only the files needed to RUN the skill (SKILL.md + scripts/ + references/) via the
 GitHub contents API -- a few hundred KB, not the whole repo -- and writes them into your Claude Code
-skills directory. like the skill's own scripts, this installer is zero-dependency: stock
-python>=3.10, no uv/pip, stdlib only.
+skills directory. the skill can migrate a broader agentic pilot: Claude-style files, MCP config,
+local tools, hooks, and similar hand-rolled setup artifacts. like the skill's own scripts, this
+installer is zero-dependency: stock python>=3.10, no uv/pip, stdlib only.
 """
 from __future__ import annotations
 
 import argparse
 import http.client
 import json
+import os
 import shutil
 import sys
 import urllib.error
@@ -52,6 +54,12 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
 
 
 _OPENER = urllib.request.build_opener(_NoRedirect())
+
+
+def _style(text: str, code: str) -> str:
+    if sys.stdout.isatty() and "NO_COLOR" not in os.environ:
+        return f"\033[{code}m{text}\033[0m"
+    return text
 
 
 def _http_get(url: str, allowed_hosts: tuple[str, ...]) -> bytes:
@@ -208,8 +216,10 @@ def main(argv: list[str]) -> int:
     except InstallError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
-    print(f"installed {len(written)} files into {args.dest}")
-    print("next: open Claude Code and run the `migrate-to-archestra` skill to begin a migration.")
+    print(_style(f"✅ installed {len(written)} files into {args.dest}", "32;1"))
+    print(_style("➡️  next: open Claude Code in the source project and ask:", "36;1"))
+    print("      Use the migrate-to-archestra skill to migrate this pilot into my Archestra instance.")
+    print("      If needed, include the source path and Archestra URL explicitly.")
     return 0
 
 

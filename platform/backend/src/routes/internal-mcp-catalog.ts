@@ -32,7 +32,10 @@ import {
   ToolModel,
 } from "@/models";
 import { isByosEnabled, secretManager } from "@/secrets-manager";
-import { assertCanAssignEnvironment } from "@/services/environments/environment";
+import {
+  assertCanAssignEnvironment,
+  assertValuesMatchEnvironmentRegex,
+} from "@/services/environments/environment";
 import {
   autoReinstallServer,
   localExecutionConfigChanged,
@@ -48,6 +51,7 @@ import {
   InsertInternalMcpCatalogSchema,
   type InternalMcpCatalog,
   ListInternalMcpCatalogSchema,
+  type LocalConfig,
   PartialUpdateInternalMcpCatalogSchema,
   SelectInternalMcpCatalogSchema,
   UuidIdSchema,
@@ -345,6 +349,19 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
           throw new ApiError(400, "Environment not found");
         }
       }
+      // Enforce the governing environment's allowlist regex against the
+      // admin-entered config values being persisted: static (non-prompted) env
+      // var values and non-secret userConfig defaults (the value a static header
+      // persists, and the suggested value a prompted field shows). Secrets are
+      // exempt; secret env values are extracted above.
+      await assertValuesMatchEnvironmentRegex({
+        environmentId: restBody.environmentId ?? null,
+        organizationId: request.organizationId,
+        valueSets: [
+          collectStaticEnvValues(restBody.localConfig?.environment),
+          collectStaticUserConfigValues(restBody.userConfig),
+        ],
+      });
       // Clone source must resolve within the caller's org — `create` copies
       // the source's tools + guardrail policies, so an unscoped `clonedFrom`
       // would let a caller pull another org's catalog config into their own.
@@ -854,16 +871,43 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // does — the target must belong to this org, and a restricted environment
       // (or restricted default) requires environment:deploy-to-restricted
       // (environment:admin implies it).
-      if (
+      const environmentChanged =
         "environmentId" in restBody &&
-        restBody.environmentId !== originalCatalogItem.environmentId
-      ) {
+        restBody.environmentId !== originalCatalogItem.environmentId;
+      if (environmentChanged) {
         await assertCanAssignEnvironment({
           environmentId: restBody.environmentId ?? null,
           organizationId: request.organizationId,
           canDeployToRestricted: await callerCanDeployToRestricted(
             request.headers,
           ),
+        });
+      }
+
+      // Enforce the governing environment's allowlist regex. Validate when the
+      // local config / userConfig changes (incoming values) or the environment
+      // changes (re-check the EFFECTIVE persisted values against the new env, so
+      // moving an item into a stricter env catches values stored under the old
+      // one).
+      if (
+        environmentChanged ||
+        restBody.localConfig !== undefined ||
+        restBody.userConfig !== undefined
+      ) {
+        await assertValuesMatchEnvironmentRegex({
+          environmentId: ("environmentId" in restBody
+            ? restBody.environmentId
+            : originalCatalogItem.environmentId) as string | null,
+          organizationId: request.organizationId,
+          valueSets: [
+            collectStaticEnvValues(
+              restBody.localConfig?.environment ??
+                originalCatalogItem.localConfig?.environment,
+            ),
+            collectStaticUserConfigValues(
+              restBody.userConfig ?? originalCatalogItem.userConfig,
+            ),
+          ],
         });
       }
 
@@ -1521,6 +1565,53 @@ function sameTeamSet(a: string[], b: string[]): boolean {
   if (a.length !== b.length) return false;
   const setB = new Set(b);
   return a.every((id) => setB.has(id));
+}
+
+/**
+ * Collect the admin-set static config values an environment's validation regex
+ * governs: plain-text, non-prompted env vars with a stored value. Secret,
+ * prompted, boolean, and number entries are excluded — secrets aren't policy
+ * targets, prompted values are validated at install, and the rule is meant for
+ * free-text values.
+ */
+function collectStaticEnvValues(
+  environment: LocalConfig["environment"],
+): Record<string, string> {
+  const values: Record<string, string> = {};
+  for (const envVar of environment ?? []) {
+    if (
+      envVar.type === "plain_text" &&
+      !envVar.promptOnInstallation &&
+      typeof envVar.value === "string"
+    ) {
+      values[envVar.key] = envVar.value;
+    }
+  }
+  return values;
+}
+
+/**
+ * Collect the non-secret, free-text userConfig default values an environment's
+ * allowlist regex governs — the value a static header persists and the
+ * suggested value a prompted field carries (both stored in `default`). Secret
+ * and number/boolean fields are excluded; the rule targets free-text values.
+ */
+function collectStaticUserConfigValues(
+  userConfig:
+    | Record<string, { type?: string; sensitive?: boolean; default?: unknown }>
+    | null
+    | undefined,
+): Record<string, string> {
+  const values: Record<string, string> = {};
+  for (const [key, def] of Object.entries(userConfig ?? {})) {
+    if (def.sensitive || def.type === "number" || def.type === "boolean") {
+      continue;
+    }
+    if (typeof def.default === "string" && def.default !== "") {
+      values[key] = def.default;
+    }
+  }
+  return values;
 }
 
 async function cascadeReinstallForCatalog(

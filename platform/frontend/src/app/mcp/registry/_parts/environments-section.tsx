@@ -43,6 +43,7 @@ import {
   useDefaultEnvironment,
   useUpdateDefaultEnvironment,
 } from "@/lib/organization.query";
+import { compileValidationRegex } from "./environment-validation-helpers";
 
 const NETWORK_POLICY_DOCS_URL = getDocsUrl(
   DocsPage.PlatformPrivateRegistry,
@@ -326,6 +327,7 @@ function EnvironmentEditorDialog({
     description: string | null;
     networkPolicy: NetworkPolicy | null;
     restricted: boolean;
+    validationRegex: string | null;
   };
   capabilities: ReturnType<typeof useK8sCapabilities>["data"];
 }) {
@@ -350,6 +352,7 @@ function EnvironmentEditorDialog({
   const [allowedDomainsText, setAllowedDomainsText] = useState("");
   const [allowedCidrsText, setAllowedCidrsText] = useState("");
   const [restricted, setRestricted] = useState(false);
+  const [validationRegex, setValidationRegex] = useState("");
   const [showConfirm, setShowConfirm] = useState(false);
   const syncNetworkPolicyDraft = useCallback((policy: NetworkPolicy | null) => {
     const nextPolicy = policy ?? EMPTY_NETWORK_POLICY;
@@ -369,12 +372,14 @@ function EnvironmentEditorDialog({
         setDescription(defaultEnvironment?.description ?? "");
         syncNetworkPolicyDraft(defaultEnvironment?.networkPolicy ?? null);
         setRestricted(defaultEnvironment?.restricted ?? false);
+        setValidationRegex(defaultEnvironment?.validationRegex ?? "");
       } else {
         setName(environment?.name ?? "");
         setNamespace(environment?.namespace ?? "");
         setDescription(environment?.description ?? "");
         syncNetworkPolicyDraft(environment?.networkPolicy ?? null);
         setRestricted(environment?.restricted ?? false);
+        setValidationRegex(environment?.validationRegex ?? "");
       }
     }
   }, [open, mode, environment, defaultEnvironment, syncNetworkPolicyDraft]);
@@ -386,7 +391,14 @@ function EnvironmentEditorDialog({
   const trimmedName = name.trim();
   const trimmedNamespace = namespace.trim();
   const trimmedDescription = description.trim();
-  const canSave = trimmedName.length > 0;
+  const validationRegexValue =
+    validationRegex.trim() === "" ? null : validationRegex;
+  const validationRegexError =
+    validationRegexValue !== null &&
+    compileValidationRegex(validationRegexValue) === null
+      ? "Not a valid regular expression"
+      : null;
+  const canSave = trimmedName.length > 0 && validationRegexError === null;
   const supportsFqdn = capabilities?.networkPolicy.supportsFqdn === true;
   const networkPolicy = {
     egressMode,
@@ -426,6 +438,7 @@ function EnvironmentEditorDialog({
           description: descriptionValue,
           networkPolicy,
           restricted,
+          validationRegex: validationRegexValue,
         },
         { onSuccess: (created) => created && onOpenChange(false) },
       );
@@ -437,6 +450,7 @@ function EnvironmentEditorDialog({
           description: descriptionValue,
           networkPolicy,
           restricted,
+          validationRegex: validationRegexValue,
         },
         { onSuccess: (updated) => updated && onOpenChange(false) },
       );
@@ -450,6 +464,7 @@ function EnvironmentEditorDialog({
             description: descriptionValue,
             networkPolicy,
             restricted,
+            validationRegex: validationRegexValue,
           },
         },
         { onSuccess: (updated) => updated && onOpenChange(false) },
@@ -560,6 +575,31 @@ function EnvironmentEditorDialog({
             onCheckedChange={setRestricted}
             disabled={isPending}
           />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="environment-validation-regex">Validation rule</Label>
+          <p className="text-xs text-muted-foreground">
+            Allowlist regular expression: config values entered when installing
+            into this environment are accepted only if they match. Leave empty
+            to disable. To block a substring (e.g. <code>prod</code>), use a
+            negative lookahead like{" "}
+            <code className="rounded bg-muted px-1 py-0.5 font-mono">
+              ^(?!.*(prod|production)).*$
+            </code>
+            .
+          </p>
+          <Input
+            id="environment-validation-regex"
+            value={validationRegex}
+            onChange={(e) => setValidationRegex(e.target.value)}
+            placeholder="^(?!.*(prod|production)).*$"
+            className="font-mono"
+            disabled={isPending}
+            aria-invalid={validationRegexError ? true : undefined}
+          />
+          {validationRegexError && (
+            <p className="text-xs text-destructive">{validationRegexError}</p>
+          )}
         </div>
         <section className="space-y-4 border-t pt-4">
           <div className="space-y-1">

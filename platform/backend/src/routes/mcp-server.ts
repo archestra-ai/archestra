@@ -24,6 +24,7 @@ import {
 } from "@/models";
 import { isByosEnabled, secretManager } from "@/secrets-manager";
 import { filterMcpServersAssignableToTarget } from "@/services/agent-tool-assignment";
+import { assertValuesMatchEnvironmentRegex } from "@/services/environments/environment";
 import { refreshLinkedIdentityProviderAccessToken } from "@/services/identity-providers/access-token-refresh";
 import { exchangeIdJagAtProtectedResource } from "@/services/identity-providers/enterprise-managed/broker";
 import { exchangeEnterpriseManagedCredential } from "@/services/identity-providers/enterprise-managed/exchange";
@@ -215,6 +216,20 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           userId: user.id,
           organizationId,
           headers,
+        });
+
+        // Enforce the governing environment's allowlist regex against the
+        // non-secret, free-text config values the user supplied.
+        await assertValuesMatchEnvironmentRegex({
+          environmentId: catalogItem.environmentId,
+          organizationId,
+          valueSets: [
+            collectValidatableInstallValues({
+              catalogItem,
+              userConfigValues,
+              environmentValues,
+            }),
+          ],
         });
 
         // Validate no duplicate installations for this catalog item
@@ -1008,6 +1023,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         },
         user,
         headers,
+        organizationId,
       },
       reply,
     ) => {
@@ -1048,13 +1064,28 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         action: "re-authenticate",
       });
 
+      const catalogItem = mcpServer.catalogId
+        ? await InternalMcpCatalogModel.findById(mcpServer.catalogId)
+        : null;
+
+      // Enforce the governing environment's allowlist regex against the newly
+      // submitted non-secret, free-text config values.
+      await assertValuesMatchEnvironmentRegex({
+        environmentId: catalogItem?.environmentId ?? null,
+        organizationId,
+        valueSets: [
+          collectValidatableInstallValues({
+            catalogItem,
+            userConfigValues,
+            environmentValues,
+          }),
+        ],
+      });
+
       // Resolve the new secret ID: either provided directly, or create from raw credentials
       let newSecretId = providedSecretId;
 
       if (!newSecretId) {
-        const catalogItem = mcpServer.catalogId
-          ? await InternalMcpCatalogModel.findById(mcpServer.catalogId)
-          : null;
         const catalogStaticUserConfigValues = getCatalogStaticUserConfigValues(
           catalogItem?.userConfig,
         );
@@ -1531,7 +1562,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectMcpServerSchema),
       },
     },
-    async ({ params: { id }, body, user, headers }, reply) => {
+    async ({ params: { id }, body, user, headers, organizationId }, reply) => {
       const {
         environmentValues,
         userConfigValues,
@@ -1561,6 +1592,20 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (!catalogItem) {
         throw new ApiError(404, "Catalog item not found for this server");
       }
+
+      // Enforce the governing environment's allowlist regex against the newly
+      // submitted non-secret, free-text config values.
+      await assertValuesMatchEnvironmentRegex({
+        environmentId: catalogItem.environmentId,
+        organizationId,
+        valueSets: [
+          collectValidatableInstallValues({
+            catalogItem,
+            userConfigValues,
+            environmentValues,
+          }),
+        ],
+      });
 
       // New env/userConfig values land in this install's secret bag. The
       // runtime reload below reads `secretId` to pick them up.
@@ -2228,6 +2273,40 @@ function getCatalogStaticUserConfigValues(
         String(fieldConfig.default),
       ]),
   );
+}
+
+/**
+ * Select the prompted config values an environment's allowlist regex governs:
+ * non-secret, free-text fields (userConfig string/directory/file; env
+ * plain_text). Secret fields — including BYOS vault references, which live on
+ * secret-typed fields — and typed boolean/number fields are excluded, since the
+ * rule targets free-text values. Mirrors the frontend's per-field filtering.
+ */
+function collectValidatableInstallValues(params: {
+  catalogItem: {
+    userConfig?: Record<string, { type?: string; sensitive?: boolean }> | null;
+    localConfig?: {
+      environment?: Array<{ key: string; type: string }> | null;
+    } | null;
+  } | null;
+  userConfigValues: Record<string, string> | undefined;
+  environmentValues: Record<string, string> | undefined;
+}): Record<string, string> {
+  const { catalogItem, userConfigValues, environmentValues } = params;
+  const values: Record<string, string> = {};
+  for (const [key, def] of Object.entries(catalogItem?.userConfig ?? {})) {
+    if (def.sensitive || def.type === "number" || def.type === "boolean") {
+      continue;
+    }
+    const value = userConfigValues?.[key];
+    if (value) values[key] = value;
+  }
+  for (const env of catalogItem?.localConfig?.environment ?? []) {
+    if (env.type !== "plain_text") continue;
+    const value = environmentValues?.[env.key];
+    if (value) values[env.key] = value;
+  }
+  return values;
 }
 
 function filterInstallUserConfigValues(params: {

@@ -171,6 +171,42 @@ describe("environment routes", () => {
     expect(auditRows[2].after).toBeNull();
   });
 
+  test("persists, updates, and clears a validation regex; rejects an invalid one", async ({
+    makeUser,
+    makeOrganization,
+  }) => {
+    vi.clearAllMocks();
+    mockHasPermission.mockResolvedValue({ success: true, error: null });
+    const user = await makeUser();
+    const organization = await makeOrganization();
+    organizationId = organization.id;
+    app = await buildApp(user, organizationId);
+
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/environments",
+      payload: { name: "Staging", validationRegex: "^(?!.*prod).*$" },
+    });
+    expect(created.statusCode).toBe(200);
+    const env = created.json();
+    expect(env.validationRegex).toBe("^(?!.*prod).*$");
+
+    const cleared = await app.inject({
+      method: "PATCH",
+      url: `/api/environments/${env.id}`,
+      payload: { validationRegex: null },
+    });
+    expect(cleared.statusCode).toBe(200);
+    expect(cleared.json().validationRegex).toBeNull();
+
+    const invalid = await app.inject({
+      method: "POST",
+      url: "/api/environments",
+      payload: { name: "Broken", validationRegex: "([unclosed" },
+    });
+    expect(invalid.statusCode).toBe(400);
+  });
+
   test("can create and update an environment network egress policy", async ({
     makeUser,
     makeOrganization,

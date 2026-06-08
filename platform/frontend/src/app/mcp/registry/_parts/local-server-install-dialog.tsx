@@ -33,7 +33,14 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import { useFeature } from "@/lib/config/config.query";
+import { useEnvironments } from "@/lib/environment.query";
+import { useDefaultEnvironment } from "@/lib/organization.query";
 import { useTeamsWithVaultFolders } from "@/lib/teams/team.query";
+import {
+  compileValidationRegex,
+  toFieldValueType,
+  validateFieldAgainstRegex,
+} from "./environment-validation-helpers";
 import {
   type McpServerInstallScope,
   SelectMcpServerCredentialTypeAndTeams,
@@ -449,6 +456,47 @@ export function LocalServerInstallDialog({
   const isUserConfigValid =
     isNonSensitiveUserConfigValid && isSensitiveUserConfigValid;
 
+  // Resolve the governing environment's allowlist regex (the env the catalog
+  // item is bound to, or the org default when unbound) and compile it once.
+  const { data: environmentList } = useEnvironments();
+  const defaultEnvironment = useDefaultEnvironment();
+  const boundEnvironment = catalogItem?.environmentId
+    ? environmentList?.environments.find(
+        (e) => e.id === catalogItem.environmentId,
+      )
+    : null;
+  const environmentName = boundEnvironment?.name ?? defaultEnvironment.name;
+  const validationRegex = compileValidationRegex(
+    boundEnvironment
+      ? boundEnvironment.validationRegex
+      : defaultEnvironment.validationRegex,
+  );
+  const envVarRegexError = (key: string, type: string): string | null =>
+    validateFieldAgainstRegex({
+      value: environmentValues[key] ?? "",
+      regex: validationRegex,
+      valueType: toFieldValueType(type),
+      environmentName,
+    });
+  const userConfigRegexError = (
+    key: string,
+    type: string | undefined,
+  ): string | null =>
+    validateFieldAgainstRegex({
+      value: userConfigValues[key] ?? "",
+      regex: validationRegex,
+      valueType: toFieldValueType(type),
+      environmentName,
+    });
+  const hasRegexErrors =
+    nonSecretEnvVars.some(
+      (env) => envVarRegexError(env.key, env.type) !== null,
+    ) ||
+    Object.entries(promptableUserConfig).some(
+      ([fieldName, cfg]) =>
+        !cfg.sensitive && userConfigRegexError(fieldName, cfg.type) !== null,
+    );
+
   return (
     <StandardFormDialog
       open={isOpen}
@@ -488,7 +536,11 @@ export function LocalServerInstallDialog({
             </Button>
             <Button
               type="submit"
-              disabled={!(isValid && isUserConfigValid) || isInstalling}
+              disabled={
+                !(isValid && isUserConfigValid) ||
+                hasRegexErrors ||
+                isInstalling
+              }
             >
               {isInstalling
                 ? isReauth
@@ -640,7 +692,15 @@ export function LocalServerInstallDialog({
                       placeholder={`Enter value for ${env.key}`}
                       className="font-mono"
                       disabled={isInstalling}
+                      aria-invalid={
+                        envVarRegexError(env.key, env.type) ? true : undefined
+                      }
                     />
+                  )}
+                  {envVarRegexError(env.key, env.type) && (
+                    <p className="text-xs text-destructive">
+                      {envVarRegexError(env.key, env.type)}
+                    </p>
                   )}
                 </div>
               ))}
@@ -938,8 +998,20 @@ export function LocalServerInstallDialog({
                           placeholder={`Enter value for ${fieldConfig.title || fieldName}`}
                           className="font-mono"
                           disabled={isInstalling}
+                          aria-invalid={
+                            !fieldConfig.sensitive &&
+                            userConfigRegexError(fieldName, fieldConfig.type)
+                              ? true
+                              : undefined
+                          }
                         />
                       )}
+                      {!fieldConfig.sensitive &&
+                        userConfigRegexError(fieldName, fieldConfig.type) && (
+                          <p className="text-xs text-destructive">
+                            {userConfigRegexError(fieldName, fieldConfig.type)}
+                          </p>
+                        )}
                     </div>
                   ),
                 )}

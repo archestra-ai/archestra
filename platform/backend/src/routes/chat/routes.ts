@@ -71,6 +71,7 @@ import {
   ACTIVE_CHAT_RUN_TERMINAL_REPLAY_GRACE_MS,
   activeChatRunService,
 } from "@/services/active-chat-run";
+import { conversationFilesService } from "@/services/conversation-files";
 import { buildSkillCatalogPrompt } from "@/skills/skill-catalog-prompt";
 import {
   promptNeedsRendering,
@@ -92,6 +93,7 @@ import {
   UpdateConversationSchema,
   UuidIdSchema,
 } from "@/types";
+import { ConversationFilesResponseSchema } from "@/types/conversation-file";
 import {
   resolveAgentLlmOrDefault,
   resolveConversationLlmSelectionForAgent,
@@ -1370,6 +1372,37 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       return reply.send(conversation);
+    },
+  );
+
+  fastify.get(
+    "/api/chat/conversations/:id/files",
+    {
+      schema: {
+        operationId: RouteId.GetChatConversationFiles,
+        description:
+          "List files for a conversation: download_file outputs and user attachments (metadata only).",
+        tags: ["Chat"],
+        params: z.object({ id: UuidIdSchema }),
+        response: constructResponseSchema(ConversationFilesResponseSchema),
+      },
+    },
+    async ({ params: { id }, user, organizationId }, reply) => {
+      const conversation = await findReadableConversationById({
+        conversationId: id,
+        userId: user.id,
+        organizationId,
+      });
+      if (!conversation) {
+        throw new ApiError(404, "Conversation not found");
+      }
+
+      return reply.send(
+        await conversationFilesService.list({
+          conversationId: id,
+          organizationId,
+        }),
+      );
     },
   );
 

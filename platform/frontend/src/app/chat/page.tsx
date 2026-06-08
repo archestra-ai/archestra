@@ -42,7 +42,7 @@ import {
   collectBrowserToolCallIds,
   deriveCanvasesFromMessages,
 } from "@/components/chat/chat-messages.utils";
-import { ConversationArtifactPanel } from "@/components/chat/conversation-artifact";
+import { ConversationFilesPanel } from "@/components/chat/conversation-files-panel";
 import { InitialAgentSelector } from "@/components/chat/initial-agent-selector";
 import { OnboardingWizardButton } from "@/components/chat/onboarding-wizard-button";
 import { PinnedCanvasProvider } from "@/components/chat/pinned-canvas-context";
@@ -102,6 +102,7 @@ import {
   fetchConversationEnabledTools,
   useCompactConversation,
   useConversation,
+  useConversationFiles,
   useCreateConversation,
   useHasPlaywrightMcpTools,
   useMemberDefaultModel,
@@ -279,8 +280,7 @@ export function ChatPageContent({
 
   // Tracks which tab the right-side panel last showed; restored when the panel
   // is re-opened via the header toggle.
-  const [activeRightTab, setActiveRightTab] =
-    useState<RightPanelTab>("artifact");
+  const [activeRightTab, setActiveRightTab] = useState<RightPanelTab>("files");
 
   // Independent of artifact/browser open state — toggled when the canvas tab is selected.
   const [isCanvasTabOpen, setIsCanvasTabOpen] = useState(false);
@@ -894,6 +894,30 @@ export function ChatPageContent({
     previousArtifactRef.current = conversation?.artifact;
   }, [conversation?.artifact, isArtifactOpen, conversationId]);
 
+  // Auto-open the Files panel to the list when a generated file arrives and
+  // there is no artifact (the artifact case is handled by the effects above,
+  // which open straight to artifact.md).
+  const { data: conversationFiles } = useConversationFiles(conversationId);
+  const generatedCount = conversationFiles?.generated?.length ?? 0;
+  const previousGeneratedCountRef = useRef<number | undefined>(undefined);
+  useEffect(() => {
+    if (
+      conversationId &&
+      !conversation?.artifact &&
+      previousGeneratedCountRef.current !== undefined &&
+      generatedCount > previousGeneratedCountRef.current &&
+      !isArtifactOpen
+    ) {
+      setActiveRightTab("files");
+      setIsArtifactOpen(true);
+      localStorage.setItem(
+        conversationStorageKeys(conversationId).artifactOpen,
+        "true",
+      );
+    }
+    previousGeneratedCountRef.current = generatedCount;
+  }, [generatedCount, conversation?.artifact, isArtifactOpen, conversationId]);
+
   // While a conversation tab is open, useChat owns the thread.
   // We only fall back to persisted messages before the session initializes or
   // for read-only shared conversations that do not create a live chat session.
@@ -1285,6 +1309,9 @@ export function ChatPageContent({
       queryClient.invalidateQueries({
         queryKey: ["conversation", conversationId],
       });
+      queryClient.invalidateQueries({
+        queryKey: ["conversation-files", conversationId],
+      });
     }, 3000);
 
     return () => clearInterval(interval);
@@ -1295,6 +1322,16 @@ export function ChatPageContent({
     status,
     queryClient,
   ]);
+
+  // Refresh the Files list whenever the chat settles to "ready" — that's the
+  // initial open and the end of every turn, so any `download_file` outputs
+  // persisted during the turn show up once it finishes.
+  useEffect(() => {
+    if (!conversationId || status !== "ready") return;
+    queryClient.invalidateQueries({
+      queryKey: ["conversation-files", conversationId],
+    });
+  }, [status, conversationId, queryClient]);
 
   // Auto-focus textarea when status becomes ready (message sent or stream finished)
   // or when conversation loads (e.g., new chat created, hard refresh)
@@ -1409,14 +1446,14 @@ export function ChatPageContent({
     } else if (isBrowserPanelVisible && !isArtifactOpen) {
       setActiveRightTab("browser");
     } else if (isArtifactOpen) {
-      setActiveRightTab("artifact");
+      setActiveRightTab("files");
     }
   }, [isArtifactOpen, isBrowserPanelVisible, isCanvasTabOpen]);
 
   const openRightPanelTab = useCallback(
     (tab: RightPanelTab) => {
       setActiveRightTab(tab);
-      if (tab === "artifact") {
+      if (tab === "files") {
         setIsArtifactOpen(true);
         setIsBrowserPanelOpen(false);
         setIsCanvasTabOpen(false);
@@ -1474,7 +1511,7 @@ export function ChatPageContent({
     } else {
       const target =
         activeRightTab === "browser" && !showBrowserButton
-          ? "artifact"
+          ? "files"
           : activeRightTab;
       openRightPanelTab(target);
     }
@@ -2049,12 +2086,12 @@ export function ChatPageContent({
                           if (isArtifactOpen) {
                             closeRightPanel();
                           } else {
-                            openRightPanelTab("artifact");
+                            openRightPanelTab("files");
                           }
                         }}
                       >
                         <FileText className="h-4 w-4" />
-                        {isArtifactOpen ? "Hide Artifact" : "Show Artifact"}
+                        {isArtifactOpen ? "Hide Files" : "Show Files"}
                       </DropdownMenuItem>
                       {showBrowserButton && (
                         <DropdownMenuItem
@@ -2082,13 +2119,12 @@ export function ChatPageContent({
             {/* Mobile: Inline artifact/browser panel below header */}
             {isRightPanelOpen && (
               <div className="flex-1 flex flex-col min-h-0 overflow-hidden md:hidden">
-                {activeRightTab === "artifact" && (
+                {activeRightTab === "files" && (
                   <div className="flex-1 min-h-0 overflow-auto">
-                    <ConversationArtifactPanel
+                    <ConversationFilesPanel
+                      conversationId={conversationId}
                       artifact={conversation?.artifact}
-                      isOpen
-                      onToggle={closeRightPanel}
-                      embedded
+                      onClose={closeRightPanel}
                     />
                   </div>
                 )}

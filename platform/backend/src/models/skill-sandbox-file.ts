@@ -1,6 +1,15 @@
-import { and, eq, isNotNull } from "drizzle-orm";
+import { and, asc, eq, isNotNull } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type { InsertSkillSandboxFile, SkillSandboxFile } from "@/types";
+
+/** Artifact row without its bytes — what the Files panel needs to list outputs. */
+type SkillSandboxArtifactMeta = {
+  id: string;
+  path: string;
+  mimeType: string;
+  sizeBytes: number;
+  createdAt: Date;
+};
 
 /**
  * Read/write access to `skill_sandbox_files` for the `artifact` role — output
@@ -33,6 +42,45 @@ class SkillSandboxFileModel {
         ),
       );
     return row ? normalizeFileData(row) : null;
+  }
+
+  /**
+   * Artifact-file metadata (no bytes) for every sandbox attached to a
+   * conversation within an org, oldest first. Joins through `skill_sandboxes`
+   * because files carry only a `sandboxId`, and filters on the join's
+   * `organizationId` so a conversation reused across orgs cannot leak.
+   */
+  static async listArtifactMetadataByConversationId(params: {
+    conversationId: string;
+    organizationId: string;
+  }): Promise<SkillSandboxArtifactMeta[]> {
+    return db
+      .select({
+        id: schema.skillSandboxFilesTable.id,
+        path: schema.skillSandboxFilesTable.path,
+        mimeType: schema.skillSandboxFilesTable.mimeType,
+        sizeBytes: schema.skillSandboxFilesTable.sizeBytes,
+        createdAt: schema.skillSandboxFilesTable.createdAt,
+      })
+      .from(schema.skillSandboxFilesTable)
+      .innerJoin(
+        schema.skillSandboxesTable,
+        eq(
+          schema.skillSandboxFilesTable.sandboxId,
+          schema.skillSandboxesTable.id,
+        ),
+      )
+      .where(
+        and(
+          eq(schema.skillSandboxFilesTable.kind, "artifact"),
+          eq(schema.skillSandboxesTable.conversationId, params.conversationId),
+          eq(schema.skillSandboxesTable.organizationId, params.organizationId),
+        ),
+      )
+      .orderBy(
+        asc(schema.skillSandboxFilesTable.createdAt),
+        asc(schema.skillSandboxFilesTable.id),
+      );
   }
 
   /**

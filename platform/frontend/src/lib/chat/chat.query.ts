@@ -21,6 +21,7 @@ import { handleApiError } from "@/lib/utils";
 const {
   getChatConversations,
   getChatConversation,
+  getChatConversationFiles,
   getChatAgentMcpTools,
   createChatConversation,
   updateChatConversation,
@@ -100,6 +101,26 @@ export function useConversation(conversationId?: string) {
     gcTime: 10 * 60 * 1000, // Keep in cache for 10 minutes
     refetchOnWindowFocus: false, // Don't refetch when window gains focus
     retry: false, // Don't retry on error to avoid multiple 404s
+  });
+}
+
+export function useConversationFiles(conversationId?: string) {
+  return useQuery({
+    queryKey: ["conversation-files", conversationId],
+    queryFn: async () => {
+      if (!conversationId) return null;
+      const response = await getChatConversationFiles({
+        path: { id: conversationId },
+      });
+      if (response.error) {
+        return null;
+      }
+      return response.data;
+    },
+    enabled: !!conversationId,
+    staleTime: 0,
+    gcTime: 10 * 60 * 1000,
+    refetchOnWindowFocus: false,
   });
 }
 

@@ -129,6 +129,9 @@ export function TeamManagementExternalSyncSection({
     );
   }
 
+  const selectedGroupsExpression =
+    selectedIdentityProvider?.teamSyncConfig?.groupsExpression?.trim();
+
   return (
     <div className="space-y-6">
       <div className="grid max-w-3xl gap-4">
@@ -158,18 +161,22 @@ export function TeamManagementExternalSyncSection({
         {selectedIdentityProvider && (
           <>
             <div className="space-y-2">
-              <Label>Group Extraction Template</Label>
+              <Label>
+                {selectedGroupsExpression
+                  ? "Group Extraction Template"
+                  : "Group Extraction Source"}
+              </Label>
               <Input
                 readOnly
                 className="font-mono text-sm"
                 value={
-                  selectedIdentityProvider.teamSyncConfig?.groupsExpression?.trim() ||
-                  "Default extraction"
+                  selectedGroupsExpression ?? "Built-in group claim detection"
                 }
               />
               <p className="text-sm text-muted-foreground">
-                Configured on the selected identity provider. Use the decoded
-                claims below to find a group value that this template extracts.
+                {selectedGroupsExpression
+                  ? "Configured on the selected identity provider. Use the decoded claims below to find a group value that this template extracts."
+                  : "No custom template is configured on this identity provider. Archestra will look for common group claims in the decoded token."}
               </p>
             </div>
             <LatestIdTokenClaimsPanel

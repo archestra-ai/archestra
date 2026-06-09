@@ -10,16 +10,20 @@ const migrationSql = fs.readFileSync(
 );
 
 async function runMigration() {
-  const statement = migrationSql
+  const statements = migrationSql
     .split("-- Custom SQL migration file, put your code below! --")
     .at(-1)
-    ?.trim();
+    ?.split("--> statement-breakpoint")
+    .map((statement) => statement.trim())
+    .filter(Boolean);
 
-  if (!statement) {
+  if (!statements || statements.length === 0) {
     throw new Error("Migration statement not found");
   }
 
-  await db.execute(sql.raw(statement));
+  for (const statement of statements) {
+    await db.execute(sql.raw(statement));
+  }
 }
 
 async function insertRole(params: {

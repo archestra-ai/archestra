@@ -11578,6 +11578,27 @@
         }
       },
       "indexes": {
+        "team_member_team_id_user_id_unique_idx": {
+          "name": "team_member_team_id_user_id_unique_idx",
+          "columns": [
+            {
+              "expression": "team_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
         "team_member_team_id_user_id_idx": {
           "name": "team_member_team_id_user_id_idx",
           "columns": [

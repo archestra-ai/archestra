@@ -33,13 +33,9 @@ vi.mock("@/lib/auth/identity-provider.query.ee", () => ({
 function TestWrapper({
   providerId,
   identityProviderId,
-  showEnabledField,
-  groupsExpressionReadOnly,
 }: {
   providerId: string;
   identityProviderId?: string;
-  showEnabledField?: boolean;
-  groupsExpressionReadOnly?: boolean;
 }) {
   const form = useForm<IdentityProviderFormValues>({
     // biome-ignore lint/suspicious/noExplicitAny: test setup
@@ -70,12 +66,7 @@ function TestWrapper({
 
   return (
     <Form {...form}>
-      <TeamSyncConfigForm
-        form={form}
-        identityProviderId={identityProviderId}
-        showEnabledField={showEnabledField}
-        groupsExpressionReadOnly={groupsExpressionReadOnly}
-      />
+      <TeamSyncConfigForm form={form} identityProviderId={identityProviderId} />
     </Form>
   );
 }
@@ -127,20 +118,5 @@ describe("TeamSyncConfigForm", () => {
     expect(
       screen.getByText(/sync teams from Entra App roles/i),
     ).toBeInTheDocument();
-  });
-
-  it("can hide IdP-wide enablement and render the template read-only", async () => {
-    render(
-      <TestWrapper
-        providerId="Okta"
-        showEnabledField={false}
-        groupsExpressionReadOnly
-      />,
-    );
-
-    expect(screen.queryByLabelText("Enable Team Sync")).toBeNull();
-    expect(screen.getByLabelText("Groups Handlebars Template")).toHaveAttribute(
-      "readonly",
-    );
   });
 });

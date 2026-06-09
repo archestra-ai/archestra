@@ -2,9 +2,13 @@
 
 Turn an existing agentic PoC into an [Archestra](https://github.com/archestra-ai/archestra) pilot.
 
+> **Experimental.** This kit is new and still evolving — review its output before applying it to
+> anything you care about.
+
 Packaged as a Claude Code **skill** (`migrate-to-archestra`) so the migration runs as a guided,
-agentic flow. The source setup can be messy: Claude Code-style files, MCP configs, local scripts,
-hooks, openclaw config, and whatever else accumulated during evaluation.
+agentic flow. Typical sources are messy agentic PoCs built with tools like Claude Code, OpenClaw,
+or Hermes — Claude Code-style files, MCP configs, local scripts, hooks, openclaw config, and
+whatever else accumulated during evaluation.
 
 The goal is not a byte-for-byte port — it's to get the pilot running in Archestra quickly, with the
 important behavior differences surfaced before anything is applied.

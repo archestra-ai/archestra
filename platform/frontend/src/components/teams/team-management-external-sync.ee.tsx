@@ -5,19 +5,17 @@ import {
   type archestraApiTypes,
   DocsPage,
   getDocsUrl,
-  type IdentityProviderFormValues,
 } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link2, Plus, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { useForm } from "react-hook-form";
 import { toast } from "sonner";
-import { TeamSyncConfigForm } from "@/app/settings/identity-providers/_parts/team-sync-config-form.ee";
+import { SsoTemplateTester } from "@/app/settings/identity-providers/_parts/sso-template-tester.ee";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { Button } from "@/components/ui/button";
-import { Form } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Select,
   SelectContent,
@@ -26,7 +24,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
-import { useIdentityProviders } from "@/lib/auth/identity-provider.query.ee";
+import {
+  useIdentityProviderLatestIdTokenClaims,
+  useIdentityProviders,
+} from "@/lib/auth/identity-provider.query.ee";
 
 type Team = archestraApiTypes.GetTeamsResponses["200"]["data"][number];
 type ExternalGroup =
@@ -158,9 +159,7 @@ export function TeamManagementExternalSyncSection({
         </div>
 
         {selectedIdentityProvider && (
-          <IdentityProviderTeamSyncPanel
-            identityProvider={selectedIdentityProvider}
-          />
+          <GroupExtractionPreview identityProvider={selectedIdentityProvider} />
         )}
       </div>
 
@@ -230,30 +229,65 @@ export function TeamManagementExternalSyncSection({
   );
 }
 
-function IdentityProviderTeamSyncPanel({
+function GroupExtractionPreview({
   identityProvider,
 }: {
   identityProvider: IdentityProvider;
 }) {
-  const form = useForm<IdentityProviderFormValues>({
-    defaultValues: toIdentityProviderFormValues(identityProvider),
-  });
+  return (
+    <div className="space-y-4">
+      <div className="space-y-2">
+        <Label>Extracted Groups</Label>
+        <SsoTemplateTester
+          identityProviderId={identityProvider.id}
+          mode="team-sync"
+          template={identityProvider.teamSyncConfig?.groupsExpression}
+          templateLabel="the selected identity provider's team sync groups template"
+        />
+        <p className="text-sm text-muted-foreground">
+          Group extraction is configured on the selected identity provider. Add
+          one of the extracted group values below to sync membership for this
+          team.
+        </p>
+      </div>
+      <LatestIdTokenClaimsPanel identityProviderId={identityProvider.id} />
+    </div>
+  );
+}
 
-  useEffect(() => {
-    form.reset(toIdentityProviderFormValues(identityProvider));
-  }, [form, identityProvider]);
+function LatestIdTokenClaimsPanel({
+  identityProviderId,
+}: {
+  identityProviderId: string;
+}) {
+  const { data, isLoading } =
+    useIdentityProviderLatestIdTokenClaims(identityProviderId);
+  const formattedClaims = data?.claims
+    ? JSON.stringify(data.claims, null, 2)
+    : null;
 
   return (
-    <Form {...form}>
-      <TeamSyncConfigForm
-        form={form}
-        identityProviderId={identityProvider.id}
-        embedded
-        showEnabledField={false}
-        groupsExpressionReadOnly
-        groupsExpressionDescription="This extraction template is configured on the selected identity provider. Use the mapped group values below to control membership for this team."
-      />
-    </Form>
+    <div className="space-y-2">
+      <Label>Latest ID Token Claims</Label>
+      <p className="text-sm text-muted-foreground">
+        Decoded claims from your latest sign-in with this identity provider. Raw
+        signed tokens are never shown.
+      </p>
+      {isLoading ? (
+        <p className="text-sm text-muted-foreground">Loading claims...</p>
+      ) : formattedClaims ? (
+        <ScrollArea className="h-52 overflow-auto rounded-md border bg-muted/40">
+          <pre className="p-3 text-xs leading-relaxed whitespace-pre-wrap break-words font-mono">
+            {formattedClaims}
+          </pre>
+        </ScrollArea>
+      ) : (
+        <p className="text-sm text-muted-foreground">
+          No ID token claims are available for your account yet. Sign in with
+          this provider, then reopen this dialog.
+        </p>
+      )}
+    </div>
   );
 }
 
@@ -286,53 +320,4 @@ function ExternalGroupRow({
       </Button>
     </div>
   );
-}
-
-function toIdentityProviderFormValues(
-  provider: IdentityProvider,
-): IdentityProviderFormValues {
-  const isSaml = !!provider.samlConfig;
-  return {
-    providerId: provider.providerId,
-    issuer: provider.issuer,
-    ssoLoginEnabled: provider.ssoLoginEnabled ?? true,
-    domain: provider.domain,
-    providerType: isSaml ? "saml" : "oidc",
-    roleMapping: {
-      rules: [],
-      ...provider.roleMapping,
-    },
-    teamSyncConfig: provider.teamSyncConfig ?? {
-      enabled: true,
-      groupsExpression: "",
-    },
-    ...(isSaml
-      ? {
-          samlConfig: provider.samlConfig ?? {
-            issuer: "",
-            entryPoint: "",
-            cert: "",
-            callbackUrl: "",
-            spMetadata: {},
-          },
-        }
-      : {
-          oidcConfig: {
-            issuer: "",
-            pkce: true,
-            enableRpInitiatedLogout: true,
-            clientId: "",
-            clientSecret: "",
-            discoveryEndpoint: "",
-            scopes: ["openid", "email", "profile"],
-            mapping: {
-              id: "sub",
-              email: "email",
-              name: "name",
-            },
-            overrideUserInfo: true,
-            ...provider.oidcConfig,
-          },
-        }),
-  };
 }

@@ -69,7 +69,9 @@ const createNavItems = [{ id: "team", label: "Team" }] satisfies Array<{
 export function TeamManagementDialog(props: TeamManagementDialogProps) {
   const { open, onOpenChange } = props;
   const mode = props.mode ?? "edit";
-  const team = "team" in props ? props.team : null;
+  const [createdTeam, setCreatedTeam] = useState<Team | null>(null);
+  const editTeam = "team" in props ? props.team : null;
+  const team = editTeam ?? createdTeam;
   const queryClient = useQueryClient();
   const [activeSection, setActiveSection] = useState<TeamDialogSection>("team");
   const [name, setName] = useState(team?.name ?? "");
@@ -86,9 +88,16 @@ export function TeamManagementDialog(props: TeamManagementDialogProps) {
   useEffect(() => {
     if (!open) return;
     setActiveSection("team");
-    setName(team?.name ?? "");
-    setDescription(team?.description ?? "");
-  }, [open, team]);
+    if (mode === "create") {
+      setCreatedTeam(null);
+      setName("");
+      setDescription("");
+      return;
+    }
+
+    setName(editTeam?.name ?? "");
+    setDescription(editTeam?.description ?? "");
+  }, [editTeam, mode, open]);
 
   const saveTeam = useMutation({
     mutationFn: async () => {
@@ -96,25 +105,25 @@ export function TeamManagementDialog(props: TeamManagementDialogProps) {
         name: name.trim(),
         description: description.trim() || undefined,
       };
-      const { data, error } =
-        mode === "create"
-          ? await archestraApiSdk.createTeam({ body })
-          : await archestraApiSdk.updateTeam({
-              path: { id: team?.id ?? "" },
-              body,
-            });
+      const { data, error } = !team
+        ? await archestraApiSdk.createTeam({ body })
+        : await archestraApiSdk.updateTeam({
+            path: { id: team.id },
+            body,
+          });
       if (error) throw new Error(error.error.message);
       return data;
     },
-    onSuccess: () => {
+    onSuccess: (savedTeam) => {
       queryClient.invalidateQueries({ queryKey: ["teams"] });
       queryClient.invalidateQueries({ queryKey: ["tokens"] });
-      toast.success(mode === "create" ? "Team created" : "Team updated");
-      onOpenChange(false);
-      if (mode === "create") {
-        setName("");
-        setDescription("");
+      if (mode === "create" && !team) {
+        setCreatedTeam(savedTeam as Team);
+        toast.success("Team created");
+        return;
       }
+      toast.success("Team updated");
+      onOpenChange(false);
     },
     onError: (error: Error) => {
       toast.error(
@@ -163,10 +172,10 @@ export function TeamManagementDialog(props: TeamManagementDialogProps) {
           {activeSection === "team" ? (
             <Button type="submit" disabled={saveTeam.isPending}>
               {saveTeam.isPending
-                ? mode === "create"
+                ? mode === "create" && !team
                   ? "Creating..."
                   : "Saving..."
-                : mode === "create"
+                : mode === "create" && !team
                   ? "Create Team"
                   : "Save Changes"}
             </Button>
@@ -182,7 +191,7 @@ export function TeamManagementDialog(props: TeamManagementDialogProps) {
         <TeamSection
           open={open}
           team={team}
-          showMembers={mode === "edit"}
+          showMembers={Boolean(team)}
           name={name}
           description={description}
           onNameChange={setName}

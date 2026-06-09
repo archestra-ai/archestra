@@ -53732,7 +53732,7 @@ export type GetTeamMembersResponse = GetTeamMembersResponses[keyof GetTeamMember
 export type AddTeamMemberData = {
     body: {
         userId: string;
-        role?: string;
+        role?: 'admin' | 'member';
     };
     path: {
         id: string;
@@ -53907,6 +53907,99 @@ export type RemoveTeamMemberResponses = {
 };
 
 export type RemoveTeamMemberResponse = RemoveTeamMemberResponses[keyof RemoveTeamMemberResponses];
+
+export type UpdateTeamMemberData = {
+    body: {
+        role: 'admin' | 'member';
+    };
+    path: {
+        id: string;
+        userId: string;
+    };
+    query?: never;
+    url: '/api/teams/{id}/members/{userId}';
+};
+
+export type UpdateTeamMemberErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type UpdateTeamMemberError = UpdateTeamMemberErrors[keyof UpdateTeamMemberErrors];
+
+export type UpdateTeamMemberResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        teamId: string;
+        userId: string;
+        role: string;
+        syncedFromSso: boolean;
+        createdAt: string;
+    };
+};
+
+export type UpdateTeamMemberResponse = UpdateTeamMemberResponses[keyof UpdateTeamMemberResponses];
 
 export type GetTeamExternalGroupsData = {
     body?: never;

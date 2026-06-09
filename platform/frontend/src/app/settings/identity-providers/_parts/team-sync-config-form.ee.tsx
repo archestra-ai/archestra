@@ -1,6 +1,7 @@
 "use client";
 
 import type { IdentityProviderFormValues } from "@archestra/shared";
+import type { ReactNode } from "react";
 import type { UseFormReturn } from "react-hook-form";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -20,6 +21,9 @@ interface TeamSyncConfigFormProps {
   form: UseFormReturn<IdentityProviderFormValues>;
   identityProviderId?: string;
   embedded?: boolean;
+  showEnabledField?: boolean;
+  groupsExpressionReadOnly?: boolean;
+  groupsExpressionDescription?: ReactNode;
 }
 
 const HANDLEBARS_EXAMPLES = [
@@ -41,6 +45,9 @@ export function TeamSyncConfigForm({
   form,
   identityProviderId,
   embedded = false,
+  showEnabledField = true,
+  groupsExpressionReadOnly = false,
+  groupsExpressionDescription,
 }: TeamSyncConfigFormProps) {
   const appName = useAppName();
   const providerClaimHint = getIdentityProviderClaimHint(
@@ -54,28 +61,30 @@ export function TeamSyncConfigForm({
         </p>
       )}
 
-      <FormField
-        control={form.control}
-        name="teamSyncConfig.enabled"
-        render={({ field }) => (
-          <FormItem className="flex flex-row items-start space-x-3 space-y-0">
-            <FormControl>
-              <Checkbox
-                checked={field.value !== false}
-                onCheckedChange={field.onChange}
-              />
-            </FormControl>
-            <div className="space-y-1 leading-none">
-              <FormLabel>Enable Team Sync</FormLabel>
-              <FormDescription>
-                When enabled, users are automatically added/removed from
-                {` `}
-                {appName} teams based on their SSO group memberships.
-              </FormDescription>
-            </div>
-          </FormItem>
-        )}
-      />
+      {showEnabledField && (
+        <FormField
+          control={form.control}
+          name="teamSyncConfig.enabled"
+          render={({ field }) => (
+            <FormItem className="flex flex-row items-start space-x-3 space-y-0">
+              <FormControl>
+                <Checkbox
+                  checked={field.value !== false}
+                  onCheckedChange={field.onChange}
+                />
+              </FormControl>
+              <div className="space-y-1 leading-none">
+                <FormLabel>Enable Team Sync</FormLabel>
+                <FormDescription>
+                  When enabled, users are automatically added/removed from
+                  {` `}
+                  {appName} teams based on their SSO group memberships.
+                </FormDescription>
+              </div>
+            </FormItem>
+          )}
+        />
+      )}
 
       <FormField
         control={form.control}
@@ -87,13 +96,18 @@ export function TeamSyncConfigForm({
               <Input
                 placeholder="{{#each roles}}{{this.name}},{{/each}}"
                 className="font-mono text-sm"
+                readOnly={groupsExpressionReadOnly}
                 {...field}
               />
             </FormControl>
             <FormDescription>
-              Handlebars template to extract group identifiers from SSO claims.
-              Should render to a comma-separated list or JSON array. Leave empty
-              to use default extraction.
+              {groupsExpressionDescription ?? (
+                <>
+                  Handlebars template to extract group identifiers from SSO
+                  claims. Should render to a comma-separated list or JSON array.
+                  Leave empty to use default extraction.
+                </>
+              )}
             </FormDescription>
             <FormMessage />
           </FormItem>

@@ -28,6 +28,7 @@ Combined, these endpoints expose metrics including:
 
 - `llm_request_duration_seconds` - LLM API request duration by provider, model, agent_id, agent_name, agent_type, external_agent_id, source, and status code
 - `llm_tokens_total` - Token consumption by provider, model, agent_id, agent_name, agent_type, external_agent_id, source, and type (input/output)
+- `llm_cache_tokens_total` - Prompt-cache tokens by provider, model, agent_id, agent_name, agent_type, external_agent_id, source, and cache_type (read/write). Read is a reused prefix, write is a newly cached prefix; both are separate from `llm_tokens_total` so existing input/output aggregates are unaffected.
 - `llm_cost_total` - Estimated cost in USD by provider, model, agent_id, agent_name, agent_type, external_agent_id, and source. Requires token pricing to be configured in Archestra.
 - `llm_blocked_tools_total` - Counter of tool calls blocked by tool invocation policies, grouped by provider, model, agent_id, agent_name, agent_type, external_agent_id, and source
 - `llm_time_to_first_token_seconds` - Time to first token (TTFT) for streaming requests, by provider, agent_id, agent_name, agent_type, external_agent_id, source, and model. Helps developers choose models with lower initial response latency.
@@ -202,6 +203,8 @@ Each LLM API call produces a span with `SpanKind.CLIENT` (indicating an outbound
 - `gen_ai.usage.input_tokens` - Number of input tokens consumed
 - `gen_ai.usage.output_tokens` - Number of output tokens generated
 - `gen_ai.usage.total_tokens` - Total tokens (input + output)
+- `gen_ai.usage.cache_read.input_tokens` - Prompt-cache tokens served from a provider cache (set only when the response read from cache)
+- `gen_ai.usage.cache_creation.input_tokens` - Prompt-cache tokens written to a provider cache (set only when the response cached a prefix)
 - `archestra.cost` - Estimated cost in USD (requires [token pricing](/docs/platform-cost-management#token-pricing) configuration)
 - `gen_ai.response.finish_reasons` - Why the model stopped generating (e.g., `["stop"]`, `["tool_calls"]`, `["end_turn"]`)
 

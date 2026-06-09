@@ -41,6 +41,8 @@ import {
   ATTR_GENAI_RESPONSE_FINISH_REASONS,
   ATTR_GENAI_RESPONSE_ID,
   ATTR_GENAI_RESPONSE_MODEL,
+  ATTR_GENAI_USAGE_CACHE_CREATION_INPUT_TOKENS,
+  ATTR_GENAI_USAGE_CACHE_READ_INPUT_TOKENS,
   ATTR_GENAI_USAGE_INPUT_TOKENS,
   ATTR_GENAI_USAGE_OUTPUT_TOKENS,
   ATTR_GENAI_USAGE_TOTAL_TOKENS,
@@ -1087,6 +1089,18 @@ async function handleStreaming<
             ATTR_GENAI_USAGE_TOTAL_TOKENS,
             state.usage.inputTokens + state.usage.outputTokens,
           );
+          if (state.usage.cacheReadTokens) {
+            llmSpan.setAttribute(
+              ATTR_GENAI_USAGE_CACHE_READ_INPUT_TOKENS,
+              state.usage.cacheReadTokens,
+            );
+          }
+          if (state.usage.cacheWriteTokens) {
+            llmSpan.setAttribute(
+              ATTR_GENAI_USAGE_CACHE_CREATION_INPUT_TOKENS,
+              state.usage.cacheWriteTokens,
+            );
+          }
           const cost = await utils.costOptimization.calculateCost(
             actualModel,
             state.usage.inputTokens,
@@ -1220,7 +1234,12 @@ async function handleStreaming<
         metrics.llm.reportLLMTokens(
           providerName,
           agent,
-          { input: usage.inputTokens, output: usage.outputTokens },
+          {
+            input: usage.inputTokens,
+            output: usage.outputTokens,
+            cacheRead: usage.cacheReadTokens,
+            cacheWrite: usage.cacheWriteTokens,
+          },
           actualModel,
           source,
           externalAgentId,
@@ -1378,6 +1397,18 @@ async function handleNonStreaming<
         ATTR_GENAI_USAGE_TOTAL_TOKENS,
         usage.inputTokens + usage.outputTokens,
       );
+      if (usage.cacheReadTokens) {
+        llmSpan.setAttribute(
+          ATTR_GENAI_USAGE_CACHE_READ_INPUT_TOKENS,
+          usage.cacheReadTokens,
+        );
+      }
+      if (usage.cacheWriteTokens) {
+        llmSpan.setAttribute(
+          ATTR_GENAI_USAGE_CACHE_CREATION_INPUT_TOKENS,
+          usage.cacheWriteTokens,
+        );
+      }
       const cost = await utils.costOptimization.calculateCost(
         actualModel,
         usage.inputTokens,

@@ -42,60 +42,87 @@ type TeamManagementExternalSyncSectionComponent = ComponentType<{
   team: Team;
 }>;
 
-interface TeamManagementDialogProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  team: Team;
-}
+type TeamManagementDialogProps =
+  | {
+      mode: "create";
+      open: boolean;
+      onOpenChange: (open: boolean) => void;
+    }
+  | {
+      mode?: "edit";
+      open: boolean;
+      onOpenChange: (open: boolean) => void;
+      team: Team;
+    };
 
-const navItems = [
+const editNavItems = [
   { id: "team", label: "Team" },
   { id: "token", label: "MCP/A2A Gateway Token" },
   { id: "external-groups", label: "External Group Sync" },
 ] satisfies Array<{ id: TeamDialogSection; label: string }>;
 
-export function TeamManagementDialog({
-  open,
-  onOpenChange,
-  team,
-}: TeamManagementDialogProps) {
+const createNavItems = [{ id: "team", label: "Team" }] satisfies Array<{
+  id: TeamDialogSection;
+  label: string;
+}>;
+
+export function TeamManagementDialog(props: TeamManagementDialogProps) {
+  const { open, onOpenChange } = props;
+  const mode = props.mode ?? "edit";
+  const team = "team" in props ? props.team : null;
   const queryClient = useQueryClient();
   const [activeSection, setActiveSection] = useState<TeamDialogSection>("team");
-  const [name, setName] = useState(team.name);
-  const [description, setDescription] = useState(team.description ?? "");
+  const [name, setName] = useState(team?.name ?? "");
+  const [description, setDescription] = useState(team?.description ?? "");
   const TeamManagementExternalSyncSection =
     useTeamManagementExternalSyncSection();
-  const { data: tokensData } = useTokens({ enabled: open });
+  const { data: tokensData } = useTokens({ enabled: open && mode === "edit" });
   const teamToken = tokensData?.tokens.find(
-    (token) => token.team?.id === team.id,
+    (token) => token.team?.id === team?.id,
   );
+  const navItems = mode === "create" ? createNavItems : editNavItems;
+  const title = mode === "create" ? "Create Team" : "Edit Team";
 
   useEffect(() => {
     if (!open) return;
     setActiveSection("team");
-    setName(team.name);
-    setDescription(team.description ?? "");
+    setName(team?.name ?? "");
+    setDescription(team?.description ?? "");
   }, [open, team]);
 
-  const updateTeam = useMutation({
+  const saveTeam = useMutation({
     mutationFn: async () => {
-      const { data, error } = await archestraApiSdk.updateTeam({
-        path: { id: team.id },
-        body: {
-          name: name.trim(),
-          description: description.trim() || undefined,
-        },
-      });
+      const body = {
+        name: name.trim(),
+        description: description.trim() || undefined,
+      };
+      const { data, error } =
+        mode === "create"
+          ? await archestraApiSdk.createTeam({ body })
+          : await archestraApiSdk.updateTeam({
+              path: { id: team?.id ?? "" },
+              body,
+            });
       if (error) throw new Error(error.error.message);
       return data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["teams"] });
-      toast.success("Team updated");
+      queryClient.invalidateQueries({ queryKey: ["tokens"] });
+      toast.success(mode === "create" ? "Team created" : "Team updated");
       onOpenChange(false);
+      if (mode === "create") {
+        setName("");
+        setDescription("");
+      }
     },
     onError: (error: Error) => {
-      toast.error(error.message || "Failed to update team");
+      toast.error(
+        error.message ||
+          (mode === "create"
+            ? "Failed to create team"
+            : "Failed to update team"),
+      );
     },
   });
 
@@ -105,16 +132,16 @@ export function TeamManagementDialog({
       toast.error("Team name is required");
       return;
     }
-    updateTeam.mutate();
+    saveTeam.mutate();
   };
 
   return (
     <TabbedDialogShell
       open={open}
       onOpenChange={onOpenChange}
-      title="Edit Team"
+      title={title}
       description="Manage team details, members, token access, and external group sync."
-      sidebarLabel={team.name}
+      sidebarLabel={name.trim() || (mode === "create" ? "New team" : "Team")}
       sidebarDescription="Team"
       sidebarIcon={<Users className="h-4 w-4 text-muted-foreground" />}
       activeSection={activeSection}
@@ -134,8 +161,14 @@ export function TeamManagementDialog({
             Cancel
           </Button>
           {activeSection === "team" ? (
-            <Button type="submit" disabled={updateTeam.isPending}>
-              {updateTeam.isPending ? "Saving..." : "Save Changes"}
+            <Button type="submit" disabled={saveTeam.isPending}>
+              {saveTeam.isPending
+                ? mode === "create"
+                  ? "Creating..."
+                  : "Saving..."
+                : mode === "create"
+                  ? "Create Team"
+                  : "Save Changes"}
             </Button>
           ) : (
             <Button type="button" onClick={() => onOpenChange(false)}>
@@ -149,14 +182,17 @@ export function TeamManagementDialog({
         <TeamSection
           open={open}
           team={team}
+          showMembers={mode === "edit"}
           name={name}
           description={description}
           onNameChange={setName}
           onDescriptionChange={setDescription}
         />
       )}
-      {activeSection === "token" && <TokenSection token={teamToken} />}
-      {activeSection === "external-groups" && (
+      {activeSection === "token" && mode === "edit" && (
+        <TokenSection token={teamToken} />
+      )}
+      {activeSection === "external-groups" && mode === "edit" && team && (
         <TeamManagementExternalSyncSection open={open} team={team} />
       )}
     </TabbedDialogShell>
@@ -165,7 +201,8 @@ export function TeamManagementDialog({
 
 function TeamSection(props: {
   open: boolean;
-  team: Team;
+  team: Team | null;
+  showMembers: boolean;
   name: string;
   description: string;
   onNameChange: (value: string) => void;
@@ -192,9 +229,16 @@ function TeamSection(props: {
         </div>
       </div>
 
-      <Separator />
+      {props.showMembers && props.team && (
+        <>
+          <Separator />
 
-      <MembersSection open={props.open} team={props.team} />
+          <div className="space-y-4">
+            <h3 className="text-sm font-medium">Members</h3>
+            <MembersSection open={props.open} team={props.team} />
+          </div>
+        </>
+      )}
     </div>
   );
 }

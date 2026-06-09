@@ -12,7 +12,6 @@ import { Link2, Plus, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
-import { normalizeIdentityProviderFormValues } from "@/app/settings/identity-providers/_parts/identity-provider-form.utils";
 import { TeamSyncConfigForm } from "@/app/settings/identity-providers/_parts/team-sync-config-form.ee";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { Button } from "@/components/ui/button";
@@ -27,10 +26,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
-import {
-  useIdentityProviders,
-  useUpdateIdentityProvider,
-} from "@/lib/auth/identity-provider.query.ee";
+import { useIdentityProviders } from "@/lib/auth/identity-provider.query.ee";
 
 type Team = archestraApiTypes.GetTeamsResponses["200"]["data"][number];
 type ExternalGroup =
@@ -239,7 +235,6 @@ function IdentityProviderTeamSyncPanel({
 }: {
   identityProvider: IdentityProvider;
 }) {
-  const updateIdentityProvider = useUpdateIdentityProvider();
   const form = useForm<IdentityProviderFormValues>({
     defaultValues: toIdentityProviderFormValues(identityProvider),
   });
@@ -248,35 +243,16 @@ function IdentityProviderTeamSyncPanel({
     form.reset(toIdentityProviderFormValues(identityProvider));
   }, [form, identityProvider]);
 
-  const handleSave = async () => {
-    const result = await updateIdentityProvider.mutateAsync({
-      id: identityProvider.id,
-      data: normalizeIdentityProviderFormValues(form.getValues()),
-    });
-    if (result) {
-      toast.success("Team sync extraction updated");
-    }
-  };
-
   return (
     <Form {...form}>
-      <div className="space-y-4">
-        <TeamSyncConfigForm
-          form={form}
-          identityProviderId={identityProvider.id}
-          embedded
-        />
-        <Button
-          type="button"
-          variant="outline"
-          onClick={handleSave}
-          disabled={updateIdentityProvider.isPending}
-        >
-          {updateIdentityProvider.isPending
-            ? "Saving extraction..."
-            : "Save Extraction"}
-        </Button>
-      </div>
+      <TeamSyncConfigForm
+        form={form}
+        identityProviderId={identityProvider.id}
+        embedded
+        showEnabledField={false}
+        groupsExpressionReadOnly
+        groupsExpressionDescription="This extraction template is configured on the selected identity provider. Use the mapped group values below to control membership for this team."
+      />
     </Form>
   );
 }

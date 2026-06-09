@@ -11,19 +11,13 @@ import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { useSetSettingsAction } from "@/app/settings/layout";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
-import { FormDialog } from "@/components/form-dialog";
 import { SearchInput } from "@/components/search-input";
 import {
   type TableRowAction,
   TableRowActions,
 } from "@/components/table-row-actions";
-import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
-import { DialogForm, DialogStickyFooter } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { PermissionButton } from "@/components/ui/permission-button";
-import { Textarea } from "@/components/ui/textarea";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import { useTeams } from "@/lib/teams/team.query";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
@@ -41,32 +35,9 @@ export function TeamsList() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [teamToDelete, setTeamToDelete] = useState<Team | null>(null);
 
-  // Form state
-  const [teamName, setTeamName] = useState("");
-  const [teamDescription, setTeamDescription] = useState("");
-
   const search = searchParams.get("search") || "";
 
   const { data: teams, isLoading } = useTeams();
-
-  const createMutation = useMutation({
-    mutationFn: async (data: { name: string; description?: string }) => {
-      return await archestraApiSdk.createTeam({
-        body: data,
-      });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["teams"] });
-      queryClient.invalidateQueries({ queryKey: ["tokens"] });
-      setCreateDialogOpen(false);
-      setTeamName("");
-      setTeamDescription("");
-      toast.success("Team created successfully");
-    },
-    onError: (error: Error) => {
-      toast.error(error.message || "Failed to create team");
-    },
-  });
 
   const deleteMutation = useMutation({
     mutationFn: async (teamId: string) => {
@@ -85,18 +56,6 @@ export function TeamsList() {
       toast.error(error.message || "Failed to delete team");
     },
   });
-
-  const handleCreateTeam = () => {
-    if (!teamName.trim()) {
-      toast.error("Team name is required");
-      return;
-    }
-
-    createMutation.mutate({
-      name: teamName,
-      description: teamDescription || undefined,
-    });
-  };
 
   const handleDeleteTeam = () => {
     if (teamToDelete) {
@@ -228,51 +187,11 @@ export function TeamsList() {
         />
       </div>
 
-      <FormDialog
+      <TeamManagementDialog
+        mode="create"
         open={createDialogOpen}
         onOpenChange={setCreateDialogOpen}
-        title="Create New Team"
-        description="Create a team to organize access to profiles and MCP servers"
-        size="medium"
-      >
-        <DialogForm
-          className="flex min-h-0 flex-1 flex-col"
-          onSubmit={handleCreateTeam}
-        >
-          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="name">Team Name *</Label>
-              <Input
-                id="name"
-                placeholder="Engineering Team"
-                value={teamName}
-                onChange={(e) => setTeamName(e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="description">Description</Label>
-              <Textarea
-                id="description"
-                placeholder="Team for engineering staff..."
-                value={teamDescription}
-                onChange={(e) => setTeamDescription(e.target.value)}
-              />
-            </div>
-          </div>
-          <DialogStickyFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setCreateDialogOpen(false)}
-            >
-              Cancel
-            </Button>
-            <Button type="submit" disabled={createMutation.isPending}>
-              {createMutation.isPending ? "Creating..." : "Create Team"}
-            </Button>
-          </DialogStickyFooter>
-        </DialogForm>
-      </FormDialog>
+      />
 
       <DeleteConfirmDialog
         open={deleteDialogOpen}

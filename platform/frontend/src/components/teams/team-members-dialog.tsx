@@ -163,20 +163,23 @@ export function TeamMembersDialog({
                 const orgMember = orgMembers.find(
                   (m: ActiveOrganizationMember) => m.userId === member.userId,
                 );
+                const displayName =
+                  member.name ||
+                  orgMember?.name ||
+                  member.email ||
+                  orgMember?.email ||
+                  member.userId;
+                const displayEmail =
+                  member.email || orgMember?.email || member.userId;
                 return (
                   <div
                     key={member.id}
                     className="flex items-center justify-between rounded-lg border p-3"
                   >
                     <div>
-                      <p className="text-sm font-medium">
-                        {member.email ||
-                          orgMember?.email ||
-                          member.name ||
-                          member.userId}
-                      </p>
+                      <p className="text-sm font-medium">{displayName}</p>
                       <p className="text-xs text-muted-foreground">
-                        Role: {member.role}
+                        {displayEmail} - Role: {member.role}
                       </p>
                     </div>
                     <Button

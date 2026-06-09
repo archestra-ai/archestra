@@ -387,6 +387,14 @@ function MembersSection({ open, team }: { open: boolean; team: Team }) {
               const orgMember = orgMembers.find(
                 (orgMember) => orgMember.userId === member.userId,
               );
+              const displayName =
+                member.name ||
+                orgMember?.user.name ||
+                member.email ||
+                orgMember?.user.email ||
+                member.userId;
+              const displayEmail =
+                member.email || orgMember?.user.email || member.userId;
               return (
                 <div
                   key={member.id}
@@ -394,13 +402,10 @@ function MembersSection({ open, team }: { open: boolean; team: Team }) {
                 >
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium">
-                      {member.email ||
-                        orgMember?.user.email ||
-                        member.name ||
-                        member.userId}
+                      {displayName}
                     </p>
                     <p className="truncate text-xs text-muted-foreground">
-                      {member.name || orgMember?.user.name || member.userId}
+                      {displayEmail}
                     </p>
                   </div>
                   <Select

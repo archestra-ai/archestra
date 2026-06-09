@@ -31,12 +31,14 @@ interface EditIdentityProviderDialogProps {
   identityProviderId: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  initialSection?: IdentityProviderDialogSection;
 }
 
 export function EditIdentityProviderDialog({
   identityProviderId,
   open,
   onOpenChange,
+  initialSection,
 }: EditIdentityProviderDialogProps) {
   const { data: provider, isLoading } = useIdentityProvider(identityProviderId);
   const updateIdentityProvider = useUpdateIdentityProvider();
@@ -133,6 +135,11 @@ export function EditIdentityProviderDialog({
       });
     }
   }, [provider, form]);
+
+  useEffect(() => {
+    if (!open || !provider?.id) return;
+    setActiveSection(initialSection ?? "general");
+  }, [initialSection, open, provider?.id]);
 
   const onSubmit = useCallback(
     async (data: IdentityProviderFormValues) => {

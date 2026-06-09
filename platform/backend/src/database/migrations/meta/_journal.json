@@ -1961,6 +1961,13 @@
       "when": 1781010000000,
       "tag": "0279_remove_team_admin_rbac_action",
       "breakpoints": true
+    },
+    {
+      "idx": 280,
+      "version": "7",
+      "when": 1781028483190,
+      "tag": "0280_special_hercules",
+      "breakpoints": true
     }
   ]
 }

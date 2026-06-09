@@ -1,5 +1,6 @@
 import { vi } from "vitest";
 import type * as originalConfigModule from "@/config";
+import { TeamModel } from "@/models";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -448,6 +449,27 @@ describe("team routes", () => {
       expect(response.json().userId).toBe(newMember.id);
     });
 
+    test("rejects duplicate team membership", async ({
+      makeTeam,
+      makeUser,
+      makeTeamMember,
+    }) => {
+      const team = await makeTeam(organizationId, adminUser.id);
+      const existingMember = await makeUser({
+        email: "duplicate-member@test.com",
+      });
+      await makeTeamMember(team.id, existingMember.id);
+
+      const response = await app.inject({
+        method: "POST",
+        url: `/api/teams/${team.id}/members`,
+        payload: { userId: existingMember.id, role: "member" },
+      });
+
+      expect(response.statusCode).toBe(409);
+      expect(response.json().error.message).toContain("already a member");
+    });
+
     test("team admin member can add a member without organization-level team management", async ({
       makeTeam,
       makeUser,
@@ -576,6 +598,26 @@ describe("team routes", () => {
       await teamAdminApp.close();
     });
 
+    test("cannot demote the last team admin", async ({
+      makeTeam,
+      makeUser,
+      makeTeamMember,
+    }) => {
+      const team = await makeTeam(organizationId, adminUser.id);
+      const onlyAdmin = await makeUser({ email: "only-admin@test.com" });
+      await makeTeamMember(team.id, onlyAdmin.id, { role: "admin" });
+
+      const response = await app.inject({
+        method: "PUT",
+        url: `/api/teams/${team.id}/members/${onlyAdmin.id}`,
+        payload: { role: "member" },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error.message).toContain("last admin");
+      expect(await TeamModel.isUserTeamAdmin(team.id, onlyAdmin.id)).toBe(true);
+    });
+
     test("removes a member from a team", async ({
       makeTeam,
       makeUser,
@@ -602,6 +644,27 @@ describe("team routes", () => {
       expect(
         members.some((m: { userId: string }) => m.userId === member.id),
       ).toBe(false);
+    });
+
+    test("cannot remove the last team admin", async ({
+      makeTeam,
+      makeUser,
+      makeTeamMember,
+    }) => {
+      const team = await makeTeam(organizationId, adminUser.id);
+      const onlyAdmin = await makeUser({
+        email: "only-admin-remove@test.com",
+      });
+      await makeTeamMember(team.id, onlyAdmin.id, { role: "admin" });
+
+      const response = await app.inject({
+        method: "DELETE",
+        url: `/api/teams/${team.id}/members/${onlyAdmin.id}`,
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error.message).toContain("last admin");
+      expect(await TeamModel.isUserInTeam(team.id, onlyAdmin.id)).toBe(true);
     });
 
     test("returns 404 when listing members of non-existent team", async () => {
@@ -795,6 +858,105 @@ describe("team routes", () => {
       expect(response.json().groupIdentifier).toBe("engineering");
 
       await teamAdminApp.close();
+    });
+
+    test("team admin member can remove external group mappings", async ({
+      makeTeam,
+      makeUser,
+      makeMember,
+      makeTeamMember,
+    }) => {
+      const teamAdmin = await makeUser({
+        email: "sync-remove-admin@test.com",
+      });
+      await makeMember(teamAdmin.id, organizationId);
+      const team = await makeTeam(organizationId, adminUser.id);
+      await makeTeamMember(team.id, teamAdmin.id, { role: "admin" });
+
+      const addResponse = await app.inject({
+        method: "POST",
+        url: `/api/teams/${team.id}/external-groups`,
+        payload: { groupIdentifier: "platform-admins" },
+      });
+      const group = addResponse.json();
+
+      const teamAdminApp = createFastifyInstance();
+      teamAdminApp.addHook("onRequest", async (request) => {
+        (
+          request as typeof request & { user: unknown; organizationId: string }
+        ).user = teamAdmin;
+        (
+          request as typeof request & {
+            user: { id: string };
+            organizationId: string;
+          }
+        ).organizationId = organizationId;
+      });
+      const { default: teamRoutes } = await import("./team");
+      await teamAdminApp.register(teamRoutes);
+      hasPermissionMock.mockResolvedValue({ success: false });
+
+      const deleteResponse = await teamAdminApp.inject({
+        method: "DELETE",
+        url: `/api/teams/${team.id}/external-groups/${group.id}`,
+      });
+
+      expect(deleteResponse.statusCode).toBe(200);
+      expect(deleteResponse.json().success).toBe(true);
+      expect(await TeamModel.getExternalGroups(team.id)).toEqual([]);
+
+      await teamAdminApp.close();
+    });
+
+    test("legacy team admin action does not grant team management", async ({
+      makeTeam,
+      makeUser,
+      makeMember,
+      makeTeamMember,
+    }) => {
+      const legacyRoleUser = await makeUser({
+        email: "legacy-team-admin@test.com",
+      });
+      await makeMember(legacyRoleUser.id, organizationId);
+      const team = await makeTeam(organizationId, adminUser.id);
+      await makeTeamMember(team.id, legacyRoleUser.id, { role: "member" });
+
+      const legacyRoleApp = createFastifyInstance();
+      legacyRoleApp.addHook("onRequest", async (request) => {
+        (
+          request as typeof request & { user: unknown; organizationId: string }
+        ).user = legacyRoleUser;
+        (
+          request as typeof request & {
+            user: { id: string };
+            organizationId: string;
+          }
+        ).organizationId = organizationId;
+      });
+      const { default: teamRoutes } = await import("./team");
+      await legacyRoleApp.register(teamRoutes);
+      hasPermissionMock.mockImplementation(async (permissions) => ({
+        success: permissions?.team?.includes("admin") ?? false,
+      }));
+
+      const response = await legacyRoleApp.inject({
+        method: "POST",
+        url: `/api/teams/${team.id}/external-groups`,
+        payload: { groupIdentifier: "legacy-admins" },
+      });
+
+      expect(response.statusCode).toBe(403);
+      expect(response.json().error.message).toContain("team admin");
+      expect(hasPermissionMock).toHaveBeenCalledWith(
+        { team: ["create"] },
+        expect.any(Object),
+      );
+      expect(hasPermissionMock).not.toHaveBeenCalledWith(
+        { team: ["admin"] },
+        expect.any(Object),
+      );
+
+      await legacyRoleApp.close();
     });
 
     test("returns 404 when removing non-existent group mapping", async ({

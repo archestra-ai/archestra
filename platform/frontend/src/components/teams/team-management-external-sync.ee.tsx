@@ -8,6 +8,7 @@ import {
 } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link2, Plus, Trash2 } from "lucide-react";
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { ExternalDocsLink } from "@/components/external-docs-link";
@@ -23,10 +24,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import {
   useIdentityProviderLatestIdTokenClaims,
   useIdentityProviders,
 } from "@/lib/auth/identity-provider.query.ee";
+import { useAppName } from "@/lib/hooks/use-app-name";
 
 type Team = archestraApiTypes.GetTeamsResponses["200"]["data"][number];
 type ExternalGroup =
@@ -42,8 +45,12 @@ export function TeamManagementExternalSyncSection({
   team,
 }: TeamManagementExternalSyncSectionProps) {
   const queryClient = useQueryClient();
+  const appName = useAppName();
   const { data: identityProviders = [] } = useIdentityProviders({
     enabled: open,
+  });
+  const { data: canUpdateIdentityProviders = false } = useHasPermissions({
+    identityProvider: ["update"],
   });
   const [selectedIdentityProviderId, setSelectedIdentityProviderId] =
     useState("");
@@ -174,9 +181,28 @@ export function TeamManagementExternalSyncSection({
                 }
               />
               <p className="text-sm text-muted-foreground">
-                {selectedGroupsExpression
-                  ? "Configured on the selected identity provider. Use the decoded claims below to find a group value that this template extracts."
-                  : "No custom template is configured on this identity provider. Archestra will look for common group claims in the decoded token."}
+                {selectedGroupsExpression ? (
+                  "Configured on the selected identity provider. Use the decoded claims below to find a group value that this template extracts."
+                ) : (
+                  <>
+                    No custom template is configured on this identity provider
+                    {canUpdateIdentityProviders ? (
+                      <>
+                        ,{" "}
+                        <Link
+                          href={`/settings/identity-providers?edit=${selectedIdentityProvider.id}&section=team-sync`}
+                          className="underline underline-offset-4 hover:text-foreground"
+                        >
+                          configure it here
+                        </Link>
+                      </>
+                    ) : (
+                      ", ask your admin to configure it"
+                    )}
+                    . {appName} will look for common group claims in the decoded
+                    token.
+                  </>
+                )}
               </p>
             </div>
             <LatestIdTokenClaimsPanel

@@ -1,4 +1,11 @@
-import { boolean, index, pgTable, text, timestamp } from "drizzle-orm/pg-core";
+import {
+  boolean,
+  index,
+  pgTable,
+  text,
+  timestamp,
+  uniqueIndex,
+} from "drizzle-orm/pg-core";
 import type { TeamMemberRole } from "@/types/team-role";
 import organizationsTable from "./organization";
 import usersTable from "./user";
@@ -42,6 +49,10 @@ export const teamMember = pgTable(
     createdAt: timestamp("created_at").notNull(),
   },
   (table) => [
+    uniqueIndex("team_member_team_id_user_id_unique_idx").on(
+      table.teamId,
+      table.userId,
+    ),
     index("team_member_team_id_user_id_idx").on(table.teamId, table.userId),
     index("team_member_user_id_team_id_idx").on(table.userId, table.teamId),
   ],

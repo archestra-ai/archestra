@@ -297,6 +297,11 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
         action: "manage team members",
       });
 
+      const isMember = await TeamModel.isUserInTeam(id, userId);
+      if (isMember) {
+        throw new ApiError(409, "User is already a member of this team");
+      }
+
       const member = await TeamModel.addMember(id, userId, role);
 
       return reply.send(member);
@@ -332,6 +337,12 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
         headers,
         action: "manage team member roles",
+      });
+
+      await assertNotRemovingLastTeamAdmin({
+        teamId: id,
+        userId,
+        nextRole: role,
       });
 
       const member = await TeamModel.updateMemberRole({
@@ -377,6 +388,12 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
         headers,
         action: "manage team members",
+      });
+
+      await assertNotRemovingLastTeamAdmin({
+        teamId: id,
+        userId,
+        nextRole: null,
       });
 
       const success = await TeamModel.removeMember(id, userId);
@@ -606,5 +623,29 @@ async function assertCanManageTeam(params: {
 
   if (!isTeamAdmin) {
     throw new ApiError(403, `You must be a team admin to ${params.action}`);
+  }
+}
+
+async function assertNotRemovingLastTeamAdmin(params: {
+  teamId: string;
+  userId: string;
+  nextRole: "admin" | "member" | null;
+}) {
+  const members = await TeamModel.getTeamMembers(params.teamId);
+  const targetMember = members.find(
+    (member) => member.userId === params.userId,
+  );
+
+  if (!targetMember) {
+    throw new ApiError(404, "Team member not found");
+  }
+
+  if (targetMember.role !== "admin" || params.nextRole === "admin") {
+    return;
+  }
+
+  const adminCount = members.filter((member) => member.role === "admin").length;
+  if (adminCount <= 1) {
+    throw new ApiError(400, "Cannot remove the last admin from a team");
   }
 }

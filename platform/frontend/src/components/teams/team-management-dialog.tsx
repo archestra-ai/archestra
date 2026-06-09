@@ -8,26 +8,11 @@ import {
 } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useDebounce } from "@uidotdev/usehooks";
-import {
-  Check,
-  Copy,
-  Key,
-  RefreshCw,
-  Trash2,
-  Users,
-  XIcon,
-} from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { Check, Copy, Key, RefreshCw, Trash2, Users } from "lucide-react";
+import { type ComponentType, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
+import { TabbedDialogShell } from "@/components/tabbed-dialog-shell";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogForm,
-  DialogStickyFooter,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -51,14 +36,10 @@ type Team = archestraApiTypes.GetTeamsResponses["200"]["data"][number];
 type TeamMember = archestraApiTypes.GetTeamMembersResponses["200"][number];
 type TeamDialogSection = "team" | "token" | "external-groups";
 type TeamMemberRole = typeof ADMIN_ROLE_NAME | typeof MEMBER_ROLE_NAME;
-
-const { TeamManagementExternalSyncSection } = config.enterpriseFeatures.core
-  ? // biome-ignore lint/style/noRestrictedImports: conditional ee component with team sync
-    await import("./team-management-external-sync.ee")
-  : {
-      TeamManagementExternalSyncSection:
-        TeamManagementExternalSyncSectionUnavailable,
-    };
+type TeamManagementExternalSyncSectionComponent = ComponentType<{
+  open: boolean;
+  team: Team;
+}>;
 
 interface TeamManagementDialogProps {
   open: boolean;
@@ -81,6 +62,8 @@ export function TeamManagementDialog({
   const [activeSection, setActiveSection] = useState<TeamDialogSection>("team");
   const [name, setName] = useState(team.name);
   const [description, setDescription] = useState(team.description ?? "");
+  const TeamManagementExternalSyncSection =
+    useTeamManagementExternalSyncSection();
   const { data: tokensData } = useTokens({ enabled: open });
   const teamToken = tokensData?.tokens.find(
     (token) => token.team?.id === team.id,
@@ -125,106 +108,57 @@ export function TeamManagementDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent
-        className="max-w-5xl h-[85vh] flex flex-row p-0 gap-0 overflow-hidden"
-        showCloseButton={false}
-      >
-        <DialogTitle className="sr-only">Edit Team</DialogTitle>
-        <DialogDescription className="sr-only">
-          Manage team details, members, token access, and external group sync.
-        </DialogDescription>
-        <DialogForm className="contents" onSubmit={handleSubmit}>
-          <nav className="w-[220px] border-r flex flex-col shrink-0">
-            <div className="flex min-h-[72px] items-center border-b px-4 py-4">
-              <div className="flex min-w-0 items-center gap-2.5">
-                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border bg-muted">
-                  <Users className="h-4 w-4 text-muted-foreground" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="font-semibold text-sm truncate">
-                    {team.name}
-                  </div>
-                  <div className="text-xs text-muted-foreground mt-0.5">
-                    Team
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex flex-col gap-0.5 px-2 py-3 flex-1">
-              {navItems.map((navItem) => (
-                <Button
-                  key={navItem.id}
-                  type="button"
-                  variant="ghost"
-                  className={cn(
-                    "justify-start h-9 px-3 font-normal w-full",
-                    activeSection === navItem.id &&
-                      "bg-accent text-accent-foreground font-medium",
-                  )}
-                  onClick={() => setActiveSection(navItem.id)}
-                >
-                  {navItem.label}
-                </Button>
-              ))}
-            </div>
-          </nav>
-
-          <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-            <div className="flex min-h-[72px] shrink-0 items-center justify-between border-b px-4 py-4">
-              <h2 className="text-lg font-semibold truncate">Edit Team</h2>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8 rounded-xs opacity-70 hover:opacity-100"
-                onClick={() => onOpenChange(false)}
-              >
-                <XIcon className="h-4 w-4" />
-                <span className="sr-only">Close</span>
-              </Button>
-            </div>
-
-            <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-5 py-5">
-              {activeSection === "team" && (
-                <TeamSection
-                  open={open}
-                  team={team}
-                  name={name}
-                  description={description}
-                  onNameChange={setName}
-                  onDescriptionChange={setDescription}
-                />
-              )}
-              {activeSection === "token" && <TokenSection token={teamToken} />}
-              {activeSection === "external-groups" && (
-                <TeamManagementExternalSyncSection open={open} team={team} />
-              )}
-            </div>
-
-            <DialogStickyFooter className="mt-0">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => onOpenChange(false)}
-              >
-                Cancel
-              </Button>
-              {activeSection === "team" ? (
-                <Button type="submit" disabled={updateTeam.isPending}>
-                  {updateTeam.isPending ? "Saving..." : "Save Changes"}
-                </Button>
-              ) : (
-                <Button type="button" onClick={() => onOpenChange(false)}>
-                  Close
-                </Button>
-              )}
-            </DialogStickyFooter>
-          </div>
-        </DialogForm>
-      </DialogContent>
-    </Dialog>
+    <TabbedDialogShell
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Edit Team"
+      description="Manage team details, members, token access, and external group sync."
+      sidebarLabel={team.name}
+      sidebarDescription="Team"
+      sidebarIcon={<Users className="h-4 w-4 text-muted-foreground" />}
+      activeSection={activeSection}
+      navItems={navItems}
+      onActiveSectionChange={setActiveSection}
+      onSubmit={handleSubmit}
+      className="max-w-5xl"
+      contentClassName="px-5 py-5"
+      sidebarClassName="w-[220px]"
+      footer={
+        <>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+          >
+            Cancel
+          </Button>
+          {activeSection === "team" ? (
+            <Button type="submit" disabled={updateTeam.isPending}>
+              {updateTeam.isPending ? "Saving..." : "Save Changes"}
+            </Button>
+          ) : (
+            <Button type="button" onClick={() => onOpenChange(false)}>
+              Close
+            </Button>
+          )}
+        </>
+      }
+    >
+      {activeSection === "team" && (
+        <TeamSection
+          open={open}
+          team={team}
+          name={name}
+          description={description}
+          onNameChange={setName}
+          onDescriptionChange={setDescription}
+        />
+      )}
+      {activeSection === "token" && <TokenSection token={teamToken} />}
+      {activeSection === "external-groups" && (
+        <TeamManagementExternalSyncSection open={open} team={team} />
+      )}
+    </TabbedDialogShell>
   );
 }
 
@@ -613,4 +547,33 @@ function TokenSection({ token }: { token?: TeamToken }) {
 
 function TeamManagementExternalSyncSectionUnavailable() {
   return <EnterpriseLicenseRequired featureName="Team Sync" />;
+}
+
+function useTeamManagementExternalSyncSection(): TeamManagementExternalSyncSectionComponent {
+  const [Section, setSection] =
+    useState<TeamManagementExternalSyncSectionComponent>(
+      () => TeamManagementExternalSyncSectionUnavailable,
+    );
+
+  useEffect(() => {
+    if (!config.enterpriseFeatures.core) return;
+
+    let cancelled = false;
+
+    async function loadEnterpriseSection() {
+      // biome-ignore lint/style/noRestrictedImports: conditional ee component with team sync
+      const module = await import("./team-management-external-sync.ee");
+      if (!cancelled) {
+        setSection(() => module.TeamManagementExternalSyncSection);
+      }
+    }
+
+    loadEnterpriseSection();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return Section;
 }

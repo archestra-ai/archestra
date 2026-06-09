@@ -46,9 +46,48 @@ const {
   orchestrator: { mcpServerBaseImage },
 } = config;
 
+const MANAGED_NETWORK_POLICY_LABELS = sanitizeMetadataLabels({
+  "app.kubernetes.io/managed-by": "archestra",
+  "archestra.io/resource": "mcp-network-policy",
+});
+
+const MANAGED_NETWORK_POLICY_LABEL_SELECTOR = Object.entries(
+  MANAGED_NETWORK_POLICY_LABELS,
+)
+  .map(([key, value]) => `${key}=${value}`)
+  .join(",");
+
+const CILIUM_NETWORK_POLICY_RESOURCE = {
+  group: "cilium.io",
+  version: "v2",
+  plural: "ciliumnetworkpolicies",
+  label: "CiliumNetworkPolicy",
+} satisfies ManagedCustomPolicyResource;
+
+const GKE_FQDN_NETWORK_POLICY_RESOURCE = {
+  group: "networking.gke.io",
+  version: "v1alpha1",
+  plural: "fqdnnetworkpolicies",
+  label: "GKE FQDNNetworkPolicy",
+} satisfies ManagedCustomPolicyResource;
+
+const AWS_APPLICATION_NETWORK_POLICY_RESOURCE = {
+  group: "networking.k8s.aws",
+  version: "v1alpha1",
+  plural: "applicationnetworkpolicies",
+  label: "AWS ApplicationNetworkPolicy",
+} satisfies ManagedCustomPolicyResource;
+
 // How long streamLogs will keep an open WS waiting for the pod to become
 // Ready before giving up. 5 minutes covers a slow image pull on first install.
 const POD_READY_WAIT_MS = 5 * TimeInMs.Minute;
+
+interface ManagedCustomPolicyResource {
+  group: string;
+  version: string;
+  plural: string;
+  label: string;
+}
 
 /**
  * Result of processing container environment configuration.
@@ -379,6 +418,10 @@ export default class K8sDeployment {
         this.deleteGkeFqdnNetworkPolicy(policyName),
         this.deleteAwsApplicationNetworkPolicy(policyName),
       ]);
+      await this.cleanupStaleManagedNetworkPolicies({
+        desiredPolicyName: policyName,
+        desiredCustomPolicy: CILIUM_NETWORK_POLICY_RESOURCE,
+      });
       return;
     }
 
@@ -396,6 +439,11 @@ export default class K8sDeployment {
         this.deleteCiliumNetworkPolicy(policyName),
         this.deleteAwsApplicationNetworkPolicy(policyName),
       ]);
+      await this.cleanupStaleManagedNetworkPolicies({
+        desiredPolicyName: policyName,
+        keepKubernetesPolicy: true,
+        desiredCustomPolicy: GKE_FQDN_NETWORK_POLICY_RESOURCE,
+      });
       return;
     }
 
@@ -411,6 +459,10 @@ export default class K8sDeployment {
         this.deleteCiliumNetworkPolicy(policyName),
         this.deleteGkeFqdnNetworkPolicy(policyName),
       ]);
+      await this.cleanupStaleManagedNetworkPolicies({
+        desiredPolicyName: policyName,
+        desiredCustomPolicy: AWS_APPLICATION_NETWORK_POLICY_RESOURCE,
+      });
       return;
     }
 
@@ -420,6 +472,10 @@ export default class K8sDeployment {
       this.deleteGkeFqdnNetworkPolicy(policyName),
       this.deleteAwsApplicationNetworkPolicy(policyName),
     ]);
+    await this.cleanupStaleManagedNetworkPolicies({
+      desiredPolicyName: policyName,
+      keepKubernetesPolicy: true,
+    });
   }
 
   private async applyKubernetesNetworkPolicy(
@@ -697,6 +753,9 @@ export default class K8sDeployment {
       this.deleteGkeFqdnNetworkPolicy(policyName),
       this.deleteAwsApplicationNetworkPolicy(policyName),
     ]);
+    await this.cleanupStaleManagedNetworkPolicies({
+      desiredPolicyName: policyName,
+    });
   }
 
   private async deleteKubernetesNetworkPolicy(
@@ -893,6 +952,166 @@ export default class K8sDeployment {
       );
       throw error;
     }
+  }
+
+  private async cleanupStaleManagedNetworkPolicies(params: {
+    desiredPolicyName: string;
+    keepKubernetesPolicy?: boolean;
+    desiredCustomPolicy?: ManagedCustomPolicyResource;
+  }): Promise<void> {
+    await Promise.all([
+      this.cleanupStaleKubernetesNetworkPolicies(params),
+      this.cleanupStaleCustomNetworkPolicies({
+        desiredPolicyName: params.desiredPolicyName,
+        resource: CILIUM_NETWORK_POLICY_RESOURCE,
+        keepPolicy:
+          params.desiredCustomPolicy?.plural ===
+          CILIUM_NETWORK_POLICY_RESOURCE.plural,
+      }),
+      this.cleanupStaleCustomNetworkPolicies({
+        desiredPolicyName: params.desiredPolicyName,
+        resource: GKE_FQDN_NETWORK_POLICY_RESOURCE,
+        keepPolicy:
+          params.desiredCustomPolicy?.plural ===
+          GKE_FQDN_NETWORK_POLICY_RESOURCE.plural,
+      }),
+      this.cleanupStaleCustomNetworkPolicies({
+        desiredPolicyName: params.desiredPolicyName,
+        resource: AWS_APPLICATION_NETWORK_POLICY_RESOURCE,
+        keepPolicy:
+          params.desiredCustomPolicy?.plural ===
+          AWS_APPLICATION_NETWORK_POLICY_RESOURCE.plural,
+      }),
+    ]);
+  }
+
+  private async cleanupStaleKubernetesNetworkPolicies(params: {
+    desiredPolicyName: string;
+    keepKubernetesPolicy?: boolean;
+  }): Promise<void> {
+    if (
+      typeof this.k8sNetworkingApi?.listNamespacedNetworkPolicy !== "function"
+    ) {
+      return;
+    }
+
+    const stalePolicies = await this.k8sNetworkingApi
+      .listNamespacedNetworkPolicy({
+        namespace: this.namespace,
+        labelSelector: MANAGED_NETWORK_POLICY_LABEL_SELECTOR,
+      })
+      .then((response) =>
+        response.items.filter((policy) =>
+          this.shouldDeleteManagedPolicy({
+            policyName: policy.metadata?.name,
+            desiredPolicyName: params.desiredPolicyName,
+            keepPolicy: params.keepKubernetesPolicy === true,
+            metadataLabels: policy.metadata?.labels,
+            spec: policy.spec,
+          }),
+        ),
+      )
+      .catch((error: unknown) => {
+        if (isK8sNotFoundError(error)) return [];
+        throw error;
+      });
+
+    await Promise.all(
+      stalePolicies.map((policy) =>
+        this.deleteKubernetesNetworkPolicy(policy.metadata?.name ?? ""),
+      ),
+    );
+  }
+
+  private async cleanupStaleCustomNetworkPolicies(params: {
+    desiredPolicyName: string;
+    resource: ManagedCustomPolicyResource;
+    keepPolicy: boolean;
+  }): Promise<void> {
+    if (
+      typeof this.k8sCustomObjectsApi?.listNamespacedCustomObject !== "function"
+    ) {
+      return;
+    }
+
+    const stalePolicies = await this.k8sCustomObjectsApi
+      .listNamespacedCustomObject({
+        group: params.resource.group,
+        version: params.resource.version,
+        namespace: this.namespace,
+        plural: params.resource.plural,
+        labelSelector: MANAGED_NETWORK_POLICY_LABEL_SELECTOR,
+      })
+      .then((response) =>
+        listCustomObjectItems(response).filter((policy) =>
+          this.shouldDeleteManagedPolicy({
+            policyName: policy.metadata?.name,
+            desiredPolicyName: params.desiredPolicyName,
+            keepPolicy: params.keepPolicy,
+            metadataLabels: policy.metadata?.labels,
+            spec: policy.spec,
+          }),
+        ),
+      )
+      .catch((error: unknown) => {
+        if (isK8sNotFoundError(error)) return [];
+        throw error;
+      });
+
+    await Promise.all(
+      stalePolicies.map((policy) =>
+        this.deleteCustomNetworkPolicy({
+          resource: params.resource,
+          policyName: policy.metadata?.name ?? "",
+        }),
+      ),
+    );
+  }
+
+  private async deleteCustomNetworkPolicy(params: {
+    resource: ManagedCustomPolicyResource;
+    policyName: string;
+  }): Promise<void> {
+    if (!params.policyName) return;
+
+    try {
+      await this.k8sCustomObjectsApi?.deleteNamespacedCustomObject({
+        group: params.resource.group,
+        version: params.resource.version,
+        namespace: this.namespace,
+        plural: params.resource.plural,
+        name: params.policyName,
+      });
+
+      logger.info(
+        {
+          mcpServerId: this.mcpServer.id,
+          networkPolicyName: params.policyName,
+          namespace: this.namespace,
+        },
+        `Deleted stale ${params.resource.label} for MCP server`,
+      );
+    } catch (error: unknown) {
+      if (isK8sNotFoundError(error)) {
+        return;
+      }
+      throw error;
+    }
+  }
+
+  private shouldDeleteManagedPolicy(params: {
+    policyName?: string;
+    desiredPolicyName: string;
+    keepPolicy: boolean;
+    metadataLabels?: Record<string, string>;
+    spec?: unknown;
+  }): boolean {
+    if (!params.policyName) return false;
+    if (!hasManagedNetworkPolicyLabels(params.metadataLabels)) return false;
+    if (!policyTargetsPodLabels(params.spec, this.getSystemLabels())) {
+      return false;
+    }
+    return !params.keepPolicy || params.policyName !== params.desiredPolicyName;
   }
 
   /**
@@ -3490,4 +3709,86 @@ export default class K8sDeployment {
 
     return { k8sWs, podName };
   }
+}
+
+function listCustomObjectItems(response: unknown): Array<{
+  metadata?: { name?: string; labels?: Record<string, string> };
+  spec?: unknown;
+}> {
+  if (!response || typeof response !== "object" || !("items" in response)) {
+    return [];
+  }
+
+  const items = (response as { items?: unknown }).items;
+  if (!Array.isArray(items)) {
+    return [];
+  }
+
+  return items.filter(
+    (
+      item,
+    ): item is {
+      metadata?: { name?: string; labels?: Record<string, string> };
+      spec?: unknown;
+    } => Boolean(item) && typeof item === "object",
+  );
+}
+
+function policyTargetsPodLabels(
+  spec: unknown,
+  podLabels: Record<string, string>,
+): boolean {
+  const matchLabels = getPolicyMatchLabels(spec);
+  if (!matchLabels) {
+    return false;
+  }
+
+  return Object.entries(podLabels).every(
+    ([key, value]) => matchLabels[key] === value,
+  );
+}
+
+function hasManagedNetworkPolicyLabels(
+  labels?: Record<string, string>,
+): boolean {
+  if (!labels) {
+    return false;
+  }
+
+  return Object.entries(MANAGED_NETWORK_POLICY_LABELS).every(
+    ([key, value]) => labels[key] === value,
+  );
+}
+
+function getPolicyMatchLabels(
+  spec: unknown,
+): Record<string, string> | undefined {
+  if (!spec || typeof spec !== "object") {
+    return undefined;
+  }
+
+  const maybeSpec = spec as {
+    podSelector?: { matchLabels?: Record<string, string> };
+    endpointSelector?: { matchLabels?: Record<string, string> };
+  };
+
+  return (
+    maybeSpec.podSelector?.matchLabels ??
+    normalizeCiliumEndpointLabels(maybeSpec.endpointSelector?.matchLabels)
+  );
+}
+
+function normalizeCiliumEndpointLabels(
+  labels?: Record<string, string>,
+): Record<string, string> | undefined {
+  if (!labels) {
+    return undefined;
+  }
+
+  return Object.fromEntries(
+    Object.entries(labels).map(([key, value]) => [
+      key.startsWith("k8s:") ? key.slice(4) : key,
+      value,
+    ]),
+  );
 }

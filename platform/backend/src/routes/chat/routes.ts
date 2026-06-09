@@ -767,6 +767,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
                 const modelMessages = applyPromptCacheBreakpoints({
                   provider,
+                  model: selectedModel,
                   messages: await buildModelMessagesForProvider({
                     messages: compactionResult.messages,
                     provider,

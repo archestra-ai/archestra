@@ -10,14 +10,13 @@ Check ../docs_writer_prompt.md before changing this file.
 
 # Migrate to Archestra
 
-> **Experimental.** The migration kit is new and still evolving — review its output before applying
-> it to anything you care about.
+> **Experimental.** The migration kit is new and still evolving.
 
-The migration kit turns an existing agentic PoC into an Archestra pilot. Typical sources are the
-messy setups left by tools like Claude Code, OpenClaw, or Hermes: project instruction files, MCP
+The migration kit turns an existing agentic setup into an Archestra setup. Typical sources are the
+unsorted configs left by tools like Claude Code, OpenClaw, or Hermes: project instruction files, MCP
 configs, hooks, local scripts, and whatever else accumulated during evaluation.
 
-It ships as a Claude Code skill (`migrate-to-archestra`), so the migration runs as a guided,
+It ships as a Skill (`migrate-to-archestra`) for your favorite coding agent (e.g. Claude Code), so the migration runs as a guided,
 agentic flow rather than a one-shot script. The deterministic work — discovering source artifacts,
 redacting secrets, building and validating API payloads — lives in zero-dependency Python helpers;
 the model owns the judgment calls (what maps to what, what to skip, what needs review).
@@ -45,14 +44,14 @@ locked-down or air-gapped hosts. Then open Claude Code near the source project a
 
 ## Flow
 
-1. Connect to an Archestra instance, or start a local one.
+1. Connect to an Archestra instance, or start a local one (skill can help with that too).
 2. Discover the source setup into a secret-redacted `inventory.json`.
 3. Draft a preview plan and confirm the few decisions that matter (scope, which MCP servers to
    install, which keys to migrate).
 4. Dry-run, then apply the approved plan.
 5. Get a report with migrated items, manual follow-up, and behavioral differences.
 
-## What needs review
+## Typical migration plan
 
 - **Subagents** become skills — instructions migrate, but isolation and tool allowlists are
   documented, not enforced.

@@ -15227,6 +15227,1045 @@ export type GetApiKeyResponses = {
 
 export type GetApiKeyResponse = GetApiKeyResponses[keyof GetApiKeyResponses];
 
+export type GetAppsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        limit?: number;
+        offset?: number;
+        search?: string;
+    };
+    url: '/api/apps';
+};
+
+export type GetAppsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetAppsError = GetAppsErrors[keyof GetAppsErrors];
+
+export type GetAppsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        data: Array<{
+            id: string;
+            organizationId: string;
+            authorId: string | null;
+            scope: 'personal' | 'team' | 'org';
+            name: string;
+            description: string | null;
+            templateId: string | null;
+            latestVersion: number;
+            createdAt: string;
+            updatedAt: string;
+            deletedAt: string | null;
+        }>;
+        pagination: {
+            currentPage: number;
+            limit: number;
+            total: number;
+            totalPages: number;
+            hasNext: boolean;
+            hasPrev: boolean;
+        };
+    };
+};
+
+export type GetAppsResponse = GetAppsResponses[keyof GetAppsResponses];
+
+export type CreateAppData = {
+    body: {
+        name: string;
+        description?: string;
+        templateId?: string;
+        scope?: 'personal' | 'team' | 'org';
+        html: string;
+        uiCsp?: {
+            connectDomains?: Array<string>;
+            resourceDomains?: Array<string>;
+            frameDomains?: Array<string>;
+            baseUriDomains?: Array<string>;
+        };
+        uiPermissions?: {
+            camera?: {
+                [key: string]: unknown;
+            };
+            microphone?: {
+                [key: string]: unknown;
+            };
+            geolocation?: {
+                [key: string]: unknown;
+            };
+            clipboardWrite?: {
+                [key: string]: unknown;
+            };
+        };
+        teamIds?: Array<string>;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/apps';
+};
+
+export type CreateAppErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type CreateAppError = CreateAppErrors[keyof CreateAppErrors];
+
+export type CreateAppResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        authorId: string | null;
+        scope: 'personal' | 'team' | 'org';
+        name: string;
+        description: string | null;
+        templateId: string | null;
+        latestVersion: number;
+        createdAt: string;
+        updatedAt: string;
+        deletedAt: string | null;
+    };
+};
+
+export type CreateAppResponse = CreateAppResponses[keyof CreateAppResponses];
+
+export type DeleteAppData = {
+    body?: never;
+    path: {
+        appId: string;
+    };
+    query?: never;
+    url: '/api/apps/{appId}';
+};
+
+export type DeleteAppErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type DeleteAppError = DeleteAppErrors[keyof DeleteAppErrors];
+
+export type DeleteAppResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type DeleteAppResponse = DeleteAppResponses[keyof DeleteAppResponses];
+
+export type GetAppData = {
+    body?: never;
+    path: {
+        appId: string;
+    };
+    query?: never;
+    url: '/api/apps/{appId}';
+};
+
+export type GetAppErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetAppError = GetAppErrors[keyof GetAppErrors];
+
+export type GetAppResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        authorId: string | null;
+        scope: 'personal' | 'team' | 'org';
+        name: string;
+        description: string | null;
+        templateId: string | null;
+        latestVersion: number;
+        createdAt: string;
+        updatedAt: string;
+        deletedAt: string | null;
+    };
+};
+
+export type GetAppResponse = GetAppResponses[keyof GetAppResponses];
+
+export type UpdateAppData = {
+    body: {
+        name?: string;
+        description?: string | null;
+        scope?: 'personal' | 'team' | 'org';
+        html?: string;
+        uiCsp?: {
+            connectDomains?: Array<string>;
+            resourceDomains?: Array<string>;
+            frameDomains?: Array<string>;
+            baseUriDomains?: Array<string>;
+        };
+        uiPermissions?: {
+            camera?: {
+                [key: string]: unknown;
+            };
+            microphone?: {
+                [key: string]: unknown;
+            };
+            geolocation?: {
+                [key: string]: unknown;
+            };
+            clipboardWrite?: {
+                [key: string]: unknown;
+            };
+        };
+        teamIds?: Array<string>;
+    };
+    path: {
+        appId: string;
+    };
+    query?: never;
+    url: '/api/apps/{appId}';
+};
+
+export type UpdateAppErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type UpdateAppError = UpdateAppErrors[keyof UpdateAppErrors];
+
+export type UpdateAppResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        authorId: string | null;
+        scope: 'personal' | 'team' | 'org';
+        name: string;
+        description: string | null;
+        templateId: string | null;
+        latestVersion: number;
+        createdAt: string;
+        updatedAt: string;
+        deletedAt: string | null;
+    };
+};
+
+export type UpdateAppResponse = UpdateAppResponses[keyof UpdateAppResponses];
+
+export type GetAppVersionsData = {
+    body?: never;
+    path: {
+        appId: string;
+    };
+    query?: never;
+    url: '/api/apps/{appId}/versions';
+};
+
+export type GetAppVersionsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetAppVersionsError = GetAppVersionsErrors[keyof GetAppVersionsErrors];
+
+export type GetAppVersionsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        appId: string | null;
+        version: number;
+        html: string;
+        uiCsp: {
+            connectDomains?: Array<string>;
+            resourceDomains?: Array<string>;
+            frameDomains?: Array<string>;
+            baseUriDomains?: Array<string>;
+        } | null;
+        uiPermissions: {
+            camera?: {
+                [key: string]: never;
+            };
+            microphone?: {
+                [key: string]: never;
+            };
+            geolocation?: {
+                [key: string]: never;
+            };
+            clipboardWrite?: {
+                [key: string]: never;
+            };
+        } | null;
+        contentHash: string;
+        createdAt: string;
+    }>;
+};
+
+export type GetAppVersionsResponse = GetAppVersionsResponses[keyof GetAppVersionsResponses];
+
+export type GetAppVersionData = {
+    body?: never;
+    path: {
+        appId: string;
+        version: number;
+    };
+    query?: never;
+    url: '/api/apps/{appId}/versions/{version}';
+};
+
+export type GetAppVersionErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetAppVersionError = GetAppVersionErrors[keyof GetAppVersionErrors];
+
+export type GetAppVersionResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        appId: string | null;
+        version: number;
+        html: string;
+        uiCsp: {
+            connectDomains?: Array<string>;
+            resourceDomains?: Array<string>;
+            frameDomains?: Array<string>;
+            baseUriDomains?: Array<string>;
+        } | null;
+        uiPermissions: {
+            camera?: {
+                [key: string]: never;
+            };
+            microphone?: {
+                [key: string]: never;
+            };
+            geolocation?: {
+                [key: string]: never;
+            };
+            clipboardWrite?: {
+                [key: string]: never;
+            };
+        } | null;
+        contentHash: string;
+        createdAt: string;
+    };
+};
+
+export type GetAppVersionResponse = GetAppVersionResponses[keyof GetAppVersionResponses];
+
+export type GetAppToolsData = {
+    body?: never;
+    path: {
+        appId: string;
+    };
+    query?: never;
+    url: '/api/apps/{appId}/tools';
+};
+
+export type GetAppToolsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetAppToolsError = GetAppToolsErrors[keyof GetAppToolsErrors];
+
+export type GetAppToolsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        agentId: string | null;
+        catalogId: string | null;
+        delegateToAgentId: string | null;
+        name: string;
+        /**
+         *
+         * https://github.com/openai/openai-node/blob/master/src/resources/shared.ts#L217
+         *
+         * The parameters the functions accepts, described as a JSON Schema object. See the
+         * [guide](https://platform.openai.com/docs/guides/function-calling) for examples,
+         * and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for
+         * documentation about the format.
+         *
+         * Omitting parameters defines a function with an empty parameter list.
+         *
+         */
+        parameters?: {
+            [key: string]: unknown;
+        };
+        description: string | null;
+        meta: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown> | null;
+        clonedPendingDiscovery: boolean;
+        policiesAutoConfiguredAt: string | null;
+        policiesAutoConfiguringStartedAt: string | null;
+        policiesAutoConfiguredReasoning: string | null;
+        policiesAutoConfiguredModel: string | null;
+        createdAt: string;
+        updatedAt: string;
+    }>;
+};
+
+export type GetAppToolsResponse = GetAppToolsResponses[keyof GetAppToolsResponses];
+
+export type UnassignToolFromAppData = {
+    body?: never;
+    path: {
+        appId: string;
+        toolId: string;
+    };
+    query?: never;
+    url: '/api/apps/{appId}/tools/{toolId}';
+};
+
+export type UnassignToolFromAppErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type UnassignToolFromAppError = UnassignToolFromAppErrors[keyof UnassignToolFromAppErrors];
+
+export type UnassignToolFromAppResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type UnassignToolFromAppResponse = UnassignToolFromAppResponses[keyof UnassignToolFromAppResponses];
+
+export type AssignToolToAppData = {
+    body: {
+        mcpServerId?: string | null;
+        credentialResolutionMode?: 'static' | 'dynamic' | 'enterprise_managed';
+    };
+    path: {
+        appId: string;
+        toolId: string;
+    };
+    query?: never;
+    url: '/api/apps/{appId}/tools/{toolId}';
+};
+
+export type AssignToolToAppErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type AssignToolToAppError = AssignToolToAppErrors[keyof AssignToolToAppErrors];
+
+export type AssignToolToAppResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type AssignToolToAppResponse = AssignToolToAppResponses[keyof AssignToolToAppResponses];
+
 export type GetAuditLogsData = {
     body?: never;
     path?: never;
@@ -38212,6 +39251,24 @@ export type UpdateLlmProviderApiKeyResponses = {
 
 export type UpdateLlmProviderApiKeyResponse = UpdateLlmProviderApiKeyResponses[keyof UpdateLlmProviderApiKeyResponses];
 
+export type McpAppProxyPostData = {
+    body: {
+        [key: string]: unknown;
+    };
+    path: {
+        appId: string;
+    };
+    query?: never;
+    url: '/api/mcp/app/{appId}';
+};
+
+export type McpAppProxyPostResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
 export type McpGatewayGetData = {
     body?: never;
     path: {
@@ -40899,7 +41956,9 @@ export type GetMcpToolCallsResponses = {
     200: {
         data: Array<{
             id: string;
+            ownerType: string;
             agentId: string | null;
+            appId: string | null;
             mcpServerName: string;
             method: string;
             /**
@@ -41011,7 +42070,9 @@ export type GetMcpToolCallResponses = {
      */
     200: {
         id: string;
+        ownerType: string;
         agentId: string | null;
+        appId: string | null;
         mcpServerName: string;
         method: string;
         /**

@@ -25,6 +25,7 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import { UserSearchableSelect } from "@/components/user-searchable-select";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import config from "@/lib/config/config";
 import { useMembersPaginated } from "@/lib/member.query";
 import { useActiveOrganization } from "@/lib/organization.query";
@@ -79,11 +80,15 @@ export function TeamManagementDialog(props: TeamManagementDialogProps) {
   const TeamManagementExternalSyncSection =
     useTeamManagementExternalSyncSection();
   const { data: tokensData } = useTokens({ enabled: open && mode === "edit" });
+  const { data: canUpdateTeams = false } = useHasPermissions({
+    team: ["update"],
+  });
   const teamToken = tokensData?.tokens.find(
     (token) => token.team?.id === team?.id,
   );
   const navItems = mode === "create" ? createNavItems : editNavItems;
   const title = mode === "create" ? "Create Team" : "Edit Team";
+  const canEditDetails = mode === "create" || canUpdateTeams;
 
   useEffect(() => {
     if (!open) return;
@@ -169,7 +174,7 @@ export function TeamManagementDialog(props: TeamManagementDialogProps) {
           >
             Cancel
           </Button>
-          {activeSection === "team" ? (
+          {activeSection === "team" && canEditDetails ? (
             <Button type="submit" disabled={saveTeam.isPending}>
               {saveTeam.isPending
                 ? mode === "create" && !team
@@ -196,6 +201,7 @@ export function TeamManagementDialog(props: TeamManagementDialogProps) {
           description={description}
           onNameChange={setName}
           onDescriptionChange={setDescription}
+          readOnlyDetails={!canEditDetails}
         />
       )}
       {activeSection === "token" && mode === "edit" && (
@@ -216,6 +222,7 @@ function TeamSection(props: {
   description: string;
   onNameChange: (value: string) => void;
   onDescriptionChange: (value: string) => void;
+  readOnlyDetails: boolean;
 }) {
   return (
     <div className="space-y-6">
@@ -226,6 +233,7 @@ function TeamSection(props: {
             id="team-name"
             value={props.name}
             onChange={(event) => props.onNameChange(event.target.value)}
+            disabled={props.readOnlyDetails}
           />
         </div>
         <div className="space-y-2">
@@ -234,6 +242,7 @@ function TeamSection(props: {
             id="team-description"
             value={props.description}
             onChange={(event) => props.onDescriptionChange(event.target.value)}
+            disabled={props.readOnlyDetails}
           />
         </div>
       </div>

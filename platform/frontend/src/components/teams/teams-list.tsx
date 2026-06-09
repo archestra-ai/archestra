@@ -18,6 +18,7 @@ import {
 } from "@/components/table-row-actions";
 import { DataTable } from "@/components/ui/data-table";
 import { PermissionButton } from "@/components/ui/permission-button";
+import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import { useTeams } from "@/lib/teams/team.query";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
@@ -38,6 +39,11 @@ export function TeamsList() {
   const search = searchParams.get("search") || "";
 
   const { data: teams, isLoading } = useTeams();
+  const { data: session } = useSession();
+  const { data: canUpdateTeams = false } = useHasPermissions({
+    team: ["update"],
+  });
+  const currentUserId = session?.user.id;
 
   const deleteMutation = useMutation({
     mutationFn: async (teamId: string) => {
@@ -140,11 +146,17 @@ export function TeamsList() {
       enableSorting: false,
       cell: ({ row }) => {
         const team = row.original;
+        const isTeamAdmin = team.members?.some(
+          (member) =>
+            member.userId === currentUserId && member.role === "admin",
+        );
+        const canEditTeam = canUpdateTeams || isTeamAdmin;
         const actions: TableRowAction[] = [
           {
             icon: <Pencil className="h-4 w-4" />,
             label: "Edit",
-            permissions: { team: ["update"] } as const,
+            disabled: !canEditTeam,
+            disabledTooltip: "You must be a team admin to manage this team",
             testId: `${E2eTestId.ManageMembersButton}-${team.name}`,
             onClick: () => {
               setSelectedTeam(team);

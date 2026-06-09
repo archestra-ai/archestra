@@ -158,26 +158,20 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectTeamSchema),
       },
     },
-    async ({ params: { id }, body, organizationId, user, headers }, reply) => {
+    async ({ params: { id }, body, organizationId, headers }, reply) => {
       // Verify the team exists and belongs to the user's organization
       const existingTeam = await TeamModel.findById(id);
       if (!existingTeam || existingTeam.organizationId !== organizationId) {
         throw new ApiError(404, "Team not found");
       }
 
-      const { success: canManageAllTeams } = await hasPermission(
-        { team: ["create"] },
+      const { success: canUpdateTeams } = await hasPermission(
+        { team: ["update"] },
         headers,
       );
 
-      if (!canManageAllTeams) {
-        const isTeamAdmin = await TeamModel.isUserTeamAdmin(id, user.id);
-        if (!isTeamAdmin) {
-          throw new ApiError(
-            403,
-            "You must be a team admin to update this team",
-          );
-        }
+      if (!canUpdateTeams) {
+        throw new ApiError(403, "You are not authorized to update this team");
       }
 
       const team = await TeamModel.update(id, body);

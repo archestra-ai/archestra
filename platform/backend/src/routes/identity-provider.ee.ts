@@ -8,6 +8,7 @@ import { IDENTITY_PROVIDERS_API_PREFIX } from "@/constants";
 import logger from "@/logging";
 import AccountModel from "@/models/account";
 import IdentityProviderModel from "@/models/identity-provider.ee";
+import { resolveSessionExternalIdpToken } from "@/services/identity-providers/session-token";
 import {
   ApiError,
   constructResponseSchema,
@@ -84,6 +85,43 @@ const identityProviderRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async ({ user }, reply) => {
       const url = await getIdpLogoutUrl(user.id);
       return reply.send({ url });
+    },
+  );
+
+  fastify.get(
+    `${IDENTITY_PROVIDERS_API_PREFIX}/:id/link-status`,
+    {
+      schema: {
+        operationId: RouteId.GetIdentityProviderLinkStatus,
+        description:
+          "Get whether the current user has a usable token for this identity provider",
+        tags: ["Identity Providers"],
+        params: z.object({
+          id: z.string(),
+        }),
+        response: constructResponseSchema(
+          z.object({
+            providerId: z.string(),
+            connected: z.boolean(),
+          }),
+        ),
+      },
+    },
+    async ({ params: { id }, organizationId, user }, reply) => {
+      const provider = await IdentityProviderModel.findById(id, organizationId);
+      if (!provider) {
+        throw new ApiError(404, "Identity provider not found");
+      }
+
+      const token = await resolveSessionExternalIdpToken({
+        identityProviderId: provider.id,
+        userId: user.id,
+      });
+
+      return reply.send({
+        providerId: provider.providerId,
+        connected: token !== null,
+      });
     },
   );
 

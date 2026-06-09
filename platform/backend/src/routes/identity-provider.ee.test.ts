@@ -489,6 +489,56 @@ describe("identity provider routes", () => {
     });
   });
 
+  describe("GET /api/identity-providers/:id/link-status", () => {
+    test("returns whether the current user has a usable provider token", async ({
+      makeAccount,
+      makeIdentityProvider,
+    }) => {
+      const idp = await makeIdentityProvider(organizationId, {
+        providerId: "linked-provider",
+        oidcConfig: {
+          clientId: "test-client",
+          clientSecret: "test-secret",
+          issuer: "https://idp.example.com",
+          pkce: false,
+          discoveryEndpoint:
+            "https://idp.example.com/.well-known/openid-configuration",
+        },
+      });
+
+      let response = await app.inject({
+        method: "GET",
+        url: `/api/identity-providers/${idp.id}/link-status`,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({
+        providerId: "linked-provider",
+        connected: false,
+      });
+
+      await makeAccount(user.id, {
+        providerId: "linked-provider",
+        idToken: createMockIdToken({
+          sub: "user-subject",
+          email: "admin@example.com",
+          exp: Math.floor(Date.now() / 1000) + 3600,
+        }),
+      });
+
+      response = await app.inject({
+        method: "GET",
+        url: `/api/identity-providers/${idp.id}/link-status`,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({
+        providerId: "linked-provider",
+        connected: true,
+      });
+    });
+  });
+
   describe("GET /api/identity-providers/:id/latest-id-token-claims", () => {
     test("returns decoded claims for the current user's latest account", async ({
       makeAccount,

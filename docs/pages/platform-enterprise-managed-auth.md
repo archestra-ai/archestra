@@ -4,7 +4,7 @@ category: Administration
 subcategory: Identity Providers
 description: "Per-user identity for downstream MCP tool calls — OBO, ID-JAG, Cross-App Access, and RFC 8693 token exchange"
 order: 4
-lastUpdated: 2026-05-07
+lastUpdated: 2026-06-09
 ---
 
 <!--
@@ -77,6 +77,8 @@ The IdP used for Archestra sign-in does not have to be the same IdP used for a d
 Configure the downstream IdP in **Settings > Identity Providers**, then disable **Show on sign-in page**. The provider remains usable for account linking and Enterprise-Managed Auth, but it will not appear as a primary SSO option on the login screen.
 
 For this pattern to work, each user needs a downstream IdP session at least once so Archestra has a usable token for that IdP. Users do not need to find or configure this manually: if a tool call needs that token and it is missing or expired, Archestra returns an authentication-required tool result with a direct SSO link for the downstream IdP. After the user completes that SSO flow, Archestra links the downstream IdP account to the Archestra user who started the tool call, restores the original browser session, and sends the user back to the same chat so they can retry.
+
+The same linked-IdP check also runs during MCP installation when Archestra needs an exchanged user token to discover tools from a protected MCP server. The installer is redirected to the configured downstream IdP first, then returned to continue the install.
 
 The downstream IdP email does not have to match the primary SSO email. The link is scoped to a short-lived request created from the active Archestra session, not to email matching. Normal SSO sign-in still follows the deployment's account-linking rules.
 

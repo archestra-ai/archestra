@@ -65,12 +65,16 @@ class AppDataModel {
 
     return await withDbTransaction(async (tx) => {
       // Serialize concurrent writes for this app so the entry-count cap holds
-      // exactly (the existence + count read below would otherwise race).
-      await tx
+      // exactly (the existence + count read below would otherwise race). Also
+      // surfaces a stale/unknown appId as a clean error rather than an FK fault.
+      const [appRow] = await tx
         .select({ id: schema.appsTable.id })
         .from(schema.appsTable)
         .where(eq(schema.appsTable.id, appId))
         .for("update");
+      if (!appRow) {
+        throw new ApiError(404, "app not found");
+      }
 
       const [existing] = await tx
         .select({ id: schema.appDataTable.id })

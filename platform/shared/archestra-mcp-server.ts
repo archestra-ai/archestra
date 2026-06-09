@@ -118,6 +118,16 @@ export const TOOL_UPDATE_SKILL_SHORT_NAME = "update_skill";
 export const TOOL_RUN_COMMAND_SHORT_NAME = "run_command";
 export const TOOL_DOWNLOAD_FILE_SHORT_NAME = "download_file";
 export const TOOL_UPLOAD_FILE_SHORT_NAME = "upload_file";
+// MCP Apps — authoring/management (chat) + per-app data store (app runtime).
+export const TOOL_CREATE_APP_SHORT_NAME = "create_app";
+export const TOOL_LIST_APPS_SHORT_NAME = "list_apps";
+export const TOOL_GET_APP_SHORT_NAME = "get_app";
+export const TOOL_UPDATE_APP_SHORT_NAME = "update_app";
+export const TOOL_DELETE_APP_SHORT_NAME = "delete_app";
+export const TOOL_APP_DATA_GET_SHORT_NAME = "app_data_get";
+export const TOOL_APP_DATA_SET_SHORT_NAME = "app_data_set";
+export const TOOL_APP_DATA_LIST_SHORT_NAME = "app_data_list";
+export const TOOL_APP_DATA_DELETE_SHORT_NAME = "app_data_delete";
 
 export const ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_WHOAMI_SHORT_NAME,
@@ -191,6 +201,15 @@ export const ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_RUN_COMMAND_SHORT_NAME,
   TOOL_DOWNLOAD_FILE_SHORT_NAME,
   TOOL_UPLOAD_FILE_SHORT_NAME,
+  TOOL_CREATE_APP_SHORT_NAME,
+  TOOL_LIST_APPS_SHORT_NAME,
+  TOOL_GET_APP_SHORT_NAME,
+  TOOL_UPDATE_APP_SHORT_NAME,
+  TOOL_DELETE_APP_SHORT_NAME,
+  TOOL_APP_DATA_GET_SHORT_NAME,
+  TOOL_APP_DATA_SET_SHORT_NAME,
+  TOOL_APP_DATA_LIST_SHORT_NAME,
+  TOOL_APP_DATA_DELETE_SHORT_NAME,
 ] as const;
 
 export type ArchestraToolShortName =

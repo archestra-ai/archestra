@@ -4,8 +4,6 @@ import {
   ADMIN_ROLE_NAME,
   archestraApiSdk,
   type archestraApiTypes,
-  DocsPage,
-  getDocsUrl,
   MEMBER_ROLE_NAME,
 } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -14,8 +12,6 @@ import {
   Check,
   Copy,
   Key,
-  Link2,
-  Plus,
   RefreshCw,
   Trash2,
   Users,
@@ -23,7 +19,6 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { ExternalDocsLink } from "@/components/external-docs-link";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -54,10 +49,16 @@ import { EnterpriseLicenseRequired } from "../enterprise-license-required";
 
 type Team = archestraApiTypes.GetTeamsResponses["200"]["data"][number];
 type TeamMember = archestraApiTypes.GetTeamMembersResponses["200"][number];
-type ExternalGroup =
-  archestraApiTypes.GetTeamExternalGroupsResponses["200"][number];
-type TeamDialogSection = "details" | "members" | "token" | "external-groups";
+type TeamDialogSection = "team" | "token" | "external-groups";
 type TeamMemberRole = typeof ADMIN_ROLE_NAME | typeof MEMBER_ROLE_NAME;
+
+const { TeamManagementExternalSyncSection } = config.enterpriseFeatures.core
+  ? // biome-ignore lint/style/noRestrictedImports: conditional ee component with team sync
+    await import("./team-management-external-sync.ee")
+  : {
+      TeamManagementExternalSyncSection:
+        TeamManagementExternalSyncSectionUnavailable,
+    };
 
 interface TeamManagementDialogProps {
   open: boolean;
@@ -66,8 +67,7 @@ interface TeamManagementDialogProps {
 }
 
 const navItems = [
-  { id: "details", label: "Details" },
-  { id: "members", label: "Members" },
+  { id: "team", label: "Team" },
   { id: "token", label: "MCP/A2A Gateway Token" },
   { id: "external-groups", label: "External Group Sync" },
 ] satisfies Array<{ id: TeamDialogSection; label: string }>;
@@ -78,8 +78,7 @@ export function TeamManagementDialog({
   team,
 }: TeamManagementDialogProps) {
   const queryClient = useQueryClient();
-  const [activeSection, setActiveSection] =
-    useState<TeamDialogSection>("details");
+  const [activeSection, setActiveSection] = useState<TeamDialogSection>("team");
   const [name, setName] = useState(team.name);
   const [description, setDescription] = useState(team.description ?? "");
   const { data: tokensData } = useTokens({ enabled: open });
@@ -89,7 +88,7 @@ export function TeamManagementDialog({
 
   useEffect(() => {
     if (!open) return;
-    setActiveSection("details");
+    setActiveSection("team");
     setName(team.name);
     setDescription(team.description ?? "");
   }, [open, team]);
@@ -128,7 +127,7 @@ export function TeamManagementDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="max-w-6xl h-[85vh] flex flex-row p-0 gap-0 overflow-hidden"
+        className="max-w-5xl h-[85vh] flex flex-row p-0 gap-0 overflow-hidden"
         showCloseButton={false}
       >
         <DialogTitle className="sr-only">Edit Team</DialogTitle>
@@ -136,7 +135,7 @@ export function TeamManagementDialog({
           Manage team details, members, token access, and external group sync.
         </DialogDescription>
         <DialogForm className="contents" onSubmit={handleSubmit}>
-          <nav className="w-[240px] border-r flex flex-col shrink-0">
+          <nav className="w-[220px] border-r flex flex-col shrink-0">
             <div className="flex min-h-[72px] items-center border-b px-4 py-4">
               <div className="flex min-w-0 items-center gap-2.5">
                 <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border bg-muted">
@@ -187,21 +186,20 @@ export function TeamManagementDialog({
               </Button>
             </div>
 
-            <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-6 py-6">
-              {activeSection === "details" && (
-                <DetailsSection
+            <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-5 py-5">
+              {activeSection === "team" && (
+                <TeamSection
+                  open={open}
+                  team={team}
                   name={name}
                   description={description}
                   onNameChange={setName}
                   onDescriptionChange={setDescription}
                 />
               )}
-              {activeSection === "members" && (
-                <MembersSection open={open} team={team} />
-              )}
               {activeSection === "token" && <TokenSection token={teamToken} />}
               {activeSection === "external-groups" && (
-                <ExternalGroupsSection open={open} team={team} />
+                <TeamManagementExternalSyncSection open={open} team={team} />
               )}
             </div>
 
@@ -213,9 +211,15 @@ export function TeamManagementDialog({
               >
                 Cancel
               </Button>
-              <Button type="submit" disabled={updateTeam.isPending}>
-                {updateTeam.isPending ? "Saving..." : "Save Changes"}
-              </Button>
+              {activeSection === "team" ? (
+                <Button type="submit" disabled={updateTeam.isPending}>
+                  {updateTeam.isPending ? "Saving..." : "Save Changes"}
+                </Button>
+              ) : (
+                <Button type="button" onClick={() => onOpenChange(false)}>
+                  Close
+                </Button>
+              )}
             </DialogStickyFooter>
           </div>
         </DialogForm>
@@ -224,30 +228,55 @@ export function TeamManagementDialog({
   );
 }
 
-function DetailsSection(props: {
+function TeamSection(props: {
+  open: boolean;
+  team: Team;
   name: string;
   description: string;
   onNameChange: (value: string) => void;
   onDescriptionChange: (value: string) => void;
 }) {
   return (
-    <div className="space-y-4 max-w-2xl">
-      <div className="space-y-2">
-        <Label htmlFor="team-name">Team Name *</Label>
-        <Input
-          id="team-name"
-          value={props.name}
-          onChange={(event) => props.onNameChange(event.target.value)}
-        />
-      </div>
-      <div className="space-y-2">
-        <Label htmlFor="team-description">Description</Label>
-        <Textarea
-          id="team-description"
-          value={props.description}
-          onChange={(event) => props.onDescriptionChange(event.target.value)}
-        />
-      </div>
+    <div className="space-y-8">
+      <section className="space-y-4">
+        <div>
+          <h3 className="text-sm font-semibold">Details</h3>
+          <p className="text-sm text-muted-foreground">
+            Update the team name and description shown across the workspace.
+          </p>
+        </div>
+        <div className="space-y-4 max-w-3xl">
+          <div className="space-y-2">
+            <Label htmlFor="team-name">Team Name *</Label>
+            <Input
+              id="team-name"
+              value={props.name}
+              onChange={(event) => props.onNameChange(event.target.value)}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="team-description">Description</Label>
+            <Textarea
+              id="team-description"
+              value={props.description}
+              onChange={(event) =>
+                props.onDescriptionChange(event.target.value)
+              }
+            />
+          </div>
+        </div>
+      </section>
+
+      <section className="space-y-4">
+        <div>
+          <h3 className="text-sm font-semibold">Members</h3>
+          <p className="text-sm text-muted-foreground">
+            Add users to this team and choose whether they are team admins or
+            members.
+          </p>
+        </div>
+        <MembersSection open={props.open} team={props.team} />
+      </section>
     </div>
   );
 }
@@ -351,7 +380,7 @@ function MembersSection({ open, team }: { open: boolean; team: Team }) {
 
   return (
     <div className="space-y-6">
-      <div className="space-y-2 max-w-2xl">
+      <div className="space-y-2 max-w-3xl">
         <Label>Add User</Label>
         <UserSearchableSelect
           value=""
@@ -511,7 +540,7 @@ function TokenSection({ token }: { token?: TeamToken }) {
   };
 
   return (
-    <div className="space-y-4 max-w-2xl">
+    <div className="space-y-4 max-w-3xl">
       <div className="space-y-2">
         <Label>Token</Label>
         <div className="flex gap-2">
@@ -582,149 +611,6 @@ function TokenSection({ token }: { token?: TeamToken }) {
   );
 }
 
-function ExternalGroupsSection({ open, team }: { open: boolean; team: Team }) {
-  const queryClient = useQueryClient();
-  const [newGroupIdentifier, setNewGroupIdentifier] = useState("");
-
-  const { data: externalGroups = [], isLoading } = useQuery({
-    queryKey: ["teamExternalGroups", team.id],
-    queryFn: async () => {
-      const { data } = await archestraApiSdk.getTeamExternalGroups({
-        path: { id: team.id },
-      });
-      return data ?? [];
-    },
-    enabled: open && config.enterpriseFeatures.core,
-  });
-
-  const addMutation = useMutation({
-    mutationFn: async (groupIdentifier: string) => {
-      const { error } = await archestraApiSdk.addTeamExternalGroup({
-        path: { id: team.id },
-        body: { groupIdentifier },
-      });
-      if (error) throw new Error(error.error.message);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({
-        queryKey: ["teamExternalGroups", team.id],
-      });
-      setNewGroupIdentifier("");
-      toast.success("External group mapping added");
-    },
-    onError: (error: Error) => {
-      toast.error(error.message || "Failed to add external group mapping");
-    },
-  });
-
-  const removeMutation = useMutation({
-    mutationFn: async (groupId: string) => {
-      const { error } = await archestraApiSdk.removeTeamExternalGroup({
-        path: { id: team.id, groupId },
-      });
-      if (error) throw new Error(error.error.message);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({
-        queryKey: ["teamExternalGroups", team.id],
-      });
-      toast.success("External group mapping removed");
-    },
-    onError: (error: Error) => {
-      toast.error(error.message || "Failed to remove external group mapping");
-    },
-  });
-
-  if (!config.enterpriseFeatures.core) {
-    return <EnterpriseLicenseRequired featureName="Team Sync" />;
-  }
-
-  const handleAddGroup = () => {
-    const trimmed = newGroupIdentifier.trim();
-    if (!trimmed) {
-      toast.error("Group identifier is required");
-      return;
-    }
-    addMutation.mutate(trimmed);
-  };
-
-  return (
-    <div className="space-y-6">
-      <p className="text-sm text-muted-foreground">
-        Map SSO group identifiers to "{team.name}". Matching users are added to
-        this team when they sign in.{" "}
-        <ExternalDocsLink href={getDocsUrl(DocsPage.PlatformSsoTeamSync)}>
-          Learn More
-        </ExternalDocsLink>
-      </p>
-      <div className="space-y-2 max-w-2xl">
-        <Label>Add External Group Mapping</Label>
-        <div className="flex gap-2">
-          <Input
-            placeholder="e.g., archestra-admins, cn=engineering,ou=groups,dc=example,dc=com"
-            value={newGroupIdentifier}
-            onChange={(event) => setNewGroupIdentifier(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") {
-                event.preventDefault();
-                handleAddGroup();
-              }
-            }}
-          />
-          <Button
-            type="button"
-            onClick={handleAddGroup}
-            disabled={addMutation.isPending || !newGroupIdentifier.trim()}
-          >
-            <Plus className="h-4 w-4" />
-            Add
-          </Button>
-        </div>
-      </div>
-
-      <div className="space-y-2">
-        <Label>Linked External Groups ({externalGroups.length})</Label>
-        {isLoading ? (
-          <div className="py-4 text-center text-sm text-muted-foreground">
-            Loading...
-          </div>
-        ) : externalGroups.length === 0 ? (
-          <div className="rounded-lg border border-dashed p-4 text-center">
-            <Link2 className="mx-auto mb-2 h-8 w-8 text-muted-foreground" />
-            <p className="text-sm text-muted-foreground">
-              No external groups linked yet.
-            </p>
-          </div>
-        ) : (
-          <div className="space-y-2">
-            {externalGroups.map((group: ExternalGroup) => (
-              <div
-                key={group.id}
-                className="flex items-center justify-between rounded-lg border p-3"
-              >
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-mono truncate">
-                    {group.groupIdentifier}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    Added {new Date(group.createdAt).toLocaleDateString()}
-                  </p>
-                </div>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => removeMutation.mutate(group.id)}
-                  disabled={removeMutation.isPending}
-                >
-                  <Trash2 className="h-4 w-4 text-destructive" />
-                  <span className="sr-only">Remove external group</span>
-                </Button>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  );
+function TeamManagementExternalSyncSectionUnavailable() {
+  return <EnterpriseLicenseRequired featureName="Team Sync" />;
 }

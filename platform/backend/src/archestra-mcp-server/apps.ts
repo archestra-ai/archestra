@@ -6,14 +6,15 @@ import {
   TOOL_UPDATE_APP_SHORT_NAME,
 } from "@archestra/shared";
 import { z } from "zod";
-import { requireScopedModifyPermission } from "@/auth/agent-type-permissions";
-import { userHasPermission } from "@/auth/utils";
 import logger from "@/logging";
-import { AppModel, AppTeamModel, AppVersionModel, TeamModel } from "@/models";
+import { AppModel, AppTeamModel, AppVersionModel } from "@/models";
 import type { VersionPayload } from "@/models/app-version";
+import {
+  assertCallerMayModifyApp,
+  callerIsAppAdmin,
+} from "@/services/apps/app-authorization";
 import { buildValidatedVersionPayload } from "@/services/apps/app-ui-policy";
 import { ApiError } from "@/types";
-import type { AppScope } from "@/types/app";
 import {
   APP_DESCRIPTION_MAX_LENGTH,
   APP_HTML_MAX_BYTES,
@@ -30,7 +31,6 @@ import {
   structuredSuccessResult,
   successResult,
 } from "./helpers";
-import type { ArchestraContext } from "./types";
 
 const htmlField = z
   .string()
@@ -102,54 +102,6 @@ const AppSummaryOutputSchema = z.object({
   scope: AppScopeSchema,
   latestVersion: z.number(),
 });
-
-async function callerIsAppAdmin(context: ArchestraContext): Promise<boolean> {
-  if (!context.userId || !context.organizationId) {
-    return false;
-  }
-  return userHasPermission(
-    context.userId,
-    context.organizationId,
-    "app",
-    "admin",
-  );
-}
-
-/**
- * Write authorization (create/update/delete). Visibility (`findByIdForCaller`)
- * is NOT enough to mutate — an org-scoped app is visible to every member but
- * only an admin may change it. Delegates to the shared 3-tier rule used by
- * agents/skills. Throws `ApiError(403)` when denied. `userId`/`organizationId`
- * must be present (handlers check before calling).
- */
-async function assertCallerMayModifyApp(params: {
-  userId: string;
-  organizationId: string;
-  scope: AppScope;
-  authorId: string | null;
-  resourceTeamIds: string[];
-}): Promise<void> {
-  const [isAdmin, isTeamAdmin, userTeamIds] = await Promise.all([
-    userHasPermission(params.userId, params.organizationId, "app", "admin"),
-    userHasPermission(
-      params.userId,
-      params.organizationId,
-      "app",
-      "team-admin",
-    ),
-    TeamModel.getUserTeamIds(params.userId),
-  ]);
-  requireScopedModifyPermission({
-    isAdmin,
-    isTeamAdmin,
-    scope: params.scope,
-    authorId: params.authorId,
-    resourceTeamIds: params.resourceTeamIds,
-    userTeamIds,
-    userId: params.userId,
-    resourceLabel: "app",
-  });
-}
 
 const registry = defineArchestraTools([
   defineArchestraTool({
@@ -262,7 +214,10 @@ const registry = defineArchestraTools([
         id: args.appId,
         organizationId: context.organizationId,
         userId: context.userId,
-        isAppAdmin: await callerIsAppAdmin(context),
+        isAppAdmin: await callerIsAppAdmin(
+          context.userId,
+          context.organizationId,
+        ),
       });
       if (!app) {
         return errorResult(`No app found with id ${args.appId}.`);
@@ -291,7 +246,10 @@ const registry = defineArchestraTools([
         id: args.appId,
         organizationId: context.organizationId,
         userId: context.userId,
-        isAppAdmin: await callerIsAppAdmin(context),
+        isAppAdmin: await callerIsAppAdmin(
+          context.userId,
+          context.organizationId,
+        ),
       });
       if (!app) {
         return errorResult(`No app found with id ${args.appId}.`);
@@ -367,11 +325,17 @@ const registry = defineArchestraTools([
         }
       }
 
-      const updated = await AppModel.update({
-        id: args.appId,
-        ...(Object.keys(patch).length > 0 ? { patch } : {}),
-        ...(version ? { version } : {}),
-      });
+      let updated: Awaited<ReturnType<typeof AppModel.update>>;
+      try {
+        updated = await AppModel.update({
+          id: args.appId,
+          ...(Object.keys(patch).length > 0 ? { patch } : {}),
+          ...(version ? { version } : {}),
+        });
+      } catch (error) {
+        if (error instanceof ApiError) return errorResult(error.message);
+        throw error;
+      }
       if (!updated) {
         return errorResult(`Failed to update app ${args.appId}.`);
       }
@@ -400,7 +364,10 @@ const registry = defineArchestraTools([
         id: args.appId,
         organizationId: context.organizationId,
         userId: context.userId,
-        isAppAdmin: await callerIsAppAdmin(context),
+        isAppAdmin: await callerIsAppAdmin(
+          context.userId,
+          context.organizationId,
+        ),
       });
       if (!app) {
         return errorResult(`No app found with id ${args.appId}.`);

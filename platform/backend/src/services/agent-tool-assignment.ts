@@ -19,7 +19,7 @@ import type {
   ToolOwnerContext,
 } from "@/types";
 
-type ToolAssignmentError = {
+export type ToolAssignmentError = {
   code: "not_found" | "validation_error";
   error: { message: string; type: string };
 };

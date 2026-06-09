@@ -2,7 +2,9 @@ import { and, count, desc, eq, ilike, inArray, or } from "drizzle-orm";
 import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import { softDelete } from "@/database/soft-delete";
+import { ApiError } from "@/types";
 import type { App, InsertApp } from "@/types/app";
+import { isUniqueConstraintError } from "@/utils/db";
 import AppTeamModel from "./app-team";
 import AppVersionModel, { type VersionPayload } from "./app-version";
 
@@ -166,16 +168,28 @@ class AppModel {
     return await withDbTransaction(async (tx) => {
       let app: App | undefined;
       if (params.patch && Object.keys(params.patch).length > 0) {
-        [app] = await tx
-          .update(schema.appsTable)
-          .set(params.patch)
-          .where(
-            and(
-              eq(schema.appsTable.id, params.id),
-              notDeleted(schema.appsTable),
-            ),
-          )
-          .returning();
+        try {
+          [app] = await tx
+            .update(schema.appsTable)
+            .set(params.patch)
+            .where(
+              and(
+                eq(schema.appsTable.id, params.id),
+                notDeleted(schema.appsTable),
+              ),
+            )
+            .returning();
+        } catch (error) {
+          // A rename into an existing name trips the partial unique index;
+          // surface it as a clean 409 instead of an opaque DB fault.
+          if (isUniqueConstraintError(error)) {
+            throw new ApiError(
+              409,
+              "An app with this name already exists in this scope.",
+            );
+          }
+          throw error;
+        }
       } else {
         // Lock the row so a concurrent version-only update can't read the same
         // head and fork a duplicate (appId, version). The patch branch above

@@ -1,0 +1,305 @@
+import { ADMIN_ROLE_NAME } from "@archestra/shared";
+import Fastify, { type FastifyInstance } from "fastify";
+import {
+  serializerCompiler,
+  validatorCompiler,
+  type ZodTypeProvider,
+} from "fastify-type-provider-zod";
+import config from "@/config";
+import { afterAll, afterEach, beforeAll, describe, expect, test } from "@/test";
+import { ApiError } from "@/types";
+import appRoutes from "./app";
+
+const originalAppsEnabled = config.apps.enabled;
+beforeAll(() => {
+  (config.apps as { enabled: boolean }).enabled = true;
+});
+afterAll(() => {
+  (config.apps as { enabled: boolean }).enabled = originalAppsEnabled;
+});
+
+async function buildApp(
+  userId: string,
+  organizationId: string,
+): Promise<FastifyInstance> {
+  const app = Fastify().withTypeProvider<ZodTypeProvider>();
+  app.setValidatorCompiler(validatorCompiler);
+  app.setSerializerCompiler(serializerCompiler);
+  app.decorateRequest("user");
+  app.decorateRequest("organizationId");
+  app.addHook("preHandler", (request, _reply, done) => {
+    // biome-ignore lint/suspicious/noExplicitAny: test hook sets auth context
+    (request as any).user = { id: userId, email: "t@t.com", name: "T" };
+    // biome-ignore lint/suspicious/noExplicitAny: test hook sets auth context
+    (request as any).organizationId = organizationId;
+    done();
+  });
+  app.setErrorHandler((error, _request, reply) => {
+    if (error instanceof ApiError) {
+      return reply
+        .status(error.statusCode)
+        .send({ error: { message: error.message, type: error.type } });
+    }
+    const err = error as Error & { statusCode?: number };
+    return reply
+      .status(err.statusCode ?? 500)
+      .send({ error: { message: err.message } });
+  });
+  await app.register(appRoutes);
+  return app;
+}
+
+const JSON_HEADERS = { "content-type": "application/json" };
+
+describe("appRoutes /api/apps", () => {
+  let app: FastifyInstance;
+
+  afterEach(async () => {
+    if (app) await app.close();
+  });
+
+  test("the whole surface 404s when the feature is disabled", async ({
+    makeUser,
+    makeOrganization,
+  }) => {
+    const user = await makeUser();
+    const org = await makeOrganization();
+    (config.apps as { enabled: boolean }).enabled = false;
+    app = await buildApp(user.id, org.id);
+    const response = await app.inject({ method: "GET", url: "/api/apps" });
+    (config.apps as { enabled: boolean }).enabled = true;
+    expect(response.statusCode).toBe(404);
+  });
+
+  test("create → get → list → update (forks version) → delete", async ({
+    makeUser,
+    makeOrganization,
+    makeMember,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: ADMIN_ROLE_NAME });
+    app = await buildApp(user.id, org.id);
+
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/apps",
+      headers: JSON_HEADERS,
+      payload: { name: "Dashboard", html: "<h1>v1</h1>", scope: "org" },
+    });
+    expect(created.statusCode).toBe(200);
+    const appId = created.json().id as string;
+    expect(created.json().latestVersion).toBe(1);
+
+    const got = await app.inject({ method: "GET", url: `/api/apps/${appId}` });
+    expect(got.json().name).toBe("Dashboard");
+
+    const listed = await app.inject({ method: "GET", url: "/api/apps" });
+    expect(listed.json().data.map((a: { id: string }) => a.id)).toContain(
+      appId,
+    );
+    expect(listed.json().pagination.total).toBeGreaterThanOrEqual(1);
+
+    const updated = await app.inject({
+      method: "PATCH",
+      url: `/api/apps/${appId}`,
+      headers: JSON_HEADERS,
+      payload: { html: "<h1>v2</h1>" },
+    });
+    expect(updated.json().latestVersion).toBe(2);
+
+    const versions = await app.inject({
+      method: "GET",
+      url: `/api/apps/${appId}/versions`,
+    });
+    expect(versions.json()).toHaveLength(2);
+
+    const deleted = await app.inject({
+      method: "DELETE",
+      url: `/api/apps/${appId}`,
+    });
+    expect(deleted.statusCode).toBe(200);
+    expect(deleted.json().success).toBe(true);
+  });
+
+  test("a plain member cannot create an org-scoped app", async ({
+    makeUser,
+    makeOrganization,
+    makeMember,
+  }) => {
+    const org = await makeOrganization();
+    const member = await makeUser();
+    await makeMember(member.id, org.id, { role: "member" });
+    app = await buildApp(member.id, org.id);
+
+    const personal = await app.inject({
+      method: "POST",
+      url: "/api/apps",
+      headers: JSON_HEADERS,
+      payload: { name: "Mine", html: "<p/>" },
+    });
+    expect(personal.statusCode).toBe(200);
+
+    const orgApp = await app.inject({
+      method: "POST",
+      url: "/api/apps",
+      headers: JSON_HEADERS,
+      payload: { name: "Shared", html: "<p/>", scope: "org" },
+    });
+    expect(orgApp.statusCode).toBe(403);
+  });
+
+  test("renaming into an existing name returns 409", async ({
+    makeUser,
+    makeOrganization,
+    makeMember,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: ADMIN_ROLE_NAME });
+    app = await buildApp(user.id, org.id);
+
+    await app.inject({
+      method: "POST",
+      url: "/api/apps",
+      headers: JSON_HEADERS,
+      payload: { name: "Taken", html: "<p/>", scope: "org" },
+    });
+    const second = await app.inject({
+      method: "POST",
+      url: "/api/apps",
+      headers: JSON_HEADERS,
+      payload: { name: "Other", html: "<p/>", scope: "org" },
+    });
+    const secondId = second.json().id as string;
+
+    const conflict = await app.inject({
+      method: "PATCH",
+      url: `/api/apps/${secondId}`,
+      headers: JSON_HEADERS,
+      payload: { name: "Taken" },
+    });
+    expect(conflict.statusCode).toBe(409);
+  });
+
+  test("create rejects an invalid CSP domain with 400", async ({
+    makeUser,
+    makeOrganization,
+    makeMember,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: ADMIN_ROLE_NAME });
+    app = await buildApp(user.id, org.id);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/apps",
+      headers: JSON_HEADERS,
+      payload: {
+        name: "BadCsp",
+        html: "<p/>",
+        uiCsp: { connectDomains: ["https://evil.example.com"] },
+      },
+    });
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.message).toContain("invalid CSP domain");
+  });
+
+  test("rejects a team id from another organization with 400", async ({
+    makeUser,
+    makeOrganization,
+    makeMember,
+    makeTeam,
+  }) => {
+    const org = await makeOrganization();
+    const otherOrg = await makeOrganization();
+    const admin = await makeUser();
+    await makeMember(admin.id, org.id, { role: ADMIN_ROLE_NAME });
+    const foreignTeam = await makeTeam(otherOrg.id, admin.id, {
+      name: "Foreign",
+    });
+    app = await buildApp(admin.id, org.id);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/apps",
+      headers: JSON_HEADERS,
+      payload: {
+        name: "Team App",
+        html: "<p/>",
+        scope: "team",
+        teamIds: [foreignTeam.id],
+      },
+    });
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.message).toContain("Unknown team");
+  });
+
+  test("rejects changing uiCsp without supplying html (400)", async ({
+    makeUser,
+    makeOrganization,
+    makeMember,
+    makeApp,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: ADMIN_ROLE_NAME });
+    const created = await makeApp({ organizationId: org.id, scope: "org" });
+    app = await buildApp(user.id, org.id);
+
+    const response = await app.inject({
+      method: "PATCH",
+      url: `/api/apps/${created.id}`,
+      headers: JSON_HEADERS,
+      payload: { uiCsp: { connectDomains: ["api.example.com"] } },
+    });
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.message).toContain("requires supplying html");
+  });
+
+  test("assign then unassign a tool", async ({
+    makeUser,
+    makeOrganization,
+    makeMember,
+    makeApp,
+    makeTool,
+    makeInternalMcpCatalog,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: ADMIN_ROLE_NAME });
+    const created = await makeApp({ organizationId: org.id, scope: "org" });
+    const catalog = await makeInternalMcpCatalog({
+      name: "srv",
+      serverUrl: "https://example.com/mcp/",
+    });
+    const tool = await makeTool({
+      name: "srv__do_thing",
+      parameters: {},
+      catalogId: catalog.id,
+    });
+    app = await buildApp(user.id, org.id);
+
+    const assigned = await app.inject({
+      method: "POST",
+      url: `/api/apps/${created.id}/tools/${tool.id}`,
+      headers: JSON_HEADERS,
+      // Late-bound resolution avoids needing a concrete MCP server install.
+      payload: { credentialResolutionMode: "dynamic" },
+    });
+    expect(assigned.statusCode).toBe(200);
+
+    const tools = await app.inject({
+      method: "GET",
+      url: `/api/apps/${created.id}/tools`,
+    });
+    expect(tools.json().map((t: { id: string }) => t.id)).toContain(tool.id);
+
+    const unassigned = await app.inject({
+      method: "DELETE",
+      url: `/api/apps/${created.id}/tools/${tool.id}`,
+    });
+    expect(unassigned.statusCode).toBe(200);
+  });
+});

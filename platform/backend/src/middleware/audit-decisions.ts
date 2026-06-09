@@ -3,6 +3,7 @@ import type { schema } from "@/database";
 import AgentModel from "@/models/agent";
 import AgentToolModel from "@/models/agent-tool";
 import ApiKeyModel from "@/models/api-key";
+import AppModel from "@/models/app";
 import ChatOpsChannelBindingModel from "@/models/chatops-channel-binding";
 import EnvironmentModel from "@/models/environment";
 import GithubAppConfigModel from "@/models/github-app-config";
@@ -280,12 +281,8 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "join: agent × team; parent (agent) audited",
   },
-  // Apps. `appsTable` becomes `audited: true` once `AppModel` exists; its CRUD
-  // routes are not wired yet, so there is nothing to audit at this point.
-  appsTable: {
-    audited: false,
-    reason: "app CRUD not yet wired; flipped to audited once AppModel exists",
-  },
+  // Apps are a resource-shaped table with admin-facing CRUD via /api/apps.
+  appsTable: { audited: true, model: AppModel },
   appVersionsTable: {
     audited: false,
     reason: "child of app; immutable version snapshot, parent audited",

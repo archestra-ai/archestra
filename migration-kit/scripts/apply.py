@@ -421,9 +421,10 @@ def _preview_detail(built: Built) -> str:
                 case "remote":
                     return f"scope={payload.scope}; remote MCP catalog item"
                 case "local":
-                    local = payload.localConfig
-                    command = _scrub_secrets(local.command) if local else "<missing command>"
-                    return f"scope={payload.scope}; local MCP catalog item; command={command}"
+                    # don't echo the launch command here -- a flag can carry a plaintext secret
+                    # that token-shape scrubbing won't catch; the verbose --dry-run shows the
+                    # full (scrubbed) payload for anyone who needs the exact command.
+                    return f"scope={payload.scope}; local MCP catalog item"
         case BuiltInstall():
             team = f"; team_id={built.team_id}" if built.team_id else ""
             return (

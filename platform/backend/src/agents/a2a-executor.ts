@@ -20,7 +20,12 @@ import { createLLMModelForAgent } from "@/clients/llm-client";
 import mcpClient from "@/clients/mcp-client";
 import logger from "@/logging";
 import { AgentModel, McpServerModel, TeamModel, UserModel } from "@/models";
-import { mapProviderError, ProviderError } from "@/routes/chat/errors";
+import {
+  formatUnavailableToolErrorDetails,
+  getUnavailableToolErrorDetails,
+  mapProviderError,
+  ProviderError,
+} from "@/routes/chat/errors";
 import { buildSkillCatalogPrompt } from "@/skills/skill-catalog-prompt";
 import {
   promptNeedsRendering,
@@ -333,6 +338,17 @@ export async function executeA2AMessage(
           responseUiMessage = responseMessage;
         },
         onError: (error) => {
+          // a nonexistent-tool call is recoverable: the SDK already feeds the
+          // tool-error back to the model and continues the loop, so return the
+          // recovery text as the part's errorText instead of killing the run
+          const unavailableToolError = getUnavailableToolErrorDetails(error);
+          if (unavailableToolError) {
+            logger.info(
+              { agentId: agent.id, unavailableToolError },
+              "Returning unavailable tool error as tool-level error in A2A execution",
+            );
+            return formatUnavailableToolErrorDetails(unavailableToolError);
+          }
           logger.error(
             { agentId: agent.id, error },
             "Error stream.toUIMessageStream when parsing A2A execution response",

@@ -22,7 +22,6 @@ import {
   generateId,
   generateText,
   hasToolCall,
-  NoSuchToolError,
   stepCountIs,
   streamText,
   type UIMessage,
@@ -122,7 +121,9 @@ import {
 } from "./context-trimming";
 import {
   EmptyModelResponseError,
+  formatUnavailableToolErrorDetails,
   getActiveTraceContext,
+  getUnavailableToolErrorDetails,
   mapProviderError,
   ProviderError,
   sanitizeChatErrorForFrontend,
@@ -190,17 +191,6 @@ function buildLoadToolsWhenNeededSystemPrompt(): string {
 
   return `Some available tools are not listed upfront and must be discovered. If the visible tools do not fit the task, call \`${searchToolsName}\` to find relevant tools, then call \`${runToolName}\` with a tool name it returned. Only pass \`${runToolName}\` a tool name that \`${searchToolsName}\` returned or that appeared verbatim earlier in this conversation; if you do not have an exact name, call \`${searchToolsName}\` first.`;
 }
-
-const UNAVAILABLE_TOOL_ERROR_MESSAGE =
-  "The requested tool is not available in this chat. Available tools are listed in the details below; use an exact available tool name for the next tool call.";
-
-type UnavailableToolErrorDetails = {
-  type: "unavailable_tool";
-  message: string;
-  requestedToolName: string;
-  availableToolNames: string[];
-  originalErrorMessage: string;
-};
 
 const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.post(
@@ -2791,37 +2781,6 @@ export async function generateConversationTitle(
 // ============================================================================
 // Helper Functions
 // ============================================================================
-
-function getUnavailableToolErrorDetails(
-  error: unknown,
-): UnavailableToolErrorDetails | null {
-  if (!NoSuchToolError.isInstance(error)) {
-    return null;
-  }
-
-  return {
-    type: "unavailable_tool",
-    message: UNAVAILABLE_TOOL_ERROR_MESSAGE,
-    requestedToolName: error.toolName,
-    availableToolNames: error.availableTools ?? [],
-    originalErrorMessage: error.message,
-  };
-}
-
-function formatUnavailableToolErrorDetails(
-  details: UnavailableToolErrorDetails,
-): string {
-  return `${details.message}\n\nDetails:\n${JSON.stringify(
-    {
-      type: details.type,
-      requestedToolName: details.requestedToolName,
-      availableToolNames: details.availableToolNames,
-      originalErrorMessage: details.originalErrorMessage,
-    },
-    null,
-    2,
-  )}`;
-}
 
 /**
  * Regenerate a turn: find the user message being regenerated, delete the stale

@@ -437,11 +437,16 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
       availableTools: ["known_tool"],
     });
     const payload1 = capturedInnerOnError?.(unavailableToolError);
-    // the AI SDK re-invokes onError downstream with `new Error(errorText)`,
-    // wrapping the first return value — that duplicate must replay the payload.
-    const payload2 = capturedInnerOnError?.(new Error(payload1));
+    // the SDK emits a duplicate tool-error part for the same invalid call and
+    // stringifies its error in runToolsTransformation, so the second onError
+    // invocation receives the raw message string — no NoSuchToolError identity
+    const payload2 = capturedInnerOnError?.(unavailableToolError.message);
+    // stream-level error chunks can also re-fire onError with the previous
+    // return value wrapped in `new Error(errorText)` — replay, don't reprocess
+    const payload3 = capturedInnerOnError?.(new Error(payload1));
 
-    expect(payload1).toBe(payload2);
+    expect(payload2).toBe(payload1);
+    expect(payload3).toBe(payload1);
     expect(payload1).toContain(
       "The requested tool is not available in this chat.",
     );
@@ -449,6 +454,50 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
     expect(payload1).toContain('"availableToolNames"');
     expect(payload1).toContain("known_tool");
     expect(payload1).toContain("Model tried to call unavailable tool");
+
+    await new Promise((resolve) => setImmediate(resolve));
+    const persistedErrors =
+      await ConversationChatErrorModel.findByConversation(conversationId);
+    expect(persistedErrors).toHaveLength(0);
+  });
+
+  test("recovers when only the stringified unavailable-tool message reaches onError", async ({
+    expect,
+  }) => {
+    const { default: ConversationChatErrorModel } = await import(
+      "@/models/conversation-chat-error"
+    );
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/chat",
+      payload: {
+        id: conversationId,
+        messages: [
+          {
+            id: "msg-1",
+            role: "user",
+            parts: [{ type: "text", text: "hello" }],
+          },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+    expect(capturedInnerOnError).toBeDefined();
+
+    // regression: this exact shape used to fall through to mapProviderError,
+    // marking the run failed and persisting a fatal chat error
+    const payload = capturedInnerOnError?.(
+      "Model tried to call unavailable tool 'missing_tool'. Available tools: known_tool.",
+    );
+
+    expect(payload).toContain(
+      "The requested tool is not available in this chat.",
+    );
+    expect(payload).toContain('"requestedToolName": "missing_tool"');
+    expect(payload).toContain("known_tool");
 
     await new Promise((resolve) => setImmediate(resolve));
     const persistedErrors =

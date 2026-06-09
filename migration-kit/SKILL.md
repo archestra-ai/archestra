@@ -55,7 +55,9 @@ After reading the inventory, summarize it in product terms before mapping:
 - likely to migrate cleanly;
 - needs user choice or review;
 - report-only/manual follow-up;
-- secret redactions or content warnings.
+- secret redactions or content warnings;
+- telemetry/observability (OTEL env, metrics-shipping hooks/scripts) — report-only: Archestra emits
+  telemetry natively, so guide the user to leverage that rather than migrating it (`entity-mapping.md`).
 
 ## Step 3 — Map and ask
 Using `references/entity-mapping.md`, turn the inventory into `migration_plan.json`:
@@ -86,7 +88,9 @@ Use `AskUserQuestion` only for genuine ambiguities, e.g.:
 - for each `guard` hook, extract its semantics into `user_answers`
   (`tool_name`, `key`, `operator`, `value`, optional `action`/`reason`) per `entity-mapping.md`.
 
-Mark passive hooks and openclaw as `action:"manual"` with a `notes` explanation.
+Mark passive hooks and openclaw as `action:"manual"` with a `notes` explanation. Do the same for
+telemetry (OTEL env, observability hooks/scripts): map it to `manual` and, per `entity-mapping.md`,
+point the user at Archestra's native telemetry instead of migrating it.
 
 Always show the user a concise preview and get explicit approval before applying. Use this shape:
 

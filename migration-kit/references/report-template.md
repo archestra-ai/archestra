@@ -63,6 +63,9 @@ List only the differences that apply to this migration.
 - Passive hooks such as logging, banners, or context injection have no direct Archestra equivalent.
 - Tool policies only enforce when the organization tool policy mode is restrictive.
 - Prompt-only filename or artifact conventions migrated as instructions, not hard runtime checks.
+- Telemetry: any source telemetry (OTEL env, observability hooks/scripts) is reported, not migrated —
+  Archestra emits OTEL spans + Prometheus metrics natively. To keep an existing collector/Grafana,
+  set `ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT` on the instance (see `entity-mapping.md`).
 
 ## Secrets and safety notes
 

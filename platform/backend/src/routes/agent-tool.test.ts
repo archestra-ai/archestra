@@ -8,11 +8,7 @@ import {
   validateAssignment,
 } from "@/services/agent-tool-assignment";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
-import type {
-  InternalMcpCatalog,
-  Tool,
-  User,
-} from "@/types";
+import type { InternalMcpCatalog, Tool, User } from "@/types";
 
 /**
  * Build a minimal Tool object for test maps.

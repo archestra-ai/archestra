@@ -34,6 +34,7 @@ import {
 } from "@/services/identity-providers/oidc";
 import { autoReinstallServer } from "@/services/mcp-reinstall";
 import {
+  type Account,
   AgentScopeSchema,
   ApiError,
   constructResponseSchema,
@@ -879,6 +880,9 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           mcpServerId: mcpServer.id,
           secretId: mcpServer.secretId ?? undefined,
           userId: user.id,
+          // Shared enterprise-managed installs use the installer's linked IdP
+          // token only for discovery. Runtime tool calls exchange each caller's
+          // own linked IdP token.
           allowCurrentUserTokenFallback:
             mcpServer.scope === "personal" ||
             catalogItem.enterpriseManagedConfig !== null,
@@ -1966,10 +1970,7 @@ async function connectAndGetToolsForInstallation(params: {
     const message = identityProvider
       ? `Connect ${identityProvider.providerId} before installing this MCP server.`
       : "Sign in with SSO to link your identity provider before installing this MCP server.";
-    throw new ApiError(
-      401,
-      message,
-    );
+    throw new ApiError(401, message);
   }
 
   try {
@@ -2022,25 +2023,7 @@ async function getCurrentIdentityProviderAccessToken(
 ): Promise<string | undefined> {
   const account =
     await AccountModel.getLatestSsoAccountWithAccessTokenByUserId(userId);
-  if (!account?.accessToken) {
-    return undefined;
-  }
-
-  const isAccessTokenExpired =
-    !!account.accessTokenExpiresAt &&
-    account.accessTokenExpiresAt <= new Date();
-  if (!isAccessTokenExpired) {
-    return account.accessToken;
-  }
-
-  return await refreshLinkedIdentityProviderAccessToken({
-    account: {
-      id: account.id,
-      providerId: account.providerId,
-      refreshToken: account.refreshToken,
-      refreshTokenExpiresAt: account.refreshTokenExpiresAt,
-    },
-  });
+  return account ? ensureFreshSsoAccessToken(account) : undefined;
 }
 
 async function getInstallDiscoveryAccessToken(params: {
@@ -2069,7 +2052,7 @@ async function getInstallDiscoveryAccessToken(params: {
 
   if (!identityProvider) {
     if (fallbackIdentityProviderResult?.account) {
-      return await getCurrentInstallDiscoveryAccessToken(
+      return await ensureFreshSsoAccessToken(
         fallbackIdentityProviderResult.account,
       );
     }
@@ -2155,14 +2138,18 @@ async function getInstallDiscoverySubjectToken(params: {
     return params.account.idToken ?? undefined;
   }
 
-  return getCurrentInstallDiscoveryAccessToken(params.account);
+  return ensureFreshSsoAccessToken(params.account);
 }
 
-async function getCurrentInstallDiscoveryAccessToken(
-  account: NonNullable<
-    Awaited<
-      ReturnType<typeof AccountModel.getLatestSsoAccountWithAccessTokenByUserId>
-    >
+async function ensureFreshSsoAccessToken(
+  account: Pick<
+    Account,
+    | "id"
+    | "providerId"
+    | "accessToken"
+    | "accessTokenExpiresAt"
+    | "refreshToken"
+    | "refreshTokenExpiresAt"
   >,
 ): Promise<string | undefined> {
   if (!account.accessToken) {

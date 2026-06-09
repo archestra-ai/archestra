@@ -335,9 +335,9 @@ export function McpServerCard({
           agentId: agent.id,
           toolId: tool.id,
           resolveAtCallTime: true,
-          credentialResolutionMode: item.enterpriseManagedConfig
-            ? ("enterprise_managed" as const)
-            : ("dynamic" as const),
+          ...(item.enterpriseManagedConfig
+            ? { credentialResolutionMode: "enterprise_managed" as const }
+            : {}),
         }));
         await bulkAssignTools.mutateAsync({ assignments });
       }

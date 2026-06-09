@@ -3506,7 +3506,8 @@ function isAnthropicTextDocumentMimeType(mediaType: string): boolean {
     mediaType === "text/csv" ||
     mediaType === "text/markdown" ||
     mediaType === "application/csv" ||
-    mediaType === "application/vnd.ms-excel"
+    mediaType === "application/vnd.ms-excel" ||
+    mediaType === "application/json"
   );
 }
 

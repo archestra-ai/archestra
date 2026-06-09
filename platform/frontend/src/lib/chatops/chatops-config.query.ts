@@ -41,6 +41,63 @@ export function useUpdateChatOpsConfigInQuickstart() {
   });
 }
 
+export function useConnectNgrok() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (body: archestraApiTypes.ConnectNgrokData["body"]) => {
+      const { data, error } = await archestraApiSdk.connectNgrok({ body });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data ?? null;
+    },
+    onSuccess: (data) => {
+      if (!data?.success) {
+        return;
+      }
+      toast.success(
+        data.domain
+          ? `ngrok tunnel connected at ${data.domain}`
+          : "ngrok tunnel connected",
+      );
+      // Refresh config so the resolved ngrok domain (and setup status) update.
+      queryClient.invalidateQueries({ queryKey: ["config"] });
+    },
+    onError: (error) => {
+      console.error("ngrok connect error:", error);
+      toast.error("Failed to connect ngrok tunnel");
+    },
+  });
+}
+
+export function useDisconnectNgrok() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async () => {
+      const { data, error } = await archestraApiSdk.disconnectNgrok();
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data ?? null;
+    },
+    onSuccess: (data) => {
+      if (!data?.success) {
+        return;
+      }
+      toast.success("ngrok tunnel stopped");
+      queryClient.invalidateQueries({ queryKey: ["config"] });
+    },
+    onError: (error) => {
+      console.error("ngrok disconnect error:", error);
+      toast.error("Failed to stop ngrok tunnel");
+    },
+  });
+}
+
 export function useUpdateSlackChatOpsConfig() {
   const queryClient = useQueryClient();
 

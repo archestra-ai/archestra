@@ -23093,6 +23093,176 @@ export type UpdateChatOpsConfigInQuickstartResponses = {
 
 export type UpdateChatOpsConfigInQuickstartResponse = UpdateChatOpsConfigInQuickstartResponses[keyof UpdateChatOpsConfigInQuickstartResponses];
 
+export type DisconnectNgrokData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/chatops/config/ngrok';
+};
+
+export type DisconnectNgrokErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type DisconnectNgrokError = DisconnectNgrokErrors[keyof DisconnectNgrokErrors];
+
+export type DisconnectNgrokResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type DisconnectNgrokResponse = DisconnectNgrokResponses[keyof DisconnectNgrokResponses];
+
+export type ConnectNgrokData = {
+    body: {
+        authToken: string;
+        domain?: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/chatops/config/ngrok';
+};
+
+export type ConnectNgrokErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ConnectNgrokError = ConnectNgrokErrors[keyof ConnectNgrokErrors];
+
+export type ConnectNgrokResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+        domain: string;
+    };
+};
+
+export type ConnectNgrokResponse = ConnectNgrokResponses[keyof ConnectNgrokResponses];
+
 export type UpdateSlackChatOpsConfigData = {
     body: {
         enabled?: boolean;

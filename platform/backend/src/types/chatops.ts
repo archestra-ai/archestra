@@ -531,3 +531,10 @@ export interface SlackDbConfig {
   connectionMode?: ChatOpsConnectionMode;
   appLevelToken?: string;
 }
+
+/** ngrok tunnel config stored as a DB secret */
+export interface NgrokDbConfig {
+  authToken: string;
+  /** Optional reserved domain for a stable public URL across restarts. */
+  domain: string;
+}

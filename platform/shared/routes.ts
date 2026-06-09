@@ -462,6 +462,8 @@ export const RouteId = {
   CreateChatOpsDmBinding: "createChatOpsDmBinding",
   UpdateChatOpsConfigInQuickstart: "updateChatOpsConfigInQuickstart",
   UpdateSlackChatOpsConfig: "updateSlackChatOpsConfig",
+  ConnectNgrok: "connectNgrok",
+  DisconnectNgrok: "disconnectNgrok",
   RefreshChatOpsChannelDiscovery: "refreshChatOpsChannelDiscovery",
 
   // Knowledge Base Routes

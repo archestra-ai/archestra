@@ -14,6 +14,10 @@ import {
   buildWelcomeMessage,
   isSsoConfigured,
 } from "@/agents/chatops/auto-provision";
+import {
+  isChannelThreadActive,
+  markChannelThreadActive,
+} from "@/agents/chatops/channel-activation";
 import { chatOpsManager } from "@/agents/chatops/chatops-manager";
 import {
   CHATOPS_COMMANDS,
@@ -32,6 +36,7 @@ import {
   OrganizationModel,
   UserModel,
 } from "@/models";
+import { ngrokTunnelManager } from "@/ngrok-tunnel-manager";
 import {
   ApiError,
   type ChatOpsConnectionMode,
@@ -267,6 +272,22 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
             if (!message) {
               // Not a processable message (e.g., system event)
               return;
+            }
+
+            // Team-channel auto-reply gate: in channels the bot stays quiet
+            // until @mentioned, then keeps replying to that thread without
+            // further mentions. Group chats and DMs always reply (no gate).
+            // Runs before sender resolution so we don't do Graph lookups for
+            // the many un-mentioned channel messages the bot now receives.
+            if (context.activity.conversation?.conversationType === "channel") {
+              const threadId = message.threadId ?? message.channelId;
+              if (provider.wasBotMentioned(context.activity)) {
+                await markChannelThreadActive(message.channelId, threadId);
+              } else if (
+                !(await isChannelThreadActive(message.channelId, threadId))
+              ) {
+                return;
+              }
             }
 
             // Attach TurnContext so the provider can send typing indicators
@@ -1254,6 +1275,61 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       await ChatOpsConfigModel.saveMsTeamsConfig(merged);
       await chatOpsManager.reinitialize();
 
+      return reply.send({ success: true });
+    },
+  );
+  /**
+   * Connect an ngrok tunnel so this instance is reachable from the Internet.
+   * Persists the auth token and brings the tunnel up live — no restart needed.
+   */
+  fastify.put(
+    "/api/chatops/config/ngrok",
+    {
+      schema: {
+        operationId: RouteId.ConnectNgrok,
+        description: "Connect an ngrok tunnel for inbound chatops webhooks",
+        tags: ["ChatOps"],
+        body: z.object({
+          authToken: z.string().min(1).max(512),
+          domain: z.string().max(256).optional(),
+        }),
+        response: constructResponseSchema(
+          z.object({ success: z.boolean(), domain: z.string() }),
+        ),
+      },
+    },
+    async (request, reply) => {
+      const { authToken, domain } = request.body;
+
+      let publicDomain: string;
+      try {
+        publicDomain = await ngrokTunnelManager.start({ authToken, domain });
+      } catch (error) {
+        logger.error({ err: error }, "Failed to start ngrok tunnel");
+        throw new ApiError(
+          400,
+          "Could not start the ngrok tunnel — please check your auth token (and reserved domain, if set).",
+        );
+      }
+
+      return reply.send({ success: true, domain: publicDomain });
+    },
+  );
+  /**
+   * Stop the ngrok tunnel and clear its persisted credentials.
+   */
+  fastify.delete(
+    "/api/chatops/config/ngrok",
+    {
+      schema: {
+        operationId: RouteId.DisconnectNgrok,
+        description: "Stop the ngrok tunnel and clear its credentials",
+        tags: ["ChatOps"],
+        response: constructResponseSchema(z.object({ success: z.boolean() })),
+      },
+    },
+    async (_request, reply) => {
+      await ngrokTunnelManager.stop();
       return reply.send({ success: true });
     },
   );

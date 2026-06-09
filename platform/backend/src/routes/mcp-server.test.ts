@@ -1528,22 +1528,16 @@ describe("mcp server inspect route", () => {
     });
     global.fetch = fetchMock as typeof fetch;
 
-    connectAndGetToolsMock
-      .mockRejectedValueOnce(
-        new Error(
-          "Failed to connect to MCP server Protected Resource: Streamable HTTP error: unauthorized",
-        ),
-      )
-      .mockResolvedValueOnce([
-        {
-          name: "read_resource_todos",
-          description: "Read todos",
-          inputSchema: { type: "object", properties: {} },
-          _meta: {
-            archestraResourceUri: "todo://todos",
-          },
+    connectAndGetToolsMock.mockResolvedValueOnce([
+      {
+        name: "read_resource_todos",
+        description: "Read todos",
+        inputSchema: { type: "object", properties: {} },
+        _meta: {
+          archestraResourceUri: "todo://todos",
         },
-      ]);
+      },
+    ]);
 
     const response = await app.inject({
       method: "POST",
@@ -1563,7 +1557,7 @@ describe("mcp server inspect route", () => {
         requestedCredentialType: "id_jag",
       }),
     });
-    expect(connectAndGetToolsMock.mock.calls[1][0]).toMatchObject({
+    expect(connectAndGetToolsMock.mock.calls[0][0]).toMatchObject({
       secrets: { access_token: "mcp-server-access-token" },
     });
 
@@ -1597,6 +1591,7 @@ describe("mcp server inspect route", () => {
   });
 
   test("persists enterprise-managed config on installed MCP servers", async ({
+    makeAccount,
     makeInternalMcpCatalog,
   }) => {
     const catalog = await makeInternalMcpCatalog({
@@ -1618,6 +1613,11 @@ describe("mcp server inspect route", () => {
         inputSchema: { type: "object", properties: {} },
       },
     ]);
+
+    await makeAccount(user.id, {
+      providerId: "session-provider",
+      accessToken: "session-access-token",
+    });
 
     const response = await app.inject({
       method: "POST",

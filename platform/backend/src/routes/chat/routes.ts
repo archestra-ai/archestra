@@ -790,6 +790,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                         inputTokens: usage.inputTokens,
                         outputTokens: usage.outputTokens,
                         totalTokens: usage.totalTokens,
+                        cacheReadTokens: usage.cachedInputTokens,
                       } satisfies TokenUsage,
                     });
                   },
@@ -1147,6 +1148,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                       inputTokens: usage.inputTokens,
                       outputTokens: usage.outputTokens,
                       totalTokens: usage.totalTokens,
+                      cacheReadTokens: usage.cachedInputTokens,
                     } satisfies TokenUsage,
                   });
                 }

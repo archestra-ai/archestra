@@ -1251,6 +1251,26 @@ export const updateChatConversation = <ThrowOnError extends boolean = false>(opt
 });
 
 /**
+ * Toggle per-conversation hook debug mode (admin only). When on, hook runs surface inline as expandable debug chips for admins.
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `chat:update`: Edit chat messages and conversation settings
+ */
+export const setConversationHooksDebug = <ThrowOnError extends boolean = false>(options: Options<SetConversationHooksDebugData, ThrowOnError>) => (options.client ?? client).post<SetConversationHooksDebugResponses, SetConversationHooksDebugErrors, ThrowOnError>({
+    url: '/api/chat/conversations/{id}/hooks-debug',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
  * List files for a conversation: download_file outputs and user attachments (metadata only).
  *
  * Authentication:
@@ -2057,6 +2077,72 @@ export const groqChatCompletionsWithAgent = <ThrowOnError extends boolean = fals
 export const getHealth = <ThrowOnError extends boolean = false>(options?: Options<GetHealthData, ThrowOnError>) => (options?.client ?? client).get<GetHealthResponses, unknown, ThrowOnError>({ url: '/health', ...options });
 
 export const getReady = <ThrowOnError extends boolean = false>(options?: Options<GetReadyData, ThrowOnError>) => (options?.client ?? client).get<GetReadyResponses, GetReadyErrors, ThrowOnError>({ url: '/ready', ...options });
+
+/**
+ * List hook files for an agent
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `agent:read`: View and list agents
+ */
+export const getHooks = <ThrowOnError extends boolean = false>(options: Options<GetHooksData, ThrowOnError>) => (options.client ?? client).get<GetHooksResponses, GetHooksErrors, ThrowOnError>({ url: '/api/hooks', ...options });
+
+/**
+ * Create a new hook file for an agent
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `agent:update`: Modify agent configuration and settings
+ */
+export const createHook = <ThrowOnError extends boolean = false>(options: Options<CreateHookData, ThrowOnError>) => (options.client ?? client).post<CreateHookResponses, CreateHookErrors, ThrowOnError>({
+    url: '/api/hooks',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Delete a hook file
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `agent:update`: Modify agent configuration and settings
+ */
+export const deleteHook = <ThrowOnError extends boolean = false>(options: Options<DeleteHookData, ThrowOnError>) => (options.client ?? client).delete<DeleteHookResponses, DeleteHookErrors, ThrowOnError>({ url: '/api/hooks/{id}', ...options });
+
+/**
+ * Update an existing hook file
+ *
+ * Authentication:
+ *
+ * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
+ *
+ * Authorization:
+ *
+ * `agent:update`: Modify agent configuration and settings
+ */
+export const updateHook = <ThrowOnError extends boolean = false>(options: Options<UpdateHookData, ThrowOnError>) => (options.client ?? client).put<UpdateHookResponses, UpdateHookErrors, ThrowOnError>({
+    url: '/api/hooks/{id}',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
 
 /**
  * Webhook endpoint for incoming email notifications
@@ -5876,92 +5962,6 @@ export const listTeamVaultFolderSecrets = <ThrowOnError extends boolean = false>
  */
 export const getTeamVaultSecretKeys = <ThrowOnError extends boolean = false>(options: Options<GetTeamVaultSecretKeysData, ThrowOnError>) => (options.client ?? client).post<GetTeamVaultSecretKeysResponses, GetTeamVaultSecretKeysErrors, ThrowOnError>({
     url: '/api/teams/{teamId}/vault-folder/secrets/keys',
-    ...options,
-    headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-    }
-});
-
-/**
- * List hook files for an agent
- *
- * Authentication:
- *
- * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
- *
- * Authorization:
- *
- * `agent:read`: View and list agents
- */
-export const getHooks = <ThrowOnError extends boolean = false>(options: Options<GetHooksData, ThrowOnError>) => (options.client ?? client).get<GetHooksResponses, GetHooksErrors, ThrowOnError>({ url: '/api/hooks', ...options });
-
-/**
- * Create a new hook file for an agent
- *
- * Authentication:
- *
- * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
- *
- * Authorization:
- *
- * `agent:update`: Modify agent configuration and settings
- */
-export const createHook = <ThrowOnError extends boolean = false>(options: Options<CreateHookData, ThrowOnError>) => (options.client ?? client).post<CreateHookResponses, CreateHookErrors, ThrowOnError>({
-    url: '/api/hooks',
-    ...options,
-    headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-    }
-});
-
-/**
- * Delete a hook file
- *
- * Authentication:
- *
- * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
- *
- * Authorization:
- *
- * `agent:update`: Modify agent configuration and settings
- */
-export const deleteHook = <ThrowOnError extends boolean = false>(options: Options<DeleteHookData, ThrowOnError>) => (options.client ?? client).delete<DeleteHookResponses, DeleteHookErrors, ThrowOnError>({ url: '/api/hooks/{id}', ...options });
-
-/**
- * Update an existing hook file
- *
- * Authentication:
- *
- * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
- *
- * Authorization:
- *
- * `agent:update`: Modify agent configuration and settings
- */
-export const updateHook = <ThrowOnError extends boolean = false>(options: Options<UpdateHookData, ThrowOnError>) => (options.client ?? client).put<UpdateHookResponses, UpdateHookErrors, ThrowOnError>({
-    url: '/api/hooks/{id}',
-    ...options,
-    headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-    }
-});
-
-/**
- * Toggle per-conversation hook debug mode (admin only). When on, hook runs surface inline as expandable debug chips for admins.
- *
- * Authentication:
- *
- * Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.
- *
- * Authorization:
- *
- * `chat:update`: Edit chat messages and conversation settings
- */
-export const setConversationHooksDebug = <ThrowOnError extends boolean = false>(options: Options<SetConversationHooksDebugData, ThrowOnError>) => (options.client ?? client).post<SetConversationHooksDebugResponses, SetConversationHooksDebugErrors, ThrowOnError>({
-    url: '/api/chat/conversations/{id}/hooks-debug',
     ...options,
     headers: {
         'Content-Type': 'application/json',

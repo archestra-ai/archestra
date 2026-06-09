@@ -111,6 +111,12 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async ({ body, user, organizationId }, reply) => {
       const scope = body.scope ?? "personal";
       const teamIds = await resolveOrgTeamIds(body.teamIds, organizationId);
+      if (scope === "team" && teamIds.length === 0) {
+        throw new ApiError(
+          400,
+          "A team-scoped app requires at least one teamId.",
+        );
+      }
       await assertCallerMayModifyApp({
         userId: user.id,
         organizationId,
@@ -214,6 +220,13 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // team admin must not redirect an app to teams they don't administer, even
       // with the scope unchanged.
       const destScope = body.scope ?? app.scope;
+      const effectiveTeamIds = nextTeamIds ?? resourceTeamIds;
+      if (destScope === "team" && effectiveTeamIds.length === 0) {
+        throw new ApiError(
+          400,
+          "A team-scoped app requires at least one teamId.",
+        );
+      }
       const reScoping = body.scope !== undefined && body.scope !== app.scope;
       if (reScoping || nextTeamIds !== undefined) {
         await assertCallerMayModifyApp({

@@ -206,6 +206,73 @@ describe("appRoutes /api/apps", () => {
     expect(response.json().error.message).toContain("invalid CSP domain");
   });
 
+  test("a user cannot GET an app belonging to another organization", async ({
+    makeUser,
+    makeOrganization,
+    makeMember,
+    makeApp,
+  }) => {
+    const orgA = await makeOrganization();
+    const orgB = await makeOrganization();
+    const appInA = await makeApp({ organizationId: orgA.id, scope: "org" });
+    const intruder = await makeUser();
+    await makeMember(intruder.id, orgB.id, { role: ADMIN_ROLE_NAME });
+    app = await buildApp(intruder.id, orgB.id);
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/apps/${appInA.id}`,
+    });
+    expect(response.statusCode).toBe(404);
+  });
+
+  test("rejects a team-scoped app with no teamIds (400)", async ({
+    makeUser,
+    makeOrganization,
+    makeMember,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: ADMIN_ROLE_NAME });
+    app = await buildApp(user.id, org.id);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/apps",
+      headers: JSON_HEADERS,
+      payload: { name: "Teamless", html: "<p/>", scope: "team" },
+    });
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.message).toContain("at least one teamId");
+  });
+
+  test("creates a team-scoped app with a valid team", async ({
+    makeUser,
+    makeOrganization,
+    makeMember,
+    makeTeam,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: ADMIN_ROLE_NAME });
+    const team = await makeTeam(org.id, user.id, { name: "Squad" });
+    app = await buildApp(user.id, org.id);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/apps",
+      headers: JSON_HEADERS,
+      payload: {
+        name: "Team App",
+        html: "<p/>",
+        scope: "team",
+        teamIds: [team.id],
+      },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json().scope).toBe("team");
+  });
+
   test("rejects a team id from another organization with 400", async ({
     makeUser,
     makeOrganization,

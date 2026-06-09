@@ -117,9 +117,17 @@ const registry = defineArchestraTools([
       }
 
       const scope = args.scope ?? "personal";
+      // Team scope needs explicit team assignment, which these chat tools can't
+      // express — without it a team app would have zero team rows and be
+      // unreachable. Team apps are created via the Apps UI/REST API.
+      if (scope === "team") {
+        return errorResult(
+          "Team-scoped apps must be created via the Apps UI so teams can be assigned. Use personal or org scope here.",
+        );
+      }
       let payload: VersionPayload;
       try {
-        // Creating a shared (team/org) app needs the matching authority; a plain
+        // Creating a shared (org) app needs the matching authority; a plain
         // member may only create personal apps they author.
         await assertCallerMayModifyApp({
           userId: context.userId,
@@ -253,6 +261,12 @@ const registry = defineArchestraTools([
       });
       if (!app) {
         return errorResult(`No app found with id ${args.appId}.`);
+      }
+      // These chat tools can't assign teams; re-scoping to team is UI/REST-only.
+      if (args.scope === "team") {
+        return errorResult(
+          "Re-scoping an app to a team must be done via the Apps UI so teams can be assigned.",
+        );
       }
 
       try {

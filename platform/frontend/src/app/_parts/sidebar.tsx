@@ -9,6 +9,7 @@ import {
 import { requiredPagePermissionsMap } from "@archestra/shared/access-control";
 import { SignedIn, UserButton } from "@daveyplate/better-auth-ui";
 import {
+  AppWindow,
   BookOpen,
   Bot,
   Bug,
@@ -121,6 +122,17 @@ const contentNavGroups: NavGroup[] = [
               pathname.startsWith("/agents/triggers"),
           },
         ],
+      },
+    ],
+  },
+  {
+    label: "Apps",
+    items: [
+      {
+        title: "Apps",
+        url: "/apps",
+        icon: AppWindow,
+        customIsActive: (pathname: string) => pathname.startsWith("/apps"),
       },
     ],
   },
@@ -469,28 +481,32 @@ export function AppSidebar() {
 
   // Skills are gated behind the ARCHESTRA_AGENTS_SKILLS_ENABLED env var.
   const skillsEnabled = useFeature("agentSkillsEnabled") === true;
+  // Apps are gated behind the ARCHESTRA_APPS_ENABLED env var.
+  const appsEnabled = useFeature("appsEnabled") === true;
 
   // Filter nav groups based on connect permissions and feature flags
   const filteredNavGroups = React.useMemo(() => {
-    return contentNavGroups.map((group) => ({
-      ...group,
-      items: group.items
-        .filter((item) => {
-          if (item.title === "Connect" && !showConnect) return false;
-          return true;
-        })
-        .map((item) =>
-          item.subItems
-            ? {
-                ...item,
-                subItems: item.subItems.filter(
-                  (sub) => sub.url !== "/agents/skills" || skillsEnabled,
-                ),
-              }
-            : item,
-        ),
-    }));
-  }, [showConnect, skillsEnabled]);
+    return contentNavGroups
+      .filter((group) => group.label !== "Apps" || appsEnabled)
+      .map((group) => ({
+        ...group,
+        items: group.items
+          .filter((item) => {
+            if (item.title === "Connect" && !showConnect) return false;
+            return true;
+          })
+          .map((item) =>
+            item.subItems
+              ? {
+                  ...item,
+                  subItems: item.subItems.filter(
+                    (sub) => sub.url !== "/agents/skills" || skillsEnabled,
+                  ),
+                }
+              : item,
+          ),
+      }));
+  }, [showConnect, skillsEnabled, appsEnabled]);
 
   // Build additional links for UserButton popout menu
   const userMenuLinks = React.useMemo(() => {

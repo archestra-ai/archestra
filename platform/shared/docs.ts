@@ -17,6 +17,7 @@ export const DocsPage = {
   PlatformAgentTriggersEmail: "platform-agent-triggers-email",
   PlatformAgentTriggersSchedule: "platform-agent-triggers-schedule",
   PlatformAgents: "platform-agents",
+  PlatformApps: "platform-apps",
   PlatformArchestraMcpServer: "platform-archestra-mcp-server",
   PlatformApiReference: "platform-api-reference",
   PlatformBuiltInAgentsPolicyConfig: "platform-built-in-agents-policy-config",

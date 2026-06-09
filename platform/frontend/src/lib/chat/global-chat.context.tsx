@@ -978,6 +978,16 @@ function ChatSessionHook({
       const canonical = data?.messages as UIMessage[] | undefined;
       const anchor = canonical?.find((m) => m.id === messageId);
 
+      // Break the restore-on-regression chain before regenerating, like the
+      // auto-retry and 409-reattach paths do: regenerate() rebuilds the edited
+      // turn's assistant message from empty, and a buffer still holding the
+      // pre-edit answer would keep resurrecting it while the new stream writes
+      // the same message id — two writers fighting over one message in an
+      // update loop that crashes the page (React #185, "Maximum update
+      // depth"). The pre-edit answer is meant to disappear here, so no frozen
+      // snapshot is taken.
+      previousMessagesRef.current = [];
+
       if (canonical && anchor) {
         // Normal path: the message is persisted. Sync to the saved thread and
         // regenerate from it. The server replaces the turn atomically.

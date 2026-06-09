@@ -359,9 +359,59 @@ describe("ChatProvider retries", () => {
       "This conversation already has a response in progress. Stop it before sending another message.",
     );
     expect(mocks.regenerate).not.toHaveBeenCalled();
+    // A cold 409 (no auto-recovery in flight) is a genuine concurrent submit —
+    // reattaching would silently drop the message the user just typed.
+    expect(mocks.resumeStream).not.toHaveBeenCalled();
     // The SDK error is cleared so the benign guard never renders as a hard
     // inline error panel — the toast is the only surfaced feedback.
     expect(mocks.clearError).toHaveBeenCalledTimes(1);
+  });
+
+  it("reattaches to the active run when our own auto-recovery retry hits the duplicate-run 409", async () => {
+    render(
+      <ChatProvider>
+        <RegisterChatSession />
+      </ChatProvider>,
+    );
+
+    await waitFor(() => expect(mocks.useChat).toHaveBeenCalled());
+
+    // A transient network error severs the stream; the auto-retry re-POSTs
+    // into the still-running backend run and gets the duplicate-run 409.
+    // The AI SDK fires onFinish from a finally block right after onError
+    // (with isError set) — replicate that sequence, since clearing the
+    // recovery flag there would misclassify the upcoming 409 as a genuine
+    // duplicate submit.
+    vi.useFakeTimers();
+    act(() => {
+      chatOptions?.onError?.(new Error("Failed to fetch"));
+      chatOptions?.onFinish?.({
+        message: { parts: [] },
+        isAbort: false,
+        isError: true,
+        isDisconnect: true,
+      });
+      vi.advanceTimersByTime(1500);
+    });
+    expect(mocks.regenerate).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      chatOptions?.onError?.(
+        new Error("This conversation already has an active response."),
+      );
+      chatOptions?.onFinish?.({
+        message: { parts: [] },
+        isAbort: false,
+        isError: true,
+        isDisconnect: false,
+      });
+    });
+
+    // The 409 was provoked by our own recovery retry: reattach to the live
+    // run via the replay endpoint instead of telling the user to stop a
+    // response they cannot see.
+    expect(mocks.resumeStream).toHaveBeenCalledTimes(1);
+    expect(mocks.toastError).not.toHaveBeenCalled();
   });
 
   it("marks the session as recovering while auto-retrying or reattaching, but not for terminal errors", async () => {

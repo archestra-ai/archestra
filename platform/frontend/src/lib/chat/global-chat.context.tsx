@@ -32,6 +32,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { toast } from "sonner";
 import { filterOptimisticToolCalls } from "@/components/chat/chat-messages.utils";
 import { useGenerateConversationTitle } from "@/lib/chat/chat.query";
 import { useUpdateChatMessage } from "@/lib/chat/chat-message.query";
@@ -538,11 +539,19 @@ function ChatSessionHook({
 
     experimental_throttle: 100,
     id: conversationId,
-    onFinish: async ({ message, isAbort }) => {
+    onFinish: async ({ message, isAbort, isError }) => {
       setOptimisticToolCalls([]);
       clearActiveContextCompaction();
       // The stream concluded — any auto-recovery (retry/reattach) is over.
-      setIsRecovering(false);
+      // NOT on stream errors: the SDK fires onFinish from a finally block
+      // right after onError, so clearing here would wipe the recovery flag
+      // the error handler just set (and misroute the auto-retry's 409 to the
+      // genuine-duplicate toast). Error outcomes are owned by onError: it
+      // either keeps a recovery in flight or clears the flag for terminal
+      // errors.
+      if (!isError) {
+        setIsRecovering(false);
+      }
 
       // When the user stops mid-tool-call, the assistant message is left with a
       // tool part that never produced output, which the UI renders as a
@@ -648,14 +657,28 @@ function ChatSessionHook({
       });
 
       if (isDuplicateActiveRunError(chatError)) {
-        // The backend refused the send because this conversation still has a
-        // run generating — typically after the stream connection was severed
-        // (LB cut, network blip) while the backend kept going, and the
-        // auto-retry below re-POSTed into the live run. Reattach to it via the
-        // active-run replay endpoint instead of dead-ending: the user sees the
-        // in-progress response (and the Stop button) again. If the run
-        // finished in the meantime, the reconnect returns 204 and is a no-op —
-        // the conversation refetch above already shows the persisted outcome.
+        if (!recoveringRef.current) {
+          // A 409 outside auto-recovery is a genuine concurrent submit (e.g.
+          // a second tab racing this conversation): reattaching would
+          // silently drop the message the user just typed, so keep the
+          // honest guard instead.
+          toast.error(
+            "This conversation already has a response in progress. Stop it before sending another message.",
+          );
+          // Clear the SDK error so this benign guard does not also render as
+          // a hard inline error panel; the toast is the only surfaced
+          // feedback.
+          clearErrorRef.current?.();
+          return;
+        }
+        // The 409 was provoked by our own auto-recovery: the stream
+        // connection was severed (LB cut, network blip) while the backend
+        // kept generating, and the auto-retry below re-POSTed into the live
+        // run. Reattach to it via the active-run replay endpoint instead of
+        // dead-ending: the user sees the in-progress response (and the Stop
+        // button) again. If the run finished in the meantime, the reconnect
+        // returns 204 and is a no-op — the conversation refetch above
+        // already shows the persisted outcome.
         //
         // Clear the restore-on-regression buffer first: the auto-retry's
         // regenerate() has already dropped the severed turn's partial

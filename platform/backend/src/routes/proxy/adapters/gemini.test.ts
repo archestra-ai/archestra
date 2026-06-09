@@ -174,6 +174,8 @@ describe("GeminiResponseAdapter", () => {
       expect(usage).toEqual({
         inputTokens: 150,
         outputTokens: 75,
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0,
       });
     });
   });
@@ -686,6 +688,8 @@ describe("GeminiStreamAdapter", () => {
       expect(adapter.state.usage).toEqual({
         inputTokens: 100,
         outputTokens: 50,
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0,
       });
     });
 

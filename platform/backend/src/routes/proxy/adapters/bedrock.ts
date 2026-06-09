@@ -897,6 +897,8 @@ class BedrockResponseAdapter implements LLMResponseAdapter<BedrockResponse> {
     return {
       inputTokens: this.response.usage?.inputTokens ?? 0,
       outputTokens: this.response.usage?.outputTokens ?? 0,
+      cacheReadTokens: this.response.usage?.cacheReadInputTokens ?? 0,
+      cacheWriteTokens: this.response.usage?.cacheWriteInputTokens ?? 0,
     };
   }
 
@@ -1081,7 +1083,12 @@ class BedrockStreamAdapter
       // Don't set isFinal here - metadata chunk comes after messageStop
     } else if ("metadata" in chunk && chunk.metadata) {
       const metadata = chunk.metadata as {
-        usage?: { inputTokens?: number; outputTokens?: number };
+        usage?: {
+          inputTokens?: number;
+          outputTokens?: number;
+          cacheReadInputTokens?: number;
+          cacheWriteInputTokens?: number;
+        };
         metrics?: { latencyMs?: number };
         trace?: unknown;
       };
@@ -1089,6 +1096,8 @@ class BedrockStreamAdapter
         this.state.usage = {
           inputTokens: metadata.usage.inputTokens ?? 0,
           outputTokens: metadata.usage.outputTokens ?? 0,
+          cacheReadTokens: metadata.usage.cacheReadInputTokens ?? 0,
+          cacheWriteTokens: metadata.usage.cacheWriteInputTokens ?? 0,
         };
       }
       if (metadata.metrics?.latencyMs !== undefined) {

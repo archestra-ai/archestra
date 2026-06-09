@@ -1,0 +1,1 @@
+ALTER TABLE "interactions" ADD COLUMN "cache_savings" numeric(13, 10);

@@ -28,6 +28,7 @@ import type {
   ToolCompressionStats,
   ToonSkipReason,
   UnsafeContextBoundary,
+  UsageView,
 } from "@/types";
 import * as utils from "./utils";
 import type { SessionSource } from "./utils/headers/session-id";
@@ -74,25 +75,44 @@ export function normalizeToolCallsForPolicy(
 export async function calculateInteractionCosts(params: {
   baselineModel: string;
   actualModel: string;
-  usage: { inputTokens: number; outputTokens: number };
+  usage: UsageView;
   providerName: SupportedProvider;
 }): Promise<{
   baselineCost: number | undefined;
   actualCost: number | undefined;
+  cacheCost: number | undefined;
+  cacheSavings: number | undefined;
 }> {
+  const cacheTokens = {
+    readTokens: params.usage.cacheReadTokens ?? 0,
+    writeTokens: params.usage.cacheWriteTokens ?? 0,
+  };
   const baselineCost = await utils.costOptimization.calculateCost(
     params.baselineModel,
     params.usage.inputTokens,
     params.usage.outputTokens,
     params.providerName,
+    cacheTokens,
   );
   const actualCost = await utils.costOptimization.calculateCost(
     params.actualModel,
     params.usage.inputTokens,
     params.usage.outputTokens,
     params.providerName,
+    cacheTokens,
   );
-  return { baselineCost, actualCost };
+  const cacheBreakdown = await utils.costOptimization.calculateCacheCost(
+    params.actualModel,
+    params.providerName,
+    cacheTokens.readTokens,
+    cacheTokens.writeTokens,
+  );
+  return {
+    baselineCost,
+    actualCost,
+    cacheCost: cacheBreakdown?.cacheCost,
+    cacheSavings: cacheBreakdown?.cacheSavings,
+  };
 }
 
 /**
@@ -120,8 +140,13 @@ export function buildInteractionRecord(params: {
   response: unknown;
   actualModel: string;
   baselineModel: string;
-  usage: { inputTokens: number; outputTokens: number };
-  costs: { baselineCost: number | undefined; actualCost: number | undefined };
+  usage: UsageView;
+  costs: {
+    baselineCost: number | undefined;
+    actualCost: number | undefined;
+    cacheCost: number | undefined;
+    cacheSavings: number | undefined;
+  };
   toonStats: ToolCompressionStats;
   toonSkipReason: ToonSkipReason | null;
   dualLlmAnalyses: DualLlmAnalysis[];
@@ -149,8 +174,12 @@ export function buildInteractionRecord(params: {
     baselineModel: params.baselineModel,
     inputTokens: params.usage.inputTokens,
     outputTokens: params.usage.outputTokens,
+    cacheReadTokens: params.usage.cacheReadTokens ?? null,
+    cacheWriteTokens: params.usage.cacheWriteTokens ?? null,
     cost: params.costs.actualCost?.toFixed(10) ?? null,
     baselineCost: params.costs.baselineCost?.toFixed(10) ?? null,
+    cacheCost: params.costs.cacheCost?.toFixed(10) ?? null,
+    cacheSavings: params.costs.cacheSavings?.toFixed(10) ?? null,
     toonTokensBefore: params.toonStats.tokensBefore,
     toonTokensAfter: params.toonStats.tokensAfter,
     toonCostSavings: params.toonStats.costSavings?.toFixed(10) ?? null,

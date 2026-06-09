@@ -1947,6 +1947,20 @@
       "when": 1780915546685,
       "tag": "0277_faulty_pyro",
       "breakpoints": true
+    },
+    {
+      "idx": 278,
+      "version": "7",
+      "when": 1780995469295,
+      "tag": "0278_narrow_stone_men",
+      "breakpoints": true
+    },
+    {
+      "idx": 279,
+      "version": "7",
+      "when": 1780996185986,
+      "tag": "0279_foamy_sprite",
+      "breakpoints": true
     }
   ]
 }

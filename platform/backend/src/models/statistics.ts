@@ -227,6 +227,13 @@ class StatisticsModel {
         inputTokens: Number(row.inputTokens) || 0,
         outputTokens: Number(row.outputTokens) || 0,
         cost: Number(row.cost) || 0,
+        ...("cacheReadTokens" in row
+          ? {
+              cacheReadTokens:
+                Number((row as { cacheReadTokens: unknown }).cacheReadTokens) ||
+                0,
+            }
+          : {}),
       }));
     }
 
@@ -251,6 +258,9 @@ class StatisticsModel {
           inputTokens: 0,
           outputTokens: 0,
           cost: 0,
+          // Reset before accumulating; the `...row` spread would otherwise leave
+          // the first row's value in place and the merge would never sum it.
+          ...("cacheReadTokens" in row ? { cacheReadTokens: 0 } : {}),
         } as T);
       }
 
@@ -264,6 +274,11 @@ class StatisticsModel {
       if ("cost" in row && "cost" in existing) {
         (existing as { cost: number }).cost +=
           Number((row as { cost: number }).cost) || 0;
+      }
+      // Aggregate cache-read tokens (present only on model/agent series)
+      if ("cacheReadTokens" in row && "cacheReadTokens" in existing) {
+        (existing as { cacheReadTokens: number }).cacheReadTokens +=
+          Number((row as { cacheReadTokens: number }).cacheReadTokens) || 0;
       }
     }
 

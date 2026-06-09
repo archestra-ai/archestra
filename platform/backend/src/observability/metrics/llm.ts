@@ -22,8 +22,14 @@ import type { Agent } from "@/types";
 import { getExemplarLabels, sanitizeLabelKey } from "./utils";
 
 type UsageExtractor =
-  // biome-ignore lint/suspicious/noExplicitAny: usage comes from parsed JSON (cloned.json())
-  ((usage: any) => { input?: number; output?: number }) | null;
+  | // biome-ignore lint/suspicious/noExplicitAny: usage comes from parsed JSON (cloned.json())
+  ((usage: any) => {
+      input?: number;
+      output?: number;
+      cacheRead?: number;
+      cacheWrite?: number;
+    })
+  | null;
 
 /**
  * Maps each provider to its usage token extraction function for fetch-based observability.
@@ -632,11 +638,13 @@ export function getObservableFetch(
         }
         const extractor = fetchUsageExtractors[provider];
         if (extractor) {
-          const { input, output } = extractor(data.usage);
+          const { input, output, cacheRead, cacheWrite } = extractor(
+            data.usage,
+          );
           reportLLMTokens(
             provider,
             profile,
-            { input, output },
+            { input, output, cacheRead, cacheWrite },
             model ?? "unknown",
             source,
             externalAgentId,
@@ -697,11 +705,11 @@ export function getObservableGenAI(
       // Record token metrics
       const usage = result.usageMetadata;
       if (usage) {
-        const { input, output } = getGeminiUsage(usage);
+        const { input, output, cacheRead, cacheWrite } = getGeminiUsage(usage);
         reportLLMTokens(
           provider,
           profile,
-          { input, output },
+          { input, output, cacheRead, cacheWrite },
           model ?? "unknown",
           source,
           externalAgentId,

@@ -56263,6 +56263,92 @@ export type GetIdentityProviderIdpLogoutUrlResponses = {
 
 export type GetIdentityProviderIdpLogoutUrlResponse = GetIdentityProviderIdpLogoutUrlResponses[keyof GetIdentityProviderIdpLogoutUrlResponses];
 
+export type GetIdentityProviderLinkStatusData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/identity-providers/{id}/link-status';
+};
+
+export type GetIdentityProviderLinkStatusErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetIdentityProviderLinkStatusError = GetIdentityProviderLinkStatusErrors[keyof GetIdentityProviderLinkStatusErrors];
+
+export type GetIdentityProviderLinkStatusResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        providerId: string;
+        connected: boolean;
+    };
+};
+
+export type GetIdentityProviderLinkStatusResponse = GetIdentityProviderLinkStatusResponses[keyof GetIdentityProviderLinkStatusResponses];
+
 export type GetIdentityProviderLatestIdTokenClaimsData = {
     body?: never;
     path: {

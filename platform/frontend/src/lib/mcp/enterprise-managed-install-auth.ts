@@ -1,5 +1,14 @@
-import { LINKED_IDP_SSO_MODE } from "@archestra/shared";
-import type { CatalogItem } from "@/app/mcp/registry/_parts/mcp-server-card";
+import {
+  archestraApiSdk,
+  type archestraApiTypes,
+  LINKED_IDP_SSO_MODE,
+} from "@archestra/shared";
+import { useCallback } from "react";
+
+type EnterpriseManagedCatalogItem = Pick<
+  archestraApiTypes.GetInternalMcpCatalogResponse[number],
+  "enterpriseManagedConfig"
+>;
 
 const PENDING_ENTERPRISE_MANAGED_INSTALL =
   "pending_enterprise_managed_mcp_install";
@@ -12,33 +21,38 @@ export type EnterpriseManagedInstallIntent =
       teamId?: string;
     }
   | {
-      action: "open-local" | "open-remote" | "open-no-auth";
+      action: "open-local" | "open-remote";
       catalogId: string;
       scope?: "personal" | "team" | "org";
       teamId?: string;
     };
 
-export async function getEnterpriseManagedInstallConnectUrl(params: {
-  catalogItem: CatalogItem;
-  redirectTo: string;
-}): Promise<string | null> {
-  const identityProviderId =
-    params.catalogItem.enterpriseManagedConfig?.identityProviderId;
-  if (!identityProviderId) {
-    return null;
-  }
+export function useEnterpriseManagedInstallConnectUrl() {
+  return useCallback(
+    async (params: {
+      catalogItem: EnterpriseManagedCatalogItem;
+      redirectTo: string;
+    }): Promise<string | null> => {
+      const identityProviderId =
+        params.catalogItem.enterpriseManagedConfig?.identityProviderId;
+      if (!identityProviderId) {
+        return null;
+      }
 
-  const status = await fetchIdentityProviderLinkStatus(identityProviderId);
-  if (!status || status.connected) {
-    return null;
-  }
+      const status = await fetchIdentityProviderLinkStatus(identityProviderId);
+      if (!status || status.connected) {
+        return null;
+      }
 
-  const searchParams = new URLSearchParams({
-    redirectTo: params.redirectTo,
-    mode: LINKED_IDP_SSO_MODE,
-  });
+      const searchParams = new URLSearchParams({
+        redirectTo: params.redirectTo,
+        mode: LINKED_IDP_SSO_MODE,
+      });
 
-  return `/auth/sso/${encodeURIComponent(status.providerId)}?${searchParams.toString()}`;
+      return `/auth/sso/${encodeURIComponent(status.providerId)}?${searchParams.toString()}`;
+    },
+    [],
+  );
 }
 
 export function setPendingEnterpriseManagedInstall(
@@ -48,12 +62,6 @@ export function setPendingEnterpriseManagedInstall(
     PENDING_ENTERPRISE_MANAGED_INSTALL,
     JSON.stringify(intent),
   );
-}
-
-export function consumePendingEnterpriseManagedInstall(): EnterpriseManagedInstallIntent | null {
-  const intent = getPendingEnterpriseManagedInstall();
-  clearPendingEnterpriseManagedInstall();
-  return intent;
 }
 
 export function getPendingEnterpriseManagedInstall(): EnterpriseManagedInstallIntent | null {
@@ -73,30 +81,18 @@ export function clearPendingEnterpriseManagedInstall() {
   sessionStorage.removeItem(PENDING_ENTERPRISE_MANAGED_INSTALL);
 }
 
-async function fetchIdentityProviderLinkStatus(identityProviderId: string) {
-  const response = await fetch(
-    `/api/identity-providers/${encodeURIComponent(identityProviderId)}/link-status`,
-    {
-      credentials: "include",
-    },
-  );
-
-  if (!response.ok) {
+async function fetchIdentityProviderLinkStatus(
+  identityProviderId: string,
+): Promise<archestraApiTypes.GetIdentityProviderLinkStatusResponse | null> {
+  const { data, error } = await archestraApiSdk.getIdentityProviderLinkStatus({
+    path: { id: identityProviderId },
+    throwOnError: false,
+  });
+  if (error || !data) {
     return null;
   }
 
-  const body = (await response.json()) as {
-    providerId?: unknown;
-    connected?: unknown;
-  };
-  if (typeof body.providerId !== "string") {
-    return null;
-  }
-
-  return {
-    providerId: body.providerId,
-    connected: body.connected === true,
-  };
+  return data;
 }
 
 function parsePendingEnterpriseManagedInstall(
@@ -125,11 +121,7 @@ function parsePendingEnterpriseManagedInstall(
     };
   }
 
-  if (
-    intent.action === "open-local" ||
-    intent.action === "open-remote" ||
-    intent.action === "open-no-auth"
-  ) {
+  if (intent.action === "open-local" || intent.action === "open-remote") {
     return {
       action: intent.action,
       catalogId: intent.catalogId,

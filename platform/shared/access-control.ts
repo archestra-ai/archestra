@@ -1027,7 +1027,7 @@ export const requiredEndpointPermissionsMap: Partial<
     identityProvider: ["read"],
   },
   [RouteId.GetIdentityProviderLinkStatus]: {
-    identityProvider: ["read"],
+    mcpServerInstallation: ["create"],
   },
   [RouteId.CreateIdentityProvider]: {
     identityProvider: ["create"],

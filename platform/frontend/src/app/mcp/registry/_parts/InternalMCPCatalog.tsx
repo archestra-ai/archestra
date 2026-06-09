@@ -45,6 +45,13 @@ import {
   setOAuthUserConfigValues,
 } from "@/lib/auth/oauth-session";
 import { useDialogs } from "@/lib/hooks/use-dialog";
+import {
+  clearPendingEnterpriseManagedInstall,
+  type EnterpriseManagedInstallIntent,
+  getPendingEnterpriseManagedInstall,
+  setPendingEnterpriseManagedInstall,
+  useEnterpriseManagedInstallConnectUrl,
+} from "@/lib/mcp/enterprise-managed-install-auth";
 import { useMcpRegistryServer } from "@/lib/mcp/external-mcp-catalog.query";
 import {
   useInternalMcpCatalog,
@@ -52,13 +59,6 @@ import {
   useMcpCatalogLabelValues,
   useReinstallInternalMcpCatalogItem,
 } from "@/lib/mcp/internal-mcp-catalog.query";
-import {
-  clearPendingEnterpriseManagedInstall,
-  getPendingEnterpriseManagedInstall,
-  type EnterpriseManagedInstallIntent,
-  getEnterpriseManagedInstallConnectUrl,
-  setPendingEnterpriseManagedInstall,
-} from "@/lib/mcp/enterprise-managed-install-auth";
 import {
   useInstallMcpServer,
   useMcpDeploymentStatuses,
@@ -224,6 +224,8 @@ export function InternalMCPCatalog({
   });
 
   const queryClient = useQueryClient();
+  const getEnterpriseManagedInstallConnectUrl =
+    useEnterpriseManagedInstallConnectUrl();
 
   const ensureEnterpriseManagedInstallAuth = useCallback(
     async (
@@ -242,7 +244,7 @@ export function InternalMCPCatalog({
       window.location.assign(connectUrl);
       return false;
     },
-    [],
+    [getEnterpriseManagedInstallConnectUrl],
   );
 
   // Remove servers from installing set when installation completes (success or error)
@@ -781,10 +783,6 @@ export function InternalMCPCatalog({
           teamId: intent.teamId,
         });
         return;
-      case "open-no-auth":
-        setNoAuthCatalogItem(catalogItem);
-        openDialog("no-auth");
-        return;
     }
   }, [catalogItems]);
 
@@ -792,19 +790,6 @@ export function InternalMCPCatalog({
     if (!noAuthCatalogItem) return;
 
     const catalogItem = noAuthCatalogItem;
-    if (
-      !(await ensureEnterpriseManagedInstallAuth(catalogItem, {
-        action: "open-no-auth",
-        catalogId: catalogItem.id,
-        scope: result.scope,
-        ...(result.scope === "team" && result.teamId
-          ? { teamId: result.teamId }
-          : {}),
-      }))
-    ) {
-      return;
-    }
-
     setInstallingItemId(catalogItem.id);
     await installMutation.mutateAsync({
       name: catalogItem.name,

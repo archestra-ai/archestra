@@ -1,11 +1,11 @@
-import { LINKED_IDP_SSO_MODE } from "@archestra/shared";
+import { archestraApiSdk, LINKED_IDP_SSO_MODE } from "@archestra/shared";
+import { renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   clearPendingEnterpriseManagedInstall,
-  consumePendingEnterpriseManagedInstall,
-  getEnterpriseManagedInstallConnectUrl,
   getPendingEnterpriseManagedInstall,
   setPendingEnterpriseManagedInstall,
+  useEnterpriseManagedInstallConnectUrl,
 } from "./enterprise-managed-install-auth";
 
 describe("enterprise-managed MCP install auth", () => {
@@ -15,18 +15,11 @@ describe("enterprise-managed MCP install auth", () => {
   });
 
   it("returns no connect URL when the configured identity provider is linked", async () => {
-    vi.spyOn(global, "fetch").mockResolvedValueOnce(
-      new Response(
-        JSON.stringify({
-          providerId: "EntraID",
-          connected: true,
-        }),
-        { status: 200 },
-      ),
-    );
+    mockLinkStatus({ providerId: "EntraID", connected: true });
+    const { result } = renderHook(() => useEnterpriseManagedInstallConnectUrl());
 
     await expect(
-      getEnterpriseManagedInstallConnectUrl({
+      result.current({
         catalogItem: catalogItem("idp-123"),
         redirectTo: "/mcp/registry",
       }),
@@ -34,41 +27,17 @@ describe("enterprise-managed MCP install auth", () => {
   });
 
   it("builds a linked identity-provider URL when the configured provider is not linked", async () => {
-    vi.spyOn(global, "fetch").mockResolvedValueOnce(
-      new Response(
-        JSON.stringify({
-          providerId: "EntraID",
-          connected: false,
-        }),
-        { status: 200 },
-      ),
-    );
+    mockLinkStatus({ providerId: "EntraID", connected: false });
+    const { result } = renderHook(() => useEnterpriseManagedInstallConnectUrl());
 
     await expect(
-      getEnterpriseManagedInstallConnectUrl({
+      result.current({
         catalogItem: catalogItem("idp-123"),
         redirectTo: "/mcp/registry",
       }),
     ).resolves.toBe(
       `/auth/sso/EntraID?redirectTo=%2Fmcp%2Fregistry&mode=${LINKED_IDP_SSO_MODE}`,
     );
-  });
-
-  it("stores install intents as one-shot state", () => {
-    setPendingEnterpriseManagedInstall({
-      action: "direct",
-      catalogId: "catalog-123",
-      scope: "team",
-      teamId: "team-123",
-    });
-
-    expect(consumePendingEnterpriseManagedInstall()).toEqual({
-      action: "direct",
-      catalogId: "catalog-123",
-      scope: "team",
-      teamId: "team-123",
-    });
-    expect(consumePendingEnterpriseManagedInstall()).toBeNull();
   });
 
   it("keeps install intents pending until they are explicitly cleared", () => {
@@ -96,11 +65,24 @@ describe("enterprise-managed MCP install auth", () => {
 
 function catalogItem(identityProviderId: string) {
   return {
-    id: "catalog-123",
     enterpriseManagedConfig: {
       identityProviderId,
     },
-  } as Parameters<
-    typeof getEnterpriseManagedInstallConnectUrl
-  >[0]["catalogItem"];
+  } as Parameters<ReturnType<typeof useEnterpriseManagedInstallConnectUrl>>[0][
+    "catalogItem"
+  ];
+}
+
+function mockLinkStatus(data: { providerId: string; connected: boolean }) {
+  const response = {
+    data,
+    error: undefined,
+  } as Awaited<
+    ReturnType<typeof archestraApiSdk.getIdentityProviderLinkStatus>
+  >;
+
+  vi.spyOn(
+    archestraApiSdk,
+    "getIdentityProviderLinkStatus",
+  ).mockResolvedValueOnce(response);
 }

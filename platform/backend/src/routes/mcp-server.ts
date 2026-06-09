@@ -1980,6 +1980,7 @@ async function connectAndGetToolsForInstallation(params: {
     });
   } catch (error) {
     if (
+      catalogItem.enterpriseManagedConfig ||
       !params.allowCurrentUserTokenFallback ||
       !isInstallDiscoveryAuthError(error)
     ) {

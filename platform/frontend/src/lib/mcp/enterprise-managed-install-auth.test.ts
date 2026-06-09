@@ -16,7 +16,9 @@ describe("enterprise-managed MCP install auth", () => {
 
   it("returns no connect URL when the configured identity provider is linked", async () => {
     mockLinkStatus({ providerId: "EntraID", connected: true });
-    const { result } = renderHook(() => useEnterpriseManagedInstallConnectUrl());
+    const { result } = renderHook(() =>
+      useEnterpriseManagedInstallConnectUrl(),
+    );
 
     await expect(
       result.current({
@@ -28,7 +30,9 @@ describe("enterprise-managed MCP install auth", () => {
 
   it("builds a linked identity-provider URL when the configured provider is not linked", async () => {
     mockLinkStatus({ providerId: "EntraID", connected: false });
-    const { result } = renderHook(() => useEnterpriseManagedInstallConnectUrl());
+    const { result } = renderHook(() =>
+      useEnterpriseManagedInstallConnectUrl(),
+    );
 
     await expect(
       result.current({
@@ -68,9 +72,9 @@ function catalogItem(identityProviderId: string) {
     enterpriseManagedConfig: {
       identityProviderId,
     },
-  } as Parameters<ReturnType<typeof useEnterpriseManagedInstallConnectUrl>>[0][
-    "catalogItem"
-  ];
+  } as Parameters<
+    ReturnType<typeof useEnterpriseManagedInstallConnectUrl>
+  >[0]["catalogItem"];
 }
 
 function mockLinkStatus(data: { providerId: string; connected: boolean }) {

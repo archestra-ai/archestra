@@ -24,8 +24,16 @@ from typing import Literal, Mapping, Union, cast
 SCHEMA_VERSION = 1
 
 # --- secret detection (single source, shared by discover redaction + apply env handling) --
-# key names whose values must be treated as secrets.
-SECRET_KEY_RE = re.compile(r"(key|token|secret|password|passwd|api[_-]?key|authorization|credential)", re.I)
+# key names whose values must be treated as secrets. a credential word only counts as a
+# delimited *component* of the key -- the boundary is a string end, a non-alphanumeric
+# (``_``/``-``/``.``), or a camelCase hump -- so ``API_KEY``/``apiKey``/``access-token`` match
+# but ``monkey``/``tokenize``/``secretary`` do not. the alternation is case-insensitive; the
+# surrounding boundary classes are deliberately case-sensitive (camelCase detection).
+SECRET_KEY_RE = re.compile(
+    r"(?:^|[^A-Za-z0-9]|(?<=[a-z0-9])(?=[A-Z]))"
+    r"(?i:(?:api[_-]?key|key|token|secret|passwd|password|authorization|credential)s?)"
+    r"(?![a-z])"
+)
 # value shapes that look like credentials even under an innocuous key (anchored prefix).
 SECRET_VALUE_RE = re.compile(r"^(sk-|gh[psoru]_|xox[baprs]-|AIza|ya29\.|eyJ[A-Za-z0-9_-]{10,})")
 # credential-shaped tokens embedded anywhere inside a string (commands, prose, config values).

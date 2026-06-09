@@ -21,6 +21,7 @@ same `name`/`name_override`: the install resolves its catalog item **by name**, 
 | `hook` (intent `passive`) | `manual` | report | logging/inject hooks have no Archestra equivalent |
 | `openclaw` | `manual` | report | runtime config; schema unverified — report, don't translate |
 | LLM key (user-provided) | `llm_key` | best-effort | user pastes the secret in `user_answers.apiKey` |
+| telemetry (OTEL env, observability hooks, metrics-shipping scripts) | `manual` | report | no target — Archestra emits telemetry natively; redirect the collector (see "Telemetry" below) |
 
 ## Scope
 Ask for ONE default migration scope up front (default `personal`); use per-decision overrides only as
@@ -49,6 +50,29 @@ are not Archestra tools, so a guard on `Bash` has no target. Therefore:
 - `apply.py` resolves `tool_name` against `GET /api/tools`. If found → creates the policy. If not found
   (the common case for built-ins) → records `manual` with the ready-to-paste policy in the report.
 - Policies only enforce when the org `globalToolPolicy` is `restrictive`. Tell the user; don't flip it silently.
+
+## Telemetry & observability → leverage Archestra's native telemetry (report-only)
+If the source ships its own telemetry, **don't migrate it** — Archestra already emits richer telemetry
+natively and automatically: an OpenTelemetry span per LLM call and per MCP tool invocation, plus
+Prometheus metrics (tokens, cost, latency, blocked-tools), with no per-agent setup. So a setup's
+telemetry instrumentation is redundant. Map it to `manual` and, in the report, point the pilot owner at
+the native capability instead.
+
+Watch for telemetry in any of: an OTEL `env` block in `settings*.json` (`CLAUDE_CODE_ENABLE_TELEMETRY`,
+`OTEL_*`), hooks that POST spans/metrics to a collector, or plain `local_tool`/hook scripts that ship
+metrics or logs. Naming won't always say so — read the body when a hook/tool looks observability-shaped.
+
+Redirect, don't translate:
+
+| Source telemetry | Use Archestra's instead |
+|---|---|
+| per-tool-call timing/usage hooks | OTEL span + Prometheus metrics per MCP tool call (automatic) |
+| LLM token/cost logging | `llm_tokens_total`, `llm_cost_total`, `llm_request_duration_seconds` |
+| custom OTLP exporter (env/hook) | native OTLP export via `ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT` (`/v1/traces`, `/v1/logs`) |
+| scraping a local metrics file | Prometheus `/metrics` on `ARCHESTRA_METRICS_PORT` (default `:9050`) |
+
+Telemetry is **instance-level env config** — no API, no per-agent knob. To keep an existing
+Grafana/collector, the pilot owner sets `ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT` on the instance.
 
 ## Behavioral differences to put in the report
 - **Subagent isolation & tool allowlists are not preserved.** Archestra skills are instructions, not

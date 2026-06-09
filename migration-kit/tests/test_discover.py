@@ -136,3 +136,38 @@ def test_no_structured_secret_leaks_in_serialized_inventory(inv: Inventory) -> N
     assert "ghp_examplesecret" not in blob  # mcp env (structured)
     assert "sk-ant-examplesecret" not in blob  # openclaw (structured)
     assert "ghp_hooksecret" not in blob  # hook command (inline-redacted)
+
+
+def test_symlink_escaping_source_is_not_bundled(tmp_path: Path) -> None:
+    # a symlink under a skill dir pointing outside the source tree must not embed its target.
+    secret = tmp_path / "outside" / "secret.txt"
+    secret.parent.mkdir(parents=True)
+    secret.write_text("TOP_SECRET_EXTERNAL_FILE")
+    skill_dir = tmp_path / "src" / ".claude" / "skills" / "evil"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text("---\nname: evil\n---\nbody")
+    (skill_dir / "leak.txt").symlink_to(secret)
+
+    inv = discover(tmp_path / "src")
+    item = _by_id(inv, "skill:evil")
+    assert isinstance(item, SkillItem)
+    assert all(f.path != "leak.txt" for f in item.files)
+    assert "TOP_SECRET_EXTERNAL_FILE" not in json.dumps(to_jsonable(inv))
+
+
+def test_symlinked_skill_dir_is_skipped(tmp_path: Path) -> None:
+    # the skill DIRECTORY itself is a symlink escaping the source tree -> skip it entirely,
+    # else its SKILL.md + all its files would be read in from outside.
+    external = tmp_path / "external_skill"
+    external.mkdir()
+    (external / "SKILL.md").write_text("---\nname: ext\n---\nEXTERNAL_SKILL_BODY")
+    (external / "data.txt").write_text("EXTERNAL_BUNDLED_FILE")
+    skills = tmp_path / "src" / ".claude" / "skills"
+    skills.mkdir(parents=True)
+    (skills / "ext").symlink_to(external, target_is_directory=True)
+
+    inv = discover(tmp_path / "src")
+    assert all(not it.id.startswith("skill:") for it in inv.items)
+    blob = json.dumps(to_jsonable(inv))
+    assert "EXTERNAL_SKILL_BODY" not in blob
+    assert "EXTERNAL_BUNDLED_FILE" not in blob

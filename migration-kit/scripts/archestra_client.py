@@ -8,6 +8,10 @@ this module does request/response plumbing and typed payloads only -- no idempot
 migration logic (that lives in apply.py). every non-2xx response raises ArchestraApiError
 verbatim, and a 3xx redirect is treated as an error rather than silently followed (the base
 URL is fixed and user-supplied, so a redirect is unexpected and could change a POST's method).
+transport and decode failures (connection reset, unknown charset, non-JSON body) are also
+converted to ArchestraApiError (status 0) so a single failing call records a real `failed`
+outcome in apply.py instead of crashing the whole migration loop; an unexpected list-response
+shape raises ContractError, which apply.py handles the same way.
 
 HTTP is the standard library's urllib. a private opener owns a cookie jar so the session
 cookie set by sign_in carries to mint_api_key (httpx.Client did this implicitly).
@@ -27,6 +31,7 @@ from typing import Literal
 
 from contracts import (
     ConditionOperator,
+    ContractError,
     JsonValue,
     PolicyAction,
     Provider,
@@ -208,7 +213,9 @@ class ArchestraClient:
             headers["Authorization"] = self._auth
         data: bytes | None = None
         if json_body is not None:
-            data = json.dumps(json_body).encode("utf-8")
+            # allow_nan=False: a NaN/inf field is a programming error, not valid JSON -- fail
+            # loudly here rather than emit a body the server silently rejects.
+            data = json.dumps(json_body, allow_nan=False).encode("utf-8")
             headers["Content-Type"] = "application/json"
         req = urllib.request.Request(url, data=data, headers=headers, method=method)
         try:
@@ -216,6 +223,11 @@ class ArchestraClient:
                 return _decode_body(resp.read(), resp.headers)
         except urllib.error.HTTPError as exc:
             raise ArchestraApiError(method, url, exc.code, _decode_error(exc)) from exc
+        except (OSError, http.client.HTTPException, LookupError, json.JSONDecodeError) as exc:
+            # transport/decode failure with no HTTP status (URLError is an OSError; LookupError
+            # is an unknown charset; JSONDecodeError is a non-JSON body). status 0 keeps
+            # wait_ready polling (it is not a 4xx) and lets apply.py record a `failed` op.
+            raise ArchestraApiError(method, url, 0, f"{type(exc).__name__}: {exc}") from exc
 
     # --- connectivity & auth ---------------------------------------------------------------
 
@@ -228,11 +240,9 @@ class ArchestraClient:
                 body = self._request("GET", "ready")
             except ArchestraApiError as exc:
                 # a 4xx is a misconfiguration (wrong base URL / auth) -> fail fast, don't spin.
-                # 5xx is transient during boot -> keep polling.
+                # 5xx and transport errors (status 0) are transient during boot -> keep polling.
                 if 400 <= exc.status < 500:
                     raise
-                last = str(exc)
-            except (urllib.error.URLError, json.JSONDecodeError) as exc:
                 last = str(exc)
             else:
                 if isinstance(body, dict) and body.get("database") == "connected":
@@ -243,6 +253,7 @@ class ArchestraClient:
 
     def sign_in(self, email: str, password: str) -> None:
         """better-auth email sign-in; the session cookie persists on this client's jar."""
+        _require_secure_transport(self.base_url)
         self._request("POST", "/api/auth/sign-in/email", json_body={"email": email, "password": password})
 
     def mint_api_key(self, name: str) -> str:
@@ -364,10 +375,24 @@ def _items(body: JsonValue) -> list[dict[str, JsonValue]]:
         case {"data": list() as items}:
             rows = items
         case _:
-            raise ValueError(f"unexpected list-response shape: {type(body).__name__}: {str(body)[:200]}")
+            raise ContractError(f"unexpected list-response shape: {type(body).__name__}: {str(body)[:200]}")
     out: list[dict[str, JsonValue]] = []
     for row in rows:
         if not isinstance(row, dict):
-            raise ValueError(f"unexpected list item (not an object): {type(row).__name__}")
+            raise ContractError(f"unexpected list item (not an object): {type(row).__name__}")
         out.append(row)
     return out
+
+
+def _require_secure_transport(base_url: str) -> None:
+    """refuse to send sign-in credentials over a cleartext channel. https is always allowed;
+    plain http is allowed only for loopback (local docker), where there is no network exposure."""
+    parsed = urllib.parse.urlparse(base_url)
+    if parsed.scheme == "https":
+        return
+    if (parsed.hostname or "").lower() in {"localhost", "127.0.0.1", "::1"}:
+        return
+    raise ValueError(
+        f"refusing to send sign-in credentials over insecure transport: {base_url!r} "
+        "(use https, or localhost/127.0.0.1 for local docker)"
+    )

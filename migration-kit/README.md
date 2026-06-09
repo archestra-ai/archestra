@@ -1,12 +1,19 @@
-# migration-kit
+# Migrate to Archestra
 
 Turn an existing agentic PoC into an [Archestra](https://github.com/archestra-ai/archestra) pilot.
 
-Packaged as a Claude Code **skill** (`migrate-to-archestra`) so the migration runs as a guided,
-agentic flow. The source setup can be messy: Claude Code-style files, MCP configs, local scripts,
-hooks, openclaw config, and whatever else accumulated during evaluation.
+> **Experimental.** The migration kit is new and still evolving.
 
-The goal is not a byte-for-byte port — it's to get the pilot running in Archestra quickly, with the
+The migration kit turns an existing agentic setup into an Archestra setup. Typical sources are the
+unsorted configs left by tools like Claude Code, OpenClaw, or Hermes: project instruction files, MCP
+configs, hooks, local scripts, and whatever else accumulated during evaluation.
+
+It ships as a Skill (`migrate-to-archestra`) for your favorite coding agent (e.g. Claude Code), so the migration runs as a guided,
+agentic flow rather than a one-shot script. The deterministic work — discovering source artifacts,
+redacting secrets, building and validating API payloads — lives in zero-dependency Python helpers;
+the model owns the judgment calls (what maps to what, what to skip, what needs review).
+
+The goal is not a byte-for-byte port. It is to get the pilot running in Archestra quickly, with the
 important behavior differences surfaced before anything is applied.
 
 ## What you get
@@ -20,10 +27,8 @@ important behavior differences surfaced before anything is applied.
 ## Install
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/archestra-ai/archestra/feat/migrate-to-archestra-skill/migration-kit/install.py | python3
+curl -fsSL https://raw.githubusercontent.com/archestra-ai/archestra/main/migration-kit/install.py | python3
 ```
-
-<!-- TODO: after merge, switch the URL to .../archestra/main/migration-kit/install.py -->
 
 Zero-dependency (stock `python3` ≥ 3.10, stdlib only). The installer pulls **only the files the skill
 needs** — `SKILL.md`, `scripts/`, `references/` (~90 KB) — into `~/.claude/skills/migrate-to-archestra/`.
@@ -44,7 +49,7 @@ Use the migrate-to-archestra skill to migrate /path/to/pilot into http://localho
 
 | Flag | Default | Meaning |
 | --- | --- | --- |
-| `--ref` | `feat/migrate-to-archestra-skill` | Git ref (branch, tag, or commit SHA) to install from. |
+| `--ref` | `main` | Git ref (branch, tag, or commit SHA) to install from. |
 | `--dest` | `~/.claude/skills/migrate-to-archestra` | Install directory. |
 | `--force` | off | Overwrite an existing non-empty destination. |
 

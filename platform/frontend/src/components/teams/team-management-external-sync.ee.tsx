@@ -52,6 +52,9 @@ export function TeamManagementExternalSyncSection({
   const { data: canUpdateIdentityProviders = false } = useHasPermissions({
     identityProvider: ["update"],
   });
+  const { data: canCreateIdentityProviders = false } = useHasPermissions({
+    identityProvider: ["create"],
+  });
   const [selectedIdentityProviderId, setSelectedIdentityProviderId] =
     useState("");
   const [newGroupIdentifier, setNewGroupIdentifier] = useState("");
@@ -131,7 +134,19 @@ export function TeamManagementExternalSyncSection({
   if (identityProviders.length === 0) {
     return (
       <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-        Add an identity provider before configuring external group sync.
+        {canCreateIdentityProviders ? (
+          <>
+            <Link
+              href="/settings/identity-providers"
+              className="underline underline-offset-4 hover:text-foreground"
+            >
+              Add an identity provider
+            </Link>{" "}
+            before configuring external group sync.
+          </>
+        ) : (
+          "Ask your admin to add an identity provider before configuring external group sync."
+        )}
       </div>
     );
   }

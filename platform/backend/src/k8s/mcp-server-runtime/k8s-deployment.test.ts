@@ -4241,6 +4241,201 @@ describe("K8sDeployment.applyK8sNetworkPolicy", () => {
       ],
     ).toBe("api.example.com,cdn.example.com");
   });
+
+  test("updates an existing CiliumNetworkPolicy and cleans up stale duplicate managed policies", async () => {
+    const policyName = "mcp-egress-mcp-mcp-test-server";
+    const { api: networkingApi } = makeStatefulNetworkingApi();
+    const { api: customObjectsApi, policies } = makeStatefulCustomObjectsApi({
+      resource: {
+        group: "cilium.io",
+        version: "v2",
+        plural: "ciliumnetworkpolicies",
+      },
+    });
+    const capabilities = {
+      kubernetesNetworkPolicy: true,
+      ciliumNetworkPolicy: true,
+      gkeFqdnNetworkPolicy: false,
+      awsApplicationNetworkPolicy: false,
+      provider: "cilium" as const,
+      supportsFqdn: true,
+      supportsHttpMethods: false,
+      message: null,
+    };
+
+    await makeNetworkPolicyDeployment({
+      networkingApi,
+      customObjectsApi,
+      effectiveNetworkPolicy: makeNetworkPolicy({
+        allowedDomains: ["api.example.com"],
+      }),
+      networkPolicyCapabilities: capabilities,
+    }).applyK8sNetworkPolicy();
+
+    const stalePolicy = structuredClone(policies.get(policyName));
+    expect(stalePolicy).toBeDefined();
+    if (!stalePolicy?.metadata) throw new Error("expected policy metadata");
+    stalePolicy.metadata.name = "mcp-egress-generated-stale";
+    policies.set(stalePolicy.metadata.name, stalePolicy);
+
+    await makeNetworkPolicyDeployment({
+      networkingApi,
+      customObjectsApi,
+      effectiveNetworkPolicy: makeNetworkPolicy({
+        allowedDomains: ["api.example.com", "*.example.org"],
+      }),
+      networkPolicyCapabilities: capabilities,
+    }).applyK8sNetworkPolicy();
+
+    expect([...policies.keys()]).toEqual([policyName]);
+    expect(
+      customObjectsApi.replaceNamespacedCustomObject,
+    ).toHaveBeenCalledTimes(1);
+    expect(customObjectsApi.deleteNamespacedCustomObject).toHaveBeenCalledWith({
+      group: "cilium.io",
+      version: "v2",
+      namespace: "default",
+      plural: "ciliumnetworkpolicies",
+      name: "mcp-egress-generated-stale",
+    });
+    expect(
+      policies.get(policyName)?.metadata?.annotations?.[
+        "archestra.io/network-policy-allowed-domains"
+      ],
+    ).toBe("api.example.com,*.example.org");
+  });
+
+  test("updates GKE FQDNNetworkPolicy while keeping the desired Kubernetes NetworkPolicy and cleaning stale duplicates", async () => {
+    const policyName = "mcp-egress-mcp-mcp-test-server";
+    const { api: networkingApi, policies: kubernetesPolicies } =
+      makeStatefulNetworkingApi();
+    const { api: customObjectsApi, policies: gkePolicies } =
+      makeStatefulCustomObjectsApi({
+        resource: {
+          group: "networking.gke.io",
+          version: "v1alpha1",
+          plural: "fqdnnetworkpolicies",
+        },
+      });
+    const capabilities = {
+      kubernetesNetworkPolicy: true,
+      ciliumNetworkPolicy: false,
+      gkeFqdnNetworkPolicy: true,
+      awsApplicationNetworkPolicy: false,
+      provider: "gke-fqdn" as const,
+      supportsFqdn: true,
+      supportsHttpMethods: false,
+      message: null,
+    };
+
+    await makeNetworkPolicyDeployment({
+      networkingApi,
+      customObjectsApi,
+      effectiveNetworkPolicy: makeNetworkPolicy({
+        allowedDomains: ["api.example.com"],
+        allowedCidrs: ["203.0.113.0/24"],
+      }),
+      networkPolicyCapabilities: capabilities,
+    }).applyK8sNetworkPolicy();
+
+    const staleKubernetesPolicy = structuredClone(
+      kubernetesPolicies.get(policyName),
+    );
+    expect(staleKubernetesPolicy).toBeDefined();
+    if (!staleKubernetesPolicy?.metadata) {
+      throw new Error("expected Kubernetes policy metadata");
+    }
+    staleKubernetesPolicy.metadata.name = "mcp-egress-generated-stale-k8s";
+    kubernetesPolicies.set(
+      staleKubernetesPolicy.metadata.name,
+      staleKubernetesPolicy,
+    );
+
+    const staleGkePolicy = structuredClone(gkePolicies.get(policyName));
+    expect(staleGkePolicy).toBeDefined();
+    if (!staleGkePolicy?.metadata) {
+      throw new Error("expected GKE policy metadata");
+    }
+    staleGkePolicy.metadata.name = "mcp-egress-generated-stale-gke";
+    gkePolicies.set(staleGkePolicy.metadata.name, staleGkePolicy);
+
+    await makeNetworkPolicyDeployment({
+      networkingApi,
+      customObjectsApi,
+      effectiveNetworkPolicy: makeNetworkPolicy({
+        allowedDomains: ["api.example.com", "cdn.example.com"],
+        allowedCidrs: ["198.51.100.0/24"],
+      }),
+      networkPolicyCapabilities: capabilities,
+    }).applyK8sNetworkPolicy();
+
+    expect([...kubernetesPolicies.keys()]).toEqual([policyName]);
+    expect([...gkePolicies.keys()]).toEqual([policyName]);
+    expect(networkingApi.replaceNamespacedNetworkPolicy).toHaveBeenCalledTimes(
+      1,
+    );
+    expect(
+      customObjectsApi.replaceNamespacedCustomObject,
+    ).toHaveBeenCalledTimes(1);
+    expect(networkingApi.deleteNamespacedNetworkPolicy).toHaveBeenCalledWith({
+      name: "mcp-egress-generated-stale-k8s",
+      namespace: "default",
+    });
+    expect(customObjectsApi.deleteNamespacedCustomObject).toHaveBeenCalledWith({
+      group: "networking.gke.io",
+      version: "v1alpha1",
+      namespace: "default",
+      plural: "fqdnnetworkpolicies",
+      name: "mcp-egress-generated-stale-gke",
+    });
+    expect(
+      gkePolicies.get(policyName)?.metadata?.annotations?.[
+        "archestra.io/network-policy-allowed-domains"
+      ],
+    ).toBe("api.example.com,cdn.example.com");
+  });
+
+  test("deleting managed network policy also cleans up stale duplicate managed policies", async () => {
+    const policyName = "mcp-egress-mcp-mcp-test-server";
+    const { api: networkingApi, policies } = makeStatefulNetworkingApi();
+    const capabilities = {
+      kubernetesNetworkPolicy: true,
+      ciliumNetworkPolicy: false,
+      gkeFqdnNetworkPolicy: false,
+      awsApplicationNetworkPolicy: false,
+      provider: "kubernetes" as const,
+      supportsFqdn: false,
+      supportsHttpMethods: false,
+      message: null,
+    };
+
+    const deployment = makeNetworkPolicyDeployment({
+      networkingApi,
+      effectiveNetworkPolicy: makeNetworkPolicy({
+        allowedCidrs: ["203.0.113.0/24"],
+      }),
+      networkPolicyCapabilities: capabilities,
+    });
+    await deployment.applyK8sNetworkPolicy();
+
+    const stalePolicy = structuredClone(policies.get(policyName));
+    expect(stalePolicy).toBeDefined();
+    if (!stalePolicy?.metadata) throw new Error("expected policy metadata");
+    stalePolicy.metadata.name = "mcp-egress-generated-stale";
+    policies.set(stalePolicy.metadata.name, stalePolicy);
+
+    await deployment.deleteK8sNetworkPolicy();
+
+    expect([...policies.keys()]).toEqual([]);
+    expect(networkingApi.deleteNamespacedNetworkPolicy).toHaveBeenCalledWith({
+      name: policyName,
+      namespace: "default",
+    });
+    expect(networkingApi.deleteNamespacedNetworkPolicy).toHaveBeenCalledWith({
+      name: "mcp-egress-generated-stale",
+      namespace: "default",
+    });
+  });
 });
 
 describe("K8sDeployment.removeDeployment", () => {

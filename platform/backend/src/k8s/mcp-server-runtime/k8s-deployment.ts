@@ -753,6 +753,9 @@ export default class K8sDeployment {
       this.deleteGkeFqdnNetworkPolicy(policyName),
       this.deleteAwsApplicationNetworkPolicy(policyName),
     ]);
+    await this.cleanupStaleManagedNetworkPolicies({
+      desiredPolicyName: policyName,
+    });
   }
 
   private async deleteKubernetesNetworkPolicy(

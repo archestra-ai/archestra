@@ -787,6 +787,31 @@ async function ensureExistingUsersHavePersonalMcpGateways(): Promise<void> {
   }
 }
 
+/**
+ * When the skills feature flag is enabled, turn on the Agent Skill tools for
+ * every organization that hasn't already opted in. This makes skills a default
+ * capability: newly created agents inherit the model-facing skill tools and the
+ * slash-command toggle unlocks without an admin first clicking "enable".
+ * Pre-existing agents are not retrofitted. No-op when the flag is off.
+ */
+async function enableSkillToolsWhenFeatureEnabled(): Promise<void> {
+  if (!config.agents.skillsEnabled) return;
+  try {
+    const enabled = await OrganizationModel.enableSkillToolsForAllOrgs();
+    if (enabled > 0) {
+      logger.info(
+        { count: enabled },
+        "Enabled Agent Skill tools by default for organizations",
+      );
+    }
+  } catch (error) {
+    logger.error(
+      { err: error },
+      "Failed to enable Agent Skill tools by default",
+    );
+  }
+}
+
 export async function seedRequiredStartingData(): Promise<void> {
   ensureEncryptionKeyAvailable();
   await migrateSecretsToEncrypted();
@@ -796,6 +821,7 @@ export async function seedRequiredStartingData(): Promise<void> {
   await syncBuiltInAgents();
   await syncBuiltInSkills();
   await seedArchestraCatalogAndTools();
+  await enableSkillToolsWhenFeatureEnabled();
   await seedPlaywrightCatalog();
   await migratePlaywrightToolsToDynamicCredential();
   await seedTestMcpServer();

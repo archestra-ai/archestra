@@ -22,6 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import { UserSearchableSelect } from "@/components/user-searchable-select";
 import config from "@/lib/config/config";
@@ -171,46 +172,29 @@ function TeamSection(props: {
   onDescriptionChange: (value: string) => void;
 }) {
   return (
-    <div className="space-y-8">
-      <section className="space-y-4">
-        <div>
-          <h3 className="text-sm font-semibold">Details</h3>
-          <p className="text-sm text-muted-foreground">
-            Update the team name and description shown across the workspace.
-          </p>
+    <div className="space-y-6">
+      <div className="grid max-w-3xl gap-4">
+        <div className="space-y-2">
+          <Label htmlFor="team-name">Team Name *</Label>
+          <Input
+            id="team-name"
+            value={props.name}
+            onChange={(event) => props.onNameChange(event.target.value)}
+          />
         </div>
-        <div className="space-y-4 max-w-3xl">
-          <div className="space-y-2">
-            <Label htmlFor="team-name">Team Name *</Label>
-            <Input
-              id="team-name"
-              value={props.name}
-              onChange={(event) => props.onNameChange(event.target.value)}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="team-description">Description</Label>
-            <Textarea
-              id="team-description"
-              value={props.description}
-              onChange={(event) =>
-                props.onDescriptionChange(event.target.value)
-              }
-            />
-          </div>
+        <div className="space-y-2">
+          <Label htmlFor="team-description">Description</Label>
+          <Textarea
+            id="team-description"
+            value={props.description}
+            onChange={(event) => props.onDescriptionChange(event.target.value)}
+          />
         </div>
-      </section>
+      </div>
 
-      <section className="space-y-4">
-        <div>
-          <h3 className="text-sm font-semibold">Members</h3>
-          <p className="text-sm text-muted-foreground">
-            Add users to this team and choose whether they are team admins or
-            members.
-          </p>
-        </div>
-        <MembersSection open={props.open} team={props.team} />
-      </section>
+      <Separator />
+
+      <MembersSection open={props.open} team={props.team} />
     </div>
   );
 }

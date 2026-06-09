@@ -16,6 +16,7 @@ import { normalizeIdentityProviderFormValues } from "@/app/settings/identity-pro
 import { TeamSyncConfigForm } from "@/app/settings/identity-providers/_parts/team-sync-config-form.ee";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { Button } from "@/components/ui/button";
+import { Form } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -25,6 +26,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Separator } from "@/components/ui/separator";
 import {
   useIdentityProviders,
   useUpdateIdentityProvider,
@@ -134,9 +136,9 @@ export function TeamManagementExternalSyncSection({
   }
 
   return (
-    <div className="space-y-8">
-      <section className="space-y-4">
-        <div className="max-w-3xl space-y-2">
+    <div className="space-y-6">
+      <div className="grid max-w-3xl gap-4">
+        <div className="space-y-2">
           <Label>Identity Provider</Label>
           <Select
             value={selectedIdentityProvider?.id}
@@ -158,35 +160,17 @@ export function TeamManagementExternalSyncSection({
             extraction.
           </p>
         </div>
-      </section>
 
-      {selectedIdentityProvider && (
-        <section className="space-y-4">
-          <div>
-            <h3 className="text-sm font-semibold">Group Extraction</h3>
-            <p className="text-sm text-muted-foreground">
-              Reuse the same Team Sync template and debugger from the identity
-              provider editor.
-            </p>
-          </div>
+        {selectedIdentityProvider && (
           <IdentityProviderTeamSyncPanel
             identityProvider={selectedIdentityProvider}
           />
-        </section>
-      )}
+        )}
+      </div>
 
-      <section className="space-y-4">
-        <div>
-          <h3 className="text-sm font-semibold">Team Mapping</h3>
-          <p className="text-sm text-muted-foreground">
-            Map extracted SSO group identifiers to "{team.name}". Matching users
-            are added to this team when they sign in.{" "}
-            <ExternalDocsLink href={getDocsUrl(DocsPage.PlatformSsoTeamSync)}>
-              Learn More
-            </ExternalDocsLink>
-          </p>
-        </div>
+      <Separator />
 
+      <div className="space-y-6">
         <div className="space-y-2 max-w-3xl">
           <Label>Add External Group Mapping</Label>
           <div className="flex gap-2">
@@ -210,6 +194,13 @@ export function TeamManagementExternalSyncSection({
               Add
             </Button>
           </div>
+          <p className="text-sm text-muted-foreground">
+            Map extracted SSO group identifiers to "{team.name}". Matching users
+            are added to this team when they sign in.{" "}
+            <ExternalDocsLink href={getDocsUrl(DocsPage.PlatformSsoTeamSync)}>
+              Learn More
+            </ExternalDocsLink>
+          </p>
         </div>
 
         <div className="space-y-2">
@@ -238,7 +229,7 @@ export function TeamManagementExternalSyncSection({
             </div>
           )}
         </div>
-      </section>
+      </div>
     </div>
   );
 }
@@ -268,23 +259,25 @@ function IdentityProviderTeamSyncPanel({
   };
 
   return (
-    <div className="space-y-4 max-w-3xl">
-      <TeamSyncConfigForm
-        form={form}
-        identityProviderId={identityProvider.id}
-        embedded
-      />
-      <Button
-        type="button"
-        variant="outline"
-        onClick={handleSave}
-        disabled={updateIdentityProvider.isPending}
-      >
-        {updateIdentityProvider.isPending
-          ? "Saving extraction..."
-          : "Save Extraction"}
-      </Button>
-    </div>
+    <Form {...form}>
+      <div className="space-y-4">
+        <TeamSyncConfigForm
+          form={form}
+          identityProviderId={identityProvider.id}
+          embedded
+        />
+        <Button
+          type="button"
+          variant="outline"
+          onClick={handleSave}
+          disabled={updateIdentityProvider.isPending}
+        >
+          {updateIdentityProvider.isPending
+            ? "Saving extraction..."
+            : "Save Extraction"}
+        </Button>
+      </div>
+    </Form>
   );
 }
 

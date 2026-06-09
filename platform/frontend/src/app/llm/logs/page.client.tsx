@@ -343,7 +343,7 @@ function SessionsTable({
       },
       {
         id: "cache",
-        header: "Cache",
+        header: "Cache read",
         size: 120,
         minSize: 96,
         cell: ({ row }) => {

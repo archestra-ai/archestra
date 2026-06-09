@@ -38,6 +38,33 @@ class AppToolModel {
       .where(eq(schema.appToolsTable.appId, appId));
   }
 
+  /**
+   * The assigned tool row (incl. `meta`) for a given name, or null if the tool
+   * is not attached to this app. Mirrors `ToolModel.findByNameForAgent`; the app
+   * MCP proxy uses it to enforce the per-app allowlist and the `_meta.ui`
+   * visibility gate before a tools/call reaches execution.
+   */
+  static async findByNameForApp(
+    appId: string,
+    name: string,
+  ): Promise<typeof schema.toolsTable.$inferSelect | null> {
+    const [result] = await db
+      .select({ tool: schema.toolsTable })
+      .from(schema.appToolsTable)
+      .innerJoin(
+        schema.toolsTable,
+        eq(schema.appToolsTable.toolId, schema.toolsTable.id),
+      )
+      .where(
+        and(
+          eq(schema.appToolsTable.appId, appId),
+          eq(schema.toolsTable.name, name),
+        ),
+      )
+      .limit(1);
+    return result?.tool ?? null;
+  }
+
   /** Fail-closed allowlist check: is a tool with this name attached to the app? */
   static async isToolAllowed(
     appId: string,

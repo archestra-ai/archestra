@@ -1522,7 +1522,10 @@ async function buildSearchToolsDescription(
   return `${baseDescription} Available MCP servers for this gateway include: ${catalogSummaries.join(", ")}${remainingText}. Use this tool first when the user names one of these servers or asks for capabilities that may be provided by connected MCP servers.`;
 }
 
-function normalizeToolInputSchema(schema: unknown): McpListTool["inputSchema"] {
+/** @public — also consumed by the app MCP server (mcp-app-gateway.utils.ts). */
+export function normalizeToolInputSchema(
+  schema: unknown,
+): McpListTool["inputSchema"] {
   if (isRecord(schema) && schema.type === "object") {
     return schema as McpListTool["inputSchema"];
   }

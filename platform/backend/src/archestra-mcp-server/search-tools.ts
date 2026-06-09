@@ -563,7 +563,12 @@ function formatParamSignature(param: InputParameterSummary): string {
   const requiredMark = param.required ? "!" : "?";
   const typePart = formatParamType(param);
   const typeSuffix = typePart ? `:${typePart}` : "";
-  const descriptionSuffix = param.description ? ` — ${param.description}` : "";
+  // collapse whitespace so a multiline schema description cannot break the
+  // one-line signature contract.
+  const description = param.description
+    ? param.description.replace(/\s+/g, " ").trim()
+    : "";
+  const descriptionSuffix = description ? ` — ${description}` : "";
   return `${param.name}${requiredMark}${typeSuffix}${descriptionSuffix}`;
 }
 

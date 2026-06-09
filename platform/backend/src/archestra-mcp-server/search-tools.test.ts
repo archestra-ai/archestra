@@ -540,14 +540,70 @@ describe("search_tools", () => {
       ).toBe("payload?:object{id!:number, note?:string}");
     });
 
-    test("caps long enums and reports the overflow", () => {
-      const values = Array.from({ length: 25 }, (_, index) => `v${index}`);
-      const signature = signatureFor({
+    test("expands array-of-object items", () => {
+      expect(
+        signatureFor({
+          type: "object",
+          properties: {
+            todos: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: { content: { type: "string" } },
+                required: ["content"],
+              },
+            },
+          },
+        }),
+      ).toBe("todos?:array{content!:string}");
+    });
+
+    test("renders type, object shape, and enum together", () => {
+      expect(
+        signatureFor({
+          type: "object",
+          properties: {
+            target: {
+              type: "object",
+              properties: { id: { type: "string" } },
+              enum: [{ id: "a" }],
+            },
+          },
+        }),
+      ).toBe('target?:object{id?:string} enum({"id":"a"})');
+    });
+
+    test("collapses whitespace in descriptions to keep the signature single-line", () => {
+      expect(
+        signatureFor({
+          type: "object",
+          properties: {
+            body: { type: "string", description: "Line one.\n  Line two." },
+          },
+        }),
+      ).toBe("body?:string — Line one. Line two.");
+    });
+
+    const enumSignatureFor = (count: number) =>
+      signatureFor({
         type: "object",
-        properties: { kind: { type: "string", enum: values } },
+        properties: {
+          kind: {
+            type: "string",
+            enum: Array.from({ length: count }, (_, index) => `v${index}`),
+          },
+        },
       });
-      expect(signature.startsWith('kind?:string enum("v0"|')).toBe(true);
-      expect(signature.endsWith('"v19"|…(+5 more))')).toBe(true);
+
+    test("renders every enum value at exactly the cap with no overflow marker", () => {
+      const signature = enumSignatureFor(20);
+      expect(signature.endsWith('"v19")')).toBe(true);
+      expect(signature).not.toContain("more");
+    });
+
+    test("caps long enums and reports the overflow count", () => {
+      expect(enumSignatureFor(21).endsWith('"v19"|…(+1 more))')).toBe(true);
+      expect(enumSignatureFor(25).endsWith('"v19"|…(+5 more))')).toBe(true);
     });
 
     test("returns an empty string when there are no parameters", () => {

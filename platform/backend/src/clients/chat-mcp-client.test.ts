@@ -1585,7 +1585,7 @@ describe("buildArchestraToolOutput", () => {
     _meta: { extra: true },
   };
 
-  test("returns plain text for a direct (non-run_tool) archestra tool", async ({
+  test("returns plain text for a direct non-app archestra tool even with structuredContent", async ({
     makeAgent,
   }) => {
     const agent = await makeAgent();
@@ -1597,6 +1597,94 @@ describe("buildArchestraToolOutput", () => {
     });
 
     expect(result).toBe("Diagram displayed!");
+  });
+
+  test.for([
+    "create_app",
+    "update_app",
+    "get_app",
+  ] as const)("returns the rich shape for a direct %s result so chat can mount the app runtime", async (shortName, {
+    makeAgent,
+  }) => {
+    const agent = await makeAgent();
+    const appResponse = {
+      content: [{ type: "text" as const, text: `Created app "Todo" (app-1).` }],
+      structuredContent: { id: "app-1", name: "Todo", latestVersion: 1 },
+      isError: false,
+    };
+
+    const result = await chatClient.buildArchestraToolOutput({
+      response: appResponse,
+      toolName: `archestra__${shortName}`,
+      toolArguments: {},
+      agentId: agent.id,
+    });
+
+    expect(result).toMatchObject({
+      content: `Created app "Todo" (app-1).`,
+      structuredContent: { id: "app-1" },
+      rawContent: appResponse.content,
+    });
+  });
+
+  test("returns the rich shape for a run_tool dispatch with a bare create_app target", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent();
+    const appResponse = {
+      content: [{ type: "text" as const, text: `Created app "Todo" (app-1).` }],
+      structuredContent: { id: "app-1", name: "Todo", latestVersion: 1 },
+      isError: false,
+    };
+
+    const result = await chatClient.buildArchestraToolOutput({
+      response: appResponse,
+      toolName: "archestra__run_tool",
+      toolArguments: { tool_name: "create_app", tool_args: {} },
+      agentId: agent.id,
+    });
+
+    expect(result).toMatchObject({
+      content: `Created app "Todo" (app-1).`,
+      structuredContent: { id: "app-1" },
+    });
+  });
+
+  test("returns plain text for an app tool error result", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent();
+    const result = await chatClient.buildArchestraToolOutput({
+      response: {
+        content: [
+          { type: "text" as const, text: "Error: Authentication required." },
+        ],
+        isError: true,
+      },
+      toolName: "archestra__create_app",
+      toolArguments: {},
+      agentId: agent.id,
+    });
+
+    expect(result).toBe("Error: Authentication required.");
+  });
+
+  test("returns plain text for list_apps despite structuredContent", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent();
+    const result = await chatClient.buildArchestraToolOutput({
+      response: {
+        content: [{ type: "text" as const, text: "2 apps" }],
+        structuredContent: { apps: [] },
+        isError: false,
+      },
+      toolName: "archestra__list_apps",
+      toolArguments: {},
+      agentId: agent.id,
+    });
+
+    expect(result).toBe("2 apps");
   });
 
   test("attaches the target tool's UI resource when dispatched via run_tool", async ({

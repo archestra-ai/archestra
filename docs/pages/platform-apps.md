@@ -18,7 +18,7 @@ Ships behind `ARCHESTRA_APPS_ENABLED` (off by default). See [Deployment](./platf
 
 ## Authoring and running
 
-Create an app from a starter template (the HTML seed) and a name. Editing the HTML forks a new immutable version; the head version is served when the app runs. Run an app standalone at `/apps/:id/run` (no chat chrome) or open it from chat — both drive the same app-bound runtime, so behavior is identical.
+Create an app from a starter template (the HTML seed) and a name. Editing the HTML forks a new immutable version; the head version is served when the app runs. Run an app standalone at `/apps/:id/run` (no chat chrome), or from chat: a successful `create_app`, `update_app`, or `get_app` call renders the app inline in the conversation. Both surfaces drive the same app-bound runtime, so behavior is identical.
 
 ## App Data Store
 

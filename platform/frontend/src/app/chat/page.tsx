@@ -143,6 +143,7 @@ import {
   type SupportedProvider,
   useLlmProviderApiKeys,
 } from "@/lib/llm-provider-api-keys.query";
+import { useArchestraMcpIdentity } from "@/lib/mcp/archestra-mcp-server";
 import { useOrganization } from "@/lib/organization.query";
 import { useTeams } from "@/lib/teams/team.query";
 import { cn } from "@/lib/utils";
@@ -934,13 +935,16 @@ export function ChatPageContent({
   // selector is deterministic and survives transient section unmounts (the
   // previous mount-effect registry could empty when a single canvas's section
   // briefly unmounted).
+  const { getToolShortName: getArchestraToolShortName } =
+    useArchestraMcpIdentity();
   const mcpCanvases = useMemo(
     () =>
       deriveCanvasesFromMessages(
         messages,
         chatSession?.earlyToolUiStarts ?? {},
+        getArchestraToolShortName,
       ),
-    [messages, chatSession?.earlyToolUiStarts],
+    [messages, chatSession?.earlyToolUiStarts, getArchestraToolShortName],
   );
   const sendMessage = chatSession?.sendMessage;
   const regenerateUserMessage = chatSession?.regenerateUserMessage;

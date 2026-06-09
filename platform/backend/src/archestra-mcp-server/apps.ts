@@ -108,7 +108,7 @@ const registry = defineArchestraTools([
     shortName: TOOL_CREATE_APP_SHORT_NAME,
     title: "Create App",
     description:
-      "Create a new MCP App from an HTML document. Defaults to personal scope (owned by the calling user). Returns the created app id and its first version. The app's HTML runs sandboxed and can persist app-scoped state through window.archestra.data.get/set/list/delete (backed by the app_data_* tools; no app id is passed — the store is always the running app's own).",
+      "Create a new MCP App from an HTML document. Defaults to personal scope (owned by the calling user). Returns the created app id and its first version. When called from the chat UI the app is rendered inline in the conversation automatically; its standalone page is /apps/<id>/run. The app's HTML runs sandboxed and can persist app-scoped state through window.archestra.data.get/set/list/delete (backed by the app_data_* tools; no app id is passed — the store is always the running app's own).",
     schema: CreateAppSchema,
     outputSchema: AppSummaryOutputSchema,
     async handler({ args, context }) {
@@ -172,7 +172,7 @@ const registry = defineArchestraTools([
           scope: app.scope,
           latestVersion: app.latestVersion,
         },
-        `Created app "${app.name}" (${app.id}).`,
+        `Created app "${app.name}" (${app.id}). Rendered inline when viewed in chat; standalone run page: /apps/${app.id}/run`,
       );
     },
   }),
@@ -211,7 +211,8 @@ const registry = defineArchestraTools([
   defineArchestraTool({
     shortName: TOOL_GET_APP_SHORT_NAME,
     title: "Get App",
-    description: "Get a single app by id, if the caller may view it.",
+    description:
+      "Get a single app by id, if the caller may view it. When called from the chat UI the app is rendered inline in the conversation (use this to open/show an existing app); its standalone page is /apps/<id>/run.",
     schema: GetAppSchema,
     outputSchema: AppSummaryOutputSchema,
     async handler({ args, context }) {
@@ -230,20 +231,24 @@ const registry = defineArchestraTools([
       if (!app) {
         return errorResult(`No app found with id ${args.appId}.`);
       }
-      return structuredSuccessResult({
+      const summary = {
         id: app.id,
         name: app.name,
         description: app.description,
         scope: app.scope,
         latestVersion: app.latestVersion,
-      });
+      };
+      return structuredSuccessResult(
+        summary,
+        `${JSON.stringify(summary, null, 2)}\nRendered inline when viewed in chat; standalone run page: /apps/${app.id}/run`,
+      );
     },
   }),
   defineArchestraTool({
     shortName: TOOL_UPDATE_APP_SHORT_NAME,
     title: "Update App",
     description:
-      "Update an app's metadata and/or its HTML. Supplying new html forks a new immutable version (suppressed if identical).",
+      "Update an app's metadata and/or its HTML. Supplying new html forks a new immutable version (suppressed if identical). When called from the chat UI the app's head version is rendered inline in the conversation.",
     schema: UpdateAppSchema,
     outputSchema: AppSummaryOutputSchema,
     async handler({ args, context }) {
@@ -361,7 +366,7 @@ const registry = defineArchestraTools([
           scope: updated.scope,
           latestVersion: updated.latestVersion,
         },
-        `Updated app "${updated.name}" (now at version ${updated.latestVersion}).`,
+        `Updated app "${updated.name}" (now at version ${updated.latestVersion}). Rendered inline when viewed in chat; standalone run page: /apps/${updated.id}/run`,
       );
     },
   }),

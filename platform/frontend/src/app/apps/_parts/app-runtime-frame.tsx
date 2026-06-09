@@ -1,5 +1,6 @@
 "use client";
 
+import { getArchestraAppResourceUri } from "@archestra/shared";
 import type { McpUiDisplayMode } from "@modelcontextprotocol/ext-apps";
 import { useState } from "react";
 import { McpAppRuntime } from "@/components/mcp-app/mcp-app-view";
@@ -16,7 +17,7 @@ export function AppRuntimeFrame({ appId }: { appId: string }) {
   return (
     <div className="h-full w-full">
       <McpAppRuntime
-        toolResourceUri={`ui://archestra-app/${appId}`}
+        toolResourceUri={getArchestraAppResourceUri(appId)}
         endpoint={{ kind: "app", appId }}
         displayMode={displayMode}
         onDisplayModeChange={setDisplayMode}

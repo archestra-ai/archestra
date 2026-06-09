@@ -63,6 +63,8 @@ describe("app tool execution", () => {
     expect(created.isError).toBe(false);
     const appId = structured(created).id as string;
     expect(structured(created).latestVersion).toBe(1);
+    // The model hands this link to the user; the chat UI renders inline from structuredContent.id.
+    expect((created.content[0] as any).text).toContain(`/apps/${appId}/run`);
 
     const listed = await executeArchestraTool(
       getArchestraToolFullName(TOOL_LIST_APPS_SHORT_NAME),

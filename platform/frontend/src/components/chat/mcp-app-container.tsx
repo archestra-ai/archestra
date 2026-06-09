@@ -71,6 +71,7 @@ class McpAppErrorBoundary extends Component<
 export function McpAppSection({
   uiResourceUri,
   agentId,
+  appId,
   toolName,
   toolCallId,
   toolInput,
@@ -80,12 +81,20 @@ export function McpAppSection({
 }: {
   uiResourceUri: string;
   agentId: string;
+  /**
+   * Owned-app render: drive the app-bound endpoint (`/api/mcp/app/:appId`)
+   * instead of the agent gateway. Set for Archestra-authored apps surfaced by
+   * the app-management tools; the management tool's input/result are not
+   * forwarded into the iframe (they are not app data).
+   */
+  appId?: string;
   /** Full prefixed tool name (e.g. "system__get-system-stats") — used to derive the server prefix for oncalltool */
   toolName: string;
   /** Stable identifier for this canvas, used to pin it to the sidebar. */
   toolCallId?: string;
   toolInput?: Record<string, unknown>;
-  rawOutput: McpToolOutput | undefined;
+  /** Tool result for the iframe; omitted for owned apps (management payloads are not app data) */
+  rawOutput?: McpToolOutput;
   /** HTML pre-fetched by the backend and delivered via SSE — skips the in-browser HTTP fetch */
   preloadedResource?: AppResourceMeta;
   /** Called when the MCP App sends a ui/message request to inject a user message into the conversation */
@@ -122,9 +131,10 @@ export function McpAppSection({
   const renderInSidebar = sidebarHostingActive && isSelected;
   const renderPlaceholder = sidebarHostingActive;
 
-  // Reconstruct McpCallToolResult for AppFrame
+  // Reconstruct McpCallToolResult for AppFrame. Owned apps get none — the
+  // management tool's result is not app data.
   const toolResult = useMemo((): McpCallToolResult | undefined => {
-    if (!rawOutput) return undefined;
+    if (!rawOutput || appId) return undefined;
     return {
       content: rawOutput.rawContent ?? [
         { type: "text" as const, text: rawOutput.content },
@@ -133,7 +143,7 @@ export function McpAppSection({
       _meta: rawOutput._meta,
       isError: false,
     };
-  }, [rawOutput]);
+  }, [rawOutput, appId]);
 
   const handleSelect = () => {
     if (!toolCallId) return;
@@ -169,15 +179,20 @@ export function McpAppSection({
       >
         <McpAppRuntime
           toolResourceUri={uiResourceUri}
-          endpoint={{
-            kind: "agent",
-            agentId,
-            serverPrefix: parseFullToolName(toolName).serverName ?? toolName,
-          }}
+          endpoint={
+            appId
+              ? { kind: "app", appId }
+              : {
+                  kind: "agent",
+                  agentId,
+                  serverPrefix:
+                    parseFullToolName(toolName).serverName ?? toolName,
+                }
+          }
           displayMode={displayMode}
           onDisplayModeChange={setDisplayMode}
           onSizeChange={setSize}
-          toolInput={toolInput}
+          toolInput={appId ? undefined : toolInput}
           toolResult={toolResult}
           preloadedResource={preloadedResource}
           onResourceStateChange={handleResourceStateChange}

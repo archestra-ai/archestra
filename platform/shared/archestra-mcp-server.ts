@@ -416,6 +416,37 @@ export function isAlwaysExposedArchestraToolShortName(
   return ALWAYS_EXPOSED_ARCHESTRA_TOOL_SHORT_NAME_SET.has(shortName);
 }
 
+/**
+ * App-management tools whose successful result identifies a single owned MCP
+ * App (`structuredContent.id`). Chat mounts the app-bound runtime inline for
+ * these, so their results must keep `structuredContent` through the chat
+ * serialization path. `list_apps`/`delete_app` deliberately excluded — they
+ * identify no single renderable app.
+ */
+export const APP_RENDERING_ARCHESTRA_TOOL_SHORT_NAMES = [
+  TOOL_CREATE_APP_SHORT_NAME,
+  TOOL_UPDATE_APP_SHORT_NAME,
+  TOOL_GET_APP_SHORT_NAME,
+] as const satisfies readonly ArchestraToolShortName[];
+
+const APP_RENDERING_ARCHESTRA_TOOL_SHORT_NAME_SET: ReadonlySet<string> =
+  new Set(APP_RENDERING_ARCHESTRA_TOOL_SHORT_NAMES);
+
+export function isAppRenderingArchestraToolShortName(
+  shortName: string,
+): boolean {
+  return APP_RENDERING_ARCHESTRA_TOOL_SHORT_NAME_SET.has(shortName);
+}
+
+/**
+ * Synthetic resource URI for an owned app's HTML. The app-bound MCP server
+ * ignores the requested URI and always serves the head version, but hosts
+ * need a stable identifier for the runtime's resource fetch and re-keying.
+ */
+export function getArchestraAppResourceUri(appId: string): string {
+  return `ui://archestra-app/${appId}`;
+}
+
 export function isArchestraMcpServerTool(
   toolName: string,
   options?: ArchestraMcpIdentityOptions & { includeDefaultPrefix?: boolean },

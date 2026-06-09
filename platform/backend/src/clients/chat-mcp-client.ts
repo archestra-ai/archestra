@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import {
   isAgentTool,
+  isAppRenderingArchestraToolShortName,
   isBrowserMcpTool,
   MCP_APPS_CLIENT_EXTENSION_CAPABILITIES,
   parseFullToolName,
@@ -1764,6 +1765,31 @@ export async function buildArchestraToolOutput(params: {
     .join("\n");
 
   const targetToolName = resolveRunToolTargetName(toolName, toolArguments);
+
+  // App-management results identify an owned app via structuredContent.id;
+  // the chat frontend mounts the app-bound runtime from it, so keep the rich
+  // shape. Scoped to the app trio — other Archestra tools stay plain text
+  // (e.g. knowledge-source citations parse the plain output).
+  const targetShortName = archestraMcpBranding.getToolShortName(targetToolName);
+  // run_tool also accepts bare archestra short names (see run-tool.ts routing);
+  // a bare name can only be a run_tool target — direct chat tool names are
+  // always server-prefixed.
+  const matchesAppTrio =
+    targetShortName !== null
+      ? isAppRenderingArchestraToolShortName(targetShortName)
+      : isAppRenderingArchestraToolShortName(targetToolName);
+  if (
+    matchesAppTrio &&
+    !response.isError &&
+    isRecord(response.structuredContent)
+  ) {
+    return {
+      content: text,
+      structuredContent: response.structuredContent,
+      rawContent: response.content as ContentBlock[],
+    };
+  }
+
   if (targetToolName === toolName) {
     // Not a run_tool dispatch — no UI resource to attach.
     return text;

@@ -9,7 +9,6 @@ import {
 } from "@/services/agent-tool-assignment";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type {
-  EnterpriseManagedCredentialConfig,
   InternalMcpCatalog,
   Tool,
   User,
@@ -58,13 +57,6 @@ function emptyPreFetchedData() {
     toolsMap: new Map<string, Tool>(),
     catalogItemsMap: new Map<string, InternalMcpCatalog>(),
     mcpServersBasicMap: new Map<string, PrefetchedMcpServer>(),
-  };
-}
-
-function _fakeEnterpriseManagedConfig(): EnterpriseManagedCredentialConfig {
-  return {
-    resourceIdentifier: "github-managed-connection",
-    requestedCredentialType: "bearer_token",
   };
 }
 

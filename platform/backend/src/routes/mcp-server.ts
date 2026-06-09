@@ -1963,11 +1963,12 @@ async function connectAndGetToolsForInstallation(params: {
           catalogItem.enterpriseManagedConfig.identityProviderId,
         )
       : null;
-    const providerLabel =
-      identityProvider?.providerId ?? "the configured identity provider";
+    const message = identityProvider
+      ? `Connect ${identityProvider.providerId} before installing this MCP server.`
+      : "Sign in with SSO to link your identity provider before installing this MCP server.";
     throw new ApiError(
       401,
-      `Connect ${providerLabel} before installing this MCP server.`,
+      message,
     );
   }
 

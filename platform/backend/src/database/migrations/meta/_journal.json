@@ -1961,6 +1961,13 @@
       "when": 1781014582608,
       "tag": "0279_agent_lifecycle_hooks",
       "breakpoints": true
+    },
+    {
+      "idx": 280,
+      "version": "7",
+      "when": 1781028695085,
+      "tag": "0280_greedy_killer_shrike",
+      "breakpoints": true
     }
   ]
 }

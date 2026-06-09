@@ -67,8 +67,8 @@ export default function OrganizationSettingsPage() {
     DEFAULT_THEME,
     isLoadingAppearance,
   } = orgTheme ?? {
-    currentUITheme: "modern-minimal" as const,
-    DEFAULT_THEME: "modern-minimal" as const,
+    currentUITheme: "caffeine" as const,
+    DEFAULT_THEME: "caffeine" as const,
   };
 
   useOnUnmount(() => {

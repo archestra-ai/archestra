@@ -1,16 +1,19 @@
-# migration-kit
+# Migrate to Archestra
 
 Turn an existing agentic PoC into an [Archestra](https://github.com/archestra-ai/archestra) pilot.
 
-> **Experimental.** This kit is new and still evolving — review its output before applying it to
-> anything you care about.
+> **Experimental.** The migration kit is new and still evolving.
 
-Packaged as a Claude Code **skill** (`migrate-to-archestra`) so the migration runs as a guided,
-agentic flow. Typical sources are messy agentic PoCs built with tools like Claude Code, OpenClaw,
-or Hermes — Claude Code-style files, MCP configs, local scripts, hooks, openclaw config, and
-whatever else accumulated during evaluation.
+The migration kit turns an existing agentic setup into an Archestra setup. Typical sources are the
+unsorted configs left by tools like Claude Code, OpenClaw, or Hermes: project instruction files, MCP
+configs, hooks, local scripts, and whatever else accumulated during evaluation.
 
-The goal is not a byte-for-byte port — it's to get the pilot running in Archestra quickly, with the
+It ships as a Skill (`migrate-to-archestra`) for your favorite coding agent (e.g. Claude Code), so the migration runs as a guided,
+agentic flow rather than a one-shot script. The deterministic work — discovering source artifacts,
+redacting secrets, building and validating API payloads — lives in zero-dependency Python helpers;
+the model owns the judgment calls (what maps to what, what to skip, what needs review).
+
+The goal is not a byte-for-byte port. It is to get the pilot running in Archestra quickly, with the
 important behavior differences surfaced before anything is applied.
 
 ## What you get

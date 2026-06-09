@@ -79,6 +79,10 @@ describe("ChatProvider retries", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    // Model an in-flight replay by default: resumeStream() resolves only when
+    // the replayed stream concludes, so a plain vi.fn() (returning undefined)
+    // would misrepresent the SDK contract.
+    mocks.resumeStream.mockReturnValue(new Promise(() => {}));
     chatOptions = undefined;
     const messages: UIMessage[] = [];
     mocks.useChat.mockImplementation((options) => {
@@ -412,6 +416,85 @@ describe("ChatProvider retries", () => {
     // response they cannot see.
     expect(mocks.resumeStream).toHaveBeenCalledTimes(1);
     expect(mocks.toastError).not.toHaveBeenCalled();
+  });
+
+  it("concludes recovery when the reattach finds the run already finished (204 no-op)", async () => {
+    let resolveResume: (() => void) | undefined;
+    mocks.resumeStream.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveResume = resolve;
+        }),
+    );
+
+    const latestSessionRef: { current: ChatSessionSnapshot } = {
+      current: undefined,
+    };
+
+    render(
+      <ChatProvider>
+        <RegisterChatSession />
+        <CaptureChatSession
+          onSession={(session) => {
+            latestSessionRef.current = session;
+          }}
+        />
+      </ChatProvider>,
+    );
+
+    await waitFor(() => expect(mocks.useChat).toHaveBeenCalled());
+
+    // Sever the stream, let the auto-retry fire, and land its duplicate-run
+    // 409 — the session is now reattaching via resumeStream().
+    vi.useFakeTimers();
+    act(() => {
+      chatOptions?.onError?.(new Error("Failed to fetch"));
+      chatOptions?.onFinish?.({
+        message: { parts: [] },
+        isAbort: false,
+        isError: true,
+        isDisconnect: true,
+      });
+      vi.advanceTimersByTime(1500);
+    });
+    act(() => {
+      chatOptions?.onError?.(
+        new Error("This conversation already has an active response."),
+      );
+      chatOptions?.onFinish?.({
+        message: { parts: [] },
+        isAbort: false,
+        isError: true,
+        isDisconnect: false,
+      });
+    });
+    expect(mocks.resumeStream).toHaveBeenCalledTimes(1);
+    expect(latestSessionRef.current?.isRecovering).toBe(true);
+
+    // The run finished before the reattach landed: reconnectToStream gets the
+    // 204 and the SDK resolves resumeStream() WITHOUT firing onFinish or
+    // onError (ai@6 makeRequest early-returns on a null reconnect stream).
+    await act(async () => {
+      resolveResume?.();
+    });
+
+    // Recovery must conclude — a stuck flag would misroute the next genuine
+    // concurrent submit's 409 into the reattach path (silently dropping the
+    // typed message) and keep the frozen snapshot rendered indefinitely.
+    expect(latestSessionRef.current?.isRecovering).toBe(false);
+    expect(mocks.clearError).toHaveBeenCalled();
+
+    // A later cold 409 is a genuine concurrent submit again: toast, no
+    // reattach.
+    act(() => {
+      chatOptions?.onError?.(
+        new Error("This conversation already has an active response."),
+      );
+    });
+    expect(mocks.resumeStream).toHaveBeenCalledTimes(1);
+    expect(mocks.toastError).toHaveBeenCalledWith(
+      "This conversation already has a response in progress. Stop it before sending another message.",
+    );
   });
 
   it("marks the session as recovering while auto-retrying or reattaching, but not for terminal errors", async () => {

@@ -454,6 +454,11 @@ function ChatSessionHook({
   // Auto-retry state for transient errors
   const retryCountRef = useRef(0);
   const retryTimerRef = useRef<NodeJS.Timeout | null>(null);
+  // Monotonically counts onError invocations. The duplicate-run reattach uses
+  // it to detect that nothing happened between calling resumeStream() and its
+  // promise resolving — the "run already finished" case, where the reconnect
+  // gets a 204 and the SDK early-returns without firing onFinish or onError.
+  const errorSeqRef = useRef(0);
   // True while a transient failure is being auto-recovered (retry scheduled
   // or reattaching to the active run); suppresses the inline error flash.
   // The ref is the source of truth: it is written synchronously inside
@@ -637,6 +642,7 @@ function ChatSessionHook({
       }
     },
     onError: (chatError) => {
+      errorSeqRef.current += 1;
       setOptimisticToolCalls([]);
       clearActiveContextCompaction();
       queryClient.invalidateQueries({
@@ -695,7 +701,30 @@ function ChatSessionHook({
         }
         previousMessagesRef.current = [];
         setIsRecovering(true);
-        void resumeStream();
+        const reattachErrorSeq = errorSeqRef.current;
+        void resumeStream().then(() => {
+          // If the run had already finished, reconnectToStream got a 204 and
+          // the SDK resolved this promise WITHOUT firing onFinish or onError
+          // (ai@6 makeRequest early-returns on a null reconnect stream) —
+          // nothing else would clear the recovery flag, and a stuck flag
+          // misroutes the next genuine concurrent submit's 409 into this
+          // reattach path (silently dropping the typed message) and keeps the
+          // frozen snapshot rendered. Detect that nothing happened while we
+          // waited (recovery still flagged, no new error) and conclude the
+          // recovery; the conversation refetch above already shows the
+          // persisted outcome. A successful replay clears the flag in
+          // onFinish; a failed replay re-enters onError (bumping the seq) and
+          // owns the flag from there.
+          if (
+            recoveringRef.current &&
+            errorSeqRef.current === reattachErrorSeq
+          ) {
+            setIsRecovering(false);
+            // Drop the stale duplicate-run error so the SDK returns to
+            // "ready" instead of idling in the suppressed error state.
+            clearErrorRef.current?.();
+          }
+        });
         return;
       }
 

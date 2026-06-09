@@ -27,6 +27,7 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   // Agents
   agent: ["read", "create", "update", "delete", "team-admin", "admin"],
   skill: ["read", "create", "update", "delete", "team-admin", "admin"],
+  app: ["read", "create", "update", "delete", "team-admin", "admin"],
   sandbox: ["execute"],
   agentTrigger: ["read", "create", "update", "delete"],
   scheduledTask: ["read", "create", "update", "delete", "admin"],
@@ -90,6 +91,7 @@ export const editorPermissions: Record<Resource, Action[]> = {
   // Agents
   agent: ["read", "create", "update", "delete", "team-admin"],
   skill: ["read", "create", "update", "delete", "team-admin"],
+  app: ["read", "create", "update", "delete", "team-admin"],
   sandbox: ["execute"],
   agentTrigger: ["read", "create", "update", "delete"],
   scheduledTask: ["read", "create", "update", "delete"],
@@ -153,6 +155,7 @@ export const memberPermissions: Record<Resource, Action[]> = {
   // Agents
   agent: ["read", "create", "update", "delete"],
   skill: ["read", "create", "update", "delete"],
+  app: ["read", "create", "update", "delete"],
   sandbox: ["execute"],
   agentTrigger: [],
   scheduledTask: ["read", "create", "update", "delete"],
@@ -250,6 +253,14 @@ export const permissionDescriptions: Record<string, string> = {
   "skill:team-admin": "Manage team assignments for agent skills",
   "skill:admin":
     "Full administrative control over all agent skills, bypassing team restrictions",
+  "app:read":
+    "View and run MCP Apps within your scope (org, your teams, your own)",
+  "app:create": "Create new MCP Apps",
+  "app:update": "Modify MCP Apps, their tools, and their team assignments",
+  "app:delete": "Delete MCP Apps",
+  "app:team-admin": "Manage team assignments for MCP Apps",
+  "app:admin":
+    "Full administrative control over all MCP Apps, bypassing team restrictions",
   "sandbox:execute":
     "Run commands and upload/download files in code execution sandboxes",
   "agentTrigger:read":
@@ -1237,6 +1248,19 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.CreateSkillShareLink]: { skill: ["admin"] },
   [RouteId.RevokeSkillShareLink]: { skill: ["admin"] },
 
+  // MCP App Routes - per-instance scope is enforced in the handlers
+  [RouteId.GetApps]: { app: ["read"] },
+  [RouteId.CreateApp]: { app: ["create"] },
+  [RouteId.GetApp]: { app: ["read"] },
+  [RouteId.UpdateApp]: { app: ["update"] },
+  [RouteId.DeleteApp]: { app: ["delete"] },
+  [RouteId.GetAppVersions]: { app: ["read"] },
+  [RouteId.GetAppVersion]: { app: ["read"] },
+  [RouteId.GetAppTools]: { app: ["read"] },
+  [RouteId.AssignToolToApp]: { app: ["update"] },
+  [RouteId.UnassignToolFromApp]: { app: ["update"] },
+  [RouteId.GetAppTemplates]: { app: ["read"] },
+
   // Config endpoint - any authenticated user can access
   [RouteId.GetConfig]: {},
 
@@ -1251,6 +1275,8 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.McpGatewayGet]: {}, // Server discovery endpoint
   [RouteId.McpGatewayPost]: {}, // JSON-RPC endpoint for resources/read and tools/call
   [RouteId.McpProxyPost]: {}, // Frontend proxy to MCP Gateway with session auth
+  // App-bound MCP proxy: app access + visibility/allowlist gate enforced in the handler
+  [RouteId.McpAppProxyPost]: {},
 };
 
 /**
@@ -1271,6 +1297,11 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/agents/skills": { skill: ["read"] },
   "/agents/skills/new": { skill: ["create"] },
   "/scheduled-tasks": { scheduledTask: ["read"] },
+
+  // Apps
+  "/apps": { app: ["read"] },
+  "/apps/[id]": { app: ["read"] },
+  "/apps/[id]/run": { app: ["read"] },
 
   // LLM
   "/llm/proxies": { llmProxy: ["read"] },

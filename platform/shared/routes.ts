@@ -537,6 +537,21 @@ export const RouteId = {
   GetSkillShareLinks: "getSkillShareLinks",
   CreateSkillShareLink: "createSkillShareLink",
   RevokeSkillShareLink: "revokeSkillShareLink",
+
+  // MCP App Routes
+  GetApps: "getApps",
+  CreateApp: "createApp",
+  GetApp: "getApp",
+  UpdateApp: "updateApp",
+  DeleteApp: "deleteApp",
+  GetAppVersions: "getAppVersions",
+  GetAppVersion: "getAppVersion",
+  GetAppTools: "getAppTools",
+  AssignToolToApp: "assignToolToApp",
+  UnassignToolFromApp: "unassignToolFromApp",
+  GetAppTemplates: "getAppTemplates",
+  // Frontend session-based proxy to the app-bound MCP server (chat + standalone)
+  McpAppProxyPost: "mcpAppProxyPost",
 } as const;
 
 export type RouteId = (typeof RouteId)[keyof typeof RouteId];

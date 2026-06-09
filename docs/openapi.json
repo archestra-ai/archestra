@@ -82927,6 +82927,9 @@
                         "agentSkillsEnabled": {
                           "type": "boolean"
                         },
+                        "appsEnabled": {
+                          "type": "boolean"
+                        },
                         "byosEnabled": {
                           "type": "boolean"
                         },
@@ -83015,6 +83018,7 @@
                         "orchestratorK8sRuntime",
                         "sandbox",
                         "agentSkillsEnabled",
+                        "appsEnabled",
                         "byosEnabled",
                         "byosVaultKvVersion",
                         "azureOpenAiEntraIdEnabled",

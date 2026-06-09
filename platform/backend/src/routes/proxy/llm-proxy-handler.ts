@@ -1089,6 +1089,18 @@ async function handleStreaming<
             ATTR_GENAI_USAGE_TOTAL_TOKENS,
             state.usage.inputTokens + state.usage.outputTokens,
           );
+          if (state.usage.cacheReadTokens) {
+            llmSpan.setAttribute(
+              ATTR_ARCHESTRA_USAGE_CACHE_READ_TOKENS,
+              state.usage.cacheReadTokens,
+            );
+          }
+          if (state.usage.cacheWriteTokens) {
+            llmSpan.setAttribute(
+              ATTR_ARCHESTRA_USAGE_CACHE_WRITE_TOKENS,
+              state.usage.cacheWriteTokens,
+            );
+          }
           const cost = await utils.costOptimization.calculateCost(
             actualModel,
             state.usage.inputTokens,

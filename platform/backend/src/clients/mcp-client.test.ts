@@ -8,12 +8,14 @@ import {
   MCP_ENTERPRISE_AUTH_EXTENSION_ID,
   OAUTH_TOKEN_TYPE,
 } from "@archestra/shared";
+import { eq } from "drizzle-orm";
 import { vi } from "vitest";
 import config from "@/config";
 import db, { schema } from "@/database";
 import {
   AgentModel,
   AgentToolModel,
+  AppToolModel,
   InternalMcpCatalogModel,
   McpHttpSessionModel,
   McpServerModel,
@@ -22,6 +24,7 @@ import {
 import * as oauthRoutes from "@/routes/oauth";
 import { secretManager } from "@/secrets-manager";
 import { beforeEach, describe, expect, test } from "@/test";
+import { appOwner } from "@/types";
 import mcpClient from "./mcp-client";
 
 // Mock the MCP SDK
@@ -261,6 +264,99 @@ describe("McpClient", () => {
     expect(tools).toHaveLength(1);
     expect(tools[0].name).toBe("read_resource_todos");
     expect(mockListResources).toHaveBeenCalledTimes(1);
+  });
+
+  describe("executeToolCallForOwner (app owner)", () => {
+    test("executes an app-assigned tool and persists an app-owned audit row", async ({
+      makeApp,
+    }) => {
+      const app = await makeApp();
+      const tool = await ToolModel.createToolIfNotExists({
+        name: "github-mcp-server__app_list",
+        description: "List",
+        parameters: {},
+        catalogId,
+      });
+      await AppToolModel.create(app.id, tool.id, {
+        mcpServerId,
+        credentialResolutionMode: "static",
+      });
+
+      mockConnect.mockResolvedValue(undefined);
+      mockCallTool.mockResolvedValue({
+        content: [{ type: "text", text: "ok" }],
+        isError: false,
+      });
+
+      const result = await mcpClient.executeToolCallForOwner(
+        { id: "call_app_1", name: tool.name, arguments: {} },
+        appOwner(app.id),
+      );
+      expect(result.isError).toBe(false);
+
+      const [row] = await db
+        .select()
+        .from(schema.mcpToolCallsTable)
+        .where(eq(schema.mcpToolCallsTable.appId, app.id));
+      expect(row?.ownerType).toBe("app");
+      expect(row?.appId).toBe(app.id);
+      expect(row?.agentId).toBeNull();
+    });
+
+    test("resolves an app tool called by its unprefixed suffix", async ({
+      makeApp,
+    }) => {
+      const app = await makeApp();
+      const tool = await ToolModel.createToolIfNotExists({
+        name: "github-mcp-server__refresh_stats",
+        description: "Refresh",
+        parameters: {},
+        catalogId,
+      });
+      await AppToolModel.create(app.id, tool.id, {
+        mcpServerId,
+        credentialResolutionMode: "static",
+      });
+
+      mockConnect.mockResolvedValue(undefined);
+      mockCallTool.mockResolvedValue({
+        content: [{ type: "text", text: "ok" }],
+        isError: false,
+      });
+
+      // Third-party hosts call oncalltool with the raw (unprefixed) tool name.
+      const result = await mcpClient.executeToolCallForOwner(
+        { id: "call_app_suffix", name: "refresh_stats", arguments: {} },
+        appOwner(app.id),
+      );
+      expect(result.isError).toBe(false);
+    });
+
+    test("fails closed for a tool the app was never assigned", async ({
+      makeApp,
+    }) => {
+      const app = await makeApp();
+      const result = await mcpClient.executeToolCallForOwner(
+        {
+          id: "call_app_unknown",
+          name: "github-mcp-server__nope",
+          arguments: {},
+        },
+        appOwner(app.id),
+      );
+      expect(result.isError).toBe(true);
+      expect(
+        (result._meta as { archestraError?: { code?: string } } | undefined)
+          ?.archestraError?.code,
+      ).toBe("unknown_tool");
+
+      const [row] = await db
+        .select()
+        .from(schema.mcpToolCallsTable)
+        .where(eq(schema.mcpToolCallsTable.appId, app.id));
+      expect(row?.ownerType).toBe("app");
+      expect(row?.agentId).toBeNull();
+    });
   });
 
   describe("executeToolCall", () => {

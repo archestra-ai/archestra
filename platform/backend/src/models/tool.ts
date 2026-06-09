@@ -1340,6 +1340,77 @@ class ToolModel {
     return mcpTools;
   }
 
+  /** App-owner counterpart of {@link getMcpToolsAssignedToAgent}. */
+  static async getMcpToolsAssignedToApp(
+    toolNames: string[],
+    appId: string,
+  ): Promise<McpToolAssignment[]> {
+    if (toolNames.length === 0) {
+      return [];
+    }
+
+    return await db
+      .select({
+        toolName: schema.toolsTable.name,
+        mcpServerId: schema.appToolsTable.mcpServerId,
+        credentialResolutionMode: schema.appToolsTable.credentialResolutionMode,
+        catalogId: schema.toolsTable.catalogId,
+        catalogName: schema.internalMcpCatalogTable.name,
+        meta: schema.toolsTable.meta,
+      })
+      .from(schema.toolsTable)
+      .innerJoin(
+        schema.appToolsTable,
+        eq(schema.appToolsTable.toolId, schema.toolsTable.id),
+      )
+      .leftJoin(
+        schema.internalMcpCatalogTable,
+        eq(schema.toolsTable.catalogId, schema.internalMcpCatalogTable.id),
+      )
+      .where(
+        and(
+          eq(schema.appToolsTable.appId, appId),
+          inArray(schema.toolsTable.name, toolNames),
+          isNotNull(schema.toolsTable.catalogId),
+        ),
+      );
+  }
+
+  /** App-owner counterpart of {@link getMcpToolsAssignedToAgentBySuffix}. */
+  static async getMcpToolsAssignedToAppBySuffix(
+    toolNameSuffix: string,
+    appId: string,
+  ) {
+    const suffix = `${MCP_SERVER_TOOL_NAME_SEPARATOR}${toolNameSuffix}`;
+
+    return await db
+      .select({
+        toolName: schema.toolsTable.name,
+        mcpServerId: schema.appToolsTable.mcpServerId,
+        credentialResolutionMode: schema.appToolsTable.credentialResolutionMode,
+        catalogId: schema.toolsTable.catalogId,
+        catalogName: schema.internalMcpCatalogTable.name,
+        meta: schema.toolsTable.meta,
+      })
+      .from(schema.toolsTable)
+      .innerJoin(
+        schema.appToolsTable,
+        eq(schema.appToolsTable.toolId, schema.toolsTable.id),
+      )
+      .leftJoin(
+        schema.internalMcpCatalogTable,
+        eq(schema.toolsTable.catalogId, schema.internalMcpCatalogTable.id),
+      )
+      .where(
+        and(
+          eq(schema.appToolsTable.appId, appId),
+          sql`RIGHT(${schema.toolsTable.name}, ${suffix.length}) = ${suffix}`,
+          isNotNull(schema.toolsTable.catalogId),
+        ),
+      )
+      .limit(1);
+  }
+
   /**
    * Get all tools for a specific catalog item with their assignment counts and assigned agents
    * Used to show tools across all installations of the same catalog item

@@ -1,5 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import db, { schema } from "@/database";
+import type { CredentialResolutionMode } from "@/types";
 import type { InsertAppTool } from "@/types/app";
 
 /**
@@ -89,6 +90,65 @@ class AppToolModel {
     return appTool;
   }
 
+  /**
+   * Atomic upsert of an attachment's resolution config, mirroring
+   * `AgentToolModel.createOrUpdateCredentials`. The insert uses
+   * `onConflictDoUpdate` so concurrent assignments cannot violate the
+   * `unique(appId, toolId)` constraint; the prior read distinguishes
+   * created/updated/unchanged for the (non-racing) common case.
+   */
+  static async createOrUpdateCredentials(
+    appId: string,
+    toolId: string,
+    mcpServerId?: string | null,
+    credentialResolutionMode?: CredentialResolutionMode | null,
+  ): Promise<{ status: "created" | "updated" | "unchanged" }> {
+    const normalizedMcpServerId = mcpServerId ?? null;
+    const normalizedMode = credentialResolutionMode ?? "static";
+
+    const [existing] = await db
+      .select({
+        mcpServerId: schema.appToolsTable.mcpServerId,
+        credentialResolutionMode: schema.appToolsTable.credentialResolutionMode,
+      })
+      .from(schema.appToolsTable)
+      .where(
+        and(
+          eq(schema.appToolsTable.appId, appId),
+          eq(schema.appToolsTable.toolId, toolId),
+        ),
+      )
+      .limit(1);
+
+    if (existing) {
+      if (
+        existing.mcpServerId === normalizedMcpServerId &&
+        existing.credentialResolutionMode === normalizedMode
+      ) {
+        return { status: "unchanged" };
+      }
+    }
+
+    await db
+      .insert(schema.appToolsTable)
+      .values({
+        appId,
+        toolId,
+        mcpServerId: normalizedMcpServerId,
+        credentialResolutionMode: normalizedMode,
+      })
+      .onConflictDoUpdate({
+        target: [schema.appToolsTable.appId, schema.appToolsTable.toolId],
+        set: {
+          mcpServerId: normalizedMcpServerId,
+          credentialResolutionMode: normalizedMode,
+          updatedAt: new Date(),
+        },
+      });
+
+    return { status: existing ? "updated" : "created" };
+  }
+
   /** Detach a tool from an app. */
   static async delete(appId: string, toolId: string): Promise<boolean> {
     const rows = await db
@@ -101,20 +161,6 @@ class AppToolModel {
       )
       .returning({ id: schema.appToolsTable.id });
     return rows.length > 0;
-  }
-
-  static async exists(appId: string, toolId: string): Promise<boolean> {
-    const [result] = await db
-      .select({ id: schema.appToolsTable.id })
-      .from(schema.appToolsTable)
-      .where(
-        and(
-          eq(schema.appToolsTable.appId, appId),
-          eq(schema.appToolsTable.toolId, toolId),
-        ),
-      )
-      .limit(1);
-    return result !== undefined;
   }
 }
 

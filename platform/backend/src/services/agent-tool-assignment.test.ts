@@ -6,6 +6,7 @@ import TeamModel from "@/models/team";
 import { describe, expect, test } from "@/test";
 import {
   assignToolToAgent,
+  assignToolToApp,
   filterMcpServersAssignableToTarget,
   isMcpServerAssignableToTarget,
   validateAssignment,
@@ -403,6 +404,150 @@ describe("assignToolToAgent", () => {
 
     expect(assignment?.credentialResolutionMode).toBe("enterprise_managed");
     expect(assignment?.credentialResolutionMode).not.toBe("dynamic");
+  });
+});
+
+describe("assignToolToApp", () => {
+  test("assigns a tool to an app and reports a repeat as duplicate", async ({
+    makeApp,
+    makeTool,
+  }) => {
+    const app = await makeApp();
+    const tool = await makeTool({ name: "app_assignment_tool" });
+
+    const first = await assignToolToApp({ appId: app.id, toolId: tool.id });
+    const second = await assignToolToApp({ appId: app.id, toolId: tool.id });
+
+    expect(first).toBeNull();
+    expect(second).toBe("duplicate");
+
+    const [assignment] = await db
+      .select()
+      .from(schema.appToolsTable)
+      .where(
+        and(
+          eq(schema.appToolsTable.appId, app.id),
+          eq(schema.appToolsTable.toolId, tool.id),
+        ),
+      );
+    expect(assignment?.toolId).toBe(tool.id);
+  });
+
+  test("returns updated when an existing attachment changes its server", async ({
+    makeApp,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeMember,
+    makeOrganization,
+    makeTool,
+    makeUser,
+  }) => {
+    const organization = await makeOrganization();
+    const author = await makeUser();
+    await makeMember(author.id, organization.id, { role: "admin" });
+
+    const app = await makeApp({
+      organizationId: organization.id,
+      authorId: author.id,
+      scope: "personal",
+    });
+    const catalog = await makeInternalMcpCatalog({ serverType: "remote" });
+    const tool = await makeTool({
+      name: "rebindable_app_tool",
+      catalogId: catalog.id,
+    });
+    const firstServer = await makeMcpServer({
+      ownerId: author.id,
+      catalogId: catalog.id,
+    });
+    const secondServer = await makeMcpServer({
+      ownerId: author.id,
+      catalogId: catalog.id,
+    });
+
+    const created = await assignToolToApp({
+      appId: app.id,
+      toolId: tool.id,
+      mcpServerId: firstServer.id,
+    });
+    const updated = await assignToolToApp({
+      appId: app.id,
+      toolId: tool.id,
+      mcpServerId: secondServer.id,
+    });
+
+    expect(created).toBeNull();
+    expect(updated).toBe("updated");
+
+    const [assignment] = await db
+      .select()
+      .from(schema.appToolsTable)
+      .where(
+        and(
+          eq(schema.appToolsTable.appId, app.id),
+          eq(schema.appToolsTable.toolId, tool.id),
+        ),
+      );
+    expect(assignment?.mcpServerId).toBe(secondServer.id);
+  });
+
+  test("returns not_found for an unknown app", async ({ makeTool }) => {
+    const tool = await makeTool({ name: "orphan_app_tool" });
+    const result = await assignToolToApp({
+      appId: "00000000-0000-0000-0000-000000000000",
+      toolId: tool.id,
+    });
+    expect(result).not.toBeNull();
+    expect(result).toMatchObject({ code: "not_found" });
+  });
+
+  test("rejects a server a personal app has no claim to, but allows the author's own", async ({
+    makeApp,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeMember,
+    makeOrganization,
+    makeTool,
+    makeUser,
+  }) => {
+    const organization = await makeOrganization();
+    const author = await makeUser();
+    const stranger = await makeUser();
+    await makeMember(author.id, organization.id, { role: "member" });
+    await makeMember(stranger.id, organization.id, { role: "member" });
+
+    const app = await makeApp({
+      organizationId: organization.id,
+      authorId: author.id,
+      scope: "personal",
+    });
+    const catalog = await makeInternalMcpCatalog({ serverType: "remote" });
+    const tool = await makeTool({
+      name: "scoped_app_tool",
+      catalogId: catalog.id,
+    });
+    const strangersServer = await makeMcpServer({
+      ownerId: stranger.id,
+      catalogId: catalog.id,
+    });
+    const authorsServer = await makeMcpServer({
+      ownerId: author.id,
+      catalogId: catalog.id,
+    });
+
+    const rejected = await assignToolToApp({
+      appId: app.id,
+      toolId: tool.id,
+      mcpServerId: strangersServer.id,
+    });
+    expect(rejected).toMatchObject({ code: "validation_error" });
+
+    const allowed = await assignToolToApp({
+      appId: app.id,
+      toolId: tool.id,
+      mcpServerId: authorsServer.id,
+    });
+    expect(allowed).toBeNull();
   });
 });
 

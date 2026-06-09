@@ -8,7 +8,7 @@ import {
 } from "@/types/app";
 
 /** A single App Data Store entry as surfaced to callers. */
-export interface AppDataEntry {
+interface AppDataEntry {
   key: string;
   value: unknown;
 }

@@ -69,6 +69,7 @@ export * from "./task";
 export * from "./team";
 export * from "./team-token";
 export * from "./tool";
+export * from "./tool-owner";
 export * from "./tool-result-compression";
 export * from "./user";
 export * from "./user-token";

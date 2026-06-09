@@ -1,6 +1,9 @@
 import {
   AgentModel,
   AgentToolModel,
+  AppModel,
+  AppTeamModel,
+  AppToolModel,
   InternalMcpCatalogModel,
   McpServerModel,
   MemberModel,
@@ -13,9 +16,10 @@ import type {
   InternalMcpCatalog,
   ResourceVisibilityScope,
   Tool,
+  ToolOwnerContext,
 } from "@/types";
 
-type AgentToolAssignmentError = {
+type ToolAssignmentError = {
   code: "not_found" | "validation_error";
   error: { message: string; type: string };
 };
@@ -54,7 +58,7 @@ interface AgentToolAssignmentRequest {
 
 export async function assignToolToAgent(
   params: AgentToolAssignmentRequest,
-): Promise<AgentToolAssignmentError | "duplicate" | "updated" | null> {
+): Promise<ToolAssignmentError | "duplicate" | "updated" | null> {
   const credentialResolutionMode = normalizeCredentialResolutionMode(params);
   const validationError = await validateAssignment({
     agentId: params.agentId,
@@ -89,7 +93,7 @@ export async function assignToolToAgent(
 
 export async function validateAssignment(
   params: AgentToolAssignmentRequest,
-): Promise<AgentToolAssignmentError | null> {
+): Promise<ToolAssignmentError | null> {
   const { agentId, toolId, preFetchedData } = params;
   const mcpServerId = params.mcpServerId;
   const credentialResolutionMode = normalizeCredentialResolutionMode(params);
@@ -147,7 +151,7 @@ export async function validateAssignment(
     const preFetchedServer =
       preFetchedData?.mcpServersBasicMap?.get(mcpServerId);
     const validationError = await validateAssignedMcpServer({
-      agentId,
+      getOwnerContext: () => getAssignmentTargetContext(agentId),
       mcpServerId,
       tool,
       preFetchedServer,
@@ -160,12 +164,95 @@ export async function validateAssignment(
   return null;
 }
 
+/**
+ * Assign an upstream tool to an *app*, mirroring `assignToolToAgent`. Reuses the
+ * same catalog/server validation and scope-alignment rules with the app's owner
+ * context, so a personal app cannot be handed a team- or owner-scoped server it
+ * has no claim to.
+ */
+export async function assignToolToApp(params: {
+  appId: string;
+  toolId: string;
+  mcpServerId?: string | null;
+  credentialResolutionMode?: CredentialResolutionMode;
+}): Promise<ToolAssignmentError | "duplicate" | "updated" | null> {
+  const credentialResolutionMode = normalizeCredentialResolutionMode(params);
+
+  const app = await AppModel.findById(params.appId);
+  if (!app) {
+    return {
+      code: "not_found",
+      error: {
+        message: `App with ID ${params.appId} not found`,
+        type: "not_found",
+      },
+    };
+  }
+
+  const tool = await ToolModel.findById(params.toolId);
+  if (!tool) {
+    return {
+      code: "not_found",
+      error: {
+        message: `Tool with ID ${params.toolId} not found`,
+        type: "not_found",
+      },
+    };
+  }
+
+  if (tool.clonedPendingDiscovery) {
+    return {
+      code: "validation_error",
+      error: {
+        message:
+          "Tool is not available for assignment until its server is installed.",
+        type: "validation_error",
+      },
+    };
+  }
+
+  const catalogValidationError = await validateCatalogRequirements({
+    tool,
+    mcpServerId: params.mcpServerId,
+    credentialResolutionMode,
+  });
+  if (catalogValidationError) {
+    return catalogValidationError;
+  }
+
+  if (params.mcpServerId) {
+    const validationError = await validateAssignedMcpServer({
+      getOwnerContext: () => getAppAssignmentTargetContext(params.appId),
+      mcpServerId: params.mcpServerId,
+      tool,
+    });
+    if (validationError) {
+      return validationError;
+    }
+  }
+
+  const result = await AppToolModel.createOrUpdateCredentials(
+    params.appId,
+    params.toolId,
+    params.mcpServerId,
+    credentialResolutionMode,
+  );
+
+  if (result.status === "unchanged") {
+    return "duplicate";
+  }
+  if (result.status === "updated") {
+    return "updated";
+  }
+  return null;
+}
+
 async function validateCatalogRequirements(params: {
   tool: Tool;
   mcpServerId?: string | null;
   preFetchedData?: Partial<AgentToolAssignmentPrefetchedData>;
   credentialResolutionMode: CredentialResolutionMode;
-}): Promise<AgentToolAssignmentError | null> {
+}): Promise<ToolAssignmentError | null> {
   const { tool, mcpServerId, preFetchedData, credentialResolutionMode } =
     params;
   const usesLateBoundResolution =
@@ -223,15 +310,15 @@ function normalizeCredentialResolutionMode(params: {
 }
 
 async function validateAssignedMcpServer(params: {
-  agentId: string;
+  getOwnerContext: () => Promise<ToolOwnerContext>;
   mcpServerId: string;
   tool: Tool;
   preFetchedServer?: Pick<
     PrefetchedMcpServer,
     "id" | "ownerId" | "catalogId" | "teamId" | "scope"
   > | null;
-}): Promise<AgentToolAssignmentError | null> {
-  const { agentId, mcpServerId, tool, preFetchedServer } = params;
+}): Promise<ToolAssignmentError | null> {
+  const { getOwnerContext, mcpServerId, tool, preFetchedServer } = params;
 
   const mcpServer =
     preFetchedServer !== undefined
@@ -259,10 +346,9 @@ async function validateAssignedMcpServer(params: {
     };
   }
 
-  const targetContext = await getAssignmentTargetContext(agentId);
   const isAllowed = await isMcpServerAssignableToTarget({
     mcpServer,
-    target: targetContext,
+    target: await getOwnerContext(),
   });
 
   if (!isAllowed) {
@@ -278,12 +364,9 @@ async function validateAssignedMcpServer(params: {
   return null;
 }
 
-async function getAssignmentTargetContext(agentId: string): Promise<{
-  organizationId: string;
-  scope: AgentScope;
-  authorId: string | null;
-  teamIds: string[];
-}> {
+async function getAssignmentTargetContext(
+  agentId: string,
+): Promise<ToolOwnerContext> {
   const agent = await AgentModel.findById(agentId, undefined, true);
 
   if (!agent) {
@@ -295,6 +378,25 @@ async function getAssignmentTargetContext(agentId: string): Promise<{
     scope: agent.scope,
     authorId: agent.authorId,
     teamIds: agent.teams.map((team) => team.id),
+  };
+}
+
+async function getAppAssignmentTargetContext(
+  appId: string,
+): Promise<ToolOwnerContext> {
+  const app = await AppModel.findById(appId);
+
+  if (!app) {
+    throw new Error(`App with ID ${appId} not found`);
+  }
+
+  const teamIds = await AppTeamModel.getTeamsForApp(appId);
+
+  return {
+    organizationId: app.organizationId,
+    scope: app.scope,
+    authorId: app.authorId,
+    teamIds,
   };
 }
 

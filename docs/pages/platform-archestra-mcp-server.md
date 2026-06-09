@@ -1642,3 +1642,196 @@ Required RBAC permission: `skill:update`
 | `files[].content` | `string` | Yes | Text content of the file |
 | `files[].encoding` | `"utf8" \| "base64"` | No |  |
 
+
+### Apps
+
+| Tool | Description | Required RBAC Permission |
+|------|-------------|--------------------------|
+| `create_app` | Create a new MCP App from an HTML document. | `app:create` |
+| `list_apps` | List apps visible to the caller, optionally filtered by name. | `app:read` |
+| `get_app` | Get a single app by id, if the caller may view it. | `app:read` |
+| `update_app` | Update an app's metadata and/or its HTML. | `app:update` |
+| `delete_app` | Soft-delete an app the caller owns or administers. | `app:delete` |
+| `app_data_get` | Read a value from the calling app's data store. | `app:read` |
+| `app_data_set` | Write a value to the calling app's data store. | `app:update` |
+| `app_data_list` | List all entries in the calling app's data store. | `app:read` |
+| `app_data_delete` | Delete a key from the calling app's data store. | `app:update` |
+
+#### create_app
+
+Required RBAC permission: `app:create`
+
+##### Input
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `name` | `string` | Yes | App name. |
+| `description` | `string` | No | Optional description. |
+| `html` | `string` | Yes | The app's HTML document (rendered in a sandboxed iframe). |
+| `scope` | `"personal" \| "team" \| "org"` | No | Visibility scope. Defaults to personal (owned by the calling user). |
+| `templateId` | `string` | No | Optional id of the template this app was seeded from. |
+| `uiCsp` | `object` | No | Optional CSP allowlist (bare hostnames). Omitted = restrictive default (own origin only). |
+| `uiCsp.connectDomains` | `string[]` | No |  |
+| `uiCsp.resourceDomains` | `string[]` | No |  |
+| `uiCsp.frameDomains` | `string[]` | No |  |
+| `uiCsp.baseUriDomains` | `string[]` | No |  |
+| `uiPermissions` | `object` | No | Optional iframe permissions (camera/microphone/geolocation/clipboardWrite). |
+| `uiPermissions.camera` | `object` | No |  |
+| `uiPermissions.microphone` | `object` | No |  |
+| `uiPermissions.geolocation` | `object` | No |  |
+| `uiPermissions.clipboardWrite` | `object` | No |  |
+
+##### Output
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `id` | `string` | Yes |  |
+| `name` | `string` | Yes |  |
+| `description` | `string \| null` | Yes |  |
+| `scope` | `"personal" \| "team" \| "org"` | Yes |  |
+| `latestVersion` | `number` | Yes |  |
+
+#### list_apps
+
+Required RBAC permission: `app:read`
+
+##### Input
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `name` | `string` | No | Filter by name (substring match). |
+| `limit` | `integer` | No |  |
+
+##### Output
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `apps` | `object[]` | Yes |  |
+| `apps[].id` | `string` | Yes |  |
+| `apps[].name` | `string` | Yes |  |
+| `apps[].description` | `string \| null` | Yes |  |
+| `apps[].scope` | `"personal" \| "team" \| "org"` | Yes |  |
+| `apps[].latestVersion` | `number` | Yes |  |
+
+#### get_app
+
+Required RBAC permission: `app:read`
+
+##### Input
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `appId` | `string` | Yes | The app id. |
+
+##### Output
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `id` | `string` | Yes |  |
+| `name` | `string` | Yes |  |
+| `description` | `string \| null` | Yes |  |
+| `scope` | `"personal" \| "team" \| "org"` | Yes |  |
+| `latestVersion` | `number` | Yes |  |
+
+#### update_app
+
+Required RBAC permission: `app:update`
+
+##### Input
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `appId` | `string` | Yes | The app id. |
+| `name` | `string` | No |  |
+| `description` | `string \| null` | No |  |
+| `scope` | `"personal" \| "team" \| "org"` | No |  |
+| `html` | `string` | No | New HTML; supplying it forks a new immutable version (no-op if unchanged). |
+| `uiCsp` | `object` | No | New CSP allowlist; part of the version envelope, so it requires html too. |
+| `uiCsp.connectDomains` | `string[]` | No |  |
+| `uiCsp.resourceDomains` | `string[]` | No |  |
+| `uiCsp.frameDomains` | `string[]` | No |  |
+| `uiCsp.baseUriDomains` | `string[]` | No |  |
+| `uiPermissions` | `object` | No | New iframe permissions; part of the version envelope, so it requires html too. |
+| `uiPermissions.camera` | `object` | No |  |
+| `uiPermissions.microphone` | `object` | No |  |
+| `uiPermissions.geolocation` | `object` | No |  |
+| `uiPermissions.clipboardWrite` | `object` | No |  |
+
+##### Output
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `id` | `string` | Yes |  |
+| `name` | `string` | Yes |  |
+| `description` | `string \| null` | Yes |  |
+| `scope` | `"personal" \| "team" \| "org"` | Yes |  |
+| `latestVersion` | `number` | Yes |  |
+
+#### delete_app
+
+Required RBAC permission: `app:delete`
+
+##### Input
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `appId` | `string` | Yes | The app id. |
+
+
+#### app_data_get
+
+Required RBAC permission: `app:read`
+
+##### Input
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `key` | `string` | Yes | The data store key. |
+
+##### Output
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `value` | `any` | Yes |  |
+
+#### app_data_set
+
+Required RBAC permission: `app:update`
+
+##### Input
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `key` | `string` | Yes | The data store key. |
+| `value` | `any` | Yes | Any JSON-serializable value. |
+
+##### Output
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `key` | `string` | Yes |  |
+
+#### app_data_list
+
+Required RBAC permission: `app:read`
+
+This tool takes no arguments.
+
+##### Output
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `entries` | `object[]` | Yes |  |
+| `entries[].key` | `string` | Yes |  |
+| `entries[].value` | `any` | Yes |  |
+
+#### app_data_delete
+
+Required RBAC permission: `app:update`
+
+##### Input
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `key` | `string` | Yes | The data store key. |
+

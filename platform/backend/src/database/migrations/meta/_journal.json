@@ -1951,15 +1951,8 @@
     {
       "idx": 278,
       "version": "7",
-      "when": 1780995469295,
-      "tag": "0278_narrow_stone_men",
-      "breakpoints": true
-    },
-    {
-      "idx": 279,
-      "version": "7",
-      "when": 1780996185986,
-      "tag": "0279_foamy_sprite",
+      "when": 1781006952402,
+      "tag": "0278_sloppy_gwen_stacy",
       "breakpoints": true
     }
   ]

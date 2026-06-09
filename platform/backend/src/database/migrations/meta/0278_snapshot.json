@@ -1,5 +1,5 @@
 {
-  "id": "8f19fe92-4dac-4a32-b207-4b5023d54de1",
+  "id": "ced1e499-61d1-4e52-ad4c-9ff3959a220c",
   "prevId": "c12d5bdf-f584-4701-a626-81c931f000ac",
   "version": "7",
   "dialect": "postgresql",
@@ -4126,6 +4126,12 @@
         },
         "cache_cost": {
           "name": "cache_cost",
+          "type": "numeric(13, 10)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "cache_savings": {
+          "name": "cache_savings",
           "type": "numeric(13, 10)",
           "primaryKey": false,
           "notNull": false

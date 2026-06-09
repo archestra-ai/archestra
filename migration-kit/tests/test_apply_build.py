@@ -198,9 +198,11 @@ def test_dry_run_redaction_hides_user_secrets() -> None:
         name="github",
         serverType="local",
         scope="personal",
-        localConfig=LocalConfig(command="npx", environment=[
-            McpEnvVar(key="GITHUB_TOKEN", type="secret", value="ghp_real"),
-        ]),
+        localConfig=LocalConfig(
+            command="run --token=ghp_commandsecret00000",
+            arguments=["--key", "sk-argsecret00000000"],
+            environment=[McpEnvVar(key="GITHUB_TOKEN", type="secret", value="ghp_real")],
+        ),
     )))
     local = catalog["localConfig"]
     assert isinstance(local, dict)
@@ -208,6 +210,17 @@ def test_dry_run_redaction_hides_user_secrets() -> None:
     assert isinstance(catalog_env, list)
     assert isinstance(catalog_env[0], dict)
     assert catalog_env[0]["value"] == "<redacted>"
+    # a credential embedded in the launch command/args is scrubbed (CodeQL clear-text logging).
+    assert "ghp_commandsecret00000" not in json.dumps(catalog)
+    assert "sk-argsecret00000000" not in json.dumps(catalog)
+    # a remote server URL with basic-auth + a secret query param is scrubbed too.
+    remote = _redacted_for_print(BuiltCatalog(CatalogCreate(
+        name="weather", serverType="remote", scope="personal",
+        serverUrl="https://user:hunter2@mcp.example.com/w?api_key=plaintextsecret&region=us")))
+    shown_url = json.dumps(remote)
+    assert "hunter2" not in shown_url
+    assert "plaintextsecret" not in shown_url
+    assert "region=us" in shown_url  # non-secret query param preserved
 
 def test_tool_policy_requires_extracted_semantics(index: dict[str, Item]) -> None:
     with pytest.raises(ContractError, match="user_answers"):

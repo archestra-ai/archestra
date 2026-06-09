@@ -20,10 +20,8 @@ important behavior differences surfaced before anything is applied.
 ## Install
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/archestra-ai/archestra/feat/migrate-to-archestra-skill/migration-kit/install.py | python3
+curl -fsSL https://raw.githubusercontent.com/archestra-ai/archestra/main/migration-kit/install.py | python3
 ```
-
-<!-- TODO: after merge, switch the URL to .../archestra/main/migration-kit/install.py -->
 
 Zero-dependency (stock `python3` ≥ 3.10, stdlib only). The installer pulls **only the files the skill
 needs** — `SKILL.md`, `scripts/`, `references/` (~90 KB) — into `~/.claude/skills/migrate-to-archestra/`.
@@ -44,7 +42,7 @@ Use the migrate-to-archestra skill to migrate /path/to/pilot into http://localho
 
 | Flag | Default | Meaning |
 | --- | --- | --- |
-| `--ref` | `feat/migrate-to-archestra-skill` | Git ref (branch, tag, or commit SHA) to install from. |
+| `--ref` | `main` | Git ref (branch, tag, or commit SHA) to install from. |
 | `--dest` | `~/.claude/skills/migrate-to-archestra` | Install directory. |
 | `--force` | off | Overwrite an existing non-empty destination. |
 

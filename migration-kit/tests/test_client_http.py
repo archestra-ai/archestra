@@ -4,6 +4,7 @@ these exercise the stdlib pieces that replaced httpx: cookie-jar persistence acr
 error-body preservation, the no-silent-redirect policy, and content-type decoding.
 """
 import json
+import socket
 import threading
 from collections.abc import Iterator
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -11,6 +12,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 import pytest
 
 from archestra_client import ArchestraApiError, ArchestraClient, _items
+from contracts import ContractError
 
 
 class _Handler(BaseHTTPRequestHandler):
@@ -50,6 +52,8 @@ class _Handler(BaseHTTPRequestHandler):
                 self._send(200, json.dumps({"status": "ok", "database": "connected"}))
             case "/text":
                 self._send(200, "plain words", ctype="text/plain")
+            case "/api/badjson":
+                self._send(200, "{not valid json", ctype="application/json")
             case _:
                 self._send(404, json.dumps({"error": "not found"}))
 
@@ -101,10 +105,43 @@ def test_text_and_json_decoding(base_url: str) -> None:
 
 def test_items_raises_on_unexpected_shape() -> None:
     # a silent [] would make idempotency checks miss existing entities -> duplicate creates.
-    with pytest.raises(ValueError, match="unexpected list-response"):
+    # ContractError (a ValueError) is what apply.py's except clause handles -> recorded as failed.
+    with pytest.raises(ContractError, match="unexpected list-response"):
         _items({"unexpected": "envelope"})
-    with pytest.raises(ValueError, match="not an object"):
+    with pytest.raises(ContractError, match="not an object"):
         _items([{"ok": 1}, "not-an-object"])
+
+
+def test_malformed_json_body_becomes_api_error(base_url: str) -> None:
+    # a non-JSON body under an application/json content-type must not crash the migration loop.
+    with ArchestraClient(base_url) as client:
+        with pytest.raises(ArchestraApiError) as excinfo:
+            client._request("GET", "/api/badjson")
+        assert excinfo.value.status == 0  # no HTTP status -> apply.py records a failed op
+
+
+def test_transport_error_becomes_api_error() -> None:
+    # a closed port -> URLError (an OSError) -> ArchestraApiError(status 0), not an uncaught crash.
+    sock = socket.socket()
+    sock.bind(("127.0.0.1", 0))
+    port = sock.getsockname()[1]
+    sock.close()
+    with ArchestraClient(f"http://127.0.0.1:{port}", timeout=2.0) as client:
+        with pytest.raises(ArchestraApiError) as excinfo:
+            client._request("GET", "/ready")
+        assert excinfo.value.status == 0
+
+
+def test_sign_in_refuses_insecure_transport() -> None:
+    with ArchestraClient("http://api.example.com") as client:
+        with pytest.raises(ValueError, match="insecure transport"):
+            client.sign_in("a@b.c", "pw")
+
+
+def test_sign_in_allows_localhost_http(base_url: str) -> None:
+    # local docker over loopback http is fine -- no network exposure of the credentials.
+    with ArchestraClient(base_url) as client:
+        client.sign_in("a@b.c", "pw")
 
 
 class _NotReadyHandler(BaseHTTPRequestHandler):

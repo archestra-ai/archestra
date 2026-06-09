@@ -12,6 +12,8 @@ export interface TokenUsage {
   inputTokens: number | undefined;
   outputTokens: number | undefined;
   totalTokens: number | undefined;
+  /** Input tokens served from the provider's prompt cache, a subset of inputTokens. */
+  cacheReadTokens?: number;
 }
 
 /**

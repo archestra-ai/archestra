@@ -107,6 +107,7 @@ const PromptInputContent = ({
   allowFileUploads = false,
   isModelsLoading = false,
   tokensUsed = 0,
+  cachedTokens,
   maxContextLength,
   inputModalities,
   agentLlmApiKeyId,
@@ -597,6 +598,7 @@ const PromptInputContent = ({
             allowFileUploads={allowFileUploads}
             isModelsLoading={isModelsLoading}
             tokensUsed={tokensUsed}
+            cachedTokens={cachedTokens}
             maxContextLength={maxContextLength}
             inputModalities={inputModalities}
             agentLlmApiKeyId={agentLlmApiKeyId}
@@ -645,6 +647,7 @@ const ArchestraPromptInput = ({
   allowFileUploads = false,
   isModelsLoading = false,
   tokensUsed = 0,
+  cachedTokens,
   maxContextLength,
   inputModalities,
   agentLlmApiKeyId,
@@ -696,6 +699,7 @@ const ArchestraPromptInput = ({
           allowFileUploads={allowFileUploads}
           isModelsLoading={isModelsLoading}
           tokensUsed={tokensUsed}
+          cachedTokens={cachedTokens}
           maxContextLength={maxContextLength}
           inputModalities={inputModalities}
           agentLlmApiKeyId={agentLlmApiKeyId}

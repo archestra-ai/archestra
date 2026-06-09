@@ -19,6 +19,7 @@ import ModelModel from "@/models/model";
 import OptimizationRuleModel from "@/models/optimization-rule";
 import OrganizationModel from "@/models/organization";
 import OrganizationRoleModel from "@/models/organization-role";
+import ProjectModel from "@/models/project";
 import ScheduleTriggerModel from "@/models/schedule-trigger";
 import ServiceAccountModel from "@/models/service-account";
 import SkillModel from "@/models/skill";
@@ -107,6 +108,7 @@ export const AUDIT_DECISIONS = {
   organizationsTable: { audited: true, model: OrganizationModel },
   organizationRolesTable: { audited: true, model: OrganizationRoleModel },
   scheduleTriggersTable: { audited: true, model: ScheduleTriggerModel },
+  projectsTable: { audited: true, model: ProjectModel },
   skillsTable: { audited: true, model: SkillModel },
   teamsTable: { audited: true, model: TeamModel },
   teamTokensTable: { audited: true, model: TeamTokenModel },
@@ -164,6 +166,14 @@ export const AUDIT_DECISIONS = {
   conversationEnabledToolsTable: {
     audited: false,
     reason: "join: conversation × tool; chat surface",
+  },
+  projectKnowledgeBasesTable: {
+    audited: false,
+    reason: "join: project × knowledge base; project carries the signal",
+  },
+  projectTeamsTable: {
+    audited: false,
+    reason: "join: project × team; project carries the signal",
   },
   conversationSharesTable: {
     audited: false,

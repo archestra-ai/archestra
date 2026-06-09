@@ -28,6 +28,13 @@ export const RouteId = {
   GetScheduleTriggerRun: "getScheduleTriggerRun",
   CreateScheduleTriggerRunConversation: "createScheduleTriggerRunConversation",
 
+  // Project Routes
+  GetProjects: "getProjects",
+  CreateProject: "createProject",
+  GetProject: "getProject",
+  UpdateProject: "updateProject",
+  DeleteProject: "deleteProject",
+
   // Agent Tool Routes
   AssignToolToAgent: "assignToolToAgent",
   BulkAssignTools: "bulkAssignTools",

@@ -103,6 +103,12 @@ const contentNavGroups: NavGroup[] = [
           !pathname.startsWith("/agents/skills"),
         subItems: [
           {
+            title: "Projects",
+            url: "/projects",
+            customIsActive: (pathname: string) =>
+              pathname.startsWith("/projects"),
+          },
+          {
             title: "Skills",
             url: "/agents/skills",
             customIsActive: (pathname: string) =>

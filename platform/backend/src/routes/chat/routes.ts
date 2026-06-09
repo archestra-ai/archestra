@@ -68,6 +68,7 @@ import {
   MemberModel,
   MessageModel,
   OrganizationModel,
+  ProjectModel,
   ScheduleTriggerModel,
   ScheduleTriggerRunModel,
   TeamModel,
@@ -493,6 +494,12 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           [
             toolLoadingInstructions,
             renderedPrompt,
+            conversation.projectId
+              ? await getProjectInstructionsForChat({
+                  projectId: conversation.projectId,
+                  organizationId,
+                })
+              : null,
             skillCatalogPrompt,
             toolDenialInstruction,
             toolResultInstructions,
@@ -1750,6 +1757,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tags: ["Chat"],
         body: InsertConversationSchema.pick({
           agentId: true,
+          projectId: true,
           title: true,
           modelId: true,
           chatApiKeyId: true,
@@ -1757,6 +1765,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           .required({ agentId: true })
           .partial({
             title: true,
+            projectId: true,
             modelId: true,
             chatApiKeyId: true,
           }),
@@ -1764,7 +1773,11 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (
-      { body: { agentId, title, modelId, chatApiKeyId }, user, organizationId },
+      {
+        body: { agentId, projectId, title, modelId, chatApiKeyId },
+        user,
+        organizationId,
+      },
       reply,
     ) => {
       // Check if user is an agent admin
@@ -1778,6 +1791,14 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       if (!agent) {
         throw new ApiError(404, "Agent not found");
+      }
+
+      if (projectId) {
+        await requireReadableProject({
+          projectId,
+          organizationId,
+          userId: user.id,
+        });
       }
 
       // Validate chatApiKeyId if provided
@@ -1816,6 +1837,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           userId: user.id,
           organizationId,
           agentId,
+          projectId,
           title,
           modelId: llmSelection.modelId,
           chatApiKeyId: llmSelection.chatApiKeyId,
@@ -1887,6 +1909,14 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           body.modelId = llmSelection.modelId;
           body.chatApiKeyId = llmSelection.chatApiKeyId;
         }
+      }
+
+      if (body.projectId) {
+        await requireReadableProject({
+          projectId: body.projectId,
+          organizationId,
+          userId: user.id,
+        });
       }
 
       // A conversation's model and API key are a pair: persist both or
@@ -3621,6 +3651,42 @@ async function findScheduleRunConversationForAdmin(params: {
   });
 }
 
+async function requireReadableProject(params: {
+  projectId: string;
+  userId: string;
+  organizationId: string;
+}) {
+  const isProjectAdmin = await userHasPermission(
+    params.userId,
+    params.organizationId,
+    "project",
+    "admin",
+  );
+  const canAccess = await ProjectModel.userCanAccessProject({
+    projectId: params.projectId,
+    organizationId: params.organizationId,
+    userId: params.userId,
+    isProjectAdmin,
+  });
+  if (!canAccess) {
+    throw new ApiError(404, "Project not found");
+  }
+}
+
+async function getProjectInstructionsForChat(params: {
+  projectId: string;
+  organizationId: string;
+}): Promise<string | null> {
+  const project = await ProjectModel.findById({
+    id: params.projectId,
+    organizationId: params.organizationId,
+  });
+  if (!project?.instructions?.trim()) {
+    return null;
+  }
+  return `Project instructions:\n${project.instructions.trim()}`;
+}
+
 async function forkConversation(params: {
   sourceConversation: z.infer<typeof SelectConversationSchema>;
   agentId: string;
@@ -3645,6 +3711,7 @@ async function forkConversation(params: {
     userId: params.userId,
     organizationId: params.organizationId,
     agentId: agent.id,
+    projectId: params.sourceConversation.projectId,
     modelId: params.sourceConversation.modelId,
   });
 

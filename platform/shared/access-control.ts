@@ -26,6 +26,7 @@ export const allAvailableActions: Record<Resource, Action[]> = {
 
   // Agents
   agent: ["read", "create", "update", "delete", "team-admin", "admin"],
+  project: ["read", "create", "update", "delete", "admin"],
   skill: ["read", "create", "update", "delete", "team-admin", "admin"],
   sandbox: ["execute"],
   agentTrigger: ["read", "create", "update", "delete"],
@@ -89,6 +90,7 @@ export const allAvailableActions: Record<Resource, Action[]> = {
 export const editorPermissions: Record<Resource, Action[]> = {
   // Agents
   agent: ["read", "create", "update", "delete", "team-admin"],
+  project: ["read", "create", "update", "delete"],
   skill: ["read", "create", "update", "delete", "team-admin"],
   sandbox: ["execute"],
   agentTrigger: ["read", "create", "update", "delete"],
@@ -152,6 +154,7 @@ export const editorPermissions: Record<Resource, Action[]> = {
 export const memberPermissions: Record<Resource, Action[]> = {
   // Agents
   agent: ["read", "create", "update", "delete"],
+  project: ["read", "create", "update", "delete"],
   skill: ["read", "create", "update", "delete"],
   sandbox: ["execute"],
   agentTrigger: [],
@@ -242,6 +245,12 @@ export const permissionDescriptions: Record<string, string> = {
   "agent:team-admin": "Manage team assignments for agents",
   "agent:admin":
     "Full administrative control over all agents, bypassing team restrictions",
+  "project:read": "View visible projects",
+  "project:create": "Create personal projects",
+  "project:update": "Modify projects you own",
+  "project:delete": "Delete projects you own",
+  "project:admin":
+    "Share projects and view or manage all projects regardless of visibility",
   "skill:read":
     "View and use agent skills within your scope (org, your teams, your own)",
   "skill:create": "Create new agent skills",
@@ -481,6 +490,13 @@ export const requiredEndpointPermissionsMap: Partial<
   // Labels are cross-type — any agent-type read permission suffices (checked in handler)
   [RouteId.GetLabelKeys]: {},
   [RouteId.GetLabelValues]: {},
+
+  // Project routes
+  [RouteId.GetProjects]: { project: ["read"] },
+  [RouteId.CreateProject]: { project: ["create"] },
+  [RouteId.GetProject]: { project: ["read"] },
+  [RouteId.UpdateProject]: { project: ["update"] },
+  [RouteId.DeleteProject]: { project: ["delete"] },
   [RouteId.GetTokens]: {
     team: ["read"],
   },
@@ -1285,6 +1301,8 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
 
   // Agents
   "/agents": { agent: ["read"] },
+  "/projects": { project: ["read"] },
+  "/projects/[id]": { project: ["read"] },
   "/agents/triggers": { agentTrigger: ["read"] },
   "/agents/triggers/slack": { agentTrigger: ["read"] },
   "/agents/triggers/ms-teams": { agentTrigger: ["read"] },

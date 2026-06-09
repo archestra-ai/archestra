@@ -1,7 +1,7 @@
 ---
 title: Scheduled Tasks
 category: Agents
-order: 3
+order: 4
 description: Run agents automatically on a repeating schedule
 lastUpdated: 2026-05-26
 ---

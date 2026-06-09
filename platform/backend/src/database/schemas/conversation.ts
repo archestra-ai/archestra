@@ -10,6 +10,7 @@ import {
 import agentsTable from "./agent";
 import llmProviderApiKeysTable from "./llm-provider-api-key";
 import modelsTable from "./model";
+import projectsTable from "./project";
 
 // Note: Additional pg_trgm GIN index for search is created in migration 0116_pg_trgm_indexes.sql:
 // - conversations_title_trgm_idx: GIN index on title column
@@ -20,6 +21,9 @@ const conversationsTable = pgTable("conversations", {
   // Nullable to preserve conversations when agent is deleted
   // null indicates the agent was deleted
   agentId: uuid("agent_id").references(() => agentsTable.id, {
+    onDelete: "set null",
+  }),
+  projectId: uuid("project_id").references(() => projectsTable.id, {
     onDelete: "set null",
   }),
   chatApiKeyId: uuid("chat_api_key_id").references(

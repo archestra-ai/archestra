@@ -318,6 +318,7 @@ function triggerColumns() {
     organizationId: schema.scheduleTriggersTable.organizationId,
     name: schema.scheduleTriggersTable.name,
     agentId: schema.scheduleTriggersTable.agentId,
+    projectId: schema.scheduleTriggersTable.projectId,
     messageTemplate: schema.scheduleTriggersTable.messageTemplate,
     cronExpression: schema.scheduleTriggersTable.cronExpression,
     timezone: schema.scheduleTriggersTable.timezone,

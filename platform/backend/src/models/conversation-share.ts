@@ -223,11 +223,20 @@ class ConversationShareModel {
         conversation: schema.conversationsTable,
         message: schema.messagesTable,
         agent: schema.agentsTable,
+        project: {
+          id: schema.projectsTable.id,
+          name: schema.projectsTable.name,
+          icon: schema.projectsTable.icon,
+        },
       })
       .from(schema.conversationsTable)
       .leftJoin(
         schema.agentsTable,
         eq(schema.conversationsTable.agentId, schema.agentsTable.id),
+      )
+      .leftJoin(
+        schema.projectsTable,
+        eq(schema.conversationsTable.projectId, schema.projectsTable.id),
       )
       .leftJoin(
         schema.messagesTable,
@@ -257,6 +266,7 @@ class ConversationShareModel {
     return {
       ...firstRow.conversation,
       agent: firstRow.agent,
+      project: firstRow.project,
       share: {
         id: share.id,
         visibility: share.visibility,

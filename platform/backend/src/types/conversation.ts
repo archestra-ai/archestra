@@ -18,6 +18,14 @@ const ConversationShareSummarySchema = z
   })
   .nullable();
 
+const ConversationProjectSummarySchema = z
+  .object({
+    id: z.string().uuid(),
+    name: z.string(),
+    icon: z.string().nullable(),
+  })
+  .nullable();
+
 // Override selectedProvider to use the proper enum type
 // For select schema, it's nullable (matches DB schema)
 const selectExtendedFields = {
@@ -44,6 +52,7 @@ export const SelectConversationSchema = createSelectSchema(
     })
     .nullable(),
   share: ConversationShareSummarySchema,
+  project: ConversationProjectSummarySchema,
   messages: z.array(z.any()), // UIMessage[] from AI SDK
   chatErrors: z.array(SelectConversationChatErrorSchema),
   compactions: z.array(SelectConversationCompactionSchema),
@@ -76,6 +85,7 @@ export const UpdateConversationSchema = createUpdateSchema(
     agentId: true,
     artifact: true,
     pinnedAt: true,
+    projectId: true,
   })
   .extend({
     // Override pinnedAt to accept ISO date strings from the frontend.

@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  FolderInput,
   MoreHorizontal,
   Pencil,
   Pin,
@@ -11,6 +12,7 @@ import {
 } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { AgentIcon } from "@/components/agent-icon";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { TruncatedText } from "@/components/truncated-text";
 import { Button } from "@/components/ui/button";
@@ -18,6 +20,10 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
@@ -49,6 +55,7 @@ import {
   getConversationShareTooltip,
 } from "@/lib/chat/chat-utils";
 import { useGlobalChat } from "@/lib/chat/global-chat.context";
+import { useProjects } from "@/lib/project.query";
 import { cn } from "@/lib/utils";
 
 const SIDEBAR_CHAT_SLOTS = 3;
@@ -70,8 +77,16 @@ export function ChatSidebarSection() {
   const { data: canReadConversation } = useHasPermissions({
     chat: ["read"],
   });
+  const { data: canReadProject } = useHasPermissions({
+    project: ["read"],
+  });
   const { data: conversations = [], isLoading } = useConversations({
     enabled: isAuthenticated && canReadConversation === true,
+  });
+  const { data: projectsResponse, isLoading: isProjectsLoading } = useProjects({
+    limit: 20,
+    offset: 0,
+    enabled: isAuthenticated && canReadProject === true,
   });
   const updateConversationMutation = useUpdateConversation();
   const deleteConversationMutation = useDeleteConversation();
@@ -100,12 +115,16 @@ export function ChatSidebarSection() {
     ? (pathname.split("/").at(-1) ?? null)
     : null;
 
-  const pinnedChats = conversations
-    .filter((c) => c.pinnedAt)
+  const projects = projectsResponse?.data ?? [];
+  const projectConversations = projects.map((project) => ({
+    project,
+    conversations: conversations
+      .filter((conversation) => conversation.projectId === project.id)
+      .slice(0, SIDEBAR_CHAT_SLOTS),
+  }));
+  const otherConversations = conversations
+    .filter((conversation) => !conversation.projectId)
     .slice(0, SIDEBAR_CHAT_SLOTS);
-  const recentUnpinnedChats = conversations
-    .filter((c) => !c.pinnedAt)
-    .slice(0, Math.max(0, SIDEBAR_CHAT_SLOTS - pinnedChats.length));
 
   useEffect(() => {
     if (editingId && inputRef.current) {
@@ -322,6 +341,40 @@ export function ChatSidebarSection() {
                   <DropdownMenuContent align="start" side="right">
                     {canUpdateConversation && (
                       <>
+                        <DropdownMenuSub>
+                          <DropdownMenuSubTrigger>
+                            <FolderInput className="h-4 w-4 mr-2" />
+                            Move to project
+                          </DropdownMenuSubTrigger>
+                          <DropdownMenuSubContent>
+                            {projects.map((project) => (
+                              <DropdownMenuItem
+                                key={project.id}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  updateConversationMutation.mutate({
+                                    id: conv.id,
+                                    projectId: project.id,
+                                  });
+                                }}
+                              >
+                                {project.name}
+                              </DropdownMenuItem>
+                            ))}
+                            {projects.length > 0 && <DropdownMenuSeparator />}
+                            <DropdownMenuItem
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                updateConversationMutation.mutate({
+                                  id: conv.id,
+                                  projectId: null,
+                                });
+                              }}
+                            >
+                              Remove from project
+                            </DropdownMenuItem>
+                          </DropdownMenuSubContent>
+                        </DropdownMenuSub>
                         <DropdownMenuItem
                           onClick={(e) => {
                             e.stopPropagation();
@@ -383,14 +436,26 @@ export function ChatSidebarSection() {
     );
   };
 
-  if (!isLoading && conversations.length === 0) {
+  const handleSelectProject = (id: string) => {
+    if (isMobile) {
+      setOpenMobile(false);
+    }
+    router.push(`/projects/${id}`);
+  };
+
+  if (
+    !isLoading &&
+    !isProjectsLoading &&
+    conversations.length === 0 &&
+    projects.length === 0
+  ) {
     return null;
   }
 
   return (
     <>
       <SidebarMenuSub className="mx-0 ml-3.5 px-0 pl-2.5">
-        {isLoading ? (
+        {isLoading || isProjectsLoading ? (
           <SidebarMenuSubItem>
             <div className="flex items-center gap-2 px-2 py-1.5">
               <div className="h-3 w-3 animate-spin rounded-full border border-muted-foreground border-t-transparent" />
@@ -401,10 +466,45 @@ export function ChatSidebarSection() {
           </SidebarMenuSubItem>
         ) : (
           <>
-            {pinnedChats.map((conv) => renderConversationItem(conv, true))}
-            {recentUnpinnedChats.map((conv) => renderConversationItem(conv))}
+            {projectConversations.map(({ project, conversations }) => (
+              <SidebarMenuSubItem key={project.id}>
+                <div className="space-y-1">
+                  <SidebarMenuSubButton
+                    className="cursor-pointer text-sidebar-foreground/70"
+                    onClick={() => handleSelectProject(project.id)}
+                  >
+                    <AgentIcon
+                      icon={project.icon}
+                      fallbackType="agent"
+                      size={14}
+                    />
+                    <span className="truncate">{project.name}</span>
+                  </SidebarMenuSubButton>
+                  {conversations.map((conv) => renderConversationItem(conv))}
+                  {conversations.length === 0 && (
+                    <div className="ml-6 px-2 py-1 text-xs text-muted-foreground">
+                      No chats yet
+                    </div>
+                  )}
+                </div>
+              </SidebarMenuSubItem>
+            ))}
+            {otherConversations.length > 0 && (
+              <SidebarMenuSubItem>
+                <div className="px-2 pt-2 text-xs font-medium text-muted-foreground">
+                  Other
+                </div>
+              </SidebarMenuSubItem>
+            )}
+            {otherConversations.map((conv) =>
+              renderConversationItem(conv, !!conv.pinnedAt),
+            )}
             {conversations.length >
-              pinnedChats.length + recentUnpinnedChats.length && (
+              projectConversations.reduce(
+                (count, group) => count + group.conversations.length,
+                0,
+              ) +
+                otherConversations.length && (
               <SidebarMenuSubItem>
                 <SidebarMenuSubButton
                   className="cursor-pointer text-sidebar-foreground/70"

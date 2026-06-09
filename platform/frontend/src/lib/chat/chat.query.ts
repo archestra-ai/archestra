@@ -74,6 +74,10 @@ export function mergeUpdatedConversationIntoCache(
   if (variables.pinnedAt !== undefined) {
     merged.pinnedAt = updatedConversation.pinnedAt;
   }
+  if (variables.projectId !== undefined) {
+    merged.projectId = updatedConversation.projectId;
+    merged.project = updatedConversation.project;
+  }
 
   return merged;
 }
@@ -163,6 +167,7 @@ export function useCreateConversation() {
       modelId,
       chatApiKeyId,
       title,
+      projectId,
     }: NonNullable<archestraApiTypes.CreateChatConversationData["body"]>) => {
       const { data, error } = await createChatConversation({
         body: {
@@ -170,6 +175,7 @@ export function useCreateConversation() {
           modelId,
           chatApiKeyId: chatApiKeyId ?? undefined,
           title,
+          projectId,
         },
       });
       if (error) {
@@ -201,6 +207,7 @@ export function useUpdateConversation() {
       chatApiKeyId,
       agentId,
       pinnedAt,
+      projectId,
     }: { id: string } & NonNullable<
       archestraApiTypes.UpdateChatConversationData["body"]
     >) => {
@@ -212,6 +219,7 @@ export function useUpdateConversation() {
           chatApiKeyId,
           agentId,
           pinnedAt,
+          projectId,
         },
       });
       if (error) {
@@ -241,7 +249,11 @@ export function useUpdateConversation() {
       // Only invalidate the conversations list for sidebar-relevant changes
       // (pin status, agent). Model/key updates don't affect the sidebar
       // and unnecessary invalidation causes cascading re-renders.
-      if (variables.pinnedAt !== undefined || variables.agentId) {
+      if (
+        variables.pinnedAt !== undefined ||
+        variables.agentId ||
+        variables.projectId !== undefined
+      ) {
         queryClient.invalidateQueries({ queryKey: ["conversations"] });
       }
       if (variables.agentId) {

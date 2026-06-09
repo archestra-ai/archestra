@@ -4,6 +4,7 @@ import { isToday, isWithinInterval, isYesterday, subDays } from "date-fns";
 import {
   Bot,
   Cable,
+  FolderOpen,
   Home,
   Key,
   MessageCircle,
@@ -114,6 +115,13 @@ function groupConversationsByDate<
 
 // Product navigation items matching sidebar names
 const navigationItems = [
+  {
+    icon: FolderOpen,
+    label: "Projects",
+    value: "projects",
+    keywords: "projects workspaces",
+    href: "/projects",
+  },
   {
     icon: Bot,
     label: "Agents",
@@ -477,6 +485,14 @@ export function ConversationSearchPalette({
           <span className="text-sm flex-1 min-w-0 break-words leading-snug line-clamp-2">
             {displayTitle}
           </span>
+          {conv.project ? (
+            <Badge
+              variant="secondary"
+              className="max-w-[160px] truncate text-[10px]"
+            >
+              {conv.project.name}
+            </Badge>
+          ) : null}
           {isPending && (
             <Badge
               variant="destructive"

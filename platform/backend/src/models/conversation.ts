@@ -131,6 +131,11 @@ class ConversationModel {
             llmApiKeyId: schema.agentsTable.llmApiKeyId,
             deletedAt: schema.agentsTable.deletedAt,
           },
+          project: {
+            id: schema.projectsTable.id,
+            name: schema.projectsTable.name,
+            icon: schema.projectsTable.icon,
+          },
         })
         .from(schema.conversationsTable)
         .leftJoin(
@@ -164,6 +169,10 @@ class ConversationModel {
             schema.conversationSharesTable.conversationId,
           ),
         )
+        .leftJoin(
+          schema.projectsTable,
+          eq(schema.conversationsTable.projectId, schema.projectsTable.id),
+        )
         .where(and(...conditions))
         .orderBy(
           desc(schema.conversationsTable.lastMessageAt),
@@ -187,6 +196,7 @@ class ConversationModel {
           }
           conversationMap.set(conversationId, {
             ...withVisibleAgent(row.conversation, row.agent),
+            project: row.project?.id ? row.project : null,
             share: row.share?.id ? row.share : null,
             messages: [],
             chatErrors: [],
@@ -233,6 +243,11 @@ class ConversationModel {
             llmApiKeyId: schema.agentsTable.llmApiKeyId,
             deletedAt: schema.agentsTable.deletedAt,
           },
+          project: {
+            id: schema.projectsTable.id,
+            name: schema.projectsTable.name,
+            icon: schema.projectsTable.icon,
+          },
         })
         .from(schema.conversationsTable)
         .leftJoin(
@@ -246,11 +261,16 @@ class ConversationModel {
             schema.conversationSharesTable.conversationId,
           ),
         )
+        .leftJoin(
+          schema.projectsTable,
+          eq(schema.conversationsTable.projectId, schema.projectsTable.id),
+        )
         .where(and(...conditions))
         .orderBy(desc(schema.conversationsTable.lastMessageAt));
 
       return rows.map((row) => ({
         ...withVisibleAgent(row.conversation, row.agent),
+        project: row.project?.id ? row.project : null,
         share: row.share?.id ? row.share : null,
         messages: [], // Messages fetched separately via findById
         chatErrors: [],
@@ -285,6 +305,11 @@ class ConversationModel {
           llmApiKeyId: schema.agentsTable.llmApiKeyId,
           deletedAt: schema.agentsTable.deletedAt,
         },
+        project: {
+          id: schema.projectsTable.id,
+          name: schema.projectsTable.name,
+          icon: schema.projectsTable.icon,
+        },
       })
       .from(schema.conversationsTable)
       .leftJoin(
@@ -301,6 +326,10 @@ class ConversationModel {
           schema.conversationsTable.id,
           schema.conversationSharesTable.conversationId,
         ),
+      )
+      .leftJoin(
+        schema.projectsTable,
+        eq(schema.conversationsTable.projectId, schema.projectsTable.id),
       )
       .where(
         and(
@@ -334,6 +363,7 @@ class ConversationModel {
 
     return {
       ...withVisibleAgent(firstRow.conversation, firstRow.agent),
+      project: firstRow.project?.id ? firstRow.project : null,
       share: firstRow.share?.id ? firstRow.share : null,
       messages,
       chatErrors,
@@ -392,6 +422,11 @@ class ConversationModel {
           llmApiKeyId: schema.agentsTable.llmApiKeyId,
           deletedAt: schema.agentsTable.deletedAt,
         },
+        project: {
+          id: schema.projectsTable.id,
+          name: schema.projectsTable.name,
+          icon: schema.projectsTable.icon,
+        },
       })
       .from(schema.conversationsTable)
       .leftJoin(
@@ -408,6 +443,10 @@ class ConversationModel {
           schema.conversationsTable.id,
           schema.conversationSharesTable.conversationId,
         ),
+      )
+      .leftJoin(
+        schema.projectsTable,
+        eq(schema.conversationsTable.projectId, schema.projectsTable.id),
       )
       .where(
         and(
@@ -439,6 +478,7 @@ class ConversationModel {
 
     return {
       ...withVisibleAgent(firstRow.conversation, firstRow.agent),
+      project: firstRow.project?.id ? firstRow.project : null,
       share: firstRow.share?.id ? firstRow.share : null,
       messages,
       chatErrors,

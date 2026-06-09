@@ -64,7 +64,7 @@ Using `references/entity-mapping.md`, turn the inventory into `migration_plan.js
 ```json
 { "schema_version": 1, "default_scope": "personal",
   "decisions": [ { "source_id": "<inventory id>", "action": "migrate|skip|manual",
-                   "target_kind": "agent|skill|mcp_catalog|mcp_install|llm_key|tool_policy",
+                   "target_kind": "agent|skill|mcp_catalog|mcp_install|llm_key|tool_policy|hook",
                    "scope": "personal", "name_override": null, "notes": "...",
                    "user_answers": { } } ] }
 ```
@@ -85,12 +85,19 @@ Use `AskUserQuestion` only for genuine ambiguities, e.g.:
   default; use `user_answers.agentIds` only for extra explicit agent assignments;
 - which LLM keys to migrate — and have the user paste each secret into `user_answers.apiKey`
   (with `provider`). Never read a secret out of their files.
-- for each `guard` hook, extract its semantics into `user_answers`
-  (`tool_name`, `key`, `operator`, `value`, optional `action`/`reason`) per `entity-mapping.md`.
+- for each hook, choose its target per `entity-mapping.md`:
+  - event maps (`SessionStart`/`PreToolUse`/`PostToolUse`) and `data.source` ≠ `unresolved` → **`hook`**
+    (the default; a native lifecycle hook). Usually no `user_answers` needed — `apply.py` bundles the
+    script, carries PEP-723 requirements, and attaches it to the primary agent. Optional `user_answers`:
+    `agentId` (UUID), `fileName` (override), `requirements` (override; a `.sh` hook must have none);
+  - a simple declarative `guard` whose tool exists in Archestra → optionally **`tool_policy`** instead,
+    extracting `{tool_name, key, operator, value, action?, reason?}` into `user_answers`;
+  - event unmapped, or `data.source == "unresolved"` → `action:"manual"` with a `notes` explanation.
+  Surface the behavior differences (no matcher, Archestra tool names, sandbox `cwd`, dropped env/argv).
 
-Mark passive hooks and openclaw as `action:"manual"` with a `notes` explanation. Do the same for
-telemetry (OTEL env, observability hooks/scripts): map it to `manual` and, per `entity-mapping.md`,
-point the user at Archestra's native telemetry instead of migrating it.
+Mark openclaw as `action:"manual"` with a `notes` explanation. Do the same for telemetry (OTEL env,
+observability hooks/scripts): map it to `manual` and, per `entity-mapping.md`, point the user at
+Archestra's native telemetry instead of migrating it.
 
 Always show the user a concise preview and get explicit approval before applying. Use this shape:
 
@@ -137,8 +144,10 @@ exits non-zero if any op failed/was invalid.
 ## Step 5 — Report
 From `migration_result.json`, write `report.md` using `references/report-template.md`. The report is
 for deciding whether the converted pilot is ready to try in Archestra, not for producing an exhaustive
-command transcript. For unresolved `guard` hooks, include the exact policy JSON to paste once a target
-tool exists. Tool-invocation policies only enforce when the org `globalToolPolicy` is `restrictive`;
+command transcript. For a `guard` hook you mapped to a `tool_policy` whose target tool doesn't exist yet,
+include the exact policy JSON to paste once it does. For hooks migrated as native lifecycle hooks, note
+the behavior differences (no matcher, Archestra tool names, sandbox `cwd`, dropped env/argv).
+Tool-invocation policies only enforce when the org `globalToolPolicy` is `restrictive`;
 the scripts don't read that setting, so tell the user to verify it in Archestra settings. Also surface
 any `warnings` from the inventory (possible secrets left intact in migrated bodies). Summarize for the
 user what migrated, what to test first, and what still needs hands-on work.

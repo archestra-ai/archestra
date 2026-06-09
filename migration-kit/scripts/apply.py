@@ -35,6 +35,7 @@ from archestra_client import (
     ArchestraApiError,
     ArchestraClient,
     CatalogCreate,
+    HookCreate,
     LlmKeyCreate,
     LocalConfig,
     McpEnvVar,
@@ -48,11 +49,14 @@ from archestra_client import (
 from contracts import (
     SECRET_KEY_RE,
     SECRET_TOKEN_RE,
+    BundledFile,
     ClaudeMdItem,
     CommandItem,
     ContractError,
     Decision,
     FrontMatter,
+    HookEvent,
+    HookItem,
     Item,
     JsonValue,
     LocalToolItem,
@@ -63,22 +67,31 @@ from contracts import (
     Scope,
     SkillItem,
     SubagentItem,
+    archestra_file_name,
+    archestra_hook_event,
     optional_action,
+    optional_agent_id,
+    optional_file_name,
     parse_inventory,
     parse_plan,
     require_answer,
     require_dict,
+    require_hook_content,
     require_list,
     require_operator,
     require_provider,
+    require_requirements,
     require_str_field,
     to_jsonable,
+    validate_requirements,
 )
 from frontmatter import emit_frontmatter
 
-# deterministic apply order: keys before the agent, skills/catalog next, install, then policies.
+# deterministic apply order: keys before the agent, skills/catalog next, install, then policies,
+# then hooks (they attach to the already-created primary agent).
 _ORDER: dict[str, int] = {
-    "llm_key": 0, "agent": 1, "skill": 2, "mcp_catalog": 3, "mcp_install": 4, "tool_policy": 5
+    "llm_key": 0, "agent": 1, "skill": 2, "mcp_catalog": 3, "mcp_install": 4,
+    "tool_policy": 5, "hook": 6,
 }
 
 
@@ -141,7 +154,20 @@ class BuiltPolicy:
     reason: str | None
 
 
-Built = Union[BuiltAgent, BuiltSkill, BuiltCatalog, BuiltInstall, BuiltLlmKey, BuiltPolicy]
+@dataclass(frozen=True)
+class BuiltHook:
+    event: HookEvent
+    file_name: str
+    content: str
+    requirements: list[str]
+    enabled: bool
+    # explicit agent override; when None, _run_apply fills the primary migrated agent.
+    agent_id: str | None = None
+
+
+Built = Union[
+    BuiltAgent, BuiltSkill, BuiltCatalog, BuiltInstall, BuiltLlmKey, BuiltPolicy, BuiltHook
+]
 
 
 def _nonmigrate_outcome(action: str) -> Outcome:
@@ -352,6 +378,77 @@ def _build_payload(decision: Decision, item: Item) -> tuple[str, Built]:
                 reason=reason if isinstance(reason, str) else None,
             )
 
+        case "hook":
+            if not isinstance(item, HookItem):
+                raise ContractError(f"hook target requires a hook item, got {item.kind}")
+            return name, _build_hook(decision, item)
+
+
+def _hook_bundled_file(item: HookItem, *, ctx: str) -> BundledFile:
+    if not item.files:
+        raise ContractError(f"{ctx}: bundled hook has no script file")
+    return item.files[0]
+
+
+def _hook_content(decision: Decision, item: HookItem) -> tuple[str, str]:
+    """resolve (script content, default file name) for a hook by how its body was discovered."""
+    data = item.data
+    ctx = f"{decision.source_id}.content"
+    match data.source:
+        case "bundled":
+            bundled = _hook_bundled_file(item, ctx=ctx)
+            if bundled.encoding != "utf8":
+                raise ContractError(
+                    f"{decision.source_id}: bundled hook script is not utf-8 text; cannot run as a hook"
+                )
+            content = require_hook_content(bundled.content, ctx=ctx)
+            return content, (data.file_name or bundled.path.rsplit("/", 1)[-1])
+        case "inline":
+            if "<redacted>" in data.command:
+                raise ContractError(
+                    f"{decision.source_id}: inline hook command contains a redacted secret; "
+                    "supply the script by hand and map this to manual"
+                )
+            content = require_hook_content(f"#!/bin/sh\n{data.command}\n", ctx=ctx)
+            return content, _synth_file_name(data.event)
+        case "unresolved":
+            raise ContractError(
+                f"{decision.source_id}: hook script could not be resolved from its command; map it to manual"
+            )
+
+
+def _synth_file_name(event: str) -> str:
+    base = re.sub(r"[^A-Za-z0-9]", "_", event).strip("_") or "hook"
+    return f"{base}.sh"
+
+
+def _build_hook(decision: Decision, item: HookItem) -> BuiltHook:
+    answers = decision.user_answers
+    ctx = f"{decision.source_id}.user_answers"
+    data = item.data
+    event = archestra_hook_event(data.event)
+    if event is None:
+        raise ContractError(
+            f"{decision.source_id}: hook event {data.event!r} has no archestra equivalent; map it to manual"
+        )
+    content, default_name = _hook_content(decision, item)
+    file_name = archestra_file_name(
+        optional_file_name(answers, ctx=ctx) or data.file_name or default_name,
+        ctx=f"{decision.source_id}.fileName",
+    )
+    requirements = require_requirements(answers, ctx=ctx)
+    if requirements is None:
+        requirements = validate_requirements(data.requirements, ctx=f"{decision.source_id}.requirements")
+    if file_name.endswith(".sh") and requirements:
+        raise ContractError(
+            f"{decision.source_id}: a .sh hook takes no requirements "
+            "(bash hooks have no dependency mechanism); drop them or use a .py hook"
+        )
+    return BuiltHook(
+        event=event, file_name=file_name, content=content, requirements=requirements,
+        enabled=True, agent_id=optional_agent_id(answers, ctx=ctx),
+    )
+
 
 def _scrub_secrets(text: str) -> str:
     """mask credential-shaped tokens embedded in a string before it is printed (e.g. an MCP
@@ -406,6 +503,10 @@ def _redacted_for_print(built: Built) -> dict[str, JsonValue]:
             return {"tool_name": built.tool_name,
                     "conditions": [to_jsonable(c) for c in built.conditions],
                     "action": built.action, "reason": built.reason}
+        case BuiltHook():
+            return {"event": built.event, "fileName": built.file_name,
+                    "requirements": list(built.requirements), "enabled": built.enabled,
+                    "agentId": built.agent_id, "content": _scrub_secrets(built.content)}
 
 
 def _preview_detail(built: Built) -> str:
@@ -435,6 +536,10 @@ def _preview_detail(built: Built) -> str:
             return f"scope={payload.scope}; provider={payload.provider}; api_key=<redacted>"
         case BuiltPolicy():
             return f"tool={built.tool_name}; action={built.action}; conditions={len(built.conditions)}"
+        case BuiltHook():
+            agent = built.agent_id or "primary"
+            return (f"event={built.event}; file={built.file_name}; "
+                    f"requirements={len(built.requirements)}; agent={agent}")
     raise ContractError("unreachable built operation")
 
 
@@ -520,6 +625,19 @@ def _execute(client: ArchestraClient, decision: Decision, name: str, built: Buil
             ))
             return op("created", archestra_id=require_str_field(created, "id", ctx="policy create response"))
 
+        case BuiltHook():
+            if built.agent_id is None:
+                return op("failed",
+                          error="hook has no agent to attach to; migrate an agent or set user_answers.agentId")
+            existing = client.list_hooks(built.agent_id)
+            if any(h.get("event") == built.event and h.get("fileName") == built.file_name for h in existing):
+                return op("skipped", detail="a hook with this agent+event+fileName already exists")
+            created = client.create_hook(HookCreate(
+                agentId=built.agent_id, event=built.event, fileName=built.file_name,
+                content=built.content, requirements=built.requirements, enabled=built.enabled,
+            ))
+            return op("created", archestra_id=require_str_field(created, "id", ctx="hook create response"))
+
 
 def _matching_installs(servers: list[dict[str, JsonValue]], built: BuiltInstall) -> list[dict[str, JsonValue]]:
     match built.scope:
@@ -537,6 +655,26 @@ class _Built:
     name: str
     built: Built | None
     error: str
+
+
+def _flag_hook_collisions(built: list[_Built]) -> list[_Built]:
+    """archestra enforces a unique (agentId, event, fileName); two hooks that resolve to the same
+    triple would make the second silently 'skip exists'. flag the later one invalid so the model
+    fixes it with a distinct user_answers.fileName rather than losing a hook."""
+    seen: set[tuple[str | None, str, str]] = set()
+    out: list[_Built] = []
+    for b in built:
+        op = b.built
+        if isinstance(op, BuiltHook):
+            key = (op.agent_id, op.event, op.file_name)
+            if key in seen:
+                out.append(replace(b, built=None, error=(
+                    f"duplicate hook (event={op.event}, fileName={op.file_name}); "
+                    "set a distinct user_answers.fileName")))
+                continue
+            seen.add(key)
+        out.append(b)
+    return out
 
 
 def main() -> int:
@@ -567,6 +705,7 @@ def main() -> int:
             built.append(_Built(decision, name, op, ""))
         except ContractError as exc:
             built.append(_Built(decision, decision.source_id, None, str(exc)))
+    built = _flag_hook_collisions(built)
     built.sort(key=lambda b: _ORDER.get(b.decision.target_kind, 99))
 
     if args.dry_run:
@@ -636,6 +775,8 @@ def _run_apply(built: list[_Built], base_url: str, api_key: str) -> list[ResultO
                     agent_ids=[primary_agent_id],
                     team_id=built_op.team_id,
                 )
+            if isinstance(built_op, BuiltHook) and built_op.agent_id is None and primary_agent_id:
+                built_op = replace(built_op, agent_id=primary_agent_id)
             try:
                 op = _execute(client, b.decision, b.name, built_op)
             except (ArchestraApiError, ContractError) as exc:

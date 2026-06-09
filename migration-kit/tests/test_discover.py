@@ -109,6 +109,53 @@ def test_hooks_classified(inv: Inventory) -> None:
     assert session.data.intent == "passive"
 
 
+def test_bundled_hook_resolves_script_and_pep723(inv: Inventory) -> None:
+    guard = _by_id(inv, "hook:PreToolUse:0:0")
+    assert isinstance(guard, HookItem)
+    assert guard.data.source == "bundled"
+    assert guard.data.file_name == "pre_tool_use.py"
+    assert guard.data.script_path == "hooks/pre_tool_use.py"
+    assert guard.data.requirements == ["pyyaml>=6.0"]  # extracted from PEP-723 inline metadata
+    assert [f.path for f in guard.files] == ["hooks/pre_tool_use.py"]
+
+
+def test_inline_hook_has_no_bundled_script(inv: Inventory) -> None:
+    post = _by_id(inv, "hook:PostToolUse:0:0")
+    assert isinstance(post, HookItem)
+    assert post.data.source == "inline"
+    assert post.data.file_name is None
+    assert post.files == []
+
+
+def test_env_prefix_hook_is_flagged_in_summary(inv: Inventory) -> None:
+    # the SessionStart command has a `TOKEN=...` env prefix that a hook cannot represent.
+    session = _by_id(inv, "hook:SessionStart:0:0")
+    assert isinstance(session, HookItem)
+    assert session.data.source == "bundled"
+    assert "env/args" in session.summary
+
+
+def test_unsupported_event_hook_noted_for_manual(inv: Inventory) -> None:
+    ups = _by_id(inv, "hook:UserPromptSubmit:0:0")
+    assert isinstance(ups, HookItem)
+    assert "no archestra equivalent" in ups.summary
+
+
+def test_unresolved_hook_when_script_missing(tmp_path: Path) -> None:
+    src = tmp_path / "src"
+    (src / ".claude").mkdir(parents=True)
+    (src / ".claude" / "settings.json").write_text(json.dumps({
+        "hooks": {"PreToolUse": [{"hooks": [
+            {"type": "command", "command": "python3 \"$CLAUDE_PROJECT_DIR/hooks/gone.py\""}
+        ]}]}
+    }))
+    inv = discover(src)
+    hook = _by_id(inv, "hook:PreToolUse:0:0")
+    assert isinstance(hook, HookItem)
+    assert hook.data.source == "unresolved"
+    assert hook.data.file_name is None
+
+
 def test_hook_command_inline_secret_redacted(inv: Inventory) -> None:
     session = _by_id(inv, "hook:SessionStart:0:0")
     assert isinstance(session, HookItem)

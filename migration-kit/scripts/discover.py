@@ -22,9 +22,12 @@ import base64
 import json
 import os
 import re
+import shlex
 import sys
 from collections import Counter
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Callable
 
 from contracts import SECRET_KEY_RE as _SECRET_KEY
 from contracts import SECRET_TOKEN_RE as _SECRET_TOKEN
@@ -35,10 +38,12 @@ from contracts import (
     ClaudeMdItem,
     CommandData,
     CommandItem,
+    ContractError,
     FrontMatter,
     HookData,
     HookIntent,
     HookItem,
+    HookSource,
     Inventory,
     JsonValue,
     LocalToolData,
@@ -52,10 +57,12 @@ from contracts import (
     SkillItem,
     SubagentData,
     SubagentItem,
+    archestra_hook_event,
     as_array,
     as_object,
     require_dict,
     to_jsonable,
+    validate_requirements,
 )
 from frontmatter import parse_frontmatter
 
@@ -289,7 +296,7 @@ def discover(root: Path) -> Inventory:
             inv.unknowns.append(f"{rel} (not a json object)")
             continue
         _discover_mcp_servers(inv, cfg.get("mcpServers"), rel)
-        _discover_hooks(inv, cfg.get("hooks"), rel)
+        _discover_hooks(inv, cfg.get("hooks"), rel, root, mark)
 
     # 7. openclaw config -> report-only (schema unverified)
     for oc in (root / "openclaw.json", root / ".openclaw" / "openclaw.json"):
@@ -354,7 +361,100 @@ def _discover_mcp_servers(inv: Inventory, servers: JsonValue, rel: str) -> None:
         ))
 
 
-def _discover_hooks(inv: Inventory, hooks: JsonValue, rel: str) -> None:
+# a leading shell `KEY=VALUE` environment assignment (env-prefix before the interpreter).
+_ENV_ASSIGN_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
+# $CLAUDE_PROJECT_DIR / ${CLAUDE_PROJECT_DIR} -- expanded to the source root for path resolution.
+_PROJECT_DIR_RE = re.compile(r"\$\{?CLAUDE_PROJECT_DIR\}?")
+
+
+@dataclass(frozen=True)
+class _HookCmd:
+    """outcome of inspecting a hook command for a referenced script (already secret-redacted)."""
+    source: HookSource
+    script: Path | None  # resolved contained path when source == "bundled"
+    has_env_prefix: bool
+    has_extra_args: bool
+
+
+def _parse_hook_command(command: str, root: Path) -> _HookCmd:
+    """classify a hook command: a contained referenced .py/.sh (bundled), a self-contained shell
+    snippet (inline), or a referenced script we cannot resolve / unparsable quoting (unresolved)."""
+    try:
+        tokens = shlex.split(command)
+    except ValueError:
+        return _HookCmd("unresolved", None, has_env_prefix=False, has_extra_args=False)
+
+    idx = 0
+    has_env_prefix = False
+    while idx < len(tokens) and _ENV_ASSIGN_RE.match(tokens[idx]):
+        has_env_prefix = True
+        idx += 1
+    rest = tokens[idx:]
+
+    script_pos = next(
+        (k for k, t in enumerate(rest) if _expand_project_dir(t, root).endswith((".py", ".sh"))),
+        None,
+    )
+    if script_pos is None:
+        return _HookCmd("inline", None, has_env_prefix=has_env_prefix, has_extra_args=False)
+
+    has_extra_args = script_pos + 1 < len(rest)
+    candidate = Path(_expand_project_dir(rest[script_pos], root))
+    resolved = candidate if candidate.is_absolute() else root / candidate
+    if _is_contained_file(resolved, root):
+        return _HookCmd("bundled", resolved, has_env_prefix=has_env_prefix, has_extra_args=has_extra_args)
+    return _HookCmd("unresolved", None, has_env_prefix=has_env_prefix, has_extra_args=has_extra_args)
+
+
+def _expand_project_dir(token: str, root: Path) -> str:
+    return _PROJECT_DIR_RE.sub(str(root), token)
+
+
+def _pep723_requirements(content: str, ref: str, warnings: list[str]) -> list[str]:
+    """extract PEP-723 inline `dependencies` from a python hook so they become hook requirements.
+    archestra runs python hooks via `uv run --with <requirements>`, so declared deps must be carried."""
+    deps = _extract_dependencies_block(content)
+    if not deps:
+        return []
+    try:
+        return validate_requirements(deps, ctx=ref)
+    except ContractError as exc:
+        warnings.append(f"{ref}: ignored unparseable PEP-723 dependencies -- {exc}")
+        return []
+
+
+# the `dependencies = [ ... ]` array and the quoted strings inside it (minimal, stdlib-only:
+# python 3.10 has no tomllib, and we only need this one key's list-of-strings.)
+_DEPS_ARRAY_RE = re.compile(r"^dependencies\s*=\s*\[(.*?)\]", re.MULTILINE | re.DOTALL)
+_QUOTED_RE = re.compile(r'"([^"]*)"|\'([^\']*)\'')
+
+
+def _extract_dependencies_block(content: str) -> list[str]:
+    lines = content.splitlines()
+    try:
+        start = lines.index("# /// script")
+    except ValueError:
+        return []
+    end = next((k for k in range(start + 1, len(lines)) if lines[k] == "# ///"), None)
+    if end is None:
+        return []
+    body: list[str] = []
+    for line in lines[start + 1 : end]:
+        if line.startswith("# "):
+            body.append(line[2:])
+        elif line == "#":
+            body.append("")
+        else:
+            return []  # a non-comment line inside the block -> malformed, don't guess
+    match = _DEPS_ARRAY_RE.search("\n".join(body))
+    if match is None:
+        return []
+    return [a or b for a, b in _QUOTED_RE.findall(match.group(1))]
+
+
+def _discover_hooks(
+    inv: Inventory, hooks: JsonValue, rel: str, root: Path, mark: Callable[[Path], None]
+) -> None:
     hooks_obj = as_object(hooks)
     if hooks_obj is None:
         return
@@ -377,11 +477,55 @@ def _discover_hooks(inv: Inventory, hooks: JsonValue, rel: str) -> None:
                 raw_command = h_obj.get("command")
                 command = _redact_inline(raw_command if isinstance(raw_command, str) else "")
                 intent = _classify_hook(event, command)
-                inv.items.append(HookItem(
-                    id=f"hook:{event}:{i}:{j}", name=f"{event}#{i}.{j}", path=rel,
-                    summary=f"{event} hook ({intent})",
-                    data=HookData(event=event, matcher=matcher, command=command, intent=intent),
+                inv.items.append(_build_hook_item(
+                    inv, item_id=f"hook:{event}:{i}:{j}", event=event, name=f"{event}#{i}.{j}",
+                    rel=rel, matcher=matcher, command=command, intent=intent, root=root, mark=mark,
                 ))
+
+
+def _build_hook_item(
+    inv: Inventory, *, item_id: str, event: str, name: str, rel: str, matcher: str | None,
+    command: str, intent: HookIntent, root: Path, mark: Callable[[Path], None],
+) -> HookItem:
+    parsed = _parse_hook_command(command, root)
+    files: list[BundledFile] = []
+    file_name: str | None = None
+    script_path: str | None = None
+    requirements: list[str] = []
+
+    if parsed.source == "bundled" and parsed.script is not None:
+        bundled = _read_bundled(parsed.script, root)
+        files = [bundled]
+        file_name = parsed.script.name
+        script_path = bundled.path
+        mark(parsed.script)
+        if bundled.encoding == "utf8":
+            _warn_if_secret(bundled.content, script_path, inv.warnings)
+            if parsed.script.suffix == ".py":
+                requirements = _pep723_requirements(bundled.content, script_path, inv.warnings)
+
+    target = archestra_hook_event(event)
+    note = _hook_note(parsed, target)
+    summary = f"{event} hook ({intent}, {parsed.source}){note}"
+    return HookItem(
+        id=item_id, name=name, path=rel, summary=summary,
+        data=HookData(
+            event=event, command=command, intent=intent, source=parsed.source, matcher=matcher,
+            file_name=file_name, script_path=script_path, requirements=requirements,
+        ),
+        files=files,
+    )
+
+
+def _hook_note(parsed: _HookCmd, target: object) -> str:
+    parts: list[str] = []
+    if target is None:
+        parts.append("event has no archestra equivalent -> manual")
+    if parsed.has_env_prefix or parsed.has_extra_args:
+        parts.append("command sets env/args not migratable to a hook")
+    if parsed.source == "unresolved":
+        parts.append("script not resolvable -> manual")
+    return f"; {'; '.join(parts)}" if parts else ""
 
 
 def _kind_counts(inv: Inventory) -> str:
@@ -389,23 +533,35 @@ def _kind_counts(inv: Inventory) -> str:
     return ", ".join(f"{kind}={count}" for kind, count in sorted(counts.items())) or "none"
 
 
+def _hook_bucket(hook: HookItem) -> str:
+    """which summary bucket a discovered hook falls into. an unmappable event or unresolvable script
+    has no native-hook target -> manual. otherwise a guard needs review (native hook vs tool policy is
+    a judgment call) and a non-guard migrates cleanly as a native hook."""
+    mappable = archestra_hook_event(hook.data.event) is not None and hook.data.source != "unresolved"
+    if not mappable:
+        return "manual"
+    return "review" if hook.data.intent == "guard" else "likely"
+
+
 def _print_summary(inv: Inventory, out: Path) -> None:
+    hooks = [it for it in inv.items if isinstance(it, HookItem)]
     likely = sum(1 for it in inv.items if it.kind in {"claude_md", "skill", "command", "local_tool"})
-    review = sum(
-        1 for it in inv.items
-        if it.kind in {"subagent", "mcp_server"} or (isinstance(it, HookItem) and it.data.intent == "guard")
-    )
-    manual = sum(
-        1 for it in inv.items
-        if it.kind == "openclaw" or (isinstance(it, HookItem) and it.data.intent == "passive")
-    ) + len(inv.unknowns)
+    likely += sum(1 for it in hooks if _hook_bucket(it) == "likely")
+    review = sum(1 for it in inv.items if it.kind in {"subagent", "mcp_server"})
+    review += sum(1 for it in hooks if _hook_bucket(it) == "review")
+    manual = sum(1 for it in inv.items if it.kind == "openclaw")
+    manual += sum(1 for it in hooks if _hook_bucket(it) == "manual")
+    manual += len(inv.unknowns)
     redacted = sum(len(it.redacted_refs) for it in inv.items)
 
+    likely_note = "agent prompt, skills, commands, local tools, native hooks"
+    review_note = "subagents, MCP install choices, guard hooks"
+    manual_note = "unsupported/unresolved hooks, openclaw, unknown files"
     print(_style(f"🔎 discovered {len(inv.items)} items; wrote {out}", "36;1"))
     print(f"  inventory: {_kind_counts(inv)}")
-    print(f"  {_style('✅ likely migrates', '32;1')}: {likely} item(s) (agent prompt, skills, commands, local tools)")
-    print(f"  {_style('⚠️  needs review', '33;1')}: {review} item(s) (subagents, MCP install choices, guard hooks)")
-    print(f"  {_style('🛠️  manual/report-only', '34;1')}: {manual} item(s) (passive hooks, openclaw, unknown files)")
+    print(f"  {_style('✅ likely migrates', '32;1')}: {likely} item(s) ({likely_note})")
+    print(f"  {_style('⚠️  needs review', '33;1')}: {review} item(s) ({review_note})")
+    print(f"  {_style('🛠️  manual/report-only', '34;1')}: {manual} item(s) ({manual_note})")
     safety = f"{redacted} structured value(s) redacted; {len(inv.warnings)} content warning(s)"
     print(f"  {_style('🔐 safety', '35;1')}: {safety}")
     for unknown in inv.unknowns:

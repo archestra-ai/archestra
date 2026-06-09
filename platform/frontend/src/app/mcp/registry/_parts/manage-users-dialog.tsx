@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  ADMIN_ROLE_NAME,
   E2eTestId,
   formatSecretStorageType,
   getManageCredentialsAddToTeamOptionTestId,
@@ -158,9 +159,6 @@ export function ManageUsersContent({
 
   // Get user's teams and permissions for re-authentication checks
   const { data: userTeams } = useMyTeams();
-  const { data: hasTeamAdminPermission } = useHasPermissions({
-    team: ["admin"],
-  });
   const { data: hasMcpServerCreatePermission } = useHasPermissions({
     mcpServerInstallation: ["create"],
   });
@@ -187,7 +185,7 @@ export function ManageUsersContent({
   // Check if user can re-authenticate a credential
   // WHY: Permission requirements match team installation rules for consistency:
   // - Personal: mcpServer:create AND owner
-  // - Team: team:admin OR (mcpServer:update AND team membership)
+  // - Team: team admin role OR (mcpServer:update AND team membership)
   // - Org: mcpServerInstallation:admin
   // Members cannot re-authenticate team credentials, only editors and admins can.
   const canReauthenticate = (mcpServer: (typeof allServers)[number]) => {
@@ -204,8 +202,7 @@ export function ManageUsersContent({
       return mcpServer.ownerId === currentUserId;
     }
 
-    // For team credentials: team:admin OR (mcpServer:update AND team membership)
-    if (hasTeamAdminPermission) return true;
+    if (isCurrentUserTeamAdmin(mcpServer.teamId)) return true;
 
     // WHY: Editors have mcpServer:update, members don't
     // This ensures only editors and admins can manage team credentials
@@ -234,7 +231,7 @@ export function ManageUsersContent({
   };
 
   // Check if user can revoke (delete) a credential
-  // Personal: owner OR mcpServer:update. Team: team:admin OR (mcpServer:update AND membership).
+  // Personal: owner OR mcpServer:update. Team: team admin role OR (mcpServer:update AND membership).
   // Org: mcpServerInstallation:admin.
   const canRevoke = (mcpServer: (typeof allServers)[number]) => {
     const scope = getServerScope(mcpServer);
@@ -244,9 +241,20 @@ export function ManageUsersContent({
         mcpServer.ownerId === currentUserId || !!hasMcpServerUpdatePermission
       );
     }
-    if (hasTeamAdminPermission) return true;
+    if (isCurrentUserTeamAdmin(mcpServer.teamId)) return true;
     if (!hasMcpServerUpdatePermission) return false;
     return userTeams?.some((team) => team.id === mcpServer.teamId) ?? false;
+  };
+
+  const isCurrentUserTeamAdmin = (teamId: string | null | undefined) => {
+    if (!teamId || !currentUserId) return false;
+    const team = userTeams?.find((team) => team.id === teamId);
+    return (
+      team?.members?.some(
+        (member) =>
+          member.userId === currentUserId && member.role === ADMIN_ROLE_NAME,
+      ) ?? false
+    );
   };
 
   // Get tooltip message for disabled revoke button

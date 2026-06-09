@@ -1,4 +1,5 @@
 import { boolean, index, pgTable, text, timestamp } from "drizzle-orm/pg-core";
+import type { TeamMemberRole } from "@/types/team-role";
 import organizationsTable from "./organization";
 import usersTable from "./user";
 
@@ -31,7 +32,7 @@ export const teamMember = pgTable(
     userId: text("user_id")
       .notNull()
       .references(() => usersTable.id, { onDelete: "cascade" }),
-    role: text("role").default("member").notNull(),
+    role: text("role").$type<TeamMemberRole>().default("member").notNull(),
     /**
      * Indicates this membership was created via SSO team sync.
      * Synced members are automatically managed during SSO login.

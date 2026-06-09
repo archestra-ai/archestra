@@ -6,8 +6,8 @@ import {
 } from "@archestra/shared";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
-import { Key, Link2, Plus, Trash2, Users, Vault } from "lucide-react";
-import { lazy, Suspense, useEffect, useMemo, useState } from "react";
+import { Pencil, Plus, Trash2, Users } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { useSetSettingsAction } from "@/app/settings/layout";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
@@ -24,57 +24,28 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { Textarea } from "@/components/ui/textarea";
-import config from "@/lib/config/config";
-import { useFeature } from "@/lib/config/config.query";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import { useTeams } from "@/lib/teams/team.query";
-import { type TeamToken, useTokens } from "@/lib/teams/team-token.query";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
-import { TeamMembersDialog } from "./team-members-dialog";
-import { TokenManagerDialog } from "./token-manager-dialog";
-
-const TeamVaultFolderDialog = lazy(
-  () =>
-    // biome-ignore lint/style/noRestrictedImports: lazy loading
-    import("./team-vault-folder-dialog.ee"),
-);
+import { TeamManagementDialog } from "./team-management-dialog";
 
 type Team = archestraApiTypes.GetTeamsResponses["200"]["data"][number];
-
-const { TeamExternalGroupsDialog } = config.enterpriseFeatures.core
-  ? // biome-ignore lint/style/noRestrictedImports: conditional EE component with SSO / external teams
-    await import("./team-external-groups-dialog.ee")
-  : {
-      TeamExternalGroupsDialog: () => null,
-    };
 
 export function TeamsList() {
   const { searchParams, updateQueryParams } = useDataTableQueryParams();
   const setActionButton = useSetSettingsAction();
   const queryClient = useQueryClient();
-  const byosEnabled = useFeature("byosEnabled");
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [selectedTeam, setSelectedTeam] = useState<Team | null>(null);
-  const [membersDialogOpen, setMembersDialogOpen] = useState(false);
-  const [externalGroupsDialogOpen, setExternalGroupsDialogOpen] =
-    useState(false);
-  const [vaultFolderDialogOpen, setVaultFolderDialogOpen] = useState(false);
+  const [managementDialogOpen, setManagementDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [teamToDelete, setTeamToDelete] = useState<Team | null>(null);
-
-  // Token management state
-  const [selectedToken, setSelectedToken] = useState<TeamToken | null>(null);
-  const [tokenDialogOpen, setTokenDialogOpen] = useState(false);
 
   // Form state
   const [teamName, setTeamName] = useState("");
   const [teamDescription, setTeamDescription] = useState("");
 
   const search = searchParams.get("search") || "";
-
-  // Tokens query
-  const { data: tokensData, isLoading: tokensLoading } = useTokens();
-  const tokens = tokensData?.tokens;
 
   const { data: teams, isLoading } = useTeams();
 
@@ -212,59 +183,15 @@ export function TeamsList() {
         const team = row.original;
         const actions: TableRowAction[] = [
           {
-            icon: <Users className="h-4 w-4" />,
-            label: "Manage Members",
+            icon: <Pencil className="h-4 w-4" />,
+            label: "Edit",
             permissions: { team: ["update"] } as const,
             testId: `${E2eTestId.ManageMembersButton}-${team.name}`,
             onClick: () => {
               setSelectedTeam(team);
-              setMembersDialogOpen(true);
+              setManagementDialogOpen(true);
             },
           },
-          {
-            icon: <Key className="h-4 w-4" />,
-            label: "Manage MCP/A2A Gateway Token",
-            permissions: { team: ["update"] } as const,
-            disabled: tokensLoading,
-            disabledTooltip: tokensLoading ? "Loading tokens..." : undefined,
-            onClick: () => {
-              const teamToken = tokens?.find((t) => t.team?.id === team.id);
-              if (teamToken) {
-                setSelectedToken(teamToken);
-                setTokenDialogOpen(true);
-              } else {
-                toast.error("No token found for this team");
-              }
-            },
-          },
-          ...(byosEnabled
-            ? [
-                {
-                  icon: <Vault className="h-4 w-4" />,
-                  label: "Configure Vault Folder",
-                  permissions: { team: ["update"] } as const,
-                  testId: `${E2eTestId.ConfigureVaultFolderButton}-${team.name}`,
-                  onClick: () => {
-                    setSelectedTeam(team);
-                    setVaultFolderDialogOpen(true);
-                  },
-                },
-              ]
-            : []),
-          ...(config.enterpriseFeatures.core
-            ? [
-                {
-                  icon: <Link2 className="h-4 w-4" />,
-                  label: "Configure SSO Team Sync",
-                  permissions: { team: ["update"] } as const,
-                  testId: `${E2eTestId.ConfigureIdpTeamSyncButton}-${team.id}`,
-                  onClick: () => {
-                    setSelectedTeam(team);
-                    setExternalGroupsDialogOpen(true);
-                  },
-                },
-              ]
-            : []),
           {
             icon: <Trash2 className="h-4 w-4" />,
             label: "Delete",
@@ -361,37 +288,11 @@ export function TeamsList() {
         onConfirm={handleDeleteTeam}
       />
 
-      {selectedTeam && membersDialogOpen && (
-        <TeamMembersDialog
-          open={membersDialogOpen}
-          onOpenChange={setMembersDialogOpen}
+      {selectedTeam && managementDialogOpen && (
+        <TeamManagementDialog
+          open={managementDialogOpen}
+          onOpenChange={setManagementDialogOpen}
           team={selectedTeam}
-        />
-      )}
-
-      {selectedTeam && externalGroupsDialogOpen && (
-        <TeamExternalGroupsDialog
-          open={externalGroupsDialogOpen}
-          onOpenChange={setExternalGroupsDialogOpen}
-          team={selectedTeam}
-        />
-      )}
-
-      {selectedTeam && vaultFolderDialogOpen && (
-        <Suspense fallback={null}>
-          <TeamVaultFolderDialog
-            open={vaultFolderDialogOpen}
-            onOpenChange={setVaultFolderDialogOpen}
-            team={selectedTeam}
-          />
-        </Suspense>
-      )}
-
-      {selectedToken && (
-        <TokenManagerDialog
-          open={tokenDialogOpen}
-          onOpenChange={setTokenDialogOpen}
-          token={selectedToken}
         />
       )}
     </>

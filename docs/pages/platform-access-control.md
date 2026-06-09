@@ -3,7 +3,7 @@ title: "Access Control"
 category: Administration
 description: "Role-based access control (RBAC) system for managing user permissions in Archestra"
 order: 1
-lastUpdated: 2026-06-05
+lastUpdated: 2026-06-09
 ---
 <!--
 Check ../docs_writer_prompt.md before changing this file.
@@ -258,7 +258,6 @@ The following table lists all available permissions that can be assigned to cust
 | `team:create` | Create new teams |
 | `team:update` | Modify team settings |
 | `team:delete` | Delete teams |
-| `team:admin` | Manage team membership (add/remove members) |
 | `toolPolicy:read` | View tools, tool invocation policies, and trusted data policies |
 | `toolPolicy:create` | Register tools and create security policies |
 | `toolPolicy:update` | Modify tools, tool configuration, and security policies |
@@ -299,7 +298,7 @@ Examples:
 `llmProviderApiKey` and `llmVirtualKey` also support `personal`, `team`, and `org` scope, but they use different elevated permissions:
 
 - Personal records are limited to their owner
-- Team records require membership in the selected team, with some routes also allowing `team:admin`
+- Team records require membership in the selected team, with team member admins able to manage their own team
 - Organization-wide records require the resource-specific admin permission such as `llmProviderApiKey:admin` or `llmVirtualKey:admin`
 
 These resources do **not** use `:team-admin`.
@@ -321,7 +320,7 @@ Some MCP-related resources also apply runtime scope checks in addition to RBAC, 
 
 - Internal MCP catalog items can be `personal`, `team`, or `org`
 - Organization-wide catalog items require `mcpServerInstallation:admin`
-- Team MCP server installations depend on team membership, with broader control for users who have `team:admin`
+- Team MCP server installations depend on team membership, with broader control for organization-level team managers and admins of the selected team
 
 When designing custom roles, treat the permission matrix as the first gate and the resource's scope rules as the second gate.
 

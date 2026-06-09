@@ -21,6 +21,7 @@ import {
   SelectTeamMemberSchema,
   SelectTeamSchema,
   UpdateTeamBodySchema,
+  UpdateTeamMemberBodySchema,
 } from "@/types";
 
 const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
@@ -34,9 +35,9 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
         querystring: PaginationQuerySchema.extend({
           name: z.string().optional(),
           // When true, always return only the teams the caller is a member of,
-          // even for team:admins. Resource team-assignment pickers use this so a
-          // team:admin who isn't a member of a team isn't offered teams they
-          // can't actually assign to (the resource routes require membership).
+          // even for organization-level team managers. Resource
+          // team-assignment pickers use this so a manager who isn't a member of
+          // a team isn't offered teams they can't actually assign to.
           mine: z
             .preprocess((val) => val === "true" || val === true, z.boolean())
             .optional(),
@@ -48,13 +49,13 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       const { limit, offset, name, mine } = request.query;
-      const { success: isTeamAdmin } = await hasPermission(
-        { team: ["admin"] },
+      const { success: canManageAllTeams } = await hasPermission(
+        { team: ["create"] },
         request.headers,
       );
 
       // Members (and anyone passing ?mine) only see teams they belong to.
-      if (!isTeamAdmin || mine) {
+      if (!canManageAllTeams || mine) {
         const result = await TeamModel.getUserTeamsPaginated({
           userId: request.user.id,
           limit,
@@ -66,7 +67,7 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
           pagination: calculatePaginationMeta(result.total, { limit, offset }),
         });
       }
-      // Team admins see all teams in the organization
+      // Organization-level team managers see all teams in the organization
       const result = await TeamModel.findByOrganizationPaginated({
         organizationId: request.organizationId,
         limit,
@@ -128,13 +129,11 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Team not found");
       }
 
-      // Check if user is team:admin or member of the team
-      // Non team:admins can only see their own teams
-      const { success: isTeamAdmin } = await hasPermission(
-        { team: ["admin"] },
+      const { success: canManageAllTeams } = await hasPermission(
+        { team: ["create"] },
         headers,
       );
-      if (!isTeamAdmin) {
+      if (!canManageAllTeams) {
         const isMember = await TeamModel.isUserInTeam(id, user.id);
         if (!isMember) {
           throw new ApiError(404, "Team not found");
@@ -166,18 +165,17 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Team not found");
       }
 
-      // Check if user has team:admin permission or is a member of the team
-      const { success: isTeamAdmin } = await hasPermission(
-        { team: ["admin"] },
+      const { success: canManageAllTeams } = await hasPermission(
+        { team: ["create"] },
         headers,
       );
 
-      if (!isTeamAdmin) {
-        const isMember = await TeamModel.isUserInTeam(id, user.id);
-        if (!isMember) {
+      if (!canManageAllTeams) {
+        const isTeamAdmin = await TeamModel.isUserTeamAdmin(id, user.id);
+        if (!isTeamAdmin) {
           throw new ApiError(
             403,
-            "You must be a member of this team to update it",
+            "You must be a team admin to update this team",
           );
         }
       }
@@ -205,27 +203,20 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(DeleteObjectResponseSchema),
       },
     },
-    async ({ params: { id }, organizationId, user, headers }, reply) => {
+    async ({ params: { id }, organizationId, headers }, reply) => {
       // Verify the team exists and belongs to the user's organization
       const existingTeam = await TeamModel.findById(id);
       if (!existingTeam || existingTeam.organizationId !== organizationId) {
         throw new ApiError(404, "Team not found");
       }
 
-      // Check if user has team:admin permission or is a member of the team
-      const { success: isTeamAdmin } = await hasPermission(
-        { team: ["admin"] },
+      const { success: canDeleteTeams } = await hasPermission(
+        { team: ["delete"] },
         headers,
       );
 
-      if (!isTeamAdmin) {
-        const isMember = await TeamModel.isUserInTeam(id, user.id);
-        if (!isMember) {
-          throw new ApiError(
-            403,
-            "You must be a member of this team to delete it",
-          );
-        }
+      if (!canDeleteTeams) {
+        throw new ApiError(403, "You are not authorized to delete this team");
       }
 
       const success = await TeamModel.delete(id);
@@ -260,12 +251,11 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Team not found");
       }
 
-      // Check if user is team:admin or member of the team
-      const { success: isTeamAdmin } = await hasPermission(
-        { team: ["admin"] },
+      const { success: canManageAllTeams } = await hasPermission(
+        { team: ["create"] },
         headers,
       );
-      if (!isTeamAdmin) {
+      if (!canManageAllTeams) {
         const isMember = await TeamModel.isUserInTeam(id, user.id);
         if (!isMember) {
           throw new ApiError(404, "Team not found");
@@ -291,7 +281,7 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (
-      { params: { id }, body: { userId, role }, organizationId },
+      { params: { id }, body: { userId, role }, organizationId, user, headers },
       reply,
     ) => {
       // Verify the team exists and belongs to the user's organization
@@ -300,7 +290,59 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Team not found");
       }
 
+      await assertCanManageTeam({
+        teamId: id,
+        userId: user.id,
+        headers,
+        action: "manage team members",
+      });
+
       const member = await TeamModel.addMember(id, userId, role);
+
+      return reply.send(member);
+    },
+  );
+
+  fastify.put(
+    "/api/teams/:id/members/:userId",
+    {
+      schema: {
+        operationId: RouteId.UpdateTeamMember,
+        description: "Update a team member role",
+        tags: ["Teams"],
+        params: z.object({
+          id: z.string(),
+          userId: z.string(),
+        }),
+        body: UpdateTeamMemberBodySchema,
+        response: constructResponseSchema(SelectTeamMemberSchema),
+      },
+    },
+    async (
+      { params: { id, userId }, body: { role }, organizationId, user, headers },
+      reply,
+    ) => {
+      const team = await TeamModel.findById(id);
+      if (!team || team.organizationId !== organizationId) {
+        throw new ApiError(404, "Team not found");
+      }
+
+      await assertCanManageTeam({
+        teamId: id,
+        userId: user.id,
+        headers,
+        action: "manage team member roles",
+      });
+
+      const member = await TeamModel.updateMemberRole({
+        teamId: id,
+        userId,
+        role,
+      });
+
+      if (!member) {
+        throw new ApiError(404, "Team member not found");
+      }
 
       return reply.send(member);
     },
@@ -320,12 +362,22 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(DeleteObjectResponseSchema),
       },
     },
-    async ({ params: { id, userId }, organizationId, user }, reply) => {
+    async (
+      { params: { id, userId }, organizationId, user, headers },
+      reply,
+    ) => {
       // Verify the team exists and belongs to the user's organization
       const team = await TeamModel.findById(id);
       if (!team || team.organizationId !== organizationId) {
         throw new ApiError(404, "Team not found");
       }
+
+      await assertCanManageTeam({
+        teamId: id,
+        userId: user.id,
+        headers,
+        action: "manage team members",
+      });
 
       const success = await TeamModel.removeMember(id, userId);
 
@@ -393,12 +445,11 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Team not found");
       }
 
-      // Check if user is team:admin or member of the team
-      const { success: isTeamAdmin } = await hasPermission(
-        { team: ["admin"] },
+      const { success: canManageAllTeams } = await hasPermission(
+        { team: ["create"] },
         headers,
       );
-      if (!isTeamAdmin) {
+      if (!canManageAllTeams) {
         const isMember = await TeamModel.isUserInTeam(id, user.id);
         if (!isMember) {
           throw new ApiError(404, "Team not found");
@@ -425,7 +476,13 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (
-      { params: { id }, body: { groupIdentifier }, organizationId },
+      {
+        params: { id },
+        body: { groupIdentifier },
+        organizationId,
+        user,
+        headers,
+      },
       reply,
     ) => {
       // Verify enterprise license
@@ -441,6 +498,13 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (!team || team.organizationId !== organizationId) {
         throw new ApiError(404, "Team not found");
       }
+
+      await assertCanManageTeam({
+        teamId: id,
+        userId: user.id,
+        headers,
+        action: "manage team external group sync",
+      });
 
       // Normalize group identifier to lowercase for case-insensitive matching
       const normalizedGroupIdentifier = groupIdentifier.toLowerCase();
@@ -482,7 +546,10 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(DeleteObjectResponseSchema),
       },
     },
-    async ({ params: { id, groupId }, organizationId }, reply) => {
+    async (
+      { params: { id, groupId }, organizationId, user, headers },
+      reply,
+    ) => {
       // Verify enterprise license
       if (!config.enterpriseFeatures.core) {
         throw new ApiError(
@@ -497,6 +564,13 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Team not found");
       }
 
+      await assertCanManageTeam({
+        teamId: id,
+        userId: user.id,
+        headers,
+        action: "manage team external group sync",
+      });
+
       const success = await TeamModel.removeExternalGroupById(id, groupId);
 
       if (!success) {
@@ -509,3 +583,28 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
 };
 
 export default teamRoutes;
+
+async function assertCanManageTeam(params: {
+  teamId: string;
+  userId: string;
+  headers: Parameters<typeof hasPermission>[1];
+  action: string;
+}) {
+  const { success: canManageAllTeams } = await hasPermission(
+    { team: ["create"] },
+    params.headers,
+  );
+
+  if (canManageAllTeams) {
+    return;
+  }
+
+  const isTeamAdmin = await TeamModel.isUserTeamAdmin(
+    params.teamId,
+    params.userId,
+  );
+
+  if (!isTeamAdmin) {
+    throw new ApiError(403, `You must be a team admin to ${params.action}`);
+  }
+}

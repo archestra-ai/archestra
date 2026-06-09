@@ -107,13 +107,18 @@ After configuring how groups are extracted:
 
 1. Navigate to **Settings > Teams**
 2. Create a team or select an existing one
-3. Click the **link icon** (Configure SSO Team Sync) button next to the team
-4. In the dialog, enter the external group identifier(s) to link:
+3. Click **Edit** next to the team
+4. Select **External Group Sync**
+5. Enter the external group identifier(s) to link:
    - The group name as extracted by your Handlebars template or default extraction
    - For LDAP-style groups: the full DN (for example `cn=admins,ou=groups,dc=example,dc=com`)
    - For Microsoft Entra ID: the group object ID or display name
-5. Click **Add** to create the mapping
-6. Repeat for additional groups if needed
+6. Click **Add** to create the mapping
+7. Repeat for additional groups if needed
+
+Users with organization-level team management can configure any team. Team members
+with the **Admin** role can manage members, roles, and external group mappings for
+their own team without access to identity provider settings.
 
 ### Group identifier matching
 

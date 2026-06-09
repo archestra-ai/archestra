@@ -36,9 +36,13 @@ import { EnterpriseLicenseRequired } from "../enterprise-license-required";
 
 type Team = archestraApiTypes.GetTeamsResponses["200"]["data"][number];
 type TeamMember = archestraApiTypes.GetTeamMembersResponses["200"][number];
-type TeamDialogSection = "team" | "token" | "external-groups";
+type TeamDialogSection = "team" | "token" | "vault-folder" | "external-groups";
 type TeamMemberRole = typeof ADMIN_ROLE_NAME | typeof MEMBER_ROLE_NAME;
 type TeamManagementExternalSyncSectionComponent = ComponentType<{
+  open: boolean;
+  team: Team;
+}>;
+type TeamManagementVaultFolderSectionComponent = ComponentType<{
   open: boolean;
   team: Team;
 }>;
@@ -59,6 +63,7 @@ type TeamManagementDialogProps =
 const editNavItems = [
   { id: "team", label: "Team" },
   { id: "token", label: "MCP/A2A Gateway Token" },
+  { id: "vault-folder", label: "Vault Folder" },
   { id: "external-groups", label: "External Group Sync" },
 ] satisfies Array<{ id: TeamDialogSection; label: string }>;
 
@@ -79,6 +84,8 @@ export function TeamManagementDialog(props: TeamManagementDialogProps) {
   const [description, setDescription] = useState(team?.description ?? "");
   const TeamManagementExternalSyncSection =
     useTeamManagementExternalSyncSection();
+  const TeamManagementVaultFolderSection =
+    useTeamManagementVaultFolderSection();
   const { data: tokensData } = useTokens({ enabled: open && mode === "edit" });
   const { data: canUpdateTeams = false } = useHasPermissions({
     team: ["update"],
@@ -206,6 +213,9 @@ export function TeamManagementDialog(props: TeamManagementDialogProps) {
       )}
       {activeSection === "token" && mode === "edit" && (
         <TokenSection token={teamToken} />
+      )}
+      {activeSection === "vault-folder" && mode === "edit" && team && (
+        <TeamManagementVaultFolderSection open={open} team={team} />
       )}
       {activeSection === "external-groups" && mode === "edit" && team && (
         <TeamManagementExternalSyncSection open={open} team={team} />
@@ -600,6 +610,10 @@ function TeamManagementExternalSyncSectionUnavailable() {
   return <EnterpriseLicenseRequired featureName="Team Sync" />;
 }
 
+function TeamManagementVaultFolderSectionUnavailable() {
+  return <EnterpriseLicenseRequired featureName="Team Vault Folders" />;
+}
+
 function useTeamManagementExternalSyncSection(): TeamManagementExternalSyncSectionComponent {
   const [Section, setSection] =
     useState<TeamManagementExternalSyncSectionComponent>(
@@ -616,6 +630,35 @@ function useTeamManagementExternalSyncSection(): TeamManagementExternalSyncSecti
       const module = await import("./team-management-external-sync.ee");
       if (!cancelled) {
         setSection(() => module.TeamManagementExternalSyncSection);
+      }
+    }
+
+    loadEnterpriseSection();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return Section;
+}
+
+function useTeamManagementVaultFolderSection(): TeamManagementVaultFolderSectionComponent {
+  const [Section, setSection] =
+    useState<TeamManagementVaultFolderSectionComponent>(
+      () => TeamManagementVaultFolderSectionUnavailable,
+    );
+
+  useEffect(() => {
+    if (!config.enterpriseFeatures.core) return;
+
+    let cancelled = false;
+
+    async function loadEnterpriseSection() {
+      // biome-ignore lint/style/noRestrictedImports: conditional ee component with vault folder management
+      const module = await import("./team-management-vault-folder.ee");
+      if (!cancelled) {
+        setSection(() => module.TeamManagementVaultFolderSection);
       }
     }
 

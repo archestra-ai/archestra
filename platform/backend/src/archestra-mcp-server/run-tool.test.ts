@@ -2,10 +2,11 @@
 import {
   AGENT_TOOL_PREFIX,
   slugify,
+  TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON,
   TOOL_RUN_TOOL_FULL_NAME,
   TOOL_TODO_WRITE_FULL_NAME,
   TOOL_WHOAMI_FULL_NAME,
-} from "@shared";
+} from "@archestra/shared";
 import { vi } from "vitest";
 import mcpClient from "@/clients/mcp-client";
 import { ToolModel } from "@/models";
@@ -97,7 +98,10 @@ describe("run_tool", () => {
     expect(mcpClient.executeToolCall).not.toHaveBeenCalled();
   });
 
-  test("dispatches built-in tools by short name", async () => {
+  test("dispatches built-in tools by short name", async ({
+    seedAndAssignArchestraTools,
+  }) => {
+    await seedAndAssignArchestraTools(testAgent.id);
     const result = await executeArchestraTool(
       TOOL_RUN_TOOL_FULL_NAME,
       { tool_name: "whoami" },
@@ -112,7 +116,10 @@ describe("run_tool", () => {
     expect(mcpClient.executeToolCall).not.toHaveBeenCalled();
   });
 
-  test("dispatches built-in tools by full name", async () => {
+  test("dispatches built-in tools by full name", async ({
+    seedAndAssignArchestraTools,
+  }) => {
+    await seedAndAssignArchestraTools(testAgent.id);
     const result = await executeArchestraTool(
       TOOL_RUN_TOOL_FULL_NAME,
       { tool_name: TOOL_WHOAMI_FULL_NAME },
@@ -127,7 +134,10 @@ describe("run_tool", () => {
     expect(mcpClient.executeToolCall).not.toHaveBeenCalled();
   });
 
-  test("returns target built-in tool validation errors", async () => {
+  test("returns target built-in tool validation errors", async ({
+    seedAndAssignArchestraTools,
+  }) => {
+    await seedAndAssignArchestraTools(testAgent.id);
     const result = await executeArchestraTool(
       TOOL_RUN_TOOL_FULL_NAME,
       {
@@ -150,6 +160,35 @@ describe("run_tool", () => {
       "Validation error in archestra__todo_write",
     );
     expect((result.content[0] as any).text).toContain("todos[0].status:");
+    expect(mcpClient.executeToolCall).not.toHaveBeenCalled();
+  });
+
+  test("blocks built-in Archestra tools that are not assigned to the agent", async ({
+    makeAgent,
+  }) => {
+    // Fresh agent with no Archestra tools assigned.
+    const unassignedAgent = await makeAgent({
+      name: "Unassigned Agent",
+      organizationId: mockContext.organizationId,
+    });
+
+    const result = await executeArchestraTool(
+      TOOL_RUN_TOOL_FULL_NAME,
+      { tool_name: "swap_agent", tool_args: { agentId: "some-agent-id" } },
+      {
+        ...mockContext,
+        agent: { id: unassignedAgent.id, name: unassignedAgent.name },
+        agentId: unassignedAgent.id,
+      },
+    );
+
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as any).text).toContain(
+      "is not assigned to this agent",
+    );
+    expect((result._meta?.archestraError as any)?.code).toBe(
+      "tool_not_assigned",
+    );
     expect(mcpClient.executeToolCall).not.toHaveBeenCalled();
   });
 
@@ -206,7 +245,18 @@ describe("run_tool", () => {
     expect(mcpClient.executeToolCall).not.toHaveBeenCalled();
   });
 
-  test("dispatches third-party MCP tools through the MCP client", async () => {
+  test("dispatches third-party MCP tools through the MCP client", async ({
+    makeAgentTool,
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const catalog = await makeInternalMcpCatalog();
+    const tool = await makeTool({
+      name: "github__search_repositories",
+      catalogId: catalog.id,
+    });
+    await makeAgentTool(testAgent.id, tool.id);
+
     vi.mocked(mcpClient.executeToolCall).mockResolvedValueOnce({
       content: [{ type: "text", text: "Third-party response" }],
       isError: false,
@@ -243,7 +293,233 @@ describe("run_tool", () => {
     ]);
   });
 
-  test("normalizes non-array third-party content to a text result", async () => {
+  test("returns a search_tools recovery message for an unavailable third-party tool", async () => {
+    const result = await executeArchestraTool(
+      TOOL_RUN_TOOL_FULL_NAME,
+      {
+        tool_name: "giphy__image_search_tool",
+        tool_args: { query: "cat" },
+      },
+      mockContext,
+    );
+
+    expect(result.isError).toBe(true);
+    const text = (result.content[0] as any).text;
+    expect(text).toContain('No tool named "giphy__image_search_tool"');
+    expect(text).toContain("search_tools");
+    expect(text).not.toContain("not enabled for this conversation");
+    expect(mcpClient.executeToolCall).not.toHaveBeenCalled();
+  });
+
+  test("recovery message wins over the policy refusal when the agent has other tools", async ({
+    makeAgentTool,
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    // Reproduces the staging case: the agent HAS an assigned tool, so the
+    // policy gate's disabled-tool filter is active (non-empty enabled set) and
+    // would otherwise emit "not enabled for this conversation" for a
+    // hallucinated name. The pre-check must intercept first.
+    const catalog = await makeInternalMcpCatalog();
+    const assigned = await makeTool({
+      name: "github__search_repositories",
+      catalogId: catalog.id,
+    });
+    await makeAgentTool(testAgent.id, assigned.id);
+
+    const result = await executeArchestraTool(
+      TOOL_RUN_TOOL_FULL_NAME,
+      { tool_name: "giphy__image_search_tool", tool_args: { query: "cat" } },
+      mockContext,
+    );
+
+    expect(result.isError).toBe(true);
+    const text = (result.content[0] as any).text;
+    expect(text).toContain('No tool named "giphy__image_search_tool"');
+    expect(text).not.toContain("not enabled for this conversation");
+    expect(mcpClient.executeToolCall).not.toHaveBeenCalled();
+  });
+
+  test("blocks third-party MCP tools when target invocation policy denies the call", async ({
+    makeAgent,
+    makeAgentTool,
+    makeInternalMcpCatalog,
+    makeMember,
+    makeOrganization,
+    makeTool,
+    makeToolPolicy,
+    makeUser,
+  }) => {
+    const org = await makeOrganization({ globalToolPolicy: "restrictive" });
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "admin" });
+    const agent = await makeAgent({
+      name: "Run Tool Policy Agent",
+      organizationId: org.id,
+    });
+    const catalog = await makeInternalMcpCatalog();
+    const tool = await makeTool({
+      name: `workspace__export_${crypto.randomUUID().slice(0, 8)}`,
+      catalogId: catalog.id,
+    });
+    await makeAgentTool(agent.id, tool.id);
+    await makeToolPolicy(tool.id, {
+      action: "block_always",
+      reason: "External export blocked",
+      conditions: [
+        { key: "destination", operator: "equal", value: "external" },
+      ],
+    });
+
+    const result = await executeArchestraTool(
+      TOOL_RUN_TOOL_FULL_NAME,
+      {
+        tool_name: tool.name,
+        tool_args: { destination: "external" },
+      },
+      {
+        ...mockContext,
+        agent: { id: agent.id, name: agent.name },
+        agentId: agent.id,
+        organizationId: org.id,
+        userId: user.id,
+      },
+    );
+
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as any).text).toContain(tool.name);
+    expect((result.content[0] as any).text).toContain(
+      "External export blocked",
+    );
+    expect(mcpClient.executeToolCall).not.toHaveBeenCalled();
+  });
+
+  test("blocks third-party MCP tools that require approval when approval was not handled", async ({
+    makeAgent,
+    makeAgentTool,
+    makeInternalMcpCatalog,
+    makeMember,
+    makeOrganization,
+    makeTool,
+    makeToolPolicy,
+    makeUser,
+  }) => {
+    const org = await makeOrganization({ globalToolPolicy: "restrictive" });
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "admin" });
+    const agent = await makeAgent({
+      name: "Run Tool Approval Agent",
+      organizationId: org.id,
+    });
+    const catalog = await makeInternalMcpCatalog();
+    const tool = await makeTool({
+      name: `workspace__approve_${crypto.randomUUID().slice(0, 8)}`,
+      catalogId: catalog.id,
+    });
+    await makeAgentTool(agent.id, tool.id);
+    await makeToolPolicy(tool.id, {
+      action: "require_approval",
+      conditions: [],
+    });
+
+    const result = await executeArchestraTool(
+      TOOL_RUN_TOOL_FULL_NAME,
+      {
+        tool_name: tool.name,
+        tool_args: { destination: "external" },
+      },
+      {
+        ...mockContext,
+        agent: { id: agent.id, name: agent.name },
+        agentId: agent.id,
+        organizationId: org.id,
+        userId: user.id,
+      },
+    );
+
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as any).text).toContain(tool.name);
+    expect((result.content[0] as any).text).toContain(
+      TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON,
+    );
+    expect(mcpClient.executeToolCall).not.toHaveBeenCalled();
+  });
+
+  test("dispatches approval-required third-party MCP tools after chat approval was handled", async ({
+    makeAgent,
+    makeAgentTool,
+    makeInternalMcpCatalog,
+    makeMember,
+    makeOrganization,
+    makeTool,
+    makeToolPolicy,
+    makeUser,
+  }) => {
+    const org = await makeOrganization({ globalToolPolicy: "restrictive" });
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "admin" });
+    const agent = await makeAgent({
+      name: "Run Tool Approved Agent",
+      organizationId: org.id,
+    });
+    const catalog = await makeInternalMcpCatalog();
+    const tool = await makeTool({
+      name: `workspace__approved_${crypto.randomUUID().slice(0, 8)}`,
+      catalogId: catalog.id,
+    });
+    await makeAgentTool(agent.id, tool.id);
+    await makeToolPolicy(tool.id, {
+      action: "require_approval",
+      conditions: [],
+    });
+    vi.mocked(mcpClient.executeToolCall).mockResolvedValueOnce({
+      content: [{ type: "text", text: "Approved response" }],
+      isError: false,
+    } as any);
+
+    const result = await executeArchestraTool(
+      TOOL_RUN_TOOL_FULL_NAME,
+      {
+        tool_name: tool.name,
+        tool_args: { destination: "external" },
+      },
+      {
+        ...mockContext,
+        agent: { id: agent.id, name: agent.name },
+        agentId: agent.id,
+        organizationId: org.id,
+        userId: user.id,
+        approvalRequiredPoliciesHandled: true,
+      },
+    );
+
+    expect(result.isError).toBe(false);
+    expect(mcpClient.executeToolCall).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: tool.name,
+        arguments: { destination: "external" },
+      }),
+      agent.id,
+      mockContext.tokenAuth,
+      { conversationId: "conversation-1" },
+    );
+    expect(result.content).toEqual([
+      { type: "text", text: "Approved response" },
+    ]);
+  });
+
+  test("normalizes non-array third-party content to a text result", async ({
+    makeAgentTool,
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const catalog = await makeInternalMcpCatalog();
+    const tool = await makeTool({
+      name: "github__get_repository",
+      catalogId: catalog.id,
+    });
+    await makeAgentTool(testAgent.id, tool.id);
+
     vi.mocked(mcpClient.executeToolCall).mockResolvedValueOnce({
       content: { ok: true },
       isError: false,

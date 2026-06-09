@@ -1,4 +1,7 @@
-import { isProviderApiKeyOptional, type SupportedProvider } from "@shared";
+import {
+  isProviderApiKeyOptional,
+  type SupportedProvider,
+} from "@archestra/shared";
 import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
 import { getProviderEnvApiKey } from "@/config";
 import { LlmProviderApiKeyModel, TeamModel } from "@/models";

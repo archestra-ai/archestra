@@ -1,5 +1,14 @@
 import { randomUUID } from "node:crypto";
 import {
+  isAgentTool,
+  isBrowserMcpTool,
+  MCP_APPS_CLIENT_EXTENSION_CAPABILITIES,
+  parseFullToolName,
+  TimeInMs,
+  TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON,
+  TOOL_RUN_TOOL_SHORT_NAME,
+} from "@archestra/shared";
+import {
   type McpUiResourceCsp,
   type McpUiResourcePermissions,
   type McpUiToolMeta,
@@ -8,17 +17,10 @@ import {
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type {
+  CallToolResult,
   ContentBlock,
   EmbeddedResource,
 } from "@modelcontextprotocol/sdk/types.js";
-import {
-  isAgentTool,
-  isBrowserMcpTool,
-  MCP_APPS_CLIENT_EXTENSION_CAPABILITIES,
-  parseFullToolName,
-  TimeInMs,
-  TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON,
-} from "@shared";
 import { type JSONSchema7, jsonSchema, type Tool } from "ai";
 import { evaluateToolExecutionContextTrust } from "@/agents/context-trust";
 import {
@@ -214,6 +216,7 @@ export const __test = {
   executeMcpTool,
   filterToolsByEnabledIds,
   pingClientWithTimeout,
+  resolveApprovalPolicyTarget,
   throwIfApprovalRequired,
 };
 
@@ -921,9 +924,13 @@ export async function getChatMcpTools({
           ...(!blockOnApprovalRequired
             ? {
                 needsApproval: async (args: unknown) => {
-                  return ToolInvocationPolicyModel.checkApprovalRequired(
+                  const approvalTarget = resolveApprovalPolicyTarget(
                     mcpTool.name,
-                    isRecord(args) ? args : {},
+                    args,
+                  );
+                  return ToolInvocationPolicyModel.checkApprovalRequired(
+                    approvalTarget.toolName,
+                    approvalTarget.toolInput,
                     {
                       teamIds: [],
                       externalAgentId: getChatExternalAgentId(),
@@ -933,7 +940,7 @@ export async function getChatMcpTools({
                 },
               }
             : {}),
-          execute: async (args: unknown) => {
+          execute: async (args: unknown, options) => {
             if (blockOnApprovalRequired) {
               await throwIfApprovalRequired(
                 mcpTool.name,
@@ -972,6 +979,18 @@ export async function getChatMcpTools({
                       },
                       "Executing archestra tool with context",
                     );
+                    const toolExecutionContext =
+                      await evaluateToolExecutionContextTrust({
+                        messages: options.messages,
+                        agentId,
+                        organizationId,
+                        userId,
+                        considerContextUntrusted,
+                        globalToolPolicy,
+                        policyContext: {
+                          externalAgentId: getChatExternalAgentId(),
+                        },
+                      });
                     const archestraResponse = await executeArchestraTool(
                       mcpTool.name,
                       toolArguments,
@@ -986,6 +1005,8 @@ export async function getChatMcpTools({
                         sessionId,
                         scheduleTriggerRunId,
                         abortSignal,
+                        contextIsTrusted: toolExecutionContext.contextIsTrusted,
+                        approvalRequiredPoliciesHandled: true,
                         tokenAuth: buildTokenAuthContext({
                           mcpGwToken,
                           organizationId,
@@ -1009,11 +1030,15 @@ export async function getChatMcpTools({
                     // Return errors as tool-result text so the LLM can read
                     // and recover, instead of throwing (which surfaces as a
                     // fatal chat error). Matches executeMcpTool behavior.
-                    return archestraResponse.content
-                      .map((item) =>
-                        item.type === "text" ? item.text : JSON.stringify(item),
-                      )
-                      .join("\n");
+                    // When run_tool dispatches to an interactive tool, attach
+                    // that tool's MCP App UI resource so the frontend renders it
+                    // (the model still only sees the plain-text summary).
+                    return await buildArchestraToolOutput({
+                      response: archestraResponse,
+                      toolName: mcpTool.name,
+                      toolArguments,
+                      agentId,
+                    });
                   }
 
                   // Execute non-Archestra tools via shared helper with browser sync
@@ -1694,6 +1719,82 @@ async function executeMcpTool(ctx: ToolExecutionContext): Promise<{
   };
 }
 
+/**
+ * Resolves the tool whose definition carries the MCP App UI resource. For a
+ * direct call this is the tool itself; for a run_tool dispatch it is the target
+ * tool named in `tool_args` — run_tool itself has no UI resource, so without
+ * this the interactive app never renders when invoked indirectly.
+ */
+function resolveRunToolTargetName(toolName: string, args: unknown): string {
+  const shortName = archestraMcpBranding.getToolShortName(toolName);
+  if (shortName !== TOOL_RUN_TOOL_SHORT_NAME || !isRecord(args)) {
+    return toolName;
+  }
+  const targetToolName = args.tool_name;
+  return typeof targetToolName === "string" && targetToolName.length > 0
+    ? targetToolName
+    : toolName;
+}
+
+/**
+ * Builds the chat tool output for an Archestra tool result. Returns plain text
+ * for the common case; when run_tool dispatched to an interactive tool, returns
+ * the rich shape (with `_meta.ui.resourceUri` from the target tool's definition)
+ * so the frontend renders the MCP App — mirroring how `executeMcpTool` enriches
+ * directly-called tools.
+ * @public — exported for testability
+ */
+export async function buildArchestraToolOutput(params: {
+  response: CallToolResult;
+  toolName: string;
+  toolArguments: unknown;
+  agentId: string;
+}): Promise<
+  | string
+  | {
+      content: string;
+      _meta?: Record<string, unknown>;
+      structuredContent?: Record<string, unknown>;
+      rawContent?: ContentBlock[];
+    }
+> {
+  const { response, toolName, toolArguments, agentId } = params;
+  const text = response.content
+    .map((item) => (item.type === "text" ? item.text : JSON.stringify(item)))
+    .join("\n");
+
+  const targetToolName = resolveRunToolTargetName(toolName, toolArguments);
+  if (targetToolName === toolName) {
+    // Not a run_tool dispatch — no UI resource to attach.
+    return text;
+  }
+
+  let resourceUri: string | undefined;
+  try {
+    const toolDef = await ToolModel.findByNameForAgent(targetToolName, agentId);
+    resourceUri = (
+      toolDef?.meta as { _meta?: { ui?: McpUiToolMeta } } | undefined
+    )?._meta?.ui?.resourceUri;
+  } catch (error) {
+    logger.debug(
+      { error, targetToolName, agentId },
+      "Failed to fetch dispatched tool definition meta",
+    );
+  }
+  if (!resourceUri) {
+    return text;
+  }
+
+  return {
+    content: text,
+    _meta: { ...response._meta, ui: { resourceUri } },
+    structuredContent: response.structuredContent as
+      | Record<string, unknown>
+      | undefined,
+    rawContent: response.content as ContentBlock[],
+  };
+}
+
 async function buildUnsafeContextBoundaryResult(params: {
   resultMeta?: Record<string, unknown>;
   toolCallId: string;
@@ -1904,10 +2005,11 @@ async function throwIfApprovalRequired(
   args: unknown,
   globalToolPolicy: GlobalToolPolicy,
 ): Promise<void> {
+  const approvalTarget = resolveApprovalPolicyTarget(toolName, args);
   const requiresApproval =
     await ToolInvocationPolicyModel.checkApprovalRequired(
-      toolName,
-      isRecord(args) ? args : {},
+      approvalTarget.toolName,
+      approvalTarget.toolInput,
       {
         teamIds: [],
         externalAgentId: getChatExternalAgentId(),
@@ -1917,6 +2019,30 @@ async function throwIfApprovalRequired(
   if (requiresApproval) {
     throw new Error(TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON);
   }
+}
+
+function resolveApprovalPolicyTarget(
+  toolName: string,
+  args: unknown,
+): { toolName: string; toolInput: Record<string, unknown> } {
+  const toolInput = isRecord(args) ? args : {};
+  const shortName = archestraMcpBranding.getToolShortName(toolName);
+  if (shortName !== TOOL_RUN_TOOL_SHORT_NAME) {
+    return { toolName, toolInput };
+  }
+
+  const targetToolName = toolInput.tool_name;
+  if (typeof targetToolName !== "string" || targetToolName.length === 0) {
+    return { toolName, toolInput };
+  }
+
+  const targetToolInput = isRecord(toolInput.tool_args)
+    ? toolInput.tool_args
+    : {};
+  return {
+    toolName: targetToolName,
+    toolInput: targetToolInput,
+  };
 }
 
 function reportToolMetrics(params: {

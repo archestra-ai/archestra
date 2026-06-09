@@ -1,7 +1,8 @@
-import { LocalConfigFormSchema } from "@shared";
+import { LocalConfigFormSchema } from "@archestra/shared";
 import { z } from "zod";
 
 const HEADER_NAME_REGEX = /^[A-Za-z0-9-]+$/;
+const SSO_CALLBACK_PATH = "/api/auth/sso/callback";
 
 const headerNameSchema = z
   .string()
@@ -13,28 +14,16 @@ const headerNameSchema = z
     "Header name must contain only alphanumeric characters and hyphens",
   );
 
-const additionalHeaderSchema = z
-  .object({
-    fieldName: z.string().optional(),
-    headerName: headerNameSchema,
-    promptOnInstallation: z.boolean(),
-    promptOnPreset: z.boolean().optional(),
-    required: z.boolean(),
-    value: z.string().optional(),
-    description: z.string().optional().or(z.literal("")),
-    includeBearerPrefix: z.boolean().optional(),
-    sensitive: z.boolean().optional(),
-  })
-  .superRefine((value, ctx) => {
-    if (value.promptOnInstallation && value.promptOnPreset) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["promptOnPreset"],
-        message:
-          "promptOnInstallation and promptOnPreset are mutually exclusive",
-      });
-    }
-  });
+const additionalHeaderSchema = z.object({
+  fieldName: z.string().optional(),
+  headerName: headerNameSchema,
+  promptOnInstallation: z.boolean(),
+  required: z.boolean(),
+  value: z.string().optional(),
+  description: z.string().optional().or(z.literal("")),
+  includeBearerPrefix: z.boolean().optional(),
+  sensitive: z.boolean().optional(),
+});
 
 // Simplified OAuth config schema
 export const oauthConfigSchema = z
@@ -42,6 +31,7 @@ export const oauthConfigSchema = z
     client_id: z.string().optional().or(z.literal("")),
     client_secret: z.string().optional().or(z.literal("")),
     audience: z.string().optional().or(z.literal("")),
+    resource: z.string().optional().or(z.literal("")),
     redirect_uris: z.string().optional().or(z.literal("")),
     scopes: z.string().optional().or(z.literal("")),
     supports_resource_metadata: z.boolean(),
@@ -145,6 +135,20 @@ export const oauthConfigSchema = z
     }
 
     if (
+      value.grantType === "authorization_code" &&
+      value.redirect_uris
+        ?.split(",")
+        .some((uri) => uri.trim().includes(SSO_CALLBACK_PATH))
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          "MCP OAuth redirect URIs must use /oauth-callback, not the SSO callback URL",
+        path: ["redirect_uris"],
+      });
+    }
+
+    if (
       value.grantType === "client_credentials" &&
       !value.tokenEndpoint?.trim() &&
       !value.authServerUrl?.trim() &&
@@ -235,6 +239,8 @@ export const formSchema = z
     scope: z.enum(["personal", "team", "org"]).optional(),
     // Team IDs for team-scoped items
     teams: z.array(z.string()).optional(),
+    // Deployment environment assignment (null = the default environment)
+    environmentId: z.string().uuid().nullable().optional(),
   })
   .superRefine((data, ctx) => {
     const normalizedHeaders = new Set<string>();

@@ -1,6 +1,6 @@
 "use client";
 
-import type { archestraApiTypes } from "@shared";
+import type { archestraApiTypes } from "@archestra/shared";
 import { ArrowLeft, Copy, Search } from "lucide-react";
 import { useEffect, useState } from "react";
 import { FormDialog } from "@/components/form-dialog";
@@ -79,12 +79,15 @@ export function CreateCatalogDialog({
     setStep("form");
   };
 
-  const footer = (
+  const footer = ({ hasBlockingErrors }: { hasBlockingErrors: boolean }) => (
     <DialogStickyFooter className="mt-0">
       <Button variant="outline" onClick={handleClose} type="button">
         Cancel
       </Button>
-      <Button type="submit" disabled={createMutation.isPending}>
+      <Button
+        type="submit"
+        disabled={createMutation.isPending || hasBlockingErrors}
+      >
         {createMutation.isPending ? "Adding..." : "Add Server"}
       </Button>
     </DialogStickyFooter>

@@ -59,6 +59,7 @@ export const RouteId = {
   GetInternalMcpCatalogTools: "getInternalMcpCatalogTools",
   UpdateInternalMcpCatalogItem: "updateInternalMcpCatalogItem",
   ReinstallInternalMcpCatalogItem: "reinstallInternalMcpCatalogItem",
+  RefreshInternalMcpCatalogImage: "refreshInternalMcpCatalogImage",
   DeleteInternalMcpCatalogItem: "deleteInternalMcpCatalogItem",
   DeleteInternalMcpCatalogItemByName: "deleteInternalMcpCatalogItemByName",
   GetInternalMcpCatalogLabelKeys: "getInternalMcpCatalogLabelKeys",
@@ -67,10 +68,6 @@ export const RouteId = {
   ValidateDeploymentYaml: "validateDeploymentYaml",
   ResetDeploymentYaml: "resetDeploymentYaml",
   GetK8sImagePullSecrets: "getK8sImagePullSecrets",
-  // MCP Catalog Children (UI-named "presets") Routes
-  GetCatalogChildren: "getCatalogChildren",
-  CreateCatalogChild: "createCatalogChild",
-  UpdateCatalogChild: "updateCatalogChild",
 
   // MCP Server Routes
   GetMcpServers: "getMcpServers",
@@ -174,6 +171,8 @@ export const RouteId = {
   OpenAiResponsesWithAgent: "openAiResponsesWithAgent",
   OpenAiEmbeddingsWithDefaultAgent: "openAiEmbeddingsWithDefaultAgent",
   OpenAiEmbeddingsWithAgent: "openAiEmbeddingsWithAgent",
+  OpenAiListModelsWithDefaultAgent: "openAiListModelsWithDefaultAgent",
+  OpenAiListModelsWithAgent: "openAiListModelsWithAgent",
 
   // Proxy Routes - Gemini
   GeminiEmbeddingsWithDefaultAgent: "geminiEmbeddingsWithDefaultAgent",
@@ -195,6 +194,8 @@ export const RouteId = {
   // Proxy Routes - Anthropic
   AnthropicMessagesWithDefaultAgent: "anthropicMessagesWithDefaultAgent",
   AnthropicMessagesWithAgent: "anthropicMessagesWithAgent",
+  AnthropicListModelsWithDefaultAgent: "anthropicListModelsWithDefaultAgent",
+  AnthropicListModelsWithAgent: "anthropicListModelsWithAgent",
 
   // Proxy Routes - Cohere
   CohereChatWithDefaultAgent: "cohereChatWithDefaultAgent",
@@ -283,6 +284,7 @@ export const RouteId = {
   GetActiveChatRun: "getActiveChatRun",
   GetChatConversations: "getChatConversations",
   GetChatConversation: "getChatConversation",
+  GetChatConversationFiles: "getChatConversationFiles",
   GetChatAgentMcpTools: "getChatAgentMcpTools",
   CreateChatConversation: "createChatConversation",
   ForkChatConversation: "forkChatConversation",
@@ -381,17 +383,20 @@ export const RouteId = {
   // Connection Settings Routes (organization-level)
   UpdateConnectionSettings: "updateConnectionSettings",
 
-  // Preset Entity Name Routes (organization-level - configurable label for catalog presets)
-  UpdatePresetEntityName: "updatePresetEntityName",
-  UpdatePresetEntityDefaultLabel: "updatePresetEntityDefaultLabel",
-  UpdatePresetEntityDefaultValidationRegex:
-    "updatePresetEntityDefaultValidationRegex",
+  // Org-level deployment environments
+  ListEnvironments: "listEnvironments",
+  CreateEnvironment: "createEnvironment",
+  UpdateEnvironment: "updateEnvironment",
+  DeleteEnvironment: "deleteEnvironment",
+  UpdateDefaultEnvironment: "updateDefaultEnvironment",
+  GetK8sCapabilities: "getK8sCapabilities",
 
-  // Org-level preset entries (Production / Staging / Development buckets)
-  ListMcpPresetEntries: "listMcpPresetEntries",
-  CreateMcpPresetEntry: "createMcpPresetEntry",
-  UpdateMcpPresetEntry: "updateMcpPresetEntry",
-  DeleteMcpPresetEntry: "deleteMcpPresetEntry",
+  // GitHub App Configuration Routes
+  ListGithubAppConfigs: "listGithubAppConfigs",
+  CreateGithubAppConfig: "createGithubAppConfig",
+  GetGithubAppConfig: "getGithubAppConfig",
+  UpdateGithubAppConfig: "updateGithubAppConfig",
+  DeleteGithubAppConfig: "deleteGithubAppConfig",
 
   // Knowledge Settings Routes (organization-level)
   UpdateKnowledgeSettings: "updateKnowledgeSettings",
@@ -517,10 +522,14 @@ export const RouteId = {
   // Agent Skill Routes
   GetSkills: "getSkills",
   CreateSkill: "createSkill",
+  ConvertAgentToSkill: "convertAgentToSkill",
+  SuggestSkillDescription: "suggestSkillDescription",
   GetSkill: "getSkill",
   UpdateSkill: "updateSkill",
   DeleteSkill: "deleteSkill",
+  ResetSkill: "resetSkill",
   DiscoverGithubSkills: "discoverGithubSkills",
+  SearchSkillCatalog: "searchSkillCatalog",
   PreviewGithubSkill: "previewGithubSkill",
   ImportGithubSkills: "importGithubSkills",
   GetSkillSourceRepos: "getSkillSourceRepos",

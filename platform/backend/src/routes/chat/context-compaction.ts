@@ -1,10 +1,10 @@
 import { createRequire } from "node:module";
-import { type Span, SpanKind, SpanStatusCode, trace } from "@opentelemetry/api";
 import {
   BUILT_IN_AGENT_IDS,
   CONTEXT_COMPACTION_SYSTEM_PROMPT,
   type SupportedProvider,
-} from "@shared";
+} from "@archestra/shared";
+import { type Span, SpanKind, SpanStatusCode, trace } from "@opentelemetry/api";
 import { convertToModelMessages, generateText, type UIMessage } from "ai";
 import { createLLMModel, isApiKeyRequired } from "@/clients/llm-client";
 import logger from "@/logging";
@@ -1537,6 +1537,9 @@ function getChatMessageMetadata(
   return null;
 }
 
+// todo: migrate this tag-extract + correction-retry flow onto the shared
+// `generateTaggedText` (@/utils/generate-tagged-text); kept separate for now
+// because compaction also gates the retry on context headroom.
 function extractTaggedSummary(text: string): string | null {
   const startTag = `<${CONTEXT_COMPACTION_SUMMARY_TAG}>`;
   const endTag = `</${CONTEXT_COMPACTION_SUMMARY_TAG}>`;

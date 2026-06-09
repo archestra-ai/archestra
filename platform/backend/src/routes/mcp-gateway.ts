@@ -2,7 +2,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import {
   MCP_APPS_SERVER_EXTENSION_CAPABILITIES,
   MCP_ENTERPRISE_AUTH_EXTENSION_CAPABILITIES,
-} from "@shared";
+} from "@archestra/shared";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
@@ -15,6 +15,7 @@ import {
   createAgentServer,
   createStatelessTransport,
   deriveAuthMethod,
+  ensureRequestSocketDestroySoon,
   extractPassthroughHeaders,
   extractProfileIdAndTokenFromRequest,
   validateMCPGatewayToken,
@@ -80,6 +81,7 @@ async function handleMcpPostRequest(
     // Hijack reply to let SDK handle raw response
     reply.hijack();
 
+    ensureRequestSocketDestroySoon(request.raw);
     await transport.handleRequest(
       request.raw as IncomingMessage,
       reply.raw as ServerResponse,

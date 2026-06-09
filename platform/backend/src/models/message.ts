@@ -1,4 +1,4 @@
-import { and, eq, gt, sql } from "drizzle-orm";
+import { and, eq, gt, inArray, sql } from "drizzle-orm";
 import db, { schema, withDbTransaction } from "@/database";
 import type { InsertMessage, Message } from "@/types";
 
@@ -32,12 +32,15 @@ class MessageModel {
     return message;
   }
 
-  static async bulkCreate(messages: InsertMessage[]): Promise<void> {
+  static async bulkCreate(
+    messages: InsertMessage[],
+    executor: DbExecutor = db,
+  ): Promise<void> {
     if (messages.length === 0) {
       return;
     }
 
-    await db.insert(schema.messagesTable).values(messages);
+    await executor.insert(schema.messagesTable).values(messages);
 
     // Update conversation's updatedAt for all affected conversations
     const uniqueConversationIds = [
@@ -178,6 +181,29 @@ class MessageModel {
       .returning();
 
     return updatedMessage;
+  }
+
+  /**
+   * Hard-delete the given message rows by their primary keys. Accepts an
+   * optional executor so a regenerate can delete the stale trailing turn and
+   * persist its replacement in one transaction. Deletion is by identity (id),
+   * never by a timestamp window, so colliding `createdAt` values can't cause
+   * the wrong rows to be removed.
+   */
+  static async deleteByIds(
+    ids: string[],
+    executor: DbExecutor = db,
+  ): Promise<number> {
+    if (ids.length === 0) {
+      return 0;
+    }
+
+    const rows = await executor
+      .delete(schema.messagesTable)
+      .where(inArray(schema.messagesTable.id, ids))
+      .returning({ id: schema.messagesTable.id });
+
+    return rows.length;
   }
 
   static async deleteAfterMessage(

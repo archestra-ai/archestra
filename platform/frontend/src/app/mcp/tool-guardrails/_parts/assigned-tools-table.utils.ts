@@ -1,4 +1,7 @@
-import { ARCHESTRA_MCP_CATALOG_ID, type archestraApiTypes } from "@shared";
+import {
+  ARCHESTRA_MCP_CATALOG_ID,
+  type archestraApiTypes,
+} from "@archestra/shared";
 
 type InternalMcpCatalogItem =
   archestraApiTypes.GetInternalMcpCatalogResponses["200"][number];

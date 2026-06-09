@@ -20,11 +20,13 @@ export const actions = [
   "enable",
   "query",
   "execute",
+  "deploy-to-restricted",
 ] as const;
 
 export const resources = [
   "agent",
   "skill",
+  "sandbox",
   "mcpGateway",
   "llmProxy",
   "toolPolicy",
@@ -36,6 +38,8 @@ export const resources = [
   "knowledgeSource",
   "knowledgeSettings",
   "mcpServerInstallationRequest",
+  "environment",
+  "githubAppConfig",
   "chat",
   "llmCost",
   "llmLimit",
@@ -82,6 +86,7 @@ export const resources = [
 export const resourceLabels: Record<Resource, string> = {
   agent: "Agents",
   skill: "Skills",
+  sandbox: "Code Sandbox",
   mcpGateway: "MCP Gateways",
   llmProxy: "LLM Proxies",
   toolPolicy: "Tools & Policies",
@@ -96,6 +101,8 @@ export const resourceLabels: Record<Resource, string> = {
   knowledgeSource: "Knowledge Sources",
   knowledgeSettings: "Knowledge Settings",
   mcpServerInstallationRequest: "MCP Server Installation Requests",
+  environment: "Environments",
+  githubAppConfig: "GitHub App Configurations",
   team: "Teams",
   ac: "Roles",
   chat: "Chats",
@@ -125,6 +132,8 @@ export const resourceLabels: Record<Resource, string> = {
 export const resourceDescriptions: Record<Resource, string> = {
   agent: "Agents with prompts and tool assignments",
   skill: "Agent skills — reusable SKILL.md instruction bundles",
+  sandbox:
+    "Code execution sandboxes — run commands, upload/download files, run activated skills",
   mcpGateway: "Unified MCP endpoints that aggregate tools for clients",
   llmProxy: "LLM proxy endpoints with security policies and observability",
   toolPolicy: "Tools, tool invocation policies, and trusted data policies",
@@ -145,6 +154,9 @@ export const resourceDescriptions: Record<Resource, string> = {
   mcpServerInstallation: "Installed MCP servers and their runtime",
   knowledgeFile: "Uploaded files available for knowledge retrieval",
   mcpServerInstallationRequest: "Requests for new MCP server installations",
+  environment: "Deployment environments (namespace) for catalog items",
+  githubAppConfig:
+    "GitHub App credentials for authenticating skill imports and knowledge connectors",
   optimizationRule: "LLM optimization rules for routing to cheaper models",
   member: "Users and role assignments",
   ac: "Custom RBAC roles",
@@ -183,13 +195,21 @@ export const internalResources: Resource[] = ["organization"];
  * Used in both the create/edit role dialog and the account permissions display.
  */
 export const resourceCategories: Record<string, Resource[]> = {
-  Agents: ["agent", "skill", "agentTrigger", "scheduledTask", "agentSettings"],
+  Agents: [
+    "agent",
+    "skill",
+    "sandbox",
+    "agentTrigger",
+    "scheduledTask",
+    "agentSettings",
+  ],
   MCP: [
     "mcpGateway",
     "toolPolicy",
     "mcpRegistry",
     "mcpServerInstallation",
     "mcpServerInstallationRequest",
+    "environment",
   ],
   LLM: [
     "llmProxy",
@@ -221,6 +241,7 @@ export const resourceCategories: Record<string, Resource[]> = {
     "apiKey",
     "serviceAccount",
     "auditLog",
+    "githubAppConfig",
     "organizationSettings",
     "siteNotification",
   ],
@@ -241,9 +262,6 @@ export type AgentType = "profile" | "mcp_gateway" | "llm_proxy" | "agent";
 
 /** Database-level agent scope values */
 export type AgentScope = "personal" | "team" | "org";
-
-/** Database-level agent tool assignment mode values */
-export type AgentToolAssignmentMode = "manual" | "automatic";
 
 /**
  * Maps an agent's `agentType` to the corresponding RBAC resource.

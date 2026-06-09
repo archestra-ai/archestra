@@ -1,7 +1,3 @@
-import { apiKey } from "@better-auth/api-key";
-import type { HookEndpointContext } from "@better-auth/core";
-import { oauthProvider } from "@better-auth/oauth-provider";
-import { sso } from "@better-auth/sso";
 import {
   ARCHESTRA_TOKEN_PREFIX,
   AUTO_PROVISIONED_INVITATION_STATUS,
@@ -11,12 +7,16 @@ import {
   IDENTITY_TRUSTED_PROVIDER_IDS,
   OAUTH_PAGES,
   OAUTH_SCOPES,
-} from "@shared";
+} from "@archestra/shared";
 import {
   allAvailableActions,
   editorPermissions,
   memberPermissions,
-} from "@shared/access-control";
+} from "@archestra/shared/access-control";
+import { apiKey } from "@better-auth/api-key";
+import type { HookEndpointContext } from "@better-auth/core";
+import { oauthProvider } from "@better-auth/oauth-provider";
+import { sso } from "@better-auth/sso";
 import { APIError, betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { createAuthMiddleware } from "better-auth/api";

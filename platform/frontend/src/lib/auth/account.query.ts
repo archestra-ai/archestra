@@ -1,4 +1,4 @@
-import { archestraApiSdk, DEFAULT_ADMIN_EMAIL } from "@shared";
+import { archestraApiSdk, DEFAULT_ADMIN_EMAIL } from "@archestra/shared";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { authQueryKeys } from "@/lib/auth/auth.query";

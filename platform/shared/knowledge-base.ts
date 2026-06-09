@@ -69,6 +69,7 @@ export const CONNECTOR_TYPE_LABELS = {
   linear: "Linear",
   outline: "Outline",
   salesforce: "Salesforce",
+  web_crawler: "Web Crawler",
 } as const;
 
 export type ConnectorType = keyof typeof CONNECTOR_TYPE_LABELS;

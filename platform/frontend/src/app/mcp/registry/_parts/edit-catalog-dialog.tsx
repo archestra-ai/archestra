@@ -1,4 +1,5 @@
-import type { archestraApiTypes } from "@shared";
+import type { archestraApiTypes } from "@archestra/shared";
+import { Loader2, ShieldX } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -6,11 +7,9 @@ import {
   DialogFooter,
   DialogStickyFooter,
 } from "@/components/ui/dialog";
-import {
-  useCatalogPresets,
-  useUpdateInternalMcpCatalogItem,
-} from "@/lib/mcp/internal-mcp-catalog.query";
+import { useUpdateInternalMcpCatalogItem } from "@/lib/mcp/internal-mcp-catalog.query";
 import { useMcpServers } from "@/lib/mcp/mcp-server.query";
+import { useCanModifyCatalogItem } from "./catalog-edit-access";
 import { McpCatalogForm } from "./mcp-catalog-form";
 import type { McpCatalogFormValues } from "./mcp-catalog-form.types";
 import { transformFormToApiData } from "./mcp-catalog-form.utils";
@@ -27,6 +26,32 @@ export function EditCatalogDialog({ item, onClose }: EditCatalogDialogProps) {
         {item && <EditCatalogContent item={item} onClose={onClose} />}
       </DialogContent>
     </Dialog>
+  );
+}
+
+/** Centered spinner while the edit-permission check resolves. */
+function CatalogEditLoading() {
+  return (
+    <div className="flex flex-1 items-center justify-center">
+      <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+    </div>
+  );
+}
+
+/**
+ * Access-denied body shown in place of the edit form. Plain content (no
+ * DialogHeader) so it can be dropped inside any dialog that already provides a
+ * title — the settings dialog's Configuration page, or the standalone
+ * deep-link dialog on the catalog card.
+ */
+export function CatalogEditNoAccess() {
+  return (
+    <div className="flex flex-1 flex-col items-center justify-center gap-3 p-8 text-center text-muted-foreground">
+      <ShieldX className="h-10 w-10" />
+      <p className="text-sm">
+        You don't have access to edit this catalog item.
+      </p>
+    </div>
   );
 }
 
@@ -48,13 +73,18 @@ export function EditCatalogContent({
   onDirtyChange,
   submitRef,
 }: EditCatalogContentProps) {
+  // Authorization gate for the edit form itself — covers every entry point
+  // (the settings dialog's Configuration page, a shared `?edit=<id>` deep link,
+  // or the legacy EditCatalogDialog). Mirrors the backend item-modify rule: an
+  // admin, a team-admin member of the item's teams, or the author of a personal
+  // item.
+  const { canModify: canEdit, isLoading: canEditLoading } =
+    useCanModifyCatalogItem(item);
   const updateMutation = useUpdateInternalMcpCatalogItem();
 
-  const { data: presets = [] } = useCatalogPresets(item.id);
   const { data: servers = [] } = useMcpServers();
-  const affectedCatalogIds = new Set([item.id, ...presets.map((p) => p.id)]);
-  const affectedServerCount = servers.filter((s) =>
-    s.catalogId ? affectedCatalogIds.has(s.catalogId) : false,
+  const affectedServerCount = servers.filter(
+    (s) => s.catalogId === item.id,
   ).length;
 
   const onSubmit = async (values: McpCatalogFormValues) => {
@@ -71,6 +101,13 @@ export function EditCatalogContent({
     }
   };
 
+  if (canEditLoading) {
+    return <CatalogEditLoading />;
+  }
+  if (!canEdit) {
+    return <CatalogEditNoAccess />;
+  }
+
   return (
     <McpCatalogForm
       mode="edit"
@@ -81,7 +118,7 @@ export function EditCatalogContent({
       onDirtyChange={onDirtyChange}
       submitRef={submitRef}
       affectedServerCount={affectedServerCount}
-      footer={({ isDirty, onReset }) => {
+      footer={({ isDirty, onReset, hasBlockingErrors }) => {
         if (keepOpenOnSave && !isDirty) return null;
         const Footer = keepOpenOnSave ? DialogStickyFooter : DialogFooter;
         return (
@@ -97,7 +134,9 @@ export function EditCatalogContent({
             )}
             <Button
               type="submit"
-              disabled={updateMutation.isPending || !isDirty}
+              disabled={
+                updateMutation.isPending || !isDirty || hasBlockingErrors
+              }
             >
               {updateMutation.isPending ? "Saving..." : "Save Changes"}
             </Button>

@@ -57,7 +57,6 @@ type PromptedOrStaticEnvVar = {
   type?: string;
   value?: unknown;
   promptOnInstallation?: boolean;
-  promptOnPreset?: boolean;
   required?: boolean;
   sensitive?: boolean;
   description?: string;
@@ -323,9 +322,7 @@ export function userConfigChangedBreakingly(
     if (
       String(p.headerName ?? "") !== "" &&
       !p.promptOnInstallation &&
-      !p.promptOnPreset &&
       !n.promptOnInstallation &&
-      !n.promptOnPreset &&
       String(p.default ?? "") !== String(n.default ?? "")
     ) {
       return true;

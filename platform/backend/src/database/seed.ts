@@ -8,15 +8,20 @@ import {
   DUAL_LLM_MAIN_SYSTEM_PROMPT,
   DUAL_LLM_QUARANTINE_SYSTEM_PROMPT,
   PLAYWRIGHT_MCP_CATALOG_ID,
+  PLAYWRIGHT_MCP_ICON,
   PLAYWRIGHT_MCP_SERVER_NAME,
   POLICY_CONFIG_SYSTEM_PROMPT,
+  PROVIDERS_REQUIRING_BASE_URL,
   type PredefinedRoleName,
   type SupportedProvider,
   SupportedProviders,
   testMcpServerCommand,
-} from "@shared";
+} from "@archestra/shared";
 import { and, eq, inArray, isNull } from "drizzle-orm";
-import config, { getProviderEnvApiKey } from "@/config";
+import config, {
+  getProviderConfiguredBaseUrl,
+  getProviderEnvApiKey,
+} from "@/config";
 import db, { schema, withDbTransaction } from "@/database";
 import logger from "@/logging";
 import {
@@ -26,6 +31,8 @@ import {
   McpHttpSessionModel,
   MemberModel,
   OrganizationModel,
+  SkillFileModel,
+  SkillModel,
   TeamModel,
   TeamTokenModel,
   ToolModel,
@@ -33,6 +40,11 @@ import {
 } from "@/models";
 import { secretManager } from "@/secrets-manager";
 import { modelSyncService } from "@/services/model-sync";
+import {
+  BUILT_IN_SKILLS,
+  builtInSkillSourceRef,
+  builtInSkillVersion,
+} from "@/skills/built-in-skills";
 import {
   encryptSecretValue,
   ensureEncryptionKeyAvailable,
@@ -184,12 +196,127 @@ export async function syncBuiltInAgents(): Promise<void> {
 }
 
 /**
+ * Reconciles Archestra's shipped built-in skills into every organization.
+ *
+ * Insert when missing. When present and still pristine (its live content hashes
+ * to the version we last wrote), auto-upgrade it to the current shipped
+ * revision. When the user has edited it, leave it untouched — administrators
+ * reset to default explicitly. Identity is the stable `builtin:<id>` source
+ * ref, so a rename never detaches a skill from its definition.
+ *
+ * @public — exported for testability
+ */
+export async function syncBuiltInSkills(): Promise<void> {
+  const organizations = await getOrganizationsForBuiltInAgentSync();
+
+  for (const organization of organizations) {
+    for (const builtInSkill of BUILT_IN_SKILLS) {
+      const sourceRef = builtInSkillSourceRef(builtInSkill.builtInSkillId);
+      const shippedVersion = builtInSkillVersion(builtInSkill);
+      const files = builtInSkill.files.map((file) => ({
+        path: file.path,
+        content: file.content,
+        kind: file.kind,
+      }));
+
+      const existing = await SkillModel.findBuiltIn({
+        organizationId: organization.id,
+        sourceRef,
+      });
+
+      if (!existing) {
+        const created = await SkillModel.createWithFiles({
+          skill: {
+            organizationId: organization.id,
+            scope: "org",
+            name: builtInSkill.name,
+            description: builtInSkill.description,
+            content: builtInSkill.content,
+            sourceType: "built_in",
+            sourceRef,
+            sourceCommit: shippedVersion,
+          },
+          files,
+        });
+        // createWithFiles is ON CONFLICT DO NOTHING on the per-org shared-name
+        // index, so a null means a pre-existing non-built-in skill already
+        // holds this name. Surface it instead of reporting a phantom seed — that
+        // org has no built-in copy and thus no reset path until the clash clears.
+        if (!created) {
+          logger.warn(
+            {
+              builtInSkillId: builtInSkill.builtInSkillId,
+              organizationId: organization.id,
+              name: builtInSkill.name,
+            },
+            "Skipped seeding built-in skill: a skill with this name already exists",
+          );
+          continue;
+        }
+        logger.info(
+          {
+            builtInSkillId: builtInSkill.builtInSkillId,
+            organizationId: organization.id,
+          },
+          "Seeded built-in skill",
+        );
+        continue;
+      }
+
+      if (existing.sourceCommit === shippedVersion) {
+        continue;
+      }
+
+      const liveFiles = await SkillFileModel.findBySkillId(existing.id);
+      const liveVersion = builtInSkillVersion({
+        content: existing.content,
+        files: liveFiles,
+      });
+
+      // Only auto-upgrade copies that still match the revision we last wrote; a
+      // diverged copy was edited by the user and is reset explicitly instead.
+      if (liveVersion !== existing.sourceCommit) {
+        logger.info(
+          {
+            builtInSkillId: builtInSkill.builtInSkillId,
+            organizationId: organization.id,
+          },
+          "Built-in skill was edited, preserving user changes",
+        );
+        continue;
+      }
+
+      await SkillModel.updateWithFiles({
+        id: existing.id,
+        skill: {
+          name: builtInSkill.name,
+          description: builtInSkill.description,
+          content: builtInSkill.content,
+          sourceCommit: shippedVersion,
+        },
+        files,
+      });
+      logger.info(
+        {
+          builtInSkillId: builtInSkill.builtInSkillId,
+          organizationId: organization.id,
+        },
+        "Upgraded built-in skill to current revision",
+      );
+    }
+  }
+}
+
+/**
  * Seeds Archestra MCP catalog and tools.
  * ToolModel.seedArchestraTools handles catalog creation with onConflictDoNothing().
  * Tools are NOT automatically assigned to agents - users must assign them manually.
  */
 async function seedArchestraCatalogAndTools(): Promise<void> {
-  await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+  const newlyCreatedToolNames = await ToolModel.seedArchestraTools(
+    ARCHESTRA_MCP_CATALOG_ID,
+  );
+  await ToolModel.backfillNewSkillToolsToEnabledOrgs(newlyCreatedToolNames);
   logger.info("Seeded Archestra catalog and tools");
 }
 
@@ -286,6 +413,7 @@ async function seedPlaywrightCatalog(): Promise<void> {
         "Browser automation for chat - each user gets their own isolated browser session",
       serverType: "local",
       requiresAuth: false,
+      icon: PLAYWRIGHT_MCP_ICON,
       localConfig: playwrightLocalConfig,
     })
     .onConflictDoNothing();
@@ -381,6 +509,15 @@ async function seedChatApiKeysFromEnv(): Promise<void> {
       continue;
     }
 
+    const decision = decideEnvSeed(provider);
+    if (decision.kind === "skip") {
+      logger.warn(
+        { provider },
+        `Skipping env-seeded provider: ${decision.reason}`,
+      );
+      continue;
+    }
+
     // Check if API key already exists for this provider
     const existing = await LlmProviderApiKeyModel.findByScope(
       org.id,
@@ -390,7 +527,12 @@ async function seedChatApiKeysFromEnv(): Promise<void> {
 
     if (existing) {
       // Sync models if not already synced
-      await syncModelsForApiKey(existing.id, provider, apiKeyValue);
+      await syncModelsForApiKey(
+        existing.id,
+        provider,
+        apiKeyValue,
+        decision.persistedBaseUrl,
+      );
       continue;
     }
 
@@ -409,6 +551,8 @@ async function seedChatApiKeysFromEnv(): Promise<void> {
       scope: "org",
       userId: null,
       teamId: null,
+      baseUrl: decision.persistedBaseUrl,
+      isPrimary: true,
     });
 
     logger.info(
@@ -416,24 +560,65 @@ async function seedChatApiKeysFromEnv(): Promise<void> {
       "Created chat API key from environment variable",
     );
 
-    // Sync models from provider
-    await syncModelsForApiKey(apiKey.id, provider, apiKeyValue);
+    // Sync models from provider. persistedBaseUrl carries the required endpoint for
+    // azure/vllm (so their fetchers hit the right host) and null elsewhere (the
+    // fetchers fall back to their own default — unchanged from before).
+    await syncModelsForApiKey(
+      apiKey.id,
+      provider,
+      apiKeyValue,
+      decision.persistedBaseUrl,
+    );
   }
 }
 
+type EnvSeedDecision =
+  | { kind: "skip"; reason: string }
+  | { kind: "create"; persistedBaseUrl: string | null };
+
 /**
- * Sync models for an API key.
+ * Decide how to seed a provider whose env API key is set. Pure (config-only, no IO)
+ * so the gap-handling logic is unit-testable without DB or network.
+ *
+ * @public — unit-tested in seed.test.ts
+ */
+export function decideEnvSeed(provider: SupportedProvider): EnvSeedDecision {
+  const baseUrl = getProviderConfiguredBaseUrl(provider);
+
+  if (PROVIDERS_REQUIRING_BASE_URL.has(provider) && baseUrl === undefined) {
+    return { kind: "skip", reason: "required base URL is not configured" };
+  }
+
+  // Persist the base URL only for providers that require one (azure/vllm): it pins
+  // the required infra endpoint on the key, same as a manual UI add. Other providers
+  // keep null so a later ARCHESTRA_*_BASE_URL change still takes effect via the
+  // runtime fallback (the per-key URL is preferred over config when set).
+  return {
+    kind: "create",
+    persistedBaseUrl: PROVIDERS_REQUIRING_BASE_URL.has(provider)
+      ? (baseUrl ?? null)
+      : null,
+  };
+}
+
+/**
+ * Sync models for an API key. Bedrock's fetcher throws without a base URL; that is
+ * caught here so a key-only/IAM Bedrock seed still creates a usable key (chat falls
+ * back to the us-east-1 region) — its model list just stays empty until a base URL
+ * is configured.
  */
 async function syncModelsForApiKey(
   apiKeyId: string,
   provider: SupportedProvider,
   apiKeyValue: string,
+  baseUrl?: string | null,
 ): Promise<void> {
   try {
     await modelSyncService.syncModelsForApiKey({
       apiKeyId,
       provider,
       apiKeyValue,
+      baseUrl,
     });
     logger.info({ provider, apiKeyId }, "Synced models for API key");
   } catch (error) {
@@ -609,6 +794,7 @@ export async function seedRequiredStartingData(): Promise<void> {
   // Create default agents before seeding internal agents
   await AgentModel.getLLMProxyOrCreateDefault();
   await syncBuiltInAgents();
+  await syncBuiltInSkills();
   await seedArchestraCatalogAndTools();
   await seedPlaywrightCatalog();
   await migratePlaywrightToolsToDynamicCredential();

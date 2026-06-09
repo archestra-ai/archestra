@@ -1,4 +1,3 @@
-import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import {
   ARCHESTRA_TOOL_SHORT_NAMES,
   type ArchestraToolShortName,
@@ -6,15 +5,19 @@ import {
   isAgentTool,
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
-} from "@shared";
+} from "@archestra/shared";
+import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
+import { evaluateSingleMcpToolInvocationPolicy } from "@/guardrails/tool-invocation";
 import logger from "@/logging";
+import { ToolModel } from "@/models";
 import { archestraMcpBranding } from "./branding";
 import {
   defineArchestraTool,
   defineArchestraTools,
   errorResult,
 } from "./helpers";
+import { unavailableThirdPartyToolMessage } from "./tool-recovery-messages";
 
 const RunToolArgsSchema = z
   .object({
@@ -39,7 +42,7 @@ const registry = defineArchestraTools([
   defineArchestraTool({
     shortName: TOOL_RUN_TOOL_SHORT_NAME,
     title: "Run Tool",
-    description: `Dispatch to any tool available to this agent, including built-in platform tools, agent delegation tools ('agent-<id>'), or third-party MCP tools exposed through the MCP Gateway (e.g. 'context7__resolve-library-id'). Pass the tool name exactly as it appears in the tools list or use a built-in platform tool short name like 'whoami' or 'get_agent'. Prefer using ${TOOL_SEARCH_TOOLS_SHORT_NAME} first when you need to discover the right exact name. Target-tool RBAC, argument validation, and output validation all still apply.`,
+    description: `Dispatch to any tool available to this agent, including built-in platform tools, agent delegation tools ('agent-<id>'), or third-party MCP tools exposed through the MCP Gateway (e.g. 'context7__resolve-library-id'). Pass the tool name exactly as it appears in the tools list or use a built-in platform tool short name like 'whoami' or 'get_agent'. Prefer using ${TOOL_SEARCH_TOOLS_SHORT_NAME} first when you need to discover the right exact name. The target tool must be assigned to this agent; target-tool RBAC, argument validation, and output validation all still apply.`,
     schema: RunToolArgsSchema,
     async handler({ args, context }) {
       const requestedName = args.tool_name;
@@ -83,11 +86,47 @@ const registry = defineArchestraTools([
         return executeArchestraTool(resolvedName, args.tool_args, context);
       }
 
-      // Third-party MCP Gateway path.
+      // Third-party MCP Gateway path. Hallucinated archestra-prefixed names and
+      // bogus agent-<id> delegations are handled by the "archestra" route above
+      // (executeArchestraTool / checkToolAssignedToAgent), not this check.
       if (!context.agentId) {
         return errorResult(
           `${TOOL_RUN_TOOL_SHORT_NAME} requires agent context to dispatch to third-party MCP tools`,
         );
+      }
+
+      // Reject hallucinated or unassigned tool names before policy evaluation.
+      // The policy gate below already requires exact membership in this same
+      // assigned-tool set (see evaluatePolicies), so checking it here is
+      // regression-safe; it lets us return an actionable recovery message
+      // instead of the misleading "not enabled for this conversation" refusal
+      // (which implies the tool exists). In search_and_run_only mode the
+      // intended recovery is search_tools, so we point the model there. The set
+      // is passed into the gate below so it is fetched only once.
+      const assignedToolNames = await ToolModel.getAssignedToolNames(
+        context.agentId,
+      );
+      if (!assignedToolNames.has(resolvedName)) {
+        logger.info(
+          { agentId: context.agentId, requestedName, resolvedName },
+          `${TOOL_RUN_TOOL_SHORT_NAME} dispatched to an unavailable tool`,
+        );
+        return errorResult(unavailableThirdPartyToolMessage(resolvedName));
+      }
+
+      const toolInput = args.tool_args ?? {};
+      // Reuse the set computed above so the policy gate does not re-query it.
+      const policyBlock = await evaluateSingleMcpToolInvocationPolicy({
+        agentId: context.agentId,
+        toolName: resolvedName,
+        toolInput,
+        organizationId: context.organizationId,
+        contextIsTrusted: context.contextIsTrusted ?? true,
+        enforceApprovalRequired: !context.approvalRequiredPoliciesHandled,
+        enabledToolNames: assignedToolNames,
+      });
+      if (policyBlock) {
+        return errorResult(policyBlock.refusalMessage);
       }
 
       const { default: mcpClient } = await import("@/clients/mcp-client");
@@ -98,7 +137,7 @@ const registry = defineArchestraTools([
         {
           id: toolCallId,
           name: resolvedName,
-          arguments: args.tool_args,
+          arguments: toolInput,
         },
         context.agentId,
         context.tokenAuth,

@@ -1,3 +1,4 @@
+import { hasArchestraTokenPrefix } from "@archestra/shared";
 import fastifyHttpProxy from "@fastify/http-proxy";
 import { hasArchestraTokenPrefix, RouteId } from "@shared";
 import type { FastifyReply, FastifyRequest } from "fastify";

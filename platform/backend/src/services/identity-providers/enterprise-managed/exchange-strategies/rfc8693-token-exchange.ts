@@ -1,4 +1,4 @@
-import { OAUTH_GRANT_TYPE, OAUTH_TOKEN_TYPE } from "@shared";
+import { OAUTH_GRANT_TYPE, OAUTH_TOKEN_TYPE } from "@archestra/shared";
 import logger from "@/logging";
 import { discoverOidcTokenEndpoint } from "@/services/identity-providers/oidc";
 import {

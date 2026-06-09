@@ -4,6 +4,8 @@ import AgentToolModel from "@/models/agent-tool";
 import ApiKeyModel from "@/models/api-key";
 import ChatOpsChannelBindingModel from "@/models/chatops-channel-binding";
 import chatOpsConfigModel from "@/models/chatops-config";
+import EnvironmentModel from "@/models/environment";
+import GithubAppConfigModel from "@/models/github-app-config";
 import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
 import KnowledgeBaseModel from "@/models/knowledge-base";
 import KnowledgeBaseConnectorModel from "@/models/knowledge-base-connector";
@@ -281,6 +283,16 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
       KnowledgeBaseConnectorModel.findByIdForAudit(id, orgId),
   },
 
+  // GitHub App configs
+  "/api/github-app-configs": {
+    resourceType: "githubAppConfig",
+    fetchById: (id, orgId) => GithubAppConfigModel.findByIdForAudit(id, orgId),
+  },
+  "/api/github-app-configs/:id": {
+    resourceType: "githubAppConfig",
+    fetchById: (id, orgId) => GithubAppConfigModel.findByIdForAudit(id, orgId),
+  },
+
   // Limits
   "/api/limits": {
     resourceType: "limit",
@@ -308,6 +320,14 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
   },
   "/api/skills/:id": {
     resourceType: "skill",
+    fetchById: (id, orgId) => SkillModel.findByIdForAudit(id, orgId),
+  },
+  // Reset is a POST carrying :id, so the hook suppresses the parent walk-up.
+  // Register it directly to capture the target id and before/after snapshots of
+  // this destructive overwrite.
+  "/api/skills/:id/reset": {
+    resourceType: "skill",
+    action: "skill.updated",
     fetchById: (id, orgId) => SkillModel.findByIdForAudit(id, orgId),
   },
   // Enabling skill slash commands patches the org record — audit as org-level change.
@@ -348,6 +368,15 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
       MemberModel.findByUserIdForAudit(userId, orgId),
   },
 
+  // Deployment environments
+  "/api/environments": {
+    resourceType: "environment",
+    fetchById: (id, orgId) => EnvironmentModel.findByIdForAudit(id, orgId),
+  },
+  "/api/environments/:id": {
+    resourceType: "environment",
+    fetchById: (id, orgId) => EnvironmentModel.findByIdForAudit(id, orgId),
+  },
   // Team / org tokens — rotation is semantically distinct from a generic update.
   "/api/tokens/:tokenId/rotate": {
     resourceType: "teamToken",

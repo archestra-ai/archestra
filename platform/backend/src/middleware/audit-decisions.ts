@@ -4,6 +4,8 @@ import AgentModel from "@/models/agent";
 import AgentToolModel from "@/models/agent-tool";
 import ApiKeyModel from "@/models/api-key";
 import ChatOpsChannelBindingModel from "@/models/chatops-channel-binding";
+import EnvironmentModel from "@/models/environment";
+import GithubAppConfigModel from "@/models/github-app-config";
 import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
 import KnowledgeBaseModel from "@/models/knowledge-base";
 import KnowledgeBaseConnectorModel from "@/models/knowledge-base-connector";
@@ -82,6 +84,8 @@ export const AUDIT_DECISIONS = {
     audited: true,
     model: ChatOpsChannelBindingModel,
   },
+  environmentsTable: { audited: true, model: EnvironmentModel },
+  githubAppConfigsTable: { audited: true, model: GithubAppConfigModel },
   internalMcpCatalogTable: { audited: true, model: InternalMcpCatalogModel },
   knowledgeBasesTable: { audited: true, model: KnowledgeBaseModel },
   knowledgeBaseConnectorsTable: {
@@ -202,7 +206,6 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "preset definitions; static config, audited via catalog",
   },
-
   // =========================================================================
   // A2A protocol runtime
   // =========================================================================
@@ -351,21 +354,29 @@ export const AUDIT_DECISIONS = {
     reason:
       "ephemeral execution sandbox state; runtime artifact, no admin signal",
   },
-  skillSandboxSkillsTable: {
+  skillSandboxSkillMountsTable: {
     audited: false,
-    reason: "join: sandbox × skill; parent (sandbox) is ephemeral",
-  },
-  skillSandboxFileSnapshotsTable: {
-    audited: false,
-    reason: "child of sandbox; per-sandbox file snapshot",
+    reason: "child of sandbox; ordered skill mount, parent is ephemeral",
   },
   skillSandboxCommandsTable: {
     audited: false,
     reason: "child of sandbox; append-only command replay log",
   },
-  skillSandboxArtifactsTable: {
+  skillSandboxFilesTable: {
     audited: false,
-    reason: "child of sandbox; exported file bytes",
+    reason: "child of sandbox; uploaded input + exported artifact file bytes",
+  },
+  skillSandboxReplayEventsTable: {
+    audited: false,
+    reason: "child of sandbox; append-only ordered replay log",
+  },
+  skillVersionsTable: {
+    audited: false,
+    reason: "child of skill; immutable version snapshot, parent audited",
+  },
+  skillVersionFilesTable: {
+    audited: false,
+    reason: "child of skill version; immutable file snapshot",
   },
   kbChunksTable: {
     audited: false,

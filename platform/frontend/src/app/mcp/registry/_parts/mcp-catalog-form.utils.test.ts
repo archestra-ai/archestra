@@ -70,6 +70,7 @@ describe("transformFormToApiData", () => {
         client_id: "client-id",
         client_secret: "client-secret",
         audience: "",
+        resource: "https://mcp.example.com",
         redirect_uris: "https://app.example.com/oauth-callback",
         scopes: "read:jira-work",
         supports_resource_metadata: true,
@@ -111,6 +112,7 @@ describe("transformFormToApiData", () => {
       server_url: "https://mcp.example.com",
       auth_server_url: "https://auth.example.com",
       authorization_endpoint: "https://legacy-idp.example.com/oauth/authorize",
+      resource: "https://mcp.example.com",
       well_known_url:
         "https://auth.example.com/.well-known/openid-configuration",
       resource_metadata_url:
@@ -454,7 +456,6 @@ describe("transformFormToApiData", () => {
         fieldName: "header_x_tenant_id",
         headerName: "x-tenant-id",
         promptOnInstallation: false,
-        promptOnPreset: false,
         required: false,
         value: "tenant-42",
         description: "Tenant ID",
@@ -699,6 +700,7 @@ describe("transformFormToApiData", () => {
         client_id: "id",
         client_secret: "secret",
         audience: "",
+        resource: "",
         redirect_uris: "https://app.example.com/oauth-callback",
         scopes: "",
         supports_resource_metadata: true,
@@ -747,11 +749,9 @@ describe("transformFormToApiData", () => {
   });
 
   describe("round-trips the `sensitive` flag on additional headers", () => {
-    // Test 1 from the recommendation: form → API → form preserves
-    // `sensitive`. Covers both preset-scoped (where the flag is the only
-    // routing signal between `preset_field_values` and `preset_secret_id`)
-    // and installation-scoped (where the flag controls input masking but
-    // doesn't change storage).
+    // form → API → form preserves the `sensitive` flag on installation-scoped
+    // headers (where the flag controls input masking but doesn't change
+    // storage).
     type AdditionalHeader = NonNullable<
       McpCatalogFormValues["additionalHeaders"]
     >[number];
@@ -809,48 +809,10 @@ describe("transformFormToApiData", () => {
       return first;
     }
 
-    it("preserves sensitive=true on a preset-scoped header", () => {
-      const result = roundTrip({
-        headerName: "x-auth",
-        promptOnInstallation: false,
-        promptOnPreset: true,
-        required: false,
-        value: "",
-        description: "",
-        includeBearerPrefix: false,
-        sensitive: true,
-      });
-      expect(result).toMatchObject({
-        headerName: "x-auth",
-        promptOnPreset: true,
-        promptOnInstallation: false,
-        sensitive: true,
-      });
-    });
-
-    it("preserves sensitive=false on a preset-scoped header", () => {
-      const result = roundTrip({
-        headerName: "x-region",
-        promptOnInstallation: false,
-        promptOnPreset: true,
-        required: false,
-        value: "",
-        description: "",
-        includeBearerPrefix: false,
-        sensitive: false,
-      });
-      expect(result).toMatchObject({
-        headerName: "x-region",
-        promptOnPreset: true,
-        sensitive: false,
-      });
-    });
-
     it("preserves sensitive=true on an installation-scoped header", () => {
       const result = roundTrip({
         headerName: "x-tenant-token",
         promptOnInstallation: true,
-        promptOnPreset: false,
         required: true,
         value: "",
         description: "",
@@ -870,7 +832,6 @@ describe("transformFormToApiData", () => {
       const result = roundTrip({
         headerName: "x-static",
         promptOnInstallation: false,
-        promptOnPreset: false,
         required: false,
         value: "fixed-value",
         description: "",
@@ -880,7 +841,6 @@ describe("transformFormToApiData", () => {
       expect(result).toMatchObject({
         headerName: "x-static",
         promptOnInstallation: false,
-        promptOnPreset: false,
         value: "fixed-value",
         sensitive: false,
       });

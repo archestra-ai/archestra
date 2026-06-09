@@ -1,3 +1,4 @@
+import { TOOL_LIST_AGENTS_SHORT_NAME } from "@archestra/shared";
 import { z } from "zod";
 import {
   getAgentTypePermissionChecker,
@@ -12,12 +13,7 @@ import {
   KnowledgeBaseModel,
   TeamModel,
 } from "@/models";
-import type {
-  Agent,
-  AgentScope,
-  ToolAssignmentMode,
-  ToolExposureMode,
-} from "@/types";
+import type { Agent, AgentScope, ToolExposureMode } from "@/types";
 import {
   AgentLabelWithDetailsSchema,
   AgentScopeSchema,
@@ -27,6 +23,7 @@ import {
   ToolExposureModeSchema,
   UuidIdSchema,
 } from "@/types";
+import { archestraMcpBranding } from "./branding";
 import {
   assignSubAgentDelegations,
   assignToolAssignments,
@@ -103,7 +100,7 @@ export const CreateBaseToolArgsSchema = z
       .optional()
       .describe("Team IDs to attach when creating a team-scoped resource."),
     toolExposureMode: ToolExposureModeSchema.optional().describe(
-      "How tools should be exposed to MCP clients and models. Use 'search_and_run_only' to expose only search_tools and run_tool while keeping the full assigned tool set searchable and runnable.",
+      "How tools should be loaded for MCP clients and models. Use 'search_and_run_only' to keep the initial tool list small while letting search_tools find assigned tools and run_tool execute them. Assigned skill discovery/activation tools (list_skills, activate_skill, read_skill_file) and sandbox runtime tools (run_command, download_file, upload_file) stay directly available in both modes.",
     ),
   })
   .strict();
@@ -150,7 +147,7 @@ export const AgentDetailOutputSchema = z.object({
   icon: z.string().nullable().describe("The emoji icon, if configured."),
   scope: AgentScopeSchema.describe("The visibility scope."),
   toolExposureMode: ToolExposureModeSchema.describe(
-    "How tools are exposed to MCP clients and models.",
+    "How tools are loaded for MCP clients and models.",
   ),
   agentType: z
     .enum(["agent", "llm_proxy", "mcp_gateway", "profile"])
@@ -198,7 +195,6 @@ export async function handleCreateResource<
     subAgentIds?: string[];
     toolAssignments?: ToolAssignmentInput[];
     toolExposureMode?: ToolExposureMode;
-    toolAssignmentMode?: ToolAssignmentMode;
   },
 >(params: {
   args: TArgs;
@@ -274,9 +270,6 @@ export async function handleCreateResource<
     };
     if (args.toolExposureMode !== undefined) {
       createParams.toolExposureMode = args.toolExposureMode;
-    }
-    if (args.toolAssignmentMode !== undefined) {
-      createParams.toolAssignmentMode = args.toolAssignmentMode;
     }
 
     if (targetAgentType === "agent" || targetAgentType === "mcp_gateway") {
@@ -416,7 +409,12 @@ export async function handleGetResource<
     }
 
     if (!record) {
-      return errorResult(`${getLabel} not found`);
+      // only agents have a discovery tool; proxies/gateways have no list tool.
+      const steer =
+        expectedType === "agent"
+          ? ` Call ${archestraMcpBranding.getToolName(TOOL_LIST_AGENTS_SHORT_NAME)} to find the exact id or name.`
+          : "";
+      return errorResult(`${getLabel} not found.${steer}`);
     }
 
     if (record.agentType !== expectedType) {
@@ -447,7 +445,6 @@ export async function handleEditResource<
     subAgentIds?: string[];
     toolAssignments?: ToolAssignmentInput[];
     toolExposureMode?: ToolExposureMode;
-    toolAssignmentMode?: ToolAssignmentMode;
   },
 >(params: {
   args: TArgs;
@@ -504,9 +501,6 @@ export async function handleEditResource<
     if (args.teams !== undefined) updateData.teams = args.teams;
     if (args.toolExposureMode !== undefined) {
       updateData.toolExposureMode = args.toolExposureMode;
-    }
-    if (args.toolAssignmentMode !== undefined) {
-      updateData.toolAssignmentMode = args.toolAssignmentMode;
     }
     if (args.labels !== undefined) {
       updateData.labels = deduplicateLabels(args.labels);

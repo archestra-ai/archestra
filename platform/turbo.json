@@ -65,7 +65,7 @@
     "codegen": {
       "cache": false
     },
-    "@shared#codegen": {
+    "@archestra/shared#codegen": {
       "dependsOn": ["@backend#codegen"],
       "cache": false
     },

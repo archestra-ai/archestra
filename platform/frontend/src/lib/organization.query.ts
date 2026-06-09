@@ -2,13 +2,14 @@ import {
   type AnyRoleName,
   archestraApiSdk,
   type archestraApiTypes,
-} from "@shared";
+} from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Invitation } from "better-auth/plugins/organization";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { useSession } from "@/lib/auth/auth.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
+import { environmentKeys } from "./environment.query";
 import { handleApiError } from "./utils";
 
 export const appearanceKeys = {
@@ -266,9 +267,9 @@ export function useOrganization(enabled = true) {
     enabled: enabled && !!session.data?.user,
     retry: false, // Don't retry on auth pages to avoid repeated 401 errors
     throwOnError: false, // Don't throw errors to prevent crashes
-    // Org settings (theme, app name, preset entity name, etc.) change rarely
-    // and all mutations imperatively setQueryData() this key, so a long stale
-    // time keeps re-mounts cheap (every usePresetEntityName caller shares this).
+    // Org settings (theme, app name, etc.) change rarely and all mutations
+    // imperatively setQueryData() this key, so a long stale time keeps
+    // re-mounts cheap.
     staleTime: 5 * 60 * 1000,
   });
 }
@@ -474,20 +475,22 @@ export function useUpdateConnectionSettings(
 }
 
 /**
- * Update the org-wide custom label for catalog presets (internally "preset").
- * Pass both singular and plural together, or both null to reset.
+ * Update the org-wide default environment (the implicit "Default" target that
+ * catalog items use when no environment is assigned). Unlike real environments,
+ * the default has no slug, so both its name and namespace are freely editable.
+ * Pass `name`/`namespace` (or null to reset to the built-in "Default").
  */
-export function useUpdatePresetEntityName(
+export function useUpdateDefaultEnvironment(
   onSuccessMessage: string,
   onErrorMessage: string,
 ) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (
-      data: archestraApiTypes.UpdatePresetEntityNameData["body"],
+      data: archestraApiTypes.UpdateDefaultEnvironmentData["body"],
     ) => {
       const { data: updatedOrganization, error } =
-        await archestraApiSdk.updatePresetEntityName({ body: data });
+        await archestraApiSdk.updateDefaultEnvironment({ body: data });
 
       if (error) {
         toast.error(onErrorMessage);
@@ -499,94 +502,26 @@ export function useUpdatePresetEntityName(
     onSuccess: (updatedOrganization) => {
       if (!updatedOrganization) return;
       queryClient.setQueryData(organizationKeys.details(), updatedOrganization);
+      queryClient.invalidateQueries({ queryKey: environmentKeys.list() });
       toast.success(onSuccessMessage);
     },
   });
 }
 
 /**
- * Update the org-wide custom label for the implicit "default" preset row.
- * Pass null to reset to the built-in "Default" label.
+ * Returns the org-configured default environment fields. When unconfigured,
+ * `name` falls back to "Default", nullable fields fall back to null, and
+ * `restricted` falls back to false.
  */
-export function useUpdatePresetEntityDefaultLabel(
-  onSuccessMessage: string,
-  onErrorMessage: string,
-) {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async (
-      data: archestraApiTypes.UpdatePresetEntityDefaultLabelData["body"],
-    ) => {
-      const { data: updatedOrganization, error } =
-        await archestraApiSdk.updatePresetEntityDefaultLabel({ body: data });
-
-      if (error) {
-        toast.error(onErrorMessage);
-        return null;
-      }
-
-      return updatedOrganization;
-    },
-    onSuccess: (updatedOrganization) => {
-      if (!updatedOrganization) return;
-      queryClient.setQueryData(organizationKeys.details(), updatedOrganization);
-      toast.success(onSuccessMessage);
-    },
-  });
-}
-
-/**
- * Update the validation regex for the implicit "default" preset row. Pass null
- * to disable.
- */
-export function useUpdatePresetEntityDefaultValidationRegex(
-  onSuccessMessage: string,
-  onErrorMessage: string,
-) {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async (
-      data: archestraApiTypes.UpdatePresetEntityDefaultValidationRegexData["body"],
-    ) => {
-      const { data: updatedOrganization, error } =
-        await archestraApiSdk.updatePresetEntityDefaultValidationRegex({
-          body: data,
-        });
-
-      if (error) {
-        toast.error(onErrorMessage);
-        return null;
-      }
-
-      return updatedOrganization;
-    },
-    onSuccess: (updatedOrganization) => {
-      if (!updatedOrganization) return;
-      queryClient.setQueryData(organizationKeys.details(), updatedOrganization);
-      toast.success(onSuccessMessage);
-    },
-  });
-}
-
-/**
- * Returns the org-configured display label for catalog presets.
- * When unconfigured, `configured` is false and `singular`/`plural` fall back to
- * "Preset"/"Presets" — callers should use `configured` to gate UI that should
- * stay hidden until an admin has chosen a name. `defaultLabel` falls back to
- * "Default" when admins have not customized it.
- */
-export function usePresetEntityName() {
+export function useDefaultEnvironment() {
   const { data: organization } = useOrganization();
-  const singular = organization?.presetEntityName ?? null;
-  const plural = organization?.presetEntityNamePlural ?? null;
-  const configured = singular !== null && plural !== null;
   return {
-    configured,
-    singular: configured ? singular : "Preset",
-    plural: configured ? plural : "Presets",
-    defaultLabel: organization?.presetEntityDefaultLabel ?? "Default",
-    defaultValidationRegex:
-      organization?.presetEntityDefaultValidationRegex ?? null,
+    name: organization?.defaultEnvironmentName ?? "Default",
+    namespace: organization?.defaultEnvironmentNamespace ?? null,
+    description: organization?.defaultEnvironmentDescription ?? null,
+    networkPolicy: organization?.defaultNetworkPolicy ?? null,
+    restricted: organization?.defaultEnvironmentRestricted ?? false,
+    validationRegex: organization?.defaultEnvironmentValidationRegex ?? null,
   };
 }
 

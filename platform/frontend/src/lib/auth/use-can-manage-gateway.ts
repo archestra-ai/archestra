@@ -1,6 +1,6 @@
-import type { archestraApiTypes } from "@shared";
+import type { archestraApiTypes } from "@archestra/shared";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
-import { useTeams } from "@/lib/teams/team.query";
+import { useMyTeams } from "@/lib/teams/team.query";
 
 type Gateway = archestraApiTypes.GetAgentResponses["200"] | null | undefined;
 
@@ -25,7 +25,7 @@ export function useCanManageGateway(gateway: Gateway): {
   const { data: session, isPending: isSessionLoading } = useSession();
   const currentUserId = session?.user?.id;
 
-  const { data: userTeams, isLoading: isTeamsLoading } = useTeams({
+  const { data: userTeams, isLoading: isTeamsLoading } = useMyTeams({
     enabled: !!canReadTeams && gateway?.scope === "team",
   });
 

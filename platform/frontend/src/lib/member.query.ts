@@ -2,7 +2,7 @@ import {
   archestraApiSdk,
   type archestraApiTypes,
   calculatePaginationMeta,
-} from "@shared";
+} from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { authClient } from "@/lib/clients/auth/auth-client";

@@ -1,0 +1,11 @@
+{
+  "extends": "../shared/tsconfig.base.json",
+  "compilerOptions": {
+    "typeRoots": ["../node_modules/@types", "../backend/node_modules/@types"],
+    "types": ["node"],
+    "paths": {
+      "vitest": ["../backend/node_modules/vitest/dist/index.d.ts"]
+    }
+  },
+  "include": ["src/**/*.ts", "test/**/*.ts"]
+}

@@ -1,6 +1,6 @@
 "use client";
 
-import { E2eTestId } from "@shared";
+import { E2eTestId } from "@archestra/shared";
 import { Eye } from "lucide-react";
 import { useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";

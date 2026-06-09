@@ -1,9 +1,9 @@
-import type { Span } from "@opentelemetry/api";
 import type {
   InteractionSource,
   SupportedProvider,
   SupportedProviderDiscriminator,
-} from "@shared";
+} from "@archestra/shared";
+import type { Span } from "@opentelemetry/api";
 import logger from "@/logging";
 import { InteractionModel, ModelModel } from "@/models";
 import { metrics } from "@/observability";

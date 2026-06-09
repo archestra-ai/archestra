@@ -1,4 +1,4 @@
-import type { AgentScope } from "@shared";
+import type { AgentScope } from "@archestra/shared";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 

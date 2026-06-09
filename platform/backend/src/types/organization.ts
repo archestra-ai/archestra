@@ -5,13 +5,17 @@ import {
   OrganizationCustomFontSchema,
   OrganizationThemeSchema,
   SupportedProvidersSchema,
-} from "@shared";
+} from "@archestra/shared";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
 import { sanitizeSvg } from "@/utils/sanitize-svg";
+import {
+  NetworkPolicyInputSchema,
+  NetworkPolicySchema,
+  ValidationRegexSchema,
+} from "./environment";
 import { LimitCleanupIntervalSchema } from "./limit";
-import { ValidationRegexSchema } from "./mcp-preset-entry";
 
 const DATA_URI_PREFIX = "data:image/png;base64,";
 const GIF_DATA_URI_PREFIX = "data:image/gif;base64,";
@@ -290,6 +294,9 @@ const extendedFields = {
   customFont: OrganizationCustomFontSchema,
   compressionScope: OrganizationCompressionScopeSchema,
   globalToolPolicy: GlobalToolPolicySchema,
+  analyticsInstanceId: z.string().uuid(),
+  analyticsInstanceStartedAt: z.date().nullable(),
+  analyticsInstanceLastHeartbeatAt: z.date().nullable(),
   embeddingModel: z.string().nullable(),
   embeddingDimensions: EmbeddingDimensionsSchema.nullable(),
   defaultLlmModel: z.string().nullable(),
@@ -313,20 +320,34 @@ const extendedFields = {
   showTwoFactor: z.boolean(),
   oauthAccessTokenLifetimeSeconds: OAuthAccessTokenLifetimeSecondsSchema,
   connectionBaseUrls: z.array(ConnectionBaseUrlSchema).nullable(),
-  presetEntityName: z.string().nullable(),
-  presetEntityNamePlural: z.string().nullable(),
-  presetEntityDefaultLabel: z.string().nullable(),
-  presetEntityDefaultValidationRegex: z.string().nullable(),
+  defaultNetworkPolicy: NetworkPolicySchema.nullable(),
 };
 
-export const SelectOrganizationSchema = createSelectSchema(
+const InternalSelectOrganizationSchema = createSelectSchema(
   schema.organizationsTable,
   extendedFields,
 );
+export const SelectOrganizationSchema = InternalSelectOrganizationSchema.omit({
+  analyticsInstanceStartedAt: true,
+  analyticsInstanceLastHeartbeatAt: true,
+  // Preset feature removed; columns retained in DB (non-destructive) but no
+  // longer exposed via the API.
+  presetEntityName: true,
+  presetEntityNamePlural: true,
+  presetEntityDefaultLabel: true,
+  presetEntityDefaultValidationRegex: true,
+});
 export const InsertOrganizationSchema = createInsertSchema(
   schema.organizationsTable,
   extendedFields,
-);
+).omit({
+  // Preset feature removed; columns retained in DB (non-destructive) but no
+  // longer accepted by the API, mirroring SelectOrganizationSchema.
+  presetEntityName: true,
+  presetEntityNamePlural: true,
+  presetEntityDefaultLabel: true,
+  presetEntityDefaultValidationRegex: true,
+});
 export const UpdateAppearanceSettingsSchema = z.object({
   theme: OrganizationThemeSchema.optional(),
   customFont: OrganizationCustomFontSchema.optional(),
@@ -421,30 +442,25 @@ export const UpdateConnectionSettingsSchema = z.object({
     }),
 });
 
-export const UpdatePresetEntityNameSchema = z
-  .object({
-    presetEntityName: z.string().trim().min(1).max(50).nullable(),
-    presetEntityNamePlural: z.string().trim().min(1).max(50).nullable(),
-  })
-  .superRefine((value, ctx) => {
-    const singularSet = value.presetEntityName !== null;
-    const pluralSet = value.presetEntityNamePlural !== null;
-    if (singularSet !== pluralSet) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message:
-          "Both presetEntityName and presetEntityNamePlural must be set together (or both null to reset).",
-      });
-    }
-  });
-
-export const UpdatePresetEntityDefaultLabelSchema = z.object({
-  presetEntityDefaultLabel: z.string().trim().min(1).max(50).nullable(),
+/**
+ * Clean API shape for configuring the implicit "default" environment. The
+ * handler maps these to the org columns (`defaultEnvironmentName`,
+ * `defaultEnvironmentNamespace`, `defaultEnvironmentRestricted`,
+ * `defaultEnvironmentValidationRegex`). Omitting a field leaves it unchanged;
+ * an explicit null clears the nullable ones.
+ */
+export const UpdateDefaultEnvironmentSchema = z.object({
+  name: z.string().trim().min(1).max(50).nullable().optional(),
+  description: z.string().trim().max(500).nullable().optional(),
+  namespace: z.string().trim().max(253).nullable().optional(),
+  networkPolicy: NetworkPolicyInputSchema.nullable().optional(),
+  restricted: z.boolean().optional(),
+  validationRegex: ValidationRegexSchema.nullable().optional(),
 });
 
-export const UpdatePresetEntityDefaultValidationRegexSchema = z.object({
-  presetEntityDefaultValidationRegex: ValidationRegexSchema.nullable(),
-});
+export type UpdateDefaultEnvironment = z.infer<
+  typeof UpdateDefaultEnvironmentSchema
+>;
 
 export const CompleteOnboardingSchema = z.object({
   onboardingComplete: z.literal(true),
@@ -455,6 +471,13 @@ export type OrganizationCompressionScope = z.infer<
 >;
 export type GlobalToolPolicy = z.infer<typeof GlobalToolPolicySchema>;
 export type Organization = z.infer<typeof SelectOrganizationSchema>;
+export type OrganizationAnalyticsState = Pick<
+  z.infer<typeof InternalSelectOrganizationSchema>,
+  | "id"
+  | "analyticsInstanceId"
+  | "analyticsInstanceStartedAt"
+  | "analyticsInstanceLastHeartbeatAt"
+>;
 export type InsertOrganization = z.infer<typeof InsertOrganizationSchema>;
 export type AppearanceSettings = z.infer<typeof AppearanceSettingsSchema>;
 export type OrganizationChatLink = z.infer<typeof OrganizationChatLinkSchema>;

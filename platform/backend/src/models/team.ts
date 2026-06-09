@@ -1,4 +1,4 @@
-import { MEMBER_ROLE_NAME } from "@shared";
+import { MEMBER_ROLE_NAME } from "@archestra/shared";
 import { and, count, eq, getTableColumns, ilike, inArray } from "drizzle-orm";
 import db, { schema } from "@/database";
 import logger from "@/logging";
@@ -422,6 +422,32 @@ class TeamModel {
       "TeamModel.getUserTeams: completed",
     );
     return teamsWithMembers;
+  }
+
+  /**
+   * Get the teams a user belongs to within a single organization. Unlike
+   * {@link getUserTeams}, this is scoped to one org, so callers that render
+   * user context into prompts (templated skills, agent system prompts) cannot
+   * leak team names from the user's other organizations.
+   */
+  static async getUserTeamsForOrganization(params: {
+    userId: string;
+    organizationId: string;
+  }): Promise<Team[]> {
+    const { userId, organizationId } = params;
+    return db
+      .select(getTableColumns(schema.teamsTable))
+      .from(schema.teamsTable)
+      .innerJoin(
+        schema.teamMembersTable,
+        eq(schema.teamMembersTable.teamId, schema.teamsTable.id),
+      )
+      .where(
+        and(
+          eq(schema.teamMembersTable.userId, userId),
+          eq(schema.teamsTable.organizationId, organizationId),
+        ),
+      );
   }
 
   /**

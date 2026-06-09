@@ -1,6 +1,6 @@
 "use client";
 
-import { getMediaType } from "@shared";
+import { getMediaType } from "@archestra/shared";
 import type { ChatStatus, FileUIPart } from "ai";
 import {
   CornerDownLeftIcon,

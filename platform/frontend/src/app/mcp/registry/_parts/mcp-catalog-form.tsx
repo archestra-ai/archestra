@@ -1,8 +1,9 @@
 "use client";
 
+import { type archestraApiTypes, DocsPage, E2eTestId } from "@archestra/shared";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { type archestraApiTypes, DocsPage } from "@shared";
 import {
+  AlertTriangle,
   Ban,
   Code,
   ExternalLink,
@@ -34,6 +35,7 @@ import { EnvironmentVariablesFormField } from "@/components/environment-variable
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { HeaderDialog, type HeaderDraft } from "@/components/header-dialog";
 import { HeadersReadOnlyTable } from "@/components/headers-read-only-table";
+import { ReinstallConfirmBar } from "@/components/reinstall-confirm-bar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -74,18 +76,24 @@ import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useIdentityProviders } from "@/lib/auth/identity-provider-read.query";
 import { useEnterpriseFeature, useFeature } from "@/lib/config/config.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
+import { useEnvironments } from "@/lib/environment.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useK8sImagePullSecrets } from "@/lib/mcp/internal-mcp-catalog.query";
 import {
   MCP_CONFIG_AUTOCOMPLETE,
   MCP_SECRET_AUTOCOMPLETE,
 } from "@/lib/mcp/mcp-form-autocomplete";
+import { useDefaultEnvironment } from "@/lib/organization.query";
 import { useGetSecret } from "@/lib/secrets.query";
-import { useTeams } from "@/lib/teams/team.query";
+import { useAssignableTeams } from "@/lib/teams/team.query";
 import {
   type CascadeSnapshot,
   computeCascadeOutcome,
 } from "./cascade-decision";
+import {
+  compileValidationRegex,
+  validateFieldAgainstRegex,
+} from "./environment-validation-helpers";
 import {
   formSchema,
   type McpCatalogFormValues,
@@ -94,7 +102,6 @@ import {
   transformCatalogItemToFormValues,
   transformFormToApiData,
 } from "./mcp-catalog-form.utils";
-import { ReinstallConfirmBar } from "./reinstall-confirm-bar";
 
 const ExternalSecretSelector = lazy(
   () =>
@@ -102,13 +109,27 @@ const ExternalSecretSelector = lazy(
     import("@/components/external-secret-selector.ee"),
 );
 
+// Sentinel value for the default environment option (null assignment). The shadcn
+// Select cannot use an empty-string item value, so a sentinel maps to `null`
+// (no environment assigned).
+const ENVIRONMENT_DEFAULT_VALUE = "__default__";
+
 interface McpCatalogFormProps {
   mode: "create" | "edit";
   initialValues?: archestraApiTypes.GetInternalMcpCatalogResponses["200"][number];
   onSubmit: (values: McpCatalogFormValues) => void | Promise<void>;
   footer?:
     | React.ReactNode
-    | ((opts: { isDirty: boolean; onReset: () => void }) => React.ReactNode);
+    | ((opts: {
+        isDirty: boolean;
+        onReset: () => void;
+        /**
+         * True when stored config values violate the bound environment's
+         * validation rule — the footer's Save button should disable on it.
+         * Saving is also guarded internally, but disabling gives a visible cue.
+         */
+        hasBlockingErrors: boolean;
+      }) => React.ReactNode);
   nameDisabled?: boolean;
   catalogButton?: React.ReactNode;
   /** Optional banner/notice rendered at the very top of the form body. */
@@ -164,17 +185,11 @@ export function McpCatalogForm({
   const mcpServerBaseImage = useFeature("mcpServerBaseImage") ?? "";
 
   const isLocalMcpEnabled = useFeature("orchestratorK8sRuntime");
-  const advancedToolFeaturesEnabled =
-    useFeature("advancedToolFeaturesEnabled") === true;
   const isEnterpriseCoreEnabled = useEnterpriseFeature("core");
   const appName = useAppName();
   const mcpAuthDocsUrl = getFrontendDocsUrl(
     DocsPage.McpAuthentication,
     "upstream-mcp-server-authentication",
-  );
-  const gatewayLabelsDocsUrl = getFrontendDocsUrl(
-    DocsPage.PlatformMcpGateway,
-    "tool-assignment-mode",
   );
   const mcpAuthTokenExchangeDocsUrl = getFrontendDocsUrl(
     DocsPage.McpAuthentication,
@@ -246,6 +261,7 @@ export function McpCatalogForm({
           },
           scope: "personal",
           teams: [],
+          environmentId: null,
         }),
   });
 
@@ -347,7 +363,6 @@ export function McpCatalogForm({
           fieldName: undefined,
           headerName: "Authorization",
           promptOnInstallation: true,
-          promptOnPreset: false,
           required: true,
           value: "",
           description: "",
@@ -518,8 +533,103 @@ export function McpCatalogForm({
   const { data: isAdmin } = useHasPermissions({
     mcpServerInstallation: ["admin"],
   });
-  const { data: teams } = useTeams();
+  // Sharing to teams needs mcpRegistry:team-admin (admins bypass) plus team:read
+  // to populate the picker. Mirrors the agent/skill visibility gating.
+  const { data: isTeamAdmin } = useHasPermissions({
+    mcpRegistry: ["team-admin"],
+  });
+  const { data: canReadTeams } = useHasPermissions({ team: ["read"] });
+  // All teams for a full admin, otherwise only the user's own teams (the only
+  // ones the backend lets a non-admin assign).
+  const { data: teams } = useAssignableTeams({
+    isResourceAdmin: !!isAdmin,
+    enabled: !!canReadTeams,
+  });
+  const { data: environmentList } = useEnvironments();
+  const environments = environmentList?.environments;
+  // Deploying to a restricted environment needs environment:deploy-to-restricted;
+  // environment:admin (full environment management) implies it.
+  const { data: hasEnvAdmin } = useHasPermissions({ environment: ["admin"] });
+  const { data: hasDeployToRestricted } = useHasPermissions({
+    environment: ["deploy-to-restricted"],
+  });
+  const canDeployRestricted =
+    (hasEnvAdmin ?? false) || (hasDeployToRestricted ?? false);
+  const defaultEnvironment = useDefaultEnvironment();
+  // Environments the user can deploy to. Restricted environments the user can't
+  // deploy to are hidden entirely. The default is always available.
+  const accessibleEnvironments = (environments ?? []).filter(
+    (e) => !e.restricted || canDeployRestricted,
+  );
+  const hasCustomEnvironmentOptions = accessibleEnvironments.length > 0;
+  const canManageEnvironments = hasEnvAdmin ?? false;
+  // Validate static config values (env vars + headers) against the rule of the
+  // environment this item is bound to (or the org default when unbound), so a
+  // forbidden value is flagged inline and can't be saved. Passed to both
+  // EnvironmentVariablesFormField instances below.
+  const watchedEnvironmentId = form.watch("environmentId");
+  const boundEnvironment = watchedEnvironmentId
+    ? environments?.find((e) => e.id === watchedEnvironmentId)
+    : null;
+  const boundEnvironmentName =
+    boundEnvironment?.name ?? defaultEnvironment.name;
+  const boundValidationRegex = compileValidationRegex(
+    boundEnvironment
+      ? boundEnvironment.validationRegex
+      : defaultEnvironment.validationRegex,
+  );
+  const validateConfigValue = boundValidationRegex
+    ? (value: string): string | null =>
+        validateFieldAgainstRegex({
+          value,
+          regex: boundValidationRegex,
+          valueType: "string",
+          environmentName: boundEnvironmentName,
+        })
+    : undefined;
+  // Already-stored static values that violate the bound environment's rule —
+  // e.g. after switching the item to a stricter environment. The add/edit
+  // dialogs block typing a bad value, but a value entered under a laxer
+  // environment only surfaces here, where it blocks Save until fixed.
+  //
+  // Only scan the fields actually live for the current server type: env vars
+  // for local, headers for remote. A local server submits no headers and a
+  // remote one submits no localConfig.environment, so scanning the inactive
+  // (and hidden) set would block Save on a field the user can't even see.
+  const watchedEnvVars = form.watch("localConfig.environment");
+  const watchedHeaders = form.watch("additionalHeaders");
+  const envRuleViolations: string[] = [];
+  if (validateConfigValue) {
+    if (currentServerType === "local") {
+      for (const envVar of watchedEnvVars ?? []) {
+        if (
+          envVar.type === "plain_text" &&
+          !envVar.promptOnInstallation &&
+          envVar.value &&
+          validateConfigValue(envVar.value)
+        ) {
+          envRuleViolations.push(envVar.key);
+        }
+      }
+    } else {
+      for (const header of watchedHeaders ?? []) {
+        if (
+          !header.promptOnInstallation &&
+          !header.sensitive &&
+          header.value &&
+          validateConfigValue(header.value)
+        ) {
+          envRuleViolations.push(header.headerName);
+        }
+      }
+    }
+  }
+  const hasEnvRuleViolations = envRuleViolations.length > 0;
   const currentScope = form.watch("scope");
+  const canShareWithTeams = (isAdmin ?? false) || (isTeamAdmin ?? false);
+  // Shared items are one-way: an item that is already team/org-scoped cannot be
+  // demoted back to personal (mirrors the agent dialog).
+  const initialScope = initialValues?.scope;
   const enterpriseAuthDisabledReason: ReactNode | null =
     !isEnterpriseCoreEnabled
       ? "Available with the Enterprise Core license."
@@ -553,16 +663,20 @@ export function McpCatalogForm({
         label: "Personal",
         description: "Only you can access this MCP server.",
         icon: Lock,
+        disabled: initialScope != null && initialScope !== "personal",
+        disabledReason: "Shared MCP servers cannot be made personal.",
       },
       {
         value: "team",
         label: "Teams",
         description: "Share this MCP server with selected teams.",
         icon: Users,
-        disabled: !isAdmin || !teams?.length,
-        disabledReason: !isAdmin
-          ? "Only admins can assign MCP servers to teams."
-          : "Create a team first to share this MCP server.",
+        disabled: !canShareWithTeams || !canReadTeams || !teams?.length,
+        disabledReason: !canReadTeams
+          ? "Team sharing is unavailable without team:read permission."
+          : !canShareWithTeams
+            ? "You need mcpRegistry:team-admin permission to share with teams."
+            : "Create a team first to share this MCP server.",
       },
       {
         value: "org",
@@ -573,7 +687,7 @@ export function McpCatalogForm({
         disabledReason: "Only admins can make MCP servers organization-wide.",
       },
     ],
-    [isAdmin, teams],
+    [isAdmin, canShareWithTeams, canReadTeams, teams, initialScope],
   );
 
   // Check if BYOS feature is available (enterprise license)
@@ -621,6 +735,41 @@ export function McpCatalogForm({
 
   // Fetch available k8s docker-registry secrets for the "existing" dropdown
   const { data: k8sSecrets = [] } = useK8sImagePullSecrets();
+  const imagePullSecretItems = useMemo(
+    () =>
+      k8sSecrets.map((secret) => {
+        const registryLabel = formatRegistryServers(secret.registryServers);
+        const primaryLabel = registryLabel || secret.name;
+        const secondaryLabel = registryLabel ? secret.name : undefined;
+
+        return {
+          value: secret.name,
+          label: primaryLabel,
+          searchText: [secret.name, ...secret.registryServers].join(" "),
+          content: (
+            <span className="block min-w-0">
+              <span className="block truncate font-medium">{primaryLabel}</span>
+              {secondaryLabel ? (
+                <span className="block truncate text-xs text-muted-foreground">
+                  {secondaryLabel}
+                </span>
+              ) : null}
+            </span>
+          ),
+          selectedContent: (
+            <span className="block min-w-0">
+              <span className="block truncate">{primaryLabel}</span>
+              {secondaryLabel ? (
+                <span className="block truncate text-xs text-muted-foreground">
+                  {secondaryLabel}
+                </span>
+              ) : null}
+            </span>
+          ),
+        };
+      }),
+    [k8sSecrets],
+  );
 
   // Update form values when BYOS paths/keys change
   useEffect(() => {
@@ -697,6 +846,10 @@ export function McpCatalogForm({
   };
 
   const handleSubmit = async (values: McpCatalogFormValues) => {
+    // Stored values may violate the bound environment's rule (e.g. after an
+    // environment switch). The Save button is disabled in that state, but guard
+    // here too so an Enter-key submit can't bypass it.
+    if (hasEnvRuleViolations) return;
     // Cascade-confirm decision delegated to a pure function so it can be
     // matrix-tested without rendering, and so frontend + backend share
     // the same decision tree shape. See `cascade-decision.ts`.
@@ -799,7 +952,6 @@ export function McpCatalogForm({
                   )}
                 />
               </div>
-
               <FormField
                 control={form.control}
                 name="description"
@@ -817,7 +969,6 @@ export function McpCatalogForm({
                   </FormItem>
                 )}
               />
-
               <FormField
                 control={form.control}
                 name="scope"
@@ -866,7 +1017,108 @@ export function McpCatalogForm({
                   </FormItem>
                 )}
               />
+              <FormField
+                control={form.control}
+                name="environmentId"
+                render={({ field }) => {
+                  const environmentOptions = [
+                    {
+                      value: ENVIRONMENT_DEFAULT_VALUE,
+                      label: defaultEnvironment.name,
+                      description: defaultEnvironment.description ?? "",
+                    },
+                    ...accessibleEnvironments.map((environment) => ({
+                      value: environment.id,
+                      label: environment.name,
+                      description: environment.description ?? "",
+                    })),
+                  ];
+                  const selectedValue =
+                    field.value ?? ENVIRONMENT_DEFAULT_VALUE;
+                  const selectedDescription = environmentOptions.find(
+                    (option) => option.value === selectedValue,
+                  )?.description;
 
+                  return (
+                    <FormItem className="space-y-2">
+                      <Label>Environment</Label>
+                      <FormControl>
+                        <Select
+                          value={selectedValue}
+                          disabled={!hasCustomEnvironmentOptions}
+                          onValueChange={(value) =>
+                            field.onChange(
+                              value === ENVIRONMENT_DEFAULT_VALUE
+                                ? null
+                                : value,
+                            )
+                          }
+                        >
+                          <SelectTrigger
+                            className="w-full"
+                            data-testid={E2eTestId.SelectEnvironment}
+                          >
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent position="popper">
+                            {environmentOptions.map((option) => (
+                              <SelectItem
+                                key={option.value}
+                                value={option.value}
+                                description={option.description || undefined}
+                              >
+                                {option.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </FormControl>
+                      {selectedDescription ? (
+                        <p className="text-xs text-muted-foreground">
+                          {selectedDescription}
+                        </p>
+                      ) : null}
+                      {!hasCustomEnvironmentOptions ? (
+                        <FormDescription>
+                          Only the default environment is available.{" "}
+                          {canManageEnvironments ? (
+                            <Link
+                              href="/settings/environments"
+                              className="underline underline-offset-2"
+                            >
+                              Manage environments
+                            </Link>
+                          ) : null}
+                        </FormDescription>
+                      ) : null}
+                      <FormMessage />
+                    </FormItem>
+                  );
+                }}
+              />
+              {hasEnvRuleViolations && (
+                <div
+                  role="alert"
+                  className="flex items-start gap-3 rounded-md border border-amber-500/40 bg-amber-50/40 p-3 text-sm dark:bg-amber-950/20"
+                >
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-500" />
+                  <div className="space-y-1 text-foreground/90">
+                    <div className="font-semibold text-foreground">
+                      {envRuleViolations.length} value
+                      {envRuleViolations.length === 1 ? "" : "s"} not allowed in
+                      “{boundEnvironmentName}”
+                    </div>
+                    <div>
+                      Edit or remove{" "}
+                      {envRuleViolations.length === 1 ? "it" : "them"}, or
+                      choose another environment, before saving:{" "}
+                      <span className="font-mono">
+                        {envRuleViolations.join(", ")}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
               {mode === "create" && (
                 <div className="space-y-2">
                   <Label>Server Type</Label>
@@ -929,7 +1181,6 @@ export function McpCatalogForm({
                   </div>
                 </div>
               )}
-
               {currentServerType === "local" && (
                 <div className="space-y-2">
                   <Label>Tenancy</Label>
@@ -1191,6 +1442,7 @@ export function McpCatalogForm({
                   remove={remove}
                   fieldNamePrefix="localConfig.environment"
                   form={form}
+                  validateValue={validateConfigValue}
                   useExternalSecretsManager={showByosOption}
                   secretKeysWithStoredValue={storedSecretKeys}
                   disablePromptOnInstallation={isMultitenant}
@@ -1334,14 +1586,14 @@ export function McpCatalogForm({
                           <SearchableSelect
                             value={watchField("name")}
                             onValueChange={(val) => setField("name", val)}
-                            items={k8sSecrets.map((s) => ({
-                              value: s.name,
-                              label: s.name,
-                            }))}
+                            items={imagePullSecretItems}
                             placeholder="Select a secret..."
                             searchPlaceholder="Search secrets..."
                             allowCustom
+                            multiline
                             className="w-full"
+                            contentClassName="w-[min(var(--radix-popover-trigger-width),calc(100vw-2rem))]"
+                            emptyMessage="No image pull secrets found."
                           />
                         ) : (
                           <div className="grid grid-cols-2 gap-3">
@@ -1748,7 +2000,7 @@ export function McpCatalogForm({
                                   render={({ field }) => (
                                     <FormItem>
                                       <FormLabel>
-                                        Redirect URIs{" "}
+                                        MCP OAuth callback URIs{" "}
                                         <span className="text-destructive">
                                           *
                                         </span>
@@ -1761,7 +2013,39 @@ export function McpCatalogForm({
                                         />
                                       </FormControl>
                                       <FormDescription>
-                                        Comma-separated list of redirect URIs
+                                        Use {appName}'s MCP install callback,
+                                        usually{" "}
+                                        <code>
+                                          {typeof window !== "undefined"
+                                            ? `${window.location.origin}/oauth-callback`
+                                            : "https://app.example.com/oauth-callback"}
+                                        </code>
+                                        . Do not use the SSO callback URL under{" "}
+                                        <code>/api/auth/sso/callback</code>.
+                                      </FormDescription>
+                                      <FormMessage />
+                                    </FormItem>
+                                  )}
+                                />
+
+                                <FormField
+                                  control={form.control}
+                                  name="oauthConfig.resource"
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormLabel>Protected Resource</FormLabel>
+                                      <FormControl>
+                                        <Input
+                                          placeholder="https://api.example.com or api://client-id"
+                                          className="font-mono"
+                                          {...field}
+                                        />
+                                      </FormControl>
+                                      <FormDescription>
+                                        Optional OAuth resource/audience sent in
+                                        the authorization request. Leave blank
+                                        to use the Default Audience, if set, or
+                                        the MCP endpoint URL.
                                       </FormDescription>
                                       <FormMessage />
                                     </FormItem>
@@ -2152,6 +2436,7 @@ export function McpCatalogForm({
                     additionalHeaderFields.length,
                     headerDialog?.mode === "edit" ? headerDialog.index : null,
                   )}
+                  validateValue={validateConfigValue}
                   onClose={() => setHeaderDialog(null)}
                   onConfirm={(draft) => {
                     if (headerDialog?.mode === "add") {
@@ -2176,23 +2461,6 @@ export function McpCatalogForm({
                     </span>
                   )}
                 </div>
-                {advancedToolFeaturesEnabled && (
-                  <p className="text-sm text-muted-foreground">
-                    Organize servers and drive automatic tool assignment.
-                    {gatewayLabelsDocsUrl && (
-                      <>
-                        {" "}
-                        <ExternalDocsLink
-                          href={gatewayLabelsDocsUrl}
-                          className="underline"
-                          showIcon={false}
-                        >
-                          Learn more
-                        </ExternalDocsLink>
-                      </>
-                    )}
-                  </p>
-                )}
               </div>
               <div className="pt-4">
                 <ProfileLabels
@@ -2236,6 +2504,7 @@ export function McpCatalogForm({
               form.reset();
               setLabels(labelsBaseline);
             },
+            hasBlockingErrors: hasEnvRuleViolations,
           })
         ) : (
           footer
@@ -2376,7 +2645,6 @@ type AdditionalHeader = {
   description?: string;
   includeBearerPrefix?: boolean;
   promptOnInstallation?: boolean;
-  promptOnPreset?: boolean;
 };
 
 /**
@@ -2409,7 +2677,6 @@ function deriveAdditionalHeaders(userConfig: unknown): AdditionalHeader[] {
         cfg.promptOnInstallation === undefined
           ? true
           : Boolean(cfg.promptOnInstallation),
-      promptOnPreset: Boolean(cfg.promptOnPreset),
     });
   }
   return out;
@@ -2462,10 +2729,10 @@ function additionalHeadersChangeRequiresReinstall(
     if ((p.headerName ?? "") !== (n.headerName ?? "")) return true; // Routing
     if (Boolean(p.sensitive) !== Boolean(n.sensitive)) return true; // Storage
     // Static header value rotation. `value` only matters at runtime
-    // when the header is fully static (no install or preset prompt) —
-    // for prompted headers it's just a placeholder.
-    const wasStatic = !p.promptOnInstallation && !p.promptOnPreset;
-    const isStatic = !n.promptOnInstallation && !n.promptOnPreset;
+    // when the header is fully static (no install prompt) — for prompted
+    // headers it's just a placeholder.
+    const wasStatic = !p.promptOnInstallation;
+    const isStatic = !n.promptOnInstallation;
     if (wasStatic && isStatic && (p.value ?? "") !== (n.value ?? "")) {
       return true;
     }
@@ -2588,14 +2855,9 @@ function readHeaderRowAsDraft(
 ): HeaderDraft {
   const row = form.getValues(`additionalHeaders.${index}`);
   const promptOnInstallation = Boolean(row?.promptOnInstallation);
-  const promptOnPreset = Boolean(row?.promptOnPreset);
   return {
     headerName: row?.headerName ?? "",
-    scope: promptOnInstallation
-      ? "installation"
-      : promptOnPreset
-        ? "preset"
-        : "static",
+    scope: promptOnInstallation ? "installation" : "static",
     required: Boolean(row?.required),
     value: row?.value ?? "",
     description: row?.description ?? "",
@@ -2623,7 +2885,6 @@ function headerDraftToRow(draft: HeaderDraft) {
     fieldName: undefined,
     headerName: draft.headerName,
     promptOnInstallation: draft.scope === "installation",
-    promptOnPreset: draft.scope === "preset",
     required: draft.scope === "installation" ? draft.required : false,
     value: draft.scope === "static" ? draft.value : "",
     description: draft.description,
@@ -2648,10 +2909,22 @@ function applyHeaderDraftToRow(
     );
   set("headerName", draft.headerName);
   set("promptOnInstallation", draft.scope === "installation");
-  set("promptOnPreset", draft.scope === "preset");
   set("required", draft.scope === "installation" ? draft.required : false);
   set("value", draft.scope === "static" ? draft.value : "");
   set("description", draft.description);
   set("includeBearerPrefix", draft.includeBearerPrefix);
   set("sensitive", draft.scope === "static" ? false : draft.sensitive);
+}
+
+function formatRegistryServers(registryServers: string[]): string {
+  if (registryServers.length === 0) {
+    return "";
+  }
+
+  const [firstRegistry, ...remainingRegistries] = registryServers;
+  if (remainingRegistries.length === 0) {
+    return firstRegistry;
+  }
+
+  return `${firstRegistry} +${remainingRegistries.length} more`;
 }

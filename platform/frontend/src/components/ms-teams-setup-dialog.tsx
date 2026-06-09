@@ -1,6 +1,6 @@
 "use client";
 
-import { WEBSITE_URL } from "@shared";
+import { WEBSITE_URL } from "@archestra/shared";
 import JSZip from "jszip";
 import { Download, ExternalLink, Loader2, TriangleAlert } from "lucide-react";
 import * as React from "react";
@@ -460,8 +460,8 @@ function buildManifest(params: {
   const { botAppId, nameShort, nameFull, version } = params;
   return {
     $schema:
-      "https://developer.microsoft.com/json-schemas/teams/v1.16/MicrosoftTeams.schema.json",
-    manifestVersion: "1.16",
+      "https://developer.microsoft.com/json-schemas/teams/v1.21/MicrosoftTeams.schema.json",
+    manifestVersion: "1.21",
     version: version || "1.0.0",
     id: botAppId || "{{BOT_MS_APP_ID}}",
     packageName: `com.${nameShort.toLowerCase()}.bot`,
@@ -481,7 +481,7 @@ function buildManifest(params: {
     bots: [
       {
         botId: botAppId || "{{BOT_MS_APP_ID}}",
-        scopes: ["team", "groupchat", "personal"],
+        scopes: ["team", "groupchat", "personal", "copilot"],
         supportsFiles: false,
         isNotificationOnly: false,
         commandLists: [
@@ -502,6 +502,11 @@ function buildManifest(params: {
         ],
       },
     ],
+    copilotAgents: {
+      customEngineAgents: [
+        { type: "bot", id: botAppId || "{{BOT_MS_APP_ID}}" },
+      ],
+    },
     permissions: ["identity", "messageTeamMembers"],
     validDomains: [],
     webApplicationInfo: {

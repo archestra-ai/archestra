@@ -1,6 +1,9 @@
 "use client";
 
-import { DocsPage, getSystemPromptTemplateExpressions } from "@shared";
+import {
+  DocsPage,
+  getSystemPromptTemplateExpressions,
+} from "@archestra/shared";
 import { Maximize2, Minimize2 } from "lucide-react";
 import { useState } from "react";
 

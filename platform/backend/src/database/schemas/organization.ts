@@ -2,8 +2,8 @@ import type {
   OrganizationCustomFont,
   OrganizationTheme,
   SupportedProvider,
-} from "@shared";
-import { DEFAULT_OAUTH_ACCESS_TOKEN_LIFETIME_SECONDS } from "@shared";
+} from "@archestra/shared";
+import { DEFAULT_OAUTH_ACCESS_TOKEN_LIFETIME_SECONDS } from "@archestra/shared";
 import {
   boolean,
   integer,
@@ -18,6 +18,7 @@ import type {
   ConnectionBaseUrl,
   GlobalToolPolicy,
   LimitCleanupInterval,
+  NetworkPolicy,
   OnboardingWizard,
   OrganizationChatLink,
   OrganizationCompressionScope,
@@ -28,6 +29,11 @@ const organizationsTable = pgTable("organization", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
   slug: text("slug").notNull().unique(),
+  analyticsInstanceId: uuid("analytics_instance_id").notNull().defaultRandom(),
+  analyticsInstanceStartedAt: timestamp("analytics_instance_started_at"),
+  analyticsInstanceLastHeartbeatAt: timestamp(
+    "analytics_instance_last_heartbeat_at",
+  ),
   logo: text("logo"),
   logoDark: text("logo_dark"),
   createdAt: timestamp("created_at").notNull(),
@@ -215,20 +221,64 @@ const organizationsTable = pgTable("organization", {
   >(),
 
   /**
-   * Custom label admins choose for the child-configuration entity of every
-   * catalog item (internally still called "preset"). When both singular and
-   * plural are set, the catalog UI exposes the per-item presets section and
-   * replaces "Preset"/"presets" copy. Both must be set together — partial
-   * values are rejected at the API.
+   * Legacy preset columns (feature removed) — retained inert (non-destructive,
+   * no migration) and no longer read or written. Held admin-chosen singular/
+   * plural labels that the catalog UI used to override "Preset"/"presets" copy.
    */
   presetEntityName: text("preset_entity_name"),
   presetEntityNamePlural: text("preset_entity_name_plural"),
 
   /**
-   * Custom display label for the implicit "default" preset row (parent catalog
-   * item). NULL falls back to "Default" in the UI.
+   * Legacy preset column (feature removed) — retained inert. Held the custom
+   * display label for the implicit "default" preset row. No longer read or
+   * written.
    */
   presetEntityDefaultLabel: text("preset_entity_default_label"),
+
+  /**
+   * Display name of the implicit "default" environment (the deployment target
+   * referenced by internal_mcp_catalog.environment_id = null). NULL falls back
+   * to "Default" in the UI.
+   */
+  defaultEnvironmentName: text("default_environment_name"),
+
+  /**
+   * Kubernetes namespace for the implicit "default" environment. Stored only
+   * (not applied at deploy yet). NULL = unset.
+   */
+  defaultEnvironmentNamespace: text("default_environment_namespace"),
+
+  /**
+   * Optional human-readable description of the implicit "default" environment,
+   * shown in the environment selector. NULL = unset.
+   */
+  defaultEnvironmentDescription: text("default_environment_description"),
+
+  /**
+   * Optional default network egress policy for the implicit "default"
+   * environment. NULL falls back to built-in unrestricted behavior.
+   */
+  defaultNetworkPolicy: jsonb("default_network_policy").$type<NetworkPolicy>(),
+
+  /**
+   * When true, assigning a catalog item to the implicit "default" environment
+   * (environment_id = null) requires the `environment:admin` permission — i.e.
+   * creating a catalog item without choosing an environment is admin-gated.
+   * Mirrors the per-environment `environment.restricted` flag for the default.
+   */
+  defaultEnvironmentRestricted: boolean("default_environment_restricted")
+    .notNull()
+    .default(false),
+
+  /**
+   * ALLOWLIST regex (JS source, no delimiters/flags) for the implicit "default"
+   * environment (internal_mcp_catalog.environment_id = null). User-supplied
+   * config values are allowed only if they MATCH. NULL disables. Mirrors
+   * `environment.validation_regex` for the default scope.
+   */
+  defaultEnvironmentValidationRegex: text(
+    "default_environment_validation_regex",
+  ),
 
   /**
    * When true, the Agent Skill tools (`list_skills`, `activate_skill`,
@@ -249,9 +299,9 @@ const organizationsTable = pgTable("organization", {
     .default(false),
 
   /**
-   * Validation regex applied to default-scoped field values when installing an
-   * MCP server (mirrors `mcp_preset_entries.validation_regex` for the implicit
-   * default row). Stored without delimiters or flags. NULL disables validation.
+   * Legacy preset column (feature removed) — retained inert. Held a validation
+   * regex (no delimiters/flags) applied to default-scoped field values at
+   * install time. No longer read or written.
    */
   presetEntityDefaultValidationRegex: text(
     "preset_entity_default_validation_regex",

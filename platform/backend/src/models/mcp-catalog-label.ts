@@ -1,5 +1,4 @@
 import { and, asc, eq, inArray, or } from "drizzle-orm";
-import { uniqBy } from "lodash-es";
 import db, { schema, withDbTransaction } from "@/database";
 import type { AgentLabelGetResponse, AgentLabelWithDetails } from "@/types";
 import AgentLabelModel from "./agent-label";
@@ -122,15 +121,7 @@ class McpCatalogLabelModel {
     catalogId: string,
     labels: AgentLabelWithDetails[],
   ): Promise<void> {
-    const affectedPairs = await withDbTransaction(async (tx) => {
-      const previousLabels = await tx
-        .select({
-          keyId: schema.mcpCatalogLabelsTable.keyId,
-          valueId: schema.mcpCatalogLabelsTable.valueId,
-        })
-        .from(schema.mcpCatalogLabelsTable)
-        .where(eq(schema.mcpCatalogLabelsTable.catalogId, catalogId));
-
+    await withDbTransaction(async (tx) => {
       const insertedLabels: {
         catalogId: string;
         keyId: string;
@@ -153,28 +144,7 @@ class McpCatalogLabelModel {
 
         await tx.insert(schema.mcpCatalogLabelsTable).values(insertedLabels);
       }
-
-      // Return union of affected labels
-      return uniqBy(
-        [...previousLabels, ...insertedLabels],
-        (l) => `${l.keyId}-${l.valueId}`,
-      );
     });
-
-    // Re-assign matched tools for agents and MCP gateways using automatic tool assignment.
-    if (affectedPairs.length > 0) {
-      const AgentModel = (await import("./agent")).default;
-      const AgentToolModel = (await import("./agent-tool")).default;
-
-      const matchedAgents = await AgentModel.findByLabels(affectedPairs);
-      const affectedAgents = matchedAgents
-        .filter((agent) => isAutomaticToolAssignmentSupported(agent.agentType))
-        .filter((agent) => agent.toolAssignmentMode === "automatic");
-
-      for (const agent of affectedAgents) {
-        await AgentToolModel.syncAgentToolsFromLabels(agent.id);
-      }
-    }
 
     // Fire-and-forget pruning to avoid race conditions with concurrent operations
     AgentLabelModel.pruneKeysAndValues().catch(() => {});
@@ -244,7 +214,3 @@ class McpCatalogLabelModel {
 }
 
 export default McpCatalogLabelModel;
-
-function isAutomaticToolAssignmentSupported(agentType: string): boolean {
-  return agentType === "agent" || agentType === "mcp_gateway";
-}

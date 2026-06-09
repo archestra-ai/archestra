@@ -26,15 +26,8 @@ export const allAvailableActions: Record<Resource, Action[]> = {
 
   // Agents
   agent: ["read", "create", "update", "delete", "team-admin", "admin"],
-  skill: [
-    "read",
-    "create",
-    "update",
-    "delete",
-    "team-admin",
-    "admin",
-    "execute",
-  ],
+  skill: ["read", "create", "update", "delete", "team-admin", "admin"],
+  sandbox: ["execute"],
   agentTrigger: ["read", "create", "update", "delete"],
   scheduledTask: ["read", "create", "update", "delete", "admin"],
 
@@ -51,9 +44,11 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   // MCP
   mcpGateway: ["read", "create", "update", "delete", "team-admin", "admin"],
   toolPolicy: ["read", "create", "update", "delete"],
-  mcpRegistry: ["read", "create", "update", "delete"],
+  mcpRegistry: ["read", "create", "update", "delete", "team-admin"],
   mcpServerInstallation: ["read", "create", "update", "delete", "admin"],
   mcpServerInstallationRequest: ["read", "create", "update", "delete", "admin"],
+  environment: ["admin", "deploy-to-restricted"],
+  githubAppConfig: ["read", "create", "update", "delete"],
 
   // Knowledge
   knowledgeFile: ["read", "create", "update", "delete", "admin"],
@@ -94,7 +89,8 @@ export const allAvailableActions: Record<Resource, Action[]> = {
 export const editorPermissions: Record<Resource, Action[]> = {
   // Agents
   agent: ["read", "create", "update", "delete", "team-admin"],
-  skill: ["read", "create", "update", "delete", "team-admin", "execute"],
+  skill: ["read", "create", "update", "delete", "team-admin"],
+  sandbox: ["execute"],
   agentTrigger: ["read", "create", "update", "delete"],
   scheduledTask: ["read", "create", "update", "delete"],
 
@@ -111,9 +107,11 @@ export const editorPermissions: Record<Resource, Action[]> = {
   // MCP
   mcpGateway: ["read", "create", "update", "delete", "team-admin"],
   toolPolicy: ["read", "create", "update", "delete"],
-  mcpRegistry: ["read", "create", "update", "delete"],
+  mcpRegistry: ["read", "create", "update", "delete", "team-admin"],
   mcpServerInstallation: ["read", "create", "update", "delete"],
   mcpServerInstallationRequest: ["read", "create", "update", "delete"],
+  environment: ["admin"],
+  githubAppConfig: ["read", "create", "update", "delete"],
 
   // Knowledge
   knowledgeFile: ["read", "create", "update", "delete"],
@@ -154,7 +152,8 @@ export const editorPermissions: Record<Resource, Action[]> = {
 export const memberPermissions: Record<Resource, Action[]> = {
   // Agents
   agent: ["read", "create", "update", "delete"],
-  skill: ["read", "create", "update", "delete", "execute"],
+  skill: ["read", "create", "update", "delete"],
+  sandbox: ["execute"],
   agentTrigger: [],
   scheduledTask: ["read", "create", "update", "delete"],
 
@@ -174,6 +173,10 @@ export const memberPermissions: Record<Resource, Action[]> = {
   mcpRegistry: ["read"],
   mcpServerInstallation: ["read", "create", "delete"],
   mcpServerInstallationRequest: ["read", "create", "update"],
+  environment: [],
+  // minting installation tokens from a stored App credential is privileged;
+  // default members get no access — editors and admins manage/use App configs
+  githubAppConfig: [],
 
   // Knowledge
   knowledgeFile: ["read"],
@@ -247,7 +250,8 @@ export const permissionDescriptions: Record<string, string> = {
   "skill:team-admin": "Manage team assignments for agent skills",
   "skill:admin":
     "Full administrative control over all agent skills, bypassing team restrictions",
-  "skill:execute": "Execute skill scripts",
+  "sandbox:execute":
+    "Run commands and upload/download files in code execution sandboxes",
   "agentTrigger:read":
     "View agent trigger configurations (Slack, MS Teams, email)",
   "agentTrigger:create": "Set up new agent triggers",
@@ -278,6 +282,7 @@ export const permissionDescriptions: Record<string, string> = {
   "mcpRegistry:create": "Add servers to the MCP registry",
   "mcpRegistry:update": "Modify MCP registry entries",
   "mcpRegistry:delete": "Remove servers from the MCP registry",
+  "mcpRegistry:team-admin": "Manage team assignments for MCP registry entries",
   "mcpServerInstallation:read": "View installed MCP servers and their status",
   "mcpServerInstallation:create": "Install MCP servers from the registry",
   "mcpServerInstallation:update": "Modify installed MCP server configuration",
@@ -291,6 +296,14 @@ export const permissionDescriptions: Record<string, string> = {
   "mcpServerInstallationRequest:delete": "Delete installation requests",
   "mcpServerInstallationRequest:admin":
     "Approve or decline installation requests",
+  "environment:admin":
+    "Create, edit, and delete deployment environments (everyone can view them)",
+  "environment:deploy-to-restricted":
+    "Deploy catalog items to restricted environments",
+  "githubAppConfig:read": "View GitHub App configurations",
+  "githubAppConfig:create": "Create GitHub App configurations",
+  "githubAppConfig:update": "Modify GitHub App configurations",
+  "githubAppConfig:delete": "Delete GitHub App configurations",
 
   // LLM
   "llmProxy:read": "View and list LLM proxies",
@@ -559,6 +572,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.ReinstallInternalMcpCatalogItem]: {
     mcpRegistry: ["update"],
   },
+  [RouteId.RefreshInternalMcpCatalogImage]: {
+    mcpRegistry: ["update"],
+  },
   [RouteId.DeleteInternalMcpCatalogItem]: {
     mcpRegistry: ["delete"],
   },
@@ -582,15 +598,6 @@ export const requiredEndpointPermissionsMap: Partial<
   },
   [RouteId.GetK8sImagePullSecrets]: {
     mcpRegistry: ["read"],
-  },
-  [RouteId.GetCatalogChildren]: {
-    mcpRegistry: ["read"],
-  },
-  [RouteId.CreateCatalogChild]: {
-    mcpRegistry: ["create"],
-  },
-  [RouteId.UpdateCatalogChild]: {
-    mcpRegistry: ["update"],
   },
   [RouteId.GetMcpServers]: {
     mcpServerInstallation: ["read"],
@@ -737,6 +744,9 @@ export const requiredEndpointPermissionsMap: Partial<
     chat: ["read"],
   },
   [RouteId.GetChatConversation]: {
+    chat: ["read"],
+  },
+  [RouteId.GetChatConversationFiles]: {
     chat: ["read"],
   },
   [RouteId.GetChatAttachmentContent]: {
@@ -943,26 +953,37 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.UpdateConnectionSettings]: {
     organizationSettings: ["update"],
   },
-  [RouteId.UpdatePresetEntityName]: {
-    mcpServerInstallation: ["admin"],
+  // Listing environments is available to any authenticated user (read is ungated).
+  [RouteId.ListEnvironments]: {},
+  [RouteId.CreateEnvironment]: {
+    environment: ["admin"],
   },
-  [RouteId.UpdatePresetEntityDefaultLabel]: {
-    mcpServerInstallation: ["admin"],
+  [RouteId.UpdateEnvironment]: {
+    environment: ["admin"],
   },
-  [RouteId.UpdatePresetEntityDefaultValidationRegex]: {
-    mcpServerInstallation: ["admin"],
+  [RouteId.DeleteEnvironment]: {
+    environment: ["admin"],
   },
-  [RouteId.ListMcpPresetEntries]: {
-    mcpRegistry: ["read"],
+  [RouteId.UpdateDefaultEnvironment]: {
+    environment: ["admin"],
   },
-  [RouteId.CreateMcpPresetEntry]: {
-    mcpServerInstallation: ["admin"],
+  [RouteId.GetK8sCapabilities]: {
+    environment: ["admin"],
   },
-  [RouteId.UpdateMcpPresetEntry]: {
-    mcpServerInstallation: ["admin"],
+  [RouteId.ListGithubAppConfigs]: {
+    githubAppConfig: ["read"],
   },
-  [RouteId.DeleteMcpPresetEntry]: {
-    mcpServerInstallation: ["admin"],
+  [RouteId.GetGithubAppConfig]: {
+    githubAppConfig: ["read"],
+  },
+  [RouteId.CreateGithubAppConfig]: {
+    githubAppConfig: ["create"],
+  },
+  [RouteId.UpdateGithubAppConfig]: {
+    githubAppConfig: ["update"],
+  },
+  [RouteId.DeleteGithubAppConfig]: {
+    githubAppConfig: ["delete"],
   },
   [RouteId.UpdateKnowledgeSettings]: {
     knowledgeSettings: ["update"],
@@ -1182,15 +1203,27 @@ export const requiredEndpointPermissionsMap: Partial<
   // Agent Skill Routes - per-instance scope is enforced in the handlers
   [RouteId.GetSkills]: { skill: ["read"] },
   [RouteId.CreateSkill]: { skill: ["create"] },
+  [RouteId.ConvertAgentToSkill]: { skill: ["create"], agent: ["read"] },
+  // chat:read gates spending the agent's configured LLM key — the same gate
+  // every other resolveAgentLlmOrDefault path (chat, compaction) sits behind.
+  [RouteId.SuggestSkillDescription]: {
+    skill: ["create"],
+    agent: ["read"],
+    chat: ["read"],
+  },
   [RouteId.GetSkill]: { skill: ["read"] },
   [RouteId.UpdateSkill]: { skill: ["update"] },
   [RouteId.DeleteSkill]: { skill: ["delete"] },
+  [RouteId.ResetSkill]: { skill: ["update"] },
   [RouteId.DiscoverGithubSkills]: { skill: ["read"] },
+  [RouteId.SearchSkillCatalog]: { skill: ["read"] },
   [RouteId.PreviewGithubSkill]: { skill: ["read"] },
   [RouteId.ImportGithubSkills]: { skill: ["create"] },
   [RouteId.GetSkillSourceRepos]: { skill: ["read"] },
   [RouteId.EnableSkillToolDefaults]: { skill: ["admin"] },
-  [RouteId.GetSkillSandboxArtifact]: { skill: ["execute"] },
+  // matches the `download_file` tool (sandbox:execute) that hands out this
+  // URL, so a role allowed to produce an artifact can also fetch it.
+  [RouteId.GetSkillSandboxArtifact]: { sandbox: ["execute"] },
 
   // Audit Log Routes
   [RouteId.GetAuditLogs]: {
@@ -1277,11 +1310,14 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/settings/service-accounts": { serviceAccount: ["read"] },
   "/settings/llm": { llmSettings: ["read"] },
   "/settings/agents": { agentSettings: ["read"] },
+  "/settings/environments": { environment: ["admin"] },
   "/settings/knowledge": { knowledgeSettings: ["read"] },
   "/settings/users": { member: ["read"] },
   "/settings/teams": { team: ["read"] },
   "/settings/roles": { ac: ["read"] },
   "/settings/identity-providers": { identityProvider: ["read"] },
   "/settings/secrets": { secret: ["read"] },
+  "/settings/integrations": { githubAppConfig: ["read"] },
+  "/settings/integrations/github-apps": { githubAppConfig: ["read"] },
   "/settings/organization": { organizationSettings: ["read"] },
 };

@@ -12,7 +12,7 @@ Check ../docs_writer_prompt.md before changing this file.
 
 MCP authentication in Archestra has two separate layers: the client-facing gateway layer and the upstream MCP server layer.
 
-This separation is important because the MCP client usually should not know how every upstream system is authenticated. Cursor, Claude Desktop, Open WebUI, or a custom agent authenticates once to an MCP Gateway. Archestra then decides which installed MCP server connection and which upstream credential should be used for each tool call.
+This separation is important because the MCP client usually should not know how every upstream system is authenticated. Cursor, Claude Desktop, Copilot CLI, Open WebUI, or a custom agent authenticates once to an MCP Gateway. Archestra then decides which installed MCP server connection and which upstream credential should be used for each tool call.
 
 That means one gateway can expose tools backed by different credential models. A GitHub tool might use a user's OAuth token, a Jira tool might use an enterprise IdP token exchange, and an internal self-hosted tool might require no external credential at all. The client still talks to the same gateway.
 
@@ -35,7 +35,7 @@ The MCP Gateway supports four client authentication paths. They do not all prese
 
 ### OAuth 2.1
 
-MCP-native clients such as Claude Desktop, Cursor, and Open WebUI authenticate automatically using the [MCP Authorization spec](https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization). The gateway acts as both the resource server and the authorization server.
+MCP-native clients such as Claude Desktop, Cursor, Copilot CLI, and Open WebUI authenticate automatically using the [MCP Authorization spec](https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization). The gateway acts as both the resource server and the authorization server.
 
 The gateway supports the following OAuth flows and client registration methods:
 
@@ -216,6 +216,8 @@ Your server or its OAuth provider needs to expose two things:
 Archestra handles endpoint discovery, client registration, Authorization Code + PKCE, token storage, and token injection. Your server receives an `Authorization: Bearer <access_token>` header with each request from the gateway.
 
 If the MCP server URL is different from the OAuth issuer or metadata host, configure explicit OAuth overrides in the MCP catalog item. Archestra can use a separate authorization server URL, a direct well-known metadata URL, a direct resource metadata URL, or direct authorization and token endpoints instead of deriving everything from the MCP server URL.
+
+Set **Protected Resource** when the OAuth resource identifier differs from the MCP endpoint URL, such as an Entra or OAuth API identifier like `api://<client-id>` or `https://api.example.com`. Archestra sends this as the OAuth `resource` parameter. If it is blank, Archestra falls back to **Default Audience** when configured, then to the MCP endpoint URL.
 
 Direct authorization and token endpoints are useful for legacy or self-hosted OAuth providers that expose fixed OAuth URLs but do not publish `/.well-known` metadata.
 

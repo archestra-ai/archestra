@@ -1,10 +1,11 @@
-import type * as k8s from "@kubernetes/client-node";
 import {
   type EnvironmentVariableSchema,
   MCP_ORCHESTRATOR_DEFAULTS,
-} from "@shared";
+} from "@archestra/shared";
+import type * as k8s from "@kubernetes/client-node";
 import * as yaml from "js-yaml";
 import type { z } from "zod";
+import { getMcpImagePullPolicy } from "./image-pull-policy";
 
 // Helper to create placeholder strings without triggering noTemplateCurlyInString lint rule
 const placeholder = (type: string, key: string) => `\${${type}.${key}}`;
@@ -79,6 +80,7 @@ export function generateDeploymentYamlTemplate(
   context: DeploymentYamlContext,
 ): string {
   const {
+    dockerImage,
     environment = [],
     transportType = "stdio",
     httpPort = 8080,
@@ -118,6 +120,7 @@ export function generateDeploymentYamlTemplate(
   const containerSpec: Record<string, unknown> = {
     name: "mcp-server",
     image: placeholder("archestra", "docker_image"),
+    imagePullPolicy: getMcpImagePullPolicy(dockerImage),
     // command and args come from basic config
     ...(envSection.length > 0 ? { env: envSection } : {}),
     resources: {

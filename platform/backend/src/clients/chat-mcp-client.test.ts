@@ -1,12 +1,12 @@
-import type { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import {
   getArchestraToolFullName,
   TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON,
   TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
   TOOL_WHOAMI_SHORT_NAME,
-} from "@shared";
+} from "@archestra/shared";
+import type { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { jsonSchema, type Tool } from "ai";
 import { beforeEach, vi } from "vitest";
 import { archestraMcpBranding } from "@/archestra-mcp-server";
@@ -686,6 +686,9 @@ describe("executeMcpTool error handling", () => {
 describe("chat-mcp-client tool caching", () => {
   test("passes token auth context when chat executes archestra run_tool", async ({
     makeAgent,
+    makeAgentTool,
+    makeInternalMcpCatalog,
+    makeTool,
     makeUser,
     makeOrganization,
     makeMember,
@@ -697,6 +700,12 @@ describe("chat-mcp-client tool caching", () => {
       organizationId: org.id,
       name: "Chat Run Tool Agent",
     });
+    const catalog = await makeInternalMcpCatalog();
+    const targetTool = await makeTool({
+      name: "workspace__find_projects",
+      catalogId: catalog.id,
+    });
+    await makeAgentTool(agent.id, targetTool.id);
 
     const conversationId = "conversation-1";
     const cacheKey = chatClient.__test.getCacheKey(
@@ -734,7 +743,7 @@ describe("chat-mcp-client tool caching", () => {
       mockClient as unknown as Client,
     );
     vi.mocked(mcpClient.executeToolCall).mockResolvedValueOnce({
-      content: [{ type: "text", text: "Sentry organizations" }],
+      content: [{ type: "text", text: "Workspace projects" }],
       isError: false,
     } as never);
 
@@ -751,17 +760,17 @@ describe("chat-mcp-client tool caching", () => {
 
     const result = await runTool.execute?.(
       {
-        tool_name: "sentry__find_organizations",
+        tool_name: "workspace__find_projects",
         tool_args: {},
       },
       // biome-ignore lint/suspicious/noExplicitAny: minimal AI SDK execution context for this unit test
       { messages: [] } as any,
     );
 
-    expect(result).toBe("Sentry organizations");
+    expect(result).toBe("Workspace projects");
     expect(mcpClient.executeToolCall).toHaveBeenCalledWith(
       expect.objectContaining({
-        name: "sentry__find_organizations",
+        name: "workspace__find_projects",
         arguments: {},
       }),
       agent.id,
@@ -773,6 +782,135 @@ describe("chat-mcp-client tool caching", () => {
         isOrganizationToken: false,
         tokenId: expect.any(String),
       }),
+      { conversationId },
+    );
+
+    chatClient.clearChatMcpClient(agent.id);
+    await chatClient.__test.clearToolCache();
+  });
+
+  test("requests approval for run_tool when the target tool requires approval", async ({
+    makeAgent,
+    makeAgentTool,
+    makeInternalMcpCatalog,
+    makeUser,
+    makeOrganization,
+    makeMember,
+    makeTool,
+    makeToolPolicy,
+  }) => {
+    const org = await makeOrganization({ globalToolPolicy: "restrictive" });
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "admin" });
+    const agent = await makeAgent({
+      organizationId: org.id,
+      name: "Chat Wrapped Approval Agent",
+    });
+    const catalog = await makeInternalMcpCatalog();
+    const targetTool = await makeTool({
+      name: `workspace__export_${crypto.randomUUID().slice(0, 8)}`,
+      catalogId: catalog.id,
+    });
+    await makeAgentTool(agent.id, targetTool.id);
+    await makeToolPolicy(targetTool.id, {
+      action: "require_approval",
+      conditions: [
+        { key: "destination", operator: "equal", value: "external" },
+      ],
+    });
+
+    const conversationId = "conversation-approval";
+    const cacheKey = chatClient.__test.getCacheKey(
+      agent.id,
+      user.id,
+      conversationId,
+    );
+    chatClient.clearChatMcpClient(agent.id);
+    await chatClient.__test.clearToolCache();
+
+    const mockClient = {
+      ping: vi.fn().mockResolvedValue({}),
+      listTools: vi.fn().mockResolvedValue({
+        tools: [
+          {
+            name: getArchestraToolFullName("run_tool"),
+            description: "Run tool",
+            inputSchema: {
+              type: "object",
+              properties: {
+                tool_name: { type: "string" },
+                tool_args: { type: "object" },
+              },
+              required: ["tool_name"],
+            },
+          },
+        ],
+      }),
+      callTool: vi.fn(),
+      close: vi.fn(),
+    };
+
+    chatClient.__test.setCachedClient(
+      cacheKey,
+      mockClient as unknown as Client,
+    );
+
+    const tools = await chatClient.getChatMcpTools({
+      agentName: agent.name,
+      agentId: agent.id,
+      userId: user.id,
+      organizationId: org.id,
+      conversationId,
+    });
+
+    const runTool = tools[getArchestraToolFullName("run_tool")];
+    expect(typeof runTool.needsApproval).toBe("function");
+    const needsApproval = runTool.needsApproval as NonNullable<
+      Exclude<typeof runTool.needsApproval, boolean>
+    >;
+    await expect(
+      needsApproval(
+        {
+          tool_name: targetTool.name,
+          tool_args: { destination: "external" },
+        },
+        // biome-ignore lint/suspicious/noExplicitAny: minimal AI SDK execution context for this unit test
+        { messages: [] } as any,
+      ),
+    ).resolves.toBe(true);
+
+    await expect(
+      needsApproval(
+        {
+          tool_name: targetTool.name,
+          tool_args: { destination: "internal" },
+        },
+        // biome-ignore lint/suspicious/noExplicitAny: minimal AI SDK execution context for this unit test
+        { messages: [] } as any,
+      ),
+    ).resolves.toBe(false);
+
+    vi.mocked(mcpClient.executeToolCall).mockResolvedValueOnce({
+      content: [{ type: "text", text: "Export queued" }],
+      isError: false,
+    } as never);
+    const result = await runTool.execute?.(
+      {
+        tool_name: targetTool.name,
+        tool_args: { destination: "external" },
+      },
+      // biome-ignore lint/suspicious/noExplicitAny: minimal AI SDK execution context for this unit test
+      { messages: [] } as any,
+    );
+
+    expect(result).toBe("Export queued");
+    expect(mcpClient.executeToolCall).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: targetTool.name,
+        arguments: { destination: "external" },
+      }),
+      agent.id,
+      expect.anything(),
       { conversationId },
     );
 
@@ -1430,8 +1568,89 @@ describe("mcpToolToModelOutput", () => {
   });
 });
 
+describe("buildArchestraToolOutput", () => {
+  const archestraResponse = {
+    content: [{ type: "text" as const, text: "Diagram displayed!" }],
+    structuredContent: { checkpoint: "abc" },
+    _meta: { extra: true },
+  };
+
+  test("returns plain text for a direct (non-run_tool) archestra tool", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent();
+    const result = await chatClient.buildArchestraToolOutput({
+      response: archestraResponse,
+      toolName: "archestra__whoami",
+      toolArguments: {},
+      agentId: agent.id,
+    });
+
+    expect(result).toBe("Diagram displayed!");
+  });
+
+  test("attaches the target tool's UI resource when dispatched via run_tool", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent();
+    const mockToolDef = {
+      name: "excalidraw__create_view",
+      meta: { _meta: { ui: { resourceUri: "ui://excalidraw/mcp-app.html" } } },
+    };
+    const spy = vi
+      .spyOn(ToolModel, "findByNameForAgent")
+      // biome-ignore lint/suspicious/noExplicitAny: test mock data
+      .mockResolvedValueOnce(mockToolDef as any);
+
+    const result = await chatClient.buildArchestraToolOutput({
+      response: archestraResponse,
+      toolName: "archestra__run_tool",
+      toolArguments: {
+        tool_name: "excalidraw__create_view",
+        tool_args: { elements: "[]" },
+      },
+      agentId: agent.id,
+    });
+
+    expect(spy).toHaveBeenCalledWith("excalidraw__create_view", agent.id);
+    expect(typeof result).toBe("object");
+    expect(result).toMatchObject({
+      content: "Diagram displayed!",
+      _meta: {
+        extra: true,
+        ui: { resourceUri: "ui://excalidraw/mcp-app.html" },
+      },
+      structuredContent: { checkpoint: "abc" },
+    });
+
+    spy.mockRestore();
+  });
+
+  test("returns plain text when the dispatched target has no UI resource", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent();
+    const spy = vi
+      .spyOn(ToolModel, "findByNameForAgent")
+      // biome-ignore lint/suspicious/noExplicitAny: test mock data
+      .mockResolvedValueOnce({ name: "context7__search", meta: null } as any);
+
+    const result = await chatClient.buildArchestraToolOutput({
+      response: archestraResponse,
+      toolName: "archestra__run_tool",
+      toolArguments: { tool_name: "context7__search", tool_args: {} },
+      agentId: agent.id,
+    });
+
+    expect(result).toBe("Diagram displayed!");
+
+    spy.mockRestore();
+  });
+});
+
 describe("throwIfApprovalRequired", () => {
-  const { throwIfApprovalRequired } = chatClient.__test;
+  const { resolveApprovalPolicyTarget, throwIfApprovalRequired } =
+    chatClient.__test;
 
   test("does not throw when globalToolPolicy is permissive", async () => {
     await expect(
@@ -1469,9 +1688,54 @@ describe("throwIfApprovalRequired", () => {
     ).rejects.toThrow(TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON);
   });
 
+  test("throws for run_tool when target tool requires approval", async ({
+    makeTool,
+    makeToolPolicy,
+  }) => {
+    const tool = await makeTool({ name: "wrapped-restricted-tool" });
+    await makeToolPolicy(tool.id, {
+      action: "require_approval",
+      conditions: [
+        { key: "destination", operator: "equal", value: "external" },
+      ],
+    });
+
+    await expect(
+      throwIfApprovalRequired(
+        getArchestraToolFullName("run_tool"),
+        {
+          tool_name: tool.name,
+          tool_args: { destination: "external" },
+        },
+        "restrictive",
+      ),
+    ).rejects.toThrow(TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON);
+  });
+
   test("does not throw when tool is not found in DB", async () => {
     await expect(
       throwIfApprovalRequired("nonexistent-tool", {}, "restrictive"),
     ).resolves.toBeUndefined();
+  });
+
+  test("resolves approval policy target from run_tool arguments", () => {
+    expect(
+      resolveApprovalPolicyTarget(getArchestraToolFullName("run_tool"), {
+        tool_name: "workspace__export",
+        tool_args: { destination: "external" },
+      }),
+    ).toEqual({
+      toolName: "workspace__export",
+      toolInput: { destination: "external" },
+    });
+
+    expect(
+      resolveApprovalPolicyTarget("workspace__export", {
+        destination: "external",
+      }),
+    ).toEqual({
+      toolName: "workspace__export",
+      toolInput: { destination: "external" },
+    });
   });
 });

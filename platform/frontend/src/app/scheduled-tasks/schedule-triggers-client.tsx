@@ -71,7 +71,7 @@ import {
   useScheduleTriggers,
   useUpdateScheduleTrigger,
 } from "@/lib/schedule-trigger.query";
-import { useTeams } from "@/lib/teams/team.query";
+import { useMyTeams } from "@/lib/teams/team.query";
 import { cn } from "@/lib/utils";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { formatCronSchedule } from "@/lib/utils/format-cron";
@@ -581,7 +581,7 @@ export function ScheduleTriggerDetailPage({
   const { data: isAgentTeamAdmin = false } = useHasPermissions({
     agent: ["team-admin"],
   });
-  const { data: userTeams = [] } = useTeams();
+  const { data: userTeams = [] } = useMyTeams();
   const userTeamIdSet = useMemo(
     () => new Set(userTeams.map((t) => t.id)),
     [userTeams],

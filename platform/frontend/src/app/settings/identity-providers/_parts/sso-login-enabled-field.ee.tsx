@@ -1,6 +1,6 @@
 "use client";
 
-import { DocsPage, type IdentityProviderFormValues } from "@shared";
+import { DocsPage, type IdentityProviderFormValues } from "@archestra/shared";
 import type { UseFormReturn } from "react-hook-form";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { Checkbox } from "@/components/ui/checkbox";

@@ -1,5 +1,5 @@
+import { SupportedProviders } from "@archestra/shared";
 import * as Sentry from "@sentry/node";
-import { SupportedProviders } from "@shared";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { vi } from "vitest";
 import { afterEach, describe, expect, test } from "@/test";
@@ -491,7 +491,7 @@ describe("Authnz", () => {
       const { betterAuth } = await import("@/auth");
       const { UserModel } = await import("@/models");
       const { requiredEndpointPermissionsMap } = await import(
-        "@shared/access-control"
+        "@archestra/shared/access-control"
       );
 
       const fakeOrgId = "org-session-test";
@@ -546,7 +546,7 @@ describe("Authnz", () => {
       const { betterAuth } = await import("@/auth");
       const { UserModel } = await import("@/models");
       const { requiredEndpointPermissionsMap } = await import(
-        "@shared/access-control"
+        "@archestra/shared/access-control"
       );
 
       const fakeOrgId = "org-apikey-test";

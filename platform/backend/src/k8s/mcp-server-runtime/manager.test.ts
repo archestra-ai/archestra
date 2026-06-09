@@ -45,6 +45,9 @@ vi.mock("@kubernetes/client-node", () => {
     KubeConfig: MockKubeConfig,
     CoreV1Api: vi.fn(),
     AppsV1Api: vi.fn(),
+    AuthorizationV1Api: vi.fn(),
+    NetworkingV1Api: vi.fn(),
+    CustomObjectsApi: vi.fn(),
     BatchV1Api: vi.fn(),
     Attach: vi.fn(),
     Log: vi.fn(),
@@ -73,6 +76,9 @@ vi.mock("@/config", async (importOriginal) => {
 const mockCreateK8sSecret = vi.fn().mockResolvedValue(undefined);
 const mockStartOrCreateDeployment = vi.fn().mockResolvedValue(undefined);
 const mockCreateDockerRegistrySecrets = vi.fn().mockResolvedValue([]);
+const mockDeleteK8sNetworkPolicy = vi.fn().mockResolvedValue(undefined);
+const mockResolveHttpEndpoint = vi.fn().mockResolvedValue(undefined);
+const mockWaitForDeploymentReady = vi.fn().mockResolvedValue(undefined);
 const mockK8sDeploymentInstances: Array<{
   options: Record<string, unknown>;
   createK8sSecret: ReturnType<typeof vi.fn>;
@@ -97,6 +103,25 @@ vi.mock("@/models/mcp-http-session", () => ({
   },
 }));
 
+vi.mock("@/models/organization", () => ({
+  default: {
+    getFirst: vi.fn().mockResolvedValue({
+      id: "test-org",
+      defaultNetworkPolicy: null,
+    }),
+    getById: vi.fn().mockResolvedValue({
+      id: "test-org",
+      defaultNetworkPolicy: null,
+    }),
+  },
+}));
+
+vi.mock("@/services/environments/network-policy", () => ({
+  resolveEffectiveNetworkPolicy: vi
+    .fn()
+    .mockResolvedValue({ source: "built_in", policy: null }),
+}));
+
 vi.mock("@/secrets-manager", () => ({
   secretManager: vi.fn(() => ({
     getSecret: vi.fn(),
@@ -110,12 +135,18 @@ vi.mock("./k8s-deployment", () => {
       createK8sSecret: ReturnType<typeof vi.fn>;
       startOrCreateDeployment: ReturnType<typeof vi.fn>;
       createDockerRegistrySecrets: ReturnType<typeof vi.fn>;
+      deleteK8sNetworkPolicy: ReturnType<typeof vi.fn>;
+      resolveHttpEndpoint: ReturnType<typeof vi.fn>;
+      waitForDeploymentReady: ReturnType<typeof vi.fn>;
 
       constructor(options: Record<string, unknown>) {
         this.options = options;
         this.createK8sSecret = mockCreateK8sSecret;
         this.startOrCreateDeployment = mockStartOrCreateDeployment;
         this.createDockerRegistrySecrets = mockCreateDockerRegistrySecrets;
+        this.deleteK8sNetworkPolicy = mockDeleteK8sNetworkPolicy;
+        this.resolveHttpEndpoint = mockResolveHttpEndpoint;
+        this.waitForDeploymentReady = mockWaitForDeploymentReady;
         mockK8sDeploymentInstances.push({
           options,
           createK8sSecret: this.createK8sSecret,
@@ -257,6 +288,7 @@ describe("McpServerRuntimeManager", () => {
     beforeEach(() => {
       vi.clearAllMocks();
       vi.resetModules();
+      mockK8sDeploymentInstances.length = 0;
     });
 
     test("should return false when k8s config fails to load", async () => {
@@ -397,12 +429,14 @@ describe("McpServerRuntimeManager", () => {
       const mockDeleteDockerRegistrySecrets = vi
         .fn()
         .mockResolvedValue(undefined);
+      const mockDeleteK8sNetworkPolicy = vi.fn().mockResolvedValue(undefined);
 
       const mockDeployment = {
         stopDeployment: mockStopDeployment,
         deleteK8sService: mockDeleteK8sService,
         deleteK8sSecret: mockDeleteK8sSecret,
         deleteDockerRegistrySecrets: mockDeleteDockerRegistrySecrets,
+        deleteK8sNetworkPolicy: mockDeleteK8sNetworkPolicy,
       };
 
       // Access internal map and add mock deployment
@@ -417,6 +451,7 @@ describe("McpServerRuntimeManager", () => {
       expect(mockDeleteK8sService).toHaveBeenCalledTimes(1);
       expect(mockDeleteK8sSecret).toHaveBeenCalledTimes(1);
       expect(mockDeleteDockerRegistrySecrets).toHaveBeenCalledTimes(1);
+      expect(mockDeleteK8sNetworkPolicy).toHaveBeenCalledTimes(1);
 
       // Verify deployment was removed from map
       // @ts-expect-error - accessing private property for testing
@@ -444,6 +479,160 @@ describe("McpServerRuntimeManager", () => {
       await expect(
         manager.stopServer("non-existent-server"),
       ).resolves.toBeUndefined();
+
+      mockLoadFromDefault.mockRestore();
+      mockMakeApiClient.mockRestore();
+    });
+
+    test("lazy-loaded deployments receive custom-object API and network policy capabilities", async () => {
+      const mockLoadFromDefault = vi
+        .spyOn(k8s.KubeConfig.prototype, "loadFromDefault")
+        .mockImplementation(() => {});
+
+      const mockK8sClient = {
+        getAPIResources: vi.fn().mockResolvedValue({ resources: [] }),
+      };
+      const mockMakeApiClient = vi
+        .spyOn(k8s.KubeConfig.prototype, "makeApiClient")
+        .mockReturnValue(mockK8sClient as unknown as k8s.CoreV1Api);
+
+      const McpServerModel = (await import("@/models/mcp-server")).default;
+      const InternalMcpCatalogModel = (
+        await import("@/models/internal-mcp-catalog")
+      ).default;
+
+      vi.mocked(McpServerModel.findById).mockResolvedValueOnce({
+        id: "lazy-server",
+        name: "lazy-server",
+        catalogId: "local-catalog",
+      } as Awaited<ReturnType<typeof McpServerModel.findById>>);
+      vi.mocked(InternalMcpCatalogModel.findById).mockResolvedValueOnce({
+        id: "local-catalog",
+        serverType: "local",
+        localConfig: null,
+      } as unknown as Awaited<
+        ReturnType<typeof InternalMcpCatalogModel.findById>
+      >);
+
+      const { McpServerRuntimeManager } = await import("./manager");
+      const manager = new McpServerRuntimeManager();
+      const managerAny = manager as unknown as {
+        k8sApi: unknown;
+        k8sAppsApi: unknown;
+        k8sNetworkingApi: unknown;
+        k8sCustomObjectsApi: unknown;
+        k8sAttach: unknown;
+        k8sLog: unknown;
+        k8sExec: unknown;
+      };
+      managerAny.k8sApi = mockK8sClient;
+      managerAny.k8sAppsApi = mockK8sClient;
+      managerAny.k8sNetworkingApi = mockK8sClient;
+      managerAny.k8sCustomObjectsApi = mockK8sClient;
+      managerAny.k8sAttach = {};
+      managerAny.k8sLog = {};
+      managerAny.k8sExec = {};
+
+      const deployment = await manager.getOrLoadDeployment("lazy-server");
+
+      expect(deployment).toBeDefined();
+      expect(mockResolveHttpEndpoint).toHaveBeenCalledTimes(1);
+      const deploymentOptions = mockK8sDeploymentInstances.at(-1)?.options;
+      expect(deploymentOptions).toHaveProperty("k8sCustomObjectsApi");
+      expect(deploymentOptions).toMatchObject({
+        networkPolicyCapabilities: {
+          kubernetesNetworkPolicy: true,
+          provider: "kubernetes",
+          supportsFqdn: false,
+        },
+      });
+
+      mockLoadFromDefault.mockRestore();
+      mockMakeApiClient.mockRestore();
+    });
+
+    test("getOrLoadDeployment with namespaceOverride bypasses the cache and builds in the override namespace", async () => {
+      const mockLoadFromDefault = vi
+        .spyOn(k8s.KubeConfig.prototype, "loadFromDefault")
+        .mockImplementation(() => {});
+      const mockK8sClient = {
+        getAPIResources: vi.fn().mockResolvedValue({ resources: [] }),
+      };
+      const mockMakeApiClient = vi
+        .spyOn(k8s.KubeConfig.prototype, "makeApiClient")
+        .mockReturnValue(mockK8sClient as unknown as k8s.CoreV1Api);
+
+      const McpServerModel = (await import("@/models/mcp-server")).default;
+      const InternalMcpCatalogModel = (
+        await import("@/models/internal-mcp-catalog")
+      ).default;
+      const staleServer = {
+        id: "stale-server",
+        name: "stale-server",
+        catalogId: "stale-catalog",
+      } as Awaited<ReturnType<typeof McpServerModel.findById>>;
+      // No environmentId → resolves to the manager's default namespace.
+      const staleCatalog = {
+        id: "stale-catalog",
+        serverType: "local",
+        environmentId: null,
+        localConfig: null,
+      } as unknown as Awaited<
+        ReturnType<typeof InternalMcpCatalogModel.findById>
+      >;
+      // Two loads (normal + override) look these up once each. Use *Once so the
+      // mock reverts to its default afterward and never leaks into other tests —
+      // the suite runs in a shuffled order.
+      vi.mocked(McpServerModel.findById)
+        .mockResolvedValueOnce(staleServer)
+        .mockResolvedValueOnce(staleServer);
+      vi.mocked(InternalMcpCatalogModel.findById)
+        .mockResolvedValueOnce(staleCatalog)
+        .mockResolvedValueOnce(staleCatalog);
+
+      const { McpServerRuntimeManager } = await import("./manager");
+      const manager = new McpServerRuntimeManager();
+      const managerAny = manager as unknown as {
+        k8sApi: unknown;
+        k8sAppsApi: unknown;
+        k8sNetworkingApi: unknown;
+        k8sCustomObjectsApi: unknown;
+        k8sAttach: unknown;
+        k8sLog: unknown;
+        k8sExec: unknown;
+      };
+      managerAny.k8sApi = mockK8sClient;
+      managerAny.k8sAppsApi = mockK8sClient;
+      managerAny.k8sNetworkingApi = mockK8sClient;
+      managerAny.k8sCustomObjectsApi = mockK8sClient;
+      managerAny.k8sAttach = {};
+      managerAny.k8sLog = {};
+      managerAny.k8sExec = {};
+
+      // A normal load caches the deployment against the manager's default namespace.
+      await manager.getOrLoadDeployment("stale-server");
+      const cachedNamespace =
+        mockK8sDeploymentInstances.at(-1)?.options.namespace;
+      const builtBeforeOverride = mockK8sDeploymentInstances.length;
+
+      // The override load must IGNORE that cached entry and build a fresh
+      // deployment pinned to the supplied namespace. This is the staleness
+      // bypass the relocation teardown relies on: a cached entry can point at a
+      // now-wrong namespace, so trusting it would delete the wrong namespace and
+      // orphan the old-namespace pod.
+      const overridden = await manager.getOrLoadDeployment("stale-server", {
+        namespaceOverride: "old-env-namespace",
+      });
+      const overrideNamespace =
+        mockK8sDeploymentInstances.at(-1)?.options.namespace;
+
+      expect(cachedNamespace).not.toBe("old-env-namespace");
+      expect(overrideNamespace).toBe("old-env-namespace");
+      // A NEW deployment object was constructed for the override (cache not reused)...
+      expect(mockK8sDeploymentInstances.length).toBe(builtBeforeOverride + 1);
+      expect(overridden).toBeDefined();
+      // ...and the override (teardown-only) path skips serving-endpoint resolution.
+      expect(mockResolveHttpEndpoint).toHaveBeenCalledTimes(1);
 
       mockLoadFromDefault.mockRestore();
       mockMakeApiClient.mockRestore();
@@ -477,6 +666,9 @@ describe("McpServerRuntimeManager", () => {
         deleteDockerRegistrySecrets: vi.fn().mockImplementation(async () => {
           callOrder.push("deleteDockerRegistrySecrets");
         }),
+        deleteK8sNetworkPolicy: vi.fn().mockImplementation(async () => {
+          callOrder.push("deleteK8sNetworkPolicy");
+        }),
       };
 
       // @ts-expect-error - accessing private property for testing
@@ -490,6 +682,7 @@ describe("McpServerRuntimeManager", () => {
         "deleteK8sService",
         "deleteK8sSecret",
         "deleteDockerRegistrySecrets",
+        "deleteK8sNetworkPolicy",
       ]);
 
       mockLoadFromDefault.mockRestore();
@@ -511,6 +704,7 @@ describe("McpServerRuntimeManager", () => {
         deleteK8sService: vi.fn().mockResolvedValue(undefined),
         deleteK8sSecret: vi.fn().mockResolvedValue(undefined),
         deleteDockerRegistrySecrets: vi.fn().mockResolvedValue(undefined),
+        deleteK8sNetworkPolicy: vi.fn().mockResolvedValue(undefined),
       };
     }
 
@@ -704,6 +898,7 @@ describe("McpServerRuntimeManager", () => {
       const deleteK8sService = vi.fn().mockResolvedValue(undefined);
       const deleteK8sSecret = vi.fn().mockResolvedValue(undefined);
       const deleteDockerRegistrySecrets = vi.fn().mockResolvedValue(undefined);
+      const deleteK8sNetworkPolicy = vi.fn().mockResolvedValue(undefined);
       const waitForDeploymentReady = vi.fn().mockResolvedValue(undefined);
 
       // @ts-expect-error - accessing private property for testing
@@ -712,6 +907,7 @@ describe("McpServerRuntimeManager", () => {
         deleteK8sService,
         deleteK8sSecret,
         deleteDockerRegistrySecrets,
+        deleteK8sNetworkPolicy,
         waitForDeploymentReady,
       });
       // Also seed tenant B so we can verify its entry gets dropped too.
@@ -721,6 +917,7 @@ describe("McpServerRuntimeManager", () => {
         deleteK8sService: vi.fn(),
         deleteK8sSecret: vi.fn(),
         deleteDockerRegistrySecrets: vi.fn(),
+        deleteK8sNetworkPolicy: vi.fn(),
       });
 
       // Spy startServer so we don't exercise the full pod-creation flow —
@@ -744,10 +941,11 @@ describe("McpServerRuntimeManager", () => {
       expect(deleteK8sService).toHaveBeenCalledTimes(1);
       expect(deleteK8sSecret).toHaveBeenCalledTimes(1);
       expect(deleteDockerRegistrySecrets).toHaveBeenCalledTimes(1);
+      expect(deleteK8sNetworkPolicy).toHaveBeenCalledTimes(1);
 
-      // Both siblings' in-memory entries cleared.
+      // Tenant B's stale entry is cleared; tenant A is reloaded after recreate.
       // @ts-expect-error - accessing private property for testing
-      expect(manager.mcpServerIdToDeploymentMap.has(tenantAId)).toBe(false);
+      expect(manager.mcpServerIdToDeploymentMap.has(tenantAId)).toBe(true);
       // @ts-expect-error - accessing private property for testing
       expect(manager.mcpServerIdToDeploymentMap.has(tenantBId)).toBe(false);
 
@@ -1144,18 +1342,18 @@ describe("McpServerRuntimeManager", () => {
     // with NO `environmentValues`, so startServer must reconstruct every
     // previously-supplied env value from persistent state alone.
     //
-    // The 10 cases below cover the full env-var matrix:
-    //   scope    : static / promptOnInstallation / promptOnPreset
+    // The cases below cover the full env-var matrix:
+    //   scope    : static / promptOnInstallation
     //   type     : plain_text / secret
-    //   required : true / false   (only meaningful for prompted/preset;
+    //   required : true / false   (only meaningful for prompted;
     //                              for static the value is admin-set,
     //                              required has no runtime effect)
     //
     // The user report ("Not required prompted envs missing after auto
     // re-install") singled out the optional+plain+prompted cell — but
-    // the bug actually drops every plain prompted/preset value
-    // regardless of `required`. Per-row tests make it obvious which
-    // cells are red without requiring readers to scan a giant diff.
+    // the bug actually drops every plain prompted value regardless of
+    // `required`. Per-row tests make it obvious which cells are red
+    // without requiring readers to scan a giant diff.
     //
     // STATIC_PLAIN is the one row whose contract is "must NOT be in
     // environmentValues" — it bypasses the map entirely and reaches the
@@ -1176,11 +1374,9 @@ describe("McpServerRuntimeManager", () => {
 
       // Stage what was persisted at install time:
       //   - install Secret bag (secretManager mock below) holds every
-      //     secret-typed prompted/preset value (the only thing that
-      //     belongs in a Secret object — values referenced by
-      //     secretKeyRef from the pod spec).
-      //   - catalog row's presetFieldValues (catalogItem mock below)
-      //     holds plain preset values (per-catalog source of truth).
+      //     secret-typed prompted value (the only thing that belongs in a
+      //     Secret object — values referenced by secretKeyRef from the pod
+      //     spec).
       //   - mcp_server row's environmentValues (mcpServer mock below)
       //     holds plain `promptOnInstallation` values (per-install source
       //     of truth).
@@ -1188,8 +1384,6 @@ describe("McpServerRuntimeManager", () => {
         secret: {
           USER_REQ_SECRET: "user-req-sec-stored",
           USER_OPT_SECRET: "user-opt-sec-stored",
-          PRESET_REQ_SECRET: "preset-req-sec-stored",
-          PRESET_OPT_SECRET: "preset-opt-sec-stored",
         },
       });
       const { secretManager } = await import("@/secrets-manager");
@@ -1244,40 +1438,9 @@ describe("McpServerRuntimeManager", () => {
               promptOnInstallation: true,
               required: false,
             },
-            // promptOnPreset × required × type
-            {
-              key: "PRESET_REQ_SECRET",
-              type: "secret",
-              promptOnPreset: true,
-              required: true,
-            },
-            {
-              key: "PRESET_OPT_SECRET",
-              type: "secret",
-              promptOnPreset: true,
-              required: false,
-            },
-            {
-              key: "PRESET_REQ_PLAIN",
-              type: "plain_text",
-              promptOnPreset: true,
-              required: true,
-            },
-            {
-              key: "PRESET_OPT_PLAIN",
-              type: "plain_text",
-              promptOnPreset: true,
-              required: false,
-            },
           ],
         },
         localConfigSecretId: null,
-        // Plain preset values live on the catalog row, not the install bag.
-        presetFieldValues: {
-          PRESET_REQ_PLAIN: "preset-req-plain-stored",
-          PRESET_OPT_PLAIN: "preset-opt-plain-stored",
-        },
-        presetSecretId: null,
       } as unknown as Awaited<
         ReturnType<typeof InternalMcpCatalogModel.findById>
       >);
@@ -1344,17 +1507,13 @@ describe("McpServerRuntimeManager", () => {
     // envDef.value, never touches the env-values map). All other cells
     // assert their value is present and correct.
     test.each`
-      key                    | expected                        | via
-      ${"STATIC_PLAIN"}      | ${undefined}                    | ${"bypasses env-values; flows via envDef.value"}
-      ${"STATIC_SECRET"}     | ${"static-secret-from-catalog"} | ${"catalog static-secret merge (manager.ts:259-277)"}
-      ${"USER_REQ_SECRET"}   | ${"user-req-sec-stored"}        | ${"install Secret bag (prompted+secret, required)"}
-      ${"USER_OPT_SECRET"}   | ${"user-opt-sec-stored"}        | ${"install Secret bag (prompted+secret, optional)"}
-      ${"USER_REQ_PLAIN"}    | ${"user-req-plain-stored"}      | ${"mcp_server.environmentValues overlay"}
-      ${"USER_OPT_PLAIN"}    | ${"user-opt-plain-stored"}      | ${"mcp_server.environmentValues overlay"}
-      ${"PRESET_REQ_SECRET"} | ${"preset-req-sec-stored"}      | ${"install Secret bag (preset+secret, required)"}
-      ${"PRESET_OPT_SECRET"} | ${"preset-opt-sec-stored"}      | ${"install Secret bag (preset+secret, optional)"}
-      ${"PRESET_REQ_PLAIN"}  | ${"preset-req-plain-stored"}    | ${"catalog.presetFieldValues overlay"}
-      ${"PRESET_OPT_PLAIN"}  | ${"preset-opt-plain-stored"}    | ${"catalog.presetFieldValues overlay"}
+      key                  | expected                        | via
+      ${"STATIC_PLAIN"}    | ${undefined}                    | ${"bypasses env-values; flows via envDef.value"}
+      ${"STATIC_SECRET"}   | ${"static-secret-from-catalog"} | ${"catalog static-secret merge (manager.ts:259-277)"}
+      ${"USER_REQ_SECRET"} | ${"user-req-sec-stored"}        | ${"install Secret bag (prompted+secret, required)"}
+      ${"USER_OPT_SECRET"} | ${"user-opt-sec-stored"}        | ${"install Secret bag (prompted+secret, optional)"}
+      ${"USER_REQ_PLAIN"}  | ${"user-req-plain-stored"}      | ${"mcp_server.environmentValues overlay"}
+      ${"USER_OPT_PLAIN"}  | ${"user-opt-plain-stored"}      | ${"mcp_server.environmentValues overlay"}
     `(
       "auto redeploy preserves $key — $via",
       ({ key, expected }: { key: string; expected: string | undefined }) => {
@@ -1369,6 +1528,18 @@ describe("McpServerRuntimeManager", () => {
 });
 
 describe("McpServerRuntimeManager.listDockerRegistrySecrets", () => {
+  function dockerConfigData(registryServers: string[]) {
+    return {
+      ".dockerconfigjson": Buffer.from(
+        JSON.stringify({
+          auths: Object.fromEntries(
+            registryServers.map((server) => [server, { auth: "redacted" }]),
+          ),
+        }),
+      ).toString("base64"),
+    };
+  }
+
   test("returns empty array when k8sApi is not initialized", async () => {
     const { McpServerRuntimeManager } = await import("./manager");
     const manager = new McpServerRuntimeManager();
@@ -1414,6 +1585,7 @@ describe("McpServerRuntimeManager.listDockerRegistrySecrets", () => {
               "team-id": "team-a",
             },
           },
+          data: dockerConfigData(["registry-b.example.com"]),
         },
         {
           metadata: {
@@ -1424,6 +1596,7 @@ describe("McpServerRuntimeManager.listDockerRegistrySecrets", () => {
               "team-id": "team-b",
             },
           },
+          data: dockerConfigData(["registry-a.example.com"]),
         },
       ],
     });
@@ -1433,8 +1606,14 @@ describe("McpServerRuntimeManager.listDockerRegistrySecrets", () => {
 
     const result = await manager.listDockerRegistrySecrets({ isAdmin: true });
     expect(result).toEqual([
-      { name: "regcred-team-a" },
-      { name: "regcred-team-b" },
+      {
+        name: "regcred-team-a",
+        registryServers: ["registry-b.example.com"],
+      },
+      {
+        name: "regcred-team-b",
+        registryServers: ["registry-a.example.com"],
+      },
     ]);
 
     expect(mockListSecrets).toHaveBeenCalledWith(
@@ -1485,7 +1664,7 @@ describe("McpServerRuntimeManager.listDockerRegistrySecrets", () => {
     const result = await manager.listDockerRegistrySecrets({
       teamIds: ["team-a"],
     });
-    expect(result).toEqual([{ name: "regcred-team-a" }]);
+    expect(result).toEqual([{ name: "regcred-team-a", registryServers: [] }]);
   });
 
   test("non-admin with no teams sees no secrets", async () => {
@@ -1512,6 +1691,74 @@ describe("McpServerRuntimeManager.listDockerRegistrySecrets", () => {
 
     const result = await manager.listDockerRegistrySecrets({ teamIds: [] });
     expect(result).toEqual([]);
+  });
+
+  test("returns sorted registry servers parsed from docker config json", async () => {
+    const { McpServerRuntimeManager } = await import("./manager");
+    const manager = new McpServerRuntimeManager();
+
+    (manager as unknown as { k8sApi: unknown }).k8sApi = {
+      listNamespacedSecret: vi.fn().mockResolvedValue({
+        items: [
+          {
+            metadata: {
+              name: "regcred-private",
+              labels: {
+                app: "mcp-server",
+                type: "regcred",
+                "team-id": "team-a",
+              },
+            },
+            data: dockerConfigData([
+              "z.registry.example.com",
+              "a.registry.example.com",
+            ]),
+          },
+        ],
+      }),
+    };
+
+    const result = await manager.listDockerRegistrySecrets({
+      teamIds: ["team-a"],
+    });
+
+    expect(result).toEqual([
+      {
+        name: "regcred-private",
+        registryServers: ["a.registry.example.com", "z.registry.example.com"],
+      },
+    ]);
+  });
+
+  test("returns empty registry server list when docker config json is invalid", async () => {
+    const { McpServerRuntimeManager } = await import("./manager");
+    const manager = new McpServerRuntimeManager();
+
+    (manager as unknown as { k8sApi: unknown }).k8sApi = {
+      listNamespacedSecret: vi.fn().mockResolvedValue({
+        items: [
+          {
+            metadata: {
+              name: "regcred-private",
+              labels: {
+                app: "mcp-server",
+                type: "regcred",
+                "team-id": "team-a",
+              },
+            },
+            data: {
+              ".dockerconfigjson": Buffer.from("not-json").toString("base64"),
+            },
+          },
+        ],
+      }),
+    };
+
+    const result = await manager.listDockerRegistrySecrets({
+      teamIds: ["team-a"],
+    });
+
+    expect(result).toEqual([{ name: "regcred-private", registryServers: [] }]);
   });
 });
 

@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
+import { TimeInMs } from "@archestra/shared";
 import { Octokit } from "@octokit/rest";
-import { TimeInMs } from "@shared";
 import { LRUCacheManager } from "@/cache-manager";
 import logger from "@/logging";
 import type { SkillFileEncoding, SkillFileKind } from "@/types";
@@ -60,7 +60,9 @@ interface DiscoveredSkill {
   name: string;
   description: string;
   compatibility: string | null;
-  /** Number of bundled resource files (excludes SKILL.md). */
+  allowedTools: string | null;
+  templated: boolean;
+  /** Total files the skill ships, including its own SKILL.md. */
   fileCount: number;
 }
 
@@ -153,12 +155,13 @@ export async function discoverSkills(params: {
       snapshot.manifests.set(manifestPath, parsed);
     }
 
+    // count every file the skill ships, including its own SKILL.md, so an
+    // instruction-only skill reads "1 file" rather than "0".
     const fileCount = snapshot.tree.filter(
       (item) =>
         item.type === "blob" &&
         !!item.path &&
-        isUnderSkillDir(item.path, skillPath) &&
-        basename(item.path) !== SKILL_MANIFEST_FILENAME,
+        isUnderSkillDir(item.path, skillPath),
     ).length;
 
     skills.push({
@@ -166,6 +169,8 @@ export async function discoverSkills(params: {
       name: parsed.name,
       description: parsed.description,
       compatibility: parsed.compatibility,
+      allowedTools: parsed.allowedTools,
+      templated: parsed.templated,
       fileCount,
     });
   }

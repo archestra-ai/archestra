@@ -4,7 +4,7 @@ import {
   MCP_CATALOG_INSTALL_QUERY_PARAM,
   MCP_CATALOG_REAUTH_QUERY_PARAM,
   MCP_CATALOG_SERVER_QUERY_PARAM,
-} from "@shared";
+} from "@archestra/shared";
 import type { PolicyDeniedPart } from "@/components/message-thread";
 
 export interface AuthRequiredResult {

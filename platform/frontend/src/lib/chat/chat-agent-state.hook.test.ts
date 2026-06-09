@@ -3,7 +3,7 @@ import {
   makeSwapAgentPokeText,
   SWAP_AGENT_FAILED_POKE_TEXT,
   SWAP_TO_DEFAULT_AGENT_POKE_TEXT,
-} from "@shared";
+} from "@archestra/shared";
 import type { UIMessage } from "ai";
 import { describe, expect, test } from "vitest";
 import {
@@ -183,6 +183,7 @@ function makeConversationAgent(id: string, name: string) {
     name,
     systemPrompt: null,
     agentType: "agent" as const,
+    toolExposureMode: "full" as const,
     llmApiKeyId: null,
   };
 }
@@ -214,6 +215,7 @@ function makeConversation(
       name: "Agent A",
       systemPrompt: null,
       agentType: "agent",
+      toolExposureMode: "full",
       llmApiKeyId: null,
     },
     share: null,

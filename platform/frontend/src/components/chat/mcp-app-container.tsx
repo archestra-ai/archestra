@@ -1,3 +1,9 @@
+import {
+  type archestraApiTypes,
+  buildFullToolName,
+  MCP_SERVER_TOOL_NAME_SEPARATOR,
+  parseFullToolName,
+} from "@archestra/shared";
 import type {
   McpUiDisplayMode,
   McpUiResourceCsp,
@@ -8,16 +14,17 @@ import {
   AppBridge,
   PostMessageTransport,
 } from "@modelcontextprotocol/ext-apps/app-bridge";
-import {
-  type archestraApiTypes,
-  buildFullToolName,
-  MCP_SERVER_TOOL_NAME_SEPARATOR,
-  parseFullToolName,
-} from "@shared";
 import { PanelRightOpen } from "lucide-react";
 import { useTheme } from "next-themes";
 import type React from "react";
-import { Component, useEffect, useMemo, useRef, useState } from "react";
+import {
+  Component,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { createPortal } from "react-dom";
 import { usePinnedCanvas } from "@/components/chat/pinned-canvas-context";
 import { Button } from "@/components/ui/button";
@@ -285,10 +292,24 @@ export function McpAppSection({
   /** Called when the MCP App sends a ui/message request to inject a user message into the conversation */
   onSendMessage?: (text: string) => void;
 }) {
+  const resourceKey = `${agentId}:${uiResourceUri}`;
   const [displayMode, setDisplayMode] = useState<McpUiDisplayMode>("inline");
   const [size, setSize] = useState<{ width: number; height: number } | null>(
     null,
   );
+  const [resourceState, setResourceState] = useState<{
+    key: string;
+    state: "unknown" | "renderable" | "empty";
+  }>(() => ({
+    key: resourceKey,
+    state: preloadedResource
+      ? isRenderableMcpAppHtml(preloadedResource.html)
+        ? "renderable"
+        : "empty"
+      : "unknown",
+  }));
+  const effectiveResourceState =
+    resourceState.key === resourceKey ? resourceState.state : "unknown";
 
   const { selectedCanvasId, select, showInSidebar, portalTarget } =
     usePinnedCanvas();
@@ -325,6 +346,17 @@ export function McpAppSection({
     showInSidebar(toolCallId);
   };
 
+  const handleResourceStateChange = useCallback(
+    (state: "renderable" | "empty") => {
+      setResourceState({ key: resourceKey, state });
+    },
+    [resourceKey],
+  );
+
+  if (effectiveResourceState === "empty") {
+    return null;
+  }
+
   const canvas = (
     <McpAppErrorBoundary>
       <McpAppContainer
@@ -346,6 +378,7 @@ export function McpAppSection({
           toolInput={toolInput}
           toolResult={toolResult}
           preloadedResource={preloadedResource}
+          onResourceStateChange={handleResourceStateChange}
           onSendMessage={onSendMessage}
         />
       </McpAppContainer>
@@ -695,6 +728,13 @@ function SandboxIframe({
       window.removeEventListener("message", onMessage);
       iframe.remove();
       iframeRef.current = null;
+      // Reset connection state so the send effects below don't fire against a
+      // bridge whose iframe we just removed. Without this, ready/initialized
+      // stay stale-true after a re-render that re-runs this effect (e.g.
+      // editing a message re-renders the message list), and sendToolInput
+      // throws "Not connected".
+      setReady(false);
+      setInitialized(false);
     };
   }, [sandboxUrl.href, appBridge, useDedicatedOrigin]);
 
@@ -733,15 +773,32 @@ function SandboxIframe({
   // Send tool input when available
   useEffect(() => {
     if (!ready || !initialized || !toolInput) return;
-    appBridge.sendToolInput({ arguments: toolInput });
+    // Guard the synchronous send: the bridge can drop between render and effect
+    // (iframe closed by a re-render). A dropped bridge is transient — the effect
+    // re-fires once it reconnects — so swallow rather than crash the page.
+    try {
+      appBridge.sendToolInput({ arguments: toolInput });
+    } catch (err) {
+      console.warn(
+        "[mcp-app] sendToolInput skipped (bridge not connected)",
+        err,
+      );
+    }
   }, [ready, initialized, toolInput, appBridge]);
 
   // Send tool result when available
   useEffect(() => {
     if (!ready || !initialized || !toolResult) return;
-    // Cast needed: our McpCallToolResult is looser than the SDK's strict union type
-    // biome-ignore lint/suspicious/noExplicitAny: McpCallToolResult is structurally compatible but TypeScript can't prove it
-    appBridge.sendToolResult(toolResult as any);
+    try {
+      // Cast needed: our McpCallToolResult is looser than the SDK's strict union type
+      // biome-ignore lint/suspicious/noExplicitAny: McpCallToolResult is structurally compatible but TypeScript can't prove it
+      appBridge.sendToolResult(toolResult as any);
+    } catch (err) {
+      console.warn(
+        "[mcp-app] sendToolResult skipped (bridge not connected)",
+        err,
+      );
+    }
   }, [ready, initialized, toolResult, appBridge]);
 
   return (
@@ -780,6 +837,7 @@ const McpAppView = function McpAppView({
   onError,
   onSendMessage,
   preloadedResource,
+  onResourceStateChange,
 }: {
   toolResourceUri: string;
   agentId: string;
@@ -795,6 +853,7 @@ const McpAppView = function McpAppView({
   onSendMessage?: (text: string) => void;
   /** HTML pre-fetched by the backend — skips the in-browser HTTP fetch to avoid SSE deadlock */
   preloadedResource?: AppResourceMeta;
+  onResourceStateChange: (state: "renderable" | "empty") => void;
 }) {
   const { resolvedTheme } = useTheme();
   const [bridge, setBridge] = useState<AppBridge | null>(null);
@@ -816,6 +875,8 @@ const McpAppView = function McpAppView({
   onSizeChangeRef.current = onSizeChange;
   const onSendMessageRef = useRef(onSendMessage);
   onSendMessageRef.current = onSendMessage;
+  const onResourceStateChangeRef = useRef(onResourceStateChange);
+  onResourceStateChangeRef.current = onResourceStateChange;
   // Ref to the latest bridge for teardown — avoids capturing a stale closure
   const latestBridgeRef = useRef<AppBridge | null>(null);
   // Monotonic counter for JSON-RPC IDs to avoid collisions from Date.now() in rapid calls.
@@ -996,7 +1057,14 @@ const McpAppView = function McpAppView({
 
     // Skip HTTP fetch when the backend already sent the HTML via SSE.
     if (preloadedResource) {
-      if (!cancelled) setAppResource(preloadedResource);
+      if (!cancelled) {
+        setAppResource(preloadedResource);
+        onResourceStateChangeRef.current(
+          isRenderableMcpAppHtml(preloadedResource.html)
+            ? "renderable"
+            : "empty",
+        );
+      }
       return () => {
         cancelled = true;
         appBridge.teardownResource({}).catch(() => {});
@@ -1032,11 +1100,15 @@ const McpAppView = function McpAppView({
 
         if (!cancelled && !fetchCancelledRef.current) {
           setAppResource({ html, csp, permissions });
+          onResourceStateChangeRef.current(
+            isRenderableMcpAppHtml(html) ? "renderable" : "empty",
+          );
         }
       } catch (err) {
         if (!cancelled && !fetchCancelledRef.current) {
           const error = err instanceof Error ? err : new Error(String(err));
           setLoadError(error.message);
+          onResourceStateChangeRef.current("renderable");
           onErrorRef.current?.(error);
         }
       }
@@ -1057,6 +1129,9 @@ const McpAppView = function McpAppView({
     if (preloadedResource && !appResource && !loadError) {
       fetchCancelledRef.current = true;
       setAppResource(preloadedResource);
+      onResourceStateChangeRef.current(
+        isRenderableMcpAppHtml(preloadedResource.html) ? "renderable" : "empty",
+      );
     }
   }, [preloadedResource, appResource, loadError]);
 
@@ -1174,3 +1249,57 @@ const McpAppView = function McpAppView({
     </div>
   );
 };
+
+/**
+ * Detects MCP App resources that would create an empty iframe/canvas panel.
+ * Tool results can mark a UI resource even when that resource has no visible
+ * body content; rendering it reserves a blank chat panel before the next
+ * message or sensitive-context divider. Keep resources that can still render
+ * later through scripts or visual/interactive elements.
+ */
+function isRenderableMcpAppHtml(html: string): boolean {
+  const trimmedHtml = html.trim();
+  if (!trimmedHtml) {
+    return false;
+  }
+
+  const parser = new DOMParser();
+  const document = parser.parseFromString(trimmedHtml, "text/html");
+
+  // A script anywhere in the document (commonly a <head> module script that
+  // mounts the app into an otherwise-empty <body>, e.g. Excalidraw) can build
+  // the UI at runtime, so the resource is renderable even with an empty body.
+  if (document.querySelector("script")) {
+    return true;
+  }
+
+  const body = document.body;
+
+  if (body.textContent?.trim()) {
+    return true;
+  }
+
+  return Boolean(
+    body.querySelector(
+      [
+        "canvas",
+        "svg",
+        "img",
+        "picture",
+        "video",
+        "audio",
+        "iframe",
+        "object",
+        "embed",
+        "table",
+        "form",
+        "input",
+        "textarea",
+        "select",
+        "button",
+        "[role]",
+        "[aria-label]",
+      ].join(","),
+    ),
+  );
+}

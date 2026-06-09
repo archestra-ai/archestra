@@ -12,7 +12,7 @@ import {
   TOOL_SEARCH_TOOLS_FULL_NAME,
   TOOL_TODO_WRITE_FULL_NAME,
   TOOL_TODO_WRITE_SHORT_NAME,
-} from "@shared";
+} from "@archestra/shared";
 import { and, eq } from "drizzle-orm";
 import { vi } from "vitest";
 import { archestraMcpBranding } from "@/archestra-mcp-server";
@@ -1829,7 +1829,7 @@ describe("ToolModel", () => {
       const agent = await makeAgent();
       await seedAndAssignArchestraTools(agent.id);
 
-      const { ARCHESTRA_MCP_CATALOG_ID } = await import("@shared");
+      const { ARCHESTRA_MCP_CATALOG_ID } = await import("@archestra/shared");
       const tools = await ToolModel.findByCatalogId(ARCHESTRA_MCP_CATALOG_ID);
       const toolNames = tools.map((t) => t.name);
 
@@ -1895,7 +1895,7 @@ describe("ToolModel", () => {
 
       // Create a new agent WITHOUT a knowledgeBaseId and assign all Archestra tools
       const agent = await makeAgent({ name: "Test Agent" });
-      const { ARCHESTRA_MCP_CATALOG_ID } = await import("@shared");
+      const { ARCHESTRA_MCP_CATALOG_ID } = await import("@archestra/shared");
       await ToolModel.assignArchestraToolsToAgent(
         agent.id,
         ARCHESTRA_MCP_CATALOG_ID,

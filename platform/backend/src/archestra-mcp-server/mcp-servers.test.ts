@@ -2,8 +2,10 @@
 import {
   ARCHESTRA_MCP_SERVER_NAME,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
-} from "@shared";
-import { InternalMcpCatalogModel } from "@/models";
+  TOOL_GET_MCP_SERVERS_SHORT_NAME,
+} from "@archestra/shared";
+import { EnvironmentModel, InternalMcpCatalogModel } from "@/models";
+import { createEnvironment } from "@/services/environments/environment";
 import { beforeEach, describe, expect, test } from "@/test";
 import type { Agent } from "@/types";
 import { type ArchestraContext, executeArchestraTool } from ".";
@@ -172,6 +174,18 @@ describe("mcp server tool execution", () => {
     expect(names).toContain("test_tool_2");
   });
 
+  test("get_mcp_server_tools steers an unknown id at the listing tool", async () => {
+    const result = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}get_mcp_server_tools`,
+      { mcpServerId: "00000000-0000-4000-8000-000000000abc" },
+      mockContext,
+    );
+    expect(result.isError).toBe(true);
+    const text = (result.content[0] as any).text;
+    expect(text).toContain("not found or you don't have access");
+    expect(text).toContain(TOOL_GET_MCP_SERVERS_SHORT_NAME);
+  });
+
   test("edit_mcp_description updates an existing catalog item", async ({
     makeInternalMcpCatalog,
   }) => {
@@ -223,6 +237,63 @@ describe("mcp server tool execution", () => {
     );
     expect(createdCatalog?.serverType).toBe("remote");
     expect(createdCatalog?.serverUrl).toBe("https://example.com/mcp");
+  });
+
+  test("create_mcp_server persists environmentId", async () => {
+    const env = await EnvironmentModel.create({
+      organizationId,
+      name: "Production",
+    });
+
+    const result = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_mcp_server`,
+      {
+        name: "Server With Environment",
+        serverType: "remote",
+        serverUrl: "https://example.com/mcp",
+        environmentId: env.id,
+      },
+      mockContext,
+    );
+
+    expect(result.isError).toBe(false);
+
+    const createdCatalog = await InternalMcpCatalogModel.findByName(
+      "Server With Environment",
+    );
+    expect(createdCatalog?.environmentId).toBe(env.id);
+  });
+
+  test("edit_mcp_description cannot change the environmentId", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    const env = await EnvironmentModel.create({
+      organizationId,
+      name: "Staging",
+    });
+    const catalog = await makeInternalMcpCatalog({
+      name: "Catalog To Move",
+      organizationId,
+    });
+    expect(catalog.environmentId).toBeNull();
+
+    const result = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}edit_mcp_description`,
+      {
+        id: catalog.id,
+        environmentId: env.id,
+      },
+      mockContext,
+    );
+
+    // The edit tool's args schema is strict and no longer accepts
+    // environmentId, so the call is rejected and the environment is unchanged.
+    expect(result.isError).toBe(true);
+
+    const updatedCatalog = await InternalMcpCatalogModel.findById(catalog.id, {
+      expandSecrets: false,
+    });
+    expect(updatedCatalog?.environmentId).toBeNull();
   });
 
   test("edit_mcp_config updates persisted MCP server configuration", async ({
@@ -628,5 +699,214 @@ describe("deploy_mcp_server", () => {
     expect((result.content[0] as any).text).toContain(
       "teamId should not be provided for non-team MCP server installations",
     );
+  });
+});
+
+/**
+ * create_mcp_server must refuse to assign a *restricted* environment unless the
+ * caller holds `environment:admin`. This mirrors the REST guard
+ * (internal-mcp-catalog.restricted-environment.test.ts) but exercises the MCP
+ * tool path, which uses the real `userHasPermission` against the caller's
+ * member role: the built-in Admin role holds `environment:admin`, a plain
+ * member does not. Personal-scope create (the default) needs no
+ * `mcpServerInstallation:admin`, so a plain member can reach the environment
+ * gate.
+ */
+describe("create_mcp_server restricted environment guard", () => {
+  const CREATE_TOOL = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_mcp_server`;
+
+  test("non-env-admin member assigning a RESTRICTED env is rejected and nothing is created", async ({
+    makeAgent,
+    makeCustomRole,
+    makeUser,
+    makeOrganization,
+    makeMember,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    // A role that can create registry entries (so it passes the centralized
+    // tool RBAC gate and a personal-scope create) but lacks `environment:admin`.
+    const role = await makeCustomRole(org.id, {
+      permission: { mcpRegistry: ["create"] },
+    });
+    await makeMember(user.id, org.id, { role: role.role });
+    const agent = await makeAgent({ organizationId: org.id });
+    const ctx: ArchestraContext = {
+      agent: { id: agent.id, name: agent.name },
+      userId: user.id,
+      organizationId: org.id,
+    };
+    const restricted = await createEnvironment({
+      organizationId: org.id,
+      data: { name: "Prod", restricted: true },
+    });
+
+    const serverName = `restricted-env-rejected-${crypto.randomUUID().slice(0, 8)}`;
+    const result = await executeArchestraTool(
+      CREATE_TOOL,
+      {
+        name: serverName,
+        serverType: "remote",
+        serverUrl: "https://example.com/mcp",
+        environmentId: restricted.id,
+      },
+      ctx,
+    );
+
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as any).text).toContain("restricted environment");
+
+    const created = await InternalMcpCatalogModel.findByName(serverName);
+    expect(created).toBeFalsy();
+  });
+
+  test("env-admin (built-in Admin) assigning a RESTRICTED env succeeds", async ({
+    makeAgent,
+    makeUser,
+    makeOrganization,
+    makeMember,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "admin" });
+    const agent = await makeAgent({ organizationId: org.id });
+    const ctx: ArchestraContext = {
+      agent: { id: agent.id, name: agent.name },
+      userId: user.id,
+      organizationId: org.id,
+    };
+    const restricted = await createEnvironment({
+      organizationId: org.id,
+      data: { name: "Prod", restricted: true },
+    });
+
+    const serverName = `restricted-env-allowed-${crypto.randomUUID().slice(0, 8)}`;
+    const result = await executeArchestraTool(
+      CREATE_TOOL,
+      {
+        name: serverName,
+        serverType: "remote",
+        serverUrl: "https://example.com/mcp",
+        environmentId: restricted.id,
+      },
+      ctx,
+    );
+
+    expect(result.isError).toBe(false);
+
+    const created = await InternalMcpCatalogModel.findByName(serverName);
+    expect(created?.environmentId).toBe(restricted.id);
+  });
+});
+
+describe("mcp-server tools — team-scope RBAC", () => {
+  let ctx: ArchestraContext;
+  let organizationId: string;
+
+  const CREATE = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_mcp_server`;
+  const EDIT_DESC = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}edit_mcp_description`;
+
+  beforeEach(async ({ makeAgent, makeOrganization, makeUser, makeMember }) => {
+    const org = await makeOrganization();
+    organizationId = org.id;
+    // editor holds mcpRegistry create/update/team-admin (not installation admin)
+    const editor = await makeUser();
+    await makeMember(editor.id, org.id, { role: "editor" });
+    const agent = await makeAgent({ organizationId: org.id });
+    ctx = {
+      agent: { id: agent.id, name: agent.name },
+      userId: editor.id,
+      organizationId: org.id,
+    };
+  });
+
+  function remoteArgs(overrides: Record<string, unknown> = {}) {
+    return {
+      name: `srv-${crypto.randomUUID().slice(0, 8)}`,
+      serverType: "remote",
+      serverUrl: "https://example.test/mcp",
+      ...overrides,
+    };
+  }
+
+  function bodyText(result: { content: unknown[] }): string {
+    return (result.content[0] as any).text as string;
+  }
+
+  test("editor creates a team-scoped server for a team they belong to", async ({
+    makeTeam,
+    makeTeamMember,
+  }) => {
+    const team = await makeTeam(organizationId, ctx.userId as string);
+    await makeTeamMember(team.id, ctx.userId as string);
+
+    const result = await executeArchestraTool(
+      CREATE,
+      remoteArgs({ scope: "team", teams: [team.id] }),
+      ctx,
+    );
+    expect(result.isError).toBe(false);
+    expect(bodyText(result)).toContain("Successfully created");
+  });
+
+  test("editor cannot create a team server for a team they are not in", async ({
+    makeTeam,
+  }) => {
+    const team = await makeTeam(organizationId, ctx.userId as string);
+
+    const result = await executeArchestraTool(
+      CREATE,
+      remoteArgs({ scope: "team", teams: [team.id] }),
+      ctx,
+    );
+    expect(result.isError).toBe(true);
+    expect(bodyText(result)).toMatch(/teams you are a member of/i);
+  });
+
+  test("editor cannot create an org-scoped server", async () => {
+    const result = await executeArchestraTool(
+      CREATE,
+      remoteArgs({ scope: "org" }),
+      ctx,
+    );
+    expect(result.isError).toBe(true);
+  });
+
+  test("editor promotes their own personal server to a member team via edit", async ({
+    makeTeam,
+    makeTeamMember,
+  }) => {
+    const team = await makeTeam(organizationId, ctx.userId as string);
+    await makeTeamMember(team.id, ctx.userId as string);
+
+    const created = await executeArchestraTool(CREATE, remoteArgs(), ctx);
+    expect(created.isError).toBe(false);
+    const id = bodyText(created).match(/ID: ([0-9a-f-]+)/i)?.[1];
+    expect(id).toBeDefined();
+
+    const promoted = await executeArchestraTool(
+      EDIT_DESC,
+      { id, scope: "team", teams: [team.id] },
+      ctx,
+    );
+    expect(promoted.isError).toBe(false);
+    expect(bodyText(promoted)).toContain("Scope: team");
+  });
+
+  test("editor cannot edit-promote to a team they are not in", async ({
+    makeTeam,
+  }) => {
+    const team = await makeTeam(organizationId, ctx.userId as string);
+
+    const created = await executeArchestraTool(CREATE, remoteArgs(), ctx);
+    const id = bodyText(created).match(/ID: ([0-9a-f-]+)/i)?.[1];
+
+    const denied = await executeArchestraTool(
+      EDIT_DESC,
+      { id, scope: "team", teams: [team.id] },
+      ctx,
+    );
+    expect(denied.isError).toBe(true);
+    expect(bodyText(denied)).toMatch(/teams you are a member of/i);
   });
 });

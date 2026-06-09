@@ -1,6 +1,6 @@
 "use client";
 
-import { archestraApiSdk } from "@shared";
+import { archestraApiSdk } from "@archestra/shared";
 import { useQuery } from "@tanstack/react-query";
 import {
   AlertTriangle,
@@ -491,6 +491,7 @@ function isClientSupported(client: ConnectClient | null): boolean {
   return (
     client.id === "claude-code" ||
     client.id === "codex" ||
+    client.id === "copilot-cli" ||
     client.id === "cursor" ||
     client.id === "generic"
   );

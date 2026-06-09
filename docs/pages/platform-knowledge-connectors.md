@@ -3,7 +3,7 @@ title: Connectors
 category: Knowledge
 order: 2
 description: Supported connector types, configuration, and management
-lastUpdated: 2026-05-26
+lastUpdated: 2026-06-05
 ---
 
 <!--
@@ -68,13 +68,14 @@ Sync issues, pull request discussions, and repository files from GitHub.
 
 **Indexed:** issues, pull requests, comments, and selected text files from GitHub.com or GitHub Enterprise Server. Repository file indexing defaults to Markdown and YAML files.
 
-**Authentication:** a [personal access token](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens) or a GitHub App installation. For GitHub App auth, enter the App ID and installation ID, then paste the app private key in the credential field.
+**Authentication:** a [personal access token](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens) or a GitHub App. GitHub App credentials (App ID, installation ID, and private key) are stored once as an organization-level configuration under **Settings -> GitHub Apps**; the connector references a saved configuration instead of holding its own credentials, so one App can back many connectors and skill imports.
 
 | Field                 | Description                                                                                     |
 | --------------------- | ----------------------------------------------------------------------------------------------- |
 | GitHub API URL        | API endpoint (e.g., `https://api.github.com` for GitHub.com, or your GHE API URL)               |
 | Owner                 | GitHub organization or username that owns the repositories                                      |
 | Authentication Method | Personal access token or GitHub App                                                            |
+| GitHub App Configuration | Saved configuration to authenticate with when using GitHub App auth (managed in **Settings -> GitHub Apps**) |
 | Repositories          | Comma-separated repository names to sync (optional -- leave blank to sync all org repositories) |
 | Include Issues        | Toggle to sync issues and their comments (default: on)                                          |
 | Include Pull Requests | Toggle to sync pull requests and their comments (default: on)                                   |
@@ -294,6 +295,31 @@ Example advanced config:
 ```
 
 `Id`, `Name`, and `LastModifiedDate` are always included automatically.
+
+## Web Crawler
+
+Crawl static HTML pages from a documentation site or public web property.
+
+**Indexed:** same-host HTML pages discovered from the start URL. The crawler extracts page text, removes common navigation and layout elements, and stores each page with its canonical URL when one is present.
+
+**Authentication:** none in the initial version. The crawler only fetches pages reachable over HTTP(S).
+
+Private and internal network addresses are blocked. Start URLs and discovered pages cannot resolve to loopback, link-local, RFC 1918 private ranges, cloud metadata endpoints, or other reserved address ranges. Hosts are checked before each fetch, but DNS records can change between validation and the final network request.
+
+If the start URL is the site root, such as `https://example.com/`, and no include path prefixes are configured, the crawler can discover any same-host page within the configured depth and page limits.
+
+| Field                 | Description                                                                                              |
+| --------------------- | -------------------------------------------------------------------------------------------------------- |
+| Start URL             | First page to crawl. Crawling stays on the same host.                                                    |
+| Include Path Prefixes | Comma-separated paths to crawl, such as `/docs/` or `/guides/`. Defaults to the start URL path.          |
+| Exclude Path Patterns | Comma-separated regular expressions matched against path and query, such as `/search` or `/archive/.*`. |
+| Content Selector      | CSS selector for the page content root. Leave blank to use default document selectors.                   |
+| Exclude Selectors     | Comma-separated CSS selectors to remove before extracting text, such as `.sidebar` or `.toc`.           |
+| Max Pages             | Maximum pages to crawl in one sync (default: `250`).                                                     |
+| Max Depth             | Maximum link depth from the start URL (default: `3`).                                                    |
+| Batch Size            | Documents yielded per sync batch (default: `25`).                                                        |
+| Request Delay         | Optional delay between requests, in milliseconds.                                                        |
+| User Agent            | Optional custom User-Agent header for crawl requests.                                                    |
 
 ## Managing Connectors
 

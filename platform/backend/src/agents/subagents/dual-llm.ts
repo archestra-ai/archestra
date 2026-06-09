@@ -1,4 +1,4 @@
-import { BUILT_IN_AGENT_IDS, type SupportedProvider } from "@shared";
+import { BUILT_IN_AGENT_IDS, type SupportedProvider } from "@archestra/shared";
 import { generateObject, generateText } from "ai";
 import { z } from "zod";
 import { createDirectLLMModel } from "@/clients/llm-client";

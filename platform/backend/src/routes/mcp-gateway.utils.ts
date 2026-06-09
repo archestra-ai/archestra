@@ -1,4 +1,18 @@
 import { createHash } from "node:crypto";
+import type { IncomingMessage } from "node:http";
+import {
+  ARCHESTRA_MCP_CATALOG_ID,
+  hasArchestraTokenPrefix,
+  isAgentTool,
+  isAlwaysExposedArchestraToolShortName,
+  MCP_APPS_SERVER_EXTENSION_CAPABILITIES,
+  MCP_ENTERPRISE_AUTH_EXTENSION_CAPABILITIES,
+  OAUTH_TOKEN_ID_PREFIX,
+  parseFullToolName,
+  TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
+  TOOL_RUN_TOOL_SHORT_NAME,
+  TOOL_SEARCH_TOOLS_SHORT_NAME,
+} from "@archestra/shared";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import {
@@ -11,18 +25,6 @@ import {
   ReadResourceRequestSchema,
   type Tool,
 } from "@modelcontextprotocol/sdk/types.js";
-import {
-  ARCHESTRA_MCP_CATALOG_ID,
-  hasArchestraTokenPrefix,
-  isAgentTool,
-  MCP_APPS_SERVER_EXTENSION_CAPABILITIES,
-  MCP_ENTERPRISE_AUTH_EXTENSION_CAPABILITIES,
-  OAUTH_TOKEN_ID_PREFIX,
-  parseFullToolName,
-  TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
-  TOOL_RUN_TOOL_SHORT_NAME,
-  TOOL_SEARCH_TOOLS_SHORT_NAME,
-} from "@shared";
 import type { FastifyRequest } from "fastify";
 import {
   archestraMcpBranding,
@@ -34,6 +36,7 @@ import { userHasPermission } from "@/auth/utils";
 import { LRUCacheManager } from "@/cache-manager";
 import mcpClient, { type TokenAuthContext } from "@/clients/mcp-client";
 import config from "@/config";
+import { evaluateSingleMcpToolInvocationPolicy } from "@/guardrails/tool-invocation";
 import logger from "@/logging";
 import {
   AgentConnectorAssignmentModel,
@@ -286,15 +289,15 @@ export async function createAgentServer(
   // SEP-1865: resources/list, resources/templates/list, prompts/list
   // Proxy to all upstream MCP servers connected to this agent and aggregate results.
   server.setRequestHandler(ListResourcesRequestSchema, async () => {
-    return mcpClient.listResources(agentId);
+    return mcpClient.listResources(agentId, tokenAuth);
   });
 
   server.setRequestHandler(ListResourceTemplatesRequestSchema, async () => {
-    return mcpClient.listResourceTemplates(agentId);
+    return mcpClient.listResourceTemplates(agentId, tokenAuth);
   });
 
   server.setRequestHandler(ListPromptsRequestSchema, async () => {
-    return mcpClient.listPrompts(agentId);
+    return mcpClient.listPrompts(agentId, tokenAuth);
   });
 
   server.setRequestHandler(
@@ -324,6 +327,21 @@ export async function createAgentServer(
         // Check if this is an Archestra tool or agent delegation tool
         const isArchestraTool = archestraMcpBranding.isToolName(name);
         const isAgentDelegationTool = isAgentTool(name);
+        const contextIsTrusted = !agent.considerContextUntrusted;
+
+        const policyBlock = await evaluateSingleMcpToolInvocationPolicy({
+          agentId: agent.id,
+          toolName: name,
+          toolInput: args ?? {},
+          organizationId: tokenAuth?.organizationId,
+          contextIsTrusted,
+        });
+        if (policyBlock) {
+          return {
+            content: [{ type: "text", text: policyBlock.refusalMessage }],
+            isError: true,
+          };
+        }
 
         if (isArchestraTool || isAgentDelegationTool) {
           logger.info(
@@ -355,6 +373,7 @@ export async function createAgentServer(
                 userId: tokenAuth?.userId,
                 organizationId: tokenAuth?.organizationId,
                 tokenAuth,
+                contextIsTrusted,
               });
               span.setAttribute(
                 ATTR_MCP_IS_ERROR_RESULT,
@@ -544,6 +563,33 @@ export function createStatelessTransport(
 
   logger.info({ agentId }, "Stateless transport instance created");
   return transport;
+}
+
+/**
+ * Hono's Node adapter drains unread request bodies by calling
+ * `request.socket.destroySoon()`. Fastify inject uses a socket-like test object
+ * without that legacy method, so provide the method only when the socket lacks it.
+ */
+export function ensureRequestSocketDestroySoon(request: IncomingMessage): void {
+  const socket = request.socket as
+    | (IncomingMessage["socket"] & {
+        destroySoon?: () => void;
+        end?: () => void;
+      })
+    | undefined;
+
+  if (!socket || typeof socket.destroySoon === "function") {
+    return;
+  }
+
+  socket.destroySoon = () => {
+    if (typeof socket.destroy === "function") {
+      socket.destroy();
+      return;
+    }
+
+    socket.end?.();
+  };
 }
 
 /**
@@ -1364,10 +1410,12 @@ function filterExposedTools(params: {
 }) {
   const { toolExposureMode, tools } = params;
   return tools.filter((tool) => {
-    const isMetaTool = isArchestraMetaTool(tool.name);
+    // `search_and_run_only` normally hides every tool behind search_tools/run_tool,
+    // but the meta tools themselves and the always-exposed skill path must stay
+    // top-level. `full` mode hides only the meta tools.
     return toolExposureMode === "search_and_run_only"
-      ? isMetaTool
-      : !isMetaTool;
+      ? isArchestraMetaTool(tool.name) || isAlwaysExposedTool(tool.name)
+      : !isArchestraMetaTool(tool.name);
   });
 }
 
@@ -1492,4 +1540,9 @@ function isArchestraMetaTool(toolName: string) {
     shortName === TOOL_SEARCH_TOOLS_SHORT_NAME ||
     shortName === TOOL_RUN_TOOL_SHORT_NAME
   );
+}
+
+function isAlwaysExposedTool(toolName: string) {
+  const shortName = archestraMcpBranding.getToolShortName(toolName);
+  return shortName !== null && isAlwaysExposedArchestraToolShortName(shortName);
 }

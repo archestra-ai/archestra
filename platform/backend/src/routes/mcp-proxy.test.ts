@@ -148,6 +148,36 @@ describe("mcpProxyRoutes POST /api/mcp/:agentId", () => {
     expect(body.error?.message).toContain("not accessible from MCP Apps");
   });
 
+  test("steers an unknown tools/call name at tools/list", async ({
+    makeUser,
+    makeAgent,
+  }) => {
+    const user = await makeUser();
+    const agent = await makeAgent({ authorId: user.id });
+    vi.spyOn(auth, "hasAnyAgentTypeAdminPermission").mockResolvedValue(true);
+
+    app = await buildApp(user.id, agent.organizationId);
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/mcp/${agent.id}`,
+      headers: { "content-type": "application/json" },
+      payload: {
+        jsonrpc: "2.0",
+        method: "tools/call",
+        params: { name: "hallucinated__tool", arguments: {} },
+        id: 1,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body.error?.code).toBe(-32601);
+    expect(body.error?.message).toContain("hallucinated__tool");
+    expect(body.error?.message).toContain("tools/list");
+    expect(body.error?.message).toContain("Do not guess tool names");
+  });
+
   test("allows tools/call for a tool with visibility including 'app'", async ({
     makeUser,
     makeAgent,

@@ -1,4 +1,4 @@
-import { TOOL_INVOCATION_UNTRUSTED_CONTEXT_REASON } from "@shared";
+import { TOOL_INVOCATION_UNTRUSTED_CONTEXT_REASON } from "@archestra/shared";
 import { describe, expect, it } from "vitest";
 import {
   extractCatalogIdFromInstallUrl,

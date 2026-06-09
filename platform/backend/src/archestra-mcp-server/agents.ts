@@ -5,7 +5,7 @@ import {
   TOOL_GET_MCP_SERVER_TOOLS_SHORT_NAME,
   TOOL_LIST_AGENTS_SHORT_NAME,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
-} from "@shared";
+} from "@archestra/shared";
 import { z } from "zod";
 import { isAgentTypeAdmin } from "@/auth/agent-type-permissions";
 import logger from "@/logging";
@@ -150,7 +150,7 @@ const EditAgentToolArgsSchema = z
           "Updated visibility scope for the agent.",
         ),
         toolExposureMode: ToolExposureModeSchema.optional().describe(
-          "How tools should be exposed to MCP clients and models.",
+          "How tools should be loaded for MCP clients and models.",
         ),
         suggestedPrompts: z
           .array(SuggestedPromptToolInputSchema)

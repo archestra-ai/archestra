@@ -6,6 +6,7 @@ import {
 } from "@/clients/bedrock-credentials";
 import config from "@/config";
 import logger from "@/logging";
+import { joinBaseUrl } from "@/utils/base-url";
 import type { ModelInfo } from "./types";
 
 export async function fetchBedrockModels(
@@ -89,7 +90,10 @@ async function fetchAllBedrockInferenceProfiles(
     if (nextToken) {
       params.set("nextToken", nextToken);
     }
-    const url = `${controlPlaneUrl}/inference-profiles?${params.toString()}`;
+    const url = joinBaseUrl(
+      controlPlaneUrl,
+      `/inference-profiles?${params.toString()}`,
+    );
 
     let response: Response;
     if (iamParams) {

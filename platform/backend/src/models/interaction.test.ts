@@ -1,4 +1,4 @@
-import { ChatErrorCode } from "@shared";
+import { ChatErrorCode } from "@archestra/shared";
 import { beforeEach, describe, expect, test } from "@/test";
 import { SelectInteractionSchema } from "@/types";
 import AgentModel from "./agent";

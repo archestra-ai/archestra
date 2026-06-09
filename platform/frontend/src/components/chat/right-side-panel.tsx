@@ -5,7 +5,7 @@ import { FileText, Globe, GripVertical, Pin, PinOff, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { BrowserPanel } from "@/components/chat/browser-panel";
-import { ConversationArtifactPanel } from "@/components/chat/conversation-artifact";
+import { ConversationFilesPanel } from "@/components/chat/conversation-files-panel";
 import { usePinnedCanvas } from "@/components/chat/pinned-canvas-context";
 import { Button } from "@/components/ui/button";
 import {
@@ -18,7 +18,7 @@ import {
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 
-export type RightPanelTab = "artifact" | "browser" | "canvas";
+export type RightPanelTab = "files" | "browser" | "canvas";
 
 /** Smallest the panel itself may shrink to. */
 const MIN_PANEL_WIDTH = 300;
@@ -179,7 +179,7 @@ export function RightSidePanel({
   const portalDivRef = useRef<HTMLDivElement | null>(null);
 
   let resolvedTab: RightPanelTab = activeTab;
-  if (resolvedTab === "browser" && !canShowBrowser) resolvedTab = "artifact";
+  if (resolvedTab === "browser" && !canShowBrowser) resolvedTab = "files";
 
   // Activate the portal target only while the canvas tab is showing — when the
   // user switches to artifact/browser or closes the panel, the canvas falls
@@ -246,9 +246,9 @@ export function RightSidePanel({
               clipped. */}
           <div className="min-w-0 flex-1 overflow-x-auto">
             <TabsList className="h-8 w-max">
-              <TabsTrigger value="artifact" className="text-xs px-3">
+              <TabsTrigger value="files" className="text-xs px-3">
                 <FileText className="h-3 w-3" />
-                Artifact
+                Files
               </TabsTrigger>
               {canShowBrowser && (
                 <TabsTrigger value="browser" className="text-xs px-3">
@@ -277,13 +277,11 @@ export function RightSidePanel({
         </div>
 
         <div className="flex-1 min-h-0 overflow-hidden relative">
-          {resolvedTab === "artifact" && (
-            <ConversationArtifactPanel
+          {resolvedTab === "files" && (
+            <ConversationFilesPanel
+              conversationId={conversationId}
               artifact={artifact}
-              isOpen
-              onToggle={onClose}
-              embedded
-              hideHeader
+              onClose={onClose}
             />
           )}
           {resolvedTab === "browser" && canShowBrowser && (

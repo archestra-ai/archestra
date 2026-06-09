@@ -1,6 +1,6 @@
 "use client";
 
-import type { archestraApiTypes } from "@shared";
+import type { archestraApiTypes } from "@archestra/shared";
 import { Bot, Network, Route } from "lucide-react";
 import Image from "next/image";
 import { cn } from "@/lib/utils";

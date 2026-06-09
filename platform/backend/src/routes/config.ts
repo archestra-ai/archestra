@@ -1,16 +1,17 @@
 import { readFileSync } from "node:fs";
-import { RouteId, SupportedProvidersSchema } from "@shared";
+import { RouteId, SupportedProvidersSchema } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { getEmailProviderInfo } from "@/agents/incoming-email";
 import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
 import { isBedrockIamAuthEnabled } from "@/clients/bedrock-credentials";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
-import { codeRuntimeService } from "@/code-runtime/code-runtime-service";
 import config from "@/config";
 import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
+import logger from "@/logging";
 import { OrganizationModel } from "@/models";
 import { getByosVaultKvVersion, isByosEnabled } from "@/secrets-manager";
+import { skillSandboxRuntimeService } from "@/skills-sandbox/skill-sandbox-runtime-service";
 import { EmailProviderTypeSchema, type GlobalToolPolicy } from "@/types";
 import { PUBLIC_CONFIG_PATH } from "./route-paths";
 
@@ -28,7 +29,7 @@ export const publicConfigRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (_request, reply) => {
-      return reply.send(getPublicConfigResponse());
+      return reply.send(await getPublicConfigResponse());
     },
   );
 };
@@ -52,8 +53,7 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
             }),
             features: z.strictObject({
               orchestratorK8sRuntime: z.boolean(),
-              codeRuntime: z.boolean(),
-              advancedToolFeaturesEnabled: z.boolean(),
+              sandbox: z.boolean(),
               agentSkillsEnabled: z.boolean(),
               byosEnabled: z.boolean(),
               byosVaultKvVersion: z.enum(["1", "2"]).nullable(),
@@ -69,6 +69,7 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
               }),
               mcpServerBaseImage: z.string(),
               orchestratorK8sNamespace: z.string(),
+              environmentNamespaces: z.array(z.string()),
               isQuickstart: z.boolean(),
               ngrokDomain: z.string(),
               virtualKeyDefaultExpirationSeconds: z.number(),
@@ -98,9 +99,7 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
         },
         features: {
           orchestratorK8sRuntime: McpServerRuntimeManager.isEnabled,
-          codeRuntime: codeRuntimeService.isEnabled,
-          advancedToolFeaturesEnabled:
-            config.agents.advancedToolFeaturesEnabled,
+          sandbox: skillSandboxRuntimeService.isEnabled,
           agentSkillsEnabled: config.agents.skillsEnabled,
           byosEnabled: isByosEnabled(),
           byosVaultKvVersion: getByosVaultKvVersion(),
@@ -111,6 +110,8 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
           incomingEmail: getEmailProviderInfo(),
           mcpServerBaseImage: config.orchestrator.mcpServerBaseImage,
           orchestratorK8sNamespace: config.orchestrator.kubernetes.namespace,
+          environmentNamespaces:
+            config.orchestrator.kubernetes.environmentNamespaces,
           isQuickstart: config.isQuickstart,
           ngrokDomain: getNgrokDomain(),
           virtualKeyDefaultExpirationSeconds:
@@ -151,6 +152,7 @@ const PublicConfigResponseSchema = z.strictObject({
   maintenanceMode: z.string().nullable(),
   analytics: z.strictObject({
     enabled: z.boolean(),
+    instanceId: z.string().uuid().nullable(),
     posthog: z.strictObject({
       key: z.string(),
       host: z.string(),
@@ -158,13 +160,54 @@ const PublicConfigResponseSchema = z.strictObject({
   }),
 });
 
-function getPublicConfigResponse(): z.infer<typeof PublicConfigResponseSchema> {
+let cachedAnalyticsInstanceId: string | null = null;
+let pendingAnalyticsInstanceId: Promise<string | null> | null = null;
+let hasLoggedAnalyticsInstanceIdError = false;
+
+async function getPublicConfigResponse(): Promise<
+  z.infer<typeof PublicConfigResponseSchema>
+> {
   return {
     disableBasicAuth: config.auth.disableBasicAuth,
     disableInvitations: config.auth.disableInvitations,
     maintenanceMode: config.maintenanceMode,
-    analytics: config.analytics,
+    analytics: {
+      enabled: config.analytics.enabled,
+      instanceId: await getAnalyticsInstanceId(),
+      posthog: config.analytics.posthog,
+    },
   };
+}
+
+async function getAnalyticsInstanceId(): Promise<string | null> {
+  if (config.maintenanceMode) return null;
+  if (cachedAnalyticsInstanceId) return cachedAnalyticsInstanceId;
+
+  pendingAnalyticsInstanceId ??= loadAnalyticsInstanceId();
+  try {
+    return await pendingAnalyticsInstanceId;
+  } finally {
+    pendingAnalyticsInstanceId = null;
+  }
+}
+
+async function loadAnalyticsInstanceId(): Promise<string | null> {
+  try {
+    const instanceId = (await OrganizationModel.getAnalyticsState())
+      .analyticsInstanceId;
+    cachedAnalyticsInstanceId = instanceId;
+    hasLoggedAnalyticsInstanceIdError = false;
+    return instanceId;
+  } catch (error) {
+    if (!hasLoggedAnalyticsInstanceIdError) {
+      logger.warn(
+        { err: error },
+        "Failed to load analytics instance ID for public config",
+      );
+      hasLoggedAnalyticsInstanceIdError = true;
+    }
+    return null;
+  }
 }
 
 /**

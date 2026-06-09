@@ -1,5 +1,5 @@
-import type { archestraApiTypes } from "@shared";
-import { Github, Upload } from "lucide-react";
+import type { archestraApiTypes } from "@archestra/shared";
+import { Github, Globe, Upload } from "lucide-react";
 import type { ReactNode } from "react";
 
 type ConnectorType =
@@ -30,6 +30,10 @@ const CONNECTOR_ICON_MAP: Partial<Record<ConnectorType, ConnectorIcon>> = {
   asana: { kind: "img", src: "/icons/asana.png" },
   salesforce: { kind: "img", src: "/icons/salesforce.png" },
   outline: { kind: "img", src: "/icons/getoutline.png" },
+  web_crawler: {
+    kind: "element",
+    render: (className) => <Globe className={className} />,
+  },
 };
 
 export function hasConnectorIcon(type: string): boolean {

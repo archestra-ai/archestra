@@ -128,6 +128,12 @@ Policies can also be scoped to specific agents. For example, you might allow an 
 
 Subagent "delegation" does not reset that trust state. If a parent agent delegates to a subagent after the conversation has already become sensitive, the subagent inherits that unsafe context and the same tool call restrictions continue to apply.
 
+### Load Tools When Needed
+
+When an agent or MCP Gateway uses [Load tools when needed](/docs/platform-agents#load-tools-when-needed), the initial MCP `tools/list` only includes `search_tools` and `run_tool`.
+
+Tool call policies are still evaluated against the tool that actually runs. If `run_tool` is asked to execute `send_email`, Archestra evaluates the `send_email` policies with the submitted `tool_args`, current trust state, and policy context. Input conditions, team conditions, untrusted-context rules, and approval-required rules work the same way as a direct `send_email` tool call.
+
 ## Policy Configuration Agent
 
 Archestra includes a built-in [Tool Policy Configuration Agent](/docs/platform-built-in-agents-policy-config) that analyzes tool metadata and proposes default tool call policies and tool result policies automatically.

@@ -1,4 +1,3 @@
-import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import {
   TOOL_CREATE_AGENT_SHORT_NAME,
   TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_SHORT_NAME,
@@ -12,8 +11,15 @@ import {
   TOOL_GET_MCP_SERVERS_SHORT_NAME,
   TOOL_LIST_MCP_SERVER_DEPLOYMENTS_SHORT_NAME,
   TOOL_SEARCH_PRIVATE_MCP_REGISTRY_SHORT_NAME,
-} from "@shared";
+} from "@archestra/shared";
+import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
+import {
+  assertMcpCatalogTeams,
+  authorizeMcpCatalogScope,
+  getMcpCatalogPermissionChecker,
+  requireMcpCatalogModifyPermission,
+} from "@/auth/mcp-catalog-permissions";
 import { userHasPermission } from "@/auth/utils";
 import McpServerRuntimeManager from "@/k8s/mcp-server-runtime/manager";
 import logger from "@/logging";
@@ -24,6 +30,7 @@ import {
   TeamModel,
   ToolModel,
 } from "@/models";
+import { assertCanAssignEnvironment } from "@/services/environments/environment";
 import {
   InsertInternalMcpCatalogSchema,
   type InternalMcpCatalog,
@@ -33,6 +40,7 @@ import {
   UuidIdSchema,
 } from "@/types";
 import { broadcastMcpInstallationStatus } from "@/websocket";
+import { archestraMcpBranding } from "./branding";
 import {
   catchError,
   deduplicateLabels,
@@ -145,6 +153,11 @@ const CatalogMetadataToolSchema = z
       .array(UuidIdSchema)
       .optional()
       .describe("Team IDs for team-scoped access control."),
+    environmentId: UuidIdSchema.nullable()
+      .optional()
+      .describe(
+        "ID of the environment this server belongs to. Omit (or pass null) to leave it in the default environment.",
+      ),
   })
   .strict();
 
@@ -326,7 +339,7 @@ const EditMcpDescriptionToolArgsSchema = z
       `The catalog ID of the MCP server to edit. Use ${TOOL_GET_MCP_SERVERS_SHORT_NAME} to look it up by name.`,
     ),
   })
-  .merge(CatalogMetadataToolSchema.partial())
+  .merge(CatalogMetadataToolSchema.omit({ environmentId: true }).partial())
   .strict();
 
 const EditMcpConfigToolArgsSchema = z
@@ -418,7 +431,7 @@ const registry = defineArchestraTools([
   defineArchestraTool({
     shortName: TOOL_EDIT_MCP_DESCRIPTION_SHORT_NAME,
     title: "Edit MCP Server Description",
-    description: `Edit an MCP server's display information and metadata. Use ${TOOL_GET_MCP_SERVERS_SHORT_NAME} to look up IDs by name. Changing scope requires admin permissions.`,
+    description: `Edit an MCP server's display information and metadata. Use ${TOOL_GET_MCP_SERVERS_SHORT_NAME} to look up IDs by name. Setting Organization scope requires admin; setting Team scope requires team-admin and membership in the assigned teams.`,
     schema: EditMcpDescriptionToolArgsSchema,
     handler: ({ args, context }) => handleEditMcpDescription(args, context),
   }),
@@ -631,7 +644,12 @@ async function handleGetMcpServerTools(
       },
     );
     if (!catalogItem) {
-      return errorResult("MCP server not found or you don't have access.");
+      const getMcpServersName = archestraMcpBranding.getToolName(
+        TOOL_GET_MCP_SERVERS_SHORT_NAME,
+      );
+      return errorResult(
+        `MCP server not found or you don't have access. Call ${getMcpServersName} to list the MCP servers available to you and use an exact catalog id.`,
+      );
     }
 
     const tools = await ToolModel.findByCatalogId(args.mcpServerId);
@@ -657,33 +675,70 @@ async function handleEditMcpDescription(
       return errorResult("user/organization context not available.");
     }
 
-    const isAdmin = await userHasPermission(
-      context.userId,
+    const checker = await getMcpCatalogPermissionChecker({
+      userId: context.userId,
       organizationId,
-      "mcpServerInstallation",
-      "admin",
-    );
+    });
 
     const existing = await InternalMcpCatalogModel.findById(args.id, {
       userId: context.userId,
-      isAdmin,
+      isAdmin: checker.isAdmin,
       organizationId,
     });
     if (!existing) {
       return errorResult("MCP server not found.");
     }
 
-    if (!isAdmin) {
-      if (
-        existing.scope !== "personal" ||
-        existing.authorId !== context.userId
-      ) {
-        return errorResult("you can only edit your own personal MCP servers.");
-      }
+    const existingTeamIds = existing.teams.map((t) => t.id);
+    const newScope = args.scope ?? existing.scope;
+    // Shared items are one-way: demoting back to personal would yank the item
+    // from everyone it was shared with (mirrors the REST route).
+    if (newScope === "personal" && existing.scope !== "personal") {
+      return errorResult("Shared MCP servers cannot be made personal.");
     }
-
-    if (args.scope !== undefined && args.scope !== existing.scope && !isAdmin) {
-      return errorResult("only admins can change MCP server scope.");
+    const newTeamIds =
+      newScope === "team" ? [...new Set(args.teams ?? existingTeamIds)] : [];
+    const scopeChanged = newScope !== existing.scope;
+    const teamsChanged =
+      newScope === "team" &&
+      (newTeamIds.length !== existingTeamIds.length ||
+        !newTeamIds.every((teamId) => existingTeamIds.includes(teamId)));
+    try {
+      const userTeamIds = checker.isAdmin
+        ? []
+        : await TeamModel.getUserTeamIds(context.userId);
+      // Gate at the item's current scope (lets a team-admin member edit a team
+      // item; blocks editing someone else's personal item)…
+      requireMcpCatalogModifyPermission({
+        checker,
+        scope: existing.scope,
+        authorId: existing.authorId,
+        catalogTeamIds: existingTeamIds,
+        userTeamIds,
+        userId: context.userId,
+      });
+      // …then gate the target scope/teams only when they actually change.
+      if (scopeChanged || teamsChanged) {
+        authorizeMcpCatalogScope({
+          checker,
+          scope: newScope,
+          authorId: existing.authorId,
+          requestedTeamIds: newTeamIds,
+          userTeamIds,
+          userId: context.userId,
+        });
+        await assertMcpCatalogTeams({
+          scope: newScope,
+          teamIds: newTeamIds,
+          organizationId,
+        });
+      }
+    } catch (error) {
+      return errorResult(
+        error instanceof Error
+          ? error.message
+          : "Failed to update MCP server scope.",
+      );
     }
 
     const descriptionFields = [
@@ -703,6 +758,14 @@ async function handleEditMcpDescription(
       if (args[field] !== undefined) {
         updateData[field] = args[field];
       }
+    }
+
+    // Sync team assignments only when scope/teams actually change; otherwise
+    // leave existing rows untouched (mirrors the REST update handler).
+    if (scopeChanged || teamsChanged) {
+      updateData.teams = newTeamIds;
+    } else {
+      delete updateData.teams;
     }
 
     if (Object.keys(updateData).length === 0) {
@@ -757,29 +820,37 @@ async function handleEditMcpConfig(
       return errorResult("user/organization context not available.");
     }
 
-    const isAdmin = await userHasPermission(
-      context.userId,
+    const checker = await getMcpCatalogPermissionChecker({
+      userId: context.userId,
       organizationId,
-      "mcpServerInstallation",
-      "admin",
-    );
+    });
 
     const existing = await InternalMcpCatalogModel.findById(args.id, {
       userId: context.userId,
-      isAdmin,
+      isAdmin: checker.isAdmin,
       organizationId,
     });
     if (!existing) {
       return errorResult("MCP server not found.");
     }
 
-    if (!isAdmin) {
-      if (
-        existing.scope !== "personal" ||
-        existing.authorId !== context.userId
-      ) {
-        return errorResult("you can only edit your own personal MCP servers.");
-      }
+    try {
+      requireMcpCatalogModifyPermission({
+        checker,
+        scope: existing.scope,
+        authorId: existing.authorId,
+        catalogTeamIds: existing.teams.map((t) => t.id),
+        userTeamIds: checker.isAdmin
+          ? []
+          : await TeamModel.getUserTeamIds(context.userId),
+        userId: context.userId,
+      });
+    } catch (error) {
+      return errorResult(
+        error instanceof Error
+          ? error.message
+          : "You are not allowed to edit this MCP server.",
+      );
     }
 
     const updateData: Record<string, unknown> = {};
@@ -890,24 +961,70 @@ async function handleCreateMcpServer(
       return errorResult("user/organization context not available.");
     }
 
+    try {
+      // Deploying to a restricted environment requires
+      // environment:deploy-to-restricted (environment:admin implies it).
+      const [hasAdmin, hasDeploy] = await Promise.all([
+        userHasPermission(
+          context.userId,
+          organizationId,
+          "environment",
+          "admin",
+        ),
+        userHasPermission(
+          context.userId,
+          organizationId,
+          "environment",
+          "deploy-to-restricted",
+        ),
+      ]);
+      await assertCanAssignEnvironment({
+        environmentId: args.environmentId ?? null,
+        organizationId,
+        canDeployToRestricted: hasAdmin || hasDeploy,
+      });
+    } catch (error) {
+      return errorResult(
+        error instanceof Error ? error.message : "Failed to assign environment",
+      );
+    }
+
     const serverType = args.serverType ?? "local";
     if (!["local", "remote", "builtin"].includes(serverType)) {
       return errorResult("serverType must be one of: local, remote, builtin.");
     }
 
-    const teams = args.teams ?? [];
+    const requestedTeamIds = [...new Set(args.teams ?? [])];
     const labels = args.labels ? deduplicateLabels(args.labels) : undefined;
-    const scope = args.scope ?? (teams.length > 0 ? "team" : "personal");
+    const scope =
+      args.scope ?? (requestedTeamIds.length > 0 ? "team" : "personal");
+    const teamIdsForScope = scope === "team" ? requestedTeamIds : [];
 
-    const isAdmin = await userHasPermission(
-      context.userId,
+    const checker = await getMcpCatalogPermissionChecker({
+      userId: context.userId,
       organizationId,
-      "mcpServerInstallation",
-      "admin",
-    );
-    if (!isAdmin && scope !== "personal") {
+    });
+    try {
+      authorizeMcpCatalogScope({
+        checker,
+        scope,
+        authorId: context.userId,
+        requestedTeamIds: teamIdsForScope,
+        userTeamIds: checker.isAdmin
+          ? []
+          : await TeamModel.getUserTeamIds(context.userId),
+        userId: context.userId,
+      });
+      await assertMcpCatalogTeams({
+        scope,
+        teamIds: teamIdsForScope,
+        organizationId,
+      });
+    } catch (error) {
       return errorResult(
-        "only admins can create team or org-scoped MCP servers.",
+        error instanceof Error
+          ? error.message
+          : "Failed to set MCP server scope.",
       );
     }
 
@@ -966,8 +1083,10 @@ async function handleCreateMcpServer(
     }
     if (args.userConfig !== undefined)
       createParams.userConfig = args.userConfig;
+    if (args.environmentId !== undefined)
+      createParams.environmentId = args.environmentId;
     if (labels) createParams.labels = labels;
-    if (teams.length > 0) createParams.teams = teams;
+    if (teamIdsForScope.length > 0) createParams.teams = teamIdsForScope;
 
     const validatedParams = InsertInternalMcpCatalogSchema.parse(createParams);
     const created = await InternalMcpCatalogModel.create(validatedParams, {

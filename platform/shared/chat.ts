@@ -50,6 +50,152 @@ export type ChatMessage = {
   metadata?: unknown;
 };
 
+// Control/telemetry parts the chat UI skips and providers never see. An
+// assistant turn left with only these (e.g. a `step-start` after a dangling
+// tool call is stripped) renders nothing, so it must not count as content.
+// `data-tool-ui-start` is deliberately absent — the UI renders it as an MCP app.
+const NON_RENDERABLE_ASSISTANT_PART_TYPES: ReadonlySet<string> = new Set([
+  "step-start",
+  "data-token-usage",
+  "data-heartbeat",
+  "data-context-window-estimate",
+  "data-context-compaction-start",
+  "data-context-compaction-finish",
+]);
+
+/**
+ * True when an assistant message still carries something the chat UI can
+ * render: a non-empty text part, or any non-text part that is not a known
+ * non-renderable control/telemetry marker (so completed tool results,
+ * reasoning, files, MCP-app parts all count). An assistant turn left with no
+ * parts — or only empty text / control parts — after normalization is not
+ * renderable and must not be persisted or shown. Fails safe toward keeping:
+ * an unrecognized part type counts as content. Structurally typed so both
+ * backend `ChatMessagePart`s and the frontend's AI SDK `UIMessage` parts
+ * satisfy it.
+ */
+export function hasRenderableAssistantContent(message: {
+  parts?: ReadonlyArray<{ type: string; text?: unknown }>;
+}): boolean {
+  return (message.parts ?? []).some((part) => {
+    if (part.type === "text") {
+      return Boolean(part.text);
+    }
+
+    return !NON_RENDERABLE_ASSISTANT_PART_TYPES.has(part.type);
+  });
+}
+
+// Tool states that survive normalization and render durably: a result, an
+// error, a denial, or an approval prompt/answer. A tool part in any of these
+// is real assistant content. Excludes `input-streaming`/`input-available` and
+// bare `tool-call` parts — those are pending/dangling and get stripped before
+// persistence.
+const TERMINAL_TOOL_PART_STATES: ReadonlySet<string> = new Set([
+  "output-available",
+  "output-error",
+  "output-denied",
+  "approval-requested",
+  "approval-responded",
+]);
+
+type AssistantContentPart = {
+  type: string;
+  text?: unknown;
+  state?: unknown;
+  toolCallId?: unknown;
+  data?: unknown;
+};
+
+/**
+ * Strict counterpart to {@link hasRenderableAssistantContent} for the persist
+ * and read paths. Unlike the UI predicate (which keeps any unknown non-text
+ * part so live streaming never blanks out), this fails safe toward *dropping*:
+ * an assistant message is persistable only when it carries content that still
+ * renders after a reload — non-empty text, reasoning, a file/image/source, a terminal
+ * tool part, or a `data-tool-ui-start` MCP-app marker paired with a terminal
+ * tool part in the same message. Everything else (no parts, `parts: []`,
+ * `content: ""`, whitespace-only text, only `step-start`/telemetry `data-*`, or
+ * an unpaired marker) is an empty bubble and must not be stored or shown.
+ * Structurally typed so backend `ChatMessagePart`s and the frontend's AI SDK
+ * `UIMessage` parts both satisfy it.
+ */
+export function hasPersistableAssistantContent(message: {
+  parts?: ReadonlyArray<AssistantContentPart>;
+}): boolean {
+  const parts = message.parts;
+  // read-path callers pass historical JSON that is only cast, so reject any
+  // shape that is not an array of `type`-tagged parts before inspecting it.
+  if (!Array.isArray(parts) || parts.length === 0) {
+    return false;
+  }
+
+  const terminalToolCallIds = new Set<string>();
+  for (const part of parts) {
+    if (isTerminalToolPart(part) && typeof part.toolCallId === "string") {
+      terminalToolCallIds.add(part.toolCallId);
+    }
+  }
+
+  return parts.some((part) => {
+    if (typeof part?.type !== "string") {
+      return false;
+    }
+
+    if (part.type === "text" || part.type === "reasoning") {
+      return typeof part.text === "string" && part.text.trim().length > 0;
+    }
+
+    // `image` covers model-generated images (e.g. Gemini image generation),
+    // which the image-stripping normalizer deliberately preserves on assistant
+    // turns for multi-turn image editing.
+    if (
+      part.type === "file" ||
+      part.type === "image" ||
+      part.type.startsWith("source")
+    ) {
+      return true;
+    }
+
+    if (isTerminalToolPart(part)) {
+      return true;
+    }
+
+    // an MCP-app marker only counts when its tool call actually resolved —
+    // an orphaned marker reloads as a perpetually running tool, i.e. an empty
+    // bubble.
+    if (part.type.startsWith("data-tool-ui-start")) {
+      const toolCallId =
+        typeof part.data === "object" &&
+        part.data !== null &&
+        "toolCallId" in part.data
+          ? (part.data as { toolCallId?: unknown }).toolCallId
+          : undefined;
+      return (
+        typeof toolCallId === "string" && terminalToolCallIds.has(toolCallId)
+      );
+    }
+
+    return false;
+  });
+}
+
+function isTerminalToolPart(part: AssistantContentPart): boolean {
+  if (typeof part?.type !== "string") {
+    return false;
+  }
+  if (part.type === "tool-result") {
+    return true;
+  }
+  const isToolPart =
+    part.type.startsWith("tool-") || part.type === "dynamic-tool";
+  return (
+    isToolPart &&
+    typeof part.state === "string" &&
+    TERMINAL_TOOL_PART_STATES.has(part.state)
+  );
+}
+
 /**
  * The skill a user explicitly invoked via slash command, carried on the user
  * message's metadata. The backend uses it to inject the skill's activation

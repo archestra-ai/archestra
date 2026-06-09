@@ -47,7 +47,7 @@ function sniffImageMime(buffer: Buffer): string | null {
 
 /**
  * Reconcile a caller-claimed mime with sniffed bytes. The result is what
- * actually gets persisted in `skill_sandbox_artifacts.mime_type`.
+ * actually gets persisted in `skill_sandbox_files.mime_type`.
  *
  * Rules:
  *   - if bytes match a known image signature, the sniffed mime always wins

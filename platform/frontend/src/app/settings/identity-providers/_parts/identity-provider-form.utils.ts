@@ -5,7 +5,7 @@ import {
   isEntraHostname,
   isOktaHostname,
   OAUTH_TOKEN_TYPE,
-} from "@shared";
+} from "@archestra/shared";
 
 export type EnterpriseSubjectTokenType = NonNullable<
   NonNullable<

@@ -11,10 +11,9 @@ import {
   SKILL_ARCHESTRA_TOOL_SHORT_NAMES,
   slugify,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
-  TOOL_RUN_PYTHON_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
-} from "@shared";
+} from "@archestra/shared";
 import {
   and,
   asc,
@@ -35,7 +34,6 @@ import { alias } from "drizzle-orm/pg-core";
 import { getArchestraMcpTools } from "@/archestra-mcp-server";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { getArchestraMcpCatalogMetadata } from "@/archestra-mcp-server/metadata";
-import config from "@/config";
 import db, { schema } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import {
@@ -583,6 +581,16 @@ class ToolModel {
   }
 
   /**
+   * Names of the MCP tools assigned to an agent, as a membership set. Single
+   * source of truth for "is tool X enabled for this agent" checks, shared by the
+   * run_tool dispatch pre-check and the tool-invocation guardrail.
+   */
+  static async getAssignedToolNames(agentId: string): Promise<Set<string>> {
+    const tools = await ToolModel.getMcpToolsByAgent(agentId);
+    return new Set(tools.map((tool) => tool.name));
+  }
+
+  /**
    * Bulk create tools for an MCP server (catalog-based tools)
    * Fetches existing tools in a single query, then bulk inserts only new tools
    * Returns all tools (existing + newly created) to avoid N+1 queries
@@ -1068,6 +1076,35 @@ class ToolModel {
   }
 
   /**
+   * One-time backfill triggered on startup: when a skill built-in tool is
+   * created for the first time on this seed run, assign the skill toolset to
+   * every agent in orgs that already opted in via `organization.skillToolsEnabled`.
+   *
+   * Newly created agents inherit skill tools via {@link assignSkillToolsToAgent},
+   * but agents that predate a tool's introduction would otherwise never receive
+   * it — leaving the documented MCP flow unreachable until someone re-runs the
+   * opt-in. Idempotent (delegates to {@link backfillSkillToolsToOrgAgents}).
+   *
+   * @param newlyCreatedToolNames names returned by {@link seedArchestraTools}.
+   */
+  static async backfillNewSkillToolsToEnabledOrgs(
+    newlyCreatedToolNames: string[],
+  ): Promise<void> {
+    const skillShortNames = new Set<string>(SKILL_ARCHESTRA_TOOL_SHORT_NAMES);
+    const hasNewSkillTool = newlyCreatedToolNames.some((name) => {
+      const shortName = extractArchestraBuiltInShortName(name);
+      return shortName !== null && skillShortNames.has(shortName);
+    });
+    if (!hasNewSkillTool) return;
+
+    const organizationIds =
+      await OrganizationModel.findIdsWithSkillToolsEnabled();
+    for (const organizationId of organizationIds) {
+      await ToolModel.backfillSkillToolsToOrgAgents(organizationId);
+    }
+  }
+
+  /**
    * Assign skill tools to a single agent if its org has opted in
    * (`organization.skillToolsEnabled`). No-op otherwise.
    *
@@ -1145,7 +1182,6 @@ class ToolModel {
    * - artifact_write: for artifact management
    * - todo_write: for task tracking
    * - query_knowledge_sources: for querying the knowledge base
-   * - run_python: for code execution, only when the runtime is enabled
    *
    * Seeded default tools are assigned. The query_knowledge_sources tool is
    * filtered out at query time if the agent has no knowledge base assigned.
@@ -1158,12 +1194,12 @@ class ToolModel {
   ): Promise<void> {
     const organization = await OrganizationModel.getFirst();
     archestraMcpBranding.syncFromOrganization(organization);
+    // sandbox tools (run_command / upload_file / download_file) are not
+    // auto-assigned — they require explicit per-agent assignment plus
+    // sandbox:execute, like the rest of the skill-execution surface.
     const defaultToolShortNames: ArchestraToolShortName[] = [
       ...DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES,
     ];
-    if (config.codeRuntime.enabled) {
-      defaultToolShortNames.push(TOOL_RUN_PYTHON_SHORT_NAME);
-    }
 
     const defaultToolNames = defaultToolShortNames.map((shortName) =>
       archestraMcpBranding.getToolName(shortName),

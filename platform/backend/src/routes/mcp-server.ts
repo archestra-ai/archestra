@@ -1,5 +1,9 @@
 import type { IncomingHttpHeaders } from "node:http";
-import { isPlaywrightCatalogItem, OAUTH_TOKEN_TYPE, RouteId } from "@shared";
+import {
+  isPlaywrightCatalogItem,
+  OAUTH_TOKEN_TYPE,
+  RouteId,
+} from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { hasPermission, userHasPermission } from "@/auth";
@@ -14,14 +18,13 @@ import {
   AgentModel,
   AgentToolModel,
   InternalMcpCatalogModel,
-  McpPresetEntryModel,
   McpServerModel,
-  OrganizationModel,
   TeamModel,
   ToolModel,
 } from "@/models";
 import { isByosEnabled, secretManager } from "@/secrets-manager";
 import { filterMcpServersAssignableToTarget } from "@/services/agent-tool-assignment";
+import { assertValuesMatchEnvironmentRegex } from "@/services/environments/environment";
 import { refreshLinkedIdentityProviderAccessToken } from "@/services/identity-providers/access-token-refresh";
 import { exchangeIdJagAtProtectedResource } from "@/services/identity-providers/enterprise-managed/broker";
 import { exchangeEnterpriseManagedCredential } from "@/services/identity-providers/enterprise-managed/exchange";
@@ -43,7 +46,6 @@ import {
   SelectMcpServerSchema,
   UuidIdSchema,
 } from "@/types";
-import { validateValuesAgainstRegex } from "@/utils/validate-values-against-regex";
 import { broadcastMcpInstallationStatus } from "@/websocket";
 
 const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
@@ -190,43 +192,6 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           throw new ApiError(400, "Catalog item not found");
         }
 
-        // Enforce the preset entry's validation regex (child install) or the
-        // org-wide default regex (parent install) against every prompted user
-        // value. Vault-reference paths (isByosVault) are pre-validated lookups,
-        // not user-entered strings — skip them.
-        if (!isByosVault) {
-          let applicableRegex: string | null = null;
-          let applicableName = "Default";
-          if (catalogItem.presetEntryId) {
-            const entry = await McpPresetEntryModel.findByIdForOrganization(
-              catalogItem.presetEntryId,
-              organizationId,
-            );
-            applicableRegex = entry?.validationRegex ?? null;
-            applicableName = entry?.name ?? "Default";
-          } else {
-            const org = await OrganizationModel.getById(organizationId);
-            applicableRegex = org?.presetEntityDefaultValidationRegex ?? null;
-            applicableName = org?.presetEntityDefaultLabel ?? "Default";
-          }
-          if (applicableRegex) {
-            try {
-              validateValuesAgainstRegex(
-                userConfigValues,
-                applicableRegex,
-                applicableName,
-              );
-              validateValuesAgainstRegex(
-                environmentValues,
-                applicableRegex,
-                applicableName,
-              );
-            } catch (e) {
-              throw new ApiError(400, (e as Error).message);
-            }
-          }
-        }
-
         // Playwright browser preview can only be installed as a personal server
         if (
           isPlaywrightCatalogItem(serverData.catalogId) &&
@@ -241,10 +206,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // Set serverType from catalog item
         serverData.serverType = catalogItem.serverType;
 
-        // The catalog row is the source of truth for the install name. For
-        // preset (child) installs the row's `name` is the composed
-        // `{parent.name}-{childName}`, so this also disambiguates parent vs.
-        // preset installs at the deployment-name layer.
+        // The catalog row is the source of truth for the install name.
         serverData.name = catalogItem.name;
 
         // Scope-based authorization (personal / team / org).
@@ -254,6 +216,20 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           userId: user.id,
           organizationId,
           headers,
+        });
+
+        // Enforce the governing environment's allowlist regex against the
+        // non-secret, free-text config values the user supplied.
+        await assertValuesMatchEnvironmentRegex({
+          environmentId: catalogItem.environmentId,
+          organizationId,
+          valueSets: [
+            collectValidatableInstallValues({
+              catalogItem,
+              userConfigValues,
+              environmentValues,
+            }),
+          ],
         });
 
         // Validate no duplicate installations for this catalog item
@@ -337,40 +313,6 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // Update local reference for deployment
           if (catalogItem.localConfig) {
             catalogItem.localConfig.serviceAccount = normalizedServiceAccount;
-          }
-        }
-
-        // Apply preset-scoped overlay from the catalog row onto the install
-        // inputs. Preset values have *lower* precedence than install-time
-        // inputs — if the user explicitly supplied the same key at install
-        // time, that wins.
-        // Secret-typed preset env values are also surfaced into
-        // environmentValues here. They reach the pod via the K8s Secret
-        // (built from the install secret bag) — the env builder only emits a
-        // secretKeyRef when it sees a non-empty entry for that key in
-        // environmentValues, so the merge must include secret keys too.
-        // Runs *after* the persist step above so values freshly-supplied via
-        // this install request's `presetFieldValues` are included.
-        if (catalogItem.localConfig?.environment) {
-          const presetSecretBag = catalogItem.presetSecretId
-            ? ((await secretManager().getSecret(catalogItem.presetSecretId))
-                ?.secret as Record<string, unknown> | undefined)
-            : undefined;
-
-          const presetEnvDefaults: Record<string, string> = {};
-          for (const envDef of catalogItem.localConfig.environment) {
-            if (!envDef.promptOnPreset) continue;
-            const v =
-              envDef.type === "secret"
-                ? presetSecretBag?.[envDef.key]
-                : catalogItem.presetFieldValues?.[envDef.key];
-            if (v != null) presetEnvDefaults[envDef.key] = String(v);
-          }
-          if (Object.keys(presetEnvDefaults).length > 0) {
-            environmentValues = {
-              ...presetEnvDefaults,
-              ...(environmentValues ?? {}),
-            };
           }
         }
       }
@@ -586,15 +528,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           };
           let hasPromptedSecrets = false;
 
-          // Resolve the preset secret bundle once if the catalog row carries
-          // one — preset-scoped secret env values live in this bag, keyed by
-          // env-var name.
-          const presetSecretBag = catalogItem.presetSecretId
-            ? ((await secretManager().getSecret(catalogItem.presetSecretId))
-                ?.secret as Record<string, unknown> | undefined)
-            : undefined;
-
-          // Collect all secret-type env vars (static, prompted, and preset).
+          // Collect all secret-type env vars (static and prompted).
           for (const envDef of catalogItem.localConfig?.environment ?? []) {
             if (envDef.type === "secret") {
               let value: string | undefined;
@@ -605,10 +539,6 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 if (value) {
                   hasPromptedSecrets = true;
                 }
-              } else if (envDef.promptOnPreset) {
-                // Preset-scoped — read from the resolved preset secret bag
-                const raw = presetSecretBag?.[envDef.key];
-                value = raw != null ? String(raw) : undefined;
               } else {
                 // Static value from catalog - get from envDef.value
                 value = envDef.value;
@@ -1093,6 +1023,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         },
         user,
         headers,
+        organizationId,
       },
       reply,
     ) => {
@@ -1133,13 +1064,28 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         action: "re-authenticate",
       });
 
+      const catalogItem = mcpServer.catalogId
+        ? await InternalMcpCatalogModel.findById(mcpServer.catalogId)
+        : null;
+
+      // Enforce the governing environment's allowlist regex against the newly
+      // submitted non-secret, free-text config values.
+      await assertValuesMatchEnvironmentRegex({
+        environmentId: catalogItem?.environmentId ?? null,
+        organizationId,
+        valueSets: [
+          collectValidatableInstallValues({
+            catalogItem,
+            userConfigValues,
+            environmentValues,
+          }),
+        ],
+      });
+
       // Resolve the new secret ID: either provided directly, or create from raw credentials
       let newSecretId = providedSecretId;
 
       if (!newSecretId) {
-        const catalogItem = mcpServer.catalogId
-          ? await InternalMcpCatalogModel.findById(mcpServer.catalogId)
-          : null;
         const catalogStaticUserConfigValues = getCatalogStaticUserConfigValues(
           catalogItem?.userConfig,
         );
@@ -1616,7 +1562,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectMcpServerSchema),
       },
     },
-    async ({ params: { id }, body, user, headers }, reply) => {
+    async ({ params: { id }, body, user, headers, organizationId }, reply) => {
       const {
         environmentValues,
         userConfigValues,
@@ -1646,6 +1592,20 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (!catalogItem) {
         throw new ApiError(404, "Catalog item not found for this server");
       }
+
+      // Enforce the governing environment's allowlist regex against the newly
+      // submitted non-secret, free-text config values.
+      await assertValuesMatchEnvironmentRegex({
+        environmentId: catalogItem.environmentId,
+        organizationId,
+        valueSets: [
+          collectValidatableInstallValues({
+            catalogItem,
+            userConfigValues,
+            environmentValues,
+          }),
+        ],
+      });
 
       // New env/userConfig values land in this install's secret bag. The
       // runtime reload below reads `secretId` to pick them up.
@@ -2233,7 +2193,7 @@ function isInstallDiscoveryAuthError(error: unknown): boolean {
     lower.includes("forbidden") ||
     lower.includes("authentication failed") ||
     lower.includes("authentication required") ||
-    lower.includes("missing required authorization header") ||
+    (lower.includes("missing") && lower.includes("authorization header")) ||
     lower.includes("invalid authorization header") ||
     lower.includes("invalid token") ||
     lower.includes("access denied") ||
@@ -2313,6 +2273,40 @@ function getCatalogStaticUserConfigValues(
         String(fieldConfig.default),
       ]),
   );
+}
+
+/**
+ * Select the prompted config values an environment's allowlist regex governs:
+ * non-secret, free-text fields (userConfig string/directory/file; env
+ * plain_text). Secret fields — including BYOS vault references, which live on
+ * secret-typed fields — and typed boolean/number fields are excluded, since the
+ * rule targets free-text values. Mirrors the frontend's per-field filtering.
+ */
+function collectValidatableInstallValues(params: {
+  catalogItem: {
+    userConfig?: Record<string, { type?: string; sensitive?: boolean }> | null;
+    localConfig?: {
+      environment?: Array<{ key: string; type: string }> | null;
+    } | null;
+  } | null;
+  userConfigValues: Record<string, string> | undefined;
+  environmentValues: Record<string, string> | undefined;
+}): Record<string, string> {
+  const { catalogItem, userConfigValues, environmentValues } = params;
+  const values: Record<string, string> = {};
+  for (const [key, def] of Object.entries(catalogItem?.userConfig ?? {})) {
+    if (def.sensitive || def.type === "number" || def.type === "boolean") {
+      continue;
+    }
+    const value = userConfigValues?.[key];
+    if (value) values[key] = value;
+  }
+  for (const env of catalogItem?.localConfig?.environment ?? []) {
+    if (env.type !== "plain_text") continue;
+    const value = environmentValues?.[env.key];
+    if (value) values[env.key] = value;
+  }
+  return values;
 }
 
 function filterInstallUserConfigValues(params: {

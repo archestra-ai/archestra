@@ -1,4 +1,4 @@
-import { SESSION_ID_HEADER } from "@shared";
+import { SESSION_ID_HEADER } from "@archestra/shared";
 import { describe, expect, test } from "vitest";
 import { extractSessionInfo } from "./session-id";
 

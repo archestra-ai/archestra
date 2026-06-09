@@ -1,5 +1,6 @@
 import {
   and,
+  asc,
   count,
   desc,
   eq,
@@ -9,9 +10,11 @@ import {
   like,
   or,
 } from "drizzle-orm";
-import db, { schema, withDbTransaction } from "@/database";
+import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import type { InsertSkill, InsertSkillFile, Skill, UpdateSkill } from "@/types";
+import type { SkillFileEncoding, SkillFileKind } from "@/types/skill";
 import type { ResourceVisibilityScope } from "@/types/visibility";
+import SkillVersionModel, { type VersionFileInput } from "./skill-version";
 
 class SkillModel {
   static async findByOrganization(params: {
@@ -101,6 +104,25 @@ class SkillModel {
       .where(inArray(schema.skillsTable.id, ids));
   }
 
+  /** Locate a shipped built-in skill by its stable `source_ref` within an org. */
+  static async findBuiltIn(params: {
+    organizationId: string;
+    sourceRef: string;
+  }): Promise<Skill | null> {
+    const [result] = await db
+      .select()
+      .from(schema.skillsTable)
+      .where(
+        and(
+          eq(schema.skillsTable.organizationId, params.organizationId),
+          eq(schema.skillsTable.sourceType, "built_in"),
+          eq(schema.skillsTable.sourceRef, params.sourceRef),
+        ),
+      );
+
+    return result ?? null;
+  }
+
   static async findByName(
     organizationId: string,
     name: string,
@@ -188,15 +210,18 @@ class SkillModel {
    * When `teamIds` is supplied the team rows are inserted in the same
    * transaction, so a failed assignment cannot leave a scoped skill orphaned.
    */
-  static async createWithFiles(params: {
-    skill: InsertSkill;
-    files: Omit<InsertSkillFile, "skillId">[];
-    teamIds?: string[];
-  }): Promise<Skill | null> {
-    return await withDbTransaction(async (tx) => {
+  static async createWithFiles(
+    params: {
+      skill: InsertSkill;
+      files: Omit<InsertSkillFile, "skillId">[];
+      teamIds?: string[];
+    },
+    tx?: Transaction,
+  ): Promise<Skill | null> {
+    const run = async (tx: Transaction) => {
       const [skill] = await tx
         .insert(schema.skillsTable)
-        .values(params.skill)
+        .values({ ...params.skill, latestVersion: 1 })
         .onConflictDoNothing()
         .returning();
 
@@ -216,8 +241,25 @@ class SkillModel {
           );
       }
 
+      // every skill starts at immutable version 1.
+      const versionFiles = toVersionFiles(params.files);
+      await SkillVersionModel.insertVersion(tx, {
+        skillId: skill.id,
+        version: 1,
+        content: skill.content,
+        contentHash: SkillVersionModel.computeContentHash({
+          content: skill.content,
+          files: versionFiles,
+        }),
+        files: versionFiles,
+      });
+
       return skill;
-    });
+    };
+
+    // join a caller-supplied transaction so the create can be made atomic with
+    // other writes (e.g. agent→skill conversion deleting the source agent).
+    return tx ? await run(tx) : await withDbTransaction(run);
   }
 
   /**
@@ -273,6 +315,41 @@ class SkillModel {
         }
       }
 
+      // fork an immutable version iff the canonical payload changed. The hash is
+      // computed over the resulting file set (read back here so an omitted
+      // `files` reuses the untouched rows), so a metadata-only edit is a no-op.
+      const currentFiles = await tx
+        .select()
+        .from(schema.skillFilesTable)
+        .where(eq(schema.skillFilesTable.skillId, params.id))
+        .orderBy(asc(schema.skillFilesTable.path));
+      const versionFiles = toVersionFiles(currentFiles);
+      const contentHash = SkillVersionModel.computeContentHash({
+        content: skill.content,
+        files: versionFiles,
+      });
+      const latest = await SkillVersionModel.findBySkillAndVersion(
+        params.id,
+        skill.latestVersion,
+        tx,
+      );
+      if (!latest || latest.contentHash !== contentHash) {
+        const nextVersion = skill.latestVersion + 1;
+        await SkillVersionModel.insertVersion(tx, {
+          skillId: params.id,
+          version: nextVersion,
+          content: skill.content,
+          contentHash,
+          files: versionFiles,
+        });
+        const [bumped] = await tx
+          .update(schema.skillsTable)
+          .set({ latestVersion: nextVersion })
+          .where(eq(schema.skillsTable.id, params.id))
+          .returning();
+        return bumped ?? skill;
+      }
+
       return skill;
     });
   }
@@ -303,6 +380,23 @@ class SkillModel {
 
     return row ?? null;
   }
+}
+
+/** Normalize a resource file set into the shape a version snapshot stores. */
+function toVersionFiles(
+  files: {
+    path: string;
+    content: string;
+    encoding?: SkillFileEncoding;
+    kind: SkillFileKind;
+  }[],
+): VersionFileInput[] {
+  return files.map((file) => ({
+    path: file.path,
+    content: file.content,
+    encoding: file.encoding ?? "utf8",
+    kind: file.kind,
+  }));
 }
 
 function buildOrgFilters(params: {

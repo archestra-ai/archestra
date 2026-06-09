@@ -2,7 +2,7 @@ import {
   ARCHESTRA_MCP_CATALOG_ID,
   type PaginationQuery,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
-} from "@shared";
+} from "@archestra/shared";
 import {
   and,
   asc,
@@ -628,63 +628,6 @@ class AgentToolModel {
             inArray(schema.agentToolsTable.toolId, toolIds),
           ),
         );
-    }
-  }
-
-  static async syncAgentToolsFromLabels(agentId: string): Promise<void> {
-    // Get the agent and verify it's eligible for automatic tool assignment based on labels
-    const { default: AgentModel } = await import("./agent");
-    const agent = await AgentModel.findById(agentId);
-
-    if (!agent) return;
-    if (!isAutomaticToolAssignmentSupported(agent.agentType)) return;
-    if (agent.toolAssignmentMode !== "automatic") return;
-
-    // Fetch the agent's labels and determine which tools should be assigned based on those labels
-    const { default: AgentLabelModel } = await import("./agent-label");
-    const labels = await AgentLabelModel.getLabelsForAgent(agentId);
-
-    // For each label, find catalog items that match the label, then find tools associated with those catalog items, and build a set of desired tool IDs to be assigned to the agent
-    const desiredToolIdsSet = new Set<string>();
-    if (labels.length > 0) {
-      const { default: McpCatalogLabelModel } = await import(
-        "./mcp-catalog-label"
-      );
-      const catalogIds =
-        await McpCatalogLabelModel.getCatalogIdsByLabels(labels);
-
-      if (catalogIds.length > 0) {
-        const { default: ToolModel } = await import("./tool");
-        const toolIds = await ToolModel.getToolIdsByCatalogIds(catalogIds);
-        for (const toolId of toolIds) {
-          desiredToolIdsSet.add(toolId);
-        }
-      }
-    }
-
-    // Fetch the agent's assigned tool IDs and determine which tools to add/remove
-    const currentToolIds =
-      await AgentToolModel.findCatalogToolIdsByAgent(agentId);
-    const currentToolIdsSet = new Set(currentToolIds);
-
-    const desiredToolIds = Array.from(desiredToolIdsSet);
-    const toInsert = desiredToolIds.filter((id) => !currentToolIdsSet.has(id));
-    const toDelete = currentToolIds.filter((id) => !desiredToolIdsSet.has(id));
-
-    // Assign new tools that are not currently assigned to the agent.
-    if (toInsert.length > 0) {
-      const entries = toInsert.map((toolId) => ({
-        agentId,
-        toolId,
-        credentialResolutionMode: "dynamic" as CredentialResolutionMode, // default to dynamic for automatically assigned tools
-      }));
-
-      await AgentToolModel.bulkCreate(entries);
-    }
-
-    // Remove tools that are currently assigned but not in the desired set.
-    if (toDelete.length > 0) {
-      await AgentToolModel.bulkDelete(agentId, toDelete);
     }
   }
 
@@ -1347,10 +1290,6 @@ class AgentToolModel {
 }
 
 export default AgentToolModel;
-
-function isAutomaticToolAssignmentSupported(agentType: string): boolean {
-  return agentType === "agent" || agentType === "mcp_gateway";
-}
 
 function normalizeCredentialResolutionMode(params: {
   resolveAtCallTime?: boolean;

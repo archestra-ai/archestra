@@ -53,6 +53,14 @@ export const ATTR_GENAI_RESPONSE_FINISH_REASONS =
 export const ATTR_GENAI_USAGE_INPUT_TOKENS = "gen_ai.usage.input_tokens";
 export const ATTR_GENAI_USAGE_OUTPUT_TOKENS = "gen_ai.usage.output_tokens";
 export const ATTR_GENAI_USAGE_TOTAL_TOKENS = "gen_ai.usage.total_tokens";
+// Prompt-cache token counts, per the GenAI semconv. Read = served from a
+// provider cache, creation = written to it. The spec models both as a subset
+// of gen_ai.usage.input_tokens; our normalized input_tokens excludes them, so
+// the subset relationship does not hold here (tracked separately).
+export const ATTR_GENAI_USAGE_CACHE_READ_INPUT_TOKENS =
+  "gen_ai.usage.cache_read.input_tokens";
+export const ATTR_GENAI_USAGE_CACHE_CREATION_INPUT_TOKENS =
+  "gen_ai.usage.cache_creation.input_tokens";
 
 // --- gen_ai content events ---
 export const EVENT_GENAI_CONTENT_PROMPT = "gen_ai.content.prompt";
@@ -67,13 +75,6 @@ export const ATTR_GENAI_COMPLETION = "gen_ai.completion";
 // --- archestra custom ---
 export const ATTR_ARCHESTRA_AGENT_TYPE = "archestra.agent.type";
 export const ATTR_ARCHESTRA_COST = "archestra.cost";
-// Prompt-cache token counts. No stable OTEL GenAI semconv attribute exists for
-// cached tokens, so these are archestra-namespaced. Read = reused prefix,
-// write = newly cached prefix; both disjoint from gen_ai.usage.input_tokens.
-export const ATTR_ARCHESTRA_USAGE_CACHE_READ_TOKENS =
-  "archestra.usage.cache_read_tokens";
-export const ATTR_ARCHESTRA_USAGE_CACHE_WRITE_TOKENS =
-  "archestra.usage.cache_write_tokens";
 export const ATTR_ARCHESTRA_EXECUTION_ID = "archestra.execution.id";
 export const ATTR_ARCHESTRA_EXTERNAL_AGENT_ID = "archestra.external_agent_id";
 export const ATTR_ARCHESTRA_TRIGGER_SOURCE = "archestra.trigger.source";

@@ -203,8 +203,8 @@ Each LLM API call produces a span with `SpanKind.CLIENT` (indicating an outbound
 - `gen_ai.usage.input_tokens` - Number of input tokens consumed
 - `gen_ai.usage.output_tokens` - Number of output tokens generated
 - `gen_ai.usage.total_tokens` - Total tokens (input + output)
-- `archestra.usage.cache_read_tokens` - Prompt-cache tokens reused from an earlier request (set only when the response read from cache)
-- `archestra.usage.cache_write_tokens` - Prompt-cache tokens newly written to cache (set only when the response cached a prefix)
+- `gen_ai.usage.cache_read.input_tokens` - Prompt-cache tokens served from a provider cache (set only when the response read from cache)
+- `gen_ai.usage.cache_creation.input_tokens` - Prompt-cache tokens written to a provider cache (set only when the response cached a prefix)
 - `archestra.cost` - Estimated cost in USD (requires [token pricing](/docs/platform-cost-management#token-pricing) configuration)
 - `gen_ai.response.finish_reasons` - Why the model stopped generating (e.g., `["stop"]`, `["tool_calls"]`, `["end_turn"]`)
 

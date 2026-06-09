@@ -10,20 +10,22 @@ vi.mock("@/skills-sandbox/skill-sandbox-runtime-service", () => ({
 
 import config from "@/config";
 import { HookFileModel, SkillSandboxModel } from "@/models";
+import { SKILL_SANDBOX_HOME } from "@/skills-sandbox/runtime-image";
 import { skillSandboxRuntimeService } from "@/skills-sandbox/skill-sandbox-runtime-service";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { hookDispatcherService } from "./hook-dispatcher-service";
 
-// The dispatcher's isEnabled gates only on config.skillsSandbox.enabled.
-const originalSkills = config.skillsSandbox.enabled;
+// The dispatcher's isEnabled gates on config.hooks.enabled (which itself folds
+// in the agent-runtime requirement at config-load time).
+const originalHooks = config.hooks.enabled;
 
 describe("hookDispatcherService", () => {
   beforeEach(() => {
-    (config.skillsSandbox as { enabled: boolean }).enabled = true;
+    (config.hooks as { enabled: boolean }).enabled = true;
     vi.mocked(skillSandboxRuntimeService.runCommand).mockReset();
   });
   afterEach(() => {
-    (config.skillsSandbox as { enabled: boolean }).enabled = originalSkills;
+    (config.hooks as { enabled: boolean }).enabled = originalHooks;
     vi.restoreAllMocks();
   });
 
@@ -130,6 +132,17 @@ describe("hookDispatcherService", () => {
         fileName: "a_first.py",
         outcome: "blocked",
         exitCode: 2,
+        stdout: "",
+        stderr: "tool not allowed",
+        durationMs: 5,
+        payload: {
+          tool_name: "bash",
+          tool_input: {},
+          session_id: "conv-1",
+          cwd: SKILL_SANDBOX_HOME,
+          permission_mode: "default",
+          hook_event_name: "PreToolUse",
+        },
       },
     ]);
     // Only one run — second hook was never invoked.
@@ -215,6 +228,13 @@ describe("hookDispatcherService", () => {
 
     expect(result.decision).toBe("proceed");
     expect(result.injectedContext).toBe("ctx-a\nctx-b");
+    // Both proceeded runs surface their stdout + received payload for debug.
+    expect(result.runs).toHaveLength(2);
+    expect(result.runs?.map((r) => r.stdout)).toEqual(["ctx-a\n", "ctx-b\n"]);
+    expect(result.runs?.[0].payload).toMatchObject({
+      hook_event_name: "PreToolUse",
+      session_id: "conv-2",
+    });
   });
 
   // -----------------------------------------------------------------------
@@ -266,14 +286,25 @@ describe("hookDispatcherService", () => {
 
     expect(result.decision).toBe("proceed");
     // fail-open still reports the run that errored, mapped for inline display.
-    expect(result.runs).toEqual([
-      {
-        hookEventName: "PreToolUse",
-        fileName: "flaky.py",
-        outcome: "error",
-        exitCode: null,
+    // durationMs is wall-clock from the catch path, so match it loosely.
+    expect(result.runs).toHaveLength(1);
+    expect(result.runs?.[0]).toEqual({
+      hookEventName: "PreToolUse",
+      fileName: "flaky.py",
+      outcome: "error",
+      exitCode: null,
+      stdout: "",
+      stderr: "",
+      durationMs: expect.any(Number),
+      payload: {
+        tool_name: "bash",
+        tool_input: {},
+        session_id: "conv-3",
+        cwd: SKILL_SANDBOX_HOME,
+        permission_mode: "default",
+        hook_event_name: "PreToolUse",
       },
-    ]);
+    });
   });
 
   // -----------------------------------------------------------------------
@@ -284,7 +315,7 @@ describe("hookDispatcherService", () => {
     makeUser,
     makeAgent,
   }) => {
-    (config.skillsSandbox as { enabled: boolean }).enabled = false;
+    (config.hooks as { enabled: boolean }).enabled = false;
 
     const org = await makeOrganization();
     const user = await makeUser();
@@ -322,7 +353,7 @@ describe("hookDispatcherService", () => {
     await HookFileModel.create({
       organizationId: org.id,
       agentId: agent.id,
-      event: "user_prompt_submit",
+      event: "session_start",
       fileName: "notify.py",
       content: "print('ok')",
       requirements: [],
@@ -356,12 +387,12 @@ describe("hookDispatcherService", () => {
     });
 
     await hookDispatcherService.fire({
-      event: "user_prompt_submit",
+      event: "session_start",
       conversationId,
       agentId: agent.id,
       organizationId: org.id,
       userId: user.id,
-      fields: { prompt: "hello" },
+      fields: {},
     });
 
     expect(spyFind).toHaveBeenCalledWith({
@@ -369,84 +400,6 @@ describe("hookDispatcherService", () => {
       userId: user.id,
       conversationId,
       defaultCwd: "/home/sandbox",
-    });
-  });
-
-  // -----------------------------------------------------------------------
-  // 7. Transcript: fire materializes a Claude-format transcript + path
-  // -----------------------------------------------------------------------
-  test("writes a Claude-format transcript to the sandbox from supplied messages", async ({
-    makeOrganization,
-    makeUser,
-    makeAgent,
-  }) => {
-    const org = await makeOrganization();
-    const user = await makeUser();
-    const agent = await makeAgent({ organizationId: org.id });
-    const conversationId = crypto.randomUUID();
-
-    await HookFileModel.create({
-      organizationId: org.id,
-      agentId: agent.id,
-      event: "user_prompt_submit",
-      fileName: "notify.py",
-      content: "print('ok')",
-      requirements: [],
-    });
-
-    vi.spyOn(SkillSandboxModel, "findOrCreateDefault").mockResolvedValue({
-      id: crypto.randomUUID(),
-      organizationId: org.id,
-      userId: user.id,
-      conversationId,
-      defaultCwd: "/home/sandbox",
-      isDefault: true,
-      nextReplaySequence: 0,
-      createdAt: new Date(),
-    });
-    vi.mocked(skillSandboxRuntimeService.runCommand).mockResolvedValue({
-      commandId: "cmd-1",
-      sandboxId: "s" as never,
-      command: "",
-      cwd: null,
-      stdout: "",
-      stderr: "",
-      exitCode: 0,
-      durationMs: 5,
-      timedOut: false,
-      truncated: false,
-      stagingNotices: [],
-    });
-    vi.mocked(skillSandboxRuntimeService.uploadFile).mockResolvedValue({
-      uploadId: "up-1",
-      sandboxId: "s" as never,
-      path: "",
-      mimeType: "application/json",
-      sizeBytes: 0,
-    });
-
-    await hookDispatcherService.fire({
-      event: "user_prompt_submit",
-      conversationId,
-      agentId: agent.id,
-      organizationId: org.id,
-      userId: user.id,
-      fields: { prompt: "hello" },
-      messages: [
-        { id: "u1", role: "user", parts: [{ type: "text", text: "hello" }] },
-      ],
-    });
-
-    // The transcript is uploaded first (before the per-fire script/payload).
-    const firstUpload = vi.mocked(skillSandboxRuntimeService.uploadFile).mock
-      .calls[0][0];
-    expect(firstUpload.path).toBe(
-      `/home/sandbox/transcript/${conversationId}.jsonl`,
-    );
-    const transcript = (firstUpload.data as Buffer).toString("utf8");
-    expect(JSON.parse(transcript.trim()).message).toEqual({
-      role: "user",
-      content: [{ type: "text", text: "hello" }],
     });
   });
 });

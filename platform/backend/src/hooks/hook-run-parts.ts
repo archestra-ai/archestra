@@ -2,14 +2,19 @@ import { HOOK_RUN_PART_TYPE } from "@archestra/shared";
 import type { ChatMessage, ChatMessagePart } from "@/types";
 import type { HookOutcome } from "@/types/hook";
 
-// re-exported so callers in this package keep importing it from here; the
-// canonical wire string lives in the shared module.
+/**
+ * Re-exported so callers in this package keep importing it from here; the
+ * canonical wire string lives in the shared module.
+ *
+ * @public — also imported directly by hook-run-parts.test.ts (knip --production
+ * can't see test usage).
+ */
 export { HOOK_RUN_PART_TYPE };
 
 /**
- * Where a hook-run entry attaches within an assistant turn. SessionStart and
- * UserPromptSubmit sit at the turn's start; PreToolUse / PostToolUse bracket the
- * tool call they apply to (matched by toolCallId); Stop sits at the end.
+ * Where a hook-run entry attaches within an assistant turn. SessionStart sits at
+ * the turn's start; PreToolUse / PostToolUse bracket the tool call they apply to
+ * (matched by toolCallId); Stop sits at the end.
  */
 export type HookRunAnchor =
   | { kind: "turn-start" }
@@ -28,6 +33,14 @@ export interface HookRunDetail {
   fileName: string;
   outcome: HookOutcome;
   exitCode: number | null;
+  /** Raw stdout the hook wrote (untruncated; the part layer caps it). */
+  stdout: string;
+  /** Raw stderr the hook wrote (the block reason, untruncated). */
+  stderr: string;
+  /** Wall-clock duration of the hook run, in milliseconds. */
+  durationMs: number;
+  /** The JSON event payload the hook received on stdin. */
+  payload: Record<string, unknown>;
 }
 
 /** A single hook execution collected during a turn, ready to render inline. */
@@ -40,10 +53,25 @@ export interface CollectedHookRun {
   exitCode: number | null;
   /** Tool context for PreToolUse / PostToolUse entries (display only). */
   toolName?: string;
+  /** Raw stdout the hook wrote (untruncated; the part layer caps it). */
+  stdout: string;
+  /** Raw stderr the hook wrote (the block reason, untruncated). */
+  stderr: string;
+  /** Wall-clock duration of the hook run, in milliseconds. */
+  durationMs: number;
+  /** The JSON event payload the hook received on stdin. */
+  payload: Record<string, unknown>;
   anchor: HookRunAnchor;
 }
 
-/** The data payload of a `data-hook-run` UI message part (outcome-only). */
+/**
+ * The data payload of a `data-hook-run` UI message part. The debug bodies
+ * (`stdout` / `stderr` / `payloadJson` / `durationMs`) are optional so parts
+ * persisted before this field set still deserialize, and `stdout` / `stderr`
+ * are omitted when the hook wrote nothing. They are only ever delivered to the
+ * client when the conversation has debug mode on and the viewer is an admin
+ * (see {@link stripHookRunParts}); the model never sees any `data-*` part.
+ */
 interface HookRunPartData {
   hookEventName: string;
   fileName: string;
@@ -51,6 +79,11 @@ interface HookRunPartData {
   exitCode: number | null;
   toolName?: string;
   toolCallId?: string;
+  stdout?: string;
+  stderr?: string;
+  /** The received payload, JSON-stringified and capped. */
+  payloadJson?: string;
+  durationMs?: number;
 }
 
 /** Build the model-invisible `data-hook-run` part for one collected run. */
@@ -66,6 +99,17 @@ function hookRunToPart(run: CollectedHookRun): ChatMessagePart {
   }
   if (run.anchor.kind === "tool-pre" || run.anchor.kind === "tool-post") {
     data.toolCallId = run.anchor.toolCallId;
+  }
+  // Debug bodies: always carry the payload + duration; stdout / stderr only
+  // when non-empty so silent hooks stay compact. All are capped so the
+  // always-store model can't bloat a message row.
+  data.payloadJson = truncate(JSON.stringify(run.payload));
+  data.durationMs = run.durationMs;
+  if (run.stdout) {
+    data.stdout = truncate(run.stdout);
+  }
+  if (run.stderr) {
+    data.stderr = truncate(run.stderr);
   }
   return { type: HOOK_RUN_PART_TYPE, data };
 }
@@ -91,6 +135,9 @@ function isToolPartWithId(part: ChatMessagePart, toolCallId: string): boolean {
  * - `turn-end` runs are appended.
  * - A tool run whose `toolCallId` is not present in `parts` falls back to the
  *   very end (after `turn-end` runs) rather than being dropped.
+ *
+ * @public — used internally by {@link applyHookRunsToMessages} and exercised
+ * directly by hook-run-parts.test.ts (knip --production can't see test usage).
  */
 export function spliceHookRunParts(
   parts: ChatMessagePart[],
@@ -167,9 +214,40 @@ export function toCollectedRuns(
     fileName: r.fileName,
     outcome: r.outcome,
     exitCode: r.exitCode,
+    stdout: r.stdout,
+    stderr: r.stderr,
+    durationMs: r.durationMs,
+    payload: r.payload,
     ...(toolName !== undefined ? { toolName } : {}),
     anchor,
   }));
+}
+
+/**
+ * Remove every `data-hook-run` part from a conversation's messages unless
+ * `visible`. This is the read-time gate: hook runs are persisted on every turn
+ * (with their stdout / stderr / payload), but only delivered to the client when
+ * the conversation has debug mode on AND the viewer is an admin. Pure — returns
+ * the input as-is when visible or when no message carries a hook part, otherwise
+ * returns shallow copies of only the messages that needed filtering.
+ */
+export function stripHookRunParts(
+  messages: ChatMessage[],
+  options: { visible: boolean },
+): ChatMessage[] {
+  if (options.visible) {
+    return messages;
+  }
+  return messages.map((message) => {
+    const parts = message.parts;
+    if (!parts?.some((p) => p.type === HOOK_RUN_PART_TYPE)) {
+      return message;
+    }
+    return {
+      ...message,
+      parts: parts.filter((p) => p.type !== HOOK_RUN_PART_TYPE),
+    };
+  });
 }
 
 /**
@@ -251,4 +329,21 @@ export function applyHookRunsToMessages(
       parts: spliceHookRunParts(message.parts ?? [], msgRuns),
     };
   });
+}
+
+// === internal ===
+
+/**
+ * Per-body cap for persisted hook stdout / stderr / payload. Deliberately below
+ * the 50k PostToolUse `tool_response` cap so a single hook part stays bounded
+ * (≤ ~3 × this) even though rich bodies are stored on every turn.
+ */
+const HOOK_DEBUG_BODY_CAP = 10_000;
+
+/** Cap a string, appending a marker noting how many chars were dropped. */
+function truncate(s: string, cap = HOOK_DEBUG_BODY_CAP): string {
+  if (s.length <= cap) {
+    return s;
+  }
+  return `${s.slice(0, cap)}…[truncated ${s.length - cap} chars]`;
 }

@@ -768,6 +768,11 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.UpdateChatConversation]: {
     chat: ["update"],
   },
+  // Coarse gate only; the handler further requires agent-type admin to flip
+  // the per-conversation hook debug flag.
+  [RouteId.SetConversationHooksDebug]: {
+    chat: ["update"],
+  },
   [RouteId.DeleteChatConversation]: {
     chat: ["delete"],
   },

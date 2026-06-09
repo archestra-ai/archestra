@@ -52,7 +52,7 @@ test("every method is org-scoped — a foreign org cannot read or mutate", async
   const hook = await HookFileModel.create({
     organizationId: org.id,
     agentId: agent.id,
-    event: "stop",
+    event: "post_tool_use",
     fileName: "audit.sh",
     content: "exit 0",
     requirements: [],

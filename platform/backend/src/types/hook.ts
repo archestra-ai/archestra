@@ -8,10 +8,8 @@ import { schema } from "@/database";
 
 export const HookEventSchema = z.enum([
   "session_start",
-  "user_prompt_submit",
   "pre_tool_use",
   "post_tool_use",
-  "stop",
 ]);
 export type HookEvent = z.infer<typeof HookEventSchema>;
 

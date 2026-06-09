@@ -5,6 +5,7 @@ import {
   type CollectedHookRun,
   HOOK_RUN_PART_TYPE,
   spliceHookRunParts,
+  stripHookRunParts,
   toCollectedRuns,
 } from "./hook-run-parts";
 
@@ -24,6 +25,10 @@ function run(
     fileName: "h.py",
     outcome: "proceeded",
     exitCode: 0,
+    stdout: "",
+    stderr: "",
+    durationMs: 0,
+    payload: {},
     ...partial,
   };
 }
@@ -47,7 +52,7 @@ describe("spliceHookRunParts", () => {
     const out = spliceHookRunParts(parts, [
       run({ hookEventName: "SessionStart", anchor: { kind: "turn-start" } }),
       run({
-        hookEventName: "UserPromptSubmit",
+        hookEventName: "SessionStart",
         anchor: { kind: "turn-start" },
       }),
     ]);
@@ -57,7 +62,7 @@ describe("spliceHookRunParts", () => {
       "text",
     ]);
     expect(dataOf(out[0]).hookEventName).toBe("SessionStart");
-    expect(dataOf(out[1]).hookEventName).toBe("UserPromptSubmit");
+    expect(dataOf(out[1]).hookEventName).toBe("SessionStart");
   });
 
   it("places tool-pre before and tool-post after the matching tool part", () => {
@@ -137,6 +142,10 @@ describe("toCollectedRuns", () => {
             fileName: "g.py",
             outcome: "blocked",
             exitCode: 2,
+            stdout: "out",
+            stderr: "blocked!",
+            durationMs: 12,
+            payload: { tool_name: "bash" },
           },
         ],
         { kind: "tool-pre", toolCallId: "c1" },
@@ -148,6 +157,10 @@ describe("toCollectedRuns", () => {
         fileName: "g.py",
         outcome: "blocked",
         exitCode: 2,
+        stdout: "out",
+        stderr: "blocked!",
+        durationMs: 12,
+        payload: { tool_name: "bash" },
         toolName: "bash",
         anchor: { kind: "tool-pre", toolCallId: "c1" },
       },
@@ -171,7 +184,7 @@ describe("applyHookRunsToMessages", () => {
     expect(
       applyHookRunsToMessages(messages, [
         run({
-          hookEventName: "UserPromptSubmit",
+          hookEventName: "SessionStart",
           anchor: { kind: "turn-start" },
         }),
       ]),
@@ -185,7 +198,7 @@ describe("applyHookRunsToMessages", () => {
     ];
     const out = applyHookRunsToMessages(messages, [
       run({
-        hookEventName: "UserPromptSubmit",
+        hookEventName: "SessionStart",
         anchor: { kind: "turn-start" },
       }),
       run({ anchor: { kind: "tool-pre", toolCallId: "call-1" } }),
@@ -219,5 +232,73 @@ describe("applyHookRunsToMessages", () => {
       HOOK_RUN_PART_TYPE,
     ]);
     expect(out[2]).toBe(messages[2]);
+  });
+});
+
+describe("hook-run part debug bodies", () => {
+  it("emits payloadJson + durationMs, and stdout/stderr only when non-empty", () => {
+    const [part] = spliceHookRunParts(
+      [],
+      [
+        run({
+          anchor: { kind: "turn-start" },
+          stdout: "hello",
+          stderr: "",
+          durationMs: 42,
+          payload: { a: 1 },
+        }),
+      ],
+    );
+    const d = dataOf(part);
+    expect(d.payloadJson).toBe(JSON.stringify({ a: 1 }));
+    expect(d.durationMs).toBe(42);
+    expect(d.stdout).toBe("hello");
+    expect(d).not.toHaveProperty("stderr");
+  });
+
+  it("truncates a body past the cap with a marker", () => {
+    const big = "x".repeat(10_001);
+    const [part] = spliceHookRunParts(
+      [],
+      [run({ anchor: { kind: "turn-start" }, stdout: big })],
+    );
+    expect(dataOf(part).stdout).toBe(
+      `${"x".repeat(10_000)}…[truncated 1 chars]`,
+    );
+  });
+});
+
+describe("stripHookRunParts", () => {
+  const hookPart = (): ChatMessagePart => ({
+    type: HOOK_RUN_PART_TYPE,
+    data: {
+      hookEventName: "Stop",
+      fileName: "s.py",
+      outcome: "proceeded",
+      exitCode: 0,
+    },
+  });
+  const assistant = (parts: ChatMessagePart[]) => ({
+    role: "assistant" as const,
+    parts,
+  });
+
+  it("returns the same reference when visible", () => {
+    const messages = [assistant([text("hi"), hookPart()])];
+    expect(stripHookRunParts(messages, { visible: true })).toBe(messages);
+  });
+
+  it("removes hook parts when not visible, keeping other parts", () => {
+    const out = stripHookRunParts(
+      [assistant([text("hi"), hookPart(), tool("c1")])],
+      { visible: false },
+    );
+    expect(types(out[0].parts ?? [])).toEqual(["text", "tool-todo_write"]);
+  });
+
+  it("leaves a message with no hook part untouched (same reference)", () => {
+    const messages = [assistant([text("hi")])];
+    const out = stripHookRunParts(messages, { visible: false });
+    expect(out[0]).toBe(messages[0]);
   });
 });

@@ -1954,6 +1954,13 @@
       "when": 1781006952402,
       "tag": "0278_sloppy_gwen_stacy",
       "breakpoints": true
+    },
+    {
+      "idx": 279,
+      "version": "7",
+      "when": 1781014582608,
+      "tag": "0279_agent_lifecycle_hooks",
+      "breakpoints": true
     }
   ]
 }

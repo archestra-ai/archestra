@@ -13,6 +13,7 @@ CREATE TABLE "hook_files" (
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
+ALTER TABLE "conversations" ADD COLUMN "hooks_debug_enabled" boolean DEFAULT false NOT NULL;--> statement-breakpoint
 ALTER TABLE "hook_files" ADD CONSTRAINT "hook_files_agent_id_agents_id_fk" FOREIGN KEY ("agent_id") REFERENCES "public"."agents"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 CREATE INDEX "hook_files_agent_id_idx" ON "hook_files" USING btree ("agent_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "hook_files_agent_event_file_uidx" ON "hook_files" USING btree ("agent_id","event","file_name");

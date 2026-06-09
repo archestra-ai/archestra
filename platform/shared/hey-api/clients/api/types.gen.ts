@@ -19872,6 +19872,7 @@ export type GetChatConversationsResponses = {
             compactedTokenEstimate: number;
             createdAt: string;
         }>;
+        hooksDebugEnabled: boolean;
     }>;
 };
 
@@ -20024,6 +20025,7 @@ export type CreateChatConversationResponses = {
             compactedTokenEstimate: number;
             createdAt: string;
         }>;
+        hooksDebugEnabled: boolean;
     };
 };
 
@@ -20258,6 +20260,7 @@ export type GetChatConversationResponses = {
             compactedTokenEstimate: number;
             createdAt: string;
         }>;
+        hooksDebugEnabled: boolean;
     };
 };
 
@@ -20414,6 +20417,7 @@ export type UpdateChatConversationResponses = {
             compactedTokenEstimate: number;
             createdAt: string;
         }>;
+        hooksDebugEnabled: boolean;
     };
 };
 
@@ -20828,6 +20832,7 @@ export type ForkChatConversationResponses = {
             compactedTokenEstimate: number;
             createdAt: string;
         }>;
+        hooksDebugEnabled: boolean;
     };
 };
 
@@ -21081,6 +21086,7 @@ export type CompactChatConversationResponses = {
                 compactedTokenEstimate: number;
                 createdAt: string;
             }>;
+            hooksDebugEnabled: boolean;
         };
     };
 };
@@ -21505,6 +21511,7 @@ export type GetSharedConversationResponses = {
             createdAt: string;
         }>;
         sharedByUserId: string;
+        hooksDebugEnabled: boolean;
     };
 };
 
@@ -21656,6 +21663,7 @@ export type ForkSharedConversationResponses = {
             compactedTokenEstimate: number;
             createdAt: string;
         }>;
+        hooksDebugEnabled: boolean;
     };
 };
 
@@ -21810,6 +21818,7 @@ export type GenerateChatConversationTitleResponses = {
             compactedTokenEstimate: number;
             createdAt: string;
         }>;
+        hooksDebugEnabled: boolean;
     };
 };
 
@@ -21963,6 +21972,7 @@ export type UpdateChatMessageResponses = {
             compactedTokenEstimate: number;
             createdAt: string;
         }>;
+        hooksDebugEnabled: boolean;
     };
 };
 
@@ -23526,6 +23536,7 @@ export type GetConfigResponses = {
             mcpSandboxDomain: string | null;
             maintenanceMode: string | null;
             chatSecretScanEnabled: boolean;
+            agentHooksEnabled: boolean;
         };
         providerBaseUrls: {
             [key: string]: string | null;
@@ -48910,6 +48921,7 @@ export type CreateScheduleTriggerRunConversationResponses = {
             compactedTokenEstimate: number;
             createdAt: string;
         }>;
+        hooksDebugEnabled: boolean;
     };
 };
 
@@ -58055,3 +58067,90 @@ export type UpdateHookResponses = {
 };
 
 export type UpdateHookResponse = UpdateHookResponses[keyof UpdateHookResponses];
+
+export type SetConversationHooksDebugData = {
+    body: {
+        enabled: boolean;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/chat/conversations/{id}/hooks-debug';
+};
+
+export type SetConversationHooksDebugErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type SetConversationHooksDebugError = SetConversationHooksDebugErrors[keyof SetConversationHooksDebugErrors];
+
+export type SetConversationHooksDebugResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        hooksDebugEnabled: boolean;
+    };
+};
+
+export type SetConversationHooksDebugResponse = SetConversationHooksDebugResponses[keyof SetConversationHooksDebugResponses];

@@ -1,6 +1,6 @@
 "use client";
 
-import { Loader2, Plus, Trash2 } from "lucide-react";
+import { Loader2, Pencil, Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
@@ -27,6 +27,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { parseRequirementsInput } from "@/lib/agent-hooks-editor.requirements";
 import { useFeature } from "@/lib/config/config.query";
 import {
+  type AgentHook,
   type HookEvent,
   useAgentHooks,
   useCreateHook,
@@ -36,10 +37,8 @@ import {
 
 const HOOK_EVENTS: { value: HookEvent; label: string }[] = [
   { value: "session_start", label: "Session start" },
-  { value: "user_prompt_submit", label: "User prompt submit" },
   { value: "pre_tool_use", label: "Pre tool use" },
   { value: "post_tool_use", label: "Post tool use" },
-  { value: "stop", label: "Stop" },
 ];
 
 const EVENT_LABELS: Record<HookEvent, string> = Object.fromEntries(
@@ -96,6 +95,7 @@ function AgentHooksEditorContent({ agentId }: { agentId: string }) {
               <Badge variant="secondary">{EVENT_LABELS[hook.event]}</Badge>
               <code className="flex-1 truncate text-xs">{hook.fileName}</code>
               <div className="flex items-center gap-2">
+                <EditHookDialog agentId={agentId} hook={hook} />
                 <Switch
                   checked={hook.enabled}
                   disabled={updateHook.isPending}
@@ -188,66 +188,16 @@ function AddHookDialog({ agentId }: { agentId: string }) {
           <DialogTitle>Add hook</DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="hook-event">Event</Label>
-            <Select
-              value={event}
-              onValueChange={(value) => setEvent(value as HookEvent)}
-            >
-              <SelectTrigger id="hook-event">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {HOOK_EVENTS.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="hook-file-name">File name</Label>
-            <Input
-              id="hook-file-name"
-              value={fileName}
-              onChange={(e) => setFileName(e.target.value)}
-              placeholder="e.g. notify.py or check.sh"
-            />
-            <p className="text-xs text-muted-foreground">
-              Must end in <code>.py</code> or <code>.sh</code>.
-            </p>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="hook-content">Content</Label>
-            <Textarea
-              id="hook-content"
-              value={content}
-              onChange={(e) => setContent(e.target.value)}
-              placeholder="The script to run when the event fires"
-              className="min-h-[160px] font-mono text-xs"
-            />
-          </div>
-
-          {showRequirements && (
-            <div className="space-y-2">
-              <Label htmlFor="hook-requirements">Requirements</Label>
-              <Textarea
-                id="hook-requirements"
-                value={requirements}
-                onChange={(e) => setRequirements(e.target.value)}
-                placeholder="One per line or comma-separated, e.g. requests, httpx"
-                className="min-h-[60px] font-mono text-xs"
-              />
-              <p className="text-xs text-muted-foreground">
-                Python dependencies installed before the hook runs.
-              </p>
-            </div>
-          )}
-        </div>
+        <HookFormFields
+          event={event}
+          onEventChange={setEvent}
+          fileName={fileName}
+          onFileNameChange={setFileName}
+          content={content}
+          onContentChange={setContent}
+          requirements={requirements}
+          onRequirementsChange={setRequirements}
+        />
 
         <DialogFooter>
           <Button
@@ -266,6 +216,200 @@ function AddHookDialog({ agentId }: { agentId: string }) {
               <Loader2 className="h-4 w-4 mr-1 animate-spin" />
             )}
             Add hook
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+interface HookFormFieldsProps {
+  event: HookEvent;
+  onEventChange: (event: HookEvent) => void;
+  fileName: string;
+  onFileNameChange: (fileName: string) => void;
+  content: string;
+  onContentChange: (content: string) => void;
+  requirements: string;
+  onRequirementsChange: (requirements: string) => void;
+}
+
+/** Shared form body for the add and edit hook dialogs. */
+function HookFormFields({
+  event,
+  onEventChange,
+  fileName,
+  onFileNameChange,
+  content,
+  onContentChange,
+  requirements,
+  onRequirementsChange,
+}: HookFormFieldsProps) {
+  const showRequirements = isPythonHook(fileName);
+
+  return (
+    <div className="space-y-4">
+      <div className="space-y-2">
+        <Label htmlFor="hook-event">Event</Label>
+        <Select
+          value={event}
+          onValueChange={(value) => onEventChange(value as HookEvent)}
+        >
+          <SelectTrigger id="hook-event">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {HOOK_EVENTS.map((option) => (
+              <SelectItem key={option.value} value={option.value}>
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="hook-file-name">File name</Label>
+        <Input
+          id="hook-file-name"
+          value={fileName}
+          onChange={(e) => onFileNameChange(e.target.value)}
+          placeholder="e.g. notify.py or check.sh"
+        />
+        <p className="text-xs text-muted-foreground">
+          Must end in <code>.py</code> or <code>.sh</code>.
+        </p>
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="hook-content">Content</Label>
+        <Textarea
+          id="hook-content"
+          value={content}
+          onChange={(e) => onContentChange(e.target.value)}
+          placeholder="The script to run when the event fires"
+          className="min-h-[160px] font-mono text-xs"
+        />
+      </div>
+
+      {showRequirements && (
+        <div className="space-y-2">
+          <Label htmlFor="hook-requirements">Requirements</Label>
+          <Textarea
+            id="hook-requirements"
+            value={requirements}
+            onChange={(e) => onRequirementsChange(e.target.value)}
+            placeholder="One per line or comma-separated, e.g. requests, httpx"
+            className="min-h-[60px] font-mono text-xs"
+          />
+          <p className="text-xs text-muted-foreground">
+            Python dependencies installed before the hook runs.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function EditHookDialog({
+  agentId,
+  hook,
+}: {
+  agentId: string;
+  hook: AgentHook;
+}) {
+  const updateHook = useUpdateHook(agentId);
+  const [open, setOpen] = useState(false);
+  const [event, setEvent] = useState<HookEvent>(hook.event);
+  const [fileName, setFileName] = useState(hook.fileName);
+  const [content, setContent] = useState(hook.content);
+  const [requirements, setRequirements] = useState(
+    hook.requirements.join("\n"),
+  );
+
+  // Re-sync the form from the latest hook each time the dialog opens, so a
+  // reused row dialog never shows stale values after an external change.
+  const handleOpenChange = (next: boolean) => {
+    setOpen(next);
+    if (next) {
+      setEvent(hook.event);
+      setFileName(hook.fileName);
+      setContent(hook.content);
+      setRequirements(hook.requirements.join("\n"));
+    }
+  };
+
+  const handleSubmit = async () => {
+    const trimmedFileName = fileName.trim();
+    if (!FILE_NAME_REGEX.test(trimmedFileName)) {
+      toast.error("File name must end in .py or .sh");
+      return;
+    }
+    if (!content.trim()) {
+      toast.error("Content is required");
+      return;
+    }
+
+    const updated = await updateHook.mutateAsync({
+      id: hook.id,
+      event,
+      fileName: trimmedFileName,
+      content,
+      requirements: isPythonHook(trimmedFileName)
+        ? parseRequirementsInput(requirements)
+        : [],
+    });
+    if (updated) {
+      setOpen(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      <DialogTrigger asChild>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7 text-muted-foreground"
+          aria-label={`Edit ${hook.fileName}`}
+        >
+          <Pencil className="h-3.5 w-3.5" />
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Edit hook</DialogTitle>
+        </DialogHeader>
+
+        <HookFormFields
+          event={event}
+          onEventChange={setEvent}
+          fileName={fileName}
+          onFileNameChange={setFileName}
+          content={content}
+          onContentChange={setContent}
+          requirements={requirements}
+          onRequirementsChange={setRequirements}
+        />
+
+        <DialogFooter>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => handleOpenChange(false)}
+          >
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            onClick={handleSubmit}
+            disabled={updateHook.isPending}
+          >
+            {updateHook.isPending && (
+              <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+            )}
+            Save
           </Button>
         </DialogFooter>
       </DialogContent>

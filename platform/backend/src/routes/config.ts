@@ -76,6 +76,7 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
               mcpSandboxDomain: z.string().nullable(),
               maintenanceMode: z.string().nullable(),
               chatSecretScanEnabled: z.boolean(),
+              agentHooksEnabled: z.boolean(),
             }),
             providerBaseUrls: z.record(
               SupportedProvidersSchema,
@@ -119,6 +120,7 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
           mcpSandboxDomain: config.mcpSandbox.domain,
           maintenanceMode: config.maintenanceMode,
           chatSecretScanEnabled: config.chat.secretScanEnabled,
+          agentHooksEnabled: config.hooks.enabled,
         },
         providerBaseUrls: {
           openai: config.llm.openai.baseUrl || null,

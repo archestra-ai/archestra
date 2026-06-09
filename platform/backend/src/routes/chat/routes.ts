@@ -51,6 +51,7 @@ import { hookDispatcherService } from "@/hooks/hook-dispatcher-service";
 import {
   applyHookRunsToMessages,
   type CollectedHookRun,
+  stripHookRunParts,
   toCollectedRuns,
 } from "@/hooks/hook-run-parts";
 import { extractAndIngestDocuments } from "@/knowledge-base";
@@ -274,16 +275,14 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
 
-      // Lifecycle hooks (UserPromptSubmit / SessionStart). Cheap no-op when the
-      // agent has no hooks or the sandbox is disabled. Fired before createRun so
-      // a blocking hook never acquires/leaks an active run. Every fire is wrapped
+      // Lifecycle hooks (SessionStart). Cheap no-op when the agent has no hooks or
+      // the sandbox is disabled. Fired before createRun. Every fire is wrapped in
       // try/catch and fails open — hooks must never break chat.
       // Context returned by hooks is appended to the system prompt below.
       let hookSessionContext: string | undefined;
-      let hookPromptContext: string | undefined;
-      // Inline hook-run debug entries collected across this turn (UserPromptSubmit
-      // / SessionStart at the top, Pre/PostToolUse around their tool calls, Stop at
-      // the end) and spliced into the assistant message in onFinish.
+      // Inline hook-run debug entries collected across this turn (SessionStart at
+      // the top, Pre/PostToolUse around their tool calls, Stop at the end) and
+      // spliced into the assistant message in onFinish.
       const hookRunCollector: CollectedHookRun[] = [];
       // The conversation's user id (the sandbox is keyed per org/user/conversation).
       const conversationUserId = conversation.userId;
@@ -293,41 +292,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const isFirstTurn = !(messages as ChatMessage[]).some(
         (message) => message?.role === "assistant",
       );
-
-      // UserPromptSubmit only on a genuine user submit (skip regenerate).
-      if (trigger !== "regenerate-message") {
-        const latestUserPrompt = extractLatestUserPromptText(
-          messages as ChatMessage[],
-        );
-        try {
-          const result = await hookDispatcherService.fire({
-            event: "user_prompt_submit",
-            conversationId,
-            agentId: conversation.agentId,
-            organizationId,
-            userId: conversationUserId,
-            fields: { prompt: latestUserPrompt },
-            messages: messages as ChatMessage[],
-          });
-          if (result.decision === "block") {
-            throw new ApiError(422, result.reason ?? "Prompt blocked by hook");
-          }
-          hookPromptContext = result.injectedContext;
-          hookRunCollector.push(
-            ...toCollectedRuns(result.runs, { kind: "turn-start" }),
-          );
-        } catch (error) {
-          // A deliberate block must surface as 422; only fail open on unexpected
-          // dispatcher errors.
-          if (error instanceof ApiError) {
-            throw error;
-          }
-          logger.warn(
-            { error, conversationId },
-            "UserPromptSubmit hook dispatch failed, proceeding",
-          );
-        }
-      }
 
       if (isFirstTurn) {
         try {
@@ -343,7 +307,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
             organizationId,
             userId: conversationUserId,
             fields: { source: "startup", model: sessionStartModel },
-            messages: messages as ChatMessage[],
           });
           // SessionStart cannot block; only its injected context is used.
           hookSessionContext = result.injectedContext;
@@ -543,9 +506,8 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
             skillCatalogPrompt,
             toolDenialInstruction,
             toolResultInstructions,
-            // Context returned by SessionStart / UserPromptSubmit hooks.
+            // Context returned by SessionStart hooks.
             hookSessionContext,
-            hookPromptContext,
           ]
             .filter(Boolean)
             .join("\n\n") || undefined;
@@ -1172,28 +1134,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                     removeAbortListeners();
                     stopActiveRunPolling();
 
-                    // Stop lifecycle hook: awaited here (post-stream, so it can't
-                    // delay the user-visible response) to collect its run for
-                    // inline display. Fails open on any error.
-                    try {
-                      const stopResult = await hookDispatcherService.fire({
-                        event: "stop",
-                        conversationId,
-                        agentId,
-                        organizationId,
-                        userId: conversationUserId,
-                        fields: { stop_hook_active: false },
-                        messages: finalMessages as unknown as ChatMessage[],
-                      });
-                      hookRunCollector.push(
-                        ...toCollectedRuns(stopResult.runs, {
-                          kind: "turn-end",
-                        }),
-                      );
-                    } catch {
-                      // a Stop-hook failure must never break turn completion
-                    }
-
                     // Splice the turn's collected hook runs into the assistant
                     // message(s) as inline `data-hook-run` parts before persisting,
                     // so they survive refresh and sit at their lifecycle position.
@@ -1507,7 +1447,64 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Conversation not found");
       }
 
+      // Hook-run debug parts are persisted on every turn but only surfaced to
+      // admins while this conversation has debug mode on. Strip them otherwise
+      // so hook stdout/stderr/payload never reach a non-admin client. (When
+      // debug is off we skip the permission lookup entirely.)
+      const hooksDebugVisible =
+        config.hooks.enabled &&
+        conversation.hooksDebugEnabled &&
+        (await hasAnyAgentTypeAdminPermission({
+          userId: user.id,
+          organizationId,
+        }));
+      conversation.messages = stripHookRunParts(
+        conversation.messages as ChatMessage[],
+        { visible: hooksDebugVisible },
+      );
+
       return reply.send(conversation);
+    },
+  );
+
+  fastify.post(
+    "/api/chat/conversations/:id/hooks-debug",
+    {
+      schema: {
+        operationId: RouteId.SetConversationHooksDebug,
+        description:
+          "Toggle per-conversation hook debug mode (admin only). When on, hook runs surface inline as expandable debug chips for admins.",
+        tags: ["Chat"],
+        params: z.object({ id: UuidIdSchema }),
+        body: z.object({ enabled: z.boolean() }),
+        response: constructResponseSchema(
+          z.object({ hooksDebugEnabled: z.boolean() }),
+        ),
+      },
+    },
+    async ({ params: { id }, body: { enabled }, user, organizationId }) => {
+      if (!config.hooks.enabled) {
+        throw new ApiError(404, "Agent hooks are not enabled");
+      }
+      const isAdmin = await hasAnyAgentTypeAdminPermission({
+        userId: user.id,
+        organizationId,
+      });
+      if (!isAdmin) {
+        throw new ApiError(403, "Hook debug mode is admin only");
+      }
+
+      const updated = await ConversationModel.setHooksDebugEnabled({
+        id,
+        userId: user.id,
+        organizationId,
+        enabled,
+      });
+      if (updated === null) {
+        throw new ApiError(404, "Conversation not found");
+      }
+
+      return { hooksDebugEnabled: updated };
     },
   );
 
@@ -1682,12 +1679,18 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Conversation not found");
       }
 
-      return await forkConversation({
+      const forked = await forkConversation({
         sourceConversation,
         agentId,
         userId: user.id,
         organizationId,
       });
+      // A fresh fork starts with debug off; never echo the source's hook debug
+      // parts back in the response.
+      forked.messages = stripHookRunParts(forked.messages as ChatMessage[], {
+        visible: false,
+      });
+      return forked;
     },
   );
 
@@ -2237,6 +2240,13 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Shared conversation not found");
       }
 
+      // Hook debug parts are an owner/admin-only surface — never expose them
+      // through a share link, regardless of the viewer or debug flag.
+      conversation.messages = stripHookRunParts(
+        conversation.messages as ChatMessage[],
+        { visible: false },
+      );
+
       return conversation;
     },
   );
@@ -2273,12 +2283,16 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Shared conversation not found");
       }
 
-      return await forkConversation({
+      const forked = await forkConversation({
         sourceConversation: sharedConversation,
         agentId,
         userId: user.id,
         organizationId,
       });
+      forked.messages = stripHookRunParts(forked.messages as ChatMessage[], {
+        visible: false,
+      });
+      return forked;
     },
   );
 
@@ -2658,29 +2672,6 @@ export function extractFirstMessages(messages: unknown[]): ExtractedMessages {
   }
 
   return { firstUserMessage, firstAssistantMessage };
-}
-
-/**
- * Extracts the text of the latest user message from a chat thread, joining all
- * its text parts. Returns an empty string when no user message has text.
- * Used to populate the UserPromptSubmit lifecycle hook payload.
- */
-function extractLatestUserPromptText(messages: ChatMessage[]): string {
-  for (let i = messages.length - 1; i >= 0; i--) {
-    const message = messages[i];
-    if (message?.role !== "user") {
-      continue;
-    }
-    const text = (message.parts ?? [])
-      .filter(
-        (part): part is ChatMessagePart & { text: string } =>
-          part?.type === "text" && typeof part.text === "string",
-      )
-      .map((part) => part.text)
-      .join("\n");
-    return text;
-  }
-  return "";
 }
 
 export function buildChatStopConditions() {
@@ -3761,7 +3752,6 @@ async function validateChatApiKeyAccess(
 
 export const __test = {
   buildModelMessagesForProvider,
-  extractLatestUserPromptText,
   getMessagesNotYetPersisted,
   getMessagesWithChangedContent,
   persistNewMessages,

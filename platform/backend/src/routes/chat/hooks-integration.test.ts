@@ -188,46 +188,7 @@ describe("POST /api/chat lifecycle hooks", () => {
     await app.close();
   });
 
-  test("a UserPromptSubmit block returns 422 with the reason and never creates an active run", async () => {
-    const fireSpy = vi
-      .spyOn(hookDispatcherService, "fire")
-      .mockImplementation(async ({ event }) => {
-        if (event === "user_prompt_submit") {
-          return { decision: "block", reason: "nope" };
-        }
-        return { decision: "proceed" };
-      });
-    const createRunSpy = vi.spyOn(activeChatRunService, "createRun");
-
-    const response = await app.inject({
-      method: "POST",
-      url: "/api/chat",
-      payload: {
-        id: conversationId,
-        messages: [
-          {
-            id: "msg-1",
-            role: "user",
-            parts: [{ type: "text", text: "blocked prompt" }],
-          },
-        ],
-      },
-    });
-
-    expect(response.statusCode).toBe(422);
-    expect(response.json().error.message).toContain("nope");
-    expect(fireSpy).toHaveBeenCalledWith(
-      expect.objectContaining({
-        event: "user_prompt_submit",
-        conversationId,
-        fields: { prompt: "blocked prompt" },
-      }),
-    );
-    // The block must short-circuit before the active run is acquired.
-    expect(createRunSpy).not.toHaveBeenCalled();
-  });
-
-  test("a proceeding UserPromptSubmit hook does not block the request", async () => {
+  test("a proceeding lifecycle hook does not block the request", async () => {
     vi.spyOn(hookDispatcherService, "fire").mockResolvedValue({
       decision: "proceed",
     });

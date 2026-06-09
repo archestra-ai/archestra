@@ -104,9 +104,10 @@ class SkillSandboxModel {
         ),
       );
     if (!row) {
-      throw new Error(
-        `failed to find-or-create default sandbox for conversation ${conversationId}`,
-      );
+      // the insert succeeded (or hit the unique index), so a missing row means
+      // the conversation was deleted in between: the FK is ON DELETE SET NULL,
+      // which detaches the default sandbox from the conversation.
+      throw new SkillSandboxConversationGoneError(conversationId);
     }
     return row;
   }

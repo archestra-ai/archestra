@@ -108,7 +108,12 @@ class ExecutionSandboxRegistry {
     );
   }
 
-  /** Drop all state for an execution. Called when the root execution ends. */
+  /**
+   * Drop all state for an execution. Called when the root execution ends.
+   * Sandbox tool calls still in flight past an abort can repopulate the key
+   * with fresh entries that are never released again; sandboxes are ephemeral
+   * by design and aborts are rare, so no tombstone is kept.
+   */
   release(isolationKey: string): void {
     const keys = this.keysByIsolationKey.get(isolationKey);
     if (!keys) return;

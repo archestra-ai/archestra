@@ -598,8 +598,9 @@ async function cleanupBrowserTab(params: {
     );
   }
 
-  // For direct A2A calls (not delegated from chat), also close MCP client
-  // to free the cache slot. For delegated calls, keep client alive for reuse.
+  // Root executions own the MCP client, so close it to free the cache slot.
+  // Delegated runs (chat or headless) share their parent's scope and keep the
+  // client alive for reuse.
   if (isDirectExecutionOutsideConversation) {
     try {
       closeChatMcpClient(agentId, userId, isolationKey);

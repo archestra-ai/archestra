@@ -184,7 +184,10 @@ const registry = defineArchestraTools([
         },
         context.agentId,
         context.tokenAuth,
-        { conversationId: context.conversationId },
+        // mcp-client scopes per-conversation sessions (e.g. browser contexts)
+        // by this key; headless executions use their isolation key so
+        // concurrent runs never share a session and cleanup can close it.
+        { conversationId: context.isolationKey ?? context.conversationId },
       );
 
       const callToolResult: CallToolResult = {

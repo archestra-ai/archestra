@@ -5,7 +5,7 @@ import db, { schema } from "@/database";
 import { describe, expect, test } from "@/test";
 
 const migrationSql = fs.readFileSync(
-  path.join(__dirname, "0278_remove_team_admin_rbac_action.sql"),
+  path.join(__dirname, "0279_remove_team_admin_rbac_action.sql"),
   "utf-8",
 );
 
@@ -48,7 +48,7 @@ async function getRolePermission(
   return JSON.parse(role.permission);
 }
 
-describe("0278 migration: remove team admin RBAC action", () => {
+describe("0279 migration: remove team admin RBAC action", () => {
   test("removes team:admin while preserving other team actions", async ({
     makeOrganization,
   }) => {

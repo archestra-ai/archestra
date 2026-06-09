@@ -1427,7 +1427,12 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "List Kubernetes docker-registry secrets available for imagePullSecrets",
         tags: ["MCP Catalog"],
         response: constructResponseSchema(
-          z.array(z.object({ name: z.string() })),
+          z.array(
+            z.object({
+              name: z.string(),
+              registryServers: z.array(z.string()),
+            }),
+          ),
         ),
       },
     },

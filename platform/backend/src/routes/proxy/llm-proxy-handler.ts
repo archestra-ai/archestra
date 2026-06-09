@@ -1092,6 +1092,10 @@ async function handleStreaming<
             state.usage.inputTokens,
             state.usage.outputTokens,
             providerName,
+            {
+              readTokens: state.usage.cacheReadTokens,
+              writeTokens: state.usage.cacheWriteTokens,
+            },
           );
           if (cost !== undefined) {
             llmSpan.setAttribute(ATTR_ARCHESTRA_COST, cost);
@@ -1379,6 +1383,10 @@ async function handleNonStreaming<
         usage.inputTokens,
         usage.outputTokens,
         providerName,
+        {
+          readTokens: usage.cacheReadTokens,
+          writeTokens: usage.cacheWriteTokens,
+        },
       );
       if (cost !== undefined) {
         llmSpan.setAttribute(ATTR_ARCHESTRA_COST, cost);

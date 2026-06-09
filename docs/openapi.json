@@ -4113,6 +4113,14 @@
               },
               "output_tokens": {
                 "type": "number"
+              },
+              "cache_read_input_tokens": {
+                "nullable": true,
+                "type": "number"
+              },
+              "cache_creation_input_tokens": {
+                "nullable": true,
+                "type": "number"
               }
             },
             "required": [
@@ -21223,6 +21231,14 @@
                 "type": "number"
               },
               "output_tokens": {
+                "type": "number"
+              },
+              "cache_read_input_tokens": {
+                "nullable": true,
+                "type": "number"
+              },
+              "cache_creation_input_tokens": {
+                "nullable": true,
                 "type": "number"
               }
             },
@@ -90452,11 +90468,31 @@
                                 "minimum": -2147483648,
                                 "maximum": 2147483647
                               },
+                              "cacheReadTokens": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
+                              "cacheWriteTokens": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
                               "baselineCost": {
                                 "nullable": true,
                                 "type": "string"
                               },
                               "cost": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "cacheCost": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "cacheSavings": {
                                 "nullable": true,
                                 "type": "string"
                               },
@@ -90634,8 +90670,12 @@
                               "baselineModel",
                               "inputTokens",
                               "outputTokens",
+                              "cacheReadTokens",
+                              "cacheWriteTokens",
                               "baselineCost",
                               "cost",
+                              "cacheCost",
+                              "cacheSavings",
                               "toonTokensBefore",
                               "toonTokensAfter",
                               "toonCostSavings",
@@ -91288,11 +91328,31 @@
                                 "minimum": -2147483648,
                                 "maximum": 2147483647
                               },
+                              "cacheReadTokens": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
+                              "cacheWriteTokens": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
                               "baselineCost": {
                                 "nullable": true,
                                 "type": "string"
                               },
                               "cost": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "cacheCost": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "cacheSavings": {
                                 "nullable": true,
                                 "type": "string"
                               },
@@ -91470,8 +91530,12 @@
                               "baselineModel",
                               "inputTokens",
                               "outputTokens",
+                              "cacheReadTokens",
+                              "cacheWriteTokens",
                               "baselineCost",
                               "cost",
+                              "cacheCost",
+                              "cacheSavings",
                               "toonTokensBefore",
                               "toonTokensAfter",
                               "toonCostSavings",
@@ -91832,11 +91896,31 @@
                                 "minimum": -2147483648,
                                 "maximum": 2147483647
                               },
+                              "cacheReadTokens": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
+                              "cacheWriteTokens": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
                               "baselineCost": {
                                 "nullable": true,
                                 "type": "string"
                               },
                               "cost": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "cacheCost": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "cacheSavings": {
                                 "nullable": true,
                                 "type": "string"
                               },
@@ -92003,8 +92087,12 @@
                               "baselineModel",
                               "inputTokens",
                               "outputTokens",
+                              "cacheReadTokens",
+                              "cacheWriteTokens",
                               "baselineCost",
                               "cost",
+                              "cacheCost",
+                              "cacheSavings",
                               "toonTokensBefore",
                               "toonTokensAfter",
                               "toonCostSavings",
@@ -92240,11 +92328,31 @@
                                 "minimum": -2147483648,
                                 "maximum": 2147483647
                               },
+                              "cacheReadTokens": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
+                              "cacheWriteTokens": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
                               "baselineCost": {
                                 "nullable": true,
                                 "type": "string"
                               },
                               "cost": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "cacheCost": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "cacheSavings": {
                                 "nullable": true,
                                 "type": "string"
                               },
@@ -92422,8 +92530,12 @@
                               "baselineModel",
                               "inputTokens",
                               "outputTokens",
+                              "cacheReadTokens",
+                              "cacheWriteTokens",
                               "baselineCost",
                               "cost",
+                              "cacheCost",
+                              "cacheSavings",
                               "toonTokensBefore",
                               "toonTokensAfter",
                               "toonCostSavings",
@@ -92659,11 +92771,31 @@
                                 "minimum": -2147483648,
                                 "maximum": 2147483647
                               },
+                              "cacheReadTokens": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
+                              "cacheWriteTokens": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
                               "baselineCost": {
                                 "nullable": true,
                                 "type": "string"
                               },
                               "cost": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "cacheCost": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "cacheSavings": {
                                 "nullable": true,
                                 "type": "string"
                               },
@@ -92841,8 +92973,12 @@
                               "baselineModel",
                               "inputTokens",
                               "outputTokens",
+                              "cacheReadTokens",
+                              "cacheWriteTokens",
                               "baselineCost",
                               "cost",
+                              "cacheCost",
+                              "cacheSavings",
                               "toonTokensBefore",
                               "toonTokensAfter",
                               "toonCostSavings",
@@ -94886,11 +95022,31 @@
                                 "minimum": -2147483648,
                                 "maximum": 2147483647
                               },
+                              "cacheReadTokens": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
+                              "cacheWriteTokens": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
                               "baselineCost": {
                                 "nullable": true,
                                 "type": "string"
                               },
                               "cost": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "cacheCost": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "cacheSavings": {
                                 "nullable": true,
                                 "type": "string"
                               },
@@ -95068,8 +95224,12 @@
                               "baselineModel",
                               "inputTokens",
                               "outputTokens",
+                              "cacheReadTokens",
+                              "cacheWriteTokens",
                               "baselineCost",
                               "cost",
+                              "cacheCost",
+                              "cacheSavings",
                               "toonTokensBefore",
                               "toonTokensAfter",
                               "toonCostSavings",
@@ -95305,11 +95465,31 @@
                                 "minimum": -2147483648,
                                 "maximum": 2147483647
                               },
+                              "cacheReadTokens": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
+                              "cacheWriteTokens": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
                               "baselineCost": {
                                 "nullable": true,
                                 "type": "string"
                               },
                               "cost": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "cacheCost": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "cacheSavings": {
                                 "nullable": true,
                                 "type": "string"
                               },
@@ -95487,8 +95667,12 @@
                               "baselineModel",
                               "inputTokens",
                               "outputTokens",
+                              "cacheReadTokens",
+                              "cacheWriteTokens",
                               "baselineCost",
                               "cost",
+                              "cacheCost",
+                              "cacheSavings",
                               "toonTokensBefore",
                               "toonTokensAfter",
                               "toonCostSavings",
@@ -95724,11 +95908,31 @@
                                 "minimum": -2147483648,
                                 "maximum": 2147483647
                               },
+                              "cacheReadTokens": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
+                              "cacheWriteTokens": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
                               "baselineCost": {
                                 "nullable": true,
                                 "type": "string"
                               },
                               "cost": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "cacheCost": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "cacheSavings": {
                                 "nullable": true,
                                 "type": "string"
                               },
@@ -95906,8 +96110,12 @@
                               "baselineModel",
                               "inputTokens",
                               "outputTokens",
+                              "cacheReadTokens",
+                              "cacheWriteTokens",
                               "baselineCost",
                               "cost",
+                              "cacheCost",
+                              "cacheSavings",
                               "toonTokensBefore",
                               "toonTokensAfter",
                               "toonCostSavings",
@@ -96143,11 +96351,31 @@
                                 "minimum": -2147483648,
                                 "maximum": 2147483647
                               },
+                              "cacheReadTokens": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
+                              "cacheWriteTokens": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
                               "baselineCost": {
                                 "nullable": true,
                                 "type": "string"
                               },
                               "cost": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "cacheCost": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "cacheSavings": {
                                 "nullable": true,
                                 "type": "string"
                               },
@@ -96325,8 +96553,12 @@
                               "baselineModel",
                               "inputTokens",
                               "outputTokens",
+                              "cacheReadTokens",
+                              "cacheWriteTokens",
                               "baselineCost",
                               "cost",
+                              "cacheCost",
+                              "cacheSavings",
                               "toonTokensBefore",
                               "toonTokensAfter",
                               "toonCostSavings",
@@ -96562,11 +96794,31 @@
                                 "minimum": -2147483648,
                                 "maximum": 2147483647
                               },
+                              "cacheReadTokens": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
+                              "cacheWriteTokens": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
                               "baselineCost": {
                                 "nullable": true,
                                 "type": "string"
                               },
                               "cost": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "cacheCost": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "cacheSavings": {
                                 "nullable": true,
                                 "type": "string"
                               },
@@ -96744,8 +96996,12 @@
                               "baselineModel",
                               "inputTokens",
                               "outputTokens",
+                              "cacheReadTokens",
+                              "cacheWriteTokens",
                               "baselineCost",
                               "cost",
+                              "cacheCost",
+                              "cacheSavings",
                               "toonTokensBefore",
                               "toonTokensAfter",
                               "toonCostSavings",
@@ -96981,11 +97237,31 @@
                                 "minimum": -2147483648,
                                 "maximum": 2147483647
                               },
+                              "cacheReadTokens": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
+                              "cacheWriteTokens": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
                               "baselineCost": {
                                 "nullable": true,
                                 "type": "string"
                               },
                               "cost": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "cacheCost": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "cacheSavings": {
                                 "nullable": true,
                                 "type": "string"
                               },
@@ -97163,8 +97439,12 @@
                               "baselineModel",
                               "inputTokens",
                               "outputTokens",
+                              "cacheReadTokens",
+                              "cacheWriteTokens",
                               "baselineCost",
                               "cost",
+                              "cacheCost",
+                              "cacheSavings",
                               "toonTokensBefore",
                               "toonTokensAfter",
                               "toonCostSavings",
@@ -97400,11 +97680,31 @@
                                 "minimum": -2147483648,
                                 "maximum": 2147483647
                               },
+                              "cacheReadTokens": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
+                              "cacheWriteTokens": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
                               "baselineCost": {
                                 "nullable": true,
                                 "type": "string"
                               },
                               "cost": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "cacheCost": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "cacheSavings": {
                                 "nullable": true,
                                 "type": "string"
                               },
@@ -97582,8 +97882,12 @@
                               "baselineModel",
                               "inputTokens",
                               "outputTokens",
+                              "cacheReadTokens",
+                              "cacheWriteTokens",
                               "baselineCost",
                               "cost",
+                              "cacheCost",
+                              "cacheSavings",
                               "toonTokensBefore",
                               "toonTokensAfter",
                               "toonCostSavings",
@@ -97819,11 +98123,31 @@
                                 "minimum": -2147483648,
                                 "maximum": 2147483647
                               },
+                              "cacheReadTokens": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
+                              "cacheWriteTokens": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
                               "baselineCost": {
                                 "nullable": true,
                                 "type": "string"
                               },
                               "cost": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "cacheCost": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "cacheSavings": {
                                 "nullable": true,
                                 "type": "string"
                               },
@@ -97990,8 +98314,12 @@
                               "baselineModel",
                               "inputTokens",
                               "outputTokens",
+                              "cacheReadTokens",
+                              "cacheWriteTokens",
                               "baselineCost",
                               "cost",
+                              "cacheCost",
+                              "cacheSavings",
                               "toonTokensBefore",
                               "toonTokensAfter",
                               "toonCostSavings",
@@ -98227,11 +98555,31 @@
                                 "minimum": -2147483648,
                                 "maximum": 2147483647
                               },
+                              "cacheReadTokens": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
+                              "cacheWriteTokens": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
                               "baselineCost": {
                                 "nullable": true,
                                 "type": "string"
                               },
                               "cost": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "cacheCost": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "cacheSavings": {
                                 "nullable": true,
                                 "type": "string"
                               },
@@ -98398,8 +98746,12 @@
                               "baselineModel",
                               "inputTokens",
                               "outputTokens",
+                              "cacheReadTokens",
+                              "cacheWriteTokens",
                               "baselineCost",
                               "cost",
+                              "cacheCost",
+                              "cacheSavings",
                               "toonTokensBefore",
                               "toonTokensAfter",
                               "toonCostSavings",
@@ -98635,11 +98987,31 @@
                                 "minimum": -2147483648,
                                 "maximum": 2147483647
                               },
+                              "cacheReadTokens": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
+                              "cacheWriteTokens": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
                               "baselineCost": {
                                 "nullable": true,
                                 "type": "string"
                               },
                               "cost": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "cacheCost": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "cacheSavings": {
                                 "nullable": true,
                                 "type": "string"
                               },
@@ -98817,8 +99189,12 @@
                               "baselineModel",
                               "inputTokens",
                               "outputTokens",
+                              "cacheReadTokens",
+                              "cacheWriteTokens",
                               "baselineCost",
                               "cost",
+                              "cacheCost",
+                              "cacheSavings",
                               "toonTokensBefore",
                               "toonTokensAfter",
                               "toonCostSavings",
@@ -99054,11 +99430,31 @@
                                 "minimum": -2147483648,
                                 "maximum": 2147483647
                               },
+                              "cacheReadTokens": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
+                              "cacheWriteTokens": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
                               "baselineCost": {
                                 "nullable": true,
                                 "type": "string"
                               },
                               "cost": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "cacheCost": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "cacheSavings": {
                                 "nullable": true,
                                 "type": "string"
                               },
@@ -99236,8 +99632,12 @@
                               "baselineModel",
                               "inputTokens",
                               "outputTokens",
+                              "cacheReadTokens",
+                              "cacheWriteTokens",
                               "baselineCost",
                               "cost",
+                              "cacheCost",
+                              "cacheSavings",
                               "toonTokensBefore",
                               "toonTokensAfter",
                               "toonCostSavings",
@@ -99473,11 +99873,31 @@
                                 "minimum": -2147483648,
                                 "maximum": 2147483647
                               },
+                              "cacheReadTokens": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
+                              "cacheWriteTokens": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
                               "baselineCost": {
                                 "nullable": true,
                                 "type": "string"
                               },
                               "cost": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "cacheCost": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "cacheSavings": {
                                 "nullable": true,
                                 "type": "string"
                               },
@@ -99655,8 +100075,12 @@
                               "baselineModel",
                               "inputTokens",
                               "outputTokens",
+                              "cacheReadTokens",
+                              "cacheWriteTokens",
                               "baselineCost",
                               "cost",
+                              "cacheCost",
+                              "cacheSavings",
                               "toonTokensBefore",
                               "toonTokensAfter",
                               "toonCostSavings",
@@ -99892,11 +100316,31 @@
                                 "minimum": -2147483648,
                                 "maximum": 2147483647
                               },
+                              "cacheReadTokens": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
+                              "cacheWriteTokens": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
                               "baselineCost": {
                                 "nullable": true,
                                 "type": "string"
                               },
                               "cost": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "cacheCost": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "cacheSavings": {
                                 "nullable": true,
                                 "type": "string"
                               },
@@ -100074,8 +100518,12 @@
                               "baselineModel",
                               "inputTokens",
                               "outputTokens",
+                              "cacheReadTokens",
+                              "cacheWriteTokens",
                               "baselineCost",
                               "cost",
+                              "cacheCost",
+                              "cacheSavings",
                               "toonTokensBefore",
                               "toonTokensAfter",
                               "toonCostSavings",
@@ -100537,11 +100985,31 @@
                                 "minimum": -2147483648,
                                 "maximum": 2147483647
                               },
+                              "cacheReadTokens": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
+                              "cacheWriteTokens": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
                               "baselineCost": {
                                 "nullable": true,
                                 "type": "string"
                               },
                               "cost": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "cacheCost": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "cacheSavings": {
                                 "nullable": true,
                                 "type": "string"
                               },
@@ -100719,8 +101187,12 @@
                               "baselineModel",
                               "inputTokens",
                               "outputTokens",
+                              "cacheReadTokens",
+                              "cacheWriteTokens",
                               "baselineCost",
                               "cost",
+                              "cacheCost",
+                              "cacheSavings",
                               "toonTokensBefore",
                               "toonTokensAfter",
                               "toonCostSavings",
@@ -101373,11 +101845,31 @@
                                 "minimum": -2147483648,
                                 "maximum": 2147483647
                               },
+                              "cacheReadTokens": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
+                              "cacheWriteTokens": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
                               "baselineCost": {
                                 "nullable": true,
                                 "type": "string"
                               },
                               "cost": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "cacheCost": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "cacheSavings": {
                                 "nullable": true,
                                 "type": "string"
                               },
@@ -101555,8 +102047,12 @@
                               "baselineModel",
                               "inputTokens",
                               "outputTokens",
+                              "cacheReadTokens",
+                              "cacheWriteTokens",
                               "baselineCost",
                               "cost",
+                              "cacheCost",
+                              "cacheSavings",
                               "toonTokensBefore",
                               "toonTokensAfter",
                               "toonCostSavings",
@@ -102043,6 +102539,12 @@
                           "totalOutputTokens": {
                             "type": "number"
                           },
+                          "totalCacheReadTokens": {
+                            "type": "number"
+                          },
+                          "totalCacheWriteTokens": {
+                            "type": "number"
+                          },
                           "totalCost": {
                             "nullable": true,
                             "type": "string"
@@ -102052,6 +102554,10 @@
                             "type": "string"
                           },
                           "totalToonCostSavings": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "totalCacheSavings": {
                             "nullable": true,
                             "type": "string"
                           },
@@ -102166,9 +102672,12 @@
                           "requestCount",
                           "totalInputTokens",
                           "totalOutputTokens",
+                          "totalCacheReadTokens",
+                          "totalCacheWriteTokens",
                           "totalCost",
                           "totalBaselineCost",
                           "totalToonCostSavings",
+                          "totalCacheSavings",
                           "toonSkipReasonCounts",
                           "firstRequestTime",
                           "lastRequestTime",
@@ -103271,11 +103780,31 @@
                           "minimum": -2147483648,
                           "maximum": 2147483647
                         },
+                        "cacheReadTokens": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
+                        "cacheWriteTokens": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
                         "baselineCost": {
                           "nullable": true,
                           "type": "string"
                         },
                         "cost": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "cacheCost": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "cacheSavings": {
                           "nullable": true,
                           "type": "string"
                         },
@@ -103453,8 +103982,12 @@
                         "baselineModel",
                         "inputTokens",
                         "outputTokens",
+                        "cacheReadTokens",
+                        "cacheWriteTokens",
                         "baselineCost",
                         "cost",
+                        "cacheCost",
+                        "cacheSavings",
                         "toonTokensBefore",
                         "toonTokensAfter",
                         "toonCostSavings",
@@ -104107,11 +104640,31 @@
                           "minimum": -2147483648,
                           "maximum": 2147483647
                         },
+                        "cacheReadTokens": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
+                        "cacheWriteTokens": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
                         "baselineCost": {
                           "nullable": true,
                           "type": "string"
                         },
                         "cost": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "cacheCost": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "cacheSavings": {
                           "nullable": true,
                           "type": "string"
                         },
@@ -104289,8 +104842,12 @@
                         "baselineModel",
                         "inputTokens",
                         "outputTokens",
+                        "cacheReadTokens",
+                        "cacheWriteTokens",
                         "baselineCost",
                         "cost",
+                        "cacheCost",
+                        "cacheSavings",
                         "toonTokensBefore",
                         "toonTokensAfter",
                         "toonCostSavings",
@@ -104651,11 +105208,31 @@
                           "minimum": -2147483648,
                           "maximum": 2147483647
                         },
+                        "cacheReadTokens": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
+                        "cacheWriteTokens": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
                         "baselineCost": {
                           "nullable": true,
                           "type": "string"
                         },
                         "cost": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "cacheCost": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "cacheSavings": {
                           "nullable": true,
                           "type": "string"
                         },
@@ -104822,8 +105399,12 @@
                         "baselineModel",
                         "inputTokens",
                         "outputTokens",
+                        "cacheReadTokens",
+                        "cacheWriteTokens",
                         "baselineCost",
                         "cost",
+                        "cacheCost",
+                        "cacheSavings",
                         "toonTokensBefore",
                         "toonTokensAfter",
                         "toonCostSavings",
@@ -105059,11 +105640,31 @@
                           "minimum": -2147483648,
                           "maximum": 2147483647
                         },
+                        "cacheReadTokens": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
+                        "cacheWriteTokens": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
                         "baselineCost": {
                           "nullable": true,
                           "type": "string"
                         },
                         "cost": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "cacheCost": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "cacheSavings": {
                           "nullable": true,
                           "type": "string"
                         },
@@ -105241,8 +105842,12 @@
                         "baselineModel",
                         "inputTokens",
                         "outputTokens",
+                        "cacheReadTokens",
+                        "cacheWriteTokens",
                         "baselineCost",
                         "cost",
+                        "cacheCost",
+                        "cacheSavings",
                         "toonTokensBefore",
                         "toonTokensAfter",
                         "toonCostSavings",
@@ -105478,11 +106083,31 @@
                           "minimum": -2147483648,
                           "maximum": 2147483647
                         },
+                        "cacheReadTokens": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
+                        "cacheWriteTokens": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
                         "baselineCost": {
                           "nullable": true,
                           "type": "string"
                         },
                         "cost": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "cacheCost": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "cacheSavings": {
                           "nullable": true,
                           "type": "string"
                         },
@@ -105660,8 +106285,12 @@
                         "baselineModel",
                         "inputTokens",
                         "outputTokens",
+                        "cacheReadTokens",
+                        "cacheWriteTokens",
                         "baselineCost",
                         "cost",
+                        "cacheCost",
+                        "cacheSavings",
                         "toonTokensBefore",
                         "toonTokensAfter",
                         "toonCostSavings",
@@ -107705,11 +108334,31 @@
                           "minimum": -2147483648,
                           "maximum": 2147483647
                         },
+                        "cacheReadTokens": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
+                        "cacheWriteTokens": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
                         "baselineCost": {
                           "nullable": true,
                           "type": "string"
                         },
                         "cost": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "cacheCost": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "cacheSavings": {
                           "nullable": true,
                           "type": "string"
                         },
@@ -107887,8 +108536,12 @@
                         "baselineModel",
                         "inputTokens",
                         "outputTokens",
+                        "cacheReadTokens",
+                        "cacheWriteTokens",
                         "baselineCost",
                         "cost",
+                        "cacheCost",
+                        "cacheSavings",
                         "toonTokensBefore",
                         "toonTokensAfter",
                         "toonCostSavings",
@@ -108124,11 +108777,31 @@
                           "minimum": -2147483648,
                           "maximum": 2147483647
                         },
+                        "cacheReadTokens": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
+                        "cacheWriteTokens": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
                         "baselineCost": {
                           "nullable": true,
                           "type": "string"
                         },
                         "cost": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "cacheCost": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "cacheSavings": {
                           "nullable": true,
                           "type": "string"
                         },
@@ -108306,8 +108979,12 @@
                         "baselineModel",
                         "inputTokens",
                         "outputTokens",
+                        "cacheReadTokens",
+                        "cacheWriteTokens",
                         "baselineCost",
                         "cost",
+                        "cacheCost",
+                        "cacheSavings",
                         "toonTokensBefore",
                         "toonTokensAfter",
                         "toonCostSavings",
@@ -108543,11 +109220,31 @@
                           "minimum": -2147483648,
                           "maximum": 2147483647
                         },
+                        "cacheReadTokens": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
+                        "cacheWriteTokens": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
                         "baselineCost": {
                           "nullable": true,
                           "type": "string"
                         },
                         "cost": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "cacheCost": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "cacheSavings": {
                           "nullable": true,
                           "type": "string"
                         },
@@ -108725,8 +109422,12 @@
                         "baselineModel",
                         "inputTokens",
                         "outputTokens",
+                        "cacheReadTokens",
+                        "cacheWriteTokens",
                         "baselineCost",
                         "cost",
+                        "cacheCost",
+                        "cacheSavings",
                         "toonTokensBefore",
                         "toonTokensAfter",
                         "toonCostSavings",
@@ -108962,11 +109663,31 @@
                           "minimum": -2147483648,
                           "maximum": 2147483647
                         },
+                        "cacheReadTokens": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
+                        "cacheWriteTokens": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
                         "baselineCost": {
                           "nullable": true,
                           "type": "string"
                         },
                         "cost": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "cacheCost": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "cacheSavings": {
                           "nullable": true,
                           "type": "string"
                         },
@@ -109144,8 +109865,12 @@
                         "baselineModel",
                         "inputTokens",
                         "outputTokens",
+                        "cacheReadTokens",
+                        "cacheWriteTokens",
                         "baselineCost",
                         "cost",
+                        "cacheCost",
+                        "cacheSavings",
                         "toonTokensBefore",
                         "toonTokensAfter",
                         "toonCostSavings",
@@ -109381,11 +110106,31 @@
                           "minimum": -2147483648,
                           "maximum": 2147483647
                         },
+                        "cacheReadTokens": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
+                        "cacheWriteTokens": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
                         "baselineCost": {
                           "nullable": true,
                           "type": "string"
                         },
                         "cost": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "cacheCost": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "cacheSavings": {
                           "nullable": true,
                           "type": "string"
                         },
@@ -109563,8 +110308,12 @@
                         "baselineModel",
                         "inputTokens",
                         "outputTokens",
+                        "cacheReadTokens",
+                        "cacheWriteTokens",
                         "baselineCost",
                         "cost",
+                        "cacheCost",
+                        "cacheSavings",
                         "toonTokensBefore",
                         "toonTokensAfter",
                         "toonCostSavings",
@@ -109800,11 +110549,31 @@
                           "minimum": -2147483648,
                           "maximum": 2147483647
                         },
+                        "cacheReadTokens": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
+                        "cacheWriteTokens": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
                         "baselineCost": {
                           "nullable": true,
                           "type": "string"
                         },
                         "cost": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "cacheCost": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "cacheSavings": {
                           "nullable": true,
                           "type": "string"
                         },
@@ -109982,8 +110751,12 @@
                         "baselineModel",
                         "inputTokens",
                         "outputTokens",
+                        "cacheReadTokens",
+                        "cacheWriteTokens",
                         "baselineCost",
                         "cost",
+                        "cacheCost",
+                        "cacheSavings",
                         "toonTokensBefore",
                         "toonTokensAfter",
                         "toonCostSavings",
@@ -110219,11 +110992,31 @@
                           "minimum": -2147483648,
                           "maximum": 2147483647
                         },
+                        "cacheReadTokens": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
+                        "cacheWriteTokens": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
                         "baselineCost": {
                           "nullable": true,
                           "type": "string"
                         },
                         "cost": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "cacheCost": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "cacheSavings": {
                           "nullable": true,
                           "type": "string"
                         },
@@ -110401,8 +111194,12 @@
                         "baselineModel",
                         "inputTokens",
                         "outputTokens",
+                        "cacheReadTokens",
+                        "cacheWriteTokens",
                         "baselineCost",
                         "cost",
+                        "cacheCost",
+                        "cacheSavings",
                         "toonTokensBefore",
                         "toonTokensAfter",
                         "toonCostSavings",
@@ -110638,11 +111435,31 @@
                           "minimum": -2147483648,
                           "maximum": 2147483647
                         },
+                        "cacheReadTokens": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
+                        "cacheWriteTokens": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
                         "baselineCost": {
                           "nullable": true,
                           "type": "string"
                         },
                         "cost": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "cacheCost": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "cacheSavings": {
                           "nullable": true,
                           "type": "string"
                         },
@@ -110809,8 +111626,12 @@
                         "baselineModel",
                         "inputTokens",
                         "outputTokens",
+                        "cacheReadTokens",
+                        "cacheWriteTokens",
                         "baselineCost",
                         "cost",
+                        "cacheCost",
+                        "cacheSavings",
                         "toonTokensBefore",
                         "toonTokensAfter",
                         "toonCostSavings",
@@ -111046,11 +111867,31 @@
                           "minimum": -2147483648,
                           "maximum": 2147483647
                         },
+                        "cacheReadTokens": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
+                        "cacheWriteTokens": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
                         "baselineCost": {
                           "nullable": true,
                           "type": "string"
                         },
                         "cost": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "cacheCost": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "cacheSavings": {
                           "nullable": true,
                           "type": "string"
                         },
@@ -111217,8 +112058,12 @@
                         "baselineModel",
                         "inputTokens",
                         "outputTokens",
+                        "cacheReadTokens",
+                        "cacheWriteTokens",
                         "baselineCost",
                         "cost",
+                        "cacheCost",
+                        "cacheSavings",
                         "toonTokensBefore",
                         "toonTokensAfter",
                         "toonCostSavings",
@@ -111454,11 +112299,31 @@
                           "minimum": -2147483648,
                           "maximum": 2147483647
                         },
+                        "cacheReadTokens": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
+                        "cacheWriteTokens": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
                         "baselineCost": {
                           "nullable": true,
                           "type": "string"
                         },
                         "cost": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "cacheCost": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "cacheSavings": {
                           "nullable": true,
                           "type": "string"
                         },
@@ -111636,8 +112501,12 @@
                         "baselineModel",
                         "inputTokens",
                         "outputTokens",
+                        "cacheReadTokens",
+                        "cacheWriteTokens",
                         "baselineCost",
                         "cost",
+                        "cacheCost",
+                        "cacheSavings",
                         "toonTokensBefore",
                         "toonTokensAfter",
                         "toonCostSavings",
@@ -111873,11 +112742,31 @@
                           "minimum": -2147483648,
                           "maximum": 2147483647
                         },
+                        "cacheReadTokens": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
+                        "cacheWriteTokens": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
                         "baselineCost": {
                           "nullable": true,
                           "type": "string"
                         },
                         "cost": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "cacheCost": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "cacheSavings": {
                           "nullable": true,
                           "type": "string"
                         },
@@ -112055,8 +112944,12 @@
                         "baselineModel",
                         "inputTokens",
                         "outputTokens",
+                        "cacheReadTokens",
+                        "cacheWriteTokens",
                         "baselineCost",
                         "cost",
+                        "cacheCost",
+                        "cacheSavings",
                         "toonTokensBefore",
                         "toonTokensAfter",
                         "toonCostSavings",
@@ -112292,11 +113185,31 @@
                           "minimum": -2147483648,
                           "maximum": 2147483647
                         },
+                        "cacheReadTokens": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
+                        "cacheWriteTokens": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
                         "baselineCost": {
                           "nullable": true,
                           "type": "string"
                         },
                         "cost": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "cacheCost": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "cacheSavings": {
                           "nullable": true,
                           "type": "string"
                         },
@@ -112474,8 +113387,12 @@
                         "baselineModel",
                         "inputTokens",
                         "outputTokens",
+                        "cacheReadTokens",
+                        "cacheWriteTokens",
                         "baselineCost",
                         "cost",
+                        "cacheCost",
+                        "cacheSavings",
                         "toonTokensBefore",
                         "toonTokensAfter",
                         "toonCostSavings",
@@ -112711,11 +113628,31 @@
                           "minimum": -2147483648,
                           "maximum": 2147483647
                         },
+                        "cacheReadTokens": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
+                        "cacheWriteTokens": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
                         "baselineCost": {
                           "nullable": true,
                           "type": "string"
                         },
                         "cost": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "cacheCost": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "cacheSavings": {
                           "nullable": true,
                           "type": "string"
                         },
@@ -112893,8 +113830,12 @@
                         "baselineModel",
                         "inputTokens",
                         "outputTokens",
+                        "cacheReadTokens",
+                        "cacheWriteTokens",
                         "baselineCost",
                         "cost",
+                        "cacheCost",
+                        "cacheSavings",
                         "toonTokensBefore",
                         "toonTokensAfter",
                         "toonCostSavings",
@@ -113356,11 +114297,31 @@
                           "minimum": -2147483648,
                           "maximum": 2147483647
                         },
+                        "cacheReadTokens": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
+                        "cacheWriteTokens": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
                         "baselineCost": {
                           "nullable": true,
                           "type": "string"
                         },
                         "cost": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "cacheCost": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "cacheSavings": {
                           "nullable": true,
                           "type": "string"
                         },
@@ -113538,8 +114499,12 @@
                         "baselineModel",
                         "inputTokens",
                         "outputTokens",
+                        "cacheReadTokens",
+                        "cacheWriteTokens",
                         "baselineCost",
                         "cost",
+                        "cacheCost",
+                        "cacheSavings",
                         "toonTokensBefore",
                         "toonTokensAfter",
                         "toonCostSavings",
@@ -114192,11 +115157,31 @@
                           "minimum": -2147483648,
                           "maximum": 2147483647
                         },
+                        "cacheReadTokens": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
+                        "cacheWriteTokens": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
                         "baselineCost": {
                           "nullable": true,
                           "type": "string"
                         },
                         "cost": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "cacheCost": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "cacheSavings": {
                           "nullable": true,
                           "type": "string"
                         },
@@ -114374,8 +115359,12 @@
                         "baselineModel",
                         "inputTokens",
                         "outputTokens",
+                        "cacheReadTokens",
+                        "cacheWriteTokens",
                         "baselineCost",
                         "cost",
+                        "cacheCost",
+                        "cacheSavings",
                         "toonTokensBefore",
                         "toonTokensAfter",
                         "toonCostSavings",
@@ -121466,10 +122455,17 @@
                     "properties": {
                       "name": {
                         "type": "string"
+                      },
+                      "registryServers": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
                       }
                     },
                     "required": [
-                      "name"
+                      "name",
+                      "registryServers"
                     ],
                     "additionalProperties": false
                   }
@@ -197463,6 +198459,9 @@
                       "outputTokens": {
                         "type": "number"
                       },
+                      "cacheReadTokens": {
+                        "type": "number"
+                      },
                       "cost": {
                         "type": "number"
                       },
@@ -197494,6 +198493,7 @@
                       "requests",
                       "inputTokens",
                       "outputTokens",
+                      "cacheReadTokens",
                       "cost",
                       "timeSeries"
                     ],
@@ -197801,6 +198801,9 @@
                       "outputTokens": {
                         "type": "number"
                       },
+                      "cacheReadTokens": {
+                        "type": "number"
+                      },
                       "cost": {
                         "type": "number"
                       },
@@ -197832,6 +198835,7 @@
                       "requests",
                       "inputTokens",
                       "outputTokens",
+                      "cacheReadTokens",
                       "cost",
                       "percentage",
                       "timeSeries"
@@ -198457,6 +199461,9 @@
                     "totalToonSavings": {
                       "type": "number"
                     },
+                    "totalCacheSavings": {
+                      "type": "number"
+                    },
                     "timeSeries": {
                       "type": "array",
                       "items": {
@@ -198476,6 +199483,9 @@
                           },
                           "toonSavings": {
                             "type": "number"
+                          },
+                          "cacheSavings": {
+                            "type": "number"
                           }
                         },
                         "required": [
@@ -198483,7 +199493,8 @@
                           "baselineCost",
                           "actualCost",
                           "optimizationSavings",
-                          "toonSavings"
+                          "toonSavings",
+                          "cacheSavings"
                         ],
                         "additionalProperties": false
                       }
@@ -198495,6 +199506,7 @@
                     "totalSavings",
                     "totalOptimizationSavings",
                     "totalToonSavings",
+                    "totalCacheSavings",
                     "timeSeries"
                   ],
                   "additionalProperties": false

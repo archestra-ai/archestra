@@ -692,6 +692,7 @@ describe("chat-mcp-client tool caching", () => {
     makeUser,
     makeOrganization,
     makeMember,
+    makeConversation,
   }) => {
     const org = await makeOrganization();
     const user = await makeUser();
@@ -707,7 +708,11 @@ describe("chat-mcp-client tool caching", () => {
     });
     await makeAgentTool(agent.id, targetTool.id);
 
-    const conversationId = "conversation-1";
+    const conversation = await makeConversation(agent.id, {
+      organizationId: org.id,
+      userId: user.id,
+    });
+    const conversationId = conversation.id;
     const cacheKey = chatClient.__test.getCacheKey(
       agent.id,
       user.id,
@@ -798,6 +803,7 @@ describe("chat-mcp-client tool caching", () => {
     makeMember,
     makeTool,
     makeToolPolicy,
+    makeConversation,
   }) => {
     const org = await makeOrganization({ globalToolPolicy: "restrictive" });
     const user = await makeUser();
@@ -819,7 +825,11 @@ describe("chat-mcp-client tool caching", () => {
       ],
     });
 
-    const conversationId = "conversation-approval";
+    const conversation = await makeConversation(agent.id, {
+      organizationId: org.id,
+      userId: user.id,
+    });
+    const conversationId = conversation.id;
     const cacheKey = chatClient.__test.getCacheKey(
       agent.id,
       user.id,

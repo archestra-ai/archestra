@@ -29,6 +29,9 @@ function createMockResponse(
       candidatesTokenCount: usage?.candidatesTokenCount ?? 50,
       totalTokenCount:
         (usage?.promptTokenCount ?? 100) + (usage?.candidatesTokenCount ?? 50),
+      ...(usage?.cachedContentTokenCount !== undefined
+        ? { cachedContentTokenCount: usage.cachedContentTokenCount }
+        : {}),
     },
     modelVersion: "gemini-2.5-pro",
     responseId: "gemini-test-response",
@@ -174,6 +177,27 @@ describe("GeminiResponseAdapter", () => {
       expect(usage).toEqual({
         inputTokens: 150,
         outputTokens: 75,
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0,
+      });
+    });
+
+    test("subtracts cachedContentTokenCount from prompt to avoid double-counting", () => {
+      const response = createMockResponse([{ text: "Test" }], {
+        promptTokenCount: 150,
+        candidatesTokenCount: 75,
+        cachedContentTokenCount: 120,
+      });
+
+      const adapter = geminiAdapterFactory.createResponseAdapter(response);
+
+      // Gemini's cachedContentTokenCount is a SUBSET of promptTokenCount, so
+      // uncached input = 150 - 120 = 30 (no double-count of the cached 120).
+      expect(adapter.getUsage()).toEqual({
+        inputTokens: 30,
+        outputTokens: 75,
+        cacheReadTokens: 120,
+        cacheWriteTokens: 0,
       });
     });
   });
@@ -686,6 +710,8 @@ describe("GeminiStreamAdapter", () => {
       expect(adapter.state.usage).toEqual({
         inputTokens: 100,
         outputTokens: 50,
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0,
       });
     });
 

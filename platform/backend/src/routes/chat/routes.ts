@@ -767,6 +767,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
                 const modelMessages = applyPromptCacheBreakpoints({
                   provider,
+                  model: selectedModel,
                   messages: await buildModelMessagesForProvider({
                     messages: compactionResult.messages,
                     provider,
@@ -789,6 +790,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                         inputTokens: usage.inputTokens,
                         outputTokens: usage.outputTokens,
                         totalTokens: usage.totalTokens,
+                        cacheReadTokens: usage.cachedInputTokens,
                       } satisfies TokenUsage,
                     });
                   },
@@ -1146,6 +1148,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                       inputTokens: usage.inputTokens,
                       outputTokens: usage.outputTokens,
                       totalTokens: usage.totalTokens,
+                      cacheReadTokens: usage.cachedInputTokens,
                     } satisfies TokenUsage,
                   });
                 }

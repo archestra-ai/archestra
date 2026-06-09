@@ -96,6 +96,8 @@ export const MessagesRequestSchema = z.object({
 export const UsageSchema = z.object({
   input_tokens: z.number(),
   output_tokens: z.number(),
+  cache_read_input_tokens: z.number().nullish(),
+  cache_creation_input_tokens: z.number().nullish(),
 });
 
 export const MessagesResponseSchema = z.object({

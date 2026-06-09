@@ -166,17 +166,44 @@ export async function getOptimizedModel<
 }
 
 /**
- * Calculate cost for token usage based on model pricing.
- * Uses provider to disambiguate models with the same name across providers.
- * Returns undefined if token counts are not available.
+ * Cache token cost as a multiple of the model's per-token INPUT price.
+ * `read` = cache-read (cheap reuse); `write` = cache-creation surcharge.
+ * Anthropic/Bedrock bill a separate write surcharge; OpenAI/Gemini/DeepSeek
+ * auto-cache with only a read discount (no write surcharge).
+ */
+export const CACHE_PRICE_MULTIPLIERS: Record<
+  string,
+  { read: number; write: number }
+> = {
+  anthropic: { read: 0.1, write: 1.25 },
+  bedrock: { read: 0.1, write: 1.25 },
+  openai: { read: 0.25, write: 0 },
+  gemini: { read: 0.25, write: 0 },
+  deepseek: { read: 0.1, write: 0 },
+};
+
+interface CacheTokenCounts {
+  readTokens?: number;
+  writeTokens?: number;
+}
+
+/**
+ * Calculate the all-in cost for token usage based on model pricing (input +
+ * output + cache read + cache write). Uses provider to disambiguate models with
+ * the same name across providers. Returns undefined when there is no usage at
+ * all (so a fully-cached request — inputTokens 0 but real cache/output cost —
+ * is still costed).
  */
 export async function calculateCost(
   model: string,
   inputTokens: number | null | undefined,
   outputTokens: number | null | undefined,
   provider: SupportedProvider,
+  cacheTokens?: CacheTokenCounts,
 ): Promise<number | undefined> {
-  if (!inputTokens || !outputTokens) {
+  const readTokens = cacheTokens?.readTokens ?? 0;
+  const writeTokens = cacheTokens?.writeTokens ?? 0;
+  if (!inputTokens && !outputTokens && !readTokens && !writeTokens) {
     return undefined;
   }
 
@@ -185,12 +212,52 @@ export async function calculateCost(
     model,
   );
   const pricing = ModelModel.getEffectivePricing(model_entry, model);
+  const priceIn = Number.parseFloat(pricing.pricePerMillionInput);
+  const priceOut = Number.parseFloat(pricing.pricePerMillionOutput);
+  const mult = CACHE_PRICE_MULTIPLIERS[provider] ?? { read: 0, write: 0 };
 
-  const inputCost =
-    (inputTokens / 1_000_000) * Number.parseFloat(pricing.pricePerMillionInput);
-  const outputCost =
-    (outputTokens / 1_000_000) *
-    Number.parseFloat(pricing.pricePerMillionOutput);
+  return (
+    ((inputTokens ?? 0) / 1_000_000) * priceIn +
+    ((outputTokens ?? 0) / 1_000_000) * priceOut +
+    (readTokens / 1_000_000) * priceIn * mult.read +
+    (writeTokens / 1_000_000) * priceIn * mult.write
+  );
+}
 
-  return inputCost + outputCost;
+/**
+ * Cache cost breakdown for the interaction record / observability:
+ *  - `cacheCost`: what the cache read+write tokens actually cost.
+ *  - `cacheSavings`: net amount caching saved vs paying full input price for
+ *    those tokens — cache reads save `(1 - readMult)`, cache writes cost an
+ *    extra `(writeMult - 1)`, so net = readSavings - writeSurcharge.
+ * Returns undefined when there are no cache tokens.
+ */
+export async function calculateCacheCost(
+  model: string,
+  provider: SupportedProvider,
+  readTokens: number,
+  writeTokens: number,
+): Promise<{ cacheCost: number; cacheSavings: number } | undefined> {
+  if (!readTokens && !writeTokens) {
+    return undefined;
+  }
+  const model_entry = await ModelModel.findByProviderAndModelId(
+    provider,
+    model,
+  );
+  const mult = CACHE_PRICE_MULTIPLIERS[provider];
+  if (!mult) {
+    // Provider has no cache pricing model; don't fabricate cost/savings.
+    return undefined;
+  }
+  const pricing = ModelModel.getEffectivePricing(model_entry, model);
+  const priceIn = Number.parseFloat(pricing.pricePerMillionInput);
+
+  const readFull = (readTokens / 1_000_000) * priceIn;
+  const writeFull = (writeTokens / 1_000_000) * priceIn;
+  const cacheCost = readFull * mult.read + writeFull * mult.write;
+  const cacheSavings =
+    readFull * (1 - mult.read) - writeFull * (mult.write - 1);
+
+  return { cacheCost, cacheSavings };
 }

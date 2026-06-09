@@ -1,8 +1,9 @@
 "use client";
 
-import { type archestraApiTypes, DocsPage } from "@archestra/shared";
+import { type archestraApiTypes, DocsPage, E2eTestId } from "@archestra/shared";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
+  AlertTriangle,
   Ban,
   Code,
   ExternalLink,
@@ -119,7 +120,16 @@ interface McpCatalogFormProps {
   onSubmit: (values: McpCatalogFormValues) => void | Promise<void>;
   footer?:
     | React.ReactNode
-    | ((opts: { isDirty: boolean; onReset: () => void }) => React.ReactNode);
+    | ((opts: {
+        isDirty: boolean;
+        onReset: () => void;
+        /**
+         * True when stored config values violate the bound environment's
+         * validation rule — the footer's Save button should disable on it.
+         * Saving is also guarded internally, but disabling gives a visible cue.
+         */
+        hasBlockingErrors: boolean;
+      }) => React.ReactNode);
   nameDisabled?: boolean;
   catalogButton?: React.ReactNode;
   /** Optional banner/notice rendered at the very top of the form body. */
@@ -577,6 +587,44 @@ export function McpCatalogForm({
           environmentName: boundEnvironmentName,
         })
     : undefined;
+  // Already-stored static values that violate the bound environment's rule —
+  // e.g. after switching the item to a stricter environment. The add/edit
+  // dialogs block typing a bad value, but a value entered under a laxer
+  // environment only surfaces here, where it blocks Save until fixed.
+  //
+  // Only scan the fields actually live for the current server type: env vars
+  // for local, headers for remote. A local server submits no headers and a
+  // remote one submits no localConfig.environment, so scanning the inactive
+  // (and hidden) set would block Save on a field the user can't even see.
+  const watchedEnvVars = form.watch("localConfig.environment");
+  const watchedHeaders = form.watch("additionalHeaders");
+  const envRuleViolations: string[] = [];
+  if (validateConfigValue) {
+    if (currentServerType === "local") {
+      for (const envVar of watchedEnvVars ?? []) {
+        if (
+          envVar.type === "plain_text" &&
+          !envVar.promptOnInstallation &&
+          envVar.value &&
+          validateConfigValue(envVar.value)
+        ) {
+          envRuleViolations.push(envVar.key);
+        }
+      }
+    } else {
+      for (const header of watchedHeaders ?? []) {
+        if (
+          !header.promptOnInstallation &&
+          !header.sensitive &&
+          header.value &&
+          validateConfigValue(header.value)
+        ) {
+          envRuleViolations.push(header.headerName);
+        }
+      }
+    }
+  }
+  const hasEnvRuleViolations = envRuleViolations.length > 0;
   const currentScope = form.watch("scope");
   const canShareWithTeams = (isAdmin ?? false) || (isTeamAdmin ?? false);
   // Shared items are one-way: an item that is already team/org-scoped cannot be
@@ -687,6 +735,41 @@ export function McpCatalogForm({
 
   // Fetch available k8s docker-registry secrets for the "existing" dropdown
   const { data: k8sSecrets = [] } = useK8sImagePullSecrets();
+  const imagePullSecretItems = useMemo(
+    () =>
+      k8sSecrets.map((secret) => {
+        const registryLabel = formatRegistryServers(secret.registryServers);
+        const primaryLabel = registryLabel || secret.name;
+        const secondaryLabel = registryLabel ? secret.name : undefined;
+
+        return {
+          value: secret.name,
+          label: primaryLabel,
+          searchText: [secret.name, ...secret.registryServers].join(" "),
+          content: (
+            <span className="block min-w-0">
+              <span className="block truncate font-medium">{primaryLabel}</span>
+              {secondaryLabel ? (
+                <span className="block truncate text-xs text-muted-foreground">
+                  {secondaryLabel}
+                </span>
+              ) : null}
+            </span>
+          ),
+          selectedContent: (
+            <span className="block min-w-0">
+              <span className="block truncate">{primaryLabel}</span>
+              {secondaryLabel ? (
+                <span className="block truncate text-xs text-muted-foreground">
+                  {secondaryLabel}
+                </span>
+              ) : null}
+            </span>
+          ),
+        };
+      }),
+    [k8sSecrets],
+  );
 
   // Update form values when BYOS paths/keys change
   useEffect(() => {
@@ -763,6 +846,10 @@ export function McpCatalogForm({
   };
 
   const handleSubmit = async (values: McpCatalogFormValues) => {
+    // Stored values may violate the bound environment's rule (e.g. after an
+    // environment switch). The Save button is disabled in that state, but guard
+    // here too so an Enter-key submit can't bypass it.
+    if (hasEnvRuleViolations) return;
     // Cascade-confirm decision delegated to a pure function so it can be
     // matrix-tested without rendering, and so frontend + backend share
     // the same decision tree shape. See `cascade-decision.ts`.
@@ -967,7 +1054,10 @@ export function McpCatalogForm({
                             )
                           }
                         >
-                          <SelectTrigger className="w-full">
+                          <SelectTrigger
+                            className="w-full"
+                            data-testid={E2eTestId.SelectEnvironment}
+                          >
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent position="popper">
@@ -1006,6 +1096,29 @@ export function McpCatalogForm({
                   );
                 }}
               />
+              {hasEnvRuleViolations && (
+                <div
+                  role="alert"
+                  className="flex items-start gap-3 rounded-md border border-amber-500/40 bg-amber-50/40 p-3 text-sm dark:bg-amber-950/20"
+                >
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-500" />
+                  <div className="space-y-1 text-foreground/90">
+                    <div className="font-semibold text-foreground">
+                      {envRuleViolations.length} value
+                      {envRuleViolations.length === 1 ? "" : "s"} not allowed in
+                      “{boundEnvironmentName}”
+                    </div>
+                    <div>
+                      Edit or remove{" "}
+                      {envRuleViolations.length === 1 ? "it" : "them"}, or
+                      choose another environment, before saving:{" "}
+                      <span className="font-mono">
+                        {envRuleViolations.join(", ")}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
               {mode === "create" && (
                 <div className="space-y-2">
                   <Label>Server Type</Label>
@@ -1473,14 +1586,14 @@ export function McpCatalogForm({
                           <SearchableSelect
                             value={watchField("name")}
                             onValueChange={(val) => setField("name", val)}
-                            items={k8sSecrets.map((s) => ({
-                              value: s.name,
-                              label: s.name,
-                            }))}
+                            items={imagePullSecretItems}
                             placeholder="Select a secret..."
                             searchPlaceholder="Search secrets..."
                             allowCustom
+                            multiline
                             className="w-full"
+                            contentClassName="w-[min(var(--radix-popover-trigger-width),calc(100vw-2rem))]"
+                            emptyMessage="No image pull secrets found."
                           />
                         ) : (
                           <div className="grid grid-cols-2 gap-3">
@@ -2391,6 +2504,7 @@ export function McpCatalogForm({
               form.reset();
               setLabels(labelsBaseline);
             },
+            hasBlockingErrors: hasEnvRuleViolations,
           })
         ) : (
           footer
@@ -2800,4 +2914,17 @@ function applyHeaderDraftToRow(
   set("description", draft.description);
   set("includeBearerPrefix", draft.includeBearerPrefix);
   set("sensitive", draft.scope === "static" ? false : draft.sensitive);
+}
+
+function formatRegistryServers(registryServers: string[]): string {
+  if (registryServers.length === 0) {
+    return "";
+  }
+
+  const [firstRegistry, ...remainingRegistries] = registryServers;
+  if (remainingRegistries.length === 0) {
+    return firstRegistry;
+  }
+
+  return `${firstRegistry} +${remainingRegistries.length} more`;
 }

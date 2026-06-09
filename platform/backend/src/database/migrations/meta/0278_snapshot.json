@@ -1,5 +1,5 @@
 {
-  "id": "2b1d5f02-73fe-49e8-a44e-1de916bfcd77",
+  "id": "ced1e499-61d1-4e52-ad4c-9ff3959a220c",
   "prevId": "c12d5bdf-f584-4701-a626-81c931f000ac",
   "version": "7",
   "dialect": "postgresql",
@@ -4100,6 +4100,18 @@
           "primaryKey": false,
           "notNull": false
         },
+        "cache_read_tokens": {
+          "name": "cache_read_tokens",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "cache_write_tokens": {
+          "name": "cache_write_tokens",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
         "baseline_cost": {
           "name": "baseline_cost",
           "type": "numeric(13, 10)",
@@ -4108,6 +4120,18 @@
         },
         "cost": {
           "name": "cost",
+          "type": "numeric(13, 10)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "cache_cost": {
+          "name": "cache_cost",
+          "type": "numeric(13, 10)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "cache_savings": {
+          "name": "cache_savings",
           "type": "numeric(13, 10)",
           "primaryKey": false,
           "notNull": false

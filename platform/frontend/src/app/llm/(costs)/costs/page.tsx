@@ -415,6 +415,7 @@ export default function StatisticsPage() {
       label: formatTimestamp(point.timestamp),
       optimization: point.optimizationSavings,
       compression: point.toonSavings,
+      cache: point.cacheSavings,
     }));
   }, [costSavingsData, formatTimestamp]);
 
@@ -426,6 +427,10 @@ export default function StatisticsPage() {
     compression: {
       label: "Tool Compression Savings",
       color: "var(--chart-5)",
+    },
+    cache: {
+      label: "Prompt Cache Savings",
+      color: "var(--chart-3)",
     },
   };
 
@@ -626,6 +631,18 @@ export default function StatisticsPage() {
                   }}
                   activeDot={{ strokeWidth: 0, r: 5 }}
                 />
+                <Line
+                  dataKey="cache"
+                  type="monotone"
+                  stroke="var(--color-cache)"
+                  strokeWidth={2}
+                  dot={{
+                    strokeWidth: 0,
+                    r: 3,
+                    fill: "var(--color-cache)",
+                  }}
+                  activeDot={{ strokeWidth: 0, r: 5 }}
+                />
               </LineChart>
             </ChartContainerWrapper>
           </CardContent>
@@ -821,6 +838,9 @@ export default function StatisticsPage() {
                     <TableHead className="bg-card sticky top-0 z-10">
                       Tokens
                     </TableHead>
+                    <TableHead className="bg-card sticky top-0 z-10">
+                      Cache read
+                    </TableHead>
                     <TableHead className="bg-card sticky top-0 z-10 text-right">
                       Cost
                     </TableHead>
@@ -830,7 +850,7 @@ export default function StatisticsPage() {
                   {sortedChatAgentStatistics.length === 0 ? (
                     <TableRow>
                       <TableCell
-                        colSpan={5}
+                        colSpan={6}
                         className="text-center py-8 text-muted-foreground"
                       >
                         No agent data available for the selected timeframe
@@ -848,6 +868,9 @@ export default function StatisticsPage() {
                           {(
                             agent.inputTokens + agent.outputTokens
                           ).toLocaleString()}
+                        </TableCell>
+                        <TableCell>
+                          {(agent.cacheReadTokens ?? 0).toLocaleString()}
                         </TableCell>
                         <TableCell className="text-right">
                           ${agent.cost.toFixed(2)}
@@ -1045,6 +1068,9 @@ export default function StatisticsPage() {
                       Tokens Used
                     </TableHead>
                     <TableHead className="bg-card sticky top-0 z-10">
+                      Cache read
+                    </TableHead>
+                    <TableHead className="bg-card sticky top-0 z-10">
                       Cost
                     </TableHead>
                     <TableHead className="bg-card sticky top-0 z-10 text-right">
@@ -1056,7 +1082,7 @@ export default function StatisticsPage() {
                   {sortedModelStatistics.length === 0 ? (
                     <TableRow>
                       <TableCell
-                        colSpan={5}
+                        colSpan={6}
                         className="text-center py-8 text-muted-foreground"
                       >
                         No model data available for the selected timeframe
@@ -1073,6 +1099,9 @@ export default function StatisticsPage() {
                           {(
                             model.inputTokens + model.outputTokens
                           ).toLocaleString()}
+                        </TableCell>
+                        <TableCell>
+                          {(model.cacheReadTokens ?? 0).toLocaleString()}
                         </TableCell>
                         <TableCell>${model.cost.toFixed(2)}</TableCell>
                         <TableCell className="text-right">

@@ -2293,6 +2293,7 @@ export function ChatPageContent({
                           }
                           isModelsLoading={isModelsLoading}
                           tokensUsed={tokensUsed}
+                          cachedTokens={tokenUsage?.cacheReadTokens}
                           maxContextLength={selectedModelContextLength}
                           inputModalities={selectedModelInputModalities}
                           agentLlmApiKeyId={

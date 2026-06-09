@@ -1,0 +1,46 @@
+# Contributor-only dev tooling for the migrate-to-archestra skill.
+#
+# IMPORTANT: this file configures the *development* loop (tests, type-checking, linting). The
+# shipped scripts under scripts/ are deliberately ZERO-dependency and run on stock python>=3.10
+# with no install -- they do NOT depend on anything declared here. End users never need uv,
+# ty, ruff, or these packages; only contributors running the test suite do.
+
+[project]
+name = "migrate-to-archestra"
+version = "0.0.0"
+description = "Dev tooling for the migrate-to-archestra skill (not published)."
+requires-python = ">=3.10"
+
+[tool.uv]
+package = false
+
+[dependency-groups]
+# pinned so the type/lint gates are reproducible across contributor machines.
+dev = [
+    "pytest==9.0.3",
+    "pyyaml==6.0.3",   # test-only YAML oracle (the shipped scripts parse frontmatter themselves)
+    "ty==0.0.44",      # Astral type checker -- the enforced typing gate
+    "ruff==0.15.16",   # Astral linter -- dead-code / unused-import gate
+]
+
+[tool.ty.environment]
+# pin to the lowest supported runtime so 3.11+-only syntax is caught.
+python-version = "3.10"
+
+[tool.ty.src]
+include = ["scripts", "install.py"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+src = ["scripts", "install.py"]
+# the fixture is a deliberately-imperfect sample of a *user's* setup, not our code.
+extend-exclude = ["tests/fixtures"]
+
+[tool.ruff.lint]
+# pyflakes (unused imports/vars, dead code) + pycodestyle errors + isort.
+select = ["F", "E", "I"]
+
+[tool.ruff.lint.per-file-ignores]
+# the module docstring carries a copy-paste `curl … | python3` URL that can't be wrapped.
+"install.py" = ["E501"]

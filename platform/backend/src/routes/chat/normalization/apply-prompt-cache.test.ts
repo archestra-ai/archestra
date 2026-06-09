@@ -194,4 +194,54 @@ describe("applyPromptCacheBreakpoints", () => {
     expect(bedrockCachePoint(result[0])).toEqual({ type: "default" });
     expect(bedrockCachePoint(result[4])).toEqual({ type: "default" });
   });
+
+  it("uses a 1h TTL for Anthropic models that support it", () => {
+    const [result] = applyPromptCacheBreakpoints({
+      provider: "anthropic",
+      model: "claude-sonnet-4-5",
+      messages: [userMessage("a")],
+    });
+    expect(anthropicCacheControl(result)).toEqual({
+      type: "ephemeral",
+      ttl: "1h",
+    });
+  });
+
+  it("uses a 1h TTL for a Bedrock Sonnet 4.5+ inference profile", () => {
+    const [result] = applyPromptCacheBreakpoints({
+      provider: "bedrock",
+      model: "us.anthropic.claude-opus-4-6-v1:0",
+      messages: [userMessage("a")],
+    });
+    expect(bedrockCachePoint(result)).toEqual({ type: "default", ttl: "1h" });
+  });
+
+  it("keeps the 5m default for older models and when model is absent", () => {
+    const [sonnet4] = applyPromptCacheBreakpoints({
+      provider: "anthropic",
+      model: "claude-sonnet-4-20250514",
+      messages: [userMessage("a")],
+    });
+    expect(anthropicCacheControl(sonnet4)).toEqual({ type: "ephemeral" });
+
+    const [noModel] = applyPromptCacheBreakpoints({
+      provider: "anthropic",
+      messages: [userMessage("a")],
+    });
+    expect(anthropicCacheControl(noModel)).toEqual({ type: "ephemeral" });
+  });
+
+  it("stays 5m for a 1h-capable model when an attachment breakpoint already exists", () => {
+    // A 5m attachment marker placed before a 1h marker would violate the
+    // provider's "longer TTL must precede shorter" rule, so the request that
+    // already carries any breakpoint stays uniformly 5m.
+    const result = applyPromptCacheBreakpoints({
+      provider: "anthropic",
+      model: "claude-sonnet-4-5",
+      messages: [userMessage("first"), messageWithMarkedPart("withFile")],
+    });
+
+    // The unmarked first message gets a marker (last already has its own), 5m.
+    expect(anthropicCacheControl(result[0])).toEqual({ type: "ephemeral" });
+  });
 });

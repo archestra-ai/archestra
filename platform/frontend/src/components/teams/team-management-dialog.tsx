@@ -27,6 +27,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { UserSearchableSelect } from "@/components/user-searchable-select";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import config from "@/lib/config/config";
+import { useFeature } from "@/lib/config/config.query";
 import { useMembersPaginated } from "@/lib/member.query";
 import { useActiveOrganization } from "@/lib/organization.query";
 import { type TeamToken, useTokens } from "@/lib/teams/team-token.query";
@@ -62,10 +63,18 @@ type TeamManagementDialogProps =
 
 const editNavItems = [
   { id: "team", label: "Team" },
-  { id: "token", label: "MCP/A2A Gateway Token" },
-  { id: "vault-folder", label: "Vault Folder" },
   { id: "external-groups", label: "External Group Sync" },
 ] satisfies Array<{ id: TeamDialogSection; label: string }>;
+
+const tokenNavItem = {
+  id: "token",
+  label: "MCP/A2A Gateway Token",
+} satisfies { id: TeamDialogSection; label: string };
+
+const vaultFolderNavItem = {
+  id: "vault-folder",
+  label: "Vault Folder",
+} satisfies { id: TeamDialogSection; label: string };
 
 const createNavItems = [{ id: "team", label: "Team" }] satisfies Array<{
   id: TeamDialogSection;
@@ -86,14 +95,31 @@ export function TeamManagementDialog(props: TeamManagementDialogProps) {
     useTeamManagementExternalSyncSection();
   const TeamManagementVaultFolderSection =
     useTeamManagementVaultFolderSection();
-  const { data: tokensData } = useTokens({ enabled: open && mode === "edit" });
   const { data: canUpdateTeams = false } = useHasPermissions({
     team: ["update"],
   });
+  const { data: tokensData } = useTokens({
+    enabled: open && mode === "edit" && canUpdateTeams,
+  });
+  const byosEnabled = useFeature("byosEnabled");
   const teamToken = tokensData?.tokens.find(
     (token) => token.team?.id === team?.id,
   );
-  const navItems = mode === "create" ? createNavItems : editNavItems;
+  const navItems = useMemo(() => {
+    if (mode === "create") {
+      return createNavItems;
+    }
+
+    if (!canUpdateTeams) {
+      return editNavItems;
+    }
+
+    if (!byosEnabled) {
+      return [editNavItems[0], tokenNavItem, editNavItems[1]];
+    }
+
+    return [editNavItems[0], tokenNavItem, vaultFolderNavItem, editNavItems[1]];
+  }, [byosEnabled, canUpdateTeams, mode]);
   const title = mode === "create" ? "Create Team" : "Edit Team";
   const canEditDetails = mode === "create" || canUpdateTeams;
 
@@ -110,6 +136,18 @@ export function TeamManagementDialog(props: TeamManagementDialogProps) {
     setName(editTeam?.name ?? "");
     setDescription(editTeam?.description ?? "");
   }, [editTeam, mode, open]);
+
+  useEffect(() => {
+    const canShowActiveSection =
+      activeSection === "team" ||
+      activeSection === "external-groups" ||
+      (activeSection === "token" && canUpdateTeams) ||
+      (activeSection === "vault-folder" && canUpdateTeams && byosEnabled);
+
+    if (!canShowActiveSection) {
+      setActiveSection("team");
+    }
+  }, [activeSection, byosEnabled, canUpdateTeams]);
 
   const saveTeam = useMutation({
     mutationFn: async () => {

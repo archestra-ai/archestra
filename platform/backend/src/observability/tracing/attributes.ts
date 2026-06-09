@@ -67,6 +67,13 @@ export const ATTR_GENAI_COMPLETION = "gen_ai.completion";
 // --- archestra custom ---
 export const ATTR_ARCHESTRA_AGENT_TYPE = "archestra.agent.type";
 export const ATTR_ARCHESTRA_COST = "archestra.cost";
+// Prompt-cache token counts. No stable OTEL GenAI semconv attribute exists for
+// cached tokens, so these are archestra-namespaced. Read = reused prefix,
+// write = newly cached prefix; both disjoint from gen_ai.usage.input_tokens.
+export const ATTR_ARCHESTRA_USAGE_CACHE_READ_TOKENS =
+  "archestra.usage.cache_read_tokens";
+export const ATTR_ARCHESTRA_USAGE_CACHE_WRITE_TOKENS =
+  "archestra.usage.cache_write_tokens";
 export const ATTR_ARCHESTRA_EXECUTION_ID = "archestra.execution.id";
 export const ATTR_ARCHESTRA_EXTERNAL_AGENT_ID = "archestra.external_agent_id";
 export const ATTR_ARCHESTRA_TRIGGER_SOURCE = "archestra.trigger.source";

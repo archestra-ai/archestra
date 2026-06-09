@@ -1088,3 +1088,68 @@ describe("reportTokensPerSecond", () => {
     });
   });
 });
+
+describe("reportLLMTokens cache tokens", () => {
+  let testAgent: Agent;
+
+  beforeEach(async ({ makeAgent }) => {
+    vi.clearAllMocks();
+    testAgent = await makeAgent();
+    initializeMetrics([]);
+  });
+
+  test("emits llm_cache_tokens_total with read and write cache_type", () => {
+    reportLLMTokens(
+      "anthropic",
+      testAgent,
+      { input: 5, output: 10, cacheRead: 1000, cacheWrite: 200 },
+      "claude-sonnet",
+      "api",
+    );
+
+    expect(counterInc).toHaveBeenCalledWith({
+      labels: {
+        provider: "anthropic",
+        external_agent_id: "",
+        agent_id: testAgent.id,
+        agent_name: testAgent.name,
+        agent_type: testAgent.agentType,
+        source: "api",
+        model: "claude-sonnet",
+        cache_type: "read",
+      },
+      value: 1000,
+      exemplarLabels: expect.any(Object),
+    });
+    expect(counterInc).toHaveBeenCalledWith({
+      labels: {
+        provider: "anthropic",
+        external_agent_id: "",
+        agent_id: testAgent.id,
+        agent_name: testAgent.name,
+        agent_type: testAgent.agentType,
+        source: "api",
+        model: "claude-sonnet",
+        cache_type: "write",
+      },
+      value: 200,
+      exemplarLabels: expect.any(Object),
+    });
+  });
+
+  test("does not emit cache tokens when there is no cache usage", () => {
+    reportLLMTokens(
+      "anthropic",
+      testAgent,
+      { input: 5, output: 10, cacheRead: 0, cacheWrite: 0 },
+      "claude-sonnet",
+      "api",
+    );
+
+    expect(counterInc).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        labels: expect.objectContaining({ cache_type: expect.any(String) }),
+      }),
+    );
+  });
+});

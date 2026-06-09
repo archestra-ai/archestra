@@ -37,6 +37,8 @@ import {
 import { metrics } from "@/observability";
 import {
   ATTR_ARCHESTRA_COST,
+  ATTR_ARCHESTRA_USAGE_CACHE_READ_TOKENS,
+  ATTR_ARCHESTRA_USAGE_CACHE_WRITE_TOKENS,
   ATTR_GENAI_COMPLETION,
   ATTR_GENAI_RESPONSE_FINISH_REASONS,
   ATTR_GENAI_RESPONSE_ID,
@@ -1220,7 +1222,12 @@ async function handleStreaming<
         metrics.llm.reportLLMTokens(
           providerName,
           agent,
-          { input: usage.inputTokens, output: usage.outputTokens },
+          {
+            input: usage.inputTokens,
+            output: usage.outputTokens,
+            cacheRead: usage.cacheReadTokens,
+            cacheWrite: usage.cacheWriteTokens,
+          },
           actualModel,
           source,
           externalAgentId,
@@ -1378,6 +1385,18 @@ async function handleNonStreaming<
         ATTR_GENAI_USAGE_TOTAL_TOKENS,
         usage.inputTokens + usage.outputTokens,
       );
+      if (usage.cacheReadTokens) {
+        llmSpan.setAttribute(
+          ATTR_ARCHESTRA_USAGE_CACHE_READ_TOKENS,
+          usage.cacheReadTokens,
+        );
+      }
+      if (usage.cacheWriteTokens) {
+        llmSpan.setAttribute(
+          ATTR_ARCHESTRA_USAGE_CACHE_WRITE_TOKENS,
+          usage.cacheWriteTokens,
+        );
+      }
       const cost = await utils.costOptimization.calculateCost(
         actualModel,
         usage.inputTokens,

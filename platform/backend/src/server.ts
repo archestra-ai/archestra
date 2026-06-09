@@ -87,6 +87,7 @@ import {
   Xai,
   Zhipuai,
 } from "@/types";
+import { isCspSource } from "@/utils/csp-domain";
 import websocketService from "@/websocket";
 import * as routes from "./routes";
 import { publicConfigRoutes } from "./routes/config";
@@ -621,19 +622,14 @@ const startMetricsServer = async () => {
 
 /**
  * Allowlist-validate CSP domain entries.
- * Only permits valid hostnames and wildcard-subdomain patterns (e.g. *.example.com).
+ * Only permits valid hostnames and wildcard-subdomain patterns (e.g. *.example.com),
+ * optionally scheme-prefixed (https://, wss://) and with a port (:8443).
  * Blocks dangerous CSP sources like *, data:, blob:, https: that a denylist would miss.
+ * Shares the host grammar with the app save-time gate (see utils/csp-domain.ts).
  */
-// Matches bare domains (esm.sh), wildcard subdomains (*.esm.sh),
-// scheme-prefixed domains (https://esm.sh, wss://esm.sh), and optional port (:8443).
-const VALID_CSP_DOMAIN =
-  /^(wss?:\/\/|https?:\/\/)?(\*\.)?[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z]{2,})+(:\d{1,5})?$/;
-
 export function sanitizeCspDomains(domains?: string[]): string[] {
   if (!domains) return [];
-  return domains.filter(
-    (d) => typeof d === "string" && VALID_CSP_DOMAIN.test(d),
-  );
+  return domains.filter((d) => typeof d === "string" && isCspSource(d));
 }
 
 export function buildCspHeader(csp?: McpUiResourceCsp): string {

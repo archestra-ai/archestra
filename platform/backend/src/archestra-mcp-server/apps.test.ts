@@ -13,7 +13,7 @@ import {
   TOOL_UPDATE_APP_SHORT_NAME,
 } from "@archestra/shared";
 import config from "@/config";
-import { AppModel } from "@/models";
+import { AppModel, AppVersionModel } from "@/models";
 import {
   afterAll,
   beforeAll,
@@ -140,6 +140,46 @@ describe("app tool execution", () => {
     );
     expect(delAttempt.isError).toBe(true);
     expect(await AppModel.findById(orgAppId)).not.toBeNull();
+  });
+
+  test("create rejects an invalid CSP domain", async () => {
+    const result = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_CREATE_APP_SHORT_NAME),
+      {
+        name: "BadCsp",
+        html: "<p/>",
+        uiCsp: { connectDomains: ["https://evil.example.com"] },
+      },
+      context,
+    );
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as any).text).toContain("invalid CSP domain");
+  });
+
+  test("an html-only update preserves the existing CSP", async () => {
+    const created = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_CREATE_APP_SHORT_NAME),
+      {
+        name: "Keeps CSP",
+        html: "<h1>v1</h1>",
+        uiCsp: { connectDomains: ["api.example.com"] },
+      },
+      context,
+    );
+    const appId = structured(created).id as string;
+
+    const updated = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_UPDATE_APP_SHORT_NAME),
+      { appId, html: "<h1>v2</h1>" },
+      context,
+    );
+    expect(updated.isError).toBe(false);
+
+    const head = await AppVersionModel.findByAppAndVersion(
+      appId,
+      structured(updated).latestVersion as number,
+    );
+    expect(head?.uiCsp).toEqual({ connectDomains: ["api.example.com"] });
   });
 
   test("create reports a name conflict cleanly", async () => {

@@ -9,7 +9,9 @@ import { z } from "zod";
 import { requireScopedModifyPermission } from "@/auth/agent-type-permissions";
 import { userHasPermission } from "@/auth/utils";
 import logger from "@/logging";
-import { AppModel, AppTeamModel, TeamModel } from "@/models";
+import { AppModel, AppTeamModel, AppVersionModel, TeamModel } from "@/models";
+import type { VersionPayload } from "@/models/app-version";
+import { buildValidatedVersionPayload } from "@/services/apps/app-ui-policy";
 import { ApiError } from "@/types";
 import type { AppScope } from "@/types/app";
 import {
@@ -18,6 +20,8 @@ import {
   APP_NAME_MAX_LENGTH,
   APP_TEMPLATE_ID_MAX_LENGTH,
   AppScopeSchema,
+  AppUiCspSchema,
+  AppUiPermissionsSchema,
 } from "@/types/app";
 import {
   defineArchestraTool,
@@ -52,6 +56,12 @@ const CreateAppSchema = z.strictObject({
     .max(APP_TEMPLATE_ID_MAX_LENGTH)
     .optional()
     .describe("Optional id of the template this app was seeded from."),
+  uiCsp: AppUiCspSchema.optional().describe(
+    "Optional CSP allowlist (bare hostnames). Omitted = restrictive default (own origin only).",
+  ),
+  uiPermissions: AppUiPermissionsSchema.optional().describe(
+    "Optional iframe permissions (camera/microphone/geolocation/clipboardWrite).",
+  ),
 });
 
 const ListAppsSchema = z.strictObject({
@@ -73,6 +83,12 @@ const UpdateAppSchema = z.strictObject({
     .describe(
       "New HTML; supplying it forks a new immutable version (no-op if unchanged).",
     ),
+  uiCsp: AppUiCspSchema.optional().describe(
+    "New CSP allowlist; part of the version envelope, so it requires html too.",
+  ),
+  uiPermissions: AppUiPermissionsSchema.optional().describe(
+    "New iframe permissions; part of the version envelope, so it requires html too.",
+  ),
 });
 
 const DeleteAppSchema = z.strictObject({
@@ -149,6 +165,7 @@ const registry = defineArchestraTools([
       }
 
       const scope = args.scope ?? "personal";
+      let payload: VersionPayload;
       try {
         // Creating a shared (team/org) app needs the matching authority; a plain
         // member may only create personal apps they author.
@@ -158,6 +175,11 @@ const registry = defineArchestraTools([
           scope,
           authorId: context.userId,
           resourceTeamIds: [],
+        });
+        payload = buildValidatedVersionPayload({
+          html: args.html,
+          uiCsp: args.uiCsp,
+          uiPermissions: args.uiPermissions,
         });
       } catch (error) {
         if (error instanceof ApiError) return errorResult(error.message);
@@ -173,7 +195,7 @@ const registry = defineArchestraTools([
           description: args.description ?? null,
           templateId: args.templateId ?? null,
         },
-        payload: { html: args.html, uiCsp: null, uiPermissions: null },
+        payload,
       });
 
       if (!app) {
@@ -310,12 +332,45 @@ const registry = defineArchestraTools([
       if (args.description !== undefined) patch.description = args.description;
       if (args.scope !== undefined) patch.scope = args.scope;
 
+      // CSP/permissions are part of the immutable version envelope, so they can
+      // only change together with new html (no silent partial-version merge).
+      if (
+        args.html === undefined &&
+        (args.uiCsp !== undefined || args.uiPermissions !== undefined)
+      ) {
+        return errorResult(
+          "Changing uiCsp or uiPermissions requires supplying html (they are part of the app version).",
+        );
+      }
+      let version: VersionPayload | undefined;
+      if (args.html !== undefined) {
+        // CSP/permissions are versioned with the html. An omitted field inherits
+        // the current head's value (an html-only edit must not silently drop an
+        // existing CSP); a supplied field replaces it.
+        const head = await AppVersionModel.findByAppAndVersion(
+          app.id,
+          app.latestVersion,
+        );
+        try {
+          version = buildValidatedVersionPayload({
+            html: args.html,
+            uiCsp:
+              args.uiCsp !== undefined ? args.uiCsp : (head?.uiCsp ?? null),
+            uiPermissions:
+              args.uiPermissions !== undefined
+                ? args.uiPermissions
+                : (head?.uiPermissions ?? null),
+          });
+        } catch (error) {
+          if (error instanceof ApiError) return errorResult(error.message);
+          throw error;
+        }
+      }
+
       const updated = await AppModel.update({
         id: args.appId,
         ...(Object.keys(patch).length > 0 ? { patch } : {}),
-        ...(args.html !== undefined
-          ? { version: { html: args.html, uiCsp: null, uiPermissions: null } }
-          : {}),
+        ...(version ? { version } : {}),
       });
       if (!updated) {
         return errorResult(`Failed to update app ${args.appId}.`);

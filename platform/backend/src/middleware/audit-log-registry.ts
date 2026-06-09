@@ -2,6 +2,7 @@ import config from "@/config";
 import AgentModel from "@/models/agent";
 import AgentToolModel from "@/models/agent-tool";
 import ApiKeyModel from "@/models/api-key";
+import AppModel from "@/models/app";
 import ChatOpsChannelBindingModel from "@/models/chatops-channel-binding";
 import chatOpsConfigModel from "@/models/chatops-config";
 import EnvironmentModel from "@/models/environment";
@@ -157,6 +158,26 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
       if (typeof agentId !== "string") return Promise.resolve(null);
       return AgentToolModel.findByAgentAndToolForAudit(agentId, toolId, orgId);
     },
+  },
+
+  // Apps
+  "/api/apps": {
+    resourceType: "app",
+    fetchById: (id, orgId) => AppModel.findByIdForAudit(id, orgId),
+  },
+  "/api/apps/:appId": {
+    resourceType: "app",
+    resourceIdParam: "appId",
+    fetchById: (id, orgId) => AppModel.findByIdForAudit(id, orgId),
+  },
+  // Tool assignment changes the app's effective tool surface; appToolsTable is
+  // audited:false ("parent carries the signal"), so record app.updated with the
+  // app snapshot instead of inheriting app.created from the POST walk-up.
+  "/api/apps/:appId/tools/:toolId": {
+    resourceType: "app",
+    resourceIdParam: "appId",
+    action: "app.updated",
+    fetchById: (id, orgId) => AppModel.findByIdForAudit(id, orgId),
   },
 
   // MCP Servers

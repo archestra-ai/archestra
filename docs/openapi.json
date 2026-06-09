@@ -202552,7 +202552,7 @@
         "tags": [
           "Teams"
         ],
-        "description": "Update a team\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`team:update`: Modify team settings",
+        "description": "Update a team\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`team:read`: View teams and their members",
         "requestBody": {
           "required": true,
           "content": {
@@ -202904,7 +202904,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "team:update"
+            "team:read"
           ]
         }
       },
@@ -203497,7 +203497,7 @@
         "tags": [
           "Teams"
         ],
-        "description": "Add a member to a team\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`team:admin`: Manage team membership (add/remove members)",
+        "description": "Add a member to a team\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`team:read`: View teams and their members",
         "requestBody": {
           "required": true,
           "content": {
@@ -203510,7 +203510,11 @@
                   },
                   "role": {
                     "default": "member",
-                    "type": "string"
+                    "type": "string",
+                    "enum": [
+                      "admin",
+                      "member"
+                    ]
                   }
                 },
                 "required": [
@@ -203803,18 +203807,341 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "team:admin"
+            "team:read"
           ]
         }
       }
     },
     "/api/teams/{id}/members/{userId}": {
+      "put": {
+        "operationId": "updateTeamMember",
+        "tags": [
+          "Teams"
+        ],
+        "description": "Update a team member role\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`team:read`: View teams and their members",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "role": {
+                    "type": "string",
+                    "enum": [
+                      "admin",
+                      "member"
+                    ]
+                  }
+                },
+                "required": [
+                  "role"
+                ]
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "userId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "teamId": {
+                      "type": "string"
+                    },
+                    "userId": {
+                      "type": "string"
+                    },
+                    "role": {
+                      "type": "string"
+                    },
+                    "syncedFromSso": {
+                      "type": "boolean"
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "teamId",
+                    "userId",
+                    "role",
+                    "syncedFromSso",
+                    "createdAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "team:read"
+          ]
+        }
+      },
       "delete": {
         "operationId": "removeTeamMember",
         "tags": [
           "Teams"
         ],
-        "description": "Remove a member from a team\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`team:admin`: Manage team membership (add/remove members)",
+        "description": "Remove a member from a team\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`team:read`: View teams and their members",
         "parameters": [
           {
             "schema": {
@@ -204085,7 +204412,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "team:admin"
+            "team:read"
           ]
         }
       }
@@ -204384,7 +204711,7 @@
         "tags": [
           "Teams"
         ],
-        "description": "Add an external group mapping to a team for SSO team sync\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`team:admin`: Manage team membership (add/remove members)",
+        "description": "Add an external group mapping to a team for SSO team sync\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`team:read`: View teams and their members",
         "requestBody": {
           "required": true,
           "content": {
@@ -204679,7 +205006,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "team:admin"
+            "team:read"
           ]
         }
       }
@@ -204690,7 +205017,7 @@
         "tags": [
           "Teams"
         ],
-        "description": "Remove an external group mapping from a team for SSO team sync\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`team:admin`: Manage team membership (add/remove members)",
+        "description": "Remove an external group mapping from a team for SSO team sync\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`team:read`: View teams and their members",
         "parameters": [
           {
             "schema": {
@@ -204961,7 +205288,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "team:admin"
+            "team:read"
           ]
         }
       }
@@ -205321,7 +205648,7 @@
         "tags": [
           "Tokens"
         ],
-        "description": "Get the full token value (for copying to clipboard)\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`team:update`: Modify team settings",
+        "description": "Get the full token value (for copying to clipboard)\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`team:read`: View teams and their members",
         "parameters": [
           {
             "schema": {
@@ -205586,7 +205913,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "team:update"
+            "team:read"
           ]
         }
       }
@@ -205597,7 +205924,7 @@
         "tags": [
           "Tokens"
         ],
-        "description": "Rotate a token (generate new value)\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`team:update`: Modify team settings",
+        "description": "Rotate a token (generate new value)\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`team:read`: View teams and their members",
         "parameters": [
           {
             "schema": {
@@ -205909,7 +206236,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "team:update"
+            "team:read"
           ]
         }
       }

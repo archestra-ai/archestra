@@ -67,6 +67,7 @@ export * from "./skill-share-link-revision";
 export * from "./statistics";
 export * from "./task";
 export * from "./team";
+export * from "./team-role";
 export * from "./team-token";
 export * from "./tool";
 export * from "./tool-result-compression";

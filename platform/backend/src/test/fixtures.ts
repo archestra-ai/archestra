@@ -217,7 +217,7 @@ async function makeTeam(
 async function makeTeamMember(
   teamId: string,
   userId: string,
-  overrides: { role?: string; syncedFromSso?: boolean } = {},
+  overrides: { role?: "admin" | "member"; syncedFromSso?: boolean } = {},
 ): Promise<TeamMember> {
   return await TeamModel.addMember(
     teamId,

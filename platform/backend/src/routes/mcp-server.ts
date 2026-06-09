@@ -1848,7 +1848,7 @@ async function findAccessibleMcpServer(params: {
  *       - revoke: owner OR mcpServerInstallation:update
  *       - re-authenticate / reinstall: owner only (these replace the
  *         connection's secret, so they must not be available to editors)
- *   - team:     team:admin OR (mcpServerInstallation:update AND user-in-team)
+ *   - team:     team:create OR literal team admin OR (mcpServerInstallation:update AND user-in-team)
  *   - org:      mcpServerInstallation:admin (no owner fallback)
  */
 async function assertScopedLifecycleAuthorization(params: {
@@ -1886,11 +1886,17 @@ async function assertScopedLifecycleAuthorization(params: {
       if (!mcpServer.teamId) {
         throw new ApiError(500, "Team-scoped MCP server is missing its teamId");
       }
-      const { success: isTeamAdmin } = await hasPermission(
-        { team: ["admin"] },
+      const { success: canManageAllTeams } = await hasPermission(
+        { team: ["create"] },
         headers,
       );
-      if (isTeamAdmin) return;
+      if (canManageAllTeams) return;
+
+      const isLiteralTeamAdmin = await TeamModel.isUserTeamAdmin(
+        mcpServer.teamId,
+        userId,
+      );
+      if (isLiteralTeamAdmin) return;
 
       const { success: hasMcpServerUpdate } = await hasPermission(
         { mcpServerInstallation: ["update"] },
@@ -2382,12 +2388,20 @@ async function validateScopeAndAuthorization(params: {
       throw new ApiError(404, "Team not found");
     }
 
-    const { success: hasTeamAdmin } = await hasPermission(
-      { team: ["admin"] },
+    const { success: canManageAllTeams } = await hasPermission(
+      { team: ["create"] },
       headers,
     );
 
-    if (!hasTeamAdmin) {
+    if (!canManageAllTeams) {
+      const isLiteralTeamAdmin = await TeamModel.isUserTeamAdmin(
+        teamId,
+        userId,
+      );
+      if (isLiteralTeamAdmin) {
+        return;
+      }
+
       const { success: hasMcpServerUpdate } = await hasPermission(
         { mcpServerInstallation: ["update"] },
         headers,

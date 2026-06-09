@@ -9,7 +9,7 @@ import {
 } from "@archestra/shared";
 import { vi } from "vitest";
 import mcpClient from "@/clients/mcp-client";
-import { ToolModel } from "@/models";
+import { ConversationEnabledToolModel, ToolModel } from "@/models";
 import { beforeEach, describe, expect, test } from "@/test";
 import type { Agent } from "@/types";
 import { type ArchestraContext, executeArchestraTool } from ".";
@@ -29,31 +29,45 @@ vi.mock("@/agents/a2a-executor", () => ({
 describe("run_tool", () => {
   let testAgent: Agent;
   let mockContext: ArchestraContext;
+  let testConversationId: string;
 
-  beforeEach(async ({ makeAgent, makeMember, makeOrganization, makeUser }) => {
-    vi.clearAllMocks();
+  beforeEach(
+    async ({
+      makeAgent,
+      makeConversation,
+      makeMember,
+      makeOrganization,
+      makeUser,
+    }) => {
+      vi.clearAllMocks();
 
-    const org = await makeOrganization();
-    const user = await makeUser();
-    await makeMember(user.id, org.id, { role: "admin" });
-    testAgent = await makeAgent({
-      name: "Run Tool Agent",
-      organizationId: org.id,
-    });
-    mockContext = {
-      agent: { id: testAgent.id, name: testAgent.name },
-      agentId: testAgent.id,
-      organizationId: org.id,
-      userId: user.id,
-      conversationId: "conversation-1",
-      tokenAuth: {
-        tokenId: "token-1",
-        teamId: null,
-        isOrganizationToken: true,
+      const org = await makeOrganization();
+      const user = await makeUser();
+      await makeMember(user.id, org.id, { role: "admin" });
+      testAgent = await makeAgent({
+        name: "Run Tool Agent",
         organizationId: org.id,
-      },
-    };
-  });
+      });
+      const conversation = await makeConversation(testAgent.id, {
+        organizationId: org.id,
+        userId: user.id,
+      });
+      testConversationId = conversation.id;
+      mockContext = {
+        agent: { id: testAgent.id, name: testAgent.name },
+        agentId: testAgent.id,
+        organizationId: org.id,
+        userId: user.id,
+        conversationId: conversation.id,
+        tokenAuth: {
+          tokenId: "token-1",
+          teamId: null,
+          isOrganizationToken: true,
+          organizationId: org.id,
+        },
+      };
+    },
+  );
 
   test("validates run_tool arguments before dispatch", async () => {
     const result = await executeArchestraTool(
@@ -281,7 +295,7 @@ describe("run_tool", () => {
       },
       testAgent.id,
       mockContext.tokenAuth,
-      { conversationId: "conversation-1" },
+      { conversationId: testConversationId },
     );
     expect(result).toMatchObject({
       isError: false,
@@ -291,6 +305,168 @@ describe("run_tool", () => {
     expect(result.content).toEqual([
       { type: "text", text: "Third-party response" },
     ]);
+  });
+
+  describe("per-conversation tool filter", () => {
+    test("rejects a third-party tool disabled for the conversation (call-time re-check)", async ({
+      makeAgentTool,
+      makeInternalMcpCatalog,
+      makeTool,
+    }) => {
+      const catalog = await makeInternalMcpCatalog();
+      const enabled = await makeTool({
+        name: "github__search_repositories",
+        catalogId: catalog.id,
+      });
+      const disabled = await makeTool({
+        name: "github__create_issue",
+        catalogId: catalog.id,
+      });
+      await makeAgentTool(testAgent.id, enabled.id);
+      await makeAgentTool(testAgent.id, disabled.id);
+      // conversation enables only `enabled`; the disabled tool may have been
+      // shown by an earlier search before the selection narrowed.
+      await ConversationEnabledToolModel.setEnabledTools(testConversationId, [
+        enabled.id,
+      ]);
+
+      const result = await executeArchestraTool(
+        TOOL_RUN_TOOL_FULL_NAME,
+        { tool_name: "github__create_issue", tool_args: {} },
+        mockContext,
+      );
+
+      expect(result.isError).toBe(true);
+      expect((result.content[0] as any).text).toContain(
+        "not enabled for this conversation",
+      );
+      expect(mcpClient.executeToolCall).not.toHaveBeenCalled();
+    });
+
+    test("dispatches a third-party tool enabled for the conversation", async ({
+      makeAgentTool,
+      makeInternalMcpCatalog,
+      makeTool,
+    }) => {
+      const catalog = await makeInternalMcpCatalog();
+      const tool = await makeTool({
+        name: "github__search_repositories",
+        catalogId: catalog.id,
+      });
+      await makeAgentTool(testAgent.id, tool.id);
+      await ConversationEnabledToolModel.setEnabledTools(testConversationId, [
+        tool.id,
+      ]);
+
+      vi.mocked(mcpClient.executeToolCall).mockResolvedValueOnce({
+        content: [{ type: "text", text: "ok" }],
+        isError: false,
+        _meta: {},
+        structuredContent: { ok: true },
+      } as any);
+
+      const result = await executeArchestraTool(
+        TOOL_RUN_TOOL_FULL_NAME,
+        { tool_name: "github__search_repositories", tool_args: {} },
+        mockContext,
+      );
+
+      expect(result.isError).toBe(false);
+      expect(mcpClient.executeToolCall).toHaveBeenCalled();
+    });
+
+    test("allows Archestra built-ins under an empty custom selection", async ({
+      seedAndAssignArchestraTools,
+    }) => {
+      await seedAndAssignArchestraTools(testAgent.id);
+      await ConversationEnabledToolModel.setEnabledTools(
+        testConversationId,
+        [],
+      );
+
+      const result = await executeArchestraTool(
+        TOOL_RUN_TOOL_FULL_NAME,
+        { tool_name: "whoami" },
+        mockContext,
+      );
+
+      expect(result.isError).toBe(false);
+      expect(result.structuredContent).toEqual({
+        agentId: testAgent.id,
+        agentName: testAgent.name,
+      });
+    });
+
+    test("returns the unavailable-tool recovery message (not 'not enabled') for an unassigned name under a custom selection", async ({
+      makeAgentTool,
+      makeInternalMcpCatalog,
+      makeTool,
+    }) => {
+      const catalog = await makeInternalMcpCatalog();
+      const assigned = await makeTool({
+        name: "github__search_repositories",
+        catalogId: catalog.id,
+      });
+      await makeAgentTool(testAgent.id, assigned.id);
+      await ConversationEnabledToolModel.setEnabledTools(testConversationId, [
+        assigned.id,
+      ]);
+
+      const result = await executeArchestraTool(
+        TOOL_RUN_TOOL_FULL_NAME,
+        { tool_name: "giphy__image_search", tool_args: {} },
+        mockContext,
+      );
+
+      expect(result.isError).toBe(true);
+      const text = (result.content[0] as any).text;
+      // existence check wins: the unassigned name is not falsely reported as
+      // merely "not enabled for this conversation".
+      expect(text).toContain('No tool named "giphy__image_search"');
+      expect(text).not.toContain("not enabled for this conversation");
+      expect(mcpClient.executeToolCall).not.toHaveBeenCalled();
+    });
+
+    test("rejects an agent-delegation tool disabled for the conversation", async ({
+      makeAgent,
+      makeAgentTool,
+      makeInternalMcpCatalog,
+      makeTool,
+    }) => {
+      const targetAgent = await makeAgent({
+        name: "Research Agent",
+        organizationId: mockContext.organizationId,
+      });
+      const delegationTool = await ToolModel.findOrCreateDelegationTool(
+        targetAgent.id,
+      );
+      await makeAgentTool(testAgent.id, delegationTool.id);
+      const catalog = await makeInternalMcpCatalog();
+      const other = await makeTool({
+        name: "github__search_repositories",
+        catalogId: catalog.id,
+      });
+      await makeAgentTool(testAgent.id, other.id);
+      // enable only the unrelated third-party tool, excluding the delegation tool
+      await ConversationEnabledToolModel.setEnabledTools(testConversationId, [
+        other.id,
+      ]);
+
+      const result = await executeArchestraTool(
+        TOOL_RUN_TOOL_FULL_NAME,
+        {
+          tool_name: `${AGENT_TOOL_PREFIX}${slugify(targetAgent.name)}`,
+          tool_args: { message: "hi" },
+        },
+        mockContext,
+      );
+
+      expect(result.isError).toBe(true);
+      expect((result.content[0] as any).text).toContain(
+        "not enabled for this conversation",
+      );
+      expect(mockExecuteA2AMessage).not.toHaveBeenCalled();
+    });
   });
 
   test("returns a search_tools recovery message for an unavailable third-party tool", async () => {
@@ -501,7 +677,7 @@ describe("run_tool", () => {
       }),
       agent.id,
       mockContext.tokenAuth,
-      { conversationId: "conversation-1" },
+      { conversationId: testConversationId },
     );
     expect(result.content).toEqual([
       { type: "text", text: "Approved response" },

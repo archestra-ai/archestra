@@ -599,9 +599,12 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
     expect(mockStreamText).toHaveBeenCalledTimes(1);
     // applyPromptCacheBreakpoints marks the first and last message (the stable
     // prefix + rolling tail) with Anthropic cache_control before streamText, so
-    // the compacted messages reach the model carrying that breakpoint.
+    // the compacted messages reach the model carrying that breakpoint. The
+    // default chat model is a Claude 4.5+ model, which uses the 1h cache TTL.
     const cacheBreakpoint = {
-      providerOptions: { anthropic: { cacheControl: { type: "ephemeral" } } },
+      providerOptions: {
+        anthropic: { cacheControl: { type: "ephemeral", ttl: "1h" } },
+      },
     };
     expect(mockStreamText.mock.calls[0]?.[0].messages).toEqual([
       { ...compactedMessages[0], ...cacheBreakpoint },

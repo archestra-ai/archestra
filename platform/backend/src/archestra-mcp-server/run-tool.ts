@@ -10,14 +10,18 @@ import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import { evaluateSingleMcpToolInvocationPolicy } from "@/guardrails/tool-invocation";
 import logger from "@/logging";
-import { ToolModel } from "@/models";
+import { ConversationEnabledToolModel, ToolModel } from "@/models";
 import { archestraMcpBranding } from "./branding";
+import { isToolEnabledForConversation } from "./conversation-tool-filter";
 import {
   defineArchestraTool,
   defineArchestraTools,
   errorResult,
 } from "./helpers";
-import { unavailableThirdPartyToolMessage } from "./tool-recovery-messages";
+import {
+  toolNotEnabledForConversationMessage,
+  unavailableThirdPartyToolMessage,
+} from "./tool-recovery-messages";
 
 const RunToolArgsSchema = z
   .object({
@@ -79,7 +83,41 @@ const registry = defineArchestraTools([
         return errorResult(`${TOOL_RUN_TOOL_SHORT_NAME} cannot invoke itself`);
       }
 
+      // Per-conversation enabled-tool gate: in a chat with a custom tool
+      // selection, a tool the user disabled must not be runnable via run_tool
+      // (the visible tool list already hides it). Returns an error result when
+      // the tool is disabled, else null. Archestra built-ins always pass (and
+      // skip the lookup) so run_tool/search_tools themselves are never blocked.
+      // conversationId is server-set, never model-supplied, so it cannot be
+      // forged to bypass. Callers apply this AFTER the existence/assignment
+      // check so an unassigned name still gets the "no such tool" recovery
+      // message rather than a misleading "not enabled" one.
+      const checkConversationGate = async (
+        name: string,
+      ): Promise<CallToolResult | null> => {
+        if (!context.conversationId || archestraMcpBranding.isToolName(name)) {
+          return null;
+        }
+        const enabledNames =
+          await ConversationEnabledToolModel.getEnabledToolNameSet(
+            context.conversationId,
+          );
+        if (isToolEnabledForConversation(name, enabledNames)) {
+          return null;
+        }
+        logger.info(
+          { agentId: context.agentId, requestedName, resolvedName: name },
+          `${TOOL_RUN_TOOL_SHORT_NAME} dispatched to a tool disabled for this conversation`,
+        );
+        return errorResult(toolNotEnabledForConversationMessage(name));
+      };
+
       if (route === "archestra") {
+        // Delegation (agent-<id>) names are gated here; executeArchestraTool
+        // enforces existence/assignment for genuinely unknown archestra names.
+        const gateError = await checkConversationGate(resolvedName);
+        if (gateError) return gateError;
+
         // Dynamic import avoids the circular import between this file and
         // ./index (index.ts imports every tool group, including this one).
         const { executeArchestraTool } = await import("./index");
@@ -102,7 +140,7 @@ const registry = defineArchestraTools([
       // instead of the misleading "not enabled for this conversation" refusal
       // (which implies the tool exists). In search_and_run_only mode the
       // intended recovery is search_tools, so we point the model there. The set
-      // is passed into the gate below so it is fetched only once.
+      // is reused by the policy gate below so it is fetched only once.
       const assignedToolNames = await ToolModel.getAssignedToolNames(
         context.agentId,
       );
@@ -113,6 +151,11 @@ const registry = defineArchestraTools([
         );
         return errorResult(unavailableThirdPartyToolMessage(resolvedName));
       }
+
+      // The tool exists and is assigned — only now enforce the per-conversation
+      // selection, so an unassigned name above still gets the recovery message.
+      const gateError = await checkConversationGate(resolvedName);
+      if (gateError) return gateError;
 
       const toolInput = args.tool_args ?? {};
       // Reuse the set computed above so the policy gate does not re-query it.

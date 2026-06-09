@@ -36,6 +36,13 @@
 <body>
 <script>
 
+// The ext-apps guest SDK, served same-deployment next to this proxy. App
+// templates import it (via window.__ARCHESTRA_APP_SDK_URL__, injected below) to
+// expose window.archestra.data. location.origin is this proxy's real origin
+// (the proxy is never the opaque srcdoc guest), and /_sandbox/ is proxied to the
+// backend in every mode, so this absolute URL resolves + loads everywhere.
+const APP_SDK_URL = location.origin + "/_sandbox/ext-apps-app.js";
+
 function buildAllowAttribute(permissions) {
   if (!permissions) return "";
 
@@ -66,7 +73,7 @@ function buildCSP(csp) {
   if (!csp) {
     return [
       "default-src 'none'",
-      "script-src 'unsafe-inline'",
+      "script-src 'unsafe-inline' " + APP_SDK_URL,
       "style-src 'unsafe-inline'",
       "img-src data: blob:",
       "font-src data: blob:",
@@ -92,7 +99,7 @@ function buildCSP(csp) {
 
   return [
     "default-src 'none'",
-    "script-src 'unsafe-inline' " + resourceSrc,
+    "script-src 'unsafe-inline' " + APP_SDK_URL + " " + resourceSrc,
     "style-src 'unsafe-inline' " + resourceSrc,
     "img-src " + resourceSrc,
     "font-src " + resourceSrc,
@@ -133,7 +140,11 @@ document.addEventListener("securitypolicyviolation", function(e) {\
 function injectCSP(html, cspValue) {
   var cspMeta = '<meta http-equiv="Content-Security-Policy" content="' + cspValue + '">';
   var violationListener = buildViolationListenerScript();
-  var injection = cspMeta + violationListener;
+  // Expose the served SDK URL so app templates can import it. APP_SDK_URL is
+  // location.origin-derived (no user input), but JSON-encode defensively so it
+  // can never break out of the inline script.
+  var sdkGlobal = '<script>window.__ARCHESTRA_APP_SDK_URL__=' + JSON.stringify(APP_SDK_URL) + ';<\/script>';
+  var injection = cspMeta + sdkGlobal + violationListener;
 
   if (html.includes("<head>")) {
     return html.replace("<head>", "<head>" + injection);

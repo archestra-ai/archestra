@@ -116,6 +116,15 @@ export const CreateAppSchema = z.object({
   uiPermissions: AppUiPermissionsSchema.optional(),
 });
 
+// A curated starter an app can be seeded from. Shipped as static backend
+// modules (see app-templates/); html is the full MCP App document.
+export const AppTemplateSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  description: z.string(),
+  html: z.string(),
+});
+
 export const UpdateAppSchema = z.object({
   name: z.string().min(1).max(APP_NAME_MAX_LENGTH).optional(),
   description: z.string().max(APP_DESCRIPTION_MAX_LENGTH).nullable().optional(),
@@ -137,3 +146,4 @@ export type InsertAppData = z.infer<typeof InsertAppDataSchema>;
 export type AppTeam = z.infer<typeof SelectAppTeamSchema>;
 export type CreateApp = z.infer<typeof CreateAppSchema>;
 export type UpdateApp = z.infer<typeof UpdateAppSchema>;
+export type AppTemplate = z.infer<typeof AppTemplateSchema>;

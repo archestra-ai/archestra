@@ -369,4 +369,32 @@ describe("appRoutes /api/apps", () => {
     });
     expect(unassigned.statusCode).toBe(200);
   });
+
+  test("lists app templates when enabled, 404 when disabled", async ({
+    makeUser,
+    makeOrganization,
+  }) => {
+    const user = await makeUser();
+    const org = await makeOrganization();
+    app = await buildApp(user.id, org.id);
+
+    const listed = await app.inject({
+      method: "GET",
+      url: "/api/app-templates",
+    });
+    expect(listed.statusCode).toBe(200);
+    const templates = listed.json() as Array<{ id: string; html: string }>;
+    const ids = templates.map((t) => t.id);
+    expect(ids).toContain("blank");
+    expect(ids).toContain("form");
+    // The form template wires the data store through the host-provided SDK URL.
+    const form = templates.find((t) => t.id === "form");
+    expect(form?.html).toContain("__ARCHESTRA_APP_SDK_URL__");
+    expect(form?.html).toContain("archestra__app_data_set");
+
+    (config.apps as { enabled: boolean }).enabled = false;
+    const off = await app.inject({ method: "GET", url: "/api/app-templates" });
+    (config.apps as { enabled: boolean }).enabled = true;
+    expect(off.statusCode).toBe(404);
+  });
 });

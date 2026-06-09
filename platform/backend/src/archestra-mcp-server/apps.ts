@@ -108,7 +108,7 @@ const registry = defineArchestraTools([
     shortName: TOOL_CREATE_APP_SHORT_NAME,
     title: "Create App",
     description:
-      "Create a new MCP App from an HTML document. Defaults to personal scope (owned by the calling user). Returns the created app id and its first version.",
+      "Create a new MCP App from an HTML document. Defaults to personal scope (owned by the calling user). Returns the created app id and its first version. The app's HTML runs sandboxed and can persist app-scoped state through window.archestra.data.get/set/list/delete (backed by the app_data_* tools; no app id is passed — the store is always the running app's own).",
     schema: CreateAppSchema,
     outputSchema: AppSummaryOutputSchema,
     async handler({ args, context }) {

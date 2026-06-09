@@ -17,6 +17,7 @@ if (isMainModule) {
 }
 
 import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import {
   EmbeddingDimensionsSchema,
   LocalConfigEnvironmentDefaultSchema,
@@ -682,6 +683,30 @@ const loadSandboxHtml = (): string | null => {
 const sandboxHtml = loadSandboxHtml();
 
 /**
+ * Load the ext-apps guest SDK bundle (the `App` client + its deps) so it can be
+ * served same-deployment under /_sandbox/. App templates import this to expose
+ * `window.archestra.data` to authored HTML without inlining the SDK per app or
+ * reaching an external CDN. Resolved from node_modules at startup so it tracks
+ * the installed ext-apps version. Returns null (non-fatal) if it can't be read.
+ */
+const loadExtAppsSdk = (): string | null => {
+  try {
+    const sdkPath = createRequire(import.meta.url).resolve(
+      "@modelcontextprotocol/ext-apps/app-with-deps",
+    );
+    return readFileSync(sdkPath, "utf-8");
+  } catch (err) {
+    logger.warn(
+      { err },
+      "ext-apps guest SDK bundle not found — /_sandbox/ext-apps-app.js will not be registered",
+    );
+    return null;
+  }
+};
+
+const extAppsSdk = loadExtAppsSdk();
+
+/**
  * Register the sandbox proxy route on the main Fastify instance.
  *
  * Serves the sandbox proxy HTML under /_sandbox/ with frame-ancestors header.
@@ -733,6 +758,18 @@ const registerSandboxRoute = (
     void reply.type("text/html");
     return reply.send(sandboxHtml);
   });
+
+  // The ext-apps guest SDK, served same-deployment so app templates can import
+  // it (see loadExtAppsSdk). Module imports from an opaque-origin guest are
+  // cross-origin, so allow any origin — the bundle is a public, immutable asset.
+  if (extAppsSdk) {
+    fastify.get("/_sandbox/ext-apps-app.js", async (_request, reply) => {
+      void reply.header("Access-Control-Allow-Origin", "*");
+      void reply.header("Cache-Control", "public, max-age=31536000, immutable");
+      void reply.type("text/javascript");
+      return reply.send(extAppsSdk);
+    });
+  }
 };
 
 const startMcpServerRuntime = async (

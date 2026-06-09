@@ -15454,6 +15454,92 @@ export type CreateAppResponses = {
 
 export type CreateAppResponse = CreateAppResponses[keyof CreateAppResponses];
 
+export type GetAppTemplatesData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/app-templates';
+};
+
+export type GetAppTemplatesErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetAppTemplatesError = GetAppTemplatesErrors[keyof GetAppTemplatesErrors];
+
+export type GetAppTemplatesResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        name: string;
+        description: string;
+        html: string;
+    }>;
+};
+
+export type GetAppTemplatesResponse = GetAppTemplatesResponses[keyof GetAppTemplatesResponses];
+
 export type DeleteAppData = {
     body?: never;
     path: {

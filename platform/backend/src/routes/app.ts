@@ -6,6 +6,7 @@ import {
 } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { getAppTemplates } from "@/app-templates";
 import config from "@/config";
 import logger from "@/logging";
 import {
@@ -27,6 +28,7 @@ import { buildValidatedVersionPayload } from "@/services/apps/app-ui-policy";
 import {
   ApiError,
   type App,
+  AppTemplateSchema,
   CreateAppSchema,
   CredentialResolutionModeSchema,
   constructResponseSchema,
@@ -94,6 +96,21 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
         data,
         pagination: calculatePaginationMeta(total, query),
       });
+    },
+  );
+
+  fastify.get(
+    "/api/app-templates",
+    {
+      schema: {
+        operationId: RouteId.GetAppTemplates,
+        description: "List the curated starter templates a new app can use.",
+        tags: ["Apps"],
+        response: constructResponseSchema(z.array(AppTemplateSchema)),
+      },
+    },
+    async (_request, reply) => {
+      return reply.send(getAppTemplates());
     },
   );
 

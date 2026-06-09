@@ -156,9 +156,26 @@ export function TeamManagementExternalSyncSection({
         </div>
 
         {selectedIdentityProvider && (
-          <LatestIdTokenClaimsPanel
-            identityProviderId={selectedIdentityProvider.id}
-          />
+          <>
+            <div className="space-y-2">
+              <Label>Group Extraction Template</Label>
+              <Input
+                readOnly
+                className="font-mono text-sm"
+                value={
+                  selectedIdentityProvider.teamSyncConfig?.groupsExpression?.trim() ||
+                  "Default extraction"
+                }
+              />
+              <p className="text-sm text-muted-foreground">
+                Configured on the selected identity provider. Use the decoded
+                claims below to find a group value that this template extracts.
+              </p>
+            </div>
+            <LatestIdTokenClaimsPanel
+              identityProviderId={selectedIdentityProvider.id}
+            />
+          </>
         )}
       </div>
 

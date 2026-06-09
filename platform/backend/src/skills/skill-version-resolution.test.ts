@@ -5,6 +5,7 @@ import {
   SkillSandboxReplayEventModel,
   SkillVersionModel,
 } from "@/models";
+import { executionSandboxRegistry } from "@/skills-sandbox/execution-sandbox-registry";
 import { afterAll, beforeAll, describe, expect, test } from "@/test";
 import type { Skill } from "@/types";
 import {
@@ -182,6 +183,54 @@ describe("resolveActivationVersion (sandbox runtime enabled)", () => {
       skillId: skill.id,
     });
     expect(mount?.skillVersionId).toBe(result?.version.id);
+  });
+
+  test("mounts into the per-execution sandbox for headless runs", async ({
+    makeOrganization,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const skill = await seedSkillV2(org.id);
+    const isolationKey = crypto.randomUUID();
+
+    const result = await resolveActivationVersion({
+      skill,
+      organizationId: org.id,
+      userId: user.id,
+      conversationId: undefined,
+      isolationKey,
+      canRunSandbox: true,
+    });
+    expect(result?.mounted).toBe(true);
+    expect(result?.version.version).toBe(2);
+
+    // the per-execution sandbox pins the mounted version: a later edit is not
+    // visible inside the execution, but is everywhere else.
+    const edited = await SkillModel.updateWithFiles({
+      id: skill.id,
+      skill: { content: "# v3" },
+    });
+    if (!edited) throw new Error("update failed");
+
+    const inExecution = await resolveEffectiveSkillVersion({
+      skill: edited,
+      organizationId: org.id,
+      userId: user.id,
+      conversationId: undefined,
+      isolationKey,
+    });
+    expect(inExecution?.version).toBe(2);
+
+    const elsewhere = await resolveEffectiveSkillVersion({
+      skill: edited,
+      organizationId: org.id,
+      userId: user.id,
+      conversationId: undefined,
+    });
+    expect(elsewhere?.version).toBe(3);
+
+    executionSandboxRegistry.release(isolationKey);
   });
 
   test("a same-named skill that loses the mount path is shown read-only", async ({

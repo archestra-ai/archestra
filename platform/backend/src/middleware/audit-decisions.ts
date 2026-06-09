@@ -280,6 +280,29 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "join: agent × team; parent (agent) audited",
   },
+  // Apps. `appsTable` becomes `audited: true` once `AppModel` exists; its CRUD
+  // routes are not wired yet, so there is nothing to audit at this point.
+  appsTable: {
+    audited: false,
+    reason: "app CRUD not yet wired; flipped to audited once AppModel exists",
+  },
+  appVersionsTable: {
+    audited: false,
+    reason: "child of app; immutable version snapshot, parent audited",
+  },
+  appTeamTable: {
+    audited: false,
+    reason: "join: app × team; parent (app) audited",
+  },
+  appToolsTable: {
+    audited: false,
+    reason: "tools attached to an app; parent (app) carries the signal",
+  },
+  appDataTable: {
+    audited: false,
+    reason:
+      "app-scoped runtime data store; written by app HTML, no admin signal",
+  },
   labelKeysTable: { audited: false, reason: "label taxonomy; low-value churn" },
   labelValuesTable: {
     audited: false,

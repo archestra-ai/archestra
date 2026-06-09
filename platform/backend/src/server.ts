@@ -765,7 +765,10 @@ const registerSandboxRoute = (
   if (extAppsSdk) {
     fastify.get("/_sandbox/ext-apps-app.js", async (_request, reply) => {
       void reply.header("Access-Control-Allow-Origin", "*");
-      void reply.header("Cache-Control", "public, max-age=31536000, immutable");
+      // The URL is not content-hashed and the bundle tracks the installed
+      // ext-apps version, so cache briefly (not immutable) — an upgrade must
+      // reach clients without waiting out a year-long cache.
+      void reply.header("Cache-Control", "public, max-age=3600");
       void reply.type("text/javascript");
       return reply.send(extAppsSdk);
     });

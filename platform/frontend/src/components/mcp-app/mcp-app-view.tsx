@@ -1,3 +1,5 @@
+"use client";
+
 import {
   buildFullToolName,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
@@ -24,7 +26,7 @@ import { useFeature } from "@/lib/config/config.query";
  * to a single server prefix; an `app` endpoint is route-bound to one app whose
  * own server enforces the allowlist + visibility, so calls pass through as-is.
  */
-export type McpAppEndpoint =
+type McpAppEndpoint =
   | { kind: "agent"; agentId: string; serverPrefix: string }
   | { kind: "app"; appId: string };
 
@@ -91,7 +93,7 @@ export const McpAppRuntime = function McpAppRuntime({
   // bridge it built (no cross-endpoint routing during a transition).
   const endpointKey =
     endpoint.kind === "agent"
-      ? `agent:${endpoint.agentId}`
+      ? `agent:${endpoint.agentId}:${endpoint.serverPrefix}`
       : `app:${endpoint.appId}`;
   // Sandbox-subdomain hash seed. Apps get a per-app bucket matching the backend
   // MCP server name; isolation does not depend on this being collision-free.

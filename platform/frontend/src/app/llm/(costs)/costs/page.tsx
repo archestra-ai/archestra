@@ -870,7 +870,7 @@ export default function StatisticsPage() {
                           ).toLocaleString()}
                         </TableCell>
                         <TableCell>
-                          {agent.cacheReadTokens.toLocaleString()}
+                          {(agent.cacheReadTokens ?? 0).toLocaleString()}
                         </TableCell>
                         <TableCell className="text-right">
                           ${agent.cost.toFixed(2)}
@@ -1101,7 +1101,7 @@ export default function StatisticsPage() {
                           ).toLocaleString()}
                         </TableCell>
                         <TableCell>
-                          {model.cacheReadTokens.toLocaleString()}
+                          {(model.cacheReadTokens ?? 0).toLocaleString()}
                         </TableCell>
                         <TableCell>${model.cost.toFixed(2)}</TableCell>
                         <TableCell className="text-right">

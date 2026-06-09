@@ -1026,6 +1026,8 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetIdentityProviderLatestIdTokenClaims]: {
     identityProvider: ["read"],
   },
+  // Installers need to know whether they must link a downstream IdP, but this
+  // endpoint does not expose identity-provider configuration or secrets.
   [RouteId.GetIdentityProviderLinkStatus]: {
     mcpServerInstallation: ["create"],
   },

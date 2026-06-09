@@ -2056,19 +2056,34 @@ async function getInstallDiscoveryAccessToken(params: {
     return accessToken;
   }
 
+  const fallbackIdentityProviderResult =
+    enterpriseManagedConfig.identityProviderId
+      ? null
+      : await findInstallDiscoveryFallbackIdentityProvider(params.userId);
   const identityProvider = enterpriseManagedConfig.identityProviderId
     ? await findExternalIdentityProviderById(
         enterpriseManagedConfig.identityProviderId,
       )
-    : await findInstallDiscoveryFallbackIdentityProvider(params.userId);
+    : fallbackIdentityProviderResult?.identityProvider;
+
   if (!identityProvider) {
+    if (fallbackIdentityProviderResult?.account) {
+      return await getCurrentInstallDiscoveryAccessToken(
+        fallbackIdentityProviderResult.account,
+      );
+    }
+
     return undefined;
   }
 
-  const account = await AccountModel.getLatestSsoAccountByUserIdAndProviderId(
-    params.userId,
-    identityProvider.providerId,
-  );
+  const account =
+    fallbackIdentityProviderResult?.account.providerId ===
+    identityProvider.providerId
+      ? fallbackIdentityProviderResult.account
+      : await AccountModel.getLatestSsoAccountByUserIdAndProviderId(
+          params.userId,
+          identityProvider.providerId,
+        );
   if (!account) {
     return undefined;
   }
@@ -2111,15 +2126,18 @@ async function getInstallDiscoveryAccessToken(params: {
 }
 
 async function findInstallDiscoveryFallbackIdentityProvider(userId: string) {
-  const fallbackAccount =
+  const account =
     await AccountModel.getLatestSsoAccountWithAccessTokenByUserId(userId);
-  if (!fallbackAccount) {
+  if (!account) {
     return null;
   }
 
-  return await findExternalIdentityProviderByProviderId(
-    fallbackAccount.providerId,
-  );
+  return {
+    account,
+    identityProvider: await findExternalIdentityProviderByProviderId(
+      account.providerId,
+    ),
+  };
 }
 
 async function getInstallDiscoverySubjectToken(params: {

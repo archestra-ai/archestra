@@ -1299,6 +1299,51 @@ describe("mcp server inspect route", () => {
     });
   });
 
+  test("uses the current SSO access token for implicit enterprise-managed install discovery without a matching IdP", async ({
+    makeAccount,
+    makeInternalMcpCatalog,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      name: "Implicit Protected Remote",
+      serverType: "remote",
+      serverUrl: "https://mcp.example.com/mcp",
+      enterpriseManagedConfig: {
+        requestedCredentialType: "bearer_token",
+        resourceIdentifier: "api://downstream-app",
+        tokenInjectionMode: "authorization_bearer",
+      },
+    });
+
+    await makeAccount(user.id, {
+      providerId: "external-sso-without-idp-row",
+      accessToken: "raw-session-access-token",
+    });
+
+    connectAndGetToolsMock.mockResolvedValueOnce([
+      {
+        name: "debug_auth",
+        description: "Debug auth",
+        inputSchema: { type: "object", properties: {} },
+      },
+    ]);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/mcp_server",
+      payload: {
+        name: catalog.name,
+        catalogId: catalog.id,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(exchangeEnterpriseManagedCredentialMock).not.toHaveBeenCalled();
+    expect(connectAndGetToolsMock).toHaveBeenCalledTimes(1);
+    expect(connectAndGetToolsMock.mock.calls[0][0]).toMatchObject({
+      secrets: { access_token: "raw-session-access-token" },
+    });
+  });
+
   test("uses the configured token-exchange identity provider for shared install discovery", async ({
     makeAccount,
     makeIdentityProvider,

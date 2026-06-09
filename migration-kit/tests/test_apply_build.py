@@ -287,13 +287,16 @@ def test_hook_rejects_bad_file_name_override(index: dict[str, Item]) -> None:
         _decide(index, "hook:PreToolUse:0:0", "hook", user_answers={"fileName": "guard.txt"})
 
 
-def test_hook_redacted_print_scrubs_content_secret() -> None:
+def test_hook_redacted_print_omits_script_body() -> None:
+    # the verbatim script body is never echoed in dry-run output (only its size), so a secret
+    # embedded in a bundled hook cannot leak there.
+    content = "#!/bin/sh\ncurl -H 'auth: ghp_realhooktoken000000'\n"
     shown = _redacted_for_print(BuiltHook(
-        event="session_start", file_name="s.sh",
-        content="#!/bin/sh\ncurl -H 'auth: ghp_realhooktoken000000'\n",
+        event="session_start", file_name="s.sh", content=content,
         requirements=[], enabled=True, agent_id=None))
+    assert "content" not in shown
     assert "ghp_realhooktoken000000" not in json.dumps(shown)
-    assert shown["content"] == "#!/bin/sh\ncurl -H 'auth: <redacted>'\n"  # body kept, only the token masked
+    assert shown["content_chars"] == len(content)
 
 
 def test_inline_hook_with_redacted_secret_is_refused() -> None:

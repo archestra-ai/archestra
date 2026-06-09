@@ -504,9 +504,11 @@ def _redacted_for_print(built: Built) -> dict[str, JsonValue]:
                     "conditions": [to_jsonable(c) for c in built.conditions],
                     "action": built.action, "reason": built.reason}
         case BuiltHook():
+            # never echo the script body in dry-run output: a bundled hook is migrated verbatim and
+            # may carry credentials that token-shape scrubbing won't catch. show only its size.
             return {"event": built.event, "fileName": built.file_name,
                     "requirements": list(built.requirements), "enabled": built.enabled,
-                    "agentId": built.agent_id, "content": _scrub_secrets(built.content)}
+                    "agentId": built.agent_id, "content_chars": len(built.content)}
 
 
 def _preview_detail(built: Built) -> str:

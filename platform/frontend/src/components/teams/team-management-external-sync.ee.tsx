@@ -10,7 +10,6 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link2, Plus, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { SsoTemplateTester } from "@/app/settings/identity-providers/_parts/sso-template-tester.ee";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -32,8 +31,6 @@ import {
 type Team = archestraApiTypes.GetTeamsResponses["200"]["data"][number];
 type ExternalGroup =
   archestraApiTypes.GetTeamExternalGroupsResponses["200"][number];
-type IdentityProvider =
-  archestraApiTypes.GetIdentityProvidersResponses["200"][number];
 
 interface TeamManagementExternalSyncSectionProps {
   open: boolean;
@@ -153,13 +150,15 @@ export function TeamManagementExternalSyncSection({
             </SelectContent>
           </Select>
           <p className="text-sm text-muted-foreground">
-            Choose which IdP token to use for template testing and group
-            extraction.
+            Choose which identity provider claims to inspect while finding the
+            external group identifier for this team.
           </p>
         </div>
 
         {selectedIdentityProvider && (
-          <GroupExtractionPreview identityProvider={selectedIdentityProvider} />
+          <LatestIdTokenClaimsPanel
+            identityProviderId={selectedIdentityProvider.id}
+          />
         )}
       </div>
 
@@ -225,32 +224,6 @@ export function TeamManagementExternalSyncSection({
           )}
         </div>
       </div>
-    </div>
-  );
-}
-
-function GroupExtractionPreview({
-  identityProvider,
-}: {
-  identityProvider: IdentityProvider;
-}) {
-  return (
-    <div className="space-y-4">
-      <div className="space-y-2">
-        <Label>Extracted Groups</Label>
-        <SsoTemplateTester
-          identityProviderId={identityProvider.id}
-          mode="team-sync"
-          template={identityProvider.teamSyncConfig?.groupsExpression}
-          templateLabel="the selected identity provider's team sync groups template"
-        />
-        <p className="text-sm text-muted-foreground">
-          Group extraction is configured on the selected identity provider. Add
-          one of the extracted group values below to sync membership for this
-          team.
-        </p>
-      </div>
-      <LatestIdTokenClaimsPanel identityProviderId={identityProvider.id} />
     </div>
   );
 }

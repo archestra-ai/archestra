@@ -660,7 +660,12 @@ class _Built:
 def _flag_hook_collisions(built: list[_Built]) -> list[_Built]:
     """archestra enforces a unique (agentId, event, fileName); two hooks that resolve to the same
     triple would make the second silently 'skip exists'. flag the later one invalid so the model
-    fixes it with a distinct user_answers.fileName rather than losing a hook."""
+    fixes it with a distinct user_answers.fileName rather than losing a hook.
+
+    this runs before the primary-agent fallback fills agent_id, so it catches the common case (both
+    hooks default to the primary agent -> agent_id None on both). the rare case where one pins an
+    explicit agentId equal to the eventual primary is caught at execute time by the idempotency
+    check, which records a visible 'skipped' rather than a duplicate."""
     seen: set[tuple[str | None, str, str]] = set()
     out: list[_Built] = []
     for b in built:

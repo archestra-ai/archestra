@@ -25,9 +25,9 @@ import re
 import shlex
 import sys
 from collections import Counter
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable
 
 from contracts import SECRET_KEY_RE as _SECRET_KEY
 from contracts import SECRET_TOKEN_RE as _SECRET_TOKEN
@@ -175,6 +175,9 @@ def _redact_env(name: str, env_raw: JsonValue, sink: list[str]) -> dict[str, str
 
 
 def discover(root: Path) -> Inventory:
+    # resolve up front so path math (containment, relative_to, $CLAUDE_PROJECT_DIR expansion) is
+    # consistent whether the caller passed an absolute or a relative source dir.
+    root = root.resolve()
     inv = Inventory(source_root=str(root))
     seen: set[Path] = set()
 
@@ -365,6 +368,9 @@ def _discover_mcp_servers(inv: Inventory, servers: JsonValue, rel: str) -> None:
 _ENV_ASSIGN_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
 # $CLAUDE_PROJECT_DIR / ${CLAUDE_PROJECT_DIR} -- expanded to the source root for path resolution.
 _PROJECT_DIR_RE = re.compile(r"\$\{?CLAUDE_PROJECT_DIR\}?")
+# runners that take a script path as a later argument (so a .py/.sh after one is the hook script).
+_INTERPRETERS = frozenset({"python", "python3", "sh", "bash", "zsh", "node", "uv", "env",
+                           "ruby", "deno", "bun", "perl"})
 
 
 @dataclass(frozen=True)
@@ -390,11 +396,7 @@ def _parse_hook_command(command: str, root: Path) -> _HookCmd:
         has_env_prefix = True
         idx += 1
     rest = tokens[idx:]
-
-    script_pos = next(
-        (k for k, t in enumerate(rest) if _expand_project_dir(t, root).endswith((".py", ".sh"))),
-        None,
-    )
+    script_pos = _script_position(rest, root)
     if script_pos is None:
         return _HookCmd("inline", None, has_env_prefix=has_env_prefix, has_extra_args=False)
 
@@ -404,6 +406,22 @@ def _parse_hook_command(command: str, root: Path) -> _HookCmd:
     if _is_contained_file(resolved, root):
         return _HookCmd("bundled", resolved, has_env_prefix=has_env_prefix, has_extra_args=has_extra_args)
     return _HookCmd("unresolved", None, has_env_prefix=has_env_prefix, has_extra_args=has_extra_args)
+
+
+def _script_position(rest: list[str], root: Path) -> int | None:
+    """index of the hook script in `rest` (tokens after any env prefix): the executable itself when
+    it is a .py/.sh, else the first .py/.sh argument of a known interpreter/runner. None otherwise --
+    a `.py`/`.sh` buried in an `echo`/`cat` argument is not a script invocation."""
+    if not rest:
+        return None
+    if _expand_project_dir(rest[0], root).endswith((".py", ".sh")):
+        return 0
+    if Path(rest[0]).name in _INTERPRETERS:
+        return next(
+            (k for k in range(1, len(rest)) if _expand_project_dir(rest[k], root).endswith((".py", ".sh"))),
+            None,
+        )
+    return None
 
 
 def _expand_project_dir(token: str, root: Path) -> str:
@@ -423,10 +441,9 @@ def _pep723_requirements(content: str, ref: str, warnings: list[str]) -> list[st
         return []
 
 
-# the `dependencies = [ ... ]` array and the quoted strings inside it (minimal, stdlib-only:
-# python 3.10 has no tomllib, and we only need this one key's list-of-strings.)
-_DEPS_ARRAY_RE = re.compile(r"^dependencies\s*=\s*\[(.*?)\]", re.MULTILINE | re.DOTALL)
-_QUOTED_RE = re.compile(r'"([^"]*)"|\'([^\']*)\'')
+# the start of a PEP-723 `dependencies = [ ... ]` array (minimal, stdlib-only: python 3.10 has no
+# tomllib, and we only need this one key's list-of-strings).
+_DEPS_START_RE = re.compile(r"^dependencies\s*=\s*\[", re.MULTILINE)
 
 
 def _extract_dependencies_block(content: str) -> list[str]:
@@ -446,10 +463,30 @@ def _extract_dependencies_block(content: str) -> list[str]:
             body.append("")
         else:
             return []  # a non-comment line inside the block -> malformed, don't guess
-    match = _DEPS_ARRAY_RE.search("\n".join(body))
+    return _scan_dependency_strings("\n".join(body))
+
+
+def _scan_dependency_strings(toml: str) -> list[str]:
+    """pull the quoted requirement strings out of a `dependencies = [...]` array, scanning quote by
+    quote so a `]` inside a value (e.g. `requests[security]`) does not truncate the array early."""
+    match = _DEPS_START_RE.search(toml)
     if match is None:
         return []
-    return [a or b for a, b in _QUOTED_RE.findall(match.group(1))]
+    deps: list[str] = []
+    i, n = match.end(), len(toml)
+    while i < n:
+        ch = toml[i]
+        if ch == "]":
+            break
+        if ch in "\"'":
+            close = toml.find(ch, i + 1)
+            if close == -1:
+                break  # unterminated string -> malformed, stop
+            deps.append(toml[i + 1 : close])
+            i = close + 1
+        else:
+            i += 1
+    return deps
 
 
 def _discover_hooks(

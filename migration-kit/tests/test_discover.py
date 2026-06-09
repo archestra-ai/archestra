@@ -16,7 +16,14 @@ from contracts import (
     SubagentItem,
     to_jsonable,
 )
-from discover import _redact, _redact_value, discover
+from discover import (
+    _extract_dependencies_block,
+    _parse_hook_command,
+    _redact,
+    _redact_value,
+    _script_position,
+    discover,
+)
 
 FIXTURE = Path(__file__).parent / "fixtures" / "sample-setup"
 
@@ -154,6 +161,42 @@ def test_unresolved_hook_when_script_missing(tmp_path: Path) -> None:
     assert isinstance(hook, HookItem)
     assert hook.data.source == "unresolved"
     assert hook.data.file_name is None
+
+
+def test_bundled_hook_resolves_with_relative_root(monkeypatch: pytest.MonkeyPatch) -> None:
+    # discover() resolves the root, so a relative source dir must still bundle referenced scripts.
+    monkeypatch.chdir(FIXTURE.parent)
+    inv = discover(Path(FIXTURE.name))
+    guard = _by_id(inv, "hook:PreToolUse:0:0")
+    assert isinstance(guard, HookItem)
+    assert guard.data.source == "bundled"
+    assert guard.data.script_path == "hooks/pre_tool_use.py"
+
+
+def test_pep723_extracts_dependencies_with_extras() -> None:
+    # a `]` inside a value (extras) must not truncate the array.
+    content = "\n".join([
+        "# /// script",
+        "# dependencies = [",
+        '#   "requests[security]>=2",',
+        '#   "pyyaml",',
+        "# ]",
+        "# ///",
+        "print(1)",
+    ])
+    assert _extract_dependencies_block(content) == ["requests[security]>=2", "pyyaml"]
+
+
+def test_script_position_only_matches_executable_or_interpreter_arg(tmp_path: Path) -> None:
+    assert _script_position(["python3", "-u", "hook.py"], tmp_path) == 2
+    assert _script_position(["uv", "run", "--with", "rich", "hook.py"], tmp_path) == 4
+    assert _script_position(["./hook.sh"], tmp_path) == 0
+    assert _script_position(["echo", "note.py"], tmp_path) is None  # not a script invocation
+
+
+def test_script_path_in_echo_argument_is_inline_not_bundled(tmp_path: Path) -> None:
+    parsed = _parse_hook_command('echo "$CLAUDE_PROJECT_DIR/hooks/a.py"', tmp_path)
+    assert parsed.source == "inline"
 
 
 def test_hook_command_inline_secret_redacted(inv: Inventory) -> None:

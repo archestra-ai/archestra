@@ -293,6 +293,7 @@ def test_hook_redacted_print_scrubs_content_secret() -> None:
         content="#!/bin/sh\ncurl -H 'auth: ghp_realhooktoken000000'\n",
         requirements=[], enabled=True, agent_id=None))
     assert "ghp_realhooktoken000000" not in json.dumps(shown)
+    assert shown["content"] == "#!/bin/sh\ncurl -H 'auth: <redacted>'\n"  # body kept, only the token masked
 
 
 def test_inline_hook_with_redacted_secret_is_refused() -> None:

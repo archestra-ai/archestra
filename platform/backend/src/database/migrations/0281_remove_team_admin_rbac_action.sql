@@ -1,5 +1,3 @@
--- Custom SQL migration file, put your code below! --
-
 -- Remove the legacy `team:admin` RBAC action from custom roles. Team-level
 -- administration is now represented by the user's literal role on a team
 -- membership row instead of an organization role permission.
@@ -53,4 +51,4 @@ WHERE "id" IN (
 );
 --> statement-breakpoint
 
-CREATE UNIQUE INDEX IF NOT EXISTS "team_member_team_id_user_id_unique_idx" ON "team_member" USING btree ("team_id","user_id");
+CREATE UNIQUE INDEX "team_member_team_id_user_id_unique_idx" ON "team_member" USING btree ("team_id","user_id");

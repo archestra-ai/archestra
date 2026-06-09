@@ -19817,6 +19817,7 @@ export type GetChatConversationsResponses = {
         selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
         modelId: string | null;
         hasCustomToolSelection: boolean;
+        hooksDebugEnabled: boolean;
         todoList: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown> | null;
@@ -19969,6 +19970,7 @@ export type CreateChatConversationResponses = {
         selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
         modelId: string | null;
         hasCustomToolSelection: boolean;
+        hooksDebugEnabled: boolean;
         todoList: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown> | null;
@@ -20203,6 +20205,7 @@ export type GetChatConversationResponses = {
         selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
         modelId: string | null;
         hasCustomToolSelection: boolean;
+        hooksDebugEnabled: boolean;
         todoList: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown> | null;
@@ -20359,6 +20362,7 @@ export type UpdateChatConversationResponses = {
         selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
         modelId: string | null;
         hasCustomToolSelection: boolean;
+        hooksDebugEnabled: boolean;
         todoList: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown> | null;
@@ -20418,6 +20422,93 @@ export type UpdateChatConversationResponses = {
 };
 
 export type UpdateChatConversationResponse = UpdateChatConversationResponses[keyof UpdateChatConversationResponses];
+
+export type SetConversationHooksDebugData = {
+    body: {
+        enabled: boolean;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/chat/conversations/{id}/hooks-debug';
+};
+
+export type SetConversationHooksDebugErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type SetConversationHooksDebugError = SetConversationHooksDebugErrors[keyof SetConversationHooksDebugErrors];
+
+export type SetConversationHooksDebugResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        hooksDebugEnabled: boolean;
+    };
+};
+
+export type SetConversationHooksDebugResponse = SetConversationHooksDebugResponses[keyof SetConversationHooksDebugResponses];
 
 export type GetChatConversationFilesData = {
     body?: never;
@@ -20773,6 +20864,7 @@ export type ForkChatConversationResponses = {
         selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
         modelId: string | null;
         hasCustomToolSelection: boolean;
+        hooksDebugEnabled: boolean;
         todoList: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown> | null;
@@ -21026,6 +21118,7 @@ export type CompactChatConversationResponses = {
             selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
             modelId: string | null;
             hasCustomToolSelection: boolean;
+            hooksDebugEnabled: boolean;
             todoList: string | number | boolean | null | {
                 [key: string]: unknown;
             } | Array<unknown> | null;
@@ -21449,6 +21542,7 @@ export type GetSharedConversationResponses = {
         selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
         modelId: string | null;
         hasCustomToolSelection: boolean;
+        hooksDebugEnabled: boolean;
         todoList: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown> | null;
@@ -21601,6 +21695,7 @@ export type ForkSharedConversationResponses = {
         selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
         modelId: string | null;
         hasCustomToolSelection: boolean;
+        hooksDebugEnabled: boolean;
         todoList: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown> | null;
@@ -21755,6 +21850,7 @@ export type GenerateChatConversationTitleResponses = {
         selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
         modelId: string | null;
         hasCustomToolSelection: boolean;
+        hooksDebugEnabled: boolean;
         todoList: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown> | null;
@@ -21908,6 +22004,7 @@ export type UpdateChatMessageResponses = {
         selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
         modelId: string | null;
         hasCustomToolSelection: boolean;
+        hooksDebugEnabled: boolean;
         todoList: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown> | null;
@@ -23526,6 +23623,7 @@ export type GetConfigResponses = {
             mcpSandboxDomain: string | null;
             maintenanceMode: string | null;
             chatSecretScanEnabled: boolean;
+            agentHooksEnabled: boolean;
         };
         providerBaseUrls: {
             [key: string]: string | null;
@@ -25201,6 +25299,384 @@ export type GetReadyResponses = {
 };
 
 export type GetReadyResponse = GetReadyResponses[keyof GetReadyResponses];
+
+export type GetHooksData = {
+    body?: never;
+    path?: never;
+    query: {
+        agentId: string;
+    };
+    url: '/api/hooks';
+};
+
+export type GetHooksErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetHooksError = GetHooksErrors[keyof GetHooksErrors];
+
+export type GetHooksResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        organizationId: string;
+        agentId: string;
+        event: 'session_start' | 'pre_tool_use' | 'post_tool_use';
+        fileName: string;
+        content: string;
+        requirements: Array<string>;
+        enabled: boolean;
+        createdAt: string;
+        updatedAt: string;
+    }>;
+};
+
+export type GetHooksResponse = GetHooksResponses[keyof GetHooksResponses];
+
+export type CreateHookData = {
+    body: {
+        agentId: string;
+        event: 'session_start' | 'pre_tool_use' | 'post_tool_use';
+        fileName: string;
+        content: string;
+        requirements?: Array<string>;
+        enabled?: boolean;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/hooks';
+};
+
+export type CreateHookErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type CreateHookError = CreateHookErrors[keyof CreateHookErrors];
+
+export type CreateHookResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        agentId: string;
+        event: 'session_start' | 'pre_tool_use' | 'post_tool_use';
+        fileName: string;
+        content: string;
+        requirements: Array<string>;
+        enabled: boolean;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type CreateHookResponse = CreateHookResponses[keyof CreateHookResponses];
+
+export type DeleteHookData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/hooks/{id}';
+};
+
+export type DeleteHookErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type DeleteHookError = DeleteHookErrors[keyof DeleteHookErrors];
+
+export type DeleteHookResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type DeleteHookResponse = DeleteHookResponses[keyof DeleteHookResponses];
+
+export type UpdateHookData = {
+    body: {
+        event?: 'session_start' | 'pre_tool_use' | 'post_tool_use';
+        fileName?: string;
+        content?: string;
+        requirements?: Array<string>;
+        enabled?: boolean;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/hooks/{id}';
+};
+
+export type UpdateHookErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type UpdateHookError = UpdateHookErrors[keyof UpdateHookErrors];
+
+export type UpdateHookResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        agentId: string;
+        event: 'session_start' | 'pre_tool_use' | 'post_tool_use';
+        fileName: string;
+        content: string;
+        requirements: Array<string>;
+        enabled: boolean;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type UpdateHookResponse = UpdateHookResponses[keyof UpdateHookResponses];
 
 export type PostApiWebhooksIncomingEmailData = {
     body: unknown;
@@ -48855,6 +49331,7 @@ export type CreateScheduleTriggerRunConversationResponses = {
         selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
         modelId: string | null;
         hasCustomToolSelection: boolean;
+        hooksDebugEnabled: boolean;
         todoList: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown> | null;

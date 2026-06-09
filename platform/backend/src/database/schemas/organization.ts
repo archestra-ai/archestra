@@ -39,10 +39,7 @@ const organizationsTable = pgTable("organization", {
   createdAt: timestamp("created_at").notNull(),
   metadata: text("metadata"),
   onboardingComplete: boolean("onboarding_complete").notNull().default(false),
-  theme: text("theme")
-    .$type<OrganizationTheme>()
-    .notNull()
-    .default("cosmic-night"),
+  theme: text("theme").$type<OrganizationTheme>().notNull().default("caffeine"),
   customFont: text("custom_font")
     .$type<OrganizationCustomFont>()
     .notNull()

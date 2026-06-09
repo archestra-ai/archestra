@@ -47,6 +47,13 @@ import {
 import config from "@/config";
 import { withDbTransaction } from "@/database";
 import { browserStreamFeature } from "@/features/browser-stream/services/browser-stream.feature";
+import { hookDispatcherService } from "@/hooks/hook-dispatcher-service";
+import {
+  applyHookRunsToMessages,
+  type CollectedHookRun,
+  stripHookRunParts,
+  toCollectedRuns,
+} from "@/hooks/hook-run-parts";
 import { extractAndIngestDocuments } from "@/knowledge-base";
 import { fileUploadManager } from "@/knowledge-base/file-upload/file-upload-manager";
 import logger from "@/logging";
@@ -268,6 +275,52 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
 
+      // Lifecycle hooks (SessionStart). Cheap no-op when the agent has no hooks or
+      // the sandbox is disabled. Fired before createRun. Every fire is wrapped in
+      // try/catch and fails open — hooks must never break chat.
+      // Context returned by hooks is appended to the system prompt below.
+      let hookSessionContext: string | undefined;
+      // Inline hook-run debug entries collected across this turn (SessionStart at
+      // the top, Pre/PostToolUse around their tool calls, Stop at the end) and
+      // spliced into the assistant message in onFinish.
+      const hookRunCollector: CollectedHookRun[] = [];
+      // The conversation's user id (the sandbox is keyed per org/user/conversation).
+      const conversationUserId = conversation.userId;
+
+      // First turn = no prior assistant turn exists in the incoming thread.
+      // True for a brand-new conversation; false once the model has replied.
+      const isFirstTurn = !(messages as ChatMessage[]).some(
+        (message) => message?.role === "assistant",
+      );
+
+      if (isFirstTurn) {
+        try {
+          // Resolve the model id for the SessionStart payload. Dereferences the
+          // conversation's model_id FK (env/config fallback if unset).
+          const { model: sessionStartModel } = await resolveConversationModel(
+            conversation.modelId,
+          );
+          const result = await hookDispatcherService.fire({
+            event: "session_start",
+            conversationId,
+            agentId: conversation.agentId,
+            organizationId,
+            userId: conversationUserId,
+            fields: { source: "startup", model: sessionStartModel },
+          });
+          // SessionStart cannot block; only its injected context is used.
+          hookSessionContext = result.injectedContext;
+          hookRunCollector.push(
+            ...toCollectedRuns(result.runs, { kind: "turn-start" }),
+          );
+        } catch (error) {
+          logger.warn(
+            { error, conversationId },
+            "SessionStart hook dispatch failed, proceeding",
+          );
+        }
+      }
+
       const activeRun = await activeChatRunService.createRun({
         conversationId,
         userId: user.id,
@@ -392,6 +445,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
             delegationChain: agentId,
             abortSignal: chatAbortController.signal,
             user: { id: user.id, email: user.email, name: user.name },
+            hookRunCollector,
           }),
           getChatMcpToolUiResourceUris(conversation.agentId),
         ]);
@@ -452,6 +506,8 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
             skillCatalogPrompt,
             toolDenialInstruction,
             toolResultInstructions,
+            // Context returned by SessionStart hooks.
+            hookSessionContext,
           ]
             .filter(Boolean)
             .join("\n\n") || undefined;
@@ -1079,6 +1135,14 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                     removeAbortListeners();
                     stopActiveRunPolling();
 
+                    // Splice the turn's collected hook runs into the assistant
+                    // message(s) as inline `data-hook-run` parts before persisting,
+                    // so they survive refresh and sit at their lifecycle position.
+                    const messagesToPersist = applyHookRunsToMessages(
+                      finalMessages as unknown as ChatMessage[],
+                      hookRunCollector,
+                    );
+
                     // Only persist if not already persisted by onError
                     if (!messagesPersisted && conversationId) {
                       try {
@@ -1089,12 +1153,12 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                           await persistRegeneratedTurn({
                             conversationId,
                             requestMessages: messages,
-                            finalMessages,
+                            finalMessages: messagesToPersist,
                           });
                         } else {
                           await persistNewMessages(
                             conversationId,
-                            finalMessages,
+                            messagesToPersist,
                             "onFinish",
                           );
                         }
@@ -1385,7 +1449,64 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Conversation not found");
       }
 
+      // Hook-run debug parts are persisted on every turn but only surfaced to
+      // admins while this conversation has debug mode on. Strip them otherwise
+      // so hook stdout/stderr/payload never reach a non-admin client. (When
+      // debug is off we skip the permission lookup entirely.)
+      const hooksDebugVisible =
+        config.hooks.enabled &&
+        conversation.hooksDebugEnabled &&
+        (await hasAnyAgentTypeAdminPermission({
+          userId: user.id,
+          organizationId,
+        }));
+      conversation.messages = stripHookRunParts(
+        conversation.messages as ChatMessage[],
+        { visible: hooksDebugVisible },
+      );
+
       return reply.send(conversation);
+    },
+  );
+
+  fastify.post(
+    "/api/chat/conversations/:id/hooks-debug",
+    {
+      schema: {
+        operationId: RouteId.SetConversationHooksDebug,
+        description:
+          "Toggle per-conversation hook debug mode (admin only). When on, hook runs surface inline as expandable debug chips for admins.",
+        tags: ["Chat"],
+        params: z.object({ id: UuidIdSchema }),
+        body: z.object({ enabled: z.boolean() }),
+        response: constructResponseSchema(
+          z.object({ hooksDebugEnabled: z.boolean() }),
+        ),
+      },
+    },
+    async ({ params: { id }, body: { enabled }, user, organizationId }) => {
+      if (!config.hooks.enabled) {
+        throw new ApiError(404, "Agent hooks are not enabled");
+      }
+      const isAdmin = await hasAnyAgentTypeAdminPermission({
+        userId: user.id,
+        organizationId,
+      });
+      if (!isAdmin) {
+        throw new ApiError(403, "Hook debug mode is admin only");
+      }
+
+      const updated = await ConversationModel.setHooksDebugEnabled({
+        id,
+        userId: user.id,
+        organizationId,
+        enabled,
+      });
+      if (updated === null) {
+        throw new ApiError(404, "Conversation not found");
+      }
+
+      return { hooksDebugEnabled: updated };
     },
   );
 
@@ -1560,12 +1681,18 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Conversation not found");
       }
 
-      return await forkConversation({
+      const forked = await forkConversation({
         sourceConversation,
         agentId,
         userId: user.id,
         organizationId,
       });
+      // A fresh fork starts with debug off; never echo the source's hook debug
+      // parts back in the response.
+      forked.messages = stripHookRunParts(forked.messages as ChatMessage[], {
+        visible: false,
+      });
+      return forked;
     },
   );
 
@@ -2115,6 +2242,13 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Shared conversation not found");
       }
 
+      // Hook debug parts are an owner/admin-only surface — never expose them
+      // through a share link, regardless of the viewer or debug flag.
+      conversation.messages = stripHookRunParts(
+        conversation.messages as ChatMessage[],
+        { visible: false },
+      );
+
       return conversation;
     },
   );
@@ -2151,12 +2285,16 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Shared conversation not found");
       }
 
-      return await forkConversation({
+      const forked = await forkConversation({
         sourceConversation: sharedConversation,
         agentId,
         userId: user.id,
         organizationId,
       });
+      forked.messages = stripHookRunParts(forked.messages as ChatMessage[], {
+        visible: false,
+      });
+      return forked;
     },
   );
 

@@ -823,6 +823,10 @@ The following environment variables can be used to configure Archestra Platform.
   - Default: `false`
   - Values: `true`, `false`
 
+- **`ARCHESTRA_AGENT_HOOKS_ENABLED`** - Enables agent lifecycle hooks — user-defined scripts that run at chat lifecycle events (and the admin-only `/debug` chip mode in chat). Only takes effect when the agent runtime is also on (`ARCHESTRA_CODE_RUNTIME_ENABLED=true`), since hooks execute in the per-conversation sandbox. When off, the per-agent hooks editor is hidden and no hooks run.
+  - Default: `false`
+  - Values: `true`, `false`
+
 - **`ARCHESTRA_GIT_BINARY_PATH`** - Path to the `git` binary. The public marketplace endpoint shells out to `git http-backend` (CGI) for clone/pull traffic — make sure the binary is present in the backend container image.
   - Default: `git`
 

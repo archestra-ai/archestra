@@ -770,6 +770,11 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.UpdateChatConversation]: {
     chat: ["update"],
   },
+  // Coarse gate only; the handler further requires agent-type admin to flip
+  // the per-conversation hook debug flag.
+  [RouteId.SetConversationHooksDebug]: {
+    chat: ["update"],
+  },
   [RouteId.DeleteChatConversation]: {
     chat: ["delete"],
   },
@@ -1248,6 +1253,20 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.CreateSiteNotification]: { siteNotification: ["create"] },
   [RouteId.UpdateSiteNotification]: { siteNotification: ["update"] },
   [RouteId.DeleteSiteNotification]: { siteNotification: ["delete"] },
+
+  // Hook File Routes
+  [RouteId.GetHooks]: {
+    agent: ["read"],
+  },
+  [RouteId.CreateHook]: {
+    agent: ["update"],
+  },
+  [RouteId.UpdateHook]: {
+    agent: ["update"],
+  },
+  [RouteId.DeleteHook]: {
+    agent: ["update"],
+  },
 
   // MCP Gateway Routes - available to all authenticated users
   [RouteId.McpGatewayGet]: {}, // Server discovery endpoint

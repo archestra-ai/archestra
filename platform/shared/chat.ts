@@ -52,6 +52,15 @@ export type ChatMessage = {
   metadata?: unknown;
 };
 
+/**
+ * Type of the inline hook-run debug part. A `data-*` part: persisted and
+ * rendered in the chat thread, but dropped from the model conversion
+ * (`convertToModelMessages`), so the LLM never sees it — same class as
+ * `data-tool-ui-start`. Shared so the backend (emit) and frontend (render)
+ * agree on the wire string.
+ */
+export const HOOK_RUN_PART_TYPE = "data-hook-run";
+
 // Control/telemetry parts the chat UI skips and providers never see. An
 // assistant turn left with only these (e.g. a `step-start` after a dangling
 // tool call is stripped) renders nothing, so it must not count as content.
@@ -156,6 +165,13 @@ export function hasPersistableAssistantContent(message: {
       part.type === "image" ||
       part.type.startsWith("source")
     ) {
+      return true;
+    }
+
+    // a hook-run debug chip is standalone renderable content; unlike a
+    // `data-tool-ui-start` marker it needs no pairing, so a turn carrying only
+    // hook entries is still persistable rather than dropped as an empty bubble.
+    if (part.type === HOOK_RUN_PART_TYPE) {
       return true;
     }
 

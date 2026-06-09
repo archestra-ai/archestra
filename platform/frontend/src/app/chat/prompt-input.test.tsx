@@ -229,6 +229,8 @@ vi.mock("@/lib/chat/chat.query", () => ({
     isLoading: false,
     error: null,
   }),
+  useConversation: () => ({ data: null }),
+  useToggleHooksDebug: () => ({ mutate: vi.fn() }),
 }));
 
 vi.mock("@/lib/organization.query", () => ({

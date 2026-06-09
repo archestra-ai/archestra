@@ -84,6 +84,28 @@ class SkillSandboxFileModel {
   }
 
   /**
+   * Look up an already-staged upload by its dedup id (stored as
+   * `source_attachment_id`). Used by `uploadFile` to return a stable ref when
+   * the idempotency index fires and `appendUpload` returns null.
+   */
+  static async findUploadByDedupeId(
+    sandboxId: string,
+    dedupeId: string,
+  ): Promise<SkillSandboxFile | null> {
+    const [row] = await db
+      .select()
+      .from(schema.skillSandboxFilesTable)
+      .where(
+        and(
+          eq(schema.skillSandboxFilesTable.sandboxId, sandboxId),
+          eq(schema.skillSandboxFilesTable.sourceAttachmentId, dedupeId),
+          eq(schema.skillSandboxFilesTable.kind, "upload"),
+        ),
+      );
+    return row ? normalizeFileData(row) : null;
+  }
+
+  /**
    * Chat-attachment ids already staged into a sandbox, so auto-staging only
    * appends the not-yet-present delta.
    */

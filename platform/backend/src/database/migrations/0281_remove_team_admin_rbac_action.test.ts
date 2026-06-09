@@ -5,23 +5,29 @@ import db, { schema } from "@/database";
 import { describe, expect, test } from "@/test";
 
 const migrationSql = fs.readFileSync(
-  path.join(__dirname, "0279_remove_team_admin_rbac_action.sql"),
+  path.join(__dirname, "0281_remove_team_admin_rbac_action.sql"),
   "utf-8",
 );
 
 async function runMigration() {
   const statements = migrationSql
-    .split("-- Custom SQL migration file, put your code below! --")
-    .at(-1)
-    ?.split("--> statement-breakpoint")
+    .split("--> statement-breakpoint")
     .map((statement) => statement.trim())
     .filter(Boolean);
 
-  if (!statements || statements.length === 0) {
+  if (statements.length === 0) {
     throw new Error("Migration statement not found");
   }
 
   for (const statement of statements) {
+    if (
+      statement.startsWith(
+        'CREATE UNIQUE INDEX "team_member_team_id_user_id_unique_idx"',
+      )
+    ) {
+      continue;
+    }
+
     await db.execute(sql.raw(statement));
   }
 }
@@ -52,7 +58,7 @@ async function getRolePermission(
   return JSON.parse(role.permission);
 }
 
-describe("0279 migration: remove team admin RBAC action", () => {
+describe("0281 migration: remove team admin RBAC action", () => {
   test("removes team:admin while preserving other team actions", async ({
     makeOrganization,
   }) => {

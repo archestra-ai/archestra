@@ -38,7 +38,9 @@ const htmlField = z
   .refine((value) => Buffer.byteLength(value, "utf8") <= APP_HTML_MAX_BYTES, {
     message: `html exceeds the ${APP_HTML_MAX_BYTES}-byte limit`,
   })
-  .describe("The app's HTML document (rendered in a sandboxed iframe).");
+  .describe(
+    "The app's complete, self-contained HTML document — inline all CSS/JS (rendered in a sandboxed iframe).",
+  );
 
 const CreateAppSchema = z.strictObject({
   name: z.string().min(1).max(APP_NAME_MAX_LENGTH).describe("App name."),
@@ -108,7 +110,7 @@ const registry = defineArchestraTools([
     shortName: TOOL_CREATE_APP_SHORT_NAME,
     title: "Create App",
     description:
-      "Create a new MCP App from an HTML document. Defaults to personal scope (owned by the calling user). Returns the created app id and its first version. When called from the chat UI the app is rendered inline in the conversation automatically; its standalone page is /apps/<id>/run. The app's HTML runs sandboxed and can persist app-scoped state through window.archestra.data.get/set/list/delete (backed by the app_data_* tools; no app id is passed — the store is always the running app's own).",
+      "Build an interactive app — a to-do list, dashboard, form, tracker, game, or any custom UI — from a single self-contained HTML document. Use this whenever the user asks to make, build, or create an app, tool, or interactive UI: author the complete HTML and pass it as html instead of pasting code into the chat reply. When called from the chat UI the app is rendered inline in the conversation automatically; its standalone page is /apps/<id>/run. Defaults to personal scope (owned by the calling user). Returns the created app id and its first version. The app's HTML runs sandboxed and can persist app-scoped state through window.archestra.data.get/set/list/delete (backed by the app_data_* tools; no app id is passed — the store is always the running app's own).",
     schema: CreateAppSchema,
     outputSchema: AppSummaryOutputSchema,
     async handler({ args, context }) {
@@ -212,7 +214,7 @@ const registry = defineArchestraTools([
     shortName: TOOL_GET_APP_SHORT_NAME,
     title: "Get App",
     description:
-      "Get a single app by id, if the caller may view it. When called from the chat UI the app is rendered inline in the conversation (use this to open/show an existing app); its standalone page is /apps/<id>/run.",
+      "Open an existing app by id, if the caller may view it. Use this when the user asks to open, show, or get back to an app: when called from the chat UI the app is rendered inline in the conversation; its standalone page is /apps/<id>/run.",
     schema: GetAppSchema,
     outputSchema: AppSummaryOutputSchema,
     async handler({ args, context }) {
@@ -248,7 +250,7 @@ const registry = defineArchestraTools([
     shortName: TOOL_UPDATE_APP_SHORT_NAME,
     title: "Update App",
     description:
-      "Update an app's metadata and/or its HTML. Supplying new html forks a new immutable version (suppressed if identical). When called from the chat UI the app's head version is rendered inline in the conversation.",
+      "Change an existing app's HTML and/or metadata. Use this when the user asks to fix, tweak, restyle, or extend an app created earlier — pass the full revised HTML, not a diff. Supplying new html forks a new immutable version (suppressed if identical). When called from the chat UI the app's head version is rendered inline in the conversation.",
     schema: UpdateAppSchema,
     outputSchema: AppSummaryOutputSchema,
     async handler({ args, context }) {

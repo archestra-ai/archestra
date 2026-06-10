@@ -2,11 +2,10 @@
 import {
   AGENT_TOOL_PREFIX,
   slugify,
-  TOOL_ACTIVATE_SKILL_FULL_NAME,
   TOOL_CREATE_SKILL_FULL_NAME,
   TOOL_DOWNLOAD_FILE_FULL_NAME,
   TOOL_LIST_SKILLS_FULL_NAME,
-  TOOL_READ_SKILL_FILE_FULL_NAME,
+  TOOL_LOAD_SKILL_FULL_NAME,
   TOOL_RUN_COMMAND_FULL_NAME,
   TOOL_RUN_TOOL_FULL_NAME,
   TOOL_SEARCH_TOOLS_FULL_NAME,
@@ -224,8 +223,7 @@ describe("search_tools", () => {
 
       // the runtime path is always top-level, so never searchable
       expect(returnedToolNames).not.toContain(TOOL_LIST_SKILLS_FULL_NAME);
-      expect(returnedToolNames).not.toContain(TOOL_ACTIVATE_SKILL_FULL_NAME);
-      expect(returnedToolNames).not.toContain(TOOL_READ_SKILL_FILE_FULL_NAME);
+      expect(returnedToolNames).not.toContain(TOOL_LOAD_SKILL_FULL_NAME);
       expect(returnedToolNames).not.toContain(TOOL_RUN_COMMAND_FULL_NAME);
       expect(returnedToolNames).not.toContain(TOOL_DOWNLOAD_FILE_FULL_NAME);
       expect(returnedToolNames).not.toContain(TOOL_UPLOAD_FILE_FULL_NAME);

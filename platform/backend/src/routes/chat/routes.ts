@@ -10,7 +10,7 @@ import {
   RouteId,
   type SupportedProvider,
   TimeInMs,
-  TOOL_ACTIVATE_SKILL_SHORT_NAME,
+  TOOL_LOAD_SKILL_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
   type TokenUsage,
@@ -478,9 +478,9 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
             : "";
 
         // eagerly list the agent's skills in the prompt (like Claude Code /
-        // opencode), but only when the agent can actually activate them.
+        // opencode), but only when the agent can actually load them.
         const skillCatalogPrompt =
-          archestraMcpBranding.getToolName(TOOL_ACTIVATE_SKILL_SHORT_NAME) in
+          archestraMcpBranding.getToolName(TOOL_LOAD_SKILL_SHORT_NAME) in
           mcpTools
             ? await buildSkillCatalogPrompt({
                 organizationId,
@@ -554,7 +554,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
             // into a copy of the messages before they reach the model. The
             // original `messages` stay clean for persistence and the visible bubble.
             // Slash commands depend on skill tools (the injected block references
-            // read_skill_file), so both org flags must be on.
+            // load_skill), so both org flags must be on.
             const skillSlashCommandsActive =
               !!organization?.skillSlashCommandsEnabled &&
               !!organization?.skillToolsEnabled;

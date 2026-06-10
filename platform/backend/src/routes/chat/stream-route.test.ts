@@ -1,6 +1,6 @@
 import {
   ADMIN_ROLE_NAME,
-  TOOL_ACTIVATE_SKILL_SHORT_NAME,
+  TOOL_LOAD_SKILL_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
 } from "@archestra/shared";
@@ -832,8 +832,8 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
     const { AgentModel } = await import("@/models");
     await AgentModel.update(agentId, { systemPrompt: "You are helpful." });
     mockGetChatMcpTools.mockResolvedValue({
-      [archestraMcpBranding.getToolName(TOOL_ACTIVATE_SKILL_SHORT_NAME)]: {
-        description: "Activate a skill",
+      [archestraMcpBranding.getToolName(TOOL_LOAD_SKILL_SHORT_NAME)]: {
+        description: "Load a skill",
         inputSchema: { jsonSchema: { type: "object", properties: {} } },
       },
     });
@@ -879,7 +879,7 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
       },
       files: [],
     });
-    // beforeEach resets getChatMcpTools to {}, so no activate_skill is exposed
+    // beforeEach resets getChatMcpTools to {}, so no load_skill is exposed
     mockStreamText.mockClear();
 
     const response = await app.inject({

@@ -299,7 +299,7 @@ class ArchestraClient:
                             ctx="POST /api/skills")
 
     def enable_skill_defaults(self) -> None:
-        """enable org skill tools (list_skills/activate_skill/read_skill_file) and backfill
+        """enable org skill tools (list_skills/load_skill) and backfill
         them onto existing agents. idempotent."""
         self._request("POST", "/api/skills/enable-defaults")
 

@@ -5113,7 +5113,7 @@ export const getSkillSourceRepos = <ThrowOnError extends boolean = false>(option
 export const resetSkill = <ThrowOnError extends boolean = false>(options: Options<ResetSkillData, ThrowOnError>) => (options.client ?? client).post<ResetSkillResponses, ResetSkillErrors, ThrowOnError>({ url: '/api/skills/{id}/reset', ...options });
 
 /**
- * Enable the Agent Skill tools (`list_skills`, `activate_skill`, `read_skill_file`) for this organization. Sets the org-level flag and backfills the tools onto every existing agent. Idempotent.
+ * Enable the Agent Skill tools (`list_skills`, `load_skill`) for this organization. Sets the org-level flag and backfills the tools onto every existing agent. Idempotent.
  *
  * Authentication:
  *

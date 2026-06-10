@@ -1049,9 +1049,8 @@ class ToolModel {
   }
 
   /**
-   * Assign the Agent Skill tools (list_skills / activate_skill /
-   * read_skill_file) to every existing agent in the given organization.
-   * Idempotent.
+   * Assign the Agent Skill tools (list_skills / load_skill) to every existing
+   * agent in the given organization. Idempotent.
    *
    * Triggered by the "Enable and create a new skill" empty-state button
    * (POST /api/skills/enable-defaults).

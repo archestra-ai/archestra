@@ -129,15 +129,14 @@ export const TOOL_PERMISSIONS: Record<
 
   // skills — require skill:read; handlers further filter by per-skill scope.
   list_skills: { resource: "skill", action: "read" },
-  activate_skill: { resource: "skill", action: "read" },
-  read_skill_file: { resource: "skill", action: "read" },
+  load_skill: { resource: "skill", action: "read" },
   // Skill authoring — writes need skill:create/update; create_skill always
   // makes a personal skill, update_skill re-checks the target skill's scope.
   create_skill: { resource: "skill", action: "create" },
   update_skill: { resource: "skill", action: "update" },
   // Code execution sandbox — gated by `sandbox:execute` and per-agent tool
   // assignment. The implicit per-conversation sandbox is created lazily; the
-  // create step is not a tool. activate_skill (skill:read) mounts a skill into
+  // create step is not a tool. load_skill (skill:read) mounts a skill into
   // the sandbox when the caller also has sandbox:execute.
   run_command: { resource: "sandbox", action: "execute" },
   download_file: { resource: "sandbox", action: "execute" },
@@ -151,8 +150,7 @@ export const TOOL_PERMISSIONS: Record<
  */
 const ORG_CONTEXT_READ_TOOLS: ReadonlySet<ArchestraToolShortName> = new Set([
   "list_skills",
-  "activate_skill",
-  "read_skill_file",
+  "load_skill",
 ]);
 
 /**

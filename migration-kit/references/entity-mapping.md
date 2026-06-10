@@ -34,7 +34,7 @@ network calls.
 
 ## Skill visibility
 After creating skills/agents, `apply.py` calls `POST /api/skills/enable-defaults` once, which enables the
-org `archestra__{list_skills,activate_skill,read_skill_file}` tools and backfills them onto agents — that
+org `archestra__{list_skills,load_skill}` tools and backfills them onto agents — that
 is how the primary agent gains access to the migrated skills (there is no agent↔skill junction).
 It also tries to assign sandbox tools (`run_command`, `upload_file`, `download_file`) to migrated agents
 so bundled local tools can run from activated skills. Missing/disabled sandbox support is reported as a

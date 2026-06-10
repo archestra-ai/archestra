@@ -564,16 +564,21 @@ test.describe("Identity Provider Team Sync E2E", () => {
       description: "Team for testing SSO group sync",
     });
 
-    // STEP 3: Link external group to the team
+    // STEP 3: Link external group to the team. External group sync lives in
+    // the tabbed team management dialog (opened via the row's Edit action),
+    // under the "External Group Sync" section.
     await clickTeamActionButton({
       page,
       teamName,
-      actionName: "Configure SSO Team Sync",
+      actionName: "Edit",
     });
 
-    // Wait for dialog to appear
-    await expect(page.getByRole("dialog")).toBeVisible();
-    await expect(page.getByText("External Group Sync")).toBeVisible();
+    // Wait for the dialog and switch to the External Group Sync section
+    const teamDialog = page.getByRole("dialog");
+    await expect(teamDialog).toBeVisible();
+    await teamDialog
+      .getByRole("button", { name: "External Group Sync" })
+      .click();
 
     // Add the external group mapping
     await page.getByPlaceholder(/archestra-admins/).fill(externalGroup);

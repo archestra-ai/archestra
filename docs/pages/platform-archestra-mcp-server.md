@@ -1447,7 +1447,7 @@ Required RBAC permission: `knowledgeSource:update`
 | `todo_write` | Write todos to the current conversation. | None (no additional RBAC permission required) |
 | `swap_agent` | Switch the current conversation to a different agent. | `agent:read` |
 | `swap_to_default_agent` | Return to the default agent. | None (no additional RBAC permission required) |
-| `artifact_write` | Write or update a markdown artifact for the current conversation. | None (no additional RBAC permission required) |
+| `artifact_write` | Write or update the conversation's persistent markdown document — notes, reports, plans, summaries, diagrams — that evolves as the conversation progresses. | None (no additional RBAC permission required) |
 
 #### todo_write
 

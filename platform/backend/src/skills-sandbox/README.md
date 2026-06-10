@@ -128,7 +128,15 @@ input length and the per-sandbox pending queue length.
 The sandbox always runs as the non-root user from `runtime-image.ts`, with no
 host mounts and no backend env exposed inside the container. Network access is
 enabled because npm/uv/npx require it; this is documented in the activation
-prompt.
+prompt, but egress is firewalled: the `dagger-egress-firewall` sidecar
+(`helm/archestra` and `helm/dagger-runtime` values) drops exec egress to RFC1918
+private ranges, cloud-metadata / link-local (`169.254.0.0/16`), the Azure
+WireServer, CGNAT, and loopback at the Dagger Engine pod, so sandboxed code keeps
+public access (npm/uv) but cannot reach the cluster's internal services or the
+node's instance-metadata credentials. Established replies and DNS are returned
+back so name resolution and downloads still work. The rule lives in the engine's
+mangle `FORWARD` chain, so it holds independent of whether the cluster enforces
+`NetworkPolicy`.
 
 ## RBAC
 

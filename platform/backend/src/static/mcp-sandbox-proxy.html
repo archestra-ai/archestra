@@ -146,19 +146,24 @@ function injectCSP(html, cspValue) {
   var sdkGlobal = '<script>window.__ARCHESTRA_APP_SDK_URL__=' + JSON.stringify(APP_SDK_URL) + ';<\/script>';
   var injection = cspMeta + sdkGlobal + violationListener;
 
-  if (html.includes("<head>")) {
-    return html.replace("<head>", "<head>" + injection);
-  } else if (html.includes("<HEAD>")) {
-    return html.replace("<HEAD>", "<HEAD>" + injection);
-  } else if (html.includes("<html>")) {
-    return html.replace("<html>", "<html><head>" + injection + "</head>");
-  } else if (html.includes("<HTML>")) {
-    return html.replace("<HTML>", "<HTML><head>" + injection + "</head>");
-  } else if (html.includes("<!DOCTYPE") || html.includes("<!doctype")) {
-    return html.replace(/(<!DOCTYPE[^>]*>|<!doctype[^>]*>)/i, "$1<head>" + injection + "</head>");
-  } else {
-    return injection + html;
+  // Anchors tolerate attributes (<head lang="en">) and mirror the backend's
+  // serve-time bridge injection (app-runtime-bridge.ts) exactly: both chains
+  // resolve to the SAME first anchor, so this injection always lands before
+  // the bridge script and the SDK URL global is defined when the bridge runs.
+  // (\s[^>]*)? — attributes allowed, never a longer tag name (<header>).
+  var head = /(<head(\s[^>]*)?>)/i.exec(html);
+  if (head) {
+    return html.replace(head[1], head[1] + injection);
   }
+  var htmlTag = /(<html(\s[^>]*)?>)/i.exec(html);
+  if (htmlTag) {
+    return html.replace(htmlTag[1], htmlTag[1] + "<head>" + injection + "</head>");
+  }
+  var doctype = /(<!DOCTYPE[^>]*>)/i.exec(html);
+  if (doctype) {
+    return html.replace(doctype[1], doctype[1] + "<head>" + injection + "</head>");
+  }
+  return injection + html;
 }
 
 // Injected at serve time by server.ts. Empty array = allow any origin (open/dev deployment).

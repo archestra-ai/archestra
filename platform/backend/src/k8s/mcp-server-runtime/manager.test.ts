@@ -4,7 +4,7 @@ import * as k8s from "@kubernetes/client-node";
 import { vi } from "vitest";
 import type * as originalConfigModule from "@/config";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
-import type { McpServer } from "@/types";
+import type { McpServer, NetworkPolicy } from "@/types";
 
 // Mock fs module first
 vi.mock("node:fs");
@@ -1219,6 +1219,53 @@ describe("McpServerRuntimeManager", () => {
       expect(mockCreateK8sSecret).toHaveBeenCalledWith({
         SOME_KEY: "some-value",
         OTHER_KEY: "other-value",
+      });
+
+      cleanup();
+    });
+
+    test("uses the organization default network policy for global catalog installs", async () => {
+      const defaultNetworkPolicy = {
+        egressMode: "restricted",
+        domainPreset: "package_managers",
+        allowedDomains: ["docs.example.com"],
+        allowedCidrs: [],
+      } satisfies NetworkPolicy;
+      const OrganizationModel = (await import("@/models/organization")).default;
+      vi.mocked(OrganizationModel.getFirst).mockResolvedValueOnce({
+        id: "org-with-network-policy",
+        defaultNetworkPolicy,
+      } as unknown as Awaited<ReturnType<typeof OrganizationModel.getFirst>>);
+
+      const { resolveEffectiveNetworkPolicy } = await import(
+        "@/services/environments/network-policy"
+      );
+      vi.mocked(resolveEffectiveNetworkPolicy).mockResolvedValueOnce({
+        source: "organization_default",
+        policy: defaultNetworkPolicy,
+      });
+
+      const { manager, mcpServer, cleanup } = await setupStartServerTest({
+        vaultSecret: {},
+        catalogEnvironment: [],
+        mcpServerOverrides: {
+          secretId: null,
+        },
+      });
+
+      await manager.startServer(mcpServer);
+
+      expect(resolveEffectiveNetworkPolicy).toHaveBeenCalledWith({
+        organizationId: "org-with-network-policy",
+        environmentId: undefined,
+        environmentNetworkPolicy: undefined,
+        defaultNetworkPolicy,
+      });
+      expect(mockK8sDeploymentInstances.at(-1)?.options).toMatchObject({
+        effectiveNetworkPolicy: {
+          source: "organization_default",
+          policy: defaultNetworkPolicy,
+        },
       });
 
       cleanup();

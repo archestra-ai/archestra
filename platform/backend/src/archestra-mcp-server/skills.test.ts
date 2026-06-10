@@ -185,6 +185,10 @@ describe("skill tool execution", () => {
     }
   });
 
+  // The mount side effect of a path read (both load_skill modes resolve via
+  // resolveActivationVersion before branching on path) is covered by
+  // skill-version-resolution.test.ts's sandbox-enabled suite, not re-asserted
+  // here — don't add a mock that would sever the read from real resolution.
   test("load_skill with a path returns a bundled resource file", async () => {
     await seedSkill({
       files: [

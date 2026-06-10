@@ -1,32 +1,21 @@
 import { randomUUID } from "node:crypto";
 import { TimeInMs } from "@archestra/shared";
-import type { ElicitResult } from "@modelcontextprotocol/sdk/types.js";
+import {
+  type ElicitResult,
+  ElicitResultSchema,
+} from "@modelcontextprotocol/sdk/types.js";
 import type { UIMessageChunk } from "ai";
-import { z } from "zod";
+import type { z } from "zod";
 import { CacheKey, cacheManager } from "@/cache-manager";
 import type { McpElicitationHandler } from "@/clients/mcp-elicitation";
 import logger from "@/logging";
 import { ApiError, UuidIdSchema } from "@/types";
 
-export const ChatMcpElicitationActionSchema = z.enum([
-  "accept",
-  "decline",
-  "cancel",
-]);
-
-const ChatMcpElicitationContentValueSchema = z.union([
-  z.string(),
-  z.number(),
-  z.boolean(),
-  z.array(z.string()),
-]);
-
-export const ChatMcpElicitationResponseSchema = z.object({
+export const ChatMcpElicitationResponseSchema = ElicitResultSchema.pick({
+  action: true,
+  content: true,
+}).extend({
   conversationId: UuidIdSchema,
-  action: ChatMcpElicitationActionSchema,
-  content: z
-    .record(z.string(), ChatMcpElicitationContentValueSchema)
-    .optional(),
 });
 
 export type ChatMcpElicitationStreamData = {

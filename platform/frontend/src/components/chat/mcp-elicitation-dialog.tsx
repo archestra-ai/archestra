@@ -28,6 +28,7 @@ export type ChatMcpElicitationRequest = {
 };
 
 type ElicitationAction = "accept" | "decline" | "cancel";
+type ElicitationContentValue = string | number | boolean | string[];
 
 type FieldSchema = {
   title?: string;
@@ -54,7 +55,7 @@ export function McpElicitationDialog({
   onRespond: (response: {
     id: string;
     action: ElicitationAction;
-    content?: Record<string, unknown>;
+    content?: Record<string, ElicitationContentValue>;
   }) => Promise<void>;
 }) {
   const fields = useMemo(
@@ -357,9 +358,9 @@ function getDefaultValues(fields: ElicitationField[]) {
 function normalizeValues(
   fields: ElicitationField[],
   values: Record<string, unknown>,
-) {
+): Record<string, ElicitationContentValue> {
   if (fields.length === 0) {
-    return values;
+    return { response: String(values.response ?? "") };
   }
 
   return Object.fromEntries(
@@ -367,12 +368,18 @@ function normalizeValues(
       const value = values[field.name];
       if (field.schema.type === "number" || field.schema.type === "integer") {
         const numericValue = Number(value);
+        return [field.name, Number.isFinite(numericValue) ? numericValue : ""];
+      }
+      if (Array.isArray(value)) {
         return [
           field.name,
-          Number.isFinite(numericValue) ? numericValue : undefined,
+          value.filter((item): item is string => typeof item === "string"),
         ];
       }
-      return [field.name, value];
+      if (typeof value === "boolean") {
+        return [field.name, value];
+      }
+      return [field.name, String(value ?? "")];
     }),
   );
 }

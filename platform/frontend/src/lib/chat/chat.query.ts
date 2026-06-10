@@ -455,6 +455,10 @@ export function useStopChatStream() {
 }
 
 export function useResolveChatMcpElicitation() {
+  type ResolveChatMcpElicitationBody = NonNullable<
+    archestraApiTypes.ResolveChatMcpElicitationData["body"]
+  >;
+
   return useMutation({
     mutationFn: async ({
       id,
@@ -464,8 +468,8 @@ export function useResolveChatMcpElicitation() {
     }: {
       id: string;
       conversationId: string;
-      action: "accept" | "decline" | "cancel";
-      content?: Record<string, unknown>;
+      action: ResolveChatMcpElicitationBody["action"];
+      content?: ResolveChatMcpElicitationBody["content"];
     }) => {
       const { data, error } = await resolveChatMcpElicitation({
         path: { id },

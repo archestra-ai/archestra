@@ -113,6 +113,8 @@ Those two tools are enabled implicitly and do not appear in the built-in tool pi
 
 Use this when the full tool list is too large or noisy to send to the model on every turn, but the gateway still needs the same underlying tool access.
 
+When the request is authenticated as a specific user (not an org or team token), `search_tools` also returns third-party tools from MCP catalogs that user can access, and `run_tool` assigns such a tool to the gateway automatically on first use when the user has permission to modify the gateway. Set `ARCHESTRA_AGENTS_TOOL_AUTO_ASSIGNMENT_DISABLED=true` to restrict discovery and dispatch to assigned tools only.
+
 Tool call policies still apply to the target tool. `run_tool` does not bypass input conditions, team conditions, untrusted-context rules, or approval-required rules.
 
 ## Custom Headers

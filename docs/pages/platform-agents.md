@@ -32,6 +32,8 @@ For larger toolsets, enable **Load tools when needed**. This keeps the initial t
 
 Use this when the full tool menu is too large to send to the model on every turn, but you still want the agent to keep access to the same assigned toolset.
 
+Discovery is not limited to assigned tools. For a signed-in user, `search_tools` also returns third-party tools from MCP catalogs the user can access, and `run_tool` assigns such a tool to the agent automatically on first use — applying the same authorization as a manual assignment (catalog access plus permission to modify the agent). Users who cannot modify the agent are told to ask an admin instead. This lets [Agent Skills](/docs/platform-agent-skills-sharing) reference tools without pre-assigning every tool to every agent. Set `ARCHESTRA_AGENTS_TOOL_AUTO_ASSIGNMENT_DISABLED=true` to restrict discovery and dispatch to assigned tools only (see [Deployment](/docs/platform-deployment)).
+
 Tool call policies still apply to the target tool. If the model calls `run_tool` to execute `send_email`, Archestra evaluates policies for `send_email` with the same arguments and context it would use for a direct tool call. See [AI Tool Guardrails - Load Tools When Needed](/docs/platform-ai-tool-guardrails#load-tools-when-needed).
 
 See [MCP Gateway - Load Tools When Needed](/docs/platform-mcp-gateway#load-tools-when-needed) for the MCP-client-facing behavior and the same mode on gateways.

@@ -13,6 +13,7 @@ import {
   TOOL_UPDATE_SKILL_FULL_NAME,
   TOOL_UPLOAD_FILE_FULL_NAME,
 } from "@archestra/shared";
+import config from "@/config";
 import { ConversationEnabledToolModel, ToolModel } from "@/models";
 import { describe, expect, test } from "@/test";
 import type { ArchestraContext } from ".";
@@ -132,6 +133,163 @@ describe("search_tools", () => {
     );
     expect(returnedToolNames).not.toContain(TOOL_SEARCH_TOOLS_FULL_NAME);
     expect(returnedToolNames).not.toContain(TOOL_RUN_TOOL_FULL_NAME);
+  });
+
+  test("includes unassigned tools from catalogs the user can access", async ({
+    makeAgent,
+    makeInternalMcpCatalog,
+    makeMember,
+    makeOrganization,
+    makeTool,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "admin" });
+    const agent = await makeAgent({
+      name: "Search Agent",
+      organizationId: org.id,
+    });
+
+    const catalog = await makeInternalMcpCatalog({
+      organizationId: org.id,
+      name: "GitHub MCP",
+    });
+    // intentionally not assigned to the agent
+    await makeTool({
+      name: "github__search_repositories",
+      description: "Search repositories by topic, language, or owner.",
+      catalogId: catalog.id,
+    });
+
+    const context: ArchestraContext = {
+      agent: { id: agent.id, name: agent.name },
+      agentId: agent.id,
+      organizationId: org.id,
+      userId: user.id,
+    };
+
+    const result = await executeArchestraTool(
+      TOOL_SEARCH_TOOLS_FULL_NAME,
+      { query: "repository search" },
+      context,
+    );
+
+    expect(result.isError).toBe(false);
+    const structuredContent =
+      result.structuredContent as SearchToolsStructuredContent;
+    expect(structuredContent.tools.map((tool) => tool.toolName)).toContain(
+      "github__search_repositories",
+    );
+  });
+
+  test("hides unassigned tools when auto-assignment is disabled by config", async ({
+    makeAgent,
+    makeInternalMcpCatalog,
+    makeMember,
+    makeOrganization,
+    makeTool,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "admin" });
+    const agent = await makeAgent({
+      name: "Search Agent",
+      organizationId: org.id,
+    });
+
+    const catalog = await makeInternalMcpCatalog({
+      organizationId: org.id,
+      name: "GitHub MCP",
+    });
+    await makeTool({
+      name: "github__search_repositories",
+      description: "Search repositories by topic, language, or owner.",
+      catalogId: catalog.id,
+    });
+
+    const context: ArchestraContext = {
+      agent: { id: agent.id, name: agent.name },
+      agentId: agent.id,
+      organizationId: org.id,
+      userId: user.id,
+    };
+
+    const original = config.agents.toolAutoAssignmentDisabled;
+    (
+      config.agents as { toolAutoAssignmentDisabled: boolean }
+    ).toolAutoAssignmentDisabled = true;
+    try {
+      const result = await executeArchestraTool(
+        TOOL_SEARCH_TOOLS_FULL_NAME,
+        { query: "repository search" },
+        context,
+      );
+
+      expect(result.isError).toBe(false);
+      const structuredContent =
+        result.structuredContent as SearchToolsStructuredContent;
+      expect(
+        structuredContent.tools.map((tool) => tool.toolName),
+      ).not.toContain("github__search_repositories");
+    } finally {
+      (
+        config.agents as { toolAutoAssignmentDisabled: boolean }
+      ).toolAutoAssignmentDisabled = original;
+    }
+  });
+
+  test("hides unassigned tools whose catalog the user cannot access", async ({
+    makeAgent,
+    makeInternalMcpCatalog,
+    makeMember,
+    makeOrganization,
+    makeTeam,
+    makeTool,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "member" });
+    const agent = await makeAgent({
+      name: "Search Agent",
+      organizationId: org.id,
+    });
+
+    // user creates the team but is not a member of it
+    const team = await makeTeam(org.id, user.id);
+    const catalog = await makeInternalMcpCatalog({
+      organizationId: org.id,
+      name: "GitHub MCP",
+      scope: "team",
+      teams: [team.id],
+    });
+    await makeTool({
+      name: "github__search_repositories",
+      description: "Search repositories by topic, language, or owner.",
+      catalogId: catalog.id,
+    });
+
+    const context: ArchestraContext = {
+      agent: { id: agent.id, name: agent.name },
+      agentId: agent.id,
+      organizationId: org.id,
+      userId: user.id,
+    };
+
+    const result = await executeArchestraTool(
+      TOOL_SEARCH_TOOLS_FULL_NAME,
+      { query: "repository search" },
+      context,
+    );
+
+    expect(result.isError).toBe(false);
+    const structuredContent =
+      result.structuredContent as SearchToolsStructuredContent;
+    expect(structuredContent.tools.map((tool) => tool.toolName)).not.toContain(
+      "github__search_repositories",
+    );
   });
 
   test("filters Archestra tools by RBAC before ranking", async ({

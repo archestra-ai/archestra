@@ -58,6 +58,7 @@ import AgentModel from "./agent";
 import AgentConnectorAssignmentModel from "./agent-connector-assignment";
 import AgentTeamModel from "./agent-team";
 import AgentToolModel from "./agent-tool";
+import McpCatalogTeamModel from "./mcp-catalog-team";
 import McpServerModel from "./mcp-server";
 import OrganizationModel from "./organization";
 import ToolInvocationPolicyModel from "./tool-invocation-policy";
@@ -578,6 +579,42 @@ class ToolModel {
     }
 
     return ToolModel.filterUnavailableTools(tools, hasKnowledgeSources);
+  }
+
+  /**
+   * Catalog-backed MCP tools from every catalog the user can access
+   * (org-visible, own personal, and team catalogs). The user-wide discovery
+   * space for search_tools and run_tool auto-assignment — independent of any
+   * agent's assignments. Excludes clones still pending discovery (they cannot
+   * be assigned yet).
+   */
+  static async getMcpToolsAccessibleToUser(params: {
+    userId: string;
+    organizationId: string;
+    isAdmin: boolean;
+  }): Promise<Tool[]> {
+    const catalogIds = await McpCatalogTeamModel.getUserAccessibleCatalogIds(
+      params.userId,
+      params.isAdmin,
+      params.organizationId,
+    );
+    if (catalogIds.length === 0) {
+      return [];
+    }
+
+    // Secondary sort on id keeps the ordering deterministic when createdAt
+    // ties (bulk-inserted MCP tools share a timestamp), so search_tools and
+    // run_tool auto-assignment resolve a duplicate name to the same row.
+    return db
+      .select()
+      .from(schema.toolsTable)
+      .where(
+        and(
+          inArray(schema.toolsTable.catalogId, catalogIds),
+          eq(schema.toolsTable.clonedPendingDiscovery, false),
+        ),
+      )
+      .orderBy(desc(schema.toolsTable.createdAt), asc(schema.toolsTable.id));
   }
 
   /**

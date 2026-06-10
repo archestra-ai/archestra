@@ -18,7 +18,9 @@ import {
   defineArchestraTools,
   errorResult,
 } from "./helpers";
+import { autoAssignToolToAgent } from "./tool-auto-assign";
 import {
+  toolNotAssignedAskAdminMessage,
   toolNotEnabledForConversationMessage,
   unavailableThirdPartyToolMessage,
 } from "./tool-recovery-messages";
@@ -46,7 +48,7 @@ const registry = defineArchestraTools([
   defineArchestraTool({
     shortName: TOOL_RUN_TOOL_SHORT_NAME,
     title: "Run Tool",
-    description: `Dispatch to any tool available to this agent, including built-in platform tools, agent delegation tools ('agent-<id>'), or third-party MCP tools exposed through the MCP Gateway (e.g. 'context7__resolve-library-id'). Pass the tool name exactly as it appears in the tools list or use a built-in platform tool short name like 'whoami' or 'get_agent'. Prefer using ${TOOL_SEARCH_TOOLS_SHORT_NAME} first when you need to discover the right exact name. The target tool must be assigned to this agent; target-tool RBAC, argument validation, and output validation all still apply.`,
+    description: `Dispatch to any tool available to this agent, including built-in platform tools, agent delegation tools ('agent-<id>'), or third-party MCP tools exposed through the MCP Gateway (e.g. 'context7__resolve-library-id'). Pass the tool name exactly as it appears in the tools list or use a built-in platform tool short name like 'whoami' or 'get_agent'. Prefer using ${TOOL_SEARCH_TOOLS_SHORT_NAME} first when you need to discover the right exact name. A tool the user can access is assigned to this agent automatically on first use; target-tool RBAC, argument validation, and output validation all still apply.`,
     schema: RunToolArgsSchema,
     async handler({ args, context }) {
       const requestedName = args.tool_name;
@@ -133,23 +135,54 @@ const registry = defineArchestraTools([
         );
       }
 
-      // Reject hallucinated or unassigned tool names before policy evaluation.
-      // The policy gate below already requires exact membership in this same
-      // assigned-tool set (see evaluatePolicies), so checking it here is
-      // regression-safe; it lets us return an actionable recovery message
-      // instead of the misleading "not enabled for this conversation" refusal
-      // (which implies the tool exists). In search_and_run_only mode the
-      // intended recovery is search_tools, so we point the model there. The set
-      // is reused by the policy gate below so it is fetched only once.
+      // Gate dispatch on the assigned-tool set, but treat a miss as a
+      // first-use auto-assignment opportunity rather than a hard reject:
+      // skills reference tools nobody assigned to the agent, so a tool from a
+      // catalog the user can access is assigned on the fly when the user may
+      // modify the agent. Hallucinated names and tools the user cannot see
+      // keep the search_tools recovery message; tools the user can see but
+      // cannot assign get an "ask an admin" message instead. The set is reused
+      // by the policy gate below so it is fetched only once.
       const assignedToolNames = await ToolModel.getAssignedToolNames(
         context.agentId,
       );
       if (!assignedToolNames.has(resolvedName)) {
-        logger.info(
-          { agentId: context.agentId, requestedName, resolvedName },
-          `${TOOL_RUN_TOOL_SHORT_NAME} dispatched to an unavailable tool`,
-        );
-        return errorResult(unavailableThirdPartyToolMessage(resolvedName));
+        // A custom per-conversation tool selection is an allowlist over the
+        // agent's assigned tools, so an unassigned tool can never be enabled
+        // in it — bail out before auto-assignment so a conversation that
+        // blocks the tool cannot leave a persistent agent mutation behind.
+        // The unavailable message (not "not enabled") is consistent with
+        // search_tools, which hides the tool in this conversation as well.
+        if (await checkConversationGate(resolvedName)) {
+          logger.info(
+            { agentId: context.agentId, requestedName, resolvedName },
+            `${TOOL_RUN_TOOL_SHORT_NAME} dispatched to an unavailable tool`,
+          );
+          return errorResult(unavailableThirdPartyToolMessage(resolvedName));
+        }
+        const autoAssign = await autoAssignToolToAgent({
+          toolName: resolvedName,
+          agentId: context.agentId,
+          userId: context.userId,
+          organizationId: context.organizationId,
+        });
+        switch (autoAssign) {
+          case "assigned":
+            assignedToolNames.add(resolvedName);
+            break;
+          case "forbidden":
+            logger.info(
+              { agentId: context.agentId, requestedName, resolvedName },
+              `${TOOL_RUN_TOOL_SHORT_NAME} dispatched to a tool the user cannot assign`,
+            );
+            return errorResult(toolNotAssignedAskAdminMessage(resolvedName));
+          case "unavailable":
+            logger.info(
+              { agentId: context.agentId, requestedName, resolvedName },
+              `${TOOL_RUN_TOOL_SHORT_NAME} dispatched to an unavailable tool`,
+            );
+            return errorResult(unavailableThirdPartyToolMessage(resolvedName));
+        }
       }
 
       // The tool exists and is assigned — only now enforce the per-conversation

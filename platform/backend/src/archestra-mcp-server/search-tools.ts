@@ -23,6 +23,7 @@ import {
   structuredSuccessResult,
 } from "./helpers";
 import { filterToolNamesByPermission } from "./rbac";
+import { getUnassignedDiscoverableTools } from "./tool-auto-assign";
 
 const SearchToolsArgsSchema = z
   .object({
@@ -169,7 +170,7 @@ const registry = defineArchestraTools([
   defineArchestraTool({
     shortName: TOOL_SEARCH_TOOLS_SHORT_NAME,
     title: "Search Tools",
-    description: `Search the agent's available tools on demand. Returns exact tool names plus compact input summaries. To execute a returned tool, call ${TOOL_RUN_TOOL_SHORT_NAME} with tool_name set to the returned toolName and put target tool input parameters inside tool_args.`,
+    description: `Search the tools available to this agent and to you on demand. Returns exact tool names plus compact input summaries. To execute a returned tool, call ${TOOL_RUN_TOOL_SHORT_NAME} with tool_name set to the returned toolName and put target tool input parameters inside tool_args.`,
     schema: SearchToolsArgsSchema,
     outputSchema: SearchToolsOutputSchema,
     async handler({ args, context }) {
@@ -285,12 +286,22 @@ async function getSearchableTools(params: {
 }): Promise<SearchCandidate[]> {
   const { agentId, conversationId, organizationId, userId } = params;
   const assignedTools = await ToolModel.getMcpToolsByAgent(agentId);
+  // Widened search space: skills reference tools nobody assigned to the agent,
+  // so discovery also spans third-party tools from every catalog the user can
+  // access. run_tool auto-assigns such a tool on first use (or steers the user
+  // to an admin), which keeps these results actionable.
+  const discoverableTools = await getUnassignedDiscoverableTools({
+    assignedToolNames: new Set(assignedTools.map((tool) => tool.name)),
+    userId,
+    organizationId,
+  });
+  const searchSpace = [...assignedTools, ...discoverableTools];
   const permittedNames = await filterToolNamesByPermission(
-    assignedTools.map((tool) => tool.name),
+    searchSpace.map((tool) => tool.name),
     userId,
     organizationId,
   );
-  const filteredAssignedTools = assignedTools.filter(
+  const filteredTools = searchSpace.filter(
     (tool) =>
       permittedNames.has(tool.name) &&
       !isExcludedFromSearchResults(tool.name) &&
@@ -307,9 +318,16 @@ async function getSearchableTools(params: {
         })
       : [];
 
-  const catalogNamesById = await getCatalogNamesById(filteredAssignedTools);
+  const catalogNamesById = await getCatalogNamesById(filteredTools);
   const candidates = new Map<string, SearchCandidate>();
-  for (const tool of filteredAssignedTools) {
+  // First occurrence wins on duplicate names: assigned tools come before the
+  // discoverable ones, and the discoverable set is ordered newest-first — the
+  // same row autoAssignToolToAgent resolves, so the description shown by
+  // search matches the row a later run_tool call assigns.
+  for (const tool of filteredTools) {
+    if (candidates.has(tool.name)) {
+      continue;
+    }
     candidates.set(
       tool.name,
       toAssignedToolCandidate({

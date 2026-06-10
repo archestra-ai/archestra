@@ -1522,7 +1522,7 @@ Required RBAC permission: None (no additional RBAC permission required)
 
 | Tool | Description | Required RBAC Permission |
 |------|-------------|--------------------------|
-| `search_tools` | Search the agent's available tools on demand. | None (no additional RBAC permission required) |
+| `search_tools` | Search the tools available to this agent and to you on demand. | None (no additional RBAC permission required) |
 | `run_tool` | Dispatch to any tool available to this agent, including built-in platform tools, agent delegation tools ('agent-<id>'), or third-party MCP tools exposed through the MCP Gateway (e.g. | None (no additional RBAC permission required) |
 
 #### search_tools

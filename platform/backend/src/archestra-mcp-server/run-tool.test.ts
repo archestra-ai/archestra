@@ -9,6 +9,7 @@ import {
 } from "@archestra/shared";
 import { vi } from "vitest";
 import mcpClient from "@/clients/mcp-client";
+import config from "@/config";
 import { ConversationEnabledToolModel, ToolModel } from "@/models";
 import { beforeEach, describe, expect, test } from "@/test";
 import type { Agent } from "@/types";
@@ -305,6 +306,217 @@ describe("run_tool", () => {
     expect(result.content).toEqual([
       { type: "text", text: "Third-party response" },
     ]);
+  });
+
+  describe("first-use auto-assignment", () => {
+    test("auto-assigns an accessible catalog tool to the agent and dispatches it", async ({
+      makeInternalMcpCatalog,
+      makeTool,
+    }) => {
+      const catalog = await makeInternalMcpCatalog({
+        organizationId: mockContext.organizationId,
+      });
+      await makeTool({
+        name: "github__search_repositories",
+        catalogId: catalog.id,
+      });
+
+      vi.mocked(mcpClient.executeToolCall).mockResolvedValueOnce({
+        content: [{ type: "text", text: "ok" }],
+        isError: false,
+      } as any);
+
+      const result = await executeArchestraTool(
+        TOOL_RUN_TOOL_FULL_NAME,
+        {
+          tool_name: "github__search_repositories",
+          tool_args: { query: "archestra" },
+        },
+        mockContext,
+      );
+
+      expect(result.isError).toBe(false);
+      expect(mcpClient.executeToolCall).toHaveBeenCalledWith(
+        expect.objectContaining({ name: "github__search_repositories" }),
+        testAgent.id,
+        mockContext.tokenAuth,
+        { conversationId: testConversationId },
+      );
+      const assignedNames = await ToolModel.getAssignedToolNames(testAgent.id);
+      expect(assignedNames.has("github__search_repositories")).toBe(true);
+    });
+
+    test("tells the model to involve an admin when the user cannot modify the agent", async ({
+      makeInternalMcpCatalog,
+      makeMember,
+      makeTool,
+      makeUser,
+    }) => {
+      const memberUser = await makeUser();
+      await makeMember(memberUser.id, mockContext.organizationId as string, {
+        role: "member",
+      });
+      const catalog = await makeInternalMcpCatalog({
+        organizationId: mockContext.organizationId,
+      });
+      await makeTool({
+        name: "github__search_repositories",
+        catalogId: catalog.id,
+      });
+
+      const result = await executeArchestraTool(
+        TOOL_RUN_TOOL_FULL_NAME,
+        { tool_name: "github__search_repositories", tool_args: {} },
+        { ...mockContext, userId: memberUser.id },
+      );
+
+      expect(result.isError).toBe(true);
+      expect((result.content[0] as any).text).toContain("ask an admin");
+      expect(mcpClient.executeToolCall).not.toHaveBeenCalled();
+      const assignedNames = await ToolModel.getAssignedToolNames(testAgent.id);
+      expect(assignedNames.has("github__search_repositories")).toBe(false);
+    });
+
+    test("does not auto-assign when the conversation's custom tool selection blocks the tool", async ({
+      makeAgentTool,
+      makeInternalMcpCatalog,
+      makeTool,
+    }) => {
+      const catalog = await makeInternalMcpCatalog({
+        organizationId: mockContext.organizationId,
+      });
+      const enabled = await makeTool({
+        name: "github__search_repositories",
+        catalogId: catalog.id,
+      });
+      await makeAgentTool(testAgent.id, enabled.id);
+      await ConversationEnabledToolModel.setEnabledTools(testConversationId, [
+        enabled.id,
+      ]);
+      // accessible but unassigned, and excluded by the custom selection
+      await makeTool({
+        name: "giphy__image_search",
+        catalogId: catalog.id,
+      });
+
+      const result = await executeArchestraTool(
+        TOOL_RUN_TOOL_FULL_NAME,
+        { tool_name: "giphy__image_search", tool_args: {} },
+        mockContext,
+      );
+
+      expect(result.isError).toBe(true);
+      expect((result.content[0] as any).text).toContain(
+        'No tool named "giphy__image_search"',
+      );
+      expect(mcpClient.executeToolCall).not.toHaveBeenCalled();
+      // the blocked call must not leave a persistent agent mutation behind
+      const assignedNames = await ToolModel.getAssignedToolNames(testAgent.id);
+      expect(assignedNames.has("giphy__image_search")).toBe(false);
+    });
+
+    test("does not auto-assign for sessions without a user (org/team tokens)", async ({
+      makeInternalMcpCatalog,
+      makeTool,
+    }) => {
+      const catalog = await makeInternalMcpCatalog({
+        organizationId: mockContext.organizationId,
+      });
+      await makeTool({
+        name: "github__search_repositories",
+        catalogId: catalog.id,
+      });
+
+      const result = await executeArchestraTool(
+        TOOL_RUN_TOOL_FULL_NAME,
+        { tool_name: "github__search_repositories", tool_args: {} },
+        { ...mockContext, userId: undefined },
+      );
+
+      expect(result.isError).toBe(true);
+      expect((result.content[0] as any).text).toContain(
+        'No tool named "github__search_repositories"',
+      );
+      expect(mcpClient.executeToolCall).not.toHaveBeenCalled();
+      const assignedNames = await ToolModel.getAssignedToolNames(testAgent.id);
+      expect(assignedNames.has("github__search_repositories")).toBe(false);
+    });
+
+    test("keeps the strict behavior when auto-assignment is disabled by config", async ({
+      makeInternalMcpCatalog,
+      makeTool,
+    }) => {
+      const catalog = await makeInternalMcpCatalog({
+        organizationId: mockContext.organizationId,
+      });
+      await makeTool({
+        name: "github__search_repositories",
+        catalogId: catalog.id,
+      });
+
+      const original = config.agents.toolAutoAssignmentDisabled;
+      (
+        config.agents as { toolAutoAssignmentDisabled: boolean }
+      ).toolAutoAssignmentDisabled = true;
+      try {
+        const result = await executeArchestraTool(
+          TOOL_RUN_TOOL_FULL_NAME,
+          { tool_name: "github__search_repositories", tool_args: {} },
+          mockContext,
+        );
+
+        expect(result.isError).toBe(true);
+        expect((result.content[0] as any).text).toContain(
+          'No tool named "github__search_repositories"',
+        );
+        expect(mcpClient.executeToolCall).not.toHaveBeenCalled();
+        const assignedNames = await ToolModel.getAssignedToolNames(
+          testAgent.id,
+        );
+        expect(assignedNames.has("github__search_repositories")).toBe(false);
+      } finally {
+        (
+          config.agents as { toolAutoAssignmentDisabled: boolean }
+        ).toolAutoAssignmentDisabled = original;
+      }
+    });
+
+    test("keeps the unavailable recovery message for a tool whose catalog the user cannot access", async ({
+      makeInternalMcpCatalog,
+      makeMember,
+      makeTeam,
+      makeTool,
+      makeUser,
+    }) => {
+      const organizationId = mockContext.organizationId as string;
+      const memberUser = await makeUser();
+      await makeMember(memberUser.id, organizationId, { role: "member" });
+      // memberUser creates the team but is not a member of it
+      const team = await makeTeam(organizationId, memberUser.id);
+      const catalog = await makeInternalMcpCatalog({
+        organizationId,
+        scope: "team",
+        teams: [team.id],
+      });
+      await makeTool({
+        name: "giphy__image_search",
+        catalogId: catalog.id,
+      });
+
+      const result = await executeArchestraTool(
+        TOOL_RUN_TOOL_FULL_NAME,
+        { tool_name: "giphy__image_search", tool_args: {} },
+        { ...mockContext, userId: memberUser.id },
+      );
+
+      expect(result.isError).toBe(true);
+      expect((result.content[0] as any).text).toContain(
+        'No tool named "giphy__image_search"',
+      );
+      expect(mcpClient.executeToolCall).not.toHaveBeenCalled();
+      const assignedNames = await ToolModel.getAssignedToolNames(testAgent.id);
+      expect(assignedNames.has("giphy__image_search")).toBe(false);
+    });
   });
 
   test("headless dispatch scopes the MCP session by the isolation key", async ({

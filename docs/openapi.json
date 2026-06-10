@@ -68086,7 +68086,25 @@
                   },
                   "content": {
                     "type": "object",
-                    "additionalProperties": {}
+                    "additionalProperties": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "boolean"
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      ]
+                    }
                   }
                 },
                 "required": [

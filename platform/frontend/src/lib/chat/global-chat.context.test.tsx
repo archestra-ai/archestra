@@ -59,6 +59,10 @@ vi.mock("@/lib/chat/chat.query", () => ({
     isPending: false,
     mutate: mocks.mutate,
   }),
+  useResolveChatMcpElicitation: () => ({
+    isPending: false,
+    mutateAsync: mocks.mutateAsync,
+  }),
   useConversation: () => ({ data: conversationMock.data }),
 }));
 

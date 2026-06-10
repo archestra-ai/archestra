@@ -62,9 +62,11 @@ export function McpElicitationDialog({
     [request?.requestedSchema],
   );
   const [values, setValues] = useState<Record<string, unknown>>({});
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
     setValues(getDefaultValues(fields));
+    setErrors({});
   }, [fields]);
 
   if (!request) {
@@ -72,6 +74,13 @@ export function McpElicitationDialog({
   }
 
   const submit = async () => {
+    const validationErrors = validateValues(fields, values);
+    setErrors(validationErrors);
+
+    if (Object.keys(validationErrors).length > 0) {
+      return;
+    }
+
     await onRespond({
       id: request.id,
       action: "accept",
@@ -150,8 +159,21 @@ export function McpElicitationDialog({
               key={field.name}
               field={field}
               value={values[field.name]}
+              error={errors[field.name]}
               onChange={(value) =>
-                setValues((current) => ({ ...current, [field.name]: value }))
+                setValues((current) => {
+                  setErrors((currentErrors) => {
+                    if (!currentErrors[field.name]) {
+                      return currentErrors;
+                    }
+
+                    const nextErrors = { ...currentErrors };
+                    delete nextErrors[field.name];
+                    return nextErrors;
+                  });
+
+                  return { ...current, [field.name]: value };
+                })
               }
             />
           ))
@@ -164,13 +186,16 @@ export function McpElicitationDialog({
 function ElicitationFieldInput({
   field,
   value,
+  error,
   onChange,
 }: {
   field: ElicitationField;
   value: unknown;
+  error?: string;
   onChange: (value: unknown) => void;
 }) {
   const id = `mcp-elicitation-${field.name}`;
+  const errorId = `${id}-error`;
   const enumValues = field.schema.enum?.filter(
     (item): item is string => typeof item === "string",
   );
@@ -181,9 +206,16 @@ function ElicitationFieldInput({
         <Checkbox
           id={id}
           checked={Boolean(value)}
+          aria-invalid={Boolean(error)}
+          aria-describedby={error ? errorId : undefined}
           onCheckedChange={(checked) => onChange(checked === true)}
         />
         <Label htmlFor={id}>{field.label}</Label>
+        {error ? (
+          <p id={errorId} className="text-xs text-destructive">
+            {error}
+          </p>
+        ) : null}
       </div>
     );
   }
@@ -196,7 +228,12 @@ function ElicitationFieldInput({
       </Label>
       {enumValues?.length ? (
         <Select value={String(value ?? "")} onValueChange={onChange}>
-          <SelectTrigger id={id} className="w-full">
+          <SelectTrigger
+            id={id}
+            className="w-full"
+            aria-invalid={Boolean(error)}
+            aria-describedby={error ? errorId : undefined}
+          >
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -212,6 +249,8 @@ function ElicitationFieldInput({
           id={id}
           value={String(value ?? "")}
           onChange={(event) => onChange(event.target.value)}
+          aria-invalid={Boolean(error)}
+          aria-describedby={error ? errorId : undefined}
           className="min-h-24"
         />
       ) : (
@@ -224,8 +263,15 @@ function ElicitationFieldInput({
           }
           value={String(value ?? "")}
           onChange={(event) => onChange(event.target.value)}
+          aria-invalid={Boolean(error)}
+          aria-describedby={error ? errorId : undefined}
         />
       )}
+      {error ? (
+        <p id={errorId} className="text-xs text-destructive">
+          {error}
+        </p>
+      ) : null}
       {field.schema.description ? (
         <p className="text-xs text-muted-foreground">
           {field.schema.description}
@@ -233,6 +279,39 @@ function ElicitationFieldInput({
       ) : null}
     </div>
   );
+}
+
+function validateValues(
+  fields: ElicitationField[],
+  values: Record<string, unknown>,
+) {
+  const errors: Record<string, string> = {};
+
+  for (const field of fields) {
+    if (!field.required) {
+      continue;
+    }
+
+    const value = values[field.name];
+    const missing =
+      value === undefined ||
+      value === null ||
+      (typeof value === "string" && value.trim() === "");
+
+    if (missing) {
+      errors[field.name] = `${field.label} is required.`;
+      continue;
+    }
+
+    if (
+      (field.schema.type === "number" || field.schema.type === "integer") &&
+      !Number.isFinite(Number(value))
+    ) {
+      errors[field.name] = `${field.label} must be a number.`;
+    }
+  }
+
+  return errors;
 }
 
 function getElicitationFields(schema: unknown): ElicitationField[] {

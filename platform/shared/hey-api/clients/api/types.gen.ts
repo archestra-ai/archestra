@@ -19581,7 +19581,7 @@ export type ResolveChatMcpElicitationData = {
         conversationId: string;
         action: 'accept' | 'decline' | 'cancel';
         content?: {
-            [key: string]: unknown;
+            [key: string]: string | number | boolean | Array<string>;
         };
     };
     path: {

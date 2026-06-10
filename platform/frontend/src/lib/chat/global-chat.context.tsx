@@ -139,6 +139,7 @@ interface ChatSession {
     toolCallId: string;
     toolName: string;
   } | null;
+  pendingMcpElicitation: ChatMcpElicitationRequest | null;
   /**
    * True while the session is auto-recovering from a transient stream failure
    * (auto-retry scheduled or reattaching to the still-running response).
@@ -1066,6 +1067,7 @@ function ChatSessionHook({
     addToolResult,
     addToolApprovalResponse,
     pendingCustomServerToolCall,
+    pendingMcpElicitation,
     // Computed, not stored: the page paints the SDK error before onError has
     // run (so no flag set inside onError can suppress the first frame), and
     // consumers read the session from a map refreshed an effect-cycle later.
@@ -1114,6 +1116,7 @@ function ChatSessionHook({
     addToolResult,
     addToolApprovalResponse,
     pendingCustomServerToolCall,
+    pendingMcpElicitation,
     isRecoveringState,
     optimisticToolCalls,
     tokenUsage,

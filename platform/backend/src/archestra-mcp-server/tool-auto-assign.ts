@@ -7,7 +7,7 @@ import config from "@/config";
 import logger from "@/logging";
 import { AgentModel, TeamModel, ToolModel } from "@/models";
 import { assignToolToAgent } from "@/services/agent-tool-assignment";
-import type { Tool } from "@/types";
+import { ApiError, type Tool } from "@/types";
 import { archestraMcpBranding } from "./branding";
 
 // Skills routinely reference tools that nobody assigned to the agent, so the
@@ -39,22 +39,18 @@ export async function autoAssignToolToAgent(params: {
   userId?: string;
   organizationId?: string;
 }): Promise<AutoAssignOutcome> {
-  const { agentId, organizationId, toolName, userId } = params;
-  if (
-    config.agents.toolAutoAssignmentDisabled ||
-    !userId ||
-    !organizationId ||
-    userId === "system"
-  ) {
+  const { agentId, toolName } = params;
+  const ctx = relaxationContext(params.userId, params.organizationId);
+  if (!ctx || isExcludedFromDiscovery(toolName)) {
     return "unavailable";
   }
+  const { organizationId, userId } = ctx;
 
   // Resolve the name within the user-accessible tool set (tool names are only
   // unique per catalog, so a global name lookup could land on a row in a
   // catalog the user cannot access). This keeps the assigned row consistent
   // with what search_tools surfaced.
-  const accessibleTools = await getAccessibleTools(userId, organizationId);
-  const tool = accessibleTools.find((candidate) => candidate.name === toolName);
+  const [tool] = await getAccessibleTools(userId, organizationId, toolName);
   if (!tool) {
     return "unavailable";
   }
@@ -66,11 +62,11 @@ export async function autoAssignToolToAgent(params: {
     return "unavailable";
   }
 
+  const [checker, userTeamIds] = await Promise.all([
+    getAgentTypePermissionChecker({ userId, organizationId }),
+    TeamModel.getUserTeamIds(userId),
+  ]);
   try {
-    const checker = await getAgentTypePermissionChecker({
-      userId,
-      organizationId,
-    });
     checker.require(target.agentType, "update");
     requireAgentModifyPermission({
       checker,
@@ -78,11 +74,14 @@ export async function autoAssignToolToAgent(params: {
       agentScope: target.scope,
       agentAuthorId: target.authorId,
       agentTeamIds: target.teamIds,
-      userTeamIds: await TeamModel.getUserTeamIds(userId),
+      userTeamIds,
       userId,
     });
-  } catch {
-    return "forbidden";
+  } catch (error) {
+    if (error instanceof ApiError && error.statusCode === 403) {
+      return "forbidden";
+    }
+    throw error;
   }
 
   // Late-bound resolution: credentials and execution target resolve at call
@@ -117,34 +116,64 @@ export async function getUnassignedDiscoverableTools(params: {
   userId?: string;
   organizationId?: string;
 }): Promise<Tool[]> {
-  const { assignedToolNames, organizationId, userId } = params;
+  const { assignedToolNames } = params;
+  const ctx = relaxationContext(params.userId, params.organizationId);
+  if (!ctx) {
+    return [];
+  }
+
+  const accessibleTools = await getAccessibleTools(
+    ctx.userId,
+    ctx.organizationId,
+  );
+  return accessibleTools.filter(
+    (tool) =>
+      !assignedToolNames.has(tool.name) && !isExcludedFromDiscovery(tool.name),
+  );
+}
+
+// === Internal helpers ===
+
+// Single gate shared by the search widening and the auto-assignment so the
+// two surfaces cannot drift apart: relaxation needs a real authenticated user
+// (org/team-token sessions and the internal "system" user keep the strict
+// assigned-tools-only behavior) and the global kill switch off. Returns the
+// validated user/org pair, or null when the strict behavior applies.
+function relaxationContext(
+  userId: string | undefined,
+  organizationId: string | undefined,
+): { userId: string; organizationId: string } | null {
   if (
     config.agents.toolAutoAssignmentDisabled ||
     !userId ||
     !organizationId ||
     userId === "system"
   ) {
-    return [];
+    return null;
   }
-
-  const accessibleTools = await getAccessibleTools(userId, organizationId);
-  return accessibleTools.filter(
-    (tool) =>
-      !assignedToolNames.has(tool.name) &&
-      !archestraMcpBranding.isToolName(tool.name),
-  );
+  return { userId, organizationId };
 }
 
-// === Internal helpers ===
+// Mirrors the search-space exclusions: Archestra built-ins stay
+// assignment-gated, and `agent__`-named rows (proxy-discovered delegation
+// artifacts) are hidden from search, so they must not be auto-assignable
+// either.
+function isExcludedFromDiscovery(toolName: string): boolean {
+  return (
+    archestraMcpBranding.isToolName(toolName) || toolName.startsWith("agent__")
+  );
+}
 
 async function getAccessibleTools(
   userId: string,
   organizationId: string,
+  name?: string,
 ): Promise<Tool[]> {
   return ToolModel.getMcpToolsAccessibleToUser({
     userId,
     organizationId,
     isAdmin: await userIsCatalogAdmin(userId, organizationId),
+    name,
   });
 }
 

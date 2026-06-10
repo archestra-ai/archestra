@@ -146,20 +146,19 @@ const registry = defineArchestraTools([
       const assignedToolNames = await ToolModel.getAssignedToolNames(
         context.agentId,
       );
+      let conversationGateCleared = false;
       if (!assignedToolNames.has(resolvedName)) {
         // A custom per-conversation tool selection is an allowlist over the
         // agent's assigned tools, so an unassigned tool can never be enabled
         // in it — bail out before auto-assignment so a conversation that
         // blocks the tool cannot leave a persistent agent mutation behind.
         // The unavailable message (not "not enabled") is consistent with
-        // search_tools, which hides the tool in this conversation as well.
+        // search_tools, which hides the tool in this conversation as well;
+        // the gate helper already logs the hit.
         if (await checkConversationGate(resolvedName)) {
-          logger.info(
-            { agentId: context.agentId, requestedName, resolvedName },
-            `${TOOL_RUN_TOOL_SHORT_NAME} dispatched to an unavailable tool`,
-          );
           return errorResult(unavailableThirdPartyToolMessage(resolvedName));
         }
+        conversationGateCleared = true;
         const autoAssign = await autoAssignToolToAgent({
           toolName: resolvedName,
           agentId: context.agentId,
@@ -168,6 +167,10 @@ const registry = defineArchestraTools([
         });
         switch (autoAssign) {
           case "assigned":
+            // Intentional: the assignment persists even when the policy gate
+            // below refuses this particular call — call-time policies are
+            // argument-dependent and the manual assignment flow does not
+            // consult them either.
             assignedToolNames.add(resolvedName);
             break;
           case "forbidden":
@@ -187,8 +190,11 @@ const registry = defineArchestraTools([
 
       // The tool exists and is assigned — only now enforce the per-conversation
       // selection, so an unassigned name above still gets the recovery message.
-      const gateError = await checkConversationGate(resolvedName);
-      if (gateError) return gateError;
+      // Skipped when the auto-assign branch already cleared the same gate.
+      if (!conversationGateCleared) {
+        const gateError = await checkConversationGate(resolvedName);
+        if (gateError) return gateError;
+      }
 
       const toolInput = args.tool_args ?? {};
       // Reuse the set computed above so the policy gate does not re-query it.

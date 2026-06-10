@@ -592,6 +592,8 @@ class ToolModel {
     userId: string;
     organizationId: string;
     isAdmin: boolean;
+    /** Exact-name filter for single-tool resolution (avoids loading the whole corpus). */
+    name?: string;
   }): Promise<Tool[]> {
     const catalogIds = await McpCatalogTeamModel.getUserAccessibleCatalogIds(
       params.userId,
@@ -612,6 +614,9 @@ class ToolModel {
         and(
           inArray(schema.toolsTable.catalogId, catalogIds),
           eq(schema.toolsTable.clonedPendingDiscovery, false),
+          params.name !== undefined
+            ? eq(schema.toolsTable.name, params.name)
+            : undefined,
         ),
       )
       .orderBy(desc(schema.toolsTable.createdAt), asc(schema.toolsTable.id));

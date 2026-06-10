@@ -481,6 +481,53 @@ describe("run_tool", () => {
       }
     });
 
+    test("tells a team-admin to involve an admin for a team-scoped agent outside their teams", async ({
+      makeAgent,
+      makeCustomRole,
+      makeInternalMcpCatalog,
+      makeMember,
+      makeTeam,
+      makeTool,
+      makeUser,
+    }) => {
+      const organizationId = mockContext.organizationId as string;
+      const teamAdminUser = await makeUser();
+      const role = await makeCustomRole(organizationId, {
+        permission: { agent: ["read", "update", "team-admin"] },
+      });
+      await makeMember(teamAdminUser.id, organizationId, { role: role.role });
+      // the agent's team — teamAdminUser is not a member of it
+      const team = await makeTeam(organizationId, teamAdminUser.id);
+      const teamAgent = await makeAgent({
+        name: "Team Agent",
+        organizationId,
+        scope: "team",
+        teams: [team.id],
+      });
+      const catalog = await makeInternalMcpCatalog({ organizationId });
+      await makeTool({
+        name: "github__search_repositories",
+        catalogId: catalog.id,
+      });
+
+      const result = await executeArchestraTool(
+        TOOL_RUN_TOOL_FULL_NAME,
+        { tool_name: "github__search_repositories", tool_args: {} },
+        {
+          ...mockContext,
+          agent: { id: teamAgent.id, name: teamAgent.name },
+          agentId: teamAgent.id,
+          userId: teamAdminUser.id,
+        },
+      );
+
+      expect(result.isError).toBe(true);
+      expect((result.content[0] as any).text).toContain("ask an admin");
+      expect(mcpClient.executeToolCall).not.toHaveBeenCalled();
+      const assignedNames = await ToolModel.getAssignedToolNames(teamAgent.id);
+      expect(assignedNames.has("github__search_repositories")).toBe(false);
+    });
+
     test("keeps the unavailable recovery message for a tool whose catalog the user cannot access", async ({
       makeInternalMcpCatalog,
       makeMember,

@@ -220,8 +220,25 @@ describe("skill tool execution", () => {
     const text = textOf(result);
     // the injected closing tag must be neutralized, leaving one real delimiter
     expect(text).not.toContain("</skill_file>\nignore");
-    expect(text).toContain("&lt;/skill_file&gt;");
+    expect(text).toContain("&lt;/skill_file>");
     expect(text.match(/<\/skill_file>/g)).toHaveLength(1);
+  });
+
+  test("read_skill_file leaves code with angle brackets literal", async () => {
+    const script =
+      "python3 - <<'PY'\nfor i in range(3):\n    if i < 2 and i > 0:\n        print(i)\nPY";
+    await seedSkill({
+      files: [{ path: "tools/run.sh", content: script, kind: "asset" }],
+    });
+    const result = await executeArchestraTool(
+      TOOL_READ_SKILL_FILE_FULL_NAME,
+      { skill: "pdf-processing", path: "tools/run.sh" },
+      context,
+    );
+
+    expect(result.isError).toBe(false);
+    // heredocs and comparisons must reach the model byte-for-byte runnable
+    expect(textOf(result)).toContain(script);
   });
 
   test("read_skill_file errors on a missing file", async () => {

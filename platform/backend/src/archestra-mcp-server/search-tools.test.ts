@@ -39,7 +39,10 @@ type SearchToolsStructuredContent = {
   hint: string | null;
   tools: Array<{
     toolName: string;
-    catalogName: string | null;
+    description: string | null;
+    source: "archestra" | "mcp" | "agent_delegation";
+    server: string | null;
+    params: string;
   }>;
 };
 
@@ -108,29 +111,11 @@ describe("search_tools", () => {
     expect(structuredContent.total).toBeGreaterThan(0);
     expect(firstResult).toEqual({
       toolName: "github__search_repositories",
-      title: null,
       description: "Search repositories by topic, language, or owner.",
       source: "mcp",
       server: "github",
-      catalogName: "GitHub MCP",
-      inputParameters: [
-        {
-          name: "query",
-          required: true,
-          type: "string",
-          enum: null,
-          description: "Repository search query string.",
-          properties: null,
-        },
-        {
-          name: "language",
-          required: false,
-          type: "string",
-          enum: null,
-          description: "Optional language filter.",
-          properties: null,
-        },
-      ],
+      params:
+        "query!:string — Repository search query string.; language?:string — Optional language filter.",
     });
 
     const genericQueryResult = await executeArchestraTool(
@@ -494,6 +479,136 @@ describe("search_tools", () => {
       });
       expect(union.type).toBe("string|null");
       expect(missing.type).toBeNull();
+    });
+  });
+
+  describe("formatParamsSignature", () => {
+    const signatureFor = (schema: Record<string, unknown>) =>
+      __test.formatParamsSignature(__test.summarizeInputParameters(schema));
+
+    test("renders required-first ordering with types and descriptions", () => {
+      expect(
+        signatureFor({
+          type: "object",
+          properties: {
+            language: {
+              type: "string",
+              description: "Optional language filter.",
+            },
+            query: {
+              type: "string",
+              description: "Repository search query string.",
+            },
+          },
+          required: ["query"],
+        }),
+      ).toBe(
+        "query!:string — Repository search query string.; language?:string — Optional language filter.",
+      );
+    });
+
+    test("renders type and enum together", () => {
+      expect(
+        signatureFor({
+          type: "object",
+          properties: { sort: { type: "string", enum: ["asc", "desc"] } },
+        }),
+      ).toBe('sort?:string enum("asc"|"desc")');
+    });
+
+    test("json-encodes non-string enum values and omits a null type", () => {
+      expect(
+        signatureFor({
+          type: "object",
+          properties: { level: { enum: [1, true, null] } },
+        }),
+      ).toBe("level?:enum(1|true|null)");
+    });
+
+    test("expands one-level object shape", () => {
+      expect(
+        signatureFor({
+          type: "object",
+          properties: {
+            payload: {
+              type: "object",
+              properties: { id: { type: "number" }, note: { type: "string" } },
+              required: ["id"],
+            },
+          },
+        }),
+      ).toBe("payload?:object{id!:number, note?:string}");
+    });
+
+    test("expands array-of-object items", () => {
+      expect(
+        signatureFor({
+          type: "object",
+          properties: {
+            todos: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: { content: { type: "string" } },
+                required: ["content"],
+              },
+            },
+          },
+        }),
+      ).toBe("todos?:array{content!:string}");
+    });
+
+    test("renders type, object shape, and enum together", () => {
+      expect(
+        signatureFor({
+          type: "object",
+          properties: {
+            target: {
+              type: "object",
+              properties: { id: { type: "string" } },
+              enum: [{ id: "a" }],
+            },
+          },
+        }),
+      ).toBe('target?:object{id?:string} enum({"id":"a"})');
+    });
+
+    test("collapses whitespace in descriptions to keep the signature single-line", () => {
+      expect(
+        signatureFor({
+          type: "object",
+          properties: {
+            body: { type: "string", description: "Line one.\n  Line two." },
+          },
+        }),
+      ).toBe("body?:string — Line one. Line two.");
+    });
+
+    const enumSignatureFor = (count: number) =>
+      signatureFor({
+        type: "object",
+        properties: {
+          kind: {
+            type: "string",
+            enum: Array.from({ length: count }, (_, index) => `v${index}`),
+          },
+        },
+      });
+
+    test("renders every enum value at exactly the cap with no overflow marker", () => {
+      const signature = enumSignatureFor(20);
+      expect(signature.endsWith('"v19")')).toBe(true);
+      expect(signature).not.toContain("more");
+    });
+
+    test("caps long enums and reports the overflow count", () => {
+      expect(enumSignatureFor(21).endsWith('"v19"|…(+1 more))')).toBe(true);
+      expect(enumSignatureFor(25).endsWith('"v19"|…(+5 more))')).toBe(true);
+    });
+
+    test("returns an empty string when there are no parameters", () => {
+      expect(__test.formatParamsSignature([])).toBe("");
+      expect(signatureFor({ type: "object", properties: {} })).toBe("");
     });
   });
 

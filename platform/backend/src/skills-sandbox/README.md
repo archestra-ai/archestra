@@ -91,8 +91,9 @@ The warm base image makes `/home/sandbox` a uv **project**: a `pyproject.toml`
 plus the project venv at `/home/sandbox/.venv` (on `PATH`, so `python3` is the
 venv interpreter), seeded with numpy/pandas/httpx. The model installs more with
 `uv add --project /home/sandbox <pkg>` (the `--project` flag makes it work from
-any cwd, including a skill dir); `pip` is shimmed to fail with that hint. Skill
-`requirements.txt` installs go through the same project via
+any cwd, including a skill dir); `pip` is shimmed to fail with that hint. Every
+`requirements.txt` a skill bundles (root or nested, e.g. `tools/requirements.txt`)
+is installed at mount time through the same project via
 `uv add --project /home/sandbox -r <reqs>`, so their deps are recorded in
 pyproject/uv.lock and a later model `uv add` cannot prune them. `uv add` is a
 replayed network command, so version resolution can drift across cold replays —

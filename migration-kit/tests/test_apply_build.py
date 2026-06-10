@@ -1,5 +1,7 @@
 """offline tests for the deterministic decision->payload builder."""
 import json
+import os
+import subprocess
 import sys
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -21,13 +23,13 @@ from apply import (
     _Built,
     _flag_hook_collisions,
     _redacted_for_print,
-    main,
 )
 from archestra_client import CatalogCreate, LlmKeyCreate, LocalConfig, McpEnvVar
 from contracts import ContractError, Decision, HookData, HookItem, Item, SkillItem, to_jsonable
 from discover import discover
 
 FIXTURE = Path(__file__).parent / "fixtures" / "sample-setup"
+SCRIPTS = Path(__file__).parent.parent / "scripts"
 
 
 @pytest.fixture(scope="module")
@@ -146,6 +148,26 @@ def test_team_scoped_llm_key_carries_team_id(index: dict[str, Item]) -> None:
     )
     assert isinstance(built, BuiltLlmKey)
     assert built.payload.teamId == "team-a"
+
+
+def test_team_answer_precedence_when_both_present(index: dict[str, Item]) -> None:
+    """pins the divergent precedence: multi-team kinds prefer teamIds, single-team kinds
+    prefer teamId, when a plan carries both answers."""
+    both = {"teamIds": ["team-a", "team-b"], "teamId": "team-c"}
+    _, built = _build_payload(
+        Decision(source_id="claude_md", target_kind="agent", scope="team", user_answers=both),
+        index["claude_md"],
+    )
+    assert isinstance(built, BuiltAgent)
+    assert built.payload.teams == ["team-a", "team-b"]
+    _, built = _build_payload(
+        Decision(
+            source_id="mcp:github", target_kind="mcp_install", scope="team", user_answers=both,
+        ),
+        index["mcp:github"],
+    )
+    assert isinstance(built, BuiltInstall)
+    assert built.team_id == "team-c"
 
 
 def test_stdio_mcp_redacted_env_becomes_prompted_secret(index: dict[str, Item]) -> None:
@@ -328,7 +350,24 @@ def test_flag_hook_collisions_invalidates_duplicate_event_and_file() -> None:
     assert "distinct user_answers.fileName" in out[1].error
 
 
-def test_real_apply_preflight_invalid_plan_makes_no_network(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def _run_apply_cli(tmp_path: Path, plan: dict[str, object], *args: str,
+                   env: dict[str, str]) -> tuple[subprocess.CompletedProcess[str], Path]:
+    """run apply.py as a real subprocess: real argv, explicit env, no in-process patching."""
+    inventory_path = tmp_path / "inventory.json"
+    plan_path = tmp_path / "migration_plan.json"
+    result_path = tmp_path / "migration_result.json"
+    inventory_path.write_text(json.dumps(to_jsonable(discover(FIXTURE))), encoding="utf-8")
+    plan_path.write_text(json.dumps(plan), encoding="utf-8")
+    proc = subprocess.run(
+        [sys.executable, str(SCRIPTS / "apply.py"),
+         "--inventory", str(inventory_path), "--plan", str(plan_path),
+         "--out", str(result_path), *args],
+        capture_output=True, text=True, env=env, check=False,
+    )
+    return proc, result_path
+
+
+def test_real_apply_preflight_invalid_plan_makes_no_network(tmp_path: Path) -> None:
     requests: list[str] = []
 
     class Handler(BaseHTTPRequestHandler):
@@ -349,32 +388,40 @@ def test_real_apply_preflight_invalid_plan_makes_no_network(tmp_path: Path, monk
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     try:
-        inventory_path = tmp_path / "inventory.json"
-        plan_path = tmp_path / "migration_plan.json"
-        result_path = tmp_path / "migration_result.json"
-        inventory_path.write_text(json.dumps(to_jsonable(discover(FIXTURE))), encoding="utf-8")
-        plan_path.write_text(json.dumps({
+        proc, result_path = _run_apply_cli(tmp_path, {
             "schema_version": 1,
             "default_scope": "team",
             "decisions": [
                 {"source_id": "claude_md", "target_kind": "agent", "scope": "team"},
                 {"source_id": "skill:summarize-text", "target_kind": "skill", "scope": "team"},
             ],
-        }), encoding="utf-8")
+        }, env={
+            **os.environ,
+            "ARCHESTRA_BASE_URL": f"http://127.0.0.1:{server.server_address[1]}",
+            "ARCHESTRA_API_KEY": "arch_test",
+        })
 
-        monkeypatch.setenv("ARCHESTRA_BASE_URL", f"http://127.0.0.1:{server.server_address[1]}")
-        monkeypatch.setenv("ARCHESTRA_API_KEY", "arch_test")
-        monkeypatch.setattr(sys, "argv", [
-            "apply.py",
-            "--inventory", str(inventory_path),
-            "--plan", str(plan_path),
-            "--out", str(result_path),
-        ])
-
-        assert main() == 1
+        assert proc.returncode == 1
         assert requests == []
         result = json.loads(result_path.read_text(encoding="utf-8"))
         assert result["summary"] == {"invalid": 2}
     finally:
         server.shutdown()
         thread.join()
+
+
+def test_dry_run_writes_planned_result_without_network(tmp_path: Path) -> None:
+    """pins the --dry-run dispatch: exits 0, writes the result file, needs no env vars."""
+    env = {k: v for k, v in os.environ.items()
+           if k not in ("ARCHESTRA_BASE_URL", "ARCHESTRA_API_KEY")}
+    proc, result_path = _run_apply_cli(tmp_path, {
+        "schema_version": 1,
+        "default_scope": "personal",
+        "decisions": [{"source_id": "claude_md", "target_kind": "agent", "scope": "personal"}],
+    }, "--dry-run", env=env)
+
+    assert proc.returncode == 0
+    assert "[dry-run]" in proc.stdout
+    result = json.loads(result_path.read_text(encoding="utf-8"))
+    assert result["summary"] == {"planned": 1}
+    assert result["ops"][0]["target_kind"] == "agent"

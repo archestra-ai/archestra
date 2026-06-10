@@ -30,8 +30,8 @@ import {
 import {
   buildSkillActivationPromptContext,
   escapeXmlAttr,
-  escapeXmlText,
   formatSkillActivation,
+  neutralizeFrameTags,
 } from "@/skills/skill-activation";
 import { buildSkillCatalogPrompt } from "@/skills/skill-catalog-prompt";
 import { isSkillSandboxAvailableForAgent } from "@/skills/skill-sandbox-availability";
@@ -318,7 +318,7 @@ const registry = defineArchestraTools([
       }
 
       return successResult(
-        `<skill_file skill="${escapeXmlAttr(skill.name)}" path="${escapeXmlAttr(file.path)}">\n${escapeXmlText(file.content)}\n</skill_file>`,
+        `<skill_file skill="${escapeXmlAttr(skill.name)}" path="${escapeXmlAttr(file.path)}">\n${neutralizeFrameTags(file.content)}\n</skill_file>`,
       );
     },
   }),

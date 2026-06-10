@@ -54,6 +54,18 @@ export const CHATOPS_CHANNEL_DISCOVERY = {
 };
 
 /**
+ * Sticky auto-reply for MS Teams team channels.
+ *
+ * The bot must be @mentioned to start replying in a channel thread; once
+ * mentioned, it keeps replying to that thread without further mentions until
+ * this TTL lapses (so stale threads stop auto-replying on their own).
+ */
+export const CHATOPS_CHANNEL_AUTO_REPLY = {
+  /** How long a thread stays "active" after the last @mention (30 days) */
+  ACTIVE_TTL_MS: TimeInMs.Day * 30,
+};
+
+/**
  * Bot commands recognized by the chatops system
  */
 export const CHATOPS_COMMANDS = {

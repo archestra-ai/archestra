@@ -201,12 +201,14 @@ describe("SkillSandboxReplayEventModel", () => {
       sandboxId: sandbox.id,
       organizationId: org.id,
       mount: mountRef(skill, await latestVersionId(skill)),
-      installCommand: {
-        command:
-          "uv add --project /home/sandbox -r /skills/alpha/requirements.txt",
-        cwd: "/home/sandbox",
-        timeoutSeconds: 180,
-      },
+      installCommands: [
+        {
+          command:
+            "uv add --project /home/sandbox -r /skills/alpha/requirements.txt",
+          cwd: "/home/sandbox",
+          timeoutSeconds: 180,
+        },
+      ],
     });
 
     const log = await SkillSandboxReplayEventModel.listBySandbox(sandbox.id);
@@ -239,6 +241,60 @@ describe("SkillSandboxReplayEventModel", () => {
     // the allocator advanced past every appended event.
     const refreshed = await SkillSandboxModel.findById(sandbox.id);
     expect(refreshed?.nextReplaySequence).toBe(4);
+  });
+
+  test("appendSkillMount records every install command in order within the mount transaction", async ({
+    makeOrganization,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const skill = await seedSkill(org.id, "alpha", [
+      { path: "requirements.txt", content: "httpx\n", kind: "reference" },
+      {
+        path: "tools/requirements.txt",
+        content: "mpmath\n",
+        kind: "reference",
+      },
+    ]);
+    const sandbox = await SkillSandboxModel.create({
+      organizationId: org.id,
+      userId: user.id,
+      conversationId: null,
+      defaultCwd: "/home/sandbox",
+    });
+
+    await SkillSandboxReplayEventModel.appendSkillMount({
+      sandboxId: sandbox.id,
+      organizationId: org.id,
+      mount: mountRef(skill, await latestVersionId(skill)),
+      installCommands: [
+        {
+          command:
+            "uv add --project /home/sandbox -r /skills/alpha/requirements.txt",
+          cwd: "/home/sandbox",
+          timeoutSeconds: 180,
+        },
+        {
+          command:
+            "uv add --project /home/sandbox -r /skills/alpha/tools/requirements.txt",
+          cwd: "/home/sandbox",
+          timeoutSeconds: 180,
+        },
+      ],
+    });
+
+    const log = await SkillSandboxReplayEventModel.listBySandbox(sandbox.id);
+    expect(log.map((e) => e.kind)).toEqual([
+      "skill_mount",
+      "command",
+      "command",
+    ]);
+    const commands = log.flatMap((e) =>
+      e.kind === "command" ? [e.command.command] : [],
+    );
+    expect(commands[0]).toContain("/skills/alpha/requirements.txt");
+    expect(commands[1]).toContain("/skills/alpha/tools/requirements.txt");
   });
 
   test("appendSkillMount is idempotent under the per-skill unique constraint", async ({

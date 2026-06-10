@@ -6,19 +6,10 @@ import {
 } from "@archestra/shared";
 import { AlertTriangle, Info } from "lucide-react";
 import { useEffect, useState } from "react";
-import { CopyButton } from "@/components/copy-button";
 import Divider from "@/components/divider";
+import { NgrokSetupDialog } from "@/components/ngrok-setup-dialog";
 import { SlackSetupDialog } from "@/components/slack-setup-dialog";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogBody,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useChatOpsStatus } from "@/lib/chatops/chatops.query";
 import { useUpdateSlackChatOpsConfig } from "@/lib/chatops/chatops-config.query";
@@ -29,8 +20,8 @@ import { useAppName } from "@/lib/hooks/use-app-name";
 import { ChannelsSection } from "../_components/channels-section";
 import { CollapsibleSetupSection } from "../_components/collapsible-setup-section";
 import { CredentialField } from "../_components/credential-field";
-import { ExternalDocsLink } from "../_components/external-docs-link";
 import { LlmKeySetupStep } from "../_components/llm-key-setup-step";
+import { NgrokStatus } from "../_components/ngrok-status";
 import { SetupStep } from "../_components/setup-step";
 import type { ProviderConfig } from "../_components/types";
 import { useTriggerStatuses } from "../_components/use-trigger-statuses";
@@ -152,33 +143,26 @@ export default function SlackPage() {
               </div>
             </label>
           </RadioGroup>
-          {selectedMode === "webhook" && !hasModeChange && (
-            <div className="flex items-start gap-3 rounded-lg border border-blue-500/30 bg-blue-500/5 px-3 py-2 mt-3">
-              <Info className="h-4 w-4 text-blue-500 shrink-0 mt-0.5" />
-              <span className="text-muted-foreground text-xs">
-                {isLocalDev && ngrokDomain ? (
-                  <>
-                    Ngrok domain{" "}
-                    <code className="bg-muted px-1 py-0.5 rounded">
-                      {ngrokDomain}
-                    </code>{" "}
-                    is configured.
-                  </>
-                ) : (
-                  <>
-                    The webhook endpoint{" "}
-                    <code className="bg-muted px-1 py-0.5 rounded">
-                      POST {`${publicBaseUrl}/api/webhooks/chatops/slack`}
-                    </code>{" "}
-                    must be publicly accessible so Slack can deliver events to{" "}
-                    {appName}.
-                    {isLocalDev &&
-                      " Configure ngrok or deploy to a public URL."}
-                  </>
-                )}
-              </span>
-            </div>
-          )}
+          {selectedMode === "webhook" &&
+            !hasModeChange &&
+            (isLocalDev && ngrokDomain ? (
+              <div className="mt-3 text-xs text-muted-foreground">
+                <NgrokStatus domain={ngrokDomain} />
+              </div>
+            ) : (
+              <div className="flex items-start gap-3 rounded-lg border border-blue-500/30 bg-blue-500/5 px-3 py-2 mt-3">
+                <Info className="h-4 w-4 text-blue-500 shrink-0 mt-0.5" />
+                <span className="text-muted-foreground text-xs">
+                  The webhook endpoint{" "}
+                  <code className="bg-muted px-1 py-0.5 rounded">
+                    POST {`${publicBaseUrl}/api/webhooks/chatops/slack`}
+                  </code>{" "}
+                  must be publicly accessible so Slack can deliver events to{" "}
+                  {appName}.
+                  {isLocalDev && " Configure ngrok or deploy to a public URL."}
+                </span>
+              </div>
+            ))}
           {hasModeChange && (
             <div className="mt-3 space-y-3">
               {slack?.configured && (
@@ -264,109 +248,5 @@ export default function SlackPage() {
         onOpenChange={setNgrokDialogOpen}
       />
     </div>
-  );
-}
-
-function NgrokSetupDialog({
-  open,
-  onOpenChange,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-}) {
-  const appName = useAppName();
-  const [step, setStep] = useState<1 | 2>(1);
-  const [authToken, setAuthToken] = useState("");
-
-  const ngrokCommand = `ngrok http --authtoken=${authToken || "<your-ngrok-auth-token>"} 9000`;
-  const envCommand =
-    "ARCHESTRA_NGROK_DOMAIN=<your-ngrok-domain>.ngrok-free.dev";
-
-  const handleOpenChange = (value: boolean) => {
-    onOpenChange(value);
-    if (!value) {
-      setStep(1);
-      setAuthToken("");
-    }
-  };
-
-  return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="sm:max-w-lg">
-        {step === 1 ? (
-          <>
-            <DialogHeader>
-              <DialogTitle>Enter your ngrok auth token</DialogTitle>
-              <DialogDescription>
-                Get one at{" "}
-                <ExternalDocsLink
-                  href="https://dashboard.ngrok.com/get-started/your-authtoken"
-                  className="inline-flex text-primary"
-                >
-                  ngrok.com
-                </ExternalDocsLink>
-              </DialogDescription>
-            </DialogHeader>
-            <DialogBody className="space-y-4 p-3">
-              <Input
-                placeholder="ngrok auth token"
-                value={authToken}
-                onChange={(e) => setAuthToken(e.target.value)}
-              />
-              <Button
-                className="w-full"
-                disabled={!authToken.trim()}
-                onClick={() => setStep(2)}
-              >
-                Continue
-              </Button>
-            </DialogBody>
-          </>
-        ) : (
-          <>
-            <DialogHeader>
-              <DialogTitle>Run ngrok for Slack webhooks</DialogTitle>
-              <DialogDescription>
-                Start an ngrok tunnel to make {appName} reachable from Slack.
-              </DialogDescription>
-            </DialogHeader>
-            <DialogBody className="space-y-4 p-3">
-              <div className="space-y-2 text-sm">
-                <p>1. Start an ngrok tunnel:</p>
-                <div className="relative">
-                  <pre className="bg-muted rounded-md p-4 text-xs whitespace-pre-wrap break-all">
-                    {ngrokCommand}
-                  </pre>
-                  <div className="absolute top-0 right-0">
-                    <CopyButton text={ngrokCommand} />
-                  </div>
-                </div>
-              </div>
-              <div className="space-y-2 text-sm">
-                <p>
-                  2. Set the ngrok domain in your{" "}
-                  <code className="bg-muted px-1 py-0.5 rounded text-xs">
-                    .env
-                  </code>{" "}
-                  file:
-                </p>
-                <div className="relative">
-                  <pre className="bg-muted rounded-md p-4 text-xs whitespace-pre-wrap break-all">
-                    {envCommand}
-                  </pre>
-                  <div className="absolute top-0 right-0">
-                    <CopyButton text={envCommand} />
-                  </div>
-                </div>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Then restart {appName} with{" "}
-                <code className="bg-muted px-1 py-0.5 rounded">tilt up</code>
-              </p>
-            </DialogBody>
-          </>
-        )}
-      </DialogContent>
-    </Dialog>
   );
 }

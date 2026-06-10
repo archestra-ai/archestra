@@ -70,6 +70,61 @@ test("drainStreamToEvents compacts adjacent text and reasoning deltas before mar
   expect(terminalRun?.status).toBe("completed");
 });
 
+test("drainStreamToEvents fails the run as soon as an error chunk arrives, even if the stream never closes", async ({
+  makeAgent,
+  makeConversation,
+  makeOrganization,
+  makeUser,
+}) => {
+  const user = await makeUser();
+  const organization = await makeOrganization();
+  const agent = await makeAgent({ organizationId: organization.id });
+  const conversation = await makeConversation(agent.id, {
+    userId: user.id,
+    organizationId: organization.id,
+  });
+  const run = await ActiveChatRunModel.create({
+    conversationId: conversation.id,
+    userId: user.id,
+    organizationId: organization.id,
+  });
+
+  // A provider error surfaced mid-turn while the upstream connection wedges
+  // open: the client already rendered the error, but the stream never ends.
+  const stream = new ReadableStream<UIMessageChunk>({
+    start(controller) {
+      controller.enqueue({ type: "start" });
+      controller.enqueue({ type: "error", errorText: "provider exploded" });
+      // intentionally never closed
+    },
+  });
+
+  activeChatRunService.drainStreamToEvents({
+    runId: run?.id ?? "",
+    conversationId: conversation.id,
+    stream,
+    getTerminalStatus: async () => ({ status: "completed" }),
+  });
+
+  // The run must flip to failed without waiting for the stream to close —
+  // otherwise the conversation stays 409-blocked until the stale reaper.
+  await waitForTerminalRun(run?.id ?? "");
+  const terminalRun = await ActiveChatRunModel.findById(run?.id ?? "");
+  expect(terminalRun?.status).toBe("failed");
+  expect(terminalRun?.error).toBe("provider exploded");
+
+  // The error event is flushed before the status flips, so a replaying
+  // client can never observe the failed run without the error chunk.
+  const events = await ActiveChatRunModel.readEventsAfter({
+    runId: run?.id ?? "",
+    seq: 0,
+  });
+  expect(events.flatMap((event) => event.payloads)).toContainEqual({
+    type: "error",
+    errorText: "provider exploded",
+  });
+});
+
 test("createReplayStream uses polling fallback when no notification arrives", async ({
   makeAgent,
   makeConversation,

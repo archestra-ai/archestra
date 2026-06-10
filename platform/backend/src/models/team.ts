@@ -1,4 +1,4 @@
-import { MEMBER_ROLE_NAME } from "@archestra/shared";
+import { ADMIN_ROLE_NAME, MEMBER_ROLE_NAME } from "@archestra/shared";
 import { and, count, eq, getTableColumns, ilike, inArray } from "drizzle-orm";
 import db, { schema } from "@/database";
 import logger from "@/logging";
@@ -11,6 +11,7 @@ import type {
   UpdateTeam,
 } from "@/types";
 import { ApiError } from "@/types";
+import type { TeamMemberRole } from "@/types/team-role";
 import TeamTokenModel from "./team-token";
 
 class TeamModel {
@@ -333,7 +334,7 @@ class TeamModel {
   static async addMember(
     teamId: string,
     userId: string,
-    role: string = MEMBER_ROLE_NAME,
+    role: TeamMemberRole = MEMBER_ROLE_NAME,
     syncedFromSso = false,
   ): Promise<TeamMember> {
     logger.debug(
@@ -360,6 +361,35 @@ class TeamModel {
       "TeamModel.addMember: completed",
     );
     return member;
+  }
+
+  static async updateMemberRole(params: {
+    teamId: string;
+    userId: string;
+    role: TeamMemberRole;
+  }): Promise<TeamMember | null> {
+    const { teamId, userId, role } = params;
+    logger.debug(
+      { teamId, userId, role },
+      "TeamModel.updateMemberRole: updating member role",
+    );
+
+    const [member] = await db
+      .update(schema.teamMembersTable)
+      .set({ role })
+      .where(
+        and(
+          eq(schema.teamMembersTable.teamId, teamId),
+          eq(schema.teamMembersTable.userId, userId),
+        ),
+      )
+      .returning();
+
+    logger.debug(
+      { teamId, userId, updated: !!member },
+      "TeamModel.updateMemberRole: completed",
+    );
+    return member ?? null;
   }
 
   /**
@@ -536,6 +566,34 @@ class TeamModel {
     return isMember;
   }
 
+  static async isUserTeamAdmin(
+    teamId: string,
+    userId: string,
+  ): Promise<boolean> {
+    logger.debug(
+      { teamId, userId },
+      "TeamModel.isUserTeamAdmin: checking admin role",
+    );
+    const [membership] = await db
+      .select({ id: schema.teamMembersTable.id })
+      .from(schema.teamMembersTable)
+      .where(
+        and(
+          eq(schema.teamMembersTable.teamId, teamId),
+          eq(schema.teamMembersTable.userId, userId),
+          eq(schema.teamMembersTable.role, ADMIN_ROLE_NAME),
+        ),
+      )
+      .limit(1);
+
+    const isAdmin = !!membership;
+    logger.debug(
+      { teamId, userId, isAdmin },
+      "TeamModel.isUserTeamAdmin: completed",
+    );
+    return isAdmin;
+  }
+
   /**
    * Check if a user is a member of any of the provided teams.
    */
@@ -614,6 +672,29 @@ class TeamModel {
     logger.debug(
       { userId, count: teamIds.length },
       "TeamModel.getUserTeamIds: completed",
+    );
+    return teamIds;
+  }
+
+  static async getUserAdminTeamIds(userId: string): Promise<string[]> {
+    logger.debug(
+      { userId },
+      "TeamModel.getUserAdminTeamIds: fetching admin team IDs",
+    );
+    const teamMemberships = await db
+      .select({ teamId: schema.teamMembersTable.teamId })
+      .from(schema.teamMembersTable)
+      .where(
+        and(
+          eq(schema.teamMembersTable.userId, userId),
+          eq(schema.teamMembersTable.role, ADMIN_ROLE_NAME),
+        ),
+      );
+
+    const teamIds = teamMemberships.map((membership) => membership.teamId);
+    logger.debug(
+      { userId, count: teamIds.length },
+      "TeamModel.getUserAdminTeamIds: completed",
     );
     return teamIds;
   }
@@ -1038,23 +1119,22 @@ class TeamModel {
 
   /**
    * Check if a user has access to a team.
-   * - Team admins have full access to all teams
-   * - Non-admins must be a member of the team
+   * - Organization-level team managers have full access to all teams
+   * - Other users must be a member of the team
    */
   static async checkTeamAccess({
     userId,
     teamId,
-    isTeamAdmin,
+    canManageAllTeams,
   }: {
     userId: string;
     teamId: string;
-    isTeamAdmin: boolean;
+    canManageAllTeams: boolean;
   }): Promise<void> {
-    // Admin has full access to all teams
-    if (isTeamAdmin) {
+    if (canManageAllTeams) {
       return;
     }
-    // Non-admins must be a member of the team
+
     const isMember = await TeamModel.isUserInTeam(teamId, userId);
     if (!isMember) {
       throw new ApiError(403, "Not authorized to access this team");

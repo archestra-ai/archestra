@@ -1,5 +1,9 @@
 import type { UIMessage } from "@ai-sdk/react";
-import type { archestraApiTypes } from "@archestra/shared";
+import {
+  type archestraApiTypes,
+  HOOK_RUN_PART_TYPE,
+  hasRenderableAssistantContent,
+} from "@archestra/shared";
 
 const DEFAULT_SESSION_NAME = "New Chat Session";
 
@@ -136,8 +140,12 @@ export function mergePersistedMessageMetadata(params: {
       return liveMessage;
     }
 
-    const parts = mergePersistedUserFileParts({
+    const parts = mergePersistedHookRunParts({
       liveMessage,
+      liveParts: mergePersistedUserFileParts({
+        liveMessage,
+        persistedMessage,
+      }),
       persistedMessage,
     });
 
@@ -183,6 +191,82 @@ function mergePersistedUserFileParts(params: {
   }
 
   return params.persistedMessage.parts;
+}
+
+function isHookRunPart(part: { type: string }): boolean {
+  return part.type === HOOK_RUN_PART_TYPE;
+}
+
+/**
+ * Reconcile inline `data-hook-run` debug parts on an assistant message with the
+ * server's read-gated view. The server decides visibility (hook parts are
+ * returned only while the conversation has debug mode on and the viewer is an
+ * admin), so the persisted message is authoritative: its hook parts are spliced
+ * into the live parts at the slot they occupy among the persisted non-hook
+ * parts, and live hook parts the server no longer returns are dropped. This is
+ * what makes the `/debug` toggle take effect without a reload — the toggle
+ * invalidates the conversation query and this merge folds the refetched view
+ * into the live chat state. Idempotent: returns the live parts reference
+ * unchanged when nothing differs, so the sync effect settles.
+ */
+function mergePersistedHookRunParts(params: {
+  liveMessage: UIMessage;
+  liveParts: UIMessage["parts"];
+  persistedMessage: UIMessage;
+}): UIMessage["parts"] {
+  const { liveMessage, liveParts, persistedMessage } = params;
+  if (liveMessage.role !== "assistant") {
+    return liveParts;
+  }
+  const persistedHookParts = persistedMessage.parts.filter(isHookRunPart);
+  if (persistedHookParts.length === 0 && !liveParts.some(isHookRunPart)) {
+    return liveParts;
+  }
+
+  const merged = liveParts.filter((part) => !isHookRunPart(part));
+
+  // Stripping must never leave the message with nothing renderable — the
+  // render-time restore-on-regression guard would resurrect the parts and
+  // fight this merge in an update loop. Keep the live view for that (rare,
+  // hook-chips-only) message instead.
+  if (
+    persistedHookParts.length === 0 &&
+    !hasRenderableAssistantContent({ parts: merged })
+  ) {
+    return liveParts;
+  }
+
+  // Splice each persisted hook part in at the slot it occupies among the
+  // persisted message's non-hook parts ("after k non-hook parts"), preserving
+  // its turn-start / tool-bracket / turn-end position.
+  let nonHookSeen = 0;
+  let inserted = 0;
+  for (const part of persistedMessage.parts) {
+    if (isHookRunPart(part)) {
+      merged.splice(Math.min(nonHookSeen + inserted, merged.length), 0, part);
+      inserted++;
+    } else {
+      nonHookSeen++;
+    }
+  }
+
+  const unchanged =
+    merged.length === liveParts.length &&
+    merged.every((part, index) => {
+      const livePart = liveParts[index];
+      if (part === livePart) {
+        return true;
+      }
+      // Refetches rebuild hook part objects, so compare those structurally.
+      return (
+        livePart !== undefined &&
+        isHookRunPart(part) &&
+        isHookRunPart(livePart) &&
+        JSON.stringify(part) === JSON.stringify(livePart)
+      );
+    });
+
+  return unchanged ? liveParts : merged;
 }
 
 function getMessageText(message: UIMessage) {

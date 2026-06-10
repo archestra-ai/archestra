@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field, fields, is_dataclass
-from typing import Literal, Mapping, Union, cast
+from typing import Literal, Mapping, TypeVar, Union, cast
 
 SCHEMA_VERSION = 1
 
@@ -41,6 +41,12 @@ SECRET_TOKEN_RE = re.compile(
     r"(sk-[A-Za-z0-9_-]{8,}|gh[psoru]_[A-Za-z0-9]{8,}|xox[baprs]-[A-Za-z0-9-]{8,}"
     r"|AIza[A-Za-z0-9_-]{8,}|ya29\.[A-Za-z0-9_-]{8,}|eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)"
 )
+
+
+def redact_tokens(text: str) -> str:
+    """replace credential-shaped tokens embedded in a string (a hook command, an MCP launch
+    command, a URL) before it is stored or printed."""
+    return SECRET_TOKEN_RE.sub("<redacted>", text)
 
 # --- shared Literal vocabularies (imported by archestra_client to avoid a cycle) ----------
 
@@ -387,20 +393,28 @@ _TARGET_KINDS: tuple[TargetKind, ...] = (
     "agent", "skill", "mcp_catalog", "mcp_install", "llm_key", "tool_policy", "hook",
 )
 _PLAN_ACTIONS: tuple[Literal["migrate", "skip", "manual"], ...] = ("migrate", "skip", "manual")
+_ENCODINGS: tuple[Literal["utf8", "base64"], ...] = ("utf8", "base64")
+
+_LiteralT = TypeVar("_LiteralT", bound=str)
+
+
+def _require_literal(
+    value: object, allowed: tuple[_LiteralT, ...], *, what: str, ctx: str
+) -> _LiteralT:
+    """the one mechanism behind enum-shaped fields crossing a trust boundary."""
+    if value not in allowed:
+        raise ContractError(f"{ctx}: {what} {value!r} must be one of {'|'.join(allowed)}")
+    return cast("_LiteralT", value)
 
 
 def require_provider(answers: Mapping[str, JsonValue], *, ctx: str) -> Provider:
     value = require_str_field(answers, "provider", ctx=ctx)
-    if value not in _PROVIDERS:
-        raise ContractError(f"{ctx}: provider {value!r} is not a known provider")
-    return cast("Provider", value)
+    return _require_literal(value, _PROVIDERS, what="provider", ctx=ctx)
 
 
 def require_operator(answers: Mapping[str, JsonValue], *, ctx: str) -> ConditionOperator:
     value = require_str_field(answers, "operator", ctx=ctx)
-    if value not in _OPERATORS:
-        raise ContractError(f"{ctx}: operator {value!r} is not a known condition operator")
-    return cast("ConditionOperator", value)
+    return _require_literal(value, _OPERATORS, what="operator", ctx=ctx)
 
 
 def optional_action(answers: Mapping[str, JsonValue], *, ctx: str) -> PolicyAction:
@@ -408,9 +422,7 @@ def optional_action(answers: Mapping[str, JsonValue], *, ctx: str) -> PolicyActi
     value = answers.get("action")
     if value is None:
         return "block_always"
-    if value not in _ACTIONS:
-        raise ContractError(f"{ctx}: action {value!r} is not a known policy action")
-    return cast("PolicyAction", value)
+    return _require_literal(value, _ACTIONS, what="action", ctx=ctx)
 
 
 # --- hook validators (shared by discover PEP-723 extraction + apply build) -----------------
@@ -487,50 +499,13 @@ def require_hook_content(text: str, *, ctx: str) -> str:
 
 def parse_bundled_file(value: object, *, ctx: str) -> BundledFile:
     obj = require_dict(value, ctx=ctx)
-    encoding = require_str_field(obj, "encoding", ctx=ctx)
-    if encoding not in ("utf8", "base64"):
-        raise ContractError(f"{ctx}.encoding: {encoding!r} must be 'utf8' or 'base64'")
     return BundledFile(
         path=require_str_field(obj, "path", ctx=ctx),
         content=require_str_field(obj, "content", ctx=ctx),
-        encoding=cast('Literal["utf8", "base64"]', encoding),
+        encoding=_require_literal(
+            require_str_field(obj, "encoding", ctx=ctx), _ENCODINGS, what="encoding", ctx=ctx
+        ),
     )
-
-
-def _scope(value: object, *, ctx: str) -> Scope:
-    if value not in _SCOPES:
-        raise ContractError(f"{ctx}: scope {value!r} must be personal|team|org")
-    return cast("Scope", value)
-
-
-def _server_type(value: object, *, ctx: str) -> ServerType:
-    if value not in _SERVER_TYPES:
-        raise ContractError(f"{ctx}: transport {value!r} must be local|remote")
-    return cast("ServerType", value)
-
-
-def _intent(value: object, *, ctx: str) -> HookIntent:
-    if value not in _INTENTS:
-        raise ContractError(f"{ctx}: intent {value!r} must be guard|passive")
-    return cast("HookIntent", value)
-
-
-def _hook_source(value: object, *, ctx: str) -> HookSource:
-    if value not in _HOOK_SOURCES:
-        raise ContractError(f"{ctx}: source {value!r} must be bundled|inline|unresolved")
-    return cast("HookSource", value)
-
-
-def _target_kind(value: object, *, ctx: str) -> TargetKind:
-    if value not in _TARGET_KINDS:
-        raise ContractError(f"{ctx}: {value!r} is not a known target kind")
-    return cast("TargetKind", value)
-
-
-def _plan_action(value: object, *, ctx: str) -> Literal["migrate", "skip", "manual"]:
-    if value not in _PLAN_ACTIONS:
-        raise ContractError(f"{ctx}: {value!r} must be migrate|skip|manual")
-    return cast('Literal["migrate", "skip", "manual"]', value)
 
 
 def parse_item(value: object, *, ctx: str) -> Item:
@@ -593,7 +568,9 @@ def parse_item(value: object, *, ctx: str) -> Item:
             return McpServerItem(
                 id=item_id, name=name, path=path, summary=summary, files=files, redacted_refs=refs,
                 data=McpServerData(
-                    transport=_server_type(data.get("transport"), ctx=dctx),
+                    transport=_require_literal(
+                        data.get("transport"), _SERVER_TYPES, what="transport", ctx=dctx
+                    ),
                     command=_opt_str(data, "command", ctx=dctx),
                     args=_str_list(data.get("args", []), ctx=f"{dctx}.args"),
                     env=_str_map(data.get("env", {}), ctx=f"{dctx}.env"),
@@ -606,8 +583,8 @@ def parse_item(value: object, *, ctx: str) -> Item:
                 data=HookData(
                     event=require_str_field(data, "event", ctx=dctx),
                     command=require_str_field(data, "command", ctx=dctx),
-                    intent=_intent(data.get("intent"), ctx=dctx),
-                    source=_hook_source(data.get("source"), ctx=dctx),
+                    intent=_require_literal(data.get("intent"), _INTENTS, what="intent", ctx=dctx),
+                    source=_require_literal(data.get("source"), _HOOK_SOURCES, what="source", ctx=dctx),
                     matcher=_opt_str(data, "matcher", ctx=dctx),
                     file_name=_opt_str(data, "file_name", ctx=dctx),
                     script_path=_opt_str(data, "script_path", ctx=dctx),
@@ -654,9 +631,13 @@ def parse_decision(value: object, *, ctx: str) -> Decision:
     obj = require_dict(value, ctx=ctx)
     return Decision(
         source_id=require_str_field(obj, "source_id", ctx=ctx),
-        target_kind=_target_kind(obj.get("target_kind"), ctx=f"{ctx}.target_kind"),
-        scope=_scope(obj.get("scope"), ctx=f"{ctx}.scope"),
-        action=_plan_action(obj.get("action", "migrate"), ctx=f"{ctx}.action"),
+        target_kind=_require_literal(
+            obj.get("target_kind"), _TARGET_KINDS, what="target kind", ctx=f"{ctx}.target_kind"
+        ),
+        scope=_require_literal(obj.get("scope"), _SCOPES, what="scope", ctx=f"{ctx}.scope"),
+        action=_require_literal(
+            obj.get("action", "migrate"), _PLAN_ACTIONS, what="action", ctx=f"{ctx}.action"
+        ),
         name_override=_opt_str(obj, "name_override", ctx=ctx),
         notes=_opt_str(obj, "notes", ctx=ctx),
         user_answers=require_dict(obj.get("user_answers", {}), ctx=f"{ctx}.user_answers"),
@@ -671,7 +652,9 @@ def parse_plan(value: object, *, ctx: str = "plan") -> MigrationPlan:
     ]
     return MigrationPlan(
         schema_version=_require_int(obj.get("schema_version", SCHEMA_VERSION), ctx=f"{ctx}.schema_version"),
-        default_scope=_scope(obj.get("default_scope"), ctx=f"{ctx}.default_scope"),
+        default_scope=_require_literal(
+            obj.get("default_scope"), _SCOPES, what="scope", ctx=f"{ctx}.default_scope"
+        ),
         decisions=decisions,
     )
 

@@ -328,6 +328,10 @@ export const AUDIT_DECISIONS = {
   // =========================================================================
   // Children of audited parents
   // =========================================================================
+  hookFilesTable: {
+    audited: false,
+    reason: "agent-scoped hook script config; child of agent (audited)",
+  },
   skillTeamsTable: {
     audited: false,
     reason: "join: skill × team; parent (skill) audited",

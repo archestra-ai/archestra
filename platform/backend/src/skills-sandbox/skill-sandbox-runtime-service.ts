@@ -32,6 +32,7 @@ import {
   type MountRef,
   type MountSkillParams,
   type RunCommandParams,
+  type SandboxCaller,
   SKILL_SANDBOX_LIMITS,
   SkillSandboxError,
   type UploadFileParams,
@@ -97,14 +98,12 @@ class SkillSandboxRuntimeService {
     validateCommand(params.command);
     const timeoutSeconds = this.resolveTimeout(params.timeoutSeconds);
 
-    return this.runExclusive(params.sandboxId, async () => {
-      const sandbox = await this.loadSandbox(params.sandboxId);
-      await this.assertMountsReadable(params.sandboxId, params.caller);
-      // stage chat attachments before building context so they're part of this
-      // run's replay (the model sees them under /home/sandbox/attachments/).
-      const stagingNotices = await stageConversationAttachments(sandbox);
+    return this.runWithSandbox(params.sandboxId, async (sandbox) => {
+      const { stagingNotices, replayEntries } = await this.prepareExecution(
+        sandbox,
+        params.caller,
+      );
       const cwd = params.cwd ?? sandbox.defaultCwd;
-      const { replayEntries } = await this.buildContext(sandbox);
 
       let executed: Awaited<
         ReturnType<typeof sandboxRuntimeService.runCommand>
@@ -189,15 +188,15 @@ class SkillSandboxRuntimeService {
   async exportArtifact(params: ExportArtifactParams): Promise<ArtifactRef> {
     this.ensureEnabled();
 
-    return this.runExclusive(params.sandboxId, async () => {
-      const sandbox = await this.loadSandbox(params.sandboxId);
-      await this.assertMountsReadable(params.sandboxId, params.caller);
-      const stagingNotices = await stageConversationAttachments(sandbox);
+    return this.runWithSandbox(params.sandboxId, async (sandbox) => {
+      const { stagingNotices, replayEntries } = await this.prepareExecution(
+        sandbox,
+        params.caller,
+      );
       const resolvedPath = resolveArtifactPath({
         path: params.path,
         defaultCwd: sandbox.defaultCwd,
       });
-      const { replayEntries } = await this.buildContext(sandbox);
 
       let artifact: Awaited<
         ReturnType<typeof sandboxRuntimeService.readArtifact>
@@ -261,8 +260,7 @@ class SkillSandboxRuntimeService {
   async uploadFile(params: UploadFileParams): Promise<UploadRef> {
     this.ensureEnabled();
 
-    return this.runExclusive(params.sandboxId, async () => {
-      const sandbox = await this.loadSandbox(params.sandboxId);
+    return this.runWithSandbox(params.sandboxId, async (sandbox) => {
       const resolvedPath = resolveArtifactPath({
         path: params.path,
         defaultCwd: sandbox.defaultCwd,
@@ -357,9 +355,7 @@ class SkillSandboxRuntimeService {
   async mountSkill(params: MountSkillParams): Promise<MountRef | null> {
     this.ensureEnabled();
 
-    return this.runExclusive(params.sandboxId, async () => {
-      const sandbox = await this.loadSandbox(params.sandboxId);
-
+    return this.runWithSandbox(params.sandboxId, async (sandbox) => {
       const files = await SkillVersionModel.findFiles(
         params.skill.skillVersionId,
       );
@@ -450,6 +446,38 @@ class SkillSandboxRuntimeService {
       throw new SkillSandboxError(`sandbox ${sandboxId} does not exist`);
     }
     return sandbox;
+  }
+
+  /**
+   * Shared per-operation ceremony: serialize on the sandbox queue, then load
+   * the sandbox row inside the critical section so `fn` observes a replay
+   * state no concurrent operation can move under it.
+   */
+  private runWithSandbox<T>(
+    sandboxId: SandboxId,
+    fn: (sandbox: SkillSandbox) => Promise<T>,
+  ): Promise<T> {
+    return this.runExclusive(sandboxId, async () =>
+      fn(await this.loadSandbox(sandboxId)),
+    );
+  }
+
+  /**
+   * Shared pre-flight for the two operations that materialize a container
+   * (`runCommand`, `exportArtifact`): fail closed if any mounted skill is no
+   * longer readable by the caller, stage chat attachments so they're part of
+   * this run's replay (the model sees them under the attachments dir), and
+   * load the replay context. The append-only recipe mutations (`uploadFile`,
+   * `mountSkill`) deliberately skip this — see {@link SandboxCaller}.
+   */
+  private async prepareExecution(
+    sandbox: SkillSandbox,
+    caller: SandboxCaller,
+  ): Promise<{ stagingNotices: string[]; replayEntries: ReplayEntry[] }> {
+    await this.assertMountsReadable(asSandboxId(sandbox.id), caller);
+    const stagingNotices = await stageConversationAttachments(sandbox);
+    const { replayEntries } = await this.buildContext(sandbox);
+    return { stagingNotices, replayEntries };
   }
 
   /**

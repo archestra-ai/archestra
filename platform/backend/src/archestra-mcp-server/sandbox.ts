@@ -446,7 +446,7 @@ function ensureUsable(
 ): { userCtx: UserContext } | { error: string } {
   if (!config.skillsSandbox.enabled) {
     return {
-      error: "The code execution sandbox is not enabled on this deployment.",
+      error: "The sandbox is not enabled on this deployment.",
     };
   }
   if (!context.organizationId || !context.userId) {

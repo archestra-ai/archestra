@@ -2,7 +2,7 @@
 
 exports[`skill and sandbox tool text > archestra__activate_skill 1`] = `
 {
-  "description": "Load a specialized Agent Skill — a reusable SKILL.md instruction set. Call list_skills first to discover what is available, then call this with a skill name to load its full instructions. Activate a skill before attempting the task it covers. To inspect bundled resources use read_skill_file. Where a sandbox is available, activation also mounts the skill under /skills.",
+  "description": "Activate a specialized Agent Skill — a reusable SKILL.md instruction set. Call list_skills first to discover what is available, then call this with a skill name to load its full instructions. Activate a skill before attempting the task it covers. To inspect bundled resources use read_skill_file. Where a sandbox is available, activation also mounts the skill under /skills.",
   "inputSchema": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "properties": {

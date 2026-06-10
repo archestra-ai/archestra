@@ -93,7 +93,9 @@ describe("sandbox tools (runtime disabled)", () => {
       context,
     );
     expect(result.isError).toBe(true);
-    expect(textOf(result)).toContain("not enabled");
+    expect(textOf(result)).toBe(
+      "Error: The sandbox is not enabled on this deployment.",
+    );
   });
 });
 

@@ -157,7 +157,8 @@ const registry = defineArchestraTools([
     // activate_skill *result* adds an agent-aware sandbox hint (see
     // formatSkillActivation) only when they are genuinely available.
     description:
-      "Load a specialized Agent Skill — a reusable SKILL.md instruction set. " +
+      "Activate a specialized Agent Skill — a reusable SKILL.md instruction " +
+      "set. " +
       "Call list_skills first to discover what is available, then call this " +
       "with a skill name to load its full instructions. Activate a skill " +
       "before attempting the task it covers. To inspect bundled resources " +

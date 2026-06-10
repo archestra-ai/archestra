@@ -167,6 +167,68 @@ export function mergePersistedMessageMetadata(params: {
   return changed ? mergedMessages : params.liveMessages;
 }
 
+/**
+ * Resolve a live message's id in the saved thread. In-session messages keep
+ * their AI SDK nanoid as the live `id`, while the saved thread keys the same
+ * message by its DB UUID; mergePersistedMessageMetadata records that mapping
+ * in metadata.persistedMessageId. Returns null when the message cannot be
+ * found in the saved thread under either id.
+ */
+export function resolveCanonicalMessageId(params: {
+  messageId: string;
+  liveMessages: UIMessage[];
+  canonicalMessages: UIMessage[] | undefined;
+}): string | null {
+  const { messageId, liveMessages, canonicalMessages } = params;
+  if (!canonicalMessages) {
+    return null;
+  }
+
+  if (canonicalMessages.some((message) => message.id === messageId)) {
+    return messageId;
+  }
+
+  const liveMessage = liveMessages.find((message) => message.id === messageId);
+  if (!liveMessage) {
+    return null;
+  }
+
+  const persistedMessageId =
+    getObjectMetadata(liveMessage)[PERSISTED_MESSAGE_ID_METADATA_KEY];
+  if (
+    typeof persistedMessageId === "string" &&
+    persistedMessageId.length > 0 &&
+    canonicalMessages.some((message) => message.id === persistedMessageId)
+  ) {
+    return persistedMessageId;
+  }
+
+  return null;
+}
+
+/** Replace the text of one text part of one message, immutably. */
+export function applyTextEditToMessages(params: {
+  messages: UIMessage[];
+  messageId: string;
+  partIndex: number;
+  text: string;
+}): UIMessage[] {
+  return params.messages.map((message) => {
+    if (message.id !== params.messageId) {
+      return message;
+    }
+
+    return {
+      ...message,
+      parts: message.parts.map((part, index) =>
+        index === params.partIndex && part.type === "text"
+          ? { ...part, text: params.text }
+          : part,
+      ),
+    };
+  });
+}
+
 function messagesHaveSameRenderableContent(params: {
   liveMessage: UIMessage;
   persistedMessage: UIMessage;

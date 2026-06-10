@@ -168,19 +168,20 @@ export function EditableAssistantMessage({
 
   return (
     <Message from="assistant" className="group/message">
-      <div className="flex max-w-[80%] items-center justify-start gap-2">
-        <div className="min-w-0 flex-1">
-          <MessageContent className="max-w-none">
-            <Response isStreaming={isStreaming}>{text}</Response>
-            {citationParts && <KnowledgeGraphCitations parts={citationParts} />}
-          </MessageContent>
-        </div>
+      {/* The actions are absolutely positioned outside the flow: mounting
+          them when streaming ends must not steal width from the bubble,
+          which would make the finished text visibly rewrap. */}
+      <div className="relative max-w-[80%]">
+        <MessageContent className="max-w-none">
+          <Response isStreaming={isStreaming}>{text}</Response>
+          {citationParts && <KnowledgeGraphCitations parts={citationParts} />}
+        </MessageContent>
         {showActions && (
           <MessageActions
             textToCopy={text}
             onEditClick={handleStartEdit}
             editDisabled={editDisabled}
-            className="shrink-0 opacity-0 group-hover/message:opacity-100 transition-opacity"
+            className="absolute left-full top-1/2 ml-2 -translate-y-1/2 opacity-0 group-hover/message:opacity-100 transition-opacity"
           />
         )}
       </div>

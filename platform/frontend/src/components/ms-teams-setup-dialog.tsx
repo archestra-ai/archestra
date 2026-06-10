@@ -4,7 +4,7 @@ import { WEBSITE_URL } from "@archestra/shared";
 import JSZip from "jszip";
 import { Download, ExternalLink, Loader2, TriangleAlert } from "lucide-react";
 import * as React from "react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { CopyButton } from "@/components/copy-button";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { SetupDialog } from "@/components/setup-dialog";
@@ -41,6 +41,16 @@ export function MsTeamsSetupDialog({
   const [sharedAppSecret, setSharedAppSecret] = useState("");
   const [sharedTenantId, setSharedTenantId] = useState("");
 
+  // The status endpoint exposes the real App ID (it's not a secret) — prefill
+  // it on reconfigure so it also flows into the manifest step. Secret and
+  // tenant ID only come back masked, so those show a saved-value mask instead.
+  const savedAppId = msTeams?.dmInfo?.appId ?? "";
+  useEffect(() => {
+    if (open && savedAppId) {
+      setSharedAppId((prev) => prev || savedAppId);
+    }
+  }, [open, savedAppId]);
+
   const hasAppId = Boolean(sharedAppId || creds?.appId);
   const hasAppSecret = Boolean(sharedAppSecret || creds?.appSecret);
   const canSave = hasAppId && hasAppSecret;
@@ -66,6 +76,8 @@ export function MsTeamsSetupDialog({
             appId={sharedAppId}
             appSecret={sharedAppSecret}
             tenantId={sharedTenantId}
+            savedAppSecretMask={creds?.appSecret ?? ""}
+            savedTenantIdMask={creds?.tenantId ?? ""}
             onAppIdChange={setSharedAppId}
             onAppSecretChange={setSharedAppSecret}
             onTenantIdChange={setSharedTenantId}
@@ -100,7 +112,14 @@ export function MsTeamsSetupDialog({
         />
       );
     });
-  }, [sharedAppId, sharedAppSecret, sharedTenantId, configuredAppName]);
+  }, [
+    sharedAppId,
+    sharedAppSecret,
+    sharedTenantId,
+    configuredAppName,
+    creds?.appSecret,
+    creds?.tenantId,
+  ]);
 
   const lastStepAction = {
     label: saving ? "Connecting..." : "Connect",
@@ -279,6 +298,8 @@ function StepBotSettings({
   appId,
   appSecret,
   tenantId,
+  savedAppSecretMask,
+  savedTenantIdMask,
   onAppIdChange,
   onAppSecretChange,
   onTenantIdChange,
@@ -288,10 +309,20 @@ function StepBotSettings({
   appId: string;
   appSecret: string;
   tenantId: string;
+  savedAppSecretMask: string;
+  savedTenantIdMask: string;
   onAppIdChange: (v: string) => void;
   onAppSecretChange: (v: string) => void;
   onTenantIdChange: (v: string) => void;
 }) {
+  // Saved values come back from the API masked (e.g. "e6e••••••••"). Show the
+  // mask as the field value while blurred and empty so a reconfigure reads as
+  // prefilled; it can never be submitted because typing replaces it.
+  const [tenantFocused, setTenantFocused] = useState(false);
+  const [secretFocused, setSecretFocused] = useState(false);
+  const showTenantMask = !!savedTenantIdMask && !tenantFocused && !tenantId;
+  const showSecretMask = !!savedAppSecretMask && !secretFocused && !appSecret;
+
   return (
     <div
       className="grid flex-1 gap-4"
@@ -327,6 +358,9 @@ function StepBotSettings({
                 onChange={(e) => onAppIdChange(e.target.value)}
                 placeholder="Paste your Microsoft App ID"
                 className="mt-1.5"
+                autoComplete="off"
+                data-1p-ignore
+                data-lpignore="true"
               />
             </span>
           </li>
@@ -339,10 +373,19 @@ function StepBotSettings({
               <span className="text-muted-foreground">(optional)</span> — for
               single-tenant bots
               <Input
-                value={tenantId}
+                value={showTenantMask ? savedTenantIdMask : tenantId}
                 onChange={(e) => onTenantIdChange(e.target.value)}
-                placeholder="Paste your Tenant ID"
+                onFocus={() => setTenantFocused(true)}
+                onBlur={() => setTenantFocused(false)}
+                placeholder={
+                  savedTenantIdMask
+                    ? "leave empty to keep the saved Tenant ID"
+                    : "Paste your Tenant ID"
+                }
                 className="mt-1.5"
+                autoComplete="off"
+                data-1p-ignore
+                data-lpignore="true"
               />
             </span>
           </li>
@@ -354,11 +397,24 @@ function StepBotSettings({
               Click <strong>Manage Password</strong> →{" "}
               <strong>New client secret</strong> → copy the secret value
               <Input
-                type="password"
-                value={appSecret}
+                // plain text on purpose: -webkit-text-security masking makes
+                // iCloud Passwords treat the field as a password input and
+                // pop its AutoFill prompt over the dialog
+                type="text"
+                value={showSecretMask ? savedAppSecretMask : appSecret}
                 onChange={(e) => onAppSecretChange(e.target.value)}
-                placeholder="Paste your client secret"
+                onFocus={() => setSecretFocused(true)}
+                onBlur={() => setSecretFocused(false)}
+                placeholder={
+                  savedAppSecretMask
+                    ? "leave empty to keep the saved secret"
+                    : "Paste your client secret"
+                }
                 className="mt-1.5"
+                autoComplete="off"
+                data-1p-ignore
+                data-lpignore="true"
+                data-bwignore
               />
             </span>
           </li>

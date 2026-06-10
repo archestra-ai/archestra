@@ -99,6 +99,7 @@ export default function SlackPage() {
         providerLabel="Slack"
         docsUrl={getFrontendDocsUrl("platform-slack")}
       >
+        <LlmKeySetupStep />
         <SetupStep
           title="Choose connection mode"
           description={`How Slack delivers events to ${appName}`}
@@ -199,7 +200,6 @@ export default function SlackPage() {
             </div>
           )}
         </SetupStep>
-        <LlmKeySetupStep />
         <SetupStep
           title="Setup Slack"
           description={`Create a Slack App from manifest and connect it to ${appName}`}

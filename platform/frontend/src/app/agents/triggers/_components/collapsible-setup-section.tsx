@@ -1,7 +1,7 @@
 "use client";
 
 import { CheckCircle2, ChevronDown, ChevronUp } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -25,6 +25,18 @@ export function CollapsibleSetupSection({
   children: React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
+
+  // Collapse only when setup was already complete on page load. If the last
+  // step completes while the user is here, keep the section expanded so it
+  // doesn't yank the UI out from under them mid-setup.
+  const prevCompleted = useRef<boolean | null>(null);
+  useEffect(() => {
+    if (isLoading) return;
+    if (prevCompleted.current === false && allStepsCompleted) {
+      setOpen(true);
+    }
+    prevCompleted.current = allStepsCompleted;
+  }, [isLoading, allStepsCompleted]);
 
   // While loading or setup incomplete: always show content, no collapse toggle
   if (isLoading || !allStepsCompleted) {

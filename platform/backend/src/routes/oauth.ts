@@ -1117,16 +1117,17 @@ export function getOAuthResource(oauthConfig: {
   resource?: string;
   server_url?: string;
 }): string | undefined {
-  // Prefer the explicit RFC 8707 resource, then legacy audience configs, then
-  // the MCP endpoint URL for existing catalog entries.
-  return oauthConfig.resource || oauthConfig.audience || oauthConfig.server_url;
+  // Prefer the explicit RFC 8707 resource, then legacy audience configs.
+  // Do not fall back to server_url for authorization-code flows: some providers
+  // reject unexpected resource indicators when exchanging the authorization code.
+  return oauthConfig.resource || oauthConfig.audience;
 }
 
 export function getOAuthTokenResource(oauthConfig: {
   audience?: string;
   resource?: string;
 }): string | undefined {
-  return oauthConfig.resource || oauthConfig.audience;
+  return getOAuthResource(oauthConfig);
 }
 
 export function getOAuthResourceUrl(oauthConfig: {

@@ -88,12 +88,12 @@ describe("OAuth helper functions", () => {
       ).toBe("api://legacy-audience");
     });
 
-    test("falls back to server URL when no resource or audience is configured", () => {
+    test("does not fall back to server URL for authorization-code resource indicators", () => {
       expect(
         getOAuthResource({
           server_url: "https://mcp.example.com/mcp",
         }),
-      ).toBe("https://mcp.example.com/mcp");
+      ).toBeUndefined();
     });
 
     test("returns undefined when no resource fields are configured", () => {
@@ -711,6 +711,8 @@ describe("OAuth routes", () => {
       },
     });
     expect(initiateResponse.statusCode, initiateResponse.body).toBe(200);
+    const authorizationUrl = new URL(initiateResponse.json().authorizationUrl);
+    expect(authorizationUrl.searchParams.has("resource")).toBe(false);
     const state = initiateResponse.json().state;
 
     await db.execute(sql`

@@ -398,11 +398,15 @@ def _parse_hook_command(command: str, root: Path) -> _HookCmd:
     if script_pos is None:
         return _HookCmd("inline", None, has_env_prefix=has_env_prefix, has_extra_args=False)
 
-    has_extra_args = script_pos + 1 < len(rest)
+    # tokens between the interpreter and the script (e.g. `uv run --with rich x.py`) are
+    # dropped on migration just like trailing arguments, so both count as extra args.
+    has_extra_args = script_pos + 1 < len(rest) or script_pos > 1
     candidate = Path(_expand_project_dir(rest[script_pos], root))
     resolved = candidate if candidate.is_absolute() else root / candidate
     if _is_contained_file(resolved, root):
-        return _HookCmd("bundled", resolved, has_env_prefix=has_env_prefix, has_extra_args=has_extra_args)
+        # resolve: root is resolved, so an unresolved alias (symlinked parent, /tmp on macOS)
+        # would crash relative_to in _read_bundled; this also normalizes any `..` segments.
+        return _HookCmd("bundled", resolved.resolve(), has_env_prefix=has_env_prefix, has_extra_args=has_extra_args)
     return _HookCmd("unresolved", None, has_env_prefix=has_env_prefix, has_extra_args=has_extra_args)
 
 
@@ -476,6 +480,12 @@ def _scan_dependency_strings(toml: str) -> list[str]:
         ch = toml[i]
         if ch == "]":
             break
+        if ch == "#":  # toml comment: a quoted string inside it is not a requirement
+            nl = toml.find("\n", i + 1)
+            if nl == -1:
+                break
+            i = nl + 1
+            continue
         if ch in "\"'":
             close = toml.find(ch, i + 1)
             if close == -1:
@@ -558,7 +568,9 @@ def _hook_note(parsed: _HookCmd, target: object) -> str:
     parts: list[str] = []
     if target is None:
         parts.append("event has no archestra equivalent -> manual")
-    if parsed.has_env_prefix or parsed.has_extra_args:
+    # only a bundled script loses its env prefix / extra argv on migration; an inline
+    # command is carried verbatim into the wrapper, env assignments included.
+    if parsed.source == "bundled" and (parsed.has_env_prefix or parsed.has_extra_args):
         parts.append("command sets env/args not migratable to a hook")
     if parsed.source == "unresolved":
         parts.append("command not resolvable to a runnable script -> manual")

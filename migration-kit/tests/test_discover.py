@@ -213,6 +213,17 @@ def test_pep723_extracts_dependencies_with_extras() -> None:
     assert _extract_dependencies_block(content) == ["requests[security]>=2", "pyyaml"]
 
 
+def test_pep723_ignores_quoted_strings_in_comments() -> None:
+    content = "\n".join([
+        "# /// script",
+        "# dependencies = [",
+        '#   "foo",  # pinned for "bar" reasons',
+        "# ]",
+        "# ///",
+    ])
+    assert _extract_dependencies_block(content) == ["foo"]
+
+
 def test_script_position_only_matches_executable_or_interpreter_arg(tmp_path: Path) -> None:
     assert _script_position(["python3", "-u", "hook.py"], tmp_path) == 2
     assert _script_position(["uv", "run", "--with", "rich", "hook.py"], tmp_path) == 4
@@ -223,6 +234,52 @@ def test_script_position_only_matches_executable_or_interpreter_arg(tmp_path: Pa
 def test_script_path_in_echo_argument_is_inline_not_bundled(tmp_path: Path) -> None:
     parsed = _parse_hook_command('echo "$CLAUDE_PROJECT_DIR/hooks/a.py"', tmp_path)
     assert parsed.source == "inline"
+
+
+def test_interpreter_flags_before_script_count_as_extra_args(tmp_path: Path) -> None:
+    # `--with rich` would be dropped on migration just like trailing argv, so it must be flagged.
+    (tmp_path / "hook.py").write_text("print(1)")
+    parsed = _parse_hook_command("uv run --with rich hook.py", tmp_path)
+    assert parsed.source == "bundled"
+    assert parsed.has_extra_args
+    plain = _parse_hook_command("python3 hook.py", tmp_path)
+    assert plain.source == "bundled"
+    assert not plain.has_extra_args
+
+
+def test_bundled_script_through_symlinked_root_alias_does_not_crash(tmp_path: Path) -> None:
+    # an absolute command path spelled via an unresolved alias of the source root (symlinked
+    # parent; /tmp vs /private/tmp on macOS) must still bundle, not crash discover().
+    real = tmp_path / "real"
+    (real / ".claude").mkdir(parents=True)
+    (real / "hooks").mkdir()
+    (real / "hooks" / "a.py").write_text("print(1)")
+    alias = tmp_path / "alias"
+    alias.symlink_to(real, target_is_directory=True)
+    (real / ".claude" / "settings.json").write_text(json.dumps({
+        "hooks": {"PreToolUse": [{"hooks": [
+            {"type": "command", "command": f"python3 {alias / 'hooks' / 'a.py'}"}
+        ]}]}
+    }))
+    inv = discover(real)
+    hook = _by_id(inv, "hook:.claude/settings.json:PreToolUse:0:0")
+    assert isinstance(hook, HookItem)
+    assert hook.data.source == "bundled"
+    assert hook.data.script_path == "hooks/a.py"
+
+
+def test_inline_env_prefix_is_not_flagged(tmp_path: Path) -> None:
+    # an inline wrapper carries the command verbatim, env assignment included -- nothing is lost.
+    src = tmp_path / "src"
+    (src / ".claude").mkdir(parents=True)
+    (src / ".claude" / "settings.json").write_text(json.dumps({
+        "hooks": {"PostToolUse": [{"hooks": [{"type": "command", "command": "FOO=bar echo done"}]}]}
+    }))
+    inv = discover(src)
+    hook = _by_id(inv, "hook:.claude/settings.json:PostToolUse:0:0")
+    assert isinstance(hook, HookItem)
+    assert hook.data.source == "inline"
+    assert "env/args" not in hook.summary
 
 
 def test_hook_command_inline_secret_redacted(inv: Inventory) -> None:

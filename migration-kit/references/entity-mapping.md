@@ -52,6 +52,10 @@ hooks for those three events port near-1:1 as a `hook` target — that is the de
   the script is bundled and `file_name` is its basename. PEP-723 `dependencies` from a `.py` are pulled
   into `data.requirements`.
 - **inline** — a self-contained shell snippet; `apply.py` synthesizes a `#!/bin/sh` wrapper into a `.sh`.
+  "Self-contained" is the classifier's assumption, not a guarantee: only `.py`/`.sh` references are
+  detected as scripts, so a command running any other repo file (`node hooks/check.js`, `./check`)
+  lands here yet would reference a file that does not exist in the sandbox. Before approving an
+  inline hook, check its command for repo-file references and map such hooks `manual`.
 - **unresolved** — a missing/escaping script or unparsable command; map it `manual`.
 
 What you author per hook decision (`target_kind:"hook"`): usually nothing. Optional `user_answers`:

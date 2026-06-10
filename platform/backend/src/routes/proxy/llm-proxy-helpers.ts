@@ -86,6 +86,7 @@ export async function calculateInteractionCosts(params: {
   const cacheTokens = {
     readTokens: params.usage.cacheReadTokens ?? 0,
     writeTokens: params.usage.cacheWriteTokens ?? 0,
+    write1hTokens: params.usage.cacheWrite1hTokens ?? 0,
   };
   const baselineCost = await utils.costOptimization.calculateCost(
     params.baselineModel,
@@ -106,6 +107,7 @@ export async function calculateInteractionCosts(params: {
     params.providerName,
     cacheTokens.readTokens,
     cacheTokens.writeTokens,
+    params.usage.cacheWrite1hTokens ?? 0,
   );
   return {
     baselineCost,

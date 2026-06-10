@@ -2,11 +2,13 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import MSTeamsProvider from "./ms-teams-provider";
 
 /**
- * Tests for @mention filtering in parseWebhookNotification.
+ * Tests for bot @mention detection (wasBotMentioned).
  *
- * In team channels (conversationType === "channel"), the bot should only
- * respond when explicitly @mentioned. Group chats and personal chats are
- * unaffected — all messages are processed.
+ * In team channels the bot stays quiet until @mentioned, then keeps replying
+ * to the thread. That gating now lives in the webhook route (mention detection
+ * + channel-activation); parseWebhookNotification no longer drops un-mentioned
+ * channel messages. These tests cover the mention-detection primitive and the
+ * fact that parsing itself is mention-agnostic.
  */
 
 function makeActivity(overrides: Record<string, unknown> = {}) {
@@ -55,8 +57,86 @@ function createProvider(): MSTeamsProvider {
   return provider;
 }
 
-describe("MSTeamsProvider @mention filtering", () => {
-  test("channel message WITH bot @mention returns parsed message", async () => {
+describe("MSTeamsProvider.wasBotMentioned", () => {
+  test("true when the bot is @mentioned", () => {
+    const provider = createProvider();
+    expect(provider.wasBotMentioned(makeActivity())).toBe(true);
+  });
+
+  test("false when there are no mention entities", () => {
+    const provider = createProvider();
+    expect(provider.wasBotMentioned(makeActivity({ entities: [] }))).toBe(
+      false,
+    );
+  });
+
+  test("false when the entities array is missing", () => {
+    const provider = createProvider();
+    expect(
+      provider.wasBotMentioned(makeActivity({ entities: undefined })),
+    ).toBe(false);
+  });
+
+  test("false when a DIFFERENT user is mentioned", () => {
+    const provider = createProvider();
+    expect(
+      provider.wasBotMentioned(
+        makeActivity({
+          entities: [
+            {
+              type: "mention",
+              mentioned: { id: "other-user-id", name: "SomeoneElse" },
+            },
+          ],
+        }),
+      ),
+    ).toBe(false);
+  });
+
+  test("matches when mentioned.id has 28: prefix but recipient.id does not", () => {
+    const provider = createProvider();
+    expect(
+      provider.wasBotMentioned(
+        makeActivity({
+          recipient: { id: "app-id-123", name: "TestBot" },
+          entities: [
+            {
+              type: "mention",
+              mentioned: { id: "28:app-id-123", name: "TestBot" },
+            },
+          ],
+        }),
+      ),
+    ).toBe(true);
+  });
+
+  test("matches IDs case-insensitively", () => {
+    const provider = createProvider();
+    expect(
+      provider.wasBotMentioned(
+        makeActivity({
+          recipient: { id: "28:APP-ID-123", name: "TestBot" },
+          entities: [
+            {
+              type: "mention",
+              mentioned: { id: "28:app-id-123", name: "TestBot" },
+            },
+          ],
+        }),
+      ),
+    ).toBe(true);
+  });
+
+  test("false when the bot has no recipient id", () => {
+    const provider = createProvider();
+    expect(
+      provider.wasBotMentioned(makeActivity({ recipient: { name: "Bot" } })),
+    ).toBe(false);
+  });
+});
+
+describe("MSTeamsProvider.parseWebhookNotification is mention-agnostic", () => {
+  test("channel message WITH @mention is parsed", async () => {
     const provider = createProvider();
     const result = await provider.parseWebhookNotification(makeActivity(), {});
 
@@ -64,77 +144,14 @@ describe("MSTeamsProvider @mention filtering", () => {
     expect(result?.text).toBe("hello world");
   });
 
-  test("channel message WITHOUT bot @mention returns null", async () => {
+  test("channel message WITHOUT @mention is still parsed (gating moved to the route)", async () => {
     const provider = createProvider();
     const result = await provider.parseWebhookNotification(
       makeActivity({ entities: [] }),
       {},
     );
 
-    expect(result).toBeNull();
-  });
-
-  test("channel message with @mention of DIFFERENT user returns null", async () => {
-    const provider = createProvider();
-    const result = await provider.parseWebhookNotification(
-      makeActivity({
-        entities: [
-          {
-            type: "mention",
-            mentioned: { id: "other-user-id", name: "SomeoneElse" },
-          },
-        ],
-      }),
-      {},
-    );
-
-    expect(result).toBeNull();
-  });
-
-  test("matches when mentioned.id has 28: prefix but recipient.id does not", async () => {
-    const provider = createProvider();
-    const result = await provider.parseWebhookNotification(
-      makeActivity({
-        recipient: { id: "app-id-123", name: "TestBot" },
-        entities: [
-          {
-            type: "mention",
-            mentioned: { id: "28:app-id-123", name: "TestBot" },
-          },
-        ],
-      }),
-      {},
-    );
-
     expect(result).not.toBeNull();
-  });
-
-  test("matches IDs case-insensitively", async () => {
-    const provider = createProvider();
-    const result = await provider.parseWebhookNotification(
-      makeActivity({
-        recipient: { id: "28:APP-ID-123", name: "TestBot" },
-        entities: [
-          {
-            type: "mention",
-            mentioned: { id: "28:app-id-123", name: "TestBot" },
-          },
-        ],
-      }),
-      {},
-    );
-
-    expect(result).not.toBeNull();
-  });
-
-  test("channel message with no entities array returns null", async () => {
-    const provider = createProvider();
-    const result = await provider.parseWebhookNotification(
-      makeActivity({ entities: undefined }),
-      {},
-    );
-
-    expect(result).toBeNull();
   });
 
   test("group chat message without @mention returns parsed message", async () => {

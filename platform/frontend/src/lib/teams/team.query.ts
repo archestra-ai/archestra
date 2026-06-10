@@ -16,8 +16,8 @@ export function useTeams(params?: {
   enabled?: boolean;
   /**
    * When true, fetch only the teams the current user is a member of (even for
-   * team:admins). Use for resource team-assignment, where membership — not the
-   * org-wide team:admin permission — determines which teams can be assigned.
+   * organization-level team managers). Use for resource team-assignment, where
+   * membership determines which teams can be assigned.
    */
   mine?: boolean;
 }) {
@@ -35,7 +35,7 @@ export function useTeams(params?: {
   });
 }
 
-/** The teams the current user is a member of (membership, not team:admin view). */
+/** The teams the current user is a member of. */
 export function useMyTeams(params?: { enabled?: boolean }) {
   return useTeams({ mine: true, enabled: params?.enabled });
 }

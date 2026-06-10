@@ -305,13 +305,14 @@ const MODALITY_TO_MIME_TYPES: Record<
   ModelInputModality,
   SupportedChatUploadMimeType[] | null
 > = {
-  // Text-capable models can accept plain text and CSV documents.
+  // Text-capable models can accept plain text, CSV, and JSON documents.
   text: [
     "text/plain",
     "text/markdown",
     "text/csv",
     "application/csv",
     "application/vnd.ms-excel",
+    "application/json",
   ],
   // Image formats commonly supported by vision models
   image: [
@@ -337,7 +338,7 @@ const MODALITY_TO_MIME_TYPES: Record<
 };
 
 const MODALITY_TO_FILE_TYPE_DESCRIPTION: Record<ModelInputModality, string> = {
-  text: "chat prompts, .txt, .csv, and .md uploads",
+  text: "chat prompts, .txt, .csv, .md, and .json uploads",
   image: "images",
   audio: "audio",
   video: "video",

@@ -1,9 +1,23 @@
+"use client";
+
+import {
+  CheckCircleIcon,
+  ChevronDownIcon,
+  ClockIcon,
+  WebhookIcon,
+  XCircleIcon,
+} from "lucide-react";
+import type { ReactNode } from "react";
+import { CodeBlock } from "@/components/ai-elements/code-block";
+import { CopyButton } from "@/components/copy-button";
+import { Badge } from "@/components/ui/badge";
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { prettyPrintJson } from "./hook-run-chip.utils";
+import { cn } from "@/lib/utils";
+import { prettyPrintJson, splitHookPayload } from "./hook-run-chip.utils";
 
 export interface HookRunChipData {
   hookEventName?: string;
@@ -19,104 +33,260 @@ export interface HookRunChipData {
   durationMs?: number;
 }
 
-// Outcome → text tone. proceeded is muted; blocked warns; error/timeout alarm.
-const OUTCOME_TONE: Record<string, string> = {
-  proceeded: "text-muted-foreground",
-  blocked: "text-amber-600 dark:text-amber-500",
-  error: "text-red-600 dark:text-red-500",
-  timeout: "text-red-600 dark:text-red-500",
+// Outcome → status badge, mirroring the tool card's getStatusBadge tones:
+// green check for proceeded, orange X for blocked (like "Denied"), red for
+// error / timeout.
+const OUTCOME_BADGES: Record<string, { label: string; icon: ReactNode }> = {
+  proceeded: {
+    label: "Proceeded",
+    icon: <CheckCircleIcon className="size-4 text-green-600" />,
+  },
+  blocked: {
+    label: "Blocked",
+    icon: <XCircleIcon className="size-4 text-orange-600" />,
+  },
+  error: {
+    label: "Error",
+    icon: <XCircleIcon className="size-4 text-destructive" />,
+  },
+  timeout: {
+    label: "Timeout",
+    icon: <ClockIcon className="size-4 text-destructive" />,
+  },
 };
 
 /**
- * Model-invisible debug entry for a single hook run, rendered inline in the chat
- * thread when admin debug mode is on. The one-line summary (lifecycle event,
- * script file, outcome, exit code, duration) is always shown; when stdout /
- * stderr / payload were captured the row expands to reveal them. The backend
- * only delivers these parts to admins on debug-enabled conversations.
+ * Model-invisible debug entry for a single hook run, rendered inline in the
+ * chat thread when admin debug mode is on. Styled like the expanded tool card
+ * (ai-elements/tool.tsx): a bordered collapsible card with an icon + title +
+ * status badge header, and Payload / Stdout / Stderr sections in CodeBlocks.
+ * The backend only delivers these parts to admins on debug-enabled
+ * conversations.
  */
-export function HookRunChip({ data }: { data?: HookRunChipData }) {
+export function HookRunChip({
+  data,
+  defaultOpen = false,
+}: {
+  data?: HookRunChipData;
+  defaultOpen?: boolean;
+}) {
   if (!data) {
     return null;
   }
-  const tone = OUTCOME_TONE[data.outcome ?? ""] ?? "text-muted-foreground";
+
+  const badge = OUTCOME_BADGES[data.outcome ?? ""] ?? {
+    label: data.outcome ?? "Unknown",
+    icon: <WebhookIcon className="size-4 text-muted-foreground" />,
+  };
   const hasBodies = Boolean(data.stdout || data.stderr || data.payloadJson);
-  const titleText = `Hook ${data.hookEventName ?? ""} · ${
-    data.fileName ?? ""
-  } · ${data.outcome ?? ""}${
-    data.exitCode != null ? ` (exit ${data.exitCode})` : ""
-  }`;
+  const isFailure = data.outcome === "error" || data.outcome === "timeout";
 
-  const summary = (
-    <>
-      <span aria-hidden>⚙</span>
-      <span className="font-semibold">{data.hookEventName}</span>
+  const detail = [
+    data.fileName,
+    data.exitCode != null ? `exit ${data.exitCode}` : null,
+    typeof data.durationMs === "number" ? `${data.durationMs}ms` : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
+  const header = (
+    <div className="flex min-w-0 flex-1 items-center gap-2">
+      <WebhookIcon className="size-4 flex-none text-muted-foreground" />
+      <span className="font-medium text-sm">{data.hookEventName}</span>
       {data.toolName ? (
-        <span className="opacity-80">→ {data.toolName}</span>
+        <span className="truncate text-muted-foreground text-sm">
+          → {data.toolName}
+        </span>
       ) : null}
-      <span className="opacity-60">·</span>
-      <span>{data.fileName}</span>
-      <span className="opacity-60">·</span>
-      <span>{data.outcome}</span>
-      {data.exitCode != null ? (
-        <span className="opacity-60">(exit {data.exitCode})</span>
+      <Badge className="gap-1.5 rounded-full text-xs" variant="secondary">
+        {badge.icon}
+        {badge.label}
+      </Badge>
+      {detail ? (
+        <span className="truncate text-muted-foreground text-xs">{detail}</span>
       ) : null}
-      {typeof data.durationMs === "number" ? (
-        <span className="opacity-60">· {data.durationMs}ms</span>
-      ) : null}
-    </>
+    </div>
   );
-
-  const summaryClass = `flex flex-wrap items-center gap-1.5 font-mono text-xs ${tone}`;
 
   if (!hasBodies) {
     return (
       <div
         data-testid="hook-run-chip"
-        className={`my-1 ${summaryClass}`}
-        title={titleText}
+        className="not-prose mb-4 w-full rounded-md border p-3"
       >
-        {summary}
+        {header}
       </div>
     );
   }
 
   return (
-    <Collapsible data-testid="hook-run-chip" className="my-1">
-      <CollapsibleTrigger
-        className={`group w-full text-left ${summaryClass}`}
-        title={titleText}
-      >
-        <span
-          aria-hidden
-          className="opacity-60 transition-transform group-data-[state=open]:rotate-90"
-        >
-          ▸
-        </span>
-        {summary}
+    <Collapsible
+      data-testid="hook-run-chip"
+      defaultOpen={defaultOpen}
+      className="not-prose mb-4 w-full rounded-md border"
+    >
+      <CollapsibleTrigger className="group flex w-full cursor-pointer items-center justify-between gap-4 p-3">
+        {header}
+        <ChevronDownIcon className="size-4 flex-none text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
       </CollapsibleTrigger>
-      <CollapsibleContent>
-        <div className="mt-1 ml-4 flex flex-col gap-2 border-l pl-3 font-mono text-xs text-muted-foreground">
-          {data.payloadJson ? (
-            <HookBody
-              label="payload"
-              body={prettyPrintJson(data.payloadJson)}
-            />
-          ) : null}
-          {data.stdout ? <HookBody label="stdout" body={data.stdout} /> : null}
-          {data.stderr ? <HookBody label="stderr" body={data.stderr} /> : null}
-        </div>
+      <CollapsibleContent className="data-[state=closed]:fade-out-0 data-[state=closed]:slide-out-to-top-2 data-[state=open]:slide-in-from-top-2 text-popover-foreground outline-none data-[state=closed]:animate-out data-[state=open]:animate-in">
+        {data.payloadJson ? (
+          <PayloadSections payloadJson={data.payloadJson} />
+        ) : null}
+        {data.stdout ? <HookBody label="Stdout" body={data.stdout} /> : null}
+        {data.stderr ? (
+          <HookBody label="Stderr" body={data.stderr} isError={isFailure} />
+        ) : null}
       </CollapsibleContent>
     </Collapsible>
   );
 }
 
-function HookBody({ label, body }: { label: string; body: string }) {
+/**
+ * The payload, split into readable sections: the tool input and tool response
+ * render as their own blocks with real line breaks (multi-line strings would
+ * otherwise show as `\n` escapes inside the JSON), the remaining scalar fields
+ * collapse into a key-value list. Falls back to the raw pretty-printed JSON
+ * when the payload doesn't parse (e.g. capped with a truncation marker).
+ */
+function PayloadSections({ payloadJson }: { payloadJson: string }) {
+  const payload = splitHookPayload(payloadJson);
+  if (!payload) {
+    return (
+      <HookBody
+        label="Payload"
+        body={prettyPrintJson(payloadJson)}
+        language="json"
+      />
+    );
+  }
   return (
-    <div>
-      <div className="mb-0.5 uppercase tracking-wide opacity-60">{label}</div>
-      <pre className="max-h-64 overflow-auto whitespace-pre-wrap rounded bg-muted/50 p-2 text-foreground/80">
-        {body}
-      </pre>
+    <>
+      {"toolInput" in payload ? (
+        <PayloadValueBlock label="Tool input" value={payload.toolInput} />
+      ) : null}
+      {"toolResponse" in payload ? (
+        <PayloadValueBlock label="Tool response" value={payload.toolResponse} />
+      ) : null}
+      {Object.keys(payload.rest).length > 0 ? (
+        <PayloadFieldList fields={payload.rest} />
+      ) : null}
+    </>
+  );
+}
+
+/**
+ * One payload value as its own block. Strings render raw (real line breaks);
+ * objects render one sub-block per key so a multi-line `command` inside
+ * `tool_input` is readable; anything else falls back to pretty JSON.
+ */
+function PayloadValueBlock({
+  label,
+  value,
+}: {
+  label: string;
+  value: unknown;
+}) {
+  if (typeof value === "string") {
+    return <HookBody label={label} body={value} />;
+  }
+  if (typeof value === "object" && value !== null && !Array.isArray(value)) {
+    const entries = Object.entries(value);
+    if (entries.length > 0) {
+      return (
+        <div className="space-y-2 p-4">
+          <h4 className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
+            {label}
+          </h4>
+          {entries.map(([key, entryValue]) => (
+            <div key={key} className="space-y-1">
+              <div className="font-mono text-muted-foreground text-xs">
+                {key}
+              </div>
+              <CodeBody
+                body={
+                  typeof entryValue === "string"
+                    ? entryValue
+                    : JSON.stringify(entryValue, null, 2)
+                }
+                language={typeof entryValue === "string" ? "text" : "json"}
+              />
+            </div>
+          ))}
+        </div>
+      );
+    }
+  }
+  return (
+    <HookBody
+      label={label}
+      body={JSON.stringify(value, null, 2)}
+      language="json"
+    />
+  );
+}
+
+/** The payload's scalar metadata (session_id, cwd, …) as a key-value list. */
+function PayloadFieldList({ fields }: { fields: Record<string, unknown> }) {
+  return (
+    <div className="space-y-2 p-4">
+      <h4 className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
+        Payload
+      </h4>
+      <div className="grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1 rounded-md bg-muted/50 p-3 font-mono text-xs">
+        {Object.entries(fields).map(([key, value]) => (
+          <div key={key} className="contents">
+            <span className="text-muted-foreground">{key}</span>
+            <span className="break-all">
+              {typeof value === "string" ? value : JSON.stringify(value)}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function HookBody({
+  label,
+  body,
+  language = "text",
+  isError = false,
+}: {
+  label: string;
+  body: string;
+  language?: string;
+  isError?: boolean;
+}) {
+  return (
+    <div className="space-y-2 p-4">
+      <h4 className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
+        {label}
+      </h4>
+      <CodeBody body={body} language={language} isError={isError} />
+    </div>
+  );
+}
+
+function CodeBody({
+  body,
+  language = "text",
+  isError = false,
+}: {
+  body: string;
+  language?: string;
+  isError?: boolean;
+}) {
+  return (
+    <div
+      className={cn(
+        "overflow-x-auto rounded-md text-xs",
+        isError ? "bg-destructive/10 text-destructive" : "bg-muted/50",
+      )}
+    >
+      <CodeBlock code={body} language={language} wrapLongLines>
+        <CopyButton text={body} />
+      </CodeBlock>
     </div>
   );
 }

@@ -565,8 +565,10 @@ export function ChatMessages({
                             message.id,
                             group.startIndex,
                           ),
-                          parts: group.entries.map(
-                            (entry) => entry.toolResultPart ?? entry.part,
+                          parts: group.entries.flatMap((entry) =>
+                            entry.kind === "tool"
+                              ? [entry.toolResultPart ?? entry.part]
+                              : [],
                           ),
                           dividerRef: unsafeBoundaryRef,
                           unsafeContextBoundary,
@@ -578,13 +580,22 @@ export function ChatMessages({
                                 message.id,
                                 group.startIndex,
                               )}
-                              tools={group.entries.map((entry) => ({
-                                key: getToolEntryKey(message.id, entry),
-                                toolName: entry.toolName,
-                                part: entry.part,
-                                toolResultPart: entry.toolResultPart,
-                                errorText: entry.errorText,
-                              }))}
+                              tools={group.entries.map((entry) =>
+                                entry.kind === "hook"
+                                  ? {
+                                      kind: "hook" as const,
+                                      key: `${message.id}-hook-${entry.partIndex}`,
+                                      data: entry.data,
+                                    }
+                                  : {
+                                      kind: "tool" as const,
+                                      key: getToolEntryKey(message.id, entry),
+                                      toolName: entry.toolName,
+                                      part: entry.part,
+                                      toolResultPart: entry.toolResultPart,
+                                      errorText: entry.errorText,
+                                    },
+                              )}
                               toolIconMap={toolIconMap}
                               canExpandToolCalls={canExpandToolCalls}
                               onToolApprovalResponse={onToolApprovalResponse}
@@ -1775,6 +1786,7 @@ const MessageTool = memo(
         <CompactToolGroup
           tools={[
             {
+              kind: "tool",
               key: part.toolCallId ?? toolName,
               toolName,
               part,

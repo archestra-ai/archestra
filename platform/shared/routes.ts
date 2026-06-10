@@ -109,6 +109,7 @@ export const RouteId = {
   DeleteTeam: "deleteTeam",
   GetTeamMembers: "getTeamMembers",
   AddTeamMember: "addTeamMember",
+  UpdateTeamMember: "updateTeamMember",
   RemoveTeamMember: "removeTeamMember",
 
   // Team External Group Routes (SSO Team Sync)
@@ -463,6 +464,9 @@ export const RouteId = {
   CreateChatOpsDmBinding: "createChatOpsDmBinding",
   UpdateChatOpsConfigInQuickstart: "updateChatOpsConfigInQuickstart",
   UpdateSlackChatOpsConfig: "updateSlackChatOpsConfig",
+  ConnectNgrok: "connectNgrok",
+  DisconnectNgrok: "disconnectNgrok",
+  GetNgrokConfig: "getNgrokConfig",
   RefreshChatOpsChannelDiscovery: "refreshChatOpsChannelDiscovery",
 
   // Knowledge Base Routes

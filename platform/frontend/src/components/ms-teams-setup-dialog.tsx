@@ -464,7 +464,6 @@ function buildManifest(params: {
     manifestVersion: "1.21",
     version: version || "1.0.0",
     id: botAppId || "{{BOT_MS_APP_ID}}",
-    packageName: `com.${nameShort.toLowerCase()}.bot`,
     developer: {
       name: nameShort,
       websiteUrl: WEBSITE_URL,
@@ -481,12 +480,12 @@ function buildManifest(params: {
     bots: [
       {
         botId: botAppId || "{{BOT_MS_APP_ID}}",
-        scopes: ["team", "groupchat", "personal", "copilot"],
+        scopes: ["team", "groupChat", "personal", "copilot"],
         supportsFiles: false,
         isNotificationOnly: false,
         commandLists: [
           {
-            scopes: ["team", "groupchat", "personal"],
+            scopes: ["team", "groupChat", "personal"],
             commands: [
               {
                 title: "/select-agent",

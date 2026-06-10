@@ -69,4 +69,4 @@ export { default as tokenRoutes } from "./token";
 export { default as toolRoutes } from "./tool";
 export { default as userRoutes } from "./user";
 export { default as userTokenRoutes } from "./user-token";
-export { default as virtualApiKeysRoutes } from "./virtual-api-keys";
+export { default as virtualApiKeysRoutes } from "./virtual-api-key/virtual-api-key.routes";

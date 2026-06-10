@@ -186,14 +186,19 @@ export const ToolContent = ({
 
 export type ToolInputProps = ComponentProps<"div"> & {
   input: ToolUIPart["input"];
+  /** Render the Parameters section expanded instead of collapsed. */
+  defaultOpen?: boolean;
 };
 
-export const ToolInput = ({ className, input, ...props }: ToolInputProps) => {
-  const serializedInput = JSON.stringify(input, null, 2);
-
+export const ToolInput = ({
+  className,
+  input,
+  defaultOpen = false,
+  ...props
+}: ToolInputProps) => {
   return (
     <Collapsible
-      defaultOpen={false}
+      defaultOpen={defaultOpen}
       className={cn("space-y-2 overflow-hidden p-4", className)}
       {...props}
     >
@@ -205,14 +210,55 @@ export const ToolInput = ({ className, input, ...props }: ToolInputProps) => {
           <ChevronDownIcon className="size-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
         </CollapsibleTrigger>
         <CollapsibleContent className="data-[state=closed]:fade-out-0 data-[state=closed]:slide-out-to-top-2 data-[state=open]:slide-in-from-top-2 text-popover-foreground outline-none data-[state=closed]:animate-out data-[state=open]:animate-in">
-          <div className="rounded-md bg-muted/50 mt-2">
-            <CodeBlock code={serializedInput} language="json">
-              <CopyButton text={serializedInput} />
-            </CodeBlock>
-          </div>
+          <ToolInputBody input={input} />
         </CollapsibleContent>
       </div>
     </Collapsible>
+  );
+};
+
+/**
+ * Parameters body. An object input carrying a multi-line string value (e.g.
+ * run_command's `command`, file contents) renders one block per field with
+ * real line breaks instead of `\n` escapes inside a JSON dump — and the copy
+ * button copies the raw value, ready to paste into a terminal. Everything
+ * else keeps the compact pretty-printed JSON view.
+ */
+const ToolInputBody = ({ input }: { input: ToolUIPart["input"] }) => {
+  const entries = getEntriesWithMultilineStrings(input);
+
+  if (!entries) {
+    const serializedInput = JSON.stringify(input, null, 2);
+    return (
+      <div className="rounded-md bg-muted/50 mt-2">
+        <CodeBlock code={serializedInput} language="json">
+          <CopyButton text={serializedInput} />
+        </CodeBlock>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-2 space-y-2">
+      {entries.map(([key, value]) => {
+        const isString = typeof value === "string";
+        const code = isString ? value : JSON.stringify(value, null, 2);
+        return (
+          <div key={key} className="space-y-1">
+            <div className="font-mono text-muted-foreground text-xs">{key}</div>
+            <div className="rounded-md bg-muted/50">
+              <CodeBlock
+                code={code}
+                language={isString ? "text" : "json"}
+                wrapLongLines
+              >
+                <CopyButton text={code} />
+              </CodeBlock>
+            </div>
+          </div>
+        );
+      })}
+    </div>
   );
 };
 
@@ -401,6 +447,23 @@ export const ToolOutput = ({
     </div>
   );
 };
+
+/**
+ * Entries of a plain-object input when at least one value is a multi-line
+ * string; null otherwise (caller falls back to the JSON view).
+ */
+function getEntriesWithMultilineStrings(
+  input: unknown,
+): [string, unknown][] | null {
+  if (typeof input !== "object" || input === null || Array.isArray(input)) {
+    return null;
+  }
+  const entries = Object.entries(input);
+  const hasMultilineString = entries.some(
+    ([, value]) => typeof value === "string" && value.includes("\n"),
+  );
+  return hasMultilineString ? entries : null;
+}
 
 function normalizeToolOutput(output: ToolUIPart["output"]): unknown {
   if (!isMcpToolOutput(output)) {

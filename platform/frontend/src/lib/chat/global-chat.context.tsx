@@ -559,6 +559,7 @@ function ChatSessionHook({
     id: conversationId,
     onFinish: async ({ message, isAbort, isError }) => {
       setOptimisticToolCalls([]);
+      setPendingMcpElicitation(null);
       clearActiveContextCompaction();
       // The stream concluded — any auto-recovery (retry/reattach) is over.
       // NOT on stream errors: the SDK fires onFinish from a finally block
@@ -688,6 +689,7 @@ function ChatSessionHook({
           // a hard inline error panel; the toast is the only surfaced
           // feedback.
           clearErrorRef.current?.();
+          setPendingMcpElicitation(null);
           return;
         }
         // The 409 was provoked by our own auto-recovery: the stream
@@ -770,6 +772,7 @@ function ChatSessionHook({
       }
 
       // Terminal: no recovery in flight — surface the error.
+      setPendingMcpElicitation(null);
       setIsRecovering(false);
     },
     onToolCall: ({ toolCall }) => {

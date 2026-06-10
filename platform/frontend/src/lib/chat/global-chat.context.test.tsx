@@ -313,6 +313,81 @@ describe("ChatProvider retries", () => {
     );
   });
 
+  it("clears pending MCP elicitation when the stream finishes or terminally errors", async () => {
+    const latestSessionRef: { current: ChatSessionSnapshot } = {
+      current: undefined,
+    };
+
+    render(
+      <ChatProvider>
+        <RegisterChatSession />
+        <CaptureChatSession
+          onSession={(session) => {
+            latestSessionRef.current = session;
+          }}
+        />
+      </ChatProvider>,
+    );
+
+    await waitFor(() => expect(latestSessionRef.current).toBeDefined());
+
+    act(() => {
+      chatOptions?.onData?.({
+        type: "data-mcp-elicitation",
+        data: {
+          id: "00000000-0000-4000-8000-000000000001",
+          conversationId: "conversation-1",
+          toolName: "delivery__collect_delivery_details",
+          message: "Please confirm delivery details",
+          mode: "form",
+        },
+      });
+    });
+
+    await waitFor(() =>
+      expect(latestSessionRef.current?.pendingMcpElicitation).toMatchObject({
+        id: "00000000-0000-4000-8000-000000000001",
+      }),
+    );
+
+    act(() => {
+      chatOptions?.onFinish?.({ message: { parts: [] }, isAbort: false });
+    });
+
+    await waitFor(() =>
+      expect(latestSessionRef.current?.pendingMcpElicitation).toBeNull(),
+    );
+
+    act(() => {
+      chatOptions?.onData?.({
+        type: "data-mcp-elicitation",
+        data: {
+          id: "00000000-0000-4000-8000-000000000002",
+          conversationId: "conversation-1",
+          toolName: "delivery__collect_delivery_details",
+          message: "Please confirm delivery details",
+          mode: "form",
+        },
+      });
+    });
+
+    await waitFor(() =>
+      expect(latestSessionRef.current?.pendingMcpElicitation).toMatchObject({
+        id: "00000000-0000-4000-8000-000000000002",
+      }),
+    );
+
+    act(() => {
+      chatOptions?.onError?.(
+        new Error(JSON.stringify({ code: "server_error", message: "boom" })),
+      );
+    });
+
+    await waitFor(() =>
+      expect(latestSessionRef.current?.pendingMcpElicitation).toBeNull(),
+    );
+  });
+
   it("configures active-run reconnect URL and resumes when the last persisted message is from the user", async () => {
     const { DefaultChatTransport } = await import("ai");
     render(

@@ -1667,9 +1667,9 @@ Required RBAC permission: `app:create`
 |-----------|------|----------|-------------|
 | `name` | `string` | Yes | App name. |
 | `description` | `string` | No | Optional description. |
-| `html` | `string` | Yes | The app's complete, self-contained HTML document — inline all CSS/JS (rendered in a sandboxed iframe). |
+| `html` | `string` | No | The app's complete, self-contained HTML document — inline all CSS/JS (rendered in a sandboxed iframe). Omit it to scaffold from templateId instead. |
 | `scope` | `"personal" \| "team" \| "org"` | No | Visibility scope. Defaults to personal (owned by the calling user). |
-| `templateId` | `string` | No | Optional id of the template this app was seeded from. |
+| `templateId` | `string` | No | Template to scaffold from when html is omitted (one of: blank, form); the result returns the seeded HTML for editing. With html present it is recorded as provenance only. |
 | `uiCsp` | `object` | No | Optional CSP allowlist (bare hostnames). Omitted = restrictive default (own origin only). |
 | `uiCsp.connectDomains` | `string[]` | No |  |
 | `uiCsp.resourceDomains` | `string[]` | No |  |
@@ -1690,6 +1690,7 @@ Required RBAC permission: `app:create`
 | `description` | `string \| null` | Yes |  |
 | `scope` | `"personal" \| "team" \| "org"` | Yes |  |
 | `latestVersion` | `number` | Yes |  |
+| `warnings` | `string[]` | No | Soft save-time validation warnings about the html (the save succeeded); fix them via update_app. |
 
 #### list_apps
 
@@ -1712,6 +1713,7 @@ Required RBAC permission: `app:read`
 | `apps[].description` | `string \| null` | Yes |  |
 | `apps[].scope` | `"personal" \| "team" \| "org"` | Yes |  |
 | `apps[].latestVersion` | `number` | Yes |  |
+| `apps[].warnings` | `string[]` | No | Soft save-time validation warnings about the html (the save succeeded); fix them via update_app. |
 
 #### render_app
 
@@ -1732,6 +1734,7 @@ Required RBAC permission: `app:read`
 | `description` | `string \| null` | Yes |  |
 | `scope` | `"personal" \| "team" \| "org"` | Yes |  |
 | `latestVersion` | `number` | Yes |  |
+| `warnings` | `string[]` | No | Soft save-time validation warnings about the html (the save succeeded); fix them via update_app. |
 
 #### update_app
 
@@ -1766,6 +1769,7 @@ Required RBAC permission: `app:update`
 | `description` | `string \| null` | Yes |  |
 | `scope` | `"personal" \| "team" \| "org"` | Yes |  |
 | `latestVersion` | `number` | Yes |  |
+| `warnings` | `string[]` | No | Soft save-time validation warnings about the html (the save succeeded); fix them via update_app. |
 
 #### delete_app
 

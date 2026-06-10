@@ -1,4 +1,4 @@
-import { archestraApiSdk, type archestraApiTypes } from "@shared";
+import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
@@ -8,7 +8,7 @@ import {
   useConversations,
 } from "./chat.query";
 
-vi.mock("@shared", () => ({
+vi.mock("@archestra/shared", () => ({
   archestraApiSdk: {
     getChatConversations: vi.fn(),
   },
@@ -128,6 +128,7 @@ function makeConversation(): archestraApiTypes.GetChatConversationResponses["200
     selectedProvider: "openai",
     modelId: null,
     hasCustomToolSelection: false,
+    hooksDebugEnabled: false,
     todoList: null,
     artifact: null,
     pinnedAt: null,

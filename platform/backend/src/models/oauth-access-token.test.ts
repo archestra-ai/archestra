@@ -1,4 +1,4 @@
-import { LLM_PROXY_OAUTH_SCOPE } from "@shared";
+import { LLM_PROXY_OAUTH_SCOPE } from "@archestra/shared";
 import { describe, expect, test } from "@/test";
 import OAuthAccessTokenModel from "./oauth-access-token";
 

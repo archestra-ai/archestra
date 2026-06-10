@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { MCP_CATALOG_API_BASE_URL } from "@archestra/shared";
 import { withSentryConfig } from "@sentry/nextjs";
-import { MCP_CATALOG_API_BASE_URL } from "@shared";
 import type { NextConfig } from "next";
 
 const platformPkg = JSON.parse(
@@ -27,7 +27,7 @@ const nextConfig: NextConfig = {
   // (e.g. the dots in `v1.2.41`) are replaced with hyphens.
   // https://nextjs.org/docs/messages/deploymentid-invalid-characters
   deploymentId: process.env.VERSION?.replace(/[^a-zA-Z0-9_-]/g, "-"),
-  transpilePackages: ["@shared"],
+  transpilePackages: ["@archestra/shared"],
   // Disable dev indicators so they don't show up in docs automated screenshots
   devIndicators: false,
   turbopack: {
@@ -36,7 +36,7 @@ const nextConfig: NextConfig = {
     // when following pnpm's hoisted next symlink.
     root: resolve(import.meta.dirname, ".."),
     resolveAlias: {
-      "@shared/access-control": "../shared/access-control.ts",
+      "@archestra/shared/access-control": "../shared/access-control.ts",
     },
   },
   logging: {

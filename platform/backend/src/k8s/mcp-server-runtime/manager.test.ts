@@ -1342,18 +1342,18 @@ describe("McpServerRuntimeManager", () => {
     // with NO `environmentValues`, so startServer must reconstruct every
     // previously-supplied env value from persistent state alone.
     //
-    // The 10 cases below cover the full env-var matrix:
-    //   scope    : static / promptOnInstallation / promptOnPreset
+    // The cases below cover the full env-var matrix:
+    //   scope    : static / promptOnInstallation
     //   type     : plain_text / secret
-    //   required : true / false   (only meaningful for prompted/preset;
+    //   required : true / false   (only meaningful for prompted;
     //                              for static the value is admin-set,
     //                              required has no runtime effect)
     //
     // The user report ("Not required prompted envs missing after auto
     // re-install") singled out the optional+plain+prompted cell — but
-    // the bug actually drops every plain prompted/preset value
-    // regardless of `required`. Per-row tests make it obvious which
-    // cells are red without requiring readers to scan a giant diff.
+    // the bug actually drops every plain prompted value regardless of
+    // `required`. Per-row tests make it obvious which cells are red
+    // without requiring readers to scan a giant diff.
     //
     // STATIC_PLAIN is the one row whose contract is "must NOT be in
     // environmentValues" — it bypasses the map entirely and reaches the
@@ -1374,11 +1374,9 @@ describe("McpServerRuntimeManager", () => {
 
       // Stage what was persisted at install time:
       //   - install Secret bag (secretManager mock below) holds every
-      //     secret-typed prompted/preset value (the only thing that
-      //     belongs in a Secret object — values referenced by
-      //     secretKeyRef from the pod spec).
-      //   - catalog row's presetFieldValues (catalogItem mock below)
-      //     holds plain preset values (per-catalog source of truth).
+      //     secret-typed prompted value (the only thing that belongs in a
+      //     Secret object — values referenced by secretKeyRef from the pod
+      //     spec).
       //   - mcp_server row's environmentValues (mcpServer mock below)
       //     holds plain `promptOnInstallation` values (per-install source
       //     of truth).
@@ -1386,8 +1384,6 @@ describe("McpServerRuntimeManager", () => {
         secret: {
           USER_REQ_SECRET: "user-req-sec-stored",
           USER_OPT_SECRET: "user-opt-sec-stored",
-          PRESET_REQ_SECRET: "preset-req-sec-stored",
-          PRESET_OPT_SECRET: "preset-opt-sec-stored",
         },
       });
       const { secretManager } = await import("@/secrets-manager");
@@ -1442,40 +1438,9 @@ describe("McpServerRuntimeManager", () => {
               promptOnInstallation: true,
               required: false,
             },
-            // promptOnPreset × required × type
-            {
-              key: "PRESET_REQ_SECRET",
-              type: "secret",
-              promptOnPreset: true,
-              required: true,
-            },
-            {
-              key: "PRESET_OPT_SECRET",
-              type: "secret",
-              promptOnPreset: true,
-              required: false,
-            },
-            {
-              key: "PRESET_REQ_PLAIN",
-              type: "plain_text",
-              promptOnPreset: true,
-              required: true,
-            },
-            {
-              key: "PRESET_OPT_PLAIN",
-              type: "plain_text",
-              promptOnPreset: true,
-              required: false,
-            },
           ],
         },
         localConfigSecretId: null,
-        // Plain preset values live on the catalog row, not the install bag.
-        presetFieldValues: {
-          PRESET_REQ_PLAIN: "preset-req-plain-stored",
-          PRESET_OPT_PLAIN: "preset-opt-plain-stored",
-        },
-        presetSecretId: null,
       } as unknown as Awaited<
         ReturnType<typeof InternalMcpCatalogModel.findById>
       >);
@@ -1542,17 +1507,13 @@ describe("McpServerRuntimeManager", () => {
     // envDef.value, never touches the env-values map). All other cells
     // assert their value is present and correct.
     test.each`
-      key                    | expected                        | via
-      ${"STATIC_PLAIN"}      | ${undefined}                    | ${"bypasses env-values; flows via envDef.value"}
-      ${"STATIC_SECRET"}     | ${"static-secret-from-catalog"} | ${"catalog static-secret merge (manager.ts:259-277)"}
-      ${"USER_REQ_SECRET"}   | ${"user-req-sec-stored"}        | ${"install Secret bag (prompted+secret, required)"}
-      ${"USER_OPT_SECRET"}   | ${"user-opt-sec-stored"}        | ${"install Secret bag (prompted+secret, optional)"}
-      ${"USER_REQ_PLAIN"}    | ${"user-req-plain-stored"}      | ${"mcp_server.environmentValues overlay"}
-      ${"USER_OPT_PLAIN"}    | ${"user-opt-plain-stored"}      | ${"mcp_server.environmentValues overlay"}
-      ${"PRESET_REQ_SECRET"} | ${"preset-req-sec-stored"}      | ${"install Secret bag (preset+secret, required)"}
-      ${"PRESET_OPT_SECRET"} | ${"preset-opt-sec-stored"}      | ${"install Secret bag (preset+secret, optional)"}
-      ${"PRESET_REQ_PLAIN"}  | ${"preset-req-plain-stored"}    | ${"catalog.presetFieldValues overlay"}
-      ${"PRESET_OPT_PLAIN"}  | ${"preset-opt-plain-stored"}    | ${"catalog.presetFieldValues overlay"}
+      key                  | expected                        | via
+      ${"STATIC_PLAIN"}    | ${undefined}                    | ${"bypasses env-values; flows via envDef.value"}
+      ${"STATIC_SECRET"}   | ${"static-secret-from-catalog"} | ${"catalog static-secret merge (manager.ts:259-277)"}
+      ${"USER_REQ_SECRET"} | ${"user-req-sec-stored"}        | ${"install Secret bag (prompted+secret, required)"}
+      ${"USER_OPT_SECRET"} | ${"user-opt-sec-stored"}        | ${"install Secret bag (prompted+secret, optional)"}
+      ${"USER_REQ_PLAIN"}  | ${"user-req-plain-stored"}      | ${"mcp_server.environmentValues overlay"}
+      ${"USER_OPT_PLAIN"}  | ${"user-opt-plain-stored"}      | ${"mcp_server.environmentValues overlay"}
     `(
       "auto redeploy preserves $key — $via",
       ({ key, expected }: { key: string; expected: string | undefined }) => {
@@ -1567,6 +1528,18 @@ describe("McpServerRuntimeManager", () => {
 });
 
 describe("McpServerRuntimeManager.listDockerRegistrySecrets", () => {
+  function dockerConfigData(registryServers: string[]) {
+    return {
+      ".dockerconfigjson": Buffer.from(
+        JSON.stringify({
+          auths: Object.fromEntries(
+            registryServers.map((server) => [server, { auth: "redacted" }]),
+          ),
+        }),
+      ).toString("base64"),
+    };
+  }
+
   test("returns empty array when k8sApi is not initialized", async () => {
     const { McpServerRuntimeManager } = await import("./manager");
     const manager = new McpServerRuntimeManager();
@@ -1612,6 +1585,7 @@ describe("McpServerRuntimeManager.listDockerRegistrySecrets", () => {
               "team-id": "team-a",
             },
           },
+          data: dockerConfigData(["registry-b.example.com"]),
         },
         {
           metadata: {
@@ -1622,6 +1596,7 @@ describe("McpServerRuntimeManager.listDockerRegistrySecrets", () => {
               "team-id": "team-b",
             },
           },
+          data: dockerConfigData(["registry-a.example.com"]),
         },
       ],
     });
@@ -1631,8 +1606,14 @@ describe("McpServerRuntimeManager.listDockerRegistrySecrets", () => {
 
     const result = await manager.listDockerRegistrySecrets({ isAdmin: true });
     expect(result).toEqual([
-      { name: "regcred-team-a" },
-      { name: "regcred-team-b" },
+      {
+        name: "regcred-team-a",
+        registryServers: ["registry-b.example.com"],
+      },
+      {
+        name: "regcred-team-b",
+        registryServers: ["registry-a.example.com"],
+      },
     ]);
 
     expect(mockListSecrets).toHaveBeenCalledWith(
@@ -1683,7 +1664,7 @@ describe("McpServerRuntimeManager.listDockerRegistrySecrets", () => {
     const result = await manager.listDockerRegistrySecrets({
       teamIds: ["team-a"],
     });
-    expect(result).toEqual([{ name: "regcred-team-a" }]);
+    expect(result).toEqual([{ name: "regcred-team-a", registryServers: [] }]);
   });
 
   test("non-admin with no teams sees no secrets", async () => {
@@ -1710,6 +1691,74 @@ describe("McpServerRuntimeManager.listDockerRegistrySecrets", () => {
 
     const result = await manager.listDockerRegistrySecrets({ teamIds: [] });
     expect(result).toEqual([]);
+  });
+
+  test("returns sorted registry servers parsed from docker config json", async () => {
+    const { McpServerRuntimeManager } = await import("./manager");
+    const manager = new McpServerRuntimeManager();
+
+    (manager as unknown as { k8sApi: unknown }).k8sApi = {
+      listNamespacedSecret: vi.fn().mockResolvedValue({
+        items: [
+          {
+            metadata: {
+              name: "regcred-private",
+              labels: {
+                app: "mcp-server",
+                type: "regcred",
+                "team-id": "team-a",
+              },
+            },
+            data: dockerConfigData([
+              "z.registry.example.com",
+              "a.registry.example.com",
+            ]),
+          },
+        ],
+      }),
+    };
+
+    const result = await manager.listDockerRegistrySecrets({
+      teamIds: ["team-a"],
+    });
+
+    expect(result).toEqual([
+      {
+        name: "regcred-private",
+        registryServers: ["a.registry.example.com", "z.registry.example.com"],
+      },
+    ]);
+  });
+
+  test("returns empty registry server list when docker config json is invalid", async () => {
+    const { McpServerRuntimeManager } = await import("./manager");
+    const manager = new McpServerRuntimeManager();
+
+    (manager as unknown as { k8sApi: unknown }).k8sApi = {
+      listNamespacedSecret: vi.fn().mockResolvedValue({
+        items: [
+          {
+            metadata: {
+              name: "regcred-private",
+              labels: {
+                app: "mcp-server",
+                type: "regcred",
+                "team-id": "team-a",
+              },
+            },
+            data: {
+              ".dockerconfigjson": Buffer.from("not-json").toString("base64"),
+            },
+          },
+        ],
+      }),
+    };
+
+    const result = await manager.listDockerRegistrySecrets({
+      teamIds: ["team-a"],
+    });
+
+    expect(result).toEqual([{ name: "regcred-private", registryServers: [] }]);
   });
 });
 

@@ -1,11 +1,11 @@
-import type { Page } from "@playwright/test";
 import {
   archestraApiSdk,
   DEFAULT_VAULT_TOKEN,
   E2eTestId,
   SecretsManagerType,
-} from "@shared";
-import { testMcpServerCommand } from "@shared/test-mcp-server";
+} from "@archestra/shared";
+import { testMcpServerCommand } from "@archestra/shared/test-mcp-server";
+import type { Page } from "@playwright/test";
 import {
   ADMIN_EMAIL,
   DEFAULT_TEAM_NAME,

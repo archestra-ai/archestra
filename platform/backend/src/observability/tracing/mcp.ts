@@ -1,5 +1,5 @@
+import { parseFullToolName } from "@archestra/shared";
 import { context, type Span, SpanStatusCode, trace } from "@opentelemetry/api";
-import { parseFullToolName } from "@shared";
 import config from "@/config";
 import { SESSION_ID_KEY } from "@/observability/request-context";
 import type { AgentType } from "@/types";

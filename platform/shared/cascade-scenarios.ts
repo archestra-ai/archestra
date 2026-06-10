@@ -285,7 +285,7 @@ export const CASCADE_SCENARIOS: CascadeScenario[] = [
     id: "desc-only-bag-catalog-remote",
     shape: "test1RemoteOAuthBag",
     userAction:
-      "Admin edits description on a remote OAuth catalog with a populated client/preset secret bag",
+      "Admin edits description on a remote OAuth catalog with a populated client secret bag",
     edit: setDescription("rewritten description"),
     expected: "skip",
     sharedPredicate: "metadata-only-diff",
@@ -495,15 +495,14 @@ export const CASCADE_SCENARIOS: CascadeScenario[] = [
   {
     id: "change-static-header-value",
     shape: "hdrprobeDockerOnly",
-    userAction:
-      "Admin edits a static header's value (no install prompt, no preset prompt)",
+    userAction: "Admin edits a static header's value (no install prompt)",
     edit: modifyUserConfigField("header_x_static_token", {
       default: "rotated-token-value",
     }),
     expected: "auto",
     sharedPredicate: "non-metadata-diff",
     rationale:
-      "For a static header-mapped userConfig entry (no install/preset prompt), the form writes the admin's value into `userConfig[field].default` — that IS the runtime header sent on the wire. Changing it means installs would keep sending the old value until pods restart. The auto path is correct (no re-prompt needed; admin already provided the value). Caught by `userConfigChangedBreakingly` on both sides. Distinct from prompted headers where `default` is just a placeholder.",
+      "For a static header-mapped userConfig entry (no install prompt), the form writes the admin's value into `userConfig[field].default` — that IS the runtime header sent on the wire. Changing it means installs would keep sending the old value until pods restart. The auto path is correct (no re-prompt needed; admin already provided the value). Caught by `userConfigChangedBreakingly` on both sides. Distinct from prompted headers where `default` is just a placeholder.",
   },
 
   // ── identity / nothing-changed sanity ─────────────────────────────

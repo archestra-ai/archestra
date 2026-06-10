@@ -1,4 +1,4 @@
-import { getEmbeddingColumnName } from "@shared";
+import { getEmbeddingColumnName } from "@archestra/shared";
 import { count, eq, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type { AclEntry, InsertKbChunk, KbChunk } from "@/types";

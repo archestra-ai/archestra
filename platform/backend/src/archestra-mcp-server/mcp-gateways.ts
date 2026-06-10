@@ -2,7 +2,7 @@ import {
   TOOL_CREATE_MCP_GATEWAY_SHORT_NAME,
   TOOL_EDIT_MCP_GATEWAY_SHORT_NAME,
   TOOL_GET_MCP_GATEWAY_SHORT_NAME,
-} from "@shared";
+} from "@archestra/shared";
 import { z } from "zod";
 import {
   AgentScopeSchema,

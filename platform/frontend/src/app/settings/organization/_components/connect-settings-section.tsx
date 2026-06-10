@@ -4,7 +4,7 @@ import {
   providerDisplayNames,
   type SupportedProvider,
   SupportedProviders,
-} from "@shared";
+} from "@archestra/shared";
 import { useEffect, useMemo, useState } from "react";
 import { CONNECT_CLIENTS } from "@/app/connection/clients";
 import { getShownProviders } from "@/app/connection/connection-flow.utils";

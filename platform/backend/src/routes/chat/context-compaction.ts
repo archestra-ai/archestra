@@ -1,10 +1,10 @@
 import { createRequire } from "node:module";
-import { type Span, SpanKind, SpanStatusCode, trace } from "@opentelemetry/api";
 import {
   BUILT_IN_AGENT_IDS,
   CONTEXT_COMPACTION_SYSTEM_PROMPT,
   type SupportedProvider,
-} from "@shared";
+} from "@archestra/shared";
+import { type Span, SpanKind, SpanStatusCode, trace } from "@opentelemetry/api";
 import { convertToModelMessages, generateText, type UIMessage } from "ai";
 import { createLLMModel, isApiKeyRequired } from "@/clients/llm-client";
 import logger from "@/logging";

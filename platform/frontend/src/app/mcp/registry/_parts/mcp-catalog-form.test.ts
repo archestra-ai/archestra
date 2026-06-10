@@ -398,6 +398,30 @@ describe("formSchema", () => {
       );
     });
 
+    it("should reject MCP OAuth redirect URIs that use the SSO callback path", () => {
+      const data = {
+        ...baseValidData,
+        authMethod: "oauth" as const,
+        serverType: "remote" as const,
+        serverUrl: "https://api.example.com/mcp",
+        oauthConfig: {
+          client_id: "test-client-id",
+          client_secret: "test-secret",
+          audience: "",
+          redirect_uris:
+            "https://app.example.com/api/auth/sso/callback/EntraID",
+          scopes: "read,write",
+          supports_resource_metadata: true,
+          grantType: "authorization_code",
+        },
+        localConfig: undefined,
+      };
+
+      expect(() => formSchema.parse(data)).toThrow(
+        "MCP OAuth redirect URIs must use /oauth-callback",
+      );
+    });
+
     it("should validate OAuth client credentials without redirect URIs", () => {
       const data = {
         ...baseValidData,

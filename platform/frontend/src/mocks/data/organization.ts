@@ -1,4 +1,4 @@
-import type { archestraApiTypes } from "@shared";
+import type { archestraApiTypes } from "@archestra/shared";
 
 type Organization = archestraApiTypes.GetOrganizationResponses["200"];
 
@@ -56,15 +56,12 @@ export function makeOrganization(
     connectionShownClientIds: null,
     connectionShownProviders: null,
     connectionBaseUrls: null,
-    presetEntityName: null,
-    presetEntityNamePlural: null,
-    presetEntityDefaultLabel: null,
-    presetEntityDefaultValidationRegex: null,
     defaultEnvironmentName: null,
     defaultEnvironmentNamespace: null,
     defaultEnvironmentDescription: null,
     defaultNetworkPolicy: null,
     defaultEnvironmentRestricted: false,
+    defaultEnvironmentValidationRegex: null,
     ...overrides,
   };
 }

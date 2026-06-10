@@ -19,7 +19,7 @@ import {
   type SupportedProvider,
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
-} from "@shared";
+} from "@archestra/shared";
 import {
   AlertTriangle,
   Bot,
@@ -38,6 +38,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { ConnectorTypeIcon } from "@/app/knowledge/knowledge-bases/_parts/connector-icons";
 import { AgentBadge } from "@/components/agent-badge";
+import { AgentHooksEditor } from "@/components/agent-hooks-editor";
 import type { AgentIconVariant } from "@/components/agent-icon";
 import { AgentIconPicker } from "@/components/agent-icon-picker";
 import {
@@ -129,13 +130,14 @@ import {
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useIdentityProviders } from "@/lib/auth/identity-provider-read.query";
 import { useChatProfileMcpTools } from "@/lib/chat/chat.query";
+import { useFeature } from "@/lib/config/config.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useConnectors } from "@/lib/knowledge/connector.query";
 import { useKnowledgeBases } from "@/lib/knowledge/knowledge-base.query";
 import { useLlmModelsByProvider } from "@/lib/llm-models.query";
 import { useAvailableLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
-import { useTeams } from "@/lib/teams/team.query";
+import { useAssignableTeams } from "@/lib/teams/team.query";
 import { cn } from "@/lib/utils";
 import {
   getDescriptionPlaceholder,
@@ -607,15 +609,18 @@ export function AgentDialog({
 
   // Fetch fresh agent data when dialog opens
   const { data: freshAgent, refetch: refetchAgent } = useProfile(agent?.id);
-  const { data: teams } = useTeams({
-    enabled: open && !!canReadTeams,
-  });
   const resource = getResourceForAgentType(agentType);
   const { data: isAdmin } = useHasPermissions({
     [resource]: ["admin"],
   });
   const { data: isTeamAdmin } = useHasPermissions({
     [resource]: ["team-admin"],
+  });
+  // Picker offers all teams to a full resource-admin, otherwise only the teams
+  // the user belongs to (the only ones the backend lets a team-admin assign).
+  const { data: teams } = useAssignableTeams({
+    isResourceAdmin: !!isAdmin,
+    enabled: open && !!canReadTeams,
   });
   const agentLabelsRef = useRef<ProfileLabelsRef>(null);
   const agentToolsEditorRef = useRef<AgentToolsEditorRef>(null);
@@ -657,6 +662,7 @@ export function AgentDialog({
   // Determine type-specific visibility based on agentType prop
   const isInternalAgent = agentType === "agent";
   const isBuiltIn = !!agent?.builtIn;
+  const agentHooksEnabled = useFeature("agentHooksEnabled");
   const builtInAgentName = agent?.builtInAgentConfig?.name;
   const isPolicyConfigBuiltIn =
     builtInAgentName === BUILT_IN_AGENT_IDS.POLICY_CONFIG;
@@ -1728,6 +1734,13 @@ export function AgentDialog({
                     )}
                   </div>
                 )}
+
+                {/* Hooks (internal agents only, existing agents only; gated by
+                    the agent-hooks feature flag, which requires the agent runtime) */}
+                {agentHooksEnabled &&
+                  isInternalAgent &&
+                  !isBuiltIn &&
+                  agent?.id && <AgentHooksEditor agentId={agent.id} />}
 
                 {/* Section 4: Access & LLM */}
                 {(!isBuiltIn || isInternalAgent) && (

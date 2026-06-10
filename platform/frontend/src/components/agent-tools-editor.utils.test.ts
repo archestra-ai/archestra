@@ -1,7 +1,7 @@
 import {
   ARCHESTRA_MCP_CATALOG_ID,
   DEFAULT_ARCHESTRA_TOOL_NAMES,
-} from "@shared";
+} from "@archestra/shared";
 import { describe, expect, it } from "vitest";
 import {
   getDefaultArchestraToolIds,

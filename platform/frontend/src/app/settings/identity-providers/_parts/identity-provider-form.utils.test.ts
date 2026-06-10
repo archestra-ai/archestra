@@ -1,4 +1,7 @@
-import { type IdentityProviderFormValues, OAUTH_TOKEN_TYPE } from "@shared";
+import {
+  type IdentityProviderFormValues,
+  OAUTH_TOKEN_TYPE,
+} from "@archestra/shared";
 import { describe, expect, it } from "vitest";
 import { normalizeIdentityProviderFormValues } from "./identity-provider-form.utils";
 

@@ -2,6 +2,7 @@ import { describe, expect } from "vitest";
 import { InternalMcpCatalogModel, OrganizationModel } from "@/models";
 import {
   assertCanAssignEnvironment,
+  assertValuesMatchEnvironmentRegex,
   createEnvironment,
   deleteEnvironment,
   listEnvironments,
@@ -271,5 +272,96 @@ describe("EnvironmentService", () => {
         canDeployToRestricted: true,
       }),
     ).rejects.toMatchObject({ statusCode: 404 });
+  });
+});
+
+const BLOCK_PROD = "^(?!.*(prod|production)).*$";
+
+describe("Environment validation regex", () => {
+  test("assertValuesMatchEnvironmentRegex names the environment in the rejection", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const env = await createEnvironment({
+      organizationId: org.id,
+      data: { name: "staging", validationRegex: BLOCK_PROD },
+    });
+    await expect(
+      assertValuesMatchEnvironmentRegex({
+        environmentId: env.id,
+        organizationId: org.id,
+        valueSets: [{ host: "prod-host" }],
+      }),
+    ).rejects.toMatchObject({
+      statusCode: 400,
+      message: expect.stringContaining('"staging"'),
+    });
+  });
+
+  test("assertValuesMatchEnvironmentRegex allows values that match the rule", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const env = await createEnvironment({
+      organizationId: org.id,
+      data: { name: "staging", validationRegex: BLOCK_PROD },
+    });
+    await expect(
+      assertValuesMatchEnvironmentRegex({
+        environmentId: env.id,
+        organizationId: org.id,
+        valueSets: [{ host: "staging-host" }, { region: "eu" }],
+      }),
+    ).resolves.toBeUndefined();
+  });
+
+  test("assertValuesMatchEnvironmentRegex rejects a forbidden value across any value set with 400", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const env = await createEnvironment({
+      organizationId: org.id,
+      data: { name: "staging", validationRegex: BLOCK_PROD },
+    });
+    await expect(
+      assertValuesMatchEnvironmentRegex({
+        environmentId: env.id,
+        organizationId: org.id,
+        valueSets: [{ host: "ok-host" }, { DB: "my-prod-db" }],
+      }),
+    ).rejects.toMatchObject({ statusCode: 400 });
+  });
+
+  test("assertValuesMatchEnvironmentRegex is a no-op when the environment has no rule", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const env = await createEnvironment({
+      organizationId: org.id,
+      data: { name: "open" },
+    });
+    await expect(
+      assertValuesMatchEnvironmentRegex({
+        environmentId: env.id,
+        organizationId: org.id,
+        valueSets: [{ host: "anything-prod" }],
+      }),
+    ).resolves.toBeUndefined();
+  });
+
+  test("assertValuesMatchEnvironmentRegex enforces the org default rule for a null environment", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    await OrganizationModel.patch(org.id, {
+      defaultEnvironmentValidationRegex: BLOCK_PROD,
+    });
+    await expect(
+      assertValuesMatchEnvironmentRegex({
+        environmentId: null,
+        organizationId: org.id,
+        valueSets: [{ host: "prod-host" }],
+      }),
+    ).rejects.toMatchObject({ statusCode: 400 });
   });
 });

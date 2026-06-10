@@ -124,6 +124,19 @@ const ToolResultContentBlockSchema = z.object({
   }),
 });
 
+// Cache point block — a prompt-caching breakpoint. Bedrock Converse caches the
+// content rendered before this block. Emitted by @ai-sdk/amazon-bedrock from
+// `providerOptions.bedrock.cachePoint` and inserted into the message content
+// array, so the proxy schema must accept it on every message role. `ttl` is
+// kept so a pass-through request's cache duration ("5m"/"1h") survives instead
+// of being silently dropped; `type` stays a string since AWS validates it.
+const CachePointContentBlockSchema = z.object({
+  cachePoint: z.object({
+    type: z.string(),
+    ttl: z.string().optional(),
+  }),
+});
+
 // =============================================================================
 // EXPORTED CONTENT BLOCK UNIONS
 // =============================================================================
@@ -135,12 +148,14 @@ export const UserContentBlockSchema = z.union([
   DocumentContentBlockSchema,
   GuardContentBlockSchema,
   ToolResultContentBlockSchema,
+  CachePointContentBlockSchema,
 ]);
 
 // Content block union for assistant messages
 export const AssistantContentBlockSchema = z.union([
   TextContentBlockSchema,
   ToolUseContentBlockSchema,
+  CachePointContentBlockSchema,
 ]);
 
 // Content block union for all messages
@@ -151,6 +166,7 @@ export const ContentBlockSchema = z.union([
   GuardContentBlockSchema,
   ToolUseContentBlockSchema,
   ToolResultContentBlockSchema,
+  CachePointContentBlockSchema,
 ]);
 
 // =============================================================================
@@ -175,6 +191,7 @@ const SystemContentBlockSchema = z.union([
     .transform(({ text }) => ({ text })),
   z.object({ text: z.string() }),
   GuardContentBlockSchema,
+  CachePointContentBlockSchema,
 ]);
 
 export const SystemSchema = z.array(SystemContentBlockSchema);

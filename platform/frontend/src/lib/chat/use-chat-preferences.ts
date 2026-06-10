@@ -5,7 +5,7 @@ import {
   pickBestModel,
   type RankedModel,
   resolveModelSelection,
-} from "@shared";
+} from "@archestra/shared";
 
 export type { ModelSource };
 

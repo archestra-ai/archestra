@@ -1,4 +1,4 @@
-import { OAUTH_TOKEN_TYPE } from "@shared";
+import { OAUTH_TOKEN_TYPE } from "@archestra/shared";
 import { and, eq } from "drizzle-orm";
 import { vi } from "vitest";
 import db, { schema } from "@/database";
@@ -1228,6 +1228,88 @@ describe("mcp server inspect route", () => {
     });
   });
 
+  test("recognizes broad missing authorization header errors before enterprise-managed install retry", async ({
+    makeAccount,
+    makeIdentityProvider,
+    makeInternalMcpCatalog,
+  }) => {
+    const identityProvider = await makeIdentityProvider(user.id, {
+      providerId: "missing-auth-header-idp",
+      issuer: "https://login.example.com/tenant/v2.0",
+      oidcConfig: {
+        clientId: "web-client-id",
+        clientSecret: "web-client-secret",
+        tokenEndpoint: "https://login.example.com/tenant/oauth2/v2.0/token",
+        enterpriseManagedCredentials: {
+          exchangeStrategy: "entra_obo",
+          subjectTokenType: OAUTH_TOKEN_TYPE.AccessToken,
+          tokenEndpoint: "https://login.example.com/tenant/oauth2/v2.0/token",
+          tokenEndpointAuthentication: "client_secret_post",
+        },
+      },
+    });
+
+    const catalog = await makeInternalMcpCatalog({
+      name: "Header Required Remote",
+      serverType: "remote",
+      serverUrl: "https://mcp.example.com/mcp",
+      enterpriseManagedConfig: {
+        identityProviderId: identityProvider.id,
+        requestedCredentialType: "bearer_token",
+        resourceIdentifier: "api://downstream-app",
+        tokenInjectionMode: "authorization_bearer",
+      },
+    });
+
+    await makeAccount(user.id, {
+      providerId: "missing-auth-header-idp",
+      accessToken: "session-access-token",
+    });
+
+    exchangeEnterpriseManagedCredentialMock.mockResolvedValueOnce({
+      credentialType: "bearer_token",
+      expiresInSeconds: 300,
+      issuedTokenType: OAUTH_TOKEN_TYPE.AccessToken,
+      value: "downstream-user-token",
+    });
+
+    connectAndGetToolsMock
+      .mockRejectedValueOnce(
+        new Error(
+          "Failed to connect to MCP server Header Required Remote: Streamable HTTP error: Error POSTing to endpoint: Missing X-User, X-Ticket, or Authorization header",
+        ),
+      )
+      .mockResolvedValueOnce([
+        {
+          name: "debug_auth",
+          description: "Debug auth",
+          inputSchema: { type: "object", properties: {} },
+        },
+      ]);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/mcp_server",
+      payload: {
+        name: catalog.name,
+        catalogId: catalog.id,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(connectAndGetToolsMock).toHaveBeenCalledTimes(2);
+    expect(exchangeEnterpriseManagedCredentialMock).toHaveBeenCalledWith({
+      identityProviderId: identityProvider.id,
+      assertion: "session-access-token",
+      enterpriseManagedConfig: expect.objectContaining({
+        resourceIdentifier: "api://downstream-app",
+      }),
+    });
+    expect(connectAndGetToolsMock.mock.calls[1][0]).toMatchObject({
+      secrets: { access_token: "downstream-user-token" },
+    });
+  });
+
   test("exchanges an install-time session ID token for an ID-JAG before protected resource discovery", async ({
     makeAccount,
     makeAgent,
@@ -2351,13 +2433,13 @@ describe("mcp server inspect route", () => {
   });
 
   function configurePermissions(opts: {
-    isTeamAdmin: boolean;
+    canManageAllTeams: boolean;
     isEditor: boolean;
   }) {
     hasPermissionMock.mockImplementation(
       async (permission: Record<string, string[]>) => {
-        if (permission.team?.includes("admin")) {
-          return { success: opts.isTeamAdmin };
+        if (permission.team?.includes("create")) {
+          return { success: opts.canManageAllTeams };
         }
         if (permission.mcpServerInstallation?.includes("update")) {
           return { success: opts.isEditor };
@@ -2367,12 +2449,12 @@ describe("mcp server inspect route", () => {
     );
   }
 
-  test("install scope=team: team:admin can install for a non-member team", async ({
+  test("install scope=team: organization-level team manager can install for a non-member team", async ({
     makeInternalMcpCatalog,
     makeTeam,
     makeUser,
   }) => {
-    configurePermissions({ isTeamAdmin: true, isEditor: false });
+    configurePermissions({ canManageAllTeams: true, isEditor: false });
     const otherUser = await makeUser();
     const team = await makeTeam(organizationId, otherUser.id);
     const catalog = await makeInternalMcpCatalog({
@@ -2408,7 +2490,7 @@ describe("mcp server inspect route", () => {
     makeTeamMember,
     makeUser,
   }) => {
-    configurePermissions({ isTeamAdmin: false, isEditor: true });
+    configurePermissions({ canManageAllTeams: false, isEditor: true });
     const otherUser = await makeUser();
     const team = await makeTeam(organizationId, otherUser.id);
     await makeTeamMember(team.id, user.id);
@@ -2444,7 +2526,7 @@ describe("mcp server inspect route", () => {
     makeTeam,
     makeUser,
   }) => {
-    configurePermissions({ isTeamAdmin: false, isEditor: true });
+    configurePermissions({ canManageAllTeams: false, isEditor: true });
     const otherUser = await makeUser();
     const team = await makeTeam(organizationId, otherUser.id);
     const catalog = await makeInternalMcpCatalog({
@@ -2474,7 +2556,7 @@ describe("mcp server inspect route", () => {
     makeTeam,
     makeTeamMember,
   }) => {
-    configurePermissions({ isTeamAdmin: false, isEditor: false });
+    configurePermissions({ canManageAllTeams: false, isEditor: false });
     const team = await makeTeam(organizationId, user.id);
     await makeTeamMember(team.id, user.id);
     const catalog = await makeInternalMcpCatalog({
@@ -2499,13 +2581,13 @@ describe("mcp server inspect route", () => {
     );
   });
 
-  test("revoke team-scoped: team:admin can revoke for a non-member team", async ({
+  test("revoke team-scoped: organization-level team manager can revoke for a non-member team", async ({
     makeInternalMcpCatalog,
     makeMcpServer,
     makeTeam,
     makeUser,
   }) => {
-    configurePermissions({ isTeamAdmin: true, isEditor: false });
+    configurePermissions({ canManageAllTeams: true, isEditor: false });
     const otherUser = await makeUser();
     const team = await makeTeam(organizationId, otherUser.id);
     const catalog = await makeInternalMcpCatalog({ serverType: "remote" });
@@ -2530,7 +2612,7 @@ describe("mcp server inspect route", () => {
     makeTeam,
     makeUser,
   }) => {
-    configurePermissions({ isTeamAdmin: false, isEditor: true });
+    configurePermissions({ canManageAllTeams: false, isEditor: true });
     const otherUser = await makeUser();
     const team = await makeTeam(organizationId, otherUser.id);
     const catalog = await makeInternalMcpCatalog({ serverType: "remote" });

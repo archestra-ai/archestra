@@ -1,4 +1,4 @@
-import type { ResourceVisibilityScope } from "@shared";
+import type { ResourceVisibilityScope } from "@archestra/shared";
 import {
   customType,
   index,

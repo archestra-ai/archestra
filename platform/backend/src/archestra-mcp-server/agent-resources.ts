@@ -1,3 +1,4 @@
+import { TOOL_LIST_AGENTS_SHORT_NAME } from "@archestra/shared";
 import { z } from "zod";
 import {
   getAgentTypePermissionChecker,
@@ -22,6 +23,7 @@ import {
   ToolExposureModeSchema,
   UuidIdSchema,
 } from "@/types";
+import { archestraMcpBranding } from "./branding";
 import {
   assignSubAgentDelegations,
   assignToolAssignments,
@@ -98,7 +100,7 @@ export const CreateBaseToolArgsSchema = z
       .optional()
       .describe("Team IDs to attach when creating a team-scoped resource."),
     toolExposureMode: ToolExposureModeSchema.optional().describe(
-      "How tools should be loaded for MCP clients and models. Use 'search_and_run_only' to keep the initial tool list small while letting search_tools find assigned tools and run_tool execute them.",
+      "How tools should be loaded for MCP clients and models. Use 'search_and_run_only' to keep the initial tool list small while letting search_tools find assigned tools and run_tool execute them. Assigned skill discovery/activation tools (list_skills, activate_skill, read_skill_file) and sandbox runtime tools (run_command, download_file, upload_file) stay directly available in both modes.",
     ),
   })
   .strict();
@@ -407,7 +409,12 @@ export async function handleGetResource<
     }
 
     if (!record) {
-      return errorResult(`${getLabel} not found`);
+      // only agents have a discovery tool; proxies/gateways have no list tool.
+      const steer =
+        expectedType === "agent"
+          ? ` Call ${archestraMcpBranding.getToolName(TOOL_LIST_AGENTS_SHORT_NAME)} to find the exact id or name.`
+          : "";
+      return errorResult(`${getLabel} not found.${steer}`);
     }
 
     if (record.agentType !== expectedType) {

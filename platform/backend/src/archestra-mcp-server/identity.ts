@@ -1,4 +1,4 @@
-import { TOOL_WHOAMI_SHORT_NAME } from "@shared";
+import { TOOL_WHOAMI_SHORT_NAME } from "@archestra/shared";
 import { z } from "zod";
 import logger from "@/logging";
 import {

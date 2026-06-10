@@ -105,7 +105,7 @@ ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
 RUN corepack enable
 
-RUN corepack prepare pnpm@11.4.0 --activate
+RUN corepack prepare pnpm@11.5.2 --activate
 
 # Dependencies stage
 FROM base AS deps
@@ -118,7 +118,6 @@ COPY backend/package.json backend/
 COPY frontend/package.json frontend/
 COPY shared/package.json shared/
 COPY archestra-rs/sandbox-rs/package.json archestra-rs/sandbox-rs/
-COPY patches/ patches/
 
 # Install all dependencies
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile
@@ -238,8 +237,10 @@ COPY docker/certs/aws-rds-global-bundle.pem /tmp/aws-rds-ca.pem
 COPY docker/certs/gcloud-sql-global.pem /tmp/gcloud-sql-ca.pem
 
 RUN apk --no-cache upgrade && \
-    # Install PostgreSQL 17, pgvector, and supervisord
-    apk add --no-cache postgresql17 postgresql17-contrib postgresql-pgvector su-exec && \
+    # Install PostgreSQL 17, pgvector, supervisord, and git.
+    # The skill-marketplace clone endpoint needs the git CLI (materialize.ts) and
+    # git-http-backend, the smart-HTTP CGI — which Alpine ships in git-daemon, not git.
+    apk add --no-cache postgresql17 postgresql17-contrib postgresql-pgvector su-exec git git-daemon && \
     # Combine all CA bundles
     cat /tmp/aws-rds-ca.pem /tmp/gcloud-sql-ca.pem > /etc/ssl/certs/cloud-database-ca-bundle.pem && \
     rm -f /tmp/aws-rds-ca.pem /tmp/gcloud-sql-ca.pem && \
@@ -309,7 +310,6 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
 COPY backend/package.json backend/
 COPY frontend/package.json frontend/
 COPY archestra-rs/sandbox-rs/package.json archestra-rs/sandbox-rs/
-COPY patches/ patches/
 COPY docker/scripts/docker-banner.sh /app/docker-banner.sh
 COPY docker/scripts/docker-entrypoint.sh /docker-entrypoint.sh
 COPY docker/supervisord/supervisord.conf /etc/supervisord.conf
@@ -363,6 +363,6 @@ EXPOSE 5432 9000 9050 3000
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-    CMD wget --no-verbose --tries=1 --spider http://localhost:3000/ || exit 1
+    CMD wget --no-verbose --tries=1 --spider http://127.0.0.1:3000/ || exit 1
 
 ENTRYPOINT ["/docker-entrypoint.sh"]

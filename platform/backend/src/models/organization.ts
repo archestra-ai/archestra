@@ -1,4 +1,7 @@
-import { DEFAULT_THEME_ID, type OrganizationCustomFont } from "@shared";
+import {
+  DEFAULT_THEME_ID,
+  type OrganizationCustomFont,
+} from "@archestra/shared";
 import { eq } from "drizzle-orm";
 import { CacheKey, cacheManager } from "@/cache-manager";
 import db, { schema } from "@/database";
@@ -152,6 +155,27 @@ class OrganizationModel {
     );
     await cacheManager.delete(getOrganizationSettingsCacheKey(id));
     return updatedOrganization || null;
+  }
+
+  /**
+   * Turn on the Agent Skill tools for every organization that hasn't already
+   * opted in. Run at startup when the skills feature flag is enabled so the
+   * model-facing skill tools are on by default — newly created agents then
+   * inherit them via `ToolModel.assignSkillToolsToAgent`, and the
+   * slash-command toggle unlocks. Pre-existing agents are not retrofitted;
+   * admins add skill tools to them via the agent tools editor if needed.
+   * Idempotent; returns the number of orgs flipped on.
+   */
+  static async enableSkillToolsForAllOrgs(): Promise<number> {
+    const rows = await db
+      .update(schema.organizationsTable)
+      .set({ skillToolsEnabled: true })
+      .where(eq(schema.organizationsTable.skillToolsEnabled, false))
+      .returning({ id: schema.organizationsTable.id });
+    for (const { id } of rows) {
+      await cacheManager.delete(getOrganizationSettingsCacheKey(id));
+    }
+    return rows.length;
   }
 
   /**

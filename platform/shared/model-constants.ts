@@ -93,6 +93,19 @@ const PROVIDERS_WITH_OPTIONAL_API_KEY = new Set<SupportedProvider>([
   "vllm",
 ]);
 
+/**
+ * Providers that have no usable default endpoint, so an env-seeded key without an
+ * explicit base URL is unusable: vLLM has no default at all (the OpenAI-compatible
+ * SDK would silently fall back to api.openai.com), and Azure has no resource URL.
+ * Bedrock is intentionally excluded — at runtime it infers a region (us-east-1
+ * fallback) so chat works key-only/IAM even without a base URL (only its model-list
+ * sync needs one). Gemini is excluded — its SDK supplies its own default.
+ */
+export const PROVIDERS_REQUIRING_BASE_URL = new Set<SupportedProvider>([
+  "azure",
+  "vllm",
+]);
+
 export function isProviderApiKeyOptional(params: {
   provider: SupportedProvider;
   azureEntraIdEnabled?: boolean;
@@ -132,6 +145,8 @@ export const PERPLEXITY_MODELS = [
  * @see https://platform.minimax.io/docs/guides/models-intro
  */
 export const MINIMAX_MODELS = [
+  { id: "MiniMax-M3", displayName: "MiniMax-M3" },
+  { id: "MiniMax-M3-highspeed", displayName: "MiniMax-M3-highspeed" },
   { id: "MiniMax-M2.7", displayName: "MiniMax-M2.7" },
   { id: "MiniMax-M2.7-highspeed", displayName: "MiniMax-M2.7-highspeed" },
   { id: "MiniMax-M2.5", displayName: "MiniMax-M2.5" },
@@ -186,20 +201,40 @@ export const OPENROUTER_LATEST_ALIAS_PREFIX = "~";
  * Patterns are substrings that model IDs must contain (case-insensitive).
  * Used to identify "best" (highest quality) models.
  *
- * IMPORTANT: Patterns are checked in array order (first match wins).
- * More specific patterns should come before general ones.
+ * Patterns are checked in array order (first match wins), so list each
+ * provider's ids most- to least-preferred (more specific before general). The
+ * first listed id present in the account is the one marked best.
  */
 export const MODEL_MARKER_PATTERNS: Record<SupportedProvider, string[]> = {
-  anthropic: ["opus-4-7"],
-  openai: ["gpt-5.5-pro", "gpt-5.5"],
-  gemini: ["gemini-3.1-pro-preview", "gemini-2.5-pro"],
+  anthropic: ["opus-4-8", "opus-4-7", "opus", "sonnet"],
+  openai: [
+    "gpt-5.5-pro",
+    "gpt-5.5",
+    "gpt-5.4",
+    "gpt-5.3",
+    "gpt-5",
+    "gpt-4.1",
+    "gpt-4o",
+  ],
+  gemini: ["gemini-3.1-pro-preview", "gemini-2.5-pro", "flash"],
   cerebras: ["zai-glm-4.7"],
-  cohere: ["command-a-plus-05-2026"],
-  mistral: ["mistral-medium-2604"],
-  perplexity: ["sonar-deep-research", "sonar-reasoning-pro", "sonar-pro"],
-  groq: ["openai/gpt-oss-120b"],
-  xai: ["grok-4.3"],
+  cohere: ["command-a-plus", "command-a", "command-r-plus", "command-r"],
+  mistral: [
+    "mistral-medium-2604",
+    "mistral-large",
+    "mistral-medium",
+    "mistral-small",
+  ],
+  perplexity: [
+    "sonar-deep-research",
+    "sonar-reasoning-pro",
+    "sonar-pro",
+    "sonar",
+  ],
+  groq: ["openai/gpt-oss-120b", "gpt-oss", "llama-4", "llama-3.3"],
+  xai: ["grok-4.3", "grok-4", "grok-3"],
   openrouter: [
+    "anthropic/claude-opus-4.8",
     "anthropic/claude-opus-4.7",
     "openai/gpt-5.5-pro",
     "openai/gpt-5.5",
@@ -209,11 +244,25 @@ export const MODEL_MARKER_PATTERNS: Record<SupportedProvider, string[]> = {
   ],
   ollama: ["gpt-oss:120b", "llama4:maverick", "llama4:scout", "qwen3:235b"],
   vllm: ["gpt-oss-120b", "llama-4-maverick", "llama-4-scout", "qwen3-235b"],
-  zhipuai: ["glm-5.1"],
-  deepseek: ["deepseek-v4-pro"],
-  minimax: ["minimax-m2.7"],
-  azure: ["gpt-5.5"],
-  bedrock: ["anthropic.claude-opus-4-7"],
+  zhipuai: ["glm-5.1", "glm-5", "glm-4.7", "glm-4"],
+  deepseek: ["deepseek-v4-pro", "deepseek-v4", "deepseek-v3", "deepseek-chat"],
+  minimax: ["minimax-m3", "minimax-m2.7"],
+  azure: [
+    "gpt-5.5-pro",
+    "gpt-5.5",
+    "gpt-5.4",
+    "gpt-5.3",
+    "gpt-5",
+    "gpt-4.1",
+    "gpt-4o",
+  ],
+  bedrock: [
+    "anthropic.claude-opus-4-8",
+    "anthropic.claude-opus-4-7",
+    "claude-opus",
+    "claude-sonnet",
+    "amazon.nova-pro",
+  ],
 };
 
 /**
@@ -221,10 +270,10 @@ export const MODEL_MARKER_PATTERNS: Record<SupportedProvider, string[]> = {
  * Using Record<SupportedProvider, string> ensures a compile-time error when a new provider is added.
  */
 export const DEFAULT_MODELS: Record<SupportedProvider, string> = {
-  anthropic: "claude-opus-4-7",
+  anthropic: "claude-opus-4-8",
   openai: "gpt-5.5",
   openrouter: "openrouter/auto",
-  gemini: "gemini-3.1-pro-preview",
+  gemini: "gemini-3.5-flash",
   cohere: "command-a-plus-05-2026",
   groq: "openai/gpt-oss-120b",
   xai: "grok-4.3",
@@ -235,10 +284,23 @@ export const DEFAULT_MODELS: Record<SupportedProvider, string> = {
   perplexity: "sonar-pro",
   zhipuai: "glm-5.1",
   deepseek: "deepseek-v4-pro",
-  bedrock: "anthropic.claude-opus-4-7",
-  minimax: "MiniMax-M2.7",
+  bedrock: "anthropic.claude-opus-4-8",
+  minimax: "MiniMax-M3",
   azure: "gpt-5.5",
 };
+
+/**
+ * True for OpenAI "pro" reasoning models, which OpenAI serves only through the
+ * Responses API (`/v1/responses`). Calling them on `/v1/chat/completions`
+ * returns `api_not_found_error` ("not a chat model"), so the chat client must
+ * route these models to the Responses transport instead. "pro" is matched as a
+ * hyphen/slash-delimited token, so dated snapshots (`gpt-5.5-pro-2026-01-01`)
+ * are covered.
+ */
+export function requiresOpenAiResponsesApi(modelId: string): boolean {
+  return /(?:^|[-/])pro(?:[-/]|$)/i.test(modelId);
+}
+
 /**
  * Maps models.dev provider IDs to Archestra provider names.
  * This is the single source of truth for all synchronization logic.

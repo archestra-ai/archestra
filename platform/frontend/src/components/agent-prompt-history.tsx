@@ -1,6 +1,6 @@
 "use client";
 
-import { E2eTestId } from "@shared";
+import { E2eTestId } from "@archestra/shared";
 import { ChevronDown, History, Loader2, RotateCcw } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -13,25 +13,12 @@ import {
 import { cn } from "@/lib/utils";
 import { formatDate, formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 
-type AgentVersionItem = {
-  id: string;
-  versionNumber: number;
-  source: "create" | "update" | "restore";
-  createdBy: string | null;
-  createdByName: string | null;
-  createdAt: string;
-  promptPreview: string | null;
-};
-
 type AgentPromptHistoryProps = {
   agentId: string;
   currentPrompt: string | null;
 };
 
-export function AgentPromptHistory({
-  agentId,
-  currentPrompt,
-}: AgentPromptHistoryProps) {
+export function AgentPromptHistory({ agentId }: AgentPromptHistoryProps) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [confirmingRestore, setConfirmingRestore] = useState(false);
 

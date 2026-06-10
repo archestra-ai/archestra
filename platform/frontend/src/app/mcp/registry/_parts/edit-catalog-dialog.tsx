@@ -1,4 +1,4 @@
-import type { archestraApiTypes } from "@shared";
+import type { archestraApiTypes } from "@archestra/shared";
 import { Loader2, ShieldX } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -7,15 +7,12 @@ import {
   DialogFooter,
   DialogStickyFooter,
 } from "@/components/ui/dialog";
-import {
-  useCatalogPresets,
-  useUpdateInternalMcpCatalogItem,
-} from "@/lib/mcp/internal-mcp-catalog.query";
+import { useUpdateInternalMcpCatalogItem } from "@/lib/mcp/internal-mcp-catalog.query";
 import { useMcpServers } from "@/lib/mcp/mcp-server.query";
+import { useCanModifyCatalogItem } from "./catalog-edit-access";
 import { McpCatalogForm } from "./mcp-catalog-form";
 import type { McpCatalogFormValues } from "./mcp-catalog-form.types";
 import { transformFormToApiData } from "./mcp-catalog-form.utils";
-import { useCanEditCatalogPresets } from "./preset-helpers";
 
 interface EditCatalogDialogProps {
   item: archestraApiTypes.GetInternalMcpCatalogResponses["200"][number] | null;
@@ -78,16 +75,16 @@ export function EditCatalogContent({
 }: EditCatalogContentProps) {
   // Authorization gate for the edit form itself — covers every entry point
   // (the settings dialog's Configuration page, a shared `?edit=<id>` deep link,
-  // or the legacy EditCatalogDialog). Mirrors the backend
-  // `assertCanEditCatalogPresets`: an admin, or the author of a personal item.
-  const { canEdit, isLoading: canEditLoading } = useCanEditCatalogPresets(item);
+  // or the legacy EditCatalogDialog). Mirrors the backend item-modify rule: an
+  // admin, a team-admin member of the item's teams, or the author of a personal
+  // item.
+  const { canModify: canEdit, isLoading: canEditLoading } =
+    useCanModifyCatalogItem(item);
   const updateMutation = useUpdateInternalMcpCatalogItem();
 
-  const { data: presets = [] } = useCatalogPresets(item.id);
   const { data: servers = [] } = useMcpServers();
-  const affectedCatalogIds = new Set([item.id, ...presets.map((p) => p.id)]);
-  const affectedServerCount = servers.filter((s) =>
-    s.catalogId ? affectedCatalogIds.has(s.catalogId) : false,
+  const affectedServerCount = servers.filter(
+    (s) => s.catalogId === item.id,
   ).length;
 
   const onSubmit = async (values: McpCatalogFormValues) => {
@@ -121,7 +118,7 @@ export function EditCatalogContent({
       onDirtyChange={onDirtyChange}
       submitRef={submitRef}
       affectedServerCount={affectedServerCount}
-      footer={({ isDirty, onReset }) => {
+      footer={({ isDirty, onReset, hasBlockingErrors }) => {
         if (keepOpenOnSave && !isDirty) return null;
         const Footer = keepOpenOnSave ? DialogStickyFooter : DialogFooter;
         return (
@@ -137,7 +134,9 @@ export function EditCatalogContent({
             )}
             <Button
               type="submit"
-              disabled={updateMutation.isPending || !isDirty}
+              disabled={
+                updateMutation.isPending || !isDirty || hasBlockingErrors
+              }
             >
               {updateMutation.isPending ? "Saving..." : "Save Changes"}
             </Button>

@@ -7,7 +7,7 @@ import {
   providerDisplayNames,
   type ResourceVisibilityScope,
   type SupportedProvider,
-} from "@shared";
+} from "@archestra/shared";
 import {
   Building2,
   CheckIcon,

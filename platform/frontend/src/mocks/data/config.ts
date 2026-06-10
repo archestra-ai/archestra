@@ -1,4 +1,4 @@
-import type { archestraApiTypes } from "@shared";
+import type { archestraApiTypes } from "@archestra/shared";
 
 type Config = archestraApiTypes.GetConfigResponses["200"];
 
@@ -18,7 +18,7 @@ export function makeConfig(
     },
     features: {
       orchestratorK8sRuntime: false,
-      codeRuntime: false,
+      sandbox: false,
       agentSkillsEnabled: false,
       byosEnabled: false,
       byosVaultKvVersion: "1",
@@ -35,6 +35,7 @@ export function makeConfig(
       virtualKeyDefaultExpirationSeconds: 3600,
       mcpSandboxDomain: null,
       chatSecretScanEnabled: true,
+      agentHooksEnabled: false,
       ...overrides.features,
       maintenanceMode: overrides.features?.maintenanceMode ?? null,
     },

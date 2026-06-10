@@ -1,5 +1,6 @@
 import config from "@/config";
 import logger from "@/logging";
+import { joinBaseUrl } from "@/utils/base-url";
 import { type ModelInfo, PLACEHOLDER_BEARER_TOKEN } from "./types";
 
 export async function fetchOllamaModels(
@@ -8,7 +9,7 @@ export async function fetchOllamaModels(
   extraHeaders?: Record<string, string> | null,
 ): Promise<ModelInfo[]> {
   const baseUrl = baseUrlOverride || config.llm.ollama.baseUrl;
-  const url = `${baseUrl}/models`;
+  const url = joinBaseUrl(baseUrl, "/models");
   const response = await fetch(url, {
     headers: {
       ...(extraHeaders ?? {}),

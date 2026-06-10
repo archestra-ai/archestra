@@ -2,7 +2,7 @@ import {
   type archestraApiTypes,
   CONTEXT_EXTERNAL_AGENT_ID,
   CONTEXT_TEAM_IDS,
-} from "@shared";
+} from "@archestra/shared";
 import { ArrowRightIcon, Plus } from "lucide-react";
 import { ButtonWithTooltip } from "@/components/button-with-tooltip";
 import { DebouncedInput } from "@/components/debounced-input";

@@ -4,6 +4,25 @@ import { schema } from "@/database";
 
 // === Public schemas & types ===
 
+/**
+ * A valid JavaScript regex source, stored without delimiters or flags. Used as
+ * an environment's allowlist validation rule for MCP config values.
+ */
+export const ValidationRegexSchema = z
+  .string()
+  .max(1000)
+  .refine(
+    (val) => {
+      try {
+        new RegExp(val);
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    { message: "Must be a valid regular expression" },
+  );
+
 export const NetworkPolicyEgressModeSchema = z.enum([
   "off",
   "restricted",
@@ -102,11 +121,12 @@ export const CreateEnvironmentSchema = z.object({
   namespace: KubernetesNamespaceSchema.nullable().optional(),
   networkPolicy: NetworkPolicyInputSchema.nullable().optional(),
   restricted: z.boolean().optional(),
+  validationRegex: ValidationRegexSchema.nullable().optional(),
 });
 
 /**
  * All editable fields. Send `null` to clear the nullable ones (namespace,
- * description).
+ * description, validationRegex).
  */
 export const UpdateEnvironmentSchema = z.object({
   name: z.string().trim().min(1).max(50).optional(),
@@ -114,6 +134,7 @@ export const UpdateEnvironmentSchema = z.object({
   namespace: KubernetesNamespaceSchema.nullable().optional(),
   networkPolicy: NetworkPolicyInputSchema.nullable().optional(),
   restricted: z.boolean().optional(),
+  validationRegex: ValidationRegexSchema.nullable().optional(),
 });
 
 export type Environment = z.infer<typeof SelectEnvironmentSchema>;

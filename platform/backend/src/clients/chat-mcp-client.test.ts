@@ -1,12 +1,12 @@
-import type { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import {
   getArchestraToolFullName,
   TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON,
   TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
   TOOL_WHOAMI_SHORT_NAME,
-} from "@shared";
+} from "@archestra/shared";
+import type { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { jsonSchema, type Tool } from "ai";
 import { beforeEach, vi } from "vitest";
 import { archestraMcpBranding } from "@/archestra-mcp-server";
@@ -686,9 +686,13 @@ describe("executeMcpTool error handling", () => {
 describe("chat-mcp-client tool caching", () => {
   test("passes token auth context when chat executes archestra run_tool", async ({
     makeAgent,
+    makeAgentTool,
+    makeInternalMcpCatalog,
+    makeTool,
     makeUser,
     makeOrganization,
     makeMember,
+    makeConversation,
   }) => {
     const org = await makeOrganization();
     const user = await makeUser();
@@ -697,8 +701,18 @@ describe("chat-mcp-client tool caching", () => {
       organizationId: org.id,
       name: "Chat Run Tool Agent",
     });
+    const catalog = await makeInternalMcpCatalog();
+    const targetTool = await makeTool({
+      name: "workspace__find_projects",
+      catalogId: catalog.id,
+    });
+    await makeAgentTool(agent.id, targetTool.id);
 
-    const conversationId = "conversation-1";
+    const conversation = await makeConversation(agent.id, {
+      organizationId: org.id,
+      userId: user.id,
+    });
+    const conversationId = conversation.id;
     const cacheKey = chatClient.__test.getCacheKey(
       agent.id,
       user.id,
@@ -782,11 +796,14 @@ describe("chat-mcp-client tool caching", () => {
 
   test("requests approval for run_tool when the target tool requires approval", async ({
     makeAgent,
+    makeAgentTool,
+    makeInternalMcpCatalog,
     makeUser,
     makeOrganization,
     makeMember,
     makeTool,
     makeToolPolicy,
+    makeConversation,
   }) => {
     const org = await makeOrganization({ globalToolPolicy: "restrictive" });
     const user = await makeUser();
@@ -795,9 +812,12 @@ describe("chat-mcp-client tool caching", () => {
       organizationId: org.id,
       name: "Chat Wrapped Approval Agent",
     });
+    const catalog = await makeInternalMcpCatalog();
     const targetTool = await makeTool({
       name: `workspace__export_${crypto.randomUUID().slice(0, 8)}`,
+      catalogId: catalog.id,
     });
+    await makeAgentTool(agent.id, targetTool.id);
     await makeToolPolicy(targetTool.id, {
       action: "require_approval",
       conditions: [
@@ -805,7 +825,11 @@ describe("chat-mcp-client tool caching", () => {
       ],
     });
 
-    const conversationId = "conversation-approval";
+    const conversation = await makeConversation(agent.id, {
+      organizationId: org.id,
+      userId: user.id,
+    });
+    const conversationId = conversation.id;
     const cacheKey = chatClient.__test.getCacheKey(
       agent.id,
       user.id,
@@ -1551,6 +1575,86 @@ describe("mcpToolToModelOutput", () => {
     });
 
     expect(result).toEqual({ type: "text", value: "Just text, no metadata" });
+  });
+});
+
+describe("buildArchestraToolOutput", () => {
+  const archestraResponse = {
+    content: [{ type: "text" as const, text: "Diagram displayed!" }],
+    structuredContent: { checkpoint: "abc" },
+    _meta: { extra: true },
+  };
+
+  test("returns plain text for a direct (non-run_tool) archestra tool", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent();
+    const result = await chatClient.buildArchestraToolOutput({
+      response: archestraResponse,
+      toolName: "archestra__whoami",
+      toolArguments: {},
+      agentId: agent.id,
+    });
+
+    expect(result).toBe("Diagram displayed!");
+  });
+
+  test("attaches the target tool's UI resource when dispatched via run_tool", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent();
+    const mockToolDef = {
+      name: "excalidraw__create_view",
+      meta: { _meta: { ui: { resourceUri: "ui://excalidraw/mcp-app.html" } } },
+    };
+    const spy = vi
+      .spyOn(ToolModel, "findByNameForAgent")
+      // biome-ignore lint/suspicious/noExplicitAny: test mock data
+      .mockResolvedValueOnce(mockToolDef as any);
+
+    const result = await chatClient.buildArchestraToolOutput({
+      response: archestraResponse,
+      toolName: "archestra__run_tool",
+      toolArguments: {
+        tool_name: "excalidraw__create_view",
+        tool_args: { elements: "[]" },
+      },
+      agentId: agent.id,
+    });
+
+    expect(spy).toHaveBeenCalledWith("excalidraw__create_view", agent.id);
+    expect(typeof result).toBe("object");
+    expect(result).toMatchObject({
+      content: "Diagram displayed!",
+      _meta: {
+        extra: true,
+        ui: { resourceUri: "ui://excalidraw/mcp-app.html" },
+      },
+      structuredContent: { checkpoint: "abc" },
+    });
+
+    spy.mockRestore();
+  });
+
+  test("returns plain text when the dispatched target has no UI resource", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent();
+    const spy = vi
+      .spyOn(ToolModel, "findByNameForAgent")
+      // biome-ignore lint/suspicious/noExplicitAny: test mock data
+      .mockResolvedValueOnce({ name: "context7__search", meta: null } as any);
+
+    const result = await chatClient.buildArchestraToolOutput({
+      response: archestraResponse,
+      toolName: "archestra__run_tool",
+      toolArguments: { tool_name: "context7__search", tool_args: {} },
+      agentId: agent.id,
+    });
+
+    expect(result).toBe("Diagram displayed!");
+
+    spy.mockRestore();
   });
 });
 

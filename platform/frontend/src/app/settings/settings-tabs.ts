@@ -1,4 +1,4 @@
-import { requiredPagePermissionsMap } from "@shared/access-control";
+import { requiredPagePermissionsMap } from "@archestra/shared/access-control";
 import { usePermissionMap } from "@/lib/auth/auth.query";
 import config from "@/lib/config/config";
 
@@ -35,6 +35,9 @@ export function useSettingsTabs() {
       : []),
     ...(permissionMap?.["/settings/roles"]
       ? [{ label: "Roles", href: "/settings/roles" }]
+      : []),
+    ...(permissionMap?.["/settings/github"]
+      ? [{ label: "GitHub", href: "/settings/github" }]
       : []),
     ...(config.enterpriseFeatures.core &&
     permissionMap?.["/settings/identity-providers"]

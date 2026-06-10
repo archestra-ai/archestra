@@ -3,7 +3,7 @@ import {
   DEFAULT_ADMIN_EMAIL,
   type Permissions,
   type PredefinedRoleName,
-} from "@shared";
+} from "@archestra/shared";
 import { eq, getTableColumns, inArray } from "drizzle-orm";
 import { betterAuth } from "@/auth";
 import config from "@/config";

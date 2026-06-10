@@ -2,7 +2,7 @@
 title: Costs & Limits
 category: LLM Proxy
 order: 4
-lastUpdated: 2026-06-02
+lastUpdated: 2026-06-09
 ---
 
 Archestra tracks LLM usage costs, enforces usage limits, and records savings from model optimization and tool-result compression. These controls work together: pricing defines cost, logs and statistics show what happened, limits stop or shape usage, and optimization reduces spend before a request reaches a model.
@@ -23,6 +23,7 @@ Archestra stores both raw spend and savings. Savings can come from:
 
 - optimization rules that reroute requests to lower-cost models
 - TOON compression that reduces tool-result tokens before the result is sent to the model
+- prompt caching that reuses an unchanged request prefix instead of reprocessing it each turn
 
 ## Usage Limits
 
@@ -98,3 +99,9 @@ You can enable TOON compression at:
 - team level when only certain teams should use it
 
 See the upstream TOON format project for the format specification and benchmarks: [toon-format/toon](https://github.com/toon-format/toon).
+
+## Prompt Caching
+
+Prompt caching lets a provider reuse the unchanging prefix of a request, such as the system prompt, tool definitions, and earlier turns, instead of reprocessing it on every turn. Reused tokens are billed at a fraction of the input price, which matters most for agents with a long system prompt or many tools. The first request to cache a prefix pays a small write surcharge, while later requests that reuse it pay far less, so a multi-turn conversation is a net saving.
+
+Anthropic and Amazon Bedrock require explicit cache markers, which Archestra adds to the stable prefix and the most recent turn; OpenAI, Gemini, and DeepSeek cache eligible prefixes on their own. Caching applies automatically wherever the provider and model support it. Archestra records cache read and write token counts and the resulting savings, so they appear in logs and aggregate cost reporting.

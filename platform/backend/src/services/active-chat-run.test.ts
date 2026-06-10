@@ -1,5 +1,7 @@
 import type { UIMessageChunk } from "ai";
+import { eq } from "drizzle-orm";
 import { vi } from "vitest";
+import db, { schema } from "@/database";
 import ActiveChatRunModel from "@/models/chat-active-run";
 import {
   ActiveChatRunService,
@@ -66,6 +68,61 @@ test("drainStreamToEvents compacts adjacent text and reasoning deltas before mar
 
   const terminalRun = await ActiveChatRunModel.findById(run?.id ?? "");
   expect(terminalRun?.status).toBe("completed");
+});
+
+test("drainStreamToEvents fails the run as soon as an error chunk arrives, even if the stream never closes", async ({
+  makeAgent,
+  makeConversation,
+  makeOrganization,
+  makeUser,
+}) => {
+  const user = await makeUser();
+  const organization = await makeOrganization();
+  const agent = await makeAgent({ organizationId: organization.id });
+  const conversation = await makeConversation(agent.id, {
+    userId: user.id,
+    organizationId: organization.id,
+  });
+  const run = await ActiveChatRunModel.create({
+    conversationId: conversation.id,
+    userId: user.id,
+    organizationId: organization.id,
+  });
+
+  // A provider error surfaced mid-turn while the upstream connection wedges
+  // open: the client already rendered the error, but the stream never ends.
+  const stream = new ReadableStream<UIMessageChunk>({
+    start(controller) {
+      controller.enqueue({ type: "start" });
+      controller.enqueue({ type: "error", errorText: "provider exploded" });
+      // intentionally never closed
+    },
+  });
+
+  activeChatRunService.drainStreamToEvents({
+    runId: run?.id ?? "",
+    conversationId: conversation.id,
+    stream,
+    getTerminalStatus: async () => ({ status: "completed" }),
+  });
+
+  // The run must flip to failed without waiting for the stream to close —
+  // otherwise the conversation stays 409-blocked until the stale reaper.
+  await waitForTerminalRun(run?.id ?? "");
+  const terminalRun = await ActiveChatRunModel.findById(run?.id ?? "");
+  expect(terminalRun?.status).toBe("failed");
+  expect(terminalRun?.error).toBe("provider exploded");
+
+  // The error event is flushed before the status flips, so a replaying
+  // client can never observe the failed run without the error chunk.
+  const events = await ActiveChatRunModel.readEventsAfter({
+    runId: run?.id ?? "",
+    seq: 0,
+  });
+  expect(events.flatMap((event) => event.payloads)).toContainEqual({
+    type: "error",
+    errorText: "provider exploded",
+  });
 });
 
 test("createReplayStream uses polling fallback when no notification arrives", async ({
@@ -285,6 +342,129 @@ test("createRun throttles terminal cleanup and only checks stale runs after conf
 
   deleteSpy.mockRestore();
   staleSpy.mockRestore();
+});
+
+test("failInFlightRuns fails this pod's running runs and clears the set", async ({
+  makeAgent,
+  makeConversation,
+  makeOrganization,
+  makeUser,
+}) => {
+  const user = await makeUser();
+  const organization = await makeOrganization();
+  const agent = await makeAgent({ organizationId: organization.id });
+  const runningConversation = await makeConversation(agent.id, {
+    userId: user.id,
+    organizationId: organization.id,
+  });
+  const completedConversation = await makeConversation(agent.id, {
+    userId: user.id,
+    organizationId: organization.id,
+  });
+  const service = new ActiveChatRunService(
+    new InMemoryActiveChatRunNotifier(),
+    10_000,
+    10_000,
+  );
+
+  const runningRun = await service.createRun({
+    conversationId: runningConversation.id,
+    userId: user.id,
+    organizationId: organization.id,
+  });
+  const completedRun = await service.createRun({
+    conversationId: completedConversation.id,
+    userId: user.id,
+    organizationId: organization.id,
+  });
+  // A completed run leaves the in-flight set and must not be re-failed.
+  await service.markTerminal({
+    runId: completedRun?.id ?? "",
+    status: "completed",
+  });
+
+  expect(await service.failInFlightRuns()).toBe(1);
+  expect(
+    (await ActiveChatRunModel.findById(runningRun?.id ?? ""))?.status,
+  ).toBe("failed");
+  expect(
+    (await ActiveChatRunModel.findById(completedRun?.id ?? ""))?.status,
+  ).toBe("completed");
+
+  // The set is cleared, so a second shutdown pass fails nothing.
+  expect(await service.failInFlightRuns()).toBe(0);
+});
+
+test("createRun refuses new runs once shutdown has begun", async ({
+  makeAgent,
+  makeConversation,
+  makeOrganization,
+  makeUser,
+}) => {
+  const user = await makeUser();
+  const organization = await makeOrganization();
+  const agent = await makeAgent({ organizationId: organization.id });
+  const conversation = await makeConversation(agent.id, {
+    userId: user.id,
+    organizationId: organization.id,
+  });
+  const service = new ActiveChatRunService(
+    new InMemoryActiveChatRunNotifier(),
+    10_000,
+    10_000,
+  );
+
+  service.beginShutdown();
+  expect(service.shuttingDown).toBe(true);
+
+  const run = await service.createRun({
+    conversationId: conversation.id,
+    userId: user.id,
+    organizationId: organization.id,
+  });
+
+  // No run is created after shutdown begins, so there is nothing to orphan.
+  expect(run).toBeNull();
+  expect(
+    await ActiveChatRunModel.findRunningByConversation(conversation.id),
+  ).toBeNull();
+  expect(await service.failInFlightRuns()).toBe(0);
+});
+
+test("reapStaleRuns fails runs past the stale cutoff", async ({
+  makeAgent,
+  makeConversation,
+  makeOrganization,
+  makeUser,
+}) => {
+  const user = await makeUser();
+  const organization = await makeOrganization();
+  const agent = await makeAgent({ organizationId: organization.id });
+  const conversation = await makeConversation(agent.id, {
+    userId: user.id,
+    organizationId: organization.id,
+  });
+  const service = new ActiveChatRunService(
+    new InMemoryActiveChatRunNotifier(),
+    10_000,
+    10_000,
+  );
+
+  const run = await service.createRun({
+    conversationId: conversation.id,
+    userId: user.id,
+    organizationId: organization.id,
+  });
+  await db
+    .update(schema.chatActiveRunsTable)
+    .set({ updatedAt: new Date(Date.now() - 11 * 60 * 1000) })
+    .where(eq(schema.chatActiveRunsTable.id, run?.id ?? ""));
+
+  await service.reapStaleRuns();
+
+  expect((await ActiveChatRunModel.findById(run?.id ?? ""))?.status).toBe(
+    "failed",
+  );
 });
 
 function createChunkStream(

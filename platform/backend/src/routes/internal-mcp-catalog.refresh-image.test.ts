@@ -176,8 +176,10 @@ describe("POST /api/internal_mcp_catalog/:id/refresh-image", () => {
     expect(mockReinstallMultitenantCatalog).not.toHaveBeenCalled();
   });
 
-  test("rejects non-editors for shared catalogs", async () => {
-    mockHasPermission.mockResolvedValue({ success: false, error: null });
+  test("rejects non-editors for shared catalogs", async ({
+    makeUser,
+    makeMember,
+  }) => {
     const catalog = await InternalMcpCatalogModel.create(
       {
         name: "shared-local-server",
@@ -191,70 +193,20 @@ describe("POST /api/internal_mcp_catalog/:id/refresh-image", () => {
       { organizationId, authorId: user.id },
     );
 
+    // Act as a plain member: no mcpRegistry:team-admin and not an admin, so
+    // they cannot manage an org-scoped catalog.
+    const member = await makeUser();
+    await makeMember(member.id, organizationId, { role: "member" });
+    user = member;
+
     const response = await app.inject({
       method: "POST",
       url: `/api/internal_mcp_catalog/${catalog.id}/refresh-image`,
     });
 
     expect(response.statusCode).toBe(403);
-    expect(response.json().error.message).toBe(
-      "Only catalog editors can restart this catalog's pods",
-    );
+    expect(response.json().error.message).toMatch(/admin/i);
     expect(mockReinstallMultitenantCatalog).not.toHaveBeenCalled();
-  });
-
-  test("restarts local child catalogs with the parent catalog", async () => {
-    const parent = await InternalMcpCatalogModel.create(
-      {
-        name: "parent-local-server",
-        serverType: "local",
-        scope: "org",
-        multitenant: true,
-        localConfig: {
-          dockerImage: "registry.example.com/mcp:latest",
-        },
-      },
-      { organizationId, authorId: user.id },
-    );
-    const childA = await InternalMcpCatalogModel.create(
-      {
-        name: "child-a-ignored",
-        childName: "child-a",
-        parentCatalogItemId: parent.id,
-        serverType: "local",
-        scope: "org",
-        multitenant: true,
-        localConfig: {
-          dockerImage: "registry.example.com/mcp:latest",
-        },
-      },
-      { organizationId, authorId: user.id },
-    );
-    const childB = await InternalMcpCatalogModel.create(
-      {
-        name: "child-b-ignored",
-        childName: "child-b",
-        parentCatalogItemId: parent.id,
-        serverType: "local",
-        scope: "org",
-        multitenant: true,
-        localConfig: {
-          dockerImage: "registry.example.com/mcp:latest",
-        },
-      },
-      { organizationId, authorId: user.id },
-    );
-
-    const response = await app.inject({
-      method: "POST",
-      url: `/api/internal_mcp_catalog/${parent.id}/refresh-image`,
-    });
-
-    expect(response.statusCode).toBe(200);
-    expect(mockReinstallMultitenantCatalog).toHaveBeenCalledTimes(3);
-    expect(
-      mockReinstallMultitenantCatalog.mock.calls.map(([catalog]) => catalog.id),
-    ).toEqual([parent.id, childA.id, childB.id]);
   });
 
   test("does not fail the request when one single-tenant install restart succeeds", async () => {

@@ -4,7 +4,7 @@ import {
   isSupportedProvider,
   providerDisplayNames,
   type SupportedProvider,
-} from "@shared";
+} from "@archestra/shared";
 import { AlertTriangle, Check, Copy, Search } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";

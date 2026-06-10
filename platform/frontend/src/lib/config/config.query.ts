@@ -1,4 +1,4 @@
-import { archestraApiSdk, type archestraApiTypes } from "@shared";
+import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useQuery } from "@tanstack/react-query";
 import { useIsAuthenticated } from "@/lib/auth/auth.hook";
 import appConfig, { DEFAULT_BACKEND_URL } from "./config";

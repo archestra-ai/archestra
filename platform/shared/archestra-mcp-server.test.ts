@@ -6,6 +6,7 @@ import {
   getArchestraToolFullName,
   getArchestraToolPrefix,
   getArchestraToolShortName,
+  isAlwaysExposedArchestraToolShortName,
   isArchestraMcpServerTool,
   TOOL_CREATE_AGENT_FULL_NAME,
 } from "./archestra-mcp-server";
@@ -80,5 +81,44 @@ describe("archestra MCP tool names", () => {
     expect(isArchestraMcpServerTool("github__list_issues")).toBe(false);
     expect(isAgentTool(`${AGENT_TOOL_PREFIX}delegate_me`)).toBe(true);
     expect(isAgentTool("archestra__whoami")).toBe(false);
+  });
+
+  test("flags the skill and sandbox runtime path as always-exposed", () => {
+    for (const shortName of [
+      "list_skills",
+      "activate_skill",
+      "read_skill_file",
+      "run_command",
+      "download_file",
+      "upload_file",
+    ]) {
+      expect(isAlwaysExposedArchestraToolShortName(shortName)).toBe(true);
+    }
+  });
+
+  test("recognizes always-exposed tools through a white-label prefix", () => {
+    const branding = { appName: "Acme Control Plane", fullWhiteLabeling: true };
+    const brandedActivate = getArchestraToolFullName(
+      "activate_skill",
+      branding,
+    );
+    const shortName = getArchestraToolShortName(brandedActivate, branding);
+
+    expect(shortName).toBe("activate_skill");
+    expect(
+      shortName !== null && isAlwaysExposedArchestraToolShortName(shortName),
+    ).toBe(true);
+  });
+
+  test("does not flag skill-authoring or unrelated tools", () => {
+    for (const shortName of [
+      "create_skill",
+      "update_skill",
+      "whoami",
+      "search_tools",
+      "run_tool",
+    ]) {
+      expect(isAlwaysExposedArchestraToolShortName(shortName)).toBe(false);
+    }
   });
 });

@@ -1,4 +1,4 @@
-import type { ModelInputModality } from "@shared";
+import type { ModelInputModality } from "@archestra/shared";
 import type { drive_v3 } from "googleapis";
 import { google } from "googleapis";
 import JSZip from "jszip";

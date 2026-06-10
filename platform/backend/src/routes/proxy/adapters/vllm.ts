@@ -4,7 +4,7 @@
  * vLLM exposes an OpenAI-compatible API, so this adapter is largely based on the OpenAI adapter.
  * See: https://docs.vllm.ai/en/latest/features/openai_api.html
  */
-import { ArchestraInternalErrorCode } from "@shared";
+import { ArchestraInternalErrorCode } from "@archestra/shared";
 import { encode as toonEncode } from "@toon-format/toon";
 import { get } from "lodash-es";
 import OpenAIProvider from "openai";

@@ -4,7 +4,7 @@ import {
   TOOL_LIST_SKILLS_FULL_NAME,
   TOOL_READ_SKILL_FILE_FULL_NAME,
   TOOL_UPDATE_SKILL_FULL_NAME,
-} from "@shared";
+} from "@archestra/shared";
 import { describe, expect, it } from "vitest";
 import {
   agentToSkill,

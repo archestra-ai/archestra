@@ -1,6 +1,6 @@
 "use client";
 
-import { DEFAULT_APP_DESCRIPTION, DEFAULT_APP_NAME } from "@shared";
+import { DEFAULT_APP_DESCRIPTION, DEFAULT_APP_NAME } from "@archestra/shared";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useState } from "react";
 import {
@@ -67,8 +67,8 @@ export default function OrganizationSettingsPage() {
     DEFAULT_THEME,
     isLoadingAppearance,
   } = orgTheme ?? {
-    currentUITheme: "modern-minimal" as const,
-    DEFAULT_THEME: "modern-minimal" as const,
+    currentUITheme: "caffeine" as const,
+    DEFAULT_THEME: "caffeine" as const,
   };
 
   useOnUnmount(() => {

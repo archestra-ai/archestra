@@ -6,7 +6,7 @@ import {
   formatSecretStorageType,
   isProviderApiKeyOptional,
   type ResourceVisibilityScope,
-} from "@shared";
+} from "@archestra/shared";
 import type { ColumnDef } from "@tanstack/react-table";
 import {
   AlertTriangle,
@@ -444,9 +444,6 @@ export default function ApiKeysPage() {
                   label: "Edit",
                   permissions: {
                     llmProviderApiKey: ["update"],
-                    ...(row.original.scope === "org"
-                      ? { team: ["admin"] }
-                      : {}),
                   },
                   disabled: isSystem,
                   disabledTooltip: "System keys cannot be edited",
@@ -459,9 +456,6 @@ export default function ApiKeysPage() {
                   variant: "destructive",
                   permissions: {
                     llmProviderApiKey: ["delete"],
-                    ...(row.original.scope === "org"
-                      ? { team: ["admin"] }
-                      : {}),
                   },
                   disabled: isSystem || isInUse,
                   disabledTooltip: isInUse

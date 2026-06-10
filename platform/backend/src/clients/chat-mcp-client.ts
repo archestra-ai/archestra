@@ -1,5 +1,14 @@
 import { randomUUID } from "node:crypto";
 import {
+  isAgentTool,
+  isBrowserMcpTool,
+  MCP_APPS_CLIENT_EXTENSION_CAPABILITIES,
+  parseFullToolName,
+  TimeInMs,
+  TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON,
+  TOOL_RUN_TOOL_SHORT_NAME,
+} from "@archestra/shared";
+import {
   type McpUiResourceCsp,
   type McpUiResourcePermissions,
   type McpUiToolMeta,
@@ -8,18 +17,10 @@ import {
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type {
+  CallToolResult,
   ContentBlock,
   EmbeddedResource,
 } from "@modelcontextprotocol/sdk/types.js";
-import {
-  isAgentTool,
-  isBrowserMcpTool,
-  MCP_APPS_CLIENT_EXTENSION_CAPABILITIES,
-  parseFullToolName,
-  TimeInMs,
-  TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON,
-  TOOL_RUN_TOOL_SHORT_NAME,
-} from "@shared";
 import { type JSONSchema7, jsonSchema, type Tool } from "ai";
 import { evaluateToolExecutionContextTrust } from "@/agents/context-trust";
 import {
@@ -31,6 +32,8 @@ import {
 import { CacheKey, LRUCacheManager } from "@/cache-manager";
 import mcpClient, { type TokenAuthContext } from "@/clients/mcp-client";
 import config from "@/config";
+import { hookDispatcherService } from "@/hooks/hook-dispatcher-service";
+import { type CollectedHookRun, toCollectedRuns } from "@/hooks/hook-run-parts";
 import logger from "@/logging";
 import {
   AgentModel,
@@ -217,6 +220,12 @@ export const __test = {
   pingClientWithTimeout,
   resolveApprovalPolicyTarget,
   throwIfApprovalRequired,
+  // Hook helpers — exposed for focused unit tests
+  firePreToolUseHook,
+  firePostToolUseHook,
+  appendHookFeedbackToToolResult,
+  buildPreToolUseBlockedResult,
+  toolResultText,
 };
 
 /**
@@ -785,6 +794,7 @@ export async function getChatMcpTools({
   user,
   blockOnApprovalRequired,
   scheduleTriggerRunId,
+  hookRunCollector,
 }: {
   agentName: string;
   agentId: string;
@@ -808,6 +818,8 @@ export async function getChatMcpTools({
   blockOnApprovalRequired?: boolean;
   /** Schedule trigger run ID — enables artifact_write to target the run */
   scheduleTriggerRunId?: string;
+  /** Per-turn sink for inline `data-hook-run` entries (chat path only). */
+  hookRunCollector?: CollectedHookRun[];
 }): Promise<Record<string, Tool>> {
   const toolCacheKey = getToolCacheKey(agentId, userId, conversationId);
   const shouldUseToolCache = !abortSignal;
@@ -968,6 +980,37 @@ export async function getChatMcpTools({
               callback: async (span) => {
                 try {
                   throwIfAborted(abortSignal);
+
+                  // PreToolUse lifecycle hook: a block short-circuits execution
+                  // and returns an explanatory tool-result instead of running.
+                  const hookCtx: ToolHookContext = {
+                    agentId,
+                    organizationId,
+                    userId,
+                    conversationId,
+                    hookRunCollector,
+                  };
+                  const preBlockReason = await firePreToolUseHook({
+                    ctx: hookCtx,
+                    toolName: mcpTool.name,
+                    toolInput: toolArguments,
+                    toolCallId: options.toolCallId,
+                  });
+                  if (preBlockReason !== null) {
+                    span.setAttribute(ATTR_MCP_IS_ERROR_RESULT, true);
+                    reportToolMetrics({
+                      toolName: mcpTool.name,
+                      agentId,
+                      agentName,
+                      startTime: toolStartTime,
+                      isError: true,
+                    });
+                    return buildPreToolUseBlockedResult(preBlockReason);
+                  }
+
+                  let toolResult:
+                    | string
+                    | { content: string; [key: string]: unknown };
                   // Check if this is an Archestra tool - handle directly without DB lookup
                   if (archestraMcpBranding.isToolName(mcpTool.name)) {
                     logger.debug(
@@ -1029,27 +1072,44 @@ export async function getChatMcpTools({
                     // Return errors as tool-result text so the LLM can read
                     // and recover, instead of throwing (which surfaces as a
                     // fatal chat error). Matches executeMcpTool behavior.
-                    return archestraResponse.content
-                      .map((item) =>
-                        item.type === "text" ? item.text : JSON.stringify(item),
-                      )
-                      .join("\n");
+                    // When run_tool dispatches to an interactive tool, attach
+                    // that tool's MCP App UI resource so the frontend renders it
+                    // (the model still only sees the plain-text summary).
+                    toolResult = await buildArchestraToolOutput({
+                      response: archestraResponse,
+                      toolName: mcpTool.name,
+                      toolArguments,
+                      agentId,
+                    });
+                  } else {
+                    // Execute non-Archestra tools via shared helper with browser sync
+                    toolResult = await executeMcpTool({
+                      toolName: mcpTool.name,
+                      toolArguments,
+                      agentId,
+                      agentName,
+                      userId,
+                      organizationId,
+                      conversationId,
+                      mcpGwToken,
+                      globalToolPolicy,
+                      considerContextUntrusted,
+                      abortSignal,
+                    });
                   }
 
-                  // Execute non-Archestra tools via shared helper with browser sync
-                  return await executeMcpTool({
+                  // PostToolUse lifecycle hook: append any block feedback to the
+                  // tool result the model sees, preserving its shape.
+                  const postFeedback = await firePostToolUseHook({
+                    ctx: hookCtx,
                     toolName: mcpTool.name,
-                    toolArguments,
-                    agentId,
-                    agentName,
-                    userId,
-                    organizationId,
-                    conversationId,
-                    mcpGwToken,
-                    globalToolPolicy,
-                    considerContextUntrusted,
-                    abortSignal,
+                    toolInput: toolArguments,
+                    toolResponse: toolResultText(toolResult),
+                    toolCallId: options.toolCallId,
                   });
+                  return postFeedback
+                    ? appendHookFeedbackToToolResult(toolResult, postFeedback)
+                    : toolResult;
                 } catch (error) {
                   reportToolMetrics({
                     toolName: mcpTool.name,
@@ -1714,6 +1774,82 @@ async function executeMcpTool(ctx: ToolExecutionContext): Promise<{
   };
 }
 
+/**
+ * Resolves the tool whose definition carries the MCP App UI resource. For a
+ * direct call this is the tool itself; for a run_tool dispatch it is the target
+ * tool named in `tool_args` — run_tool itself has no UI resource, so without
+ * this the interactive app never renders when invoked indirectly.
+ */
+function resolveRunToolTargetName(toolName: string, args: unknown): string {
+  const shortName = archestraMcpBranding.getToolShortName(toolName);
+  if (shortName !== TOOL_RUN_TOOL_SHORT_NAME || !isRecord(args)) {
+    return toolName;
+  }
+  const targetToolName = args.tool_name;
+  return typeof targetToolName === "string" && targetToolName.length > 0
+    ? targetToolName
+    : toolName;
+}
+
+/**
+ * Builds the chat tool output for an Archestra tool result. Returns plain text
+ * for the common case; when run_tool dispatched to an interactive tool, returns
+ * the rich shape (with `_meta.ui.resourceUri` from the target tool's definition)
+ * so the frontend renders the MCP App — mirroring how `executeMcpTool` enriches
+ * directly-called tools.
+ * @public — exported for testability
+ */
+export async function buildArchestraToolOutput(params: {
+  response: CallToolResult;
+  toolName: string;
+  toolArguments: unknown;
+  agentId: string;
+}): Promise<
+  | string
+  | {
+      content: string;
+      _meta?: Record<string, unknown>;
+      structuredContent?: Record<string, unknown>;
+      rawContent?: ContentBlock[];
+    }
+> {
+  const { response, toolName, toolArguments, agentId } = params;
+  const text = response.content
+    .map((item) => (item.type === "text" ? item.text : JSON.stringify(item)))
+    .join("\n");
+
+  const targetToolName = resolveRunToolTargetName(toolName, toolArguments);
+  if (targetToolName === toolName) {
+    // Not a run_tool dispatch — no UI resource to attach.
+    return text;
+  }
+
+  let resourceUri: string | undefined;
+  try {
+    const toolDef = await ToolModel.findByNameForAgent(targetToolName, agentId);
+    resourceUri = (
+      toolDef?.meta as { _meta?: { ui?: McpUiToolMeta } } | undefined
+    )?._meta?.ui?.resourceUri;
+  } catch (error) {
+    logger.debug(
+      { error, targetToolName, agentId },
+      "Failed to fetch dispatched tool definition meta",
+    );
+  }
+  if (!resourceUri) {
+    return text;
+  }
+
+  return {
+    content: text,
+    _meta: { ...response._meta, ui: { resourceUri } },
+    structuredContent: response.structuredContent as
+      | Record<string, unknown>
+      | undefined,
+    rawContent: response.content as ContentBlock[],
+  };
+}
+
 async function buildUnsafeContextBoundaryResult(params: {
   resultMeta?: Record<string, unknown>;
   toolCallId: string;
@@ -1982,4 +2118,161 @@ function reportToolMetrics(params: {
     durationSeconds: (Date.now() - params.startTime) / 1000,
     isError: params.isError,
   });
+}
+
+/**
+ * Context needed to fire the PreToolUse / PostToolUse lifecycle hooks against a
+ * conversation's default sandbox. Hooks require a conversationId (the sandbox
+ * session key) and the conversation's user id, so the caller passes both.
+ */
+interface ToolHookContext {
+  agentId: string;
+  organizationId: string;
+  /** Conversation user id — the default sandbox is keyed per org/user/conversation. */
+  userId: string;
+  conversationId?: string;
+  /**
+   * Per-turn sink the chat route drains into inline `data-hook-run` entries.
+   * Pre/PostToolUse runs are appended here, tagged with the tool call's id so
+   * they render next to that tool call. Absent for non-chat callers.
+   */
+  hookRunCollector?: CollectedHookRun[];
+}
+
+/**
+ * Fires the PreToolUse lifecycle hook before a tool executes. Returns a block
+ * reason string when a hook blocks (the caller must NOT execute the tool and
+ * should return a tool-result describing the block); returns null to proceed.
+ * Cheap no-op when no conversation context or no hooks. Fails open on error.
+ */
+async function firePreToolUseHook(params: {
+  ctx: ToolHookContext;
+  toolName: string;
+  toolInput: unknown;
+  toolCallId?: string;
+}): Promise<string | null> {
+  const { ctx, toolName, toolInput, toolCallId } = params;
+  if (!ctx.conversationId) {
+    return null;
+  }
+  try {
+    const result = await hookDispatcherService.fire({
+      event: "pre_tool_use",
+      conversationId: ctx.conversationId,
+      agentId: ctx.agentId,
+      organizationId: ctx.organizationId,
+      userId: ctx.userId,
+      fields: { tool_name: toolName, tool_input: toolInput ?? {} },
+    });
+    // Record the run for inline display, anchored before this tool call.
+    if (ctx.hookRunCollector && toolCallId) {
+      ctx.hookRunCollector.push(
+        ...toCollectedRuns(
+          result.runs,
+          { kind: "tool-pre", toolCallId },
+          toolName,
+        ),
+      );
+    }
+    if (result.decision === "block") {
+      return result.reason ?? null;
+    }
+  } catch (error) {
+    logger.warn(
+      { error, toolName, agentId: ctx.agentId },
+      "PreToolUse hook dispatch failed, proceeding",
+    );
+  }
+  return null;
+}
+
+/** Tool-result text returned to the model when a PreToolUse hook blocks a call. */
+function buildPreToolUseBlockedResult(reason: string | null): string {
+  return `Tool call blocked by a PreToolUse hook. Reason: ${reason ?? "no reason given"}. Do not retry; explain the block to the user.`;
+}
+
+/** Max chars of tool output passed to a PostToolUse hook payload. */
+const POST_TOOL_USE_RESPONSE_CAP = 50_000;
+
+/**
+ * Fires the PostToolUse lifecycle hook after a tool executes. When a hook blocks
+ * and supplies a reason, returns hook feedback to append to the tool result;
+ * otherwise returns null (return the result unchanged). Cheap no-op without
+ * conversation context or hooks. Fails open on error.
+ */
+async function firePostToolUseHook(params: {
+  ctx: ToolHookContext;
+  toolName: string;
+  toolInput: unknown;
+  toolResponse: string;
+  toolCallId?: string;
+}): Promise<string | null> {
+  const { ctx, toolName, toolInput, toolResponse, toolCallId } = params;
+  if (!ctx.conversationId) {
+    return null;
+  }
+  try {
+    const result = await hookDispatcherService.fire({
+      event: "post_tool_use",
+      conversationId: ctx.conversationId,
+      agentId: ctx.agentId,
+      organizationId: ctx.organizationId,
+      userId: ctx.userId,
+      fields: {
+        tool_name: toolName,
+        tool_input: toolInput ?? {},
+        tool_response: toolResponse.slice(0, POST_TOOL_USE_RESPONSE_CAP),
+      },
+    });
+    // Record the run for inline display, anchored after this tool call.
+    if (ctx.hookRunCollector && toolCallId) {
+      ctx.hookRunCollector.push(
+        ...toCollectedRuns(
+          result.runs,
+          { kind: "tool-post", toolCallId },
+          toolName,
+        ),
+      );
+    }
+    // Phase 1: only a blocking hook's stderr becomes [hook feedback].
+    // injectedContext (stdout on proceed) does not reach the model in this phase.
+    if (result.decision === "block" && result.reason) {
+      return result.reason;
+    }
+  } catch (error) {
+    logger.warn(
+      { error, toolName, agentId: ctx.agentId },
+      "PostToolUse hook dispatch failed, proceeding",
+    );
+  }
+  return null;
+}
+
+/**
+ * Extracts the plain-text body of a tool-execution result for the PostToolUse
+ * hook payload and for appending hook feedback. Tool results are either a plain
+ * string or a rich `{ content }` object (see executeMcpTool / buildArchestraToolOutput).
+ */
+function toolResultText(
+  result: string | { content: string; [key: string]: unknown },
+): string {
+  return typeof result === "string" ? result : result.content;
+}
+
+/**
+ * Appends PostToolUse hook feedback to a tool result, preserving its shape: a
+ * string stays a string; a rich `{ content }` object keeps its other fields.
+ */
+function appendHookFeedbackToToolResult<
+  T extends string | { content: string; [key: string]: unknown },
+>(result: T, feedback: string): T {
+  const suffix = `\n\n[hook feedback] ${feedback}`;
+  if (typeof result === "string") {
+    return (result + suffix) as T;
+  }
+  const objectResult = result as { content: string; [key: string]: unknown };
+  return {
+    ...objectResult,
+    content: objectResult.content + suffix,
+  } as T;
 }

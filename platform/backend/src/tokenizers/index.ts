@@ -1,4 +1,4 @@
-import type { SupportedProvider } from "@shared";
+import type { SupportedProvider } from "@archestra/shared";
 import { AnthropicTokenizer } from "./anthropic";
 import type { Tokenizer } from "./base";
 import { TiktokenTokenizer } from "./tiktoken";

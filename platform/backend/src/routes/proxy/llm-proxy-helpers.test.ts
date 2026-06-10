@@ -33,6 +33,15 @@ const mockCalculateCost =
       provider: string,
     ) => Promise<number | undefined>
   >();
+const mockCalculateCacheCost =
+  vi.fn<
+    (
+      model: string,
+      provider: string,
+      readTokens: number,
+      writeTokens: number,
+    ) => Promise<{ cacheCost: number; cacheSavings: number } | undefined>
+  >();
 vi.mock("@/routes/proxy/utils/cost-optimization", async (importOriginal) => {
   const original =
     await importOriginal<
@@ -42,6 +51,8 @@ vi.mock("@/routes/proxy/utils/cost-optimization", async (importOriginal) => {
     ...original,
     calculateCost: (...args: Parameters<typeof mockCalculateCost>) =>
       mockCalculateCost(...args),
+    calculateCacheCost: (...args: Parameters<typeof mockCalculateCacheCost>) =>
+      mockCalculateCacheCost(...args),
   };
 });
 
@@ -169,6 +180,10 @@ describe("calculateInteractionCosts", () => {
     mockCalculateCost
       .mockResolvedValueOnce(0.001) // baseline
       .mockResolvedValueOnce(0.0005); // actual
+    mockCalculateCacheCost.mockResolvedValue({
+      cacheCost: 0.0001,
+      cacheSavings: 0.0009,
+    });
 
     const result = await calculateInteractionCosts({
       baselineModel: "gpt-4",
@@ -177,14 +192,27 @@ describe("calculateInteractionCosts", () => {
       providerName: "openai",
     });
 
-    expect(result).toEqual({ baselineCost: 0.001, actualCost: 0.0005 });
+    expect(result).toEqual({
+      baselineCost: 0.001,
+      actualCost: 0.0005,
+      cacheCost: 0.0001,
+      cacheSavings: 0.0009,
+    });
     expect(mockCalculateCost).toHaveBeenCalledTimes(2);
-    expect(mockCalculateCost).toHaveBeenCalledWith("gpt-4", 100, 50, "openai");
+    const cacheTokens = { readTokens: 0, writeTokens: 0 };
+    expect(mockCalculateCost).toHaveBeenCalledWith(
+      "gpt-4",
+      100,
+      50,
+      "openai",
+      cacheTokens,
+    );
     expect(mockCalculateCost).toHaveBeenCalledWith(
       "gpt-3.5-turbo",
       100,
       50,
       "openai",
+      cacheTokens,
     );
   });
 
@@ -204,6 +232,7 @@ describe("calculateInteractionCosts", () => {
 
   test("handles undefined costs (model not found)", async () => {
     mockCalculateCost.mockResolvedValue(undefined);
+    mockCalculateCacheCost.mockResolvedValue(undefined);
 
     const result = await calculateInteractionCosts({
       baselineModel: "unknown-model",
@@ -215,6 +244,8 @@ describe("calculateInteractionCosts", () => {
     expect(result).toEqual({
       baselineCost: undefined,
       actualCost: undefined,
+      cacheCost: undefined,
+      cacheSavings: undefined,
     });
   });
 });
@@ -236,8 +267,18 @@ describe("buildInteractionRecord", () => {
     response: { id: "resp-1" },
     actualModel: "gpt-3.5-turbo",
     baselineModel: "gpt-4",
-    usage: { inputTokens: 100, outputTokens: 50 },
-    costs: { baselineCost: 0.001, actualCost: 0.0005 },
+    usage: {
+      inputTokens: 100,
+      outputTokens: 50,
+      cacheReadTokens: 80,
+      cacheWriteTokens: 20,
+    },
+    costs: {
+      baselineCost: 0.001,
+      actualCost: 0.0005,
+      cacheCost: 0.0002,
+      cacheSavings: 0.0018,
+    },
     toonStats: {
       tokensBefore: 500,
       tokensAfter: 300,
@@ -290,16 +331,27 @@ describe("buildInteractionRecord", () => {
 
     expect(record.cost).toBe("0.0005000000");
     expect(record.baselineCost).toBe("0.0010000000");
+    expect(record.cacheCost).toBe("0.0002000000");
+    expect(record.cacheSavings).toBe("0.0018000000");
+    expect(record.cacheReadTokens).toBe(80);
+    expect(record.cacheWriteTokens).toBe(20);
   });
 
   test("handles null costs → null strings", () => {
     const record = buildInteractionRecord({
       ...baseParams,
-      costs: { baselineCost: undefined, actualCost: undefined },
+      costs: {
+        baselineCost: undefined,
+        actualCost: undefined,
+        cacheCost: undefined,
+        cacheSavings: undefined,
+      },
     });
 
     expect(record.cost).toBeNull();
     expect(record.baselineCost).toBeNull();
+    expect(record.cacheCost).toBeNull();
+    expect(record.cacheSavings).toBeNull();
   });
 
   test("handles null toonCostSavings", () => {

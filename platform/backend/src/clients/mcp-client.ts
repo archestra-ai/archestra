@@ -1,16 +1,4 @@
 import { createHash } from "node:crypto";
-import { UnauthorizedError } from "@modelcontextprotocol/sdk/client/auth.js";
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import {
-  StreamableHTTPClientTransport,
-  StreamableHTTPError,
-} from "@modelcontextprotocol/sdk/client/streamableHttp.js";
-import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
-import type {
-  ContentBlock,
-  ReadResourceResult,
-  Tool,
-} from "@modelcontextprotocol/sdk/types.js";
 import {
   type AssignedCredentialUnavailableMcpToolError,
   type AuthExpiredMcpToolError,
@@ -26,8 +14,21 @@ import {
   type McpToolError,
   parseFullToolName,
   TimeInMs,
-} from "@shared";
+} from "@archestra/shared";
+import { UnauthorizedError } from "@modelcontextprotocol/sdk/client/auth.js";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import {
+  StreamableHTTPClientTransport,
+  StreamableHTTPError,
+} from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
+import type {
+  ContentBlock,
+  ReadResourceResult,
+  Tool,
+} from "@modelcontextprotocol/sdk/types.js";
 import QuickLRU from "quick-lru";
+import { unavailableThirdPartyToolMessage } from "@/archestra-mcp-server/tool-recovery-messages";
 import { LRUCacheManager } from "@/cache-manager";
 import config from "@/config";
 import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
@@ -1137,11 +1138,20 @@ class McpClient {
     const tool = mcpTools[0];
 
     if (!tool) {
+      const message = unavailableThirdPartyToolMessage(toolCall.name);
       return {
         error: await this.createErrorResult(
           toolCall,
           agentId,
-          "Tool not found or not assigned to agent",
+          message,
+          "unknown",
+          undefined,
+          {
+            type: "tool_state",
+            code: "unknown_tool",
+            message,
+            toolName: toolCall.name,
+          },
         ),
       };
     }
@@ -1609,7 +1619,6 @@ class McpClient {
           catalogItem,
           secrets,
         });
-        applyPresetHeaderMappings(localHeaders, catalogItem);
         if (enterpriseTransportCredential) {
           localHeaders[enterpriseTransportCredential.headerName] =
             enterpriseTransportCredential.headerValue;
@@ -1641,7 +1650,6 @@ class McpClient {
           catalogItem,
           secrets,
         });
-        applyPresetHeaderMappings(headers, catalogItem);
         if (enterpriseTransportCredential) {
           headers[enterpriseTransportCredential.headerName] =
             enterpriseTransportCredential.headerValue;
@@ -3416,42 +3424,6 @@ function formatActionableAuthError(params: {
     "",
     params.postAction,
   ].join("\n");
-}
-
-/**
- * Apply preset-scoped userConfig field values to outgoing headers.
- * For each userConfig field flagged `promptOnPreset` with a `headerName`,
- * resolve `catalogItem.presetFieldValues[key] ?? field.default` and write
- * to the header. Preset values overwrite anything previously written
- * (presets are the authoritative source for these fields). Caller-supplied
- * (`promptOnInstallation`) and static fields are not handled here — they
- * flow through `buildStaticCredentialHeaders` and `mergePassthroughHeaders`.
- *
- * `presetFieldValues` lives on the catalog row itself: parent catalog rows
- * carry the default-preset values, child catalog rows ("presets" in UI)
- * carry their own overlay.
- *
- * @public — exported for testability
- */
-export function applyPresetHeaderMappings(
-  headers: Record<string, string>,
-  catalogItem: InternalMcpCatalog,
-): void {
-  if (!catalogItem.userConfig) return;
-
-  const presetFieldValues = catalogItem.presetFieldValues ?? {};
-
-  for (const [fieldName, field] of Object.entries(catalogItem.userConfig)) {
-    if (!field.promptOnPreset || !field.headerName) continue;
-
-    const raw = presetFieldValues[fieldName] ?? field.default;
-    if (raw === undefined || raw === null) continue;
-
-    const value = Array.isArray(raw) ? raw.join(",") : String(raw);
-    if (value.length === 0) continue;
-
-    headers[field.headerName] = `${field.valuePrefix ?? ""}${value}`;
-  }
 }
 
 /** Merge passthrough headers into target, skipping keys already present (case-insensitive). */

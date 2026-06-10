@@ -1,4 +1,4 @@
-import type { SupportedProvider } from "@shared";
+import type { SupportedProvider } from "@archestra/shared";
 import { isBedrockIamAuthEnabled } from "@/clients/bedrock-credentials";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
 import config, { getProviderEnvApiKey } from "@/config";

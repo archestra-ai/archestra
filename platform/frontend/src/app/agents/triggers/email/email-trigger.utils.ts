@@ -3,7 +3,7 @@ import {
   type IncomingEmailSecurityMode,
   IncomingEmailSecurityModeSchema,
   MAX_DOMAIN_LENGTH,
-} from "@shared";
+} from "@archestra/shared";
 import { z } from "zod";
 
 export const AgentEmailSettingsFormSchema = z

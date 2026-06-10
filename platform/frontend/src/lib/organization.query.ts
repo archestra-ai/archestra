@@ -2,7 +2,7 @@ import {
   type AnyRoleName,
   archestraApiSdk,
   type archestraApiTypes,
-} from "@shared";
+} from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Invitation } from "better-auth/plugins/organization";
 import { useRouter } from "next/navigation";
@@ -267,9 +267,9 @@ export function useOrganization(enabled = true) {
     enabled: enabled && !!session.data?.user,
     retry: false, // Don't retry on auth pages to avoid repeated 401 errors
     throwOnError: false, // Don't throw errors to prevent crashes
-    // Org settings (theme, app name, preset entity name, etc.) change rarely
-    // and all mutations imperatively setQueryData() this key, so a long stale
-    // time keeps re-mounts cheap (every usePresetEntityName caller shares this).
+    // Org settings (theme, app name, etc.) change rarely and all mutations
+    // imperatively setQueryData() this key, so a long stale time keeps
+    // re-mounts cheap.
     staleTime: 5 * 60 * 1000,
   });
 }
@@ -475,28 +475,6 @@ export function useUpdateConnectionSettings(
 }
 
 /**
- * Returns the org-configured display label for catalog presets.
- * When unconfigured, `configured` is false and `singular`/`plural` fall back to
- * "Preset"/"Presets" — callers should use `configured` to gate UI that should
- * stay hidden until an admin has chosen a name. `defaultLabel` falls back to
- * "Default" when admins have not customized it.
- */
-export function usePresetEntityName() {
-  const { data: organization } = useOrganization();
-  const singular = organization?.presetEntityName ?? null;
-  const plural = organization?.presetEntityNamePlural ?? null;
-  const configured = singular !== null && plural !== null;
-  return {
-    configured,
-    singular: configured ? singular : "Preset",
-    plural: configured ? plural : "Presets",
-    defaultLabel: organization?.presetEntityDefaultLabel ?? "Default",
-    defaultValidationRegex:
-      organization?.presetEntityDefaultValidationRegex ?? null,
-  };
-}
-
-/**
  * Update the org-wide default environment (the implicit "Default" target that
  * catalog items use when no environment is assigned). Unlike real environments,
  * the default has no slug, so both its name and namespace are freely editable.
@@ -543,6 +521,7 @@ export function useDefaultEnvironment() {
     description: organization?.defaultEnvironmentDescription ?? null,
     networkPolicy: organization?.defaultNetworkPolicy ?? null,
     restricted: organization?.defaultEnvironmentRestricted ?? false,
+    validationRegex: organization?.defaultEnvironmentValidationRegex ?? null,
   };
 }
 

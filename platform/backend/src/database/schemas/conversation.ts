@@ -1,4 +1,4 @@
-import type { SupportedProvider } from "@shared";
+import type { SupportedProvider } from "@archestra/shared";
 import {
   boolean,
   jsonb,
@@ -40,6 +40,12 @@ const conversationsTable = pgTable("conversations", {
   hasCustomToolSelection: boolean("has_custom_tool_selection")
     .notNull()
     .default(false),
+  /**
+   * When true (and the viewer is an admin), hook runs in this conversation
+   * surface inline as expandable debug chips. Toggled per-conversation via the
+   * `/debug` chat command. See hooks/hook-run-parts.ts `stripHookRunParts`.
+   */
+  hooksDebugEnabled: boolean("hooks_debug_enabled").notNull().default(false),
   todoList:
     jsonb("todo_list").$type<
       Array<{

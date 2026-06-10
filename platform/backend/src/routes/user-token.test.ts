@@ -1,4 +1,4 @@
-import { ARCHESTRA_TOKEN_PREFIX } from "@shared";
+import { ARCHESTRA_TOKEN_PREFIX } from "@archestra/shared";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";

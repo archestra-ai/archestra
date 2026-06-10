@@ -3,7 +3,8 @@ import {
   buildUserSystemPromptContext,
   type InteractionSource,
   PLAYWRIGHT_MCP_CATALOG_ID,
-} from "@shared";
+  TOOL_ACTIVATE_SKILL_SHORT_NAME,
+} from "@archestra/shared";
 import type { ModelMessage, UIMessage, UserContent } from "ai";
 import {
   consumeStream as consumeReadableStream,
@@ -13,12 +14,19 @@ import {
 } from "ai";
 import { MIN_IMAGE_ATTACHMENT_SIZE } from "@/agents/incoming-email/constants";
 import { subagentExecutionTracker } from "@/agents/subagent-execution-tracker";
+import { archestraMcpBranding } from "@/archestra-mcp-server";
 import { closeChatMcpClient, getChatMcpTools } from "@/clients/chat-mcp-client";
 import { createLLMModelForAgent } from "@/clients/llm-client";
 import mcpClient from "@/clients/mcp-client";
 import logger from "@/logging";
 import { AgentModel, McpServerModel, TeamModel, UserModel } from "@/models";
-import { mapProviderError, ProviderError } from "@/routes/chat/errors";
+import {
+  formatUnavailableToolErrorDetails,
+  getUnavailableToolErrorDetails,
+  mapProviderError,
+  ProviderError,
+} from "@/routes/chat/errors";
+import { buildSkillCatalogPrompt } from "@/skills/skill-catalog-prompt";
 import {
   promptNeedsRendering,
   renderSystemPrompt,
@@ -222,6 +230,24 @@ export async function executeA2AMessage(
       scheduleTriggerRunId,
     });
 
+    // eagerly list the agent's skills in the prompt — autonomous runs have no
+    // human to type a slash command — but only when the agent can activate them.
+    if (
+      archestraMcpBranding.getToolName(TOOL_ACTIVATE_SKILL_SHORT_NAME) in
+      mcpTools
+    ) {
+      const skillCatalogPrompt = await buildSkillCatalogPrompt({
+        organizationId,
+        userId,
+        agentId: agent.id,
+      });
+      if (skillCatalogPrompt) {
+        systemPrompt =
+          [systemPrompt, skillCatalogPrompt].filter(Boolean).join("\n\n") ||
+          undefined;
+      }
+    }
+
     logger.info(
       {
         agentId: agent.id,
@@ -312,6 +338,17 @@ export async function executeA2AMessage(
           responseUiMessage = responseMessage;
         },
         onError: (error) => {
+          // a nonexistent-tool call is recoverable: the SDK already feeds the
+          // tool-error back to the model and continues the loop, so return the
+          // recovery text as the part's errorText instead of killing the run
+          const unavailableToolError = getUnavailableToolErrorDetails(error);
+          if (unavailableToolError) {
+            logger.info(
+              { agentId: agent.id, unavailableToolError },
+              "Returning unavailable tool error as tool-level error in A2A execution",
+            );
+            return formatUnavailableToolErrorDetails(unavailableToolError);
+          }
           logger.error(
             { agentId: agent.id, error },
             "Error stream.toUIMessageStream when parsing A2A execution response",

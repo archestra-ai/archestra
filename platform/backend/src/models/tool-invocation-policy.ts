@@ -5,7 +5,7 @@ import {
   TOOL_INVOCATION_BLOCK_ALWAYS_REASON,
   TOOL_INVOCATION_NO_POLICY_UNTRUSTED_REASON,
   TOOL_INVOCATION_UNTRUSTED_CONTEXT_REASON,
-} from "@shared";
+} from "@archestra/shared";
 import { and, desc, eq, inArray, or, sql } from "drizzle-orm";
 import { get } from "lodash-es";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";

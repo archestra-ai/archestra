@@ -74,10 +74,6 @@ export const RouteId = {
   ValidateDeploymentYaml: "validateDeploymentYaml",
   ResetDeploymentYaml: "resetDeploymentYaml",
   GetK8sImagePullSecrets: "getK8sImagePullSecrets",
-  // MCP Catalog Children (UI-named "presets") Routes
-  GetCatalogChildren: "getCatalogChildren",
-  CreateCatalogChild: "createCatalogChild",
-  UpdateCatalogChild: "updateCatalogChild",
 
   // MCP Server Routes
   GetMcpServers: "getMcpServers",
@@ -119,6 +115,7 @@ export const RouteId = {
   DeleteTeam: "deleteTeam",
   GetTeamMembers: "getTeamMembers",
   AddTeamMember: "addTeamMember",
+  UpdateTeamMember: "updateTeamMember",
   RemoveTeamMember: "removeTeamMember",
 
   // Team External Group Routes (SSO Team Sync)
@@ -181,6 +178,8 @@ export const RouteId = {
   OpenAiResponsesWithAgent: "openAiResponsesWithAgent",
   OpenAiEmbeddingsWithDefaultAgent: "openAiEmbeddingsWithDefaultAgent",
   OpenAiEmbeddingsWithAgent: "openAiEmbeddingsWithAgent",
+  OpenAiListModelsWithDefaultAgent: "openAiListModelsWithDefaultAgent",
+  OpenAiListModelsWithAgent: "openAiListModelsWithAgent",
 
   // Proxy Routes - OpenAI-compatible model router
   ModelRouterChatCompletionsWithDefaultAgent:
@@ -198,6 +197,8 @@ export const RouteId = {
   // Proxy Routes - Anthropic
   AnthropicMessagesWithDefaultAgent: "anthropicMessagesWithDefaultAgent",
   AnthropicMessagesWithAgent: "anthropicMessagesWithAgent",
+  AnthropicListModelsWithDefaultAgent: "anthropicListModelsWithDefaultAgent",
+  AnthropicListModelsWithAgent: "anthropicListModelsWithAgent",
 
   // Proxy Routes - Cohere
   CohereChatWithDefaultAgent: "cohereChatWithDefaultAgent",
@@ -284,10 +285,12 @@ export const RouteId = {
   GetActiveChatRun: "getActiveChatRun",
   GetChatConversations: "getChatConversations",
   GetChatConversation: "getChatConversation",
+  GetChatConversationFiles: "getChatConversationFiles",
   GetChatAgentMcpTools: "getChatAgentMcpTools",
   CreateChatConversation: "createChatConversation",
   ForkChatConversation: "forkChatConversation",
   UpdateChatConversation: "updateChatConversation",
+  SetConversationHooksDebug: "setConversationHooksDebug",
   DeleteChatConversation: "deleteChatConversation",
   CompactChatConversation: "compactChatConversation",
   GenerateChatConversationTitle: "generateChatConversationTitle",
@@ -382,10 +385,6 @@ export const RouteId = {
   // Connection Settings Routes (organization-level)
   UpdateConnectionSettings: "updateConnectionSettings",
 
-  // Org-level preset entries (Production / Staging / Development buckets).
-  // Read-only: managed via existing data; the registry admin UI was removed.
-  ListMcpPresetEntries: "listMcpPresetEntries",
-
   // Org-level deployment environments
   ListEnvironments: "listEnvironments",
   CreateEnvironment: "createEnvironment",
@@ -393,6 +392,13 @@ export const RouteId = {
   DeleteEnvironment: "deleteEnvironment",
   UpdateDefaultEnvironment: "updateDefaultEnvironment",
   GetK8sCapabilities: "getK8sCapabilities",
+
+  // GitHub App Configuration Routes
+  ListGithubAppConfigs: "listGithubAppConfigs",
+  CreateGithubAppConfig: "createGithubAppConfig",
+  GetGithubAppConfig: "getGithubAppConfig",
+  UpdateGithubAppConfig: "updateGithubAppConfig",
+  DeleteGithubAppConfig: "deleteGithubAppConfig",
 
   // Knowledge Settings Routes (organization-level)
   UpdateKnowledgeSettings: "updateKnowledgeSettings",
@@ -534,6 +540,12 @@ export const RouteId = {
 
   // Audit Log Routes
   GetAuditLogs: "getAuditLogs",
+
+  // Hook File Routes
+  GetHooks: "getHooks",
+  CreateHook: "createHook",
+  UpdateHook: "updateHook",
+  DeleteHook: "deleteHook",
 
   // Skill Share Link Routes
   GetSkillShareLinks: "getSkillShareLinks",

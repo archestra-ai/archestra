@@ -1,6 +1,6 @@
 "use client";
 
-import { DocsPage, type ResourceVisibilityScope } from "@shared";
+import { DocsPage, type ResourceVisibilityScope } from "@archestra/shared";
 import {
   ChevronDown,
   ChevronRight,

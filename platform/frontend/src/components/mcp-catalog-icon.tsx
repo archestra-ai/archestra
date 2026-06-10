@@ -1,6 +1,6 @@
 "use client";
 
-import { ARCHESTRA_MCP_CATALOG_ID, DEFAULT_APP_NAME } from "@shared";
+import { ARCHESTRA_MCP_CATALOG_ID, DEFAULT_APP_NAME } from "@archestra/shared";
 import { Server } from "lucide-react";
 import Image from "next/image";
 import { useAppIconLogo } from "@/lib/hooks/use-app-name";

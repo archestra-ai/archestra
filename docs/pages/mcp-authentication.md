@@ -217,6 +217,8 @@ Archestra handles endpoint discovery, client registration, Authorization Code + 
 
 If the MCP server URL is different from the OAuth issuer or metadata host, configure explicit OAuth overrides in the MCP catalog item. Archestra can use a separate authorization server URL, a direct well-known metadata URL, a direct resource metadata URL, or direct authorization and token endpoints instead of deriving everything from the MCP server URL.
 
+Set **Protected Resource** when the OAuth resource identifier differs from the MCP endpoint URL, such as an Entra or OAuth API identifier like `api://<client-id>` or `https://api.example.com`. Archestra sends this as the OAuth `resource` parameter. If it is blank, Archestra falls back to **Default Audience** when configured, then to the MCP endpoint URL.
+
 Direct authorization and token endpoints are useful for legacy or self-hosted OAuth providers that expose fixed OAuth URLs but do not publish `/.well-known` metadata.
 
 #### OAuth Client Credentials

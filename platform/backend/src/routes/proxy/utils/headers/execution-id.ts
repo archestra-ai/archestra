@@ -1,4 +1,4 @@
-import { EXECUTION_ID_HEADER } from "@shared";
+import { EXECUTION_ID_HEADER } from "@archestra/shared";
 import { getHeaderValue, parseMetaHeader } from "./meta-header";
 
 /**

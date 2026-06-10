@@ -1,5 +1,5 @@
 import type { UIMessageChunk } from "ai";
-import { and, asc, desc, eq, gt, lt, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, lt, sql } from "drizzle-orm";
 import db, { schema, withDbTransaction } from "@/database";
 import type {
   ChatActiveRun,
@@ -141,6 +141,9 @@ class ActiveChatRunModel {
     return run ?? null;
   }
 
+  // Only a 'running' row transitions to terminal. Guarding on status makes
+  // terminal->terminal a no-op, so a late-finishing drain cannot overwrite a
+  // status the stale reaper or shutdown cleanup already set.
   static async markTerminal(params: {
     runId: string;
     status: Exclude<ChatActiveRunStatus, "running">;
@@ -153,10 +156,41 @@ class ActiveChatRunModel {
         error: params.error ?? null,
         updatedAt: new Date(),
       })
-      .where(eq(schema.chatActiveRunsTable.id, params.runId))
+      .where(
+        and(
+          eq(schema.chatActiveRunsTable.id, params.runId),
+          eq(schema.chatActiveRunsTable.status, "running"),
+        ),
+      )
       .returning();
 
     return run ?? null;
+  }
+
+  static async markRunningAsFailedByIds(params: {
+    ids: string[];
+    error: string;
+  }): Promise<number> {
+    if (params.ids.length === 0) {
+      return 0;
+    }
+
+    const runs = await db
+      .update(schema.chatActiveRunsTable)
+      .set({
+        status: "failed",
+        error: params.error,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          inArray(schema.chatActiveRunsTable.id, params.ids),
+          eq(schema.chatActiveRunsTable.status, "running"),
+        ),
+      )
+      .returning({ id: schema.chatActiveRunsTable.id });
+
+    return runs.length;
   }
 
   static async markStaleRunningAsFailed(staleMs: number): Promise<number> {

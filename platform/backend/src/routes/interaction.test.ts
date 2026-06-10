@@ -1,4 +1,4 @@
-import { ChatErrorCode } from "@shared";
+import { ChatErrorCode } from "@archestra/shared";
 import ConversationModel from "@/models/conversation";
 import ConversationChatErrorModel from "@/models/conversation-chat-error";
 import InteractionModel from "@/models/interaction";

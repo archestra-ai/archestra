@@ -1,8 +1,9 @@
 import {
   buildUserSystemPromptContext,
   type UserSystemPromptContext,
-} from "@shared";
+} from "@archestra/shared";
 import { TeamModel, UserModel } from "@/models";
+import { SKILL_SANDBOX_ATTACHMENTS_DIR } from "@/skills-sandbox/runtime-image";
 import { renderSystemPrompt } from "@/templating";
 import type { Skill, SkillFile } from "@/types";
 
@@ -34,7 +35,7 @@ export function formatSkillActivation({
   files: Pick<SkillFile, "path" | "kind">[];
   /**
    * Whether the sandbox tools are usable for this caller (feature enabled +
-   * `skill:execute`). When false, omit the sandbox hint so we never point the
+   * `sandbox:execute`). When false, omit the sandbox hint so we never point the
    * model at tools that would just refuse.
    */
   canRunSandbox: boolean;
@@ -49,19 +50,25 @@ export function formatSkillActivation({
     skill.templated && promptContext
       ? (renderSystemPrompt(skill.content, promptContext) ?? skill.content)
       : skill.content;
+  const skillRoot = `/skills/${escapeXmlText(skill.name)}`;
   const sandboxHint = canRunSandbox
-    ? " To execute a script or shell command from this skill, call " +
-      "create_skill_sandbox with this skill's name, then run_skill_command — " +
-      "commands run from the skill root so relative paths from the spec " +
-      "resolve correctly. Use get_skill_sandbox_artifact to retrieve " +
-      "generated files."
+    ? ` This skill is mounted in your sandbox at ${skillRoot} and is on ` +
+      "PYTHONPATH, so its modules import directly in run_command (no path " +
+      `setup of any kind). Run a bundled script via run_command (\`python3 ${skillRoot}` +
+      `/<script>\`); pass cwd: ${skillRoot} when a script reads bundled files ` +
+      "by relative path. Python is the uv project venv at /home/sandbox " +
+      "(`python3`) — install packages with `uv add --project /home/sandbox " +
+      `<pkg>\`. Files the user attached are under ${SKILL_SANDBOX_ATTACHMENTS_DIR}/. ` +
+      "Use download_file to retrieve generated files, upload_file to add inputs."
     : "";
   const resources =
     files.length > 0
       ? `\n<skill_resources>\n${files
           .map((file) => `${escapeXmlText(file.path)} (${file.kind})`)
           .join("\n")}\n</skill_resources>\n` +
-        "Inspect any resource with read_skill_file." +
+        "Inspect any resource with read_skill_file before re-implementing — " +
+        "prefer importing and running the skill's own modules over rewriting " +
+        "them." +
         sandboxHint
       : "";
 

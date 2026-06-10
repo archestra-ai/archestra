@@ -1,7 +1,7 @@
 import {
   ARCHESTRA_TOKEN_PREFIX,
   LEGACY_ARCHESTRA_TOKEN_PREFIXES,
-} from "@shared";
+} from "@archestra/shared";
 import { describe } from "vitest";
 import { expect, test } from "@/test";
 import VirtualApiKeyModel from "./virtual-api-key";

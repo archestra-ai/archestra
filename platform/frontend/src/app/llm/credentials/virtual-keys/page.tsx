@@ -5,7 +5,7 @@ import {
   E2eTestId,
   getDeleteVirtualKeyButtonTestId,
   getVirtualKeyRowTestId,
-} from "@shared";
+} from "@archestra/shared";
 import type { ColumnDef } from "@tanstack/react-table";
 import {
   Globe,

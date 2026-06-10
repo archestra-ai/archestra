@@ -306,7 +306,9 @@ def test_real_apply_preflight_invalid_plan_makes_no_network(tmp_path: Path, monk
         thread.join()
 
 
-def test_dry_run_writes_planned_result_without_network(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_dry_run_writes_planned_result_without_network(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
     """pins main()'s --dry-run dispatch: exits 0, writes the result file, needs no env vars."""
     inventory_path = tmp_path / "inventory.json"
     plan_path = tmp_path / "migration_plan.json"
@@ -329,6 +331,7 @@ def test_dry_run_writes_planned_result_without_network(tmp_path: Path, monkeypat
     ])
 
     assert main() == 0
+    assert "[dry-run]" in capsys.readouterr().out
     result = json.loads(result_path.read_text(encoding="utf-8"))
     assert result["summary"] == {"planned": 1}
     assert result["ops"][0]["target_kind"] == "agent"

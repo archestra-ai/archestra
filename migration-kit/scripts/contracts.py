@@ -363,7 +363,7 @@ _LiteralT = TypeVar("_LiteralT", bound=str)
 def _require_literal(
     value: object, allowed: tuple[_LiteralT, ...], *, what: str, ctx: str
 ) -> _LiteralT:
-    """the single mechanism behind every enum-shaped field crossing a trust boundary."""
+    """the one mechanism behind enum-shaped fields crossing a trust boundary."""
     if value not in allowed:
         raise ContractError(f"{ctx}: {what} {value!r} must be one of {'|'.join(allowed)}")
     return cast("_LiteralT", value)

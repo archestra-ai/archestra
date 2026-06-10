@@ -29,7 +29,6 @@ import logger from "@/logging";
 import {
   AgentConnectorAssignmentModel,
   AgentKnowledgeBaseModel,
-  AgentModel,
   KnowledgeBaseConnectorModel,
   KnowledgeBaseModel,
   UserModel,
@@ -488,19 +487,6 @@ async function handleQueryKnowledgeSources(params: {
       return errorResult("Organization context not available.");
     }
 
-    const agent = await AgentModel.findById(contextAgent.id);
-
-    const hasKbs = agent?.knowledgeBaseIds?.length;
-    const connectorAssignments =
-      await AgentConnectorAssignmentModel.findByAgent(contextAgent.id);
-    const directConnectorIds = connectorAssignments.map((a) => a.connectorId);
-
-    if (!hasKbs && directConnectorIds.length === 0) {
-      return errorResult(
-        "No knowledge base or connector assigned to this agent. Assign a knowledge base or connector in agent settings to enable knowledge search.",
-      );
-    }
-
     const access =
       context.userId && organizationId
         ? await knowledgeSourceAccessControlService.buildAccessControlContext({
@@ -509,9 +495,9 @@ async function handleQueryKnowledgeSources(params: {
           })
         : null;
 
-    const validKbs = hasKbs
-      ? await KnowledgeBaseModel.findByIds(agent.knowledgeBaseIds)
-      : [];
+    const validKbs = await KnowledgeBaseModel.findByOrganization({
+      organizationId,
+    });
     const visibleKbs = access
       ? knowledgeSourceAccessControlService.filterKnowledgeBases(
           access,
@@ -519,15 +505,12 @@ async function handleQueryKnowledgeSources(params: {
         )
       : validKbs;
 
-    const directConnectors = directConnectorIds.length
-      ? await KnowledgeBaseConnectorModel.findByIds(directConnectorIds)
-      : [];
-    const visibleDirectConnectors = access
-      ? knowledgeSourceAccessControlService.filterConnectors(
-          access,
-          directConnectors,
-        )
-      : directConnectors;
+    const visibleDirectConnectors =
+      await KnowledgeBaseConnectorModel.findByOrganization({
+        organizationId,
+        canReadAll: access?.canReadAll,
+        viewerTeamIds: access?.teamIds,
+      });
 
     const connectorIdsFromVisibleKbs = visibleKbs.length
       ? (
@@ -558,7 +541,7 @@ async function handleQueryKnowledgeSources(params: {
 
     if (connectorIds.length === 0) {
       return errorResult(
-        "No connectors found for the assigned knowledge bases or agent. Add connectors to enable knowledge search.",
+        "No connectors found for the visible knowledge sources. Add connectors to enable knowledge search.",
       );
     }
 

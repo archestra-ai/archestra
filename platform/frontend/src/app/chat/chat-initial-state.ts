@@ -41,7 +41,7 @@ export type ResolvedChatModelState = {
 };
 
 export type CreateConversationInput = {
-  agentId: string;
+  agentId?: string;
   modelId?: string;
   chatApiKeyId?: string | null;
   title?: string;
@@ -194,12 +194,8 @@ export function buildCreateConversationInput(params: {
   title?: string;
   projectId?: string | null;
 }): CreateConversationInput | null {
-  if (!params.agentId) {
-    return null;
-  }
-
   return {
-    agentId: params.agentId,
+    agentId: params.agentId ?? undefined,
     modelId: params.modelId || undefined,
     chatApiKeyId: params.chatApiKeyId ?? undefined,
     title: params.title,

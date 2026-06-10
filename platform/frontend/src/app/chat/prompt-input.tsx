@@ -7,6 +7,12 @@ import {
   supportsFileUploads,
 } from "@archestra/shared";
 import type { ChatStatus } from "ai";
+import {
+  CalendarIcon,
+  ChevronDownIcon,
+  ClockIcon,
+  SendHorizontalIcon,
+} from "lucide-react";
 import type { FormEvent, KeyboardEvent } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -30,6 +36,30 @@ import {
 } from "@/components/ai-elements/prompt-input";
 import { PlaywrightInstallInline } from "@/components/chat/playwright-install-dialog";
 import { SensitiveDataConfirmDialog } from "@/components/chat/sensitive-data-confirm-dialog";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogBody,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useConversation, useToggleHooksDebug } from "@/lib/chat/chat.query";
 import { useChatPlaceholder } from "@/lib/chat/chat-placeholder.hook";
@@ -146,16 +176,21 @@ const PromptInputContent = ({
 
   // Skills exposed as slash commands, gated by the org flag.
   const skillSlashCommandsEnabled = orgData?.skillSlashCommandsEnabled ?? false;
+  const { data: canReadSkills } = useHasPermissions({ skill: ["read"] });
   const { data: skillsData } = useSkillsPaginated(
     { limit: 100 },
-    { enabled: skillSlashCommandsEnabled },
+    { enabled: skillSlashCommandsEnabled && canReadSkills === true },
   );
   const skillCommands = useMemo<SkillCommand[]>(() => {
-    if (!skillSlashCommandsEnabled || !skillsData?.data) {
+    if (
+      !skillSlashCommandsEnabled ||
+      canReadSkills !== true ||
+      !skillsData?.data
+    ) {
       return [];
     }
     return buildSkillCommands(skillsData.data);
-  }, [skillSlashCommandsEnabled, skillsData]);
+  }, [skillSlashCommandsEnabled, canReadSkills, skillsData]);
 
   // /debug toggles per-conversation hook debug chips; admin-only, existing
   // conversation only. Mirrors the server gate (agent-type admin) loosely — the
@@ -376,6 +411,10 @@ const PromptInputContent = ({
   const sensitiveDataDetectionEnabled =
     useFeature("chatSecretScanEnabled") ?? false;
   const [sensitiveDataDialogOpen, setSensitiveDataDialogOpen] = useState(false);
+  const [scheduleDialogOpen, setScheduleDialogOpen] = useState(false);
+  const [scheduledDateOption, setScheduledDateOption] = useState("today");
+  const [scheduledTime, setScheduledTime] = useState("13:00");
+  const quickScheduleOptions = useMemo(() => getQuickScheduleOptions(), []);
   const pendingSubmissionRef = useRef<{
     outgoing: PromptInputMessage;
     e: FormEvent<HTMLFormElement>;
@@ -493,6 +532,29 @@ const PromptInputContent = ({
     },
     [showFileUploadButton],
   );
+
+  const handleScheduleForLater = useCallback(
+    (scheduledFor: Date) => {
+      if (!controller.textInput.value.trim()) {
+        toast.error("Write a message before scheduling it.");
+        return;
+      }
+      toast.info(
+        `Message scheduling will use ${formatScheduledDateTime(scheduledFor)} once one-off scheduled chat messages are available.`,
+      );
+      setScheduleDialogOpen(false);
+    },
+    [controller.textInput.value],
+  );
+
+  const handleCustomSchedule = useCallback(() => {
+    handleScheduleForLater(
+      buildScheduledDate({
+        dateOption: scheduledDateOption,
+        time: scheduledTime,
+      }),
+    );
+  }, [handleScheduleForLater, scheduledDateOption, scheduledTime]);
 
   const submitStatus = status === "error" ? "ready" : status;
 
@@ -614,14 +676,106 @@ const PromptInputContent = ({
               textareaRef={textareaRef}
               onTranscriptionChange={handleTranscriptionChange}
             />
-            <PromptInputSubmit
-              className="!h-8"
-              status={submitStatus}
-              disabled={submitDisabled || isContextCompacting}
-            />
+            <div className="flex overflow-hidden rounded-md bg-primary text-primary-foreground">
+              <PromptInputSubmit
+                className="!h-8 rounded-r-none border-r border-primary-foreground/20 bg-transparent hover:bg-primary/90"
+                status={submitStatus}
+                disabled={submitDisabled || isContextCompacting}
+              >
+                <SendHorizontalIcon className="size-4" />
+              </PromptInputSubmit>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 rounded-none bg-transparent text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground"
+                    disabled={submitDisabled || isContextCompacting}
+                    aria-label="Schedule message"
+                  >
+                    <ChevronDownIcon className="size-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" side="top" className="w-72">
+                  <DropdownMenuLabel className="text-muted-foreground">
+                    Schedule message
+                  </DropdownMenuLabel>
+                  {quickScheduleOptions.map((option) => (
+                    <DropdownMenuItem
+                      key={option.label}
+                      className="text-base"
+                      onSelect={() => handleScheduleForLater(option.date)}
+                    >
+                      {option.label}
+                    </DropdownMenuItem>
+                  ))}
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    className="text-base"
+                    onSelect={() => setScheduleDialogOpen(true)}
+                  >
+                    Custom time
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
           </div>
         </PromptInputFooter>
       </PromptInput>
+      <Dialog open={scheduleDialogOpen} onOpenChange={setScheduleDialogOpen}>
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Schedule message</DialogTitle>
+            <p className="text-sm text-muted-foreground">
+              Time zone: {getCurrentTimeZoneLabel()}
+            </p>
+          </DialogHeader>
+          <DialogBody>
+            <div className="grid gap-4 sm:grid-cols-[1fr_0.65fr]">
+              <Select
+                value={scheduledDateOption}
+                onValueChange={setScheduledDateOption}
+              >
+                <SelectTrigger className="h-12">
+                  <CalendarIcon className="mr-2 size-4 text-muted-foreground" />
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="today">Today</SelectItem>
+                  <SelectItem value="tomorrow">Tomorrow</SelectItem>
+                  <SelectItem value="monday">Monday</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={scheduledTime} onValueChange={setScheduledTime}>
+                <SelectTrigger className="h-12">
+                  <ClockIcon className="mr-2 size-4 text-muted-foreground" />
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {SCHEDULE_TIME_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </DialogBody>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setScheduleDialogOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button type="button" onClick={handleCustomSchedule}>
+              Schedule Message
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <SensitiveDataConfirmDialog
         open={sensitiveDataDialogOpen}
         onConfirm={handleSensitiveDataConfirm}
@@ -719,3 +873,60 @@ const ArchestraPromptInput = ({
 };
 
 export default ArchestraPromptInput;
+
+const SCHEDULE_TIME_OPTIONS = [
+  { value: "09:00", label: "9:00 AM" },
+  { value: "12:00", label: "12:00 PM" },
+  { value: "13:00", label: "1:00 PM" },
+  { value: "17:00", label: "5:00 PM" },
+];
+
+function getQuickScheduleOptions() {
+  return [
+    {
+      label: "Later today at 1:00 PM",
+      date: buildScheduledDate({ dateOption: "today", time: "13:00" }),
+    },
+    {
+      label: "Tomorrow at 9:00 AM",
+      date: buildScheduledDate({ dateOption: "tomorrow", time: "09:00" }),
+    },
+    {
+      label: "Monday at 9:00 AM",
+      date: buildScheduledDate({ dateOption: "monday", time: "09:00" }),
+    },
+  ];
+}
+
+function buildScheduledDate({
+  dateOption,
+  time,
+}: {
+  dateOption: string;
+  time: string;
+}) {
+  const date = new Date();
+  if (dateOption === "tomorrow") {
+    date.setDate(date.getDate() + 1);
+  } else if (dateOption === "monday") {
+    const day = date.getDay();
+    const daysUntilMonday = (8 - day) % 7 || 7;
+    date.setDate(date.getDate() + daysUntilMonday);
+  }
+
+  const [hours, minutes] = time.split(":").map(Number);
+  date.setHours(hours ?? 9, minutes ?? 0, 0, 0);
+  return date;
+}
+
+function formatScheduledDateTime(date: Date) {
+  return new Intl.DateTimeFormat(undefined, {
+    weekday: "long",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(date);
+}
+
+function getCurrentTimeZoneLabel() {
+  return Intl.DateTimeFormat().resolvedOptions().timeZone.replaceAll("_", " ");
+}

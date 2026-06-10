@@ -296,20 +296,22 @@ export function ChatPageContent({
   // Independent of artifact/browser open state — toggled when the canvas tab is selected.
   const [isCanvasTabOpen, setIsCanvasTabOpen] = useState(false);
 
-  const hasChatAccess = canReadAgent !== false;
+  const canListAgents = canReadAgent === true;
   const canUseProviderSettings =
     canReadLlmProvider === true && canReadLlmModels === true;
 
   // Fetch internal agents for dialog editing
   const { data: internalAgents = [], isPending: isLoadingAgents } =
-    useInternalAgents({ enabled: hasChatAccess });
+    useInternalAgents({ enabled: canListAgents });
   const { data: defaultAgentId } = useDefaultAgentId();
 
   // Fetch profiles and models for initial chat (no conversation)
   const { modelsByProvider, isPending: isModelsLoading } =
     useLlmModelsByProvider({ enabled: canUseProviderSettings });
   const { data: chatApiKeys = [], isLoading: isLoadingApiKeys } =
-    useLlmProviderApiKeys({ enabled: hasChatAccess && canUseProviderSettings });
+    useLlmProviderApiKeys({
+      enabled: canListAgents && canUseProviderSettings,
+    });
   const { data: organization, isPending: isOrgLoading } = useOrganization();
   // The user's saved default (model, key) pair — top of the resolution chain
   // for a new chat ("member" level).
@@ -542,10 +544,12 @@ export function ChatPageContent({
   }, [initialModel, modelsByProvider]);
 
   const { isLoading: isLoadingFeatures } = useConfig();
-  const { data: chatModels = [] } = useLlmModels();
+  const { data: chatModels = [] } = useLlmModels({
+    enabled: canUseProviderSettings,
+  });
   // Check if user has any API keys (including system keys for keyless providers
   // like Vertex AI Gemini, vLLM, or Ollama which don't require secrets)
-  const hasAnyApiKey = chatApiKeys.length > 0;
+  const hasAnyApiKey = !canUseProviderSettings || chatApiKeys.length > 0;
   const isLoadingApiKeyCheck = isLoadingApiKeys || isLoadingFeatures;
 
   useEffect(() => {
@@ -1043,7 +1047,12 @@ export function ChatPageContent({
     })),
   });
   const newChatAgentId =
-    activeAgentId ?? initialAgentId ?? internalAgents[0]?.id ?? null;
+    activeAgentId ??
+    initialAgentId ??
+    internalAgents[0]?.id ??
+    defaultAgentId ??
+    organization?.defaultAgentId ??
+    null;
 
   // Find the specific internal agent for this conversation (if any)
   const _conversationInternalAgent = conversationAgentId
@@ -1086,7 +1095,7 @@ export function ChatPageContent({
     conversationToolsStateId,
     {
       enabled:
-        !isReadOnlyConversation && hasChatAccess && canUpdateAgent !== false,
+        !isReadOnlyConversation && canListAgents && canUpdateAgent !== false,
     },
   );
   // Treat both loading and required as "visible" for disabling submit, hiding arrow, etc.
@@ -1762,7 +1771,6 @@ export function ChatPageContent({
 
       if (
         (!hasText && !hasFiles && !skill) ||
-        !initialAgentId ||
         createConversationMutation.isPending
       ) {
         return;
@@ -1774,7 +1782,9 @@ export function ChatPageContent({
       pendingSkillRef.current = skill;
 
       // Check if there are pending tool actions to apply
-      const pendingActions = getPendingActions(initialAgentId);
+      const pendingActions = initialAgentId
+        ? getPendingActions(initialAgentId)
+        : [];
 
       createInitialConversation(async (newConversation) => {
         // Apply pending tool actions if any
@@ -1852,8 +1862,6 @@ export function ChatPageContent({
     // Skip if conversation already exists
     if (conversationId) return;
 
-    // Wait for agent to be ready.
-    if (!initialAgentId) return;
     // Skip if mutation is already in progress
     if (createConversationMutation.isPending) return;
 
@@ -1874,7 +1882,6 @@ export function ChatPageContent({
   }, [
     initialUserPrompt,
     conversationId,
-    initialAgentId,
     createInitialConversation,
     selectConversation,
     createConversationMutation.isPending,
@@ -1941,32 +1948,12 @@ export function ChatPageContent({
   // Check if the conversation's agent was deleted
   const isAgentDeleted = conversationId && conversation && !conversation.agent;
 
-  // If user lacks permission to read agents, show access denied
-  // Must check before loading state since disabled queries stay in pending state
-  if (!conversationId && canReadAgent === false) {
-    return (
-      <Empty className="h-full">
-        <EmptyHeader>
-          <EmptyMedia variant="icon">
-            <AlertTriangle />
-          </EmptyMedia>
-          <EmptyTitle>Access restricted</EmptyTitle>
-          <EmptyDescription>
-            You don&apos;t have the required permissions to use the chat. Ask
-            your administrator to grant you the following:
-          </EmptyDescription>
-        </EmptyHeader>
-        <EmptyContent>
-          <code className="rounded bg-muted px-2 py-1 text-sm font-mono">
-            agent:read
-          </code>
-        </EmptyContent>
-      </Empty>
-    );
-  }
-
   // Show loading spinner while essential data is loading
-  if (isLoadingApiKeyCheck || isLoadingAgents || isPlaywrightCheckLoading) {
+  if (
+    isLoadingApiKeyCheck ||
+    (canListAgents && isLoadingAgents) ||
+    isPlaywrightCheckLoading
+  ) {
     return (
       <div className="flex items-center justify-center h-full">
         <LoadingSpinner />
@@ -1980,7 +1967,7 @@ export function ChatPageContent({
   }
 
   // If no agents exist and we're not viewing a conversation with a deleted agent, show empty state
-  if (internalAgents.length === 0 && !isAgentDeleted) {
+  if (canListAgents && internalAgents.length === 0 && !isAgentDeleted) {
     return (
       <Empty className="h-full">
         <EmptyHeader>

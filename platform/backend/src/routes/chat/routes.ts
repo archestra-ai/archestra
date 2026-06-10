@@ -11,6 +11,7 @@ import {
   type SupportedProvider,
   TimeInMs,
   TOOL_ACTIVATE_SKILL_SHORT_NAME,
+  TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
   type TokenUsage,
@@ -53,7 +54,10 @@ import {
   stripHookRunParts,
   toCollectedRuns,
 } from "@/hooks/hook-run-parts";
-import { extractAndIngestDocuments } from "@/knowledge-base";
+import {
+  extractAndIngestDocuments,
+  knowledgeSourceAccessControlService,
+} from "@/knowledge-base";
 import { fileUploadManager } from "@/knowledge-base/file-upload/file-upload-manager";
 import logger from "@/logging";
 import {
@@ -65,6 +69,8 @@ import {
   ConversationModel,
   ConversationShareModel,
   LlmProviderApiKeyModel,
+  KnowledgeBaseConnectorModel,
+  KnowledgeBaseModel,
   MemberModel,
   MessageModel,
   OrganizationModel,
@@ -489,6 +495,15 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 agentId,
               })
             : null;
+        const knowledgeSourcesPrompt =
+          archestraMcpBranding.getToolName(
+            TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
+          ) in mcpTools
+            ? await buildKnowledgeSourcesPrompt({
+                organizationId,
+                userId: user.id,
+              })
+            : null;
 
         systemPrompt =
           [
@@ -500,6 +515,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   organizationId,
                 })
               : null,
+            knowledgeSourcesPrompt,
             skillCatalogPrompt,
             toolDenialInstruction,
             toolResultInstructions,
@@ -1762,8 +1778,8 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           modelId: true,
           chatApiKeyId: true,
         })
-          .required({ agentId: true })
           .partial({
+            agentId: true,
             title: true,
             projectId: true,
             modelId: true,
@@ -1786,12 +1802,12 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
       });
 
-      // Validate that the agent exists and user has access to it
-      const agent = await AgentModel.findById(agentId, user.id, isAgentAdmin);
-
-      if (!agent) {
-        throw new ApiError(404, "Agent not found");
-      }
+      const agent = await resolveConversationAgent({
+        agentId,
+        userId: user.id,
+        organizationId,
+        isAgentAdmin,
+      });
 
       if (projectId) {
         await requireReadableProject({
@@ -1836,7 +1852,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         await ConversationModel.create({
           userId: user.id,
           organizationId,
-          agentId,
+          agentId: agent.id,
           projectId,
           title,
           modelId: llmSelection.modelId,
@@ -3673,6 +3689,54 @@ async function requireReadableProject(params: {
   }
 }
 
+async function resolveConversationAgent(params: {
+  agentId?: string;
+  userId: string;
+  organizationId: string;
+  isAgentAdmin: boolean;
+}) {
+  if (params.agentId) {
+    const agent = await AgentModel.findById(
+      params.agentId,
+      params.userId,
+      params.isAgentAdmin,
+    );
+    if (!agent) {
+      throw new ApiError(404, "Agent not found");
+    }
+    return agent;
+  }
+
+  const memberDefaultAgentId = await MemberModel.getDefaultAgentId(
+    params.userId,
+    params.organizationId,
+  );
+  if (memberDefaultAgentId) {
+    const memberDefaultAgent = await AgentModel.findById(
+      memberDefaultAgentId,
+      params.userId,
+      params.isAgentAdmin,
+    );
+    if (memberDefaultAgent) {
+      return memberDefaultAgent;
+    }
+  }
+
+  const organization = await OrganizationModel.getById(params.organizationId);
+  if (organization?.defaultAgentId) {
+    const organizationDefaultAgent = await AgentModel.findById(
+      organization.defaultAgentId,
+      params.userId,
+      params.isAgentAdmin,
+    );
+    if (organizationDefaultAgent) {
+      return organizationDefaultAgent;
+    }
+  }
+
+  throw new ApiError(404, "Default chat agent not found");
+}
+
 async function getProjectInstructionsForChat(params: {
   projectId: string;
   organizationId: string;
@@ -3685,6 +3749,64 @@ async function getProjectInstructionsForChat(params: {
     return null;
   }
   return `Project instructions:\n${project.instructions.trim()}`;
+}
+
+async function buildKnowledgeSourcesPrompt(params: {
+  organizationId: string;
+  userId: string;
+}): Promise<string | null> {
+  const access =
+    await knowledgeSourceAccessControlService.buildAccessControlContext({
+      userId: params.userId,
+      organizationId: params.organizationId,
+    });
+  const [knowledgeBases, connectors] = await Promise.all([
+    KnowledgeBaseModel.findByOrganization({
+      organizationId: params.organizationId,
+    }),
+    KnowledgeBaseConnectorModel.findByOrganization({
+      organizationId: params.organizationId,
+      canReadAll: access.canReadAll,
+      viewerTeamIds: access.teamIds,
+    }),
+  ]);
+
+  const visibleKnowledgeBases =
+    knowledgeSourceAccessControlService.filterKnowledgeBases(
+      access,
+      knowledgeBases,
+    );
+  if (visibleKnowledgeBases.length === 0 && connectors.length === 0) {
+    return null;
+  }
+
+  const knowledgeToolName = archestraMcpBranding.getToolName(
+    TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
+  );
+  const knowledgeBaseLines = visibleKnowledgeBases
+    .slice(0, 20)
+    .map((kb) => `- ${kb.name}${kb.description ? `: ${kb.description}` : ""}`);
+  const connectorLines = connectors
+    .slice(0, 20)
+    .map(
+      (connector) =>
+        `- ${connector.name} (${connector.connectorType})${
+          connector.description ? `: ${connector.description}` : ""
+        }`,
+    );
+
+  return [
+    "Available knowledge sources:",
+    knowledgeBaseLines.length > 0
+      ? `Knowledge bases:\n${knowledgeBaseLines.join("\n")}`
+      : null,
+    connectorLines.length > 0
+      ? `Connectors:\n${connectorLines.join("\n")}`
+      : null,
+    `Use \`${knowledgeToolName}\` when answering would benefit from these sources. Query the sources instead of guessing from memory.`,
+  ]
+    .filter(Boolean)
+    .join("\n\n");
 }
 
 async function forkConversation(params: {

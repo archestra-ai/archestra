@@ -2,11 +2,9 @@
 
 import {
   ChevronDown,
-  FolderOpen,
   MessageCircle,
   MoreVertical,
   Pencil,
-  Plus,
   Star,
   Trash2,
 } from "lucide-react";
@@ -425,7 +423,6 @@ function ProjectSidePanelContent({
 }) {
   const [openSideCards, setOpenSideCards] = useState({
     instructions: true,
-    scheduled: false,
     context: true,
   });
   const toggleSideCard = (card: keyof typeof openSideCards) => {
@@ -462,57 +459,11 @@ function ProjectSidePanelContent({
       </ProjectSideCard>
 
       <ProjectSideCard
-        title="Scheduled"
-        open={openSideCards.scheduled}
-        onToggle={() => toggleSideCard("scheduled")}
-        action={
-          <Button variant="ghost" size="icon" className="size-7" disabled>
-            <Plus className="h-4 w-4" />
-            <span className="sr-only">Add scheduled trigger</span>
-          </Button>
-        }
-      >
-        <div className="text-xs leading-5 text-muted-foreground">
-          Set up recurring tasks for this project.
-        </div>
-      </ProjectSideCard>
-
-      <ProjectSideCard
         title="Context"
         open={openSideCards.context}
         onToggle={() => toggleSideCard("context")}
-        action={
-          canUpdate ? (
-            <Button
-              variant="ghost"
-              size="icon"
-              className="size-7"
-              onClick={onEdit}
-            >
-              <Plus className="h-4 w-4" />
-              <span className="sr-only">Edit context</span>
-            </Button>
-          ) : null
-        }
       >
         <div className="space-y-2.5">
-          <ContextSubsection title="Knowledge">
-            {project.knowledgeBases.length === 0 ? (
-              <div className="text-xs leading-5 text-muted-foreground">
-                No knowledge sources selected.
-              </div>
-            ) : (
-              project.knowledgeBases.map((knowledgeBase) => (
-                <div
-                  key={knowledgeBase.id}
-                  className="flex items-center gap-2 text-xs leading-5"
-                >
-                  <FolderOpen className="h-3.5 w-3.5 text-muted-foreground" />
-                  {knowledgeBase.name}
-                </div>
-              ))
-            )}
-          </ContextSubsection>
           <ContextSubsection title="Files">
             <div className="text-xs leading-5 text-muted-foreground">
               No files

@@ -54,7 +54,7 @@ describe("knowledge-management tool execution", () => {
       expect((result.content[0] as any).text).toContain("query:");
     });
 
-    test("returns error when no knowledge base assigned", async () => {
+    test("returns error when no visible knowledge sources exist", async () => {
       const result = await executeArchestraTool(
         t("query_knowledge_sources"),
         { query: "test query" },
@@ -62,7 +62,7 @@ describe("knowledge-management tool execution", () => {
       );
       expect(result.isError).toBe(true);
       expect((result.content[0] as any).text).toContain(
-        "No knowledge base or connector assigned",
+        "No visible knowledge sources found for the current user.",
       );
     });
 
@@ -132,7 +132,7 @@ describe("knowledge-management tool execution", () => {
       querySpy.mockRestore();
     });
 
-    test("returns error when no connectors found for KB", async ({
+    test("returns error when no visible connectors found for knowledge sources", async ({
       makeAgent,
       makeOrganization,
       makeUser,
@@ -163,7 +163,7 @@ describe("knowledge-management tool execution", () => {
       );
       expect(result.isError).toBe(true);
       expect((result.content[0] as any).text).toContain(
-        "No connectors found for the assigned knowledge bases",
+        "No connectors found for the visible knowledge sources",
       );
     });
 
@@ -445,7 +445,7 @@ describe("knowledge-management tool execution", () => {
       querySpy.mockRestore();
     });
 
-    test("returns error when no assigned knowledge source is visible to the caller", async ({
+    test("returns error when no visible connector is visible to the caller", async ({
       makeAgent,
       makeOrganization,
       makeUser,
@@ -484,7 +484,7 @@ describe("knowledge-management tool execution", () => {
 
       expect(result.isError).toBe(true);
       expect((result.content[0] as any).text).toContain(
-        "No connectors found for the assigned knowledge bases or agent",
+        "No connectors found for the visible knowledge sources",
       );
     });
 

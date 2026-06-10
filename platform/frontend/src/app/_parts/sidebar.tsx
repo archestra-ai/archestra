@@ -120,12 +120,13 @@ const contentNavGroups: NavGroup[] = [
             customIsActive: (pathname: string) =>
               pathname.startsWith("/agents/skills"),
           },
-          {
-            title: "Scheduled",
-            url: "/scheduled-tasks",
-            customIsActive: (pathname: string) =>
-              pathname.startsWith("/scheduled-tasks"),
-          },
+          // TODO: Remove this once Projects are finished and scheduling is owned by project/chat flows.
+          // {
+          //   title: "Scheduled",
+          //   url: "/scheduled-tasks",
+          //   customIsActive: (pathname: string) =>
+          //     pathname.startsWith("/scheduled-tasks"),
+          // },
           {
             title: "Triggers",
             url: "/agents/triggers",

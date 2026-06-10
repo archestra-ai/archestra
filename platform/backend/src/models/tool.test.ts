@@ -1782,7 +1782,7 @@ describe("ToolModel", () => {
       expect(toolNames).toHaveLength(1);
     });
 
-    test("getMcpToolsByAgent removes query_knowledge_sources after connector unassignment", async ({
+    test("getMcpToolsByAgent keeps query_knowledge_sources available for org knowledge sources", async ({
       makeAgent,
       makeOrganization,
       makeKnowledgeBase,
@@ -1815,9 +1815,9 @@ describe("ToolModel", () => {
           ),
         );
 
-      // Tool should no longer appear
+      // Org-visible knowledge sources remain available without explicit agent assignment.
       tools = await ToolModel.getMcpToolsByAgent(agent.id);
-      expect(tools.map((t) => t.name)).not.toContain(
+      expect(tools.map((t) => t.name)).toContain(
         TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME,
       );
     });

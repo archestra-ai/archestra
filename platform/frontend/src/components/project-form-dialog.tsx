@@ -4,7 +4,6 @@ import type { ResourceVisibilityScope } from "@archestra/shared";
 import { Globe, User, Users } from "lucide-react";
 import { type FormEvent, useEffect, useState } from "react";
 import { AgentIconPicker } from "@/components/agent-icon-picker";
-import { KnowledgeSourcesSelector } from "@/components/knowledge-sources-selector";
 import { StandardFormDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,7 +15,6 @@ import {
   VisibilitySelector,
 } from "@/components/visibility-selector";
 import { useHasPermissions } from "@/lib/auth/auth.query";
-import { useKnowledgeBases } from "@/lib/knowledge/knowledge-base.query";
 import {
   type Project,
   useCreateProject,
@@ -39,7 +37,6 @@ export function ProjectFormDialog({
   const [instructions, setInstructions] = useState("");
   const [scope, setScope] = useState<ResourceVisibilityScope>("personal");
   const [teamIds, setTeamIds] = useState<string[]>([]);
-  const [knowledgeBaseIds, setKnowledgeBaseIds] = useState<string[]>([]);
   const createProject = useCreateProject();
   const updateProject = useUpdateProject();
   const { data: canProjectAdmin } = useHasPermissions({ project: ["admin"] });
@@ -49,9 +46,6 @@ export function ProjectFormDialog({
   const { data: teams = [] } = useTeams({
     enabled: !!canProjectAdmin || !!canProjectTeamAdmin,
   });
-  const { data: knowledgeBasesData } = useKnowledgeBases();
-  const knowledgeBases = knowledgeBasesData ?? [];
-
   useEffect(() => {
     if (!open) return;
     setName(project?.name ?? "");
@@ -60,7 +54,6 @@ export function ProjectFormDialog({
     setInstructions(project?.instructions ?? "");
     setScope(project?.scope ?? "personal");
     setTeamIds(project?.teams.map((team) => team.id) ?? []);
-    setKnowledgeBaseIds(project?.knowledgeBaseIds ?? []);
   }, [open, project]);
 
   const isPending = createProject.isPending || updateProject.isPending;
@@ -106,7 +99,6 @@ export function ProjectFormDialog({
       instructions: instructions || null,
       scope,
       teamIds: scope === "team" ? teamIds : [],
-      knowledgeBaseIds,
     };
     const result = project
       ? await updateProject.mutateAsync({ id: project.id, ...payload })
@@ -167,17 +159,6 @@ export function ProjectFormDialog({
         </div>
 
         <div className="rounded-lg border bg-card p-4 space-y-4">
-          <div className="space-y-2">
-            <Label>Knowledge Sources</Label>
-            <p className="text-xs text-muted-foreground">
-              Choose which knowledge this project can draw from in chat.
-            </p>
-            <KnowledgeSourcesSelector
-              knowledgeBases={knowledgeBases}
-              selectedKnowledgeBaseIds={knowledgeBaseIds}
-              onKnowledgeBaseIdsChange={setKnowledgeBaseIds}
-            />
-          </div>
           <div className="space-y-2">
             <Label htmlFor="project-instructions">Instructions</Label>
             <Textarea

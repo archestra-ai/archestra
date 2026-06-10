@@ -1,6 +1,8 @@
 import ConversationModel from "@/models/conversation";
 import ConversationAttachmentModel from "@/models/conversation-attachment";
+import MemberModel from "@/models/member";
 import MessageModel from "@/models/message";
+import OrganizationModel from "@/models/organization";
 import ScheduleTriggerRunModel from "@/models/schedule-trigger-run";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
@@ -58,6 +60,55 @@ describe("chat conversation and message routes", () => {
       id: expect.any(String),
       agentId: agent.id,
       pinnedAt: null,
+    });
+  });
+
+  test("creates a conversation with the member default agent when agentId is omitted", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({
+      organizationId,
+      authorId: currentUser.id,
+      scope: "personal",
+    });
+    await MemberModel.setDefaultAgent(currentUser.id, organizationId, agent.id);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/chat/conversations",
+      payload: {},
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      id: expect.any(String),
+      agentId: agent.id,
+    });
+  });
+
+  test("falls back to the organization default agent when the member default is not set", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({
+      organizationId,
+      authorId: currentUser.id,
+      scope: "org",
+    });
+    await MemberModel.setDefaultAgent(currentUser.id, organizationId, null);
+    await OrganizationModel.patch(organizationId, {
+      defaultAgentId: agent.id,
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/chat/conversations",
+      payload: {},
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      id: expect.any(String),
+      agentId: agent.id,
     });
   });
 

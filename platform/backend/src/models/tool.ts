@@ -534,10 +534,10 @@ class ToolModel {
       TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
     );
 
-    // Get tool IDs assigned via junction table (MCP tools) and agent's knowledge sources
+    // Get tool IDs assigned via junction table (MCP tools) and available knowledge sources
     const [assignedToolIds, hasKnowledgeSources] = await Promise.all([
       AgentToolModel.findToolIdsByAgent(agentId),
-      ToolModel.getAgentHasKnowledgeSources(agentId),
+      ToolModel.getAgentHasAvailableKnowledgeSources(agentId),
     ]);
 
     if (assignedToolIds.length === 0 && !hasKnowledgeSources) {
@@ -2433,13 +2433,15 @@ class ToolModel {
   // =============================================================================
 
   /**
-   * Check if an agent has any knowledge sources — either knowledge bases or
-   * directly-assigned connectors.
+   * Check if an agent should expose knowledge search. Knowledge sources are no
+   * longer assigned per-agent, but existing explicit assignments still count for
+   * compatibility while org-level connectors make the search tool available.
    */
-  private static async getAgentHasKnowledgeSources(
+  private static async getAgentHasAvailableKnowledgeSources(
     agentId: string,
   ): Promise<boolean> {
-    const [kbRows, connectorIds] = await Promise.all([
+    const [agent, kbRows, connectorIds] = await Promise.all([
+      AgentModel.findById(agentId),
       db
         .select({
           knowledgeBaseId: schema.agentKnowledgeBasesTable.knowledgeBaseId,
@@ -2449,7 +2451,23 @@ class ToolModel {
         .limit(1),
       AgentConnectorAssignmentModel.getConnectorIds(agentId),
     ]);
-    return kbRows.length > 0 || connectorIds.length > 0;
+    if (kbRows.length > 0 || connectorIds.length > 0) {
+      return true;
+    }
+    if (!agent?.organizationId) {
+      return false;
+    }
+    const [connector] = await db
+      .select({ id: schema.knowledgeBaseConnectorsTable.id })
+      .from(schema.knowledgeBaseConnectorsTable)
+      .where(
+        eq(
+          schema.knowledgeBaseConnectorsTable.organizationId,
+          agent.organizationId,
+        ),
+      )
+      .limit(1);
+    return !!connector;
   }
 
   /**

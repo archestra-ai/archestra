@@ -515,7 +515,7 @@ export function ChatSidebarSection() {
     });
   };
 
-  const renderGroupActions = (projectId?: string) => (
+  const renderViewProjectAction = (projectId?: string) => (
     <div className="flex shrink-0 items-center gap-1">
       <TooltipProvider>
         <Tooltip>
@@ -540,6 +540,11 @@ export function ChatSidebarSection() {
           </TooltipContent>
         </Tooltip>
       </TooltipProvider>
+    </div>
+  );
+
+  const renderGroupModeAction = () => (
+    <div className="flex shrink-0 items-center gap-1">
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button
@@ -568,6 +573,15 @@ export function ChatSidebarSection() {
           </DropdownMenuRadioGroup>
         </DropdownMenuContent>
       </DropdownMenu>
+    </div>
+  );
+
+  const renderGroupActions = (projectId?: string) => (
+    <div className="flex shrink-0 items-center gap-1">
+      {projectId
+        ? renderViewProjectAction(projectId)
+        : renderViewProjectAction()}
+      {renderGroupModeAction()}
     </div>
   );
 
@@ -652,35 +666,43 @@ export function ChatSidebarSection() {
                 )}
 
                 {groupMode === "project" &&
-                  projectConversations.map(({ project, conversations }) => (
-                    <div key={project.id}>
-                      <div className="group/project space-y-0.5">
-                        <div className="flex items-center gap-1">
-                          <SidebarMenuSubButton
-                            className="min-w-0 flex-1 cursor-pointer px-2 text-sidebar-foreground/70 hover:text-sidebar-foreground"
-                            onClick={() => toggleGroup(`project:${project.id}`)}
-                          >
-                            <span className="truncate">{project.name}</span>
-                            <ChevronDown
-                              className={cn(
-                                "h-3.5 w-3.5 text-muted-foreground/70 transition-transform",
-                                collapsedGroups.has(`project:${project.id}`) &&
-                                  "-rotate-90",
-                              )}
-                            />
-                          </SidebarMenuSubButton>
-                          {renderGroupActions(project.id)}
+                  projectConversations.map(
+                    ({ project, conversations }, index) => (
+                      <div key={project.id}>
+                        <div className="group/project space-y-0.5">
+                          <div className="flex items-center gap-1">
+                            <SidebarMenuSubButton
+                              className="min-w-0 flex-1 cursor-pointer px-2 text-sidebar-foreground/70 hover:text-sidebar-foreground"
+                              onClick={() =>
+                                toggleGroup(`project:${project.id}`)
+                              }
+                            >
+                              <span className="truncate">{project.name}</span>
+                              <ChevronDown
+                                className={cn(
+                                  "h-3.5 w-3.5 text-muted-foreground/70 transition-transform",
+                                  collapsedGroups.has(
+                                    `project:${project.id}`,
+                                  ) && "-rotate-90",
+                                )}
+                              />
+                            </SidebarMenuSubButton>
+                            <div className="flex shrink-0 items-center gap-1">
+                              {renderViewProjectAction(project.id)}
+                              {index === 0 ? renderGroupModeAction() : null}
+                            </div>
+                          </div>
+                          {renderLimitedConversationGroup({
+                            conversations,
+                            emptyMessage: "No chats yet",
+                            groupId: `project:${project.id}`,
+                            overflowHref: `/projects/${project.id}`,
+                            overflowLabel: `View all ${conversations.length} chats`,
+                          })}
                         </div>
-                        {renderLimitedConversationGroup({
-                          conversations,
-                          emptyMessage: "No chats yet",
-                          groupId: `project:${project.id}`,
-                          overflowHref: `/projects/${project.id}`,
-                          overflowLabel: `View all ${conversations.length} chats`,
-                        })}
                       </div>
-                    </div>
-                  ))}
+                    ),
+                  )}
 
                 {groupMode === "project" && (
                   <>
@@ -707,7 +729,7 @@ export function ChatSidebarSection() {
                           <ChevronRight className="h-3 w-3" />
                         </button>
                         {projectConversations.length === 0
-                          ? renderGroupActions()
+                          ? renderGroupModeAction()
                           : null}
                       </div>
                     </div>

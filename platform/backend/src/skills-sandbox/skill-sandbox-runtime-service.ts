@@ -63,11 +63,17 @@ const REQUIREMENTS_INSTALL_TIMEOUT_SECONDS = 180;
  * concurrent calls cannot observe stale replay state or record commands out of
  * execution order.
  */
+/** per-sandbox serialization chain plus its queued-operation count. */
+interface SandboxQueueState {
+  /** settles once every queued operation has finished; never rejects. */
+  tail: Promise<unknown>;
+  /** operations queued or running; the entry is dropped when this hits 0. */
+  pending: number;
+}
+
 class SkillSandboxRuntimeService {
   // per-sandbox promise chain: ensures load + exec + append are atomic per sandbox.
-  private readonly sandboxQueues = new Map<string, Promise<unknown>>();
-  // per-sandbox pending counter for queue capacity enforcement.
-  private readonly sandboxPendingCounts = new Map<string, number>();
+  private readonly sandboxQueues = new Map<SandboxId, SandboxQueueState>();
 
   get isEnabled(): boolean {
     return config.skillsSandbox.enabled && sandboxRuntimeService.isEnabled;
@@ -594,49 +600,53 @@ class SkillSandboxRuntimeService {
    * Serializes operations on the same sandbox so concurrent calls observe a
    * consistent replay state. Also enforces a per-sandbox queue cap.
    */
-  private runExclusive<T>(sandboxId: string, fn: () => Promise<T>): Promise<T> {
-    const pending = this.sandboxPendingCounts.get(sandboxId) ?? 0;
-    if (pending >= SKILL_SANDBOX_LIMITS.maxSandboxQueueLength) {
+  private runExclusive<T>(
+    sandboxId: SandboxId,
+    fn: () => Promise<T>,
+  ): Promise<T> {
+    const state = this.sandboxQueues.get(sandboxId);
+    if (state && state.pending >= SKILL_SANDBOX_LIMITS.maxSandboxQueueLength) {
       return Promise.reject(
         new SkillSandboxError(
           "too many requests are already queued for this sandbox",
         ),
       );
     }
-    this.sandboxPendingCounts.set(sandboxId, pending + 1);
 
-    const prev = this.sandboxQueues.get(sandboxId) ?? Promise.resolve();
+    const prev = state?.tail ?? Promise.resolve();
     const next = prev.then(
       () => fn(),
       () => fn(),
     );
     const counted = next.then(
       (v) => {
-        this.decrementSandboxPending(sandboxId);
+        this.releaseQueueSlot(sandboxId);
         return v;
       },
       (e) => {
-        this.decrementSandboxPending(sandboxId);
+        this.releaseQueueSlot(sandboxId);
         throw e;
       },
     );
-    const tail = counted.catch(() => {});
-    this.sandboxQueues.set(sandboxId, tail);
-    tail.then(() => {
-      if (this.sandboxQueues.get(sandboxId) === tail) {
-        this.sandboxQueues.delete(sandboxId);
-      }
+    this.sandboxQueues.set(sandboxId, {
+      tail: counted.catch(() => {}),
+      pending: (state?.pending ?? 0) + 1,
     });
     return counted;
   }
 
-  private decrementSandboxPending(sandboxId: string): void {
-    const count = this.sandboxPendingCounts.get(sandboxId) ?? 0;
-    if (count <= 1) {
-      this.sandboxPendingCounts.delete(sandboxId);
-    } else {
-      this.sandboxPendingCounts.set(sandboxId, count - 1);
+  /**
+   * Slots are released in settle order, one per queued operation, so the
+   * entry's pending count reaches 0 exactly when the chain has drained — at
+   * which point the whole entry is dropped and the map cannot leak.
+   */
+  private releaseQueueSlot(sandboxId: SandboxId): void {
+    const state = this.sandboxQueues.get(sandboxId);
+    if (!state || state.pending <= 1) {
+      this.sandboxQueues.delete(sandboxId);
+      return;
     }
+    state.pending -= 1;
   }
 }
 

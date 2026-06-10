@@ -150,7 +150,106 @@ describe("skillSandboxRuntimeService", () => {
     );
     expect(queueErrors.length).toBeGreaterThanOrEqual(1);
   });
+
+  test("queue guard rejects exactly the calls beyond maxSandboxQueueLength", async () => {
+    const enabled = await importEnabledService();
+    const { SKILL_SANDBOX_LIMITS } = await import("./types");
+
+    const sandboxId = __internals.asSandboxId(crypto.randomUUID());
+    // all N+1 calls are created synchronously, so the first N take queue slots
+    // and only the last one trips the guard.
+    const results = await Promise.allSettled(
+      Array.from(
+        { length: SKILL_SANDBOX_LIMITS.maxSandboxQueueLength + 1 },
+        () =>
+          enabled.runCommand({
+            sandboxId,
+            caller: { userId: "u", organizationId: "o" },
+            command: "echo hi",
+          }),
+      ),
+    );
+    const queueErrors = results.filter(
+      (r) =>
+        r.status === "rejected" &&
+        (r.reason as Error)?.message?.includes("too many requests"),
+    );
+    expect(queueErrors).toHaveLength(1);
+  });
+
+  test("queue guard resets after the saturated queue drains", async () => {
+    const enabled = await importEnabledService();
+    const { SKILL_SANDBOX_LIMITS } = await import("./types");
+
+    const sandboxId = __internals.asSandboxId(crypto.randomUUID());
+    await Promise.allSettled(
+      Array.from(
+        { length: SKILL_SANDBOX_LIMITS.maxSandboxQueueLength + 1 },
+        () =>
+          enabled.runCommand({
+            sandboxId,
+            caller: { userId: "u", organizationId: "o" },
+            command: "echo hi",
+          }),
+      ),
+    );
+
+    // the queue fully drained, so the next call must reach the sandbox load
+    // (and fail there — no sandbox row) instead of tripping the queue guard.
+    const [after] = await Promise.allSettled([
+      enabled.runCommand({
+        sandboxId,
+        caller: { userId: "u", organizationId: "o" },
+        command: "echo hi",
+      }),
+    ]);
+    expect(after.status).toBe("rejected");
+    expect((after as PromiseRejectedResult).reason?.message).not.toContain(
+      "too many requests",
+    );
+  });
+
+  test("a call enqueued right as the previous one settles is not lost", async () => {
+    const enabled = await importEnabledService();
+
+    const sandboxId = __internals.asSandboxId(crypto.randomUUID());
+    const run = () =>
+      enabled.runCommand({
+        sandboxId,
+        caller: { userId: "u", organizationId: "o" },
+        command: "echo hi",
+      });
+
+    // enqueue the second call in the microtask window where the first call's
+    // queue-cleanup callbacks may still be pending; it must execute normally.
+    const [first] = await Promise.allSettled([run()]);
+    const [second] = await Promise.allSettled([run()]);
+    for (const result of [first, second]) {
+      expect(result.status).toBe("rejected");
+      expect((result as PromiseRejectedResult).reason?.message).not.toContain(
+        "too many requests",
+      );
+    }
+  });
 });
+
+/**
+ * the queue tests need the service compiled with the sandbox feature on; each
+ * gets a fresh module registry so the singleton's queue state starts empty.
+ */
+async function importEnabledService() {
+  vi.resetModules();
+  vi.stubEnv("ARCHESTRA_AGENTS_SKILLS_ENABLED", "true");
+  vi.stubEnv("ARCHESTRA_CODE_RUNTIME_ENABLED", "true");
+  vi.stubEnv(
+    "ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST",
+    "tcp://dagger-runtime.dagger.svc.cluster.local:1234",
+  );
+  const { skillSandboxRuntimeService: enabled } = await import(
+    "./skill-sandbox-runtime-service"
+  );
+  return enabled;
+}
 
 describe("__internals", () => {
   test("requirementsInstallCommands picks up root and nested requirements.txt in path order", () => {

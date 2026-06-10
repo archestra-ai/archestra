@@ -335,7 +335,7 @@ describe("PATCH /api/organization/default-environment", () => {
     const policy = {
       egressMode: "restricted",
       domainPreset: "package_managers",
-      allowedDomains: ["registry.npmjs.org", "latest.disneyland.disney.go.com"],
+      allowedDomains: ["registry.npmjs.org", "browser-target.example.com"],
       allowedCidrs: [],
     };
 

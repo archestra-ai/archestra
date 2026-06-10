@@ -262,7 +262,7 @@ describe("environment routes", () => {
     };
     const updatedPolicy = {
       ...initialPolicy,
-      allowedDomains: ["registry.npmjs.org", "latest.disneyland.disney.go.com"],
+      allowedDomains: ["registry.npmjs.org", "browser-target.example.com"],
     };
     const environment = await app.inject({
       method: "POST",

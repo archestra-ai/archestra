@@ -38,6 +38,9 @@ import type { ArchestraContext } from "./types";
  * the dispatch path before the handler runs). Skills become runnable here by
  * activating them (`activate_skill`), which mounts them into the default
  * sandbox; that path is `skill:read`-gated.
+ *
+ * Model-facing text in this file follows the skill terminology glossary in
+ * `skills/skill-activation.ts` and is pinned by `skill-tool-text.test.ts`.
  */
 
 const UUID_REGEX =

@@ -66,6 +66,9 @@ import type { ArchestraContext } from "./types";
  * the Skills UI. `update_skill` re-checks the target skill's scope so a user
  * cannot edit a skill they only have read access to.
  *
+ * Model-facing text in this file follows the skill terminology glossary in
+ * `skills/skill-activation.ts` and is pinned by `skill-tool-text.test.ts`.
+ *
  * @see https://agentskills.io/specification
  */
 

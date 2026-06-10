@@ -14,7 +14,7 @@ DB-backed, Dagger-materialized execution sandbox for Agent Skills.
 - `runtime-image.ts` — container path layout: skill root (`/skills/<skill-name>`),
   sandbox home, and attachment staging dir. The image itself (base image,
   apt-package baseline, non-root user) is defined in the Rust Dagger backend
-  (`archestra-rs/sandbox-core/src/backends/dagger.rs`).
+  (`platform/archestra-rs/sandbox-core/src/backends/dagger.rs`).
 - `types.ts` — `SkillSandboxLimits`, `CommandResult`, `ArtifactRef`,
   `UploadRef`, `SkillSandboxError`, runtime status enum. Tool-layer code in
   `../archestra-mcp-server/sandbox.ts` re-uses these so the service/tool

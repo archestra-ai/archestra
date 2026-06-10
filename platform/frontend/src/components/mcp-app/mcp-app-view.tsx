@@ -706,7 +706,7 @@ function SandboxIframe({
       setReady(false);
       setInitialized(false);
     };
-  }, [sandboxUrl.href, appBridge, useDedicatedOrigin]);
+  }, [sandboxUrl.href, sandboxUrl.origin, appBridge, useDedicatedOrigin]);
 
   // Set up size change and initialized handlers
   useEffect(() => {

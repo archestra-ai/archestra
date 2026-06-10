@@ -584,6 +584,7 @@ export function ChatPageContent({
 
   // App render diagnostics are conversation-scoped: drop any leftovers when
   // switching conversations so they never attach to an unrelated send.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: deliberately re-runs on conversation switch
   useEffect(() => {
     clearAllAppDiagnostics();
   }, [conversationId]);

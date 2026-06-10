@@ -13,7 +13,6 @@ import {
 import config from "@/config";
 import db, { schema } from "@/database";
 import { AppDataModel } from "@/models";
-import { APP_RUNTIME_BRIDGE_MARKER } from "@/services/apps/app-runtime-bridge";
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "@/test";
 import { ApiError } from "@/types";
 import mcpAppProxyRoutes from "./mcp-app-proxy";
@@ -271,7 +270,7 @@ describe("mcpAppProxyRoutes POST /api/mcp/app/:appId", () => {
     // The stored HTML is served with the runtime bridge injected at serve
     // time, so window.archestra exists without any authored glue.
     expect(content.text).toContain("<h1>hello app</h1>");
-    expect(content.text).toContain(APP_RUNTIME_BRIDGE_MARKER);
+    expect(content.text).toContain("data-archestra-runtime-bridge");
     expect(content.text).toContain("window.archestra");
     expect(content.mimeType).toContain("text/html");
   });

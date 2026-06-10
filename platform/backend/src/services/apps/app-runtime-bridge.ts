@@ -6,8 +6,9 @@ import {
   TOOL_APP_DATA_SET_SHORT_NAME,
 } from "@archestra/shared";
 
-// Marker attribute on the injected <script>; also the double-injection guard.
-export const APP_RUNTIME_BRIDGE_MARKER = "data-archestra-runtime-bridge";
+// Marker attribute on the injected <script>, so served documents are
+// recognizable in tests and debugging.
+const APP_RUNTIME_BRIDGE_MARKER = "data-archestra-runtime-bridge";
 
 const dataGetTool = `${ARCHESTRA_TOOL_PREFIX}${TOOL_APP_DATA_GET_SHORT_NAME}`;
 const dataSetTool = `${ARCHESTRA_TOOL_PREFIX}${TOOL_APP_DATA_SET_SHORT_NAME}`;
@@ -33,7 +34,7 @@ const dataDeleteTool = `${ARCHESTRA_TOOL_PREFIX}${TOOL_APP_DATA_DELETE_SHORT_NAM
  * sandbox proxy later injects the CSP meta + `__ARCHESTRA_APP_SDK_URL__`
  * global at the start of <head>, i.e. before this script runs.
  */
-export const APP_RUNTIME_BRIDGE_SCRIPT = `<script ${APP_RUNTIME_BRIDGE_MARKER}>
+const APP_RUNTIME_BRIDGE_SCRIPT = `<script ${APP_RUNTIME_BRIDGE_MARKER}>
 (() => {
   "use strict";
   // Render-loop diagnostics: runtime errors are posted to the parent (the

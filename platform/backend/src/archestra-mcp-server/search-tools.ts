@@ -82,6 +82,11 @@ const InputParameterSchema = z.object({
 });
 
 type InputParameterSummary = z.infer<typeof InputParameterSchema>;
+type NestedParameterSummary = z.infer<typeof NestedParameterSchema>;
+
+// cap on enum values rendered inline in a parameter signature; the full list
+// stays recoverable via run_tool validation feedback.
+const PARAM_ENUM_VALUE_CAP = 20;
 
 const SearchToolsOutputSchema = z.object({
   total: z.number().int().nonnegative().describe("Number of returned tools."),
@@ -106,10 +111,6 @@ const SearchToolsOutputSchema = z.object({
       toolName: z
         .string()
         .describe(`Exact tool name to pass to ${TOOL_RUN_TOOL_SHORT_NAME}.`),
-      title: z
-        .string()
-        .nullable()
-        .describe("Human-friendly title when available."),
       description: z
         .string()
         .nullable()
@@ -123,11 +124,15 @@ const SearchToolsOutputSchema = z.object({
         .describe(
           "MCP server prefix for third-party MCP tools when available.",
         ),
-      catalogName: z
+      params: z
         .string()
-        .nullable()
-        .describe("Catalog name for installed MCP tools when available."),
-      inputParameters: z.array(InputParameterSchema),
+        .describe(
+          "Compact one-line input signature. Parameters are joined by '; ', each rendered as " +
+            "`name<!|?>:<type>` where `!` marks required and `?` optional. Object parameters are " +
+            "expanded one level as `{child<!|?>:type, …}`, enums as `enum(<json-values>)`, and a " +
+            "trailing ` — description` is added when available. Empty string when the tool takes " +
+            `no input. Pass matching values inside tool_args when calling ${TOOL_RUN_TOOL_SHORT_NAME}.`,
+        ),
     }),
   ),
 });
@@ -245,6 +250,7 @@ export const __test = {
   rankCandidatesByKeyword,
   rankCandidatesByRegex,
   summarizeInputParameters,
+  formatParamsSignature,
   makeRankingCandidate(input: {
     toolName: string;
     title?: string | null;
@@ -537,13 +543,70 @@ function prepareSearchQuery(query: string): PreparedSearchQuery {
 function toSearchResult(candidate: SearchCandidate) {
   return {
     toolName: candidate.toolName,
-    title: candidate.title,
     description: candidate.description,
     source: candidate.source,
     server: candidate.server,
-    catalogName: candidate.catalogName,
-    inputParameters: candidate.inputParameters,
+    params: formatParamsSignature(candidate.inputParameters),
   };
+}
+
+// Render the structured per-tool parameter summaries as a single compact line so
+// repeated search_tools calls do not accumulate verbose nested JSON in context.
+// Intentionally bounded (see PARAM_ENUM_VALUE_CAP) — the full schema stays
+// recoverable through run_tool's validation feedback, matching the existing
+// "deeper structure is left to the actual call" design above.
+function formatParamsSignature(params: InputParameterSummary[]): string {
+  return params.map(formatParamSignature).join("; ");
+}
+
+function formatParamSignature(param: InputParameterSummary): string {
+  const requiredMark = param.required ? "!" : "?";
+  const typePart = formatParamType(param);
+  const typeSuffix = typePart ? `:${typePart}` : "";
+  // collapse whitespace so a multiline schema description cannot break the
+  // one-line signature contract.
+  const description = param.description
+    ? param.description.replace(/\s+/g, " ").trim()
+    : "";
+  const descriptionSuffix = description ? ` — ${description}` : "";
+  return `${param.name}${requiredMark}${typeSuffix}${descriptionSuffix}`;
+}
+
+// Additive: a parameter can carry a scalar type, a one-level object shape, and an
+// enum constraint at once, so each present part is appended rather than replacing
+// the others (e.g. `sort?:string enum("asc"|"desc")`).
+function formatParamType(param: InputParameterSummary): string {
+  let type = param.type ?? "";
+  if (param.properties && param.properties.length > 0) {
+    type += formatNestedProperties(param.properties);
+  }
+  if (param.enum && param.enum.length > 0) {
+    const enumClause = formatEnumValues(param.enum);
+    type = type ? `${type} ${enumClause}` : enumClause;
+  }
+  return type;
+}
+
+function formatNestedProperties(properties: NestedParameterSummary[]): string {
+  const inner = properties
+    .map((property) => {
+      const requiredMark = property.required ? "!" : "?";
+      const typeSuffix = property.type ? `:${property.type}` : "";
+      return `${property.name}${requiredMark}${typeSuffix}`;
+    })
+    .join(", ");
+  return `{${inner}}`;
+}
+
+// enum values are arbitrary JSON (number/boolean/null/object, or strings that may
+// contain "|"), so JSON-encode each to keep the signature unambiguous.
+function formatEnumValues(values: unknown[]): string {
+  const shown = values
+    .slice(0, PARAM_ENUM_VALUE_CAP)
+    .map((value) => JSON.stringify(value));
+  const overflow = values.length - PARAM_ENUM_VALUE_CAP;
+  const suffix = overflow > 0 ? `|…(+${overflow} more)` : "";
+  return `enum(${shown.join("|")}${suffix})`;
 }
 
 type RegexRankResult =

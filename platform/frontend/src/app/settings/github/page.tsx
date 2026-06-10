@@ -2,6 +2,7 @@
 
 import type { ColumnDef } from "@tanstack/react-table";
 import { Pencil, Plus, Trash2 } from "lucide-react";
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
@@ -33,7 +34,7 @@ import {
   useUpdateGithubAppConfig,
 } from "@/lib/github-app-config.query";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
-import { useSetSettingsAction } from "../../layout";
+import { useSetSettingsAction } from "../layout";
 
 const DEFAULT_GITHUB_URL = "https://api.github.com";
 
@@ -210,6 +211,22 @@ export default function GithubAppsSettingsPage() {
 
   return (
     <div className="space-y-6">
+      <div className="rounded-lg border bg-muted/40 px-5 py-4">
+        <p className="text-base leading-7 text-muted-foreground">
+          System integration between{" "}
+          <span className="font-medium text-foreground">Archestra.AI</span> and{" "}
+          <span className="font-medium text-foreground">GitHub</span> — used by
+          Knowledge Base (RAG) connectors and Skill sync. For an agentic
+          integration, use the{" "}
+          <Link
+            href="/mcp/registry"
+            className="font-medium text-foreground underline decoration-primary decoration-2 underline-offset-4 hover:text-primary"
+          >
+            GitHub MCP server
+          </Link>{" "}
+          instead.
+        </p>
+      </div>
       {!isCheckingPermissions && !canRead ? (
         <Alert variant="destructive">
           <AlertTitle>Access denied</AlertTitle>
@@ -236,7 +253,6 @@ export default function GithubAppsSettingsPage() {
           if (!open) setDialogState(null);
         }}
         title={isEditing ? "Edit GitHub App" : "Add GitHub App"}
-        description="Store GitHub App credentials once and reference them from connectors and skill imports. The private key is encrypted and never displayed again."
         size="medium"
       >
         <Form {...form}>

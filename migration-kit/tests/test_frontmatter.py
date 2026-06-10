@@ -89,3 +89,19 @@ def test_emit_roundtrips_through_parser_and_pyyaml() -> None:
     assert doc.frontmatter["name"] == hostile
     # ...and it is genuinely valid YAML (independent oracle).
     assert yaml.safe_load(emitted.split("---", 2)[1])["name"] == hostile
+
+
+def test_crlf_is_normalized_in_body() -> None:
+    doc = parse_frontmatter("---\r\nname: x\r\n---\r\nline1\r\nline2\r\n")
+    assert doc.frontmatter == {"name": "x"}
+    assert "\r" not in doc.body
+    assert doc.body == "line1\nline2\n"
+
+
+def test_indented_fence_does_not_close_frontmatter() -> None:
+    # an indented '  ---' is not a closing fence; the real '---' below it closes the block.
+    doc = parse_frontmatter("---\nname: x\n  ---\ndescription: y\n---\nbody")
+    assert doc.frontmatter.get("name") == "x"
+    assert doc.frontmatter.get("description") == "y"
+    assert doc.body == "body"
+    assert any("---" in line for line in doc.unparsed_lines)  # the indented line is surfaced

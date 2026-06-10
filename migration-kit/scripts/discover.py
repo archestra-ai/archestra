@@ -129,6 +129,12 @@ def _as_str_list(value: JsonValue) -> list[str]:
     return [v for v in arr if isinstance(v, str)] if arr is not None else []
 
 
+def _is_contained_file(path: Path, root: Path) -> bool:
+    """a real file that resolves inside root. excludes symlinks escaping the source tree --
+    following one would embed an arbitrary external file (e.g. /etc/shadow) into the inventory."""
+    return path.is_file() and path.resolve().is_relative_to(root.resolve())
+
+
 def _read_bundled(path: Path, rel_to: Path) -> BundledFile:
     rel = path.relative_to(rel_to).as_posix()
     raw = path.read_bytes()
@@ -177,7 +183,7 @@ def discover(root: Path) -> Inventory:
 
     # 1. root CLAUDE.md -> primary agent
     for cm in (root / "CLAUDE.md", root / ".claude" / "CLAUDE.md"):
-        if cm.is_file():
+        if _is_contained_file(cm, root):
             doc = parse_frontmatter(read(cm))
             rel = cm.relative_to(root).as_posix()
             note_unparsed(doc.unparsed_lines, rel)
@@ -192,6 +198,8 @@ def discover(root: Path) -> Inventory:
 
     # 2. subagents -> skills (preferred)
     for f in sorted((root / ".claude" / "agents").glob("*.md")):
+        if not _is_contained_file(f, root):
+            continue
         doc = parse_frontmatter(read(f))
         name = _meta_str(doc.frontmatter, "name") or f.stem
         rel = f.relative_to(root).as_posix()
@@ -207,6 +215,9 @@ def discover(root: Path) -> Inventory:
 
     # 3. skills -> skills (clean)
     for skill_md in sorted((root / ".claude" / "skills").glob("*/SKILL.md")):
+        # reject a skill reached through a symlinked dir that escapes the source tree.
+        if not _is_contained_file(skill_md, root):
+            continue
         skill_dir = skill_md.parent
         content = read(skill_md)
         doc = parse_frontmatter(content)
@@ -216,7 +227,7 @@ def discover(root: Path) -> Inventory:
         files = [
             _read_bundled(p, skill_dir)
             for p in sorted(skill_dir.rglob("*"))
-            if p.is_file() and p != skill_md
+            if p != skill_md and _is_contained_file(p, skill_dir)
         ]
         _warn_if_secret(content, rel, inv.warnings)
         for bf in files:
@@ -232,6 +243,8 @@ def discover(root: Path) -> Inventory:
 
     # 4. slash commands -> skills (best-effort)
     for f in sorted((root / ".claude" / "commands").glob("*.md")):
+        if not _is_contained_file(f, root):
+            continue
         doc = parse_frontmatter(read(f))
         name = _meta_str(doc.frontmatter, "name") or f.stem
         rel = f.relative_to(root).as_posix()
@@ -246,6 +259,8 @@ def discover(root: Path) -> Inventory:
 
     # 5. local python tools -> skills (best-effort). heuristic: *.py under a tools/ dir.
     for f in sorted((root / "tools").glob("*.py")):
+        if not _is_contained_file(f, root):
+            continue
         bundled = _read_bundled(f, root)
         if bundled.encoding == "utf8":
             _warn_if_secret(bundled.content, bundled.path, inv.warnings)

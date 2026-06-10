@@ -68,7 +68,7 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   member: ["read", "create", "update", "delete"],
   invitation: ["create", "cancel"],
   ac: ["read", "create", "update", "delete"],
-  team: ["read", "create", "update", "delete", "admin"],
+  team: ["read", "create", "update", "delete"],
   identityProvider: ["read", "create", "update", "delete"],
   secret: ["read", "update"],
   organizationSettings: ["read", "update"],
@@ -368,7 +368,6 @@ export const permissionDescriptions: Record<string, string> = {
   "team:create": "Create new teams",
   "team:update": "Modify team settings",
   "team:delete": "Delete teams",
-  "team:admin": "Manage team membership (add/remove members)",
   "invitation:create": "Send invitations to new users",
   "invitation:cancel": "Cancel pending invitations",
   "identityProvider:read": "View identity provider configurations (SSO)",
@@ -486,10 +485,10 @@ export const requiredEndpointPermissionsMap: Partial<
     team: ["read"],
   },
   [RouteId.GetTokenValue]: {
-    team: ["update"],
+    team: ["read"],
   },
   [RouteId.RotateToken]: {
-    team: ["update"],
+    team: ["read"],
   },
   [RouteId.GetTools]: {
     toolPolicy: ["read"],
@@ -666,7 +665,7 @@ export const requiredEndpointPermissionsMap: Partial<
     team: ["create"],
   },
   [RouteId.UpdateTeam]: {
-    team: ["update"],
+    team: ["read"],
   },
   [RouteId.DeleteTeam]: {
     team: ["delete"],
@@ -675,20 +674,23 @@ export const requiredEndpointPermissionsMap: Partial<
     team: ["read"],
   },
   [RouteId.AddTeamMember]: {
-    team: ["admin"],
+    team: ["read"],
+  },
+  [RouteId.UpdateTeamMember]: {
+    team: ["read"],
   },
   [RouteId.RemoveTeamMember]: {
-    team: ["admin"],
+    team: ["read"],
   },
   // Team External Group Routes (SSO Team Sync) - requires team admin permission
   [RouteId.GetTeamExternalGroups]: {
     team: ["read"],
   },
   [RouteId.AddTeamExternalGroup]: {
-    team: ["admin"],
+    team: ["read"],
   },
   [RouteId.RemoveTeamExternalGroup]: {
-    team: ["admin"],
+    team: ["read"],
   },
   // Team Vault Folder Routes (BYOS - Bring Your Own Secrets)
   // Note: Route handlers check team membership for non-admin users
@@ -766,6 +768,11 @@ export const requiredEndpointPermissionsMap: Partial<
     chat: ["create"],
   },
   [RouteId.UpdateChatConversation]: {
+    chat: ["update"],
+  },
+  // Coarse gate only; the handler further requires agent-type admin to flip
+  // the per-conversation hook debug flag.
+  [RouteId.SetConversationHooksDebug]: {
     chat: ["update"],
   },
   [RouteId.DeleteChatConversation]: {
@@ -1247,6 +1254,20 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.UpdateSiteNotification]: { siteNotification: ["update"] },
   [RouteId.DeleteSiteNotification]: { siteNotification: ["delete"] },
 
+  // Hook File Routes
+  [RouteId.GetHooks]: {
+    agent: ["read"],
+  },
+  [RouteId.CreateHook]: {
+    agent: ["update"],
+  },
+  [RouteId.UpdateHook]: {
+    agent: ["update"],
+  },
+  [RouteId.DeleteHook]: {
+    agent: ["update"],
+  },
+
   // MCP Gateway Routes - available to all authenticated users
   [RouteId.McpGatewayGet]: {}, // Server discovery endpoint
   [RouteId.McpGatewayPost]: {}, // JSON-RPC endpoint for resources/read and tools/call
@@ -1317,7 +1338,6 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/settings/roles": { ac: ["read"] },
   "/settings/identity-providers": { identityProvider: ["read"] },
   "/settings/secrets": { secret: ["read"] },
-  "/settings/integrations": { githubAppConfig: ["read"] },
-  "/settings/integrations/github-apps": { githubAppConfig: ["read"] },
+  "/settings/github": { githubAppConfig: ["read"] },
   "/settings/organization": { organizationSettings: ["read"] },
 };

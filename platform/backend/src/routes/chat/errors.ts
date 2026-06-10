@@ -19,7 +19,12 @@ import {
   context as otelContext,
   trace,
 } from "@opentelemetry/api";
-import { APICallError, NoOutputGeneratedError, RetryError } from "ai";
+import {
+  APICallError,
+  NoOutputGeneratedError,
+  NoSuchToolError,
+  RetryError,
+} from "ai";
 import logger from "@/logging";
 import { getActiveSessionId } from "@/observability/request-context";
 import { captureRawProviderErrorInSentry } from "@/observability/sentry";
@@ -58,6 +63,104 @@ export class EmptyModelResponseError extends Error {
     this.finishReason = params.finishReason;
     this.attempts = params.attempts;
   }
+}
+
+// =============================================================================
+// Unavailable tool errors — model called a tool that doesn't exist
+// =============================================================================
+
+const UNAVAILABLE_TOOL_ERROR_MESSAGE =
+  "The requested tool is not available in this chat. Available tools are listed in the details below; use an exact available tool name for the next tool call.";
+
+type UnavailableToolErrorDetails = {
+  type: "unavailable_tool";
+  message: string;
+  requestedToolName: string;
+  availableToolNames: string[];
+  originalErrorMessage: string;
+};
+
+/**
+ * Recognize the AI SDK's "model called a nonexistent tool" failure in both
+ * shapes it reaches stream onError handlers: the genuine NoSuchToolError
+ * instance (from the invalid tool-call part), and the duplicate tool-error
+ * part for the same call, whose error the SDK stringifies in
+ * runToolsTransformation before it gets here — so an isInstance check alone
+ * misses it and the recoverable failure escalates into a failed run.
+ */
+export function getUnavailableToolErrorDetails(
+  error: unknown,
+): UnavailableToolErrorDetails | null {
+  if (NoSuchToolError.isInstance(error)) {
+    return {
+      type: "unavailable_tool",
+      message: UNAVAILABLE_TOOL_ERROR_MESSAGE,
+      requestedToolName: error.toolName,
+      availableToolNames: error.availableTools ?? [],
+      originalErrorMessage: error.message,
+    };
+  }
+
+  const parsed = parseUnavailableToolErrorMessage(error);
+  if (!parsed) {
+    return null;
+  }
+
+  return {
+    type: "unavailable_tool",
+    message: UNAVAILABLE_TOOL_ERROR_MESSAGE,
+    ...parsed,
+  };
+}
+
+export function formatUnavailableToolErrorDetails(
+  details: UnavailableToolErrorDetails,
+): string {
+  return `${details.message}\n\nDetails:\n${JSON.stringify(
+    {
+      type: details.type,
+      requestedToolName: details.requestedToolName,
+      availableToolNames: details.availableToolNames,
+      originalErrorMessage: details.originalErrorMessage,
+    },
+    null,
+    2,
+  )}`;
+}
+
+// matches NoSuchToolError's message verbatim (parse-tool-call.ts in the ai
+// package), covering both the "Available tools: ..." and "No tools are
+// available." variants
+function parseUnavailableToolErrorMessage(error: unknown): {
+  requestedToolName: string;
+  availableToolNames: string[];
+  originalErrorMessage: string;
+} | null {
+  const message =
+    error instanceof Error
+      ? error.message
+      : typeof error === "string"
+        ? error
+        : null;
+  if (message === null) {
+    return null;
+  }
+
+  const match = message.match(
+    /^Model tried to call unavailable tool '([^']+)'\. (?:No tools are available\.|Available tools: (.*)\.)$/s,
+  );
+  if (!match) {
+    return null;
+  }
+
+  return {
+    requestedToolName: match[1],
+    availableToolNames: (match[2] ?? "")
+      .split(",")
+      .map((toolName) => toolName.trim())
+      .filter(Boolean),
+    originalErrorMessage: message,
+  };
 }
 
 // =============================================================================

@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """one-command installer for the migrate-to-archestra skill.
 
-    curl -fsSL https://raw.githubusercontent.com/archestra-ai/archestra/feat/migrate-to-archestra-skill/migration-kit/install.py | python3
-    # TODO: switch the URL above to .../archestra-ai/archestra/main/... once this merges to main.
+    curl -fsSL https://raw.githubusercontent.com/archestra-ai/archestra/main/migration-kit/install.py | python3
 
 it downloads only the files needed to RUN the skill (SKILL.md + scripts/ + references/) via the
 GitHub contents API -- a few hundred KB, not the whole repo -- and writes them into your Claude Code
@@ -24,8 +23,7 @@ import urllib.request
 from pathlib import Path, PurePosixPath
 
 REPO = "archestra-ai/archestra"
-# TODO: switch to "main" after this merges (the branch is deleted on merge).
-DEFAULT_REF = "feat/migrate-to-archestra-skill"
+DEFAULT_REF = "main"
 KIT_SUBDIR = "migration-kit"
 # only these are needed to RUN the skill, and they are the only paths the installer manages.
 # tests/, pyproject.toml, this installer, and the README are contributor/meta artifacts.

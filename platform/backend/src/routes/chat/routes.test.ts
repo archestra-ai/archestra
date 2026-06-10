@@ -88,6 +88,32 @@ describe("prepareMessagesForProvider", () => {
     });
   });
 
+  it("normalizes json files to text/plain for anthropic", () => {
+    const messages = __test.prepareMessagesForProvider({
+      provider: "anthropic",
+      messages: [
+        {
+          role: "user",
+          parts: [
+            {
+              type: "file",
+              mediaType: "application/json",
+              filename: "data.json",
+              url: "data:application/json;base64,eyJhIjoxfQ==",
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(messages[0].parts?.[0]).toMatchObject({
+      type: "file",
+      mediaType: "text/plain",
+      filename: "data.json",
+      url: "data:text/plain;base64,eyJhIjoxfQ==",
+    });
+  });
+
   it("leaves non-anthropic file parts unchanged", () => {
     const message = {
       role: "user" as const,

@@ -12,6 +12,8 @@ export interface TokenUsage {
   inputTokens: number | undefined;
   outputTokens: number | undefined;
   totalTokens: number | undefined;
+  /** Input tokens served from the provider's prompt cache, a subset of inputTokens. */
+  cacheReadTokens?: number;
 }
 
 /**
@@ -163,6 +165,15 @@ export type ChatMessage = {
   metadata?: unknown;
 };
 
+/**
+ * Type of the inline hook-run debug part. A `data-*` part: persisted and
+ * rendered in the chat thread, but dropped from the model conversion
+ * (`convertToModelMessages`), so the LLM never sees it — same class as
+ * `data-tool-ui-start`. Shared so the backend (emit) and frontend (render)
+ * agree on the wire string.
+ */
+export const HOOK_RUN_PART_TYPE = "data-hook-run";
+
 // Control/telemetry parts the chat UI skips and providers never see. An
 // assistant turn left with only these (e.g. a `step-start` after a dangling
 // tool call is stripped) renders nothing, so it must not count as content.
@@ -268,6 +279,13 @@ export function hasPersistableAssistantContent(message: {
       part.type === "image" ||
       part.type.startsWith("source")
     ) {
+      return true;
+    }
+
+    // a hook-run debug chip is standalone renderable content; unlike a
+    // `data-tool-ui-start` marker it needs no pairing, so a turn carrying only
+    // hook entries is still persistable rather than dropped as an empty bubble.
+    if (part.type === HOOK_RUN_PART_TYPE) {
       return true;
     }
 
@@ -401,13 +419,14 @@ const MODALITY_TO_MIME_TYPES: Record<
   ModelInputModality,
   SupportedChatUploadMimeType[] | null
 > = {
-  // Text-capable models can accept plain text and CSV documents.
+  // Text-capable models can accept plain text, CSV, and JSON documents.
   text: [
     "text/plain",
     "text/markdown",
     "text/csv",
     "application/csv",
     "application/vnd.ms-excel",
+    "application/json",
   ],
   // Image formats commonly supported by vision models
   image: [
@@ -433,7 +452,7 @@ const MODALITY_TO_MIME_TYPES: Record<
 };
 
 const MODALITY_TO_FILE_TYPE_DESCRIPTION: Record<ModelInputModality, string> = {
-  text: "chat prompts, .txt, .csv, and .md uploads",
+  text: "chat prompts, .txt, .csv, .md, and .json uploads",
   image: "images",
   audio: "audio",
   video: "video",

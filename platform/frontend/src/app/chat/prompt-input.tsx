@@ -31,6 +31,8 @@ import {
 } from "@/components/ai-elements/prompt-input";
 import { PlaywrightInstallInline } from "@/components/chat/playwright-install-dialog";
 import { SensitiveDataConfirmDialog } from "@/components/chat/sensitive-data-confirm-dialog";
+import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useConversation, useToggleHooksDebug } from "@/lib/chat/chat.query";
 import { useChatPlaceholder } from "@/lib/chat/chat-placeholder.hook";
 import { conversationStorageKeys } from "@/lib/chat/chat-utils";
 import { useFeature } from "@/lib/config/config.query";
@@ -44,6 +46,8 @@ import {
 } from "./prompt-input-tools";
 import {
   buildSkillCommands,
+  DEBUG_COMMAND_VALUE,
+  isDebugCommand,
   parseSkillCommand,
   type SkillCommand,
 } from "./skill-commands";
@@ -112,6 +116,7 @@ const PromptInputContent = ({
   allowFileUploads = false,
   isModelsLoading = false,
   tokensUsed = 0,
+  cachedTokens,
   maxContextLength,
   contextWindow,
   lastCompaction,
@@ -163,12 +168,39 @@ const PromptInputContent = ({
     return buildSkillCommands(skillsData.data);
   }, [skillSlashCommandsEnabled, skillsData]);
 
-  // /compact only applies to an existing conversation; skill commands work anywhere.
+  // /debug toggles per-conversation hook debug chips; admin-only, existing
+  // conversation only. Mirrors the server gate (agent-type admin) loosely — the
+  // toggle endpoint enforces it for real.
+  const { data: isAgentAdmin } = useHasPermissions({ agent: ["admin"] });
+  const { data: conversation } = useConversation(conversationId);
+  const toggleHooksDebug = useToggleHooksDebug();
+  const agentHooksEnabled = useFeature("agentHooksEnabled") ?? false;
+  const hooksDebugEnabled = conversation?.hooksDebugEnabled ?? false;
+  const canDebug = Boolean(conversationId && isAgentAdmin && agentHooksEnabled);
+
+  // /compact and /debug apply to an existing conversation; skill commands work anywhere.
   const slashCommands = useMemo<SlashCommand[]>(() => {
     const compact =
       conversationId && onCompactConversation ? [COMPACT_COMMAND] : [];
-    return [...compact, ...skillCommands];
-  }, [conversationId, onCompactConversation, skillCommands]);
+    const debug: SlashCommand[] = canDebug
+      ? [
+          {
+            value: DEBUG_COMMAND_VALUE,
+            name: "debug",
+            description: hooksDebugEnabled
+              ? "hide inline hook debug chips"
+              : "show inline hook debug chips",
+          },
+        ]
+      : [];
+    return [...compact, ...debug, ...skillCommands];
+  }, [
+    conversationId,
+    onCompactConversation,
+    canDebug,
+    hooksDebugEnabled,
+    skillCommands,
+  ]);
 
   const storageKey = conversationId
     ? conversationStorageKeys(conversationId).draft
@@ -270,6 +302,22 @@ const PromptInputContent = ({
     void onCompactConversation?.();
   }, [controller.textInput, onCompactConversation, storageKey]);
 
+  const runDebugCommand = useCallback(() => {
+    controller.textInput.clear();
+    localStorage.removeItem(storageKey);
+    if (!conversationId) return;
+    toggleHooksDebug.mutate({
+      id: conversationId,
+      enabled: !hooksDebugEnabled,
+    });
+  }, [
+    controller.textInput,
+    storageKey,
+    conversationId,
+    hooksDebugEnabled,
+    toggleHooksDebug,
+  ]);
+
   const selectSlashCommand = useCallback(
     (command: SlashCommand) => {
       if (command.skill) {
@@ -282,8 +330,11 @@ const PromptInputContent = ({
       if (command.value === "/compact") {
         runCompactCommand();
       }
+      if (command.value === DEBUG_COMMAND_VALUE) {
+        runDebugCommand();
+      }
     },
-    [controller.textInput, runCompactCommand, textareaRef],
+    [controller.textInput, runCompactCommand, runDebugCommand, textareaRef],
   );
 
   const handleTextareaKeyDown = useCallback(
@@ -366,6 +417,12 @@ const PromptInputContent = ({
         return;
       }
 
+      if (isDebugCommand(trimmed) && canDebug) {
+        e.preventDefault();
+        runDebugCommand();
+        return;
+      }
+
       // a skill command activates the skill; any text after the token is an
       // optional prompt — a bare skill command sends with an empty prompt
       let outgoing = message;
@@ -399,9 +456,11 @@ const PromptInputContent = ({
       dispatchSubmit(outgoing, e, options);
     },
     [
+      canDebug,
       dispatchSubmit,
       onCompactConversation,
       runCompactCommand,
+      runDebugCommand,
       sensitiveDataDetectionEnabled,
       skillCommands,
     ],
@@ -550,6 +609,7 @@ const PromptInputContent = ({
             allowFileUploads={allowFileUploads}
             isModelsLoading={isModelsLoading}
             tokensUsed={tokensUsed}
+            cachedTokens={cachedTokens}
             maxContextLength={maxContextLength}
             inputModalities={inputModalities}
             agentLlmApiKeyId={agentLlmApiKeyId}
@@ -600,6 +660,7 @@ const ArchestraPromptInput = ({
   allowFileUploads = false,
   isModelsLoading = false,
   tokensUsed = 0,
+  cachedTokens,
   maxContextLength,
   contextWindow,
   lastCompaction,
@@ -653,6 +714,7 @@ const ArchestraPromptInput = ({
           allowFileUploads={allowFileUploads}
           isModelsLoading={isModelsLoading}
           tokensUsed={tokensUsed}
+          cachedTokens={cachedTokens}
           maxContextLength={maxContextLength}
           contextWindow={contextWindow}
           lastCompaction={lastCompaction}

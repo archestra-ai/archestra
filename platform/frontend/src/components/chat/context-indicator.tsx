@@ -14,7 +14,9 @@ interface ContextIndicatorProps {
   tokensUsed: number;
   /** Maximum context window size for the model. */
   maxTokens: number | null;
-  /** Optional className for the container. */
+  /** Input tokens served from the prompt cache on the latest response, a subset of tokensUsed. */
+  cachedTokens?: number;
+  /** Optional className for the container */
   className?: string;
   /** Size of the indicator. */
   size?: "sm" | "md";
@@ -54,10 +56,15 @@ function getStrokeColor(percentage: number): string {
 export function ContextIndicator({
   tokensUsed,
   maxTokens,
+  cachedTokens,
   className,
   size = "sm",
   hideTooltip = false,
 }: ContextIndicatorProps) {
+  const cacheHitPercent =
+    cachedTokens && cachedTokens > 0 && tokensUsed > 0
+      ? Math.round((Math.min(cachedTokens, tokensUsed) / tokensUsed) * 100)
+      : null;
   const { percentage, circumference, strokeDashoffset } = useMemo(() => {
     if (!maxTokens || maxTokens === 0) {
       return { percentage: 0, circumference: 0, strokeDashoffset: 0 };
@@ -153,6 +160,11 @@ export function ContextIndicator({
               {formatTokenCount(tokensUsed)} / {formatTokenCount(maxTokens)}{" "}
               tokens ({Math.round(percentage)}%)
             </span>
+            {cacheHitPercent !== null && cacheHitPercent > 0 && (
+              <span className="text-muted-foreground">
+                {cacheHitPercent}% served from cache
+              </span>
+            )}
           </div>
         </TooltipContent>
       </Tooltip>

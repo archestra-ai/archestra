@@ -90,3 +90,13 @@ def test_require_dict_and_list_raise_on_wrong_shape() -> None:
         c.require_dict([1, 2], ctx="x")
     with pytest.raises(c.ContractError, match="array"):
         c.require_list({"a": 1}, ctx="x")
+
+
+def test_secret_key_regex_matches_real_keys_not_innocent_words() -> None:
+    # delimited credential components match (component boundary = end / non-alnum / camelCase hump).
+    for key in ("API_KEY", "apiKey", "access_token", "ANTHROPIC_API_KEY", "client-secret",
+                "DB_PASSWORD", "authorization", "credentials", "X-Api-Key"):
+        assert c.SECRET_KEY_RE.search(key), f"{key} should be detected as secret-named"
+    # words that merely contain a credential substring must NOT match.
+    for key in ("monkey", "tokenize", "secretary", "keynote", "keyboard", "donkey"):
+        assert not c.SECRET_KEY_RE.search(key), f"{key} should not be a false positive"

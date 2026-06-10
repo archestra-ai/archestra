@@ -1,5 +1,6 @@
 import {
   ConversationAttachmentModel,
+  SkillSandboxFileModel,
   SkillSandboxModel,
   SkillSandboxReplayEventModel,
 } from "@/models";
@@ -496,5 +497,113 @@ describe("stageConversationAttachments (db)", () => {
         await SkillSandboxReplayEventModel.listBySandbox(sandboxA.id),
       ),
     ).toEqual([]);
+  });
+});
+
+describe("uploadFile dedupeId idempotency (db)", () => {
+  /**
+   * Tests the dedup mechanism at the model layer — the same layer `uploadFile`
+   * delegates to — because the runtime service's `ensureEnabled()` guard
+   * requires a live Dagger runner which is not available in the test environment.
+   * The service-layer wiring (passing `dedupeId` → `sourceAttachmentId` →
+   * conflict handling) is covered by the runtime-service unit tests above.
+   */
+  test("same dedupeId → one skill_sandbox_files row + one replay event; no-throw on repeat; different dedupeId still appends", async ({
+    makeOrganization,
+    makeUser,
+    makeAgent,
+    makeConversation,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const agent = await makeAgent({ organizationId: org.id });
+    const conversation = await makeConversation(agent.id, {
+      userId: user.id,
+      organizationId: org.id,
+    });
+    if (!conversation) throw new Error("conversation seed failed");
+
+    const sandbox = await SkillSandboxModel.findOrCreateDefault({
+      organizationId: org.id,
+      userId: user.id,
+      conversationId: conversation.id,
+      defaultCwd: "/home/sandbox",
+    });
+
+    const dedupeId = crypto.randomUUID();
+    const fileData = Buffer.from("print('hello')", "utf8");
+
+    // First insert — should create a file row and a replay event.
+    const row1 = await SkillSandboxReplayEventModel.appendUpload({
+      sandboxId: sandbox.id,
+      path: "/home/sandbox/hooks/h/script.py",
+      mimeType: "text/x-python",
+      originalName: null,
+      sizeBytes: fileData.byteLength,
+      data: fileData,
+      sourceAttachmentId: dedupeId,
+    });
+    expect(row1).not.toBeNull();
+    expect(row1?.id).toBeTruthy();
+
+    // Second append with the same dedupeId — ON CONFLICT → returns null (no-op).
+    const row2 = await SkillSandboxReplayEventModel.appendUpload({
+      sandboxId: sandbox.id,
+      path: "/home/sandbox/hooks/h/script.py",
+      mimeType: "text/x-python",
+      originalName: null,
+      sizeBytes: fileData.byteLength,
+      data: fileData,
+      sourceAttachmentId: dedupeId,
+    });
+    expect(row2).toBeNull();
+
+    // Exactly one upload event in the replay log despite two calls.
+    const log = await SkillSandboxReplayEventModel.listBySandbox(sandbox.id);
+    const uploads = log.filter((e) => e.kind === "upload");
+    expect(uploads).toHaveLength(1);
+
+    // The file model can look up the already-staged row by (sandboxId, dedupeId).
+    const existing = await SkillSandboxFileModel.findUploadByDedupeId(
+      sandbox.id,
+      dedupeId,
+    );
+    expect(existing).not.toBeNull();
+    expect(existing?.id).toBe(row1?.id);
+
+    // A different dedupeId → a new distinct row + replay event.
+    const otherDedupeId = crypto.randomUUID();
+    const row3 = await SkillSandboxReplayEventModel.appendUpload({
+      sandboxId: sandbox.id,
+      path: "/home/sandbox/hooks/h/other.py",
+      mimeType: "text/x-python",
+      originalName: null,
+      sizeBytes: 7,
+      data: Buffer.from("exit(0)", "utf8"),
+      sourceAttachmentId: otherDedupeId,
+    });
+    expect(row3).not.toBeNull();
+    expect(row3?.id).not.toBe(row1?.id);
+
+    const logAfter = await SkillSandboxReplayEventModel.listBySandbox(
+      sandbox.id,
+    );
+    expect(logAfter.filter((e) => e.kind === "upload")).toHaveLength(2);
+
+    // An upload without a sourceAttachmentId (no dedupeId) also appends normally.
+    const row4 = await SkillSandboxReplayEventModel.appendUpload({
+      sandboxId: sandbox.id,
+      path: "/home/sandbox/hooks/h/payload.json",
+      mimeType: "application/json",
+      originalName: null,
+      sizeBytes: 2,
+      data: Buffer.from("{}", "utf8"),
+    });
+    expect(row4).not.toBeNull();
+
+    const logFinal = await SkillSandboxReplayEventModel.listBySandbox(
+      sandbox.id,
+    );
+    expect(logFinal.filter((e) => e.kind === "upload")).toHaveLength(3);
   });
 });

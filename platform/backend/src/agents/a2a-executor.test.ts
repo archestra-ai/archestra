@@ -1,4 +1,5 @@
 import { TOOL_ACTIVATE_SKILL_FULL_NAME } from "@archestra/shared";
+import { NoSuchToolError } from "ai";
 import { describe, expect, test, vi } from "vitest";
 import { MIN_IMAGE_ATTACHMENT_SIZE } from "@/agents/incoming-email/constants";
 import {
@@ -457,6 +458,93 @@ describe("executeA2AMessage model selection", () => {
       role: "assistant",
       parts: [{ type: "text", text: "Delegated response" }],
     });
+  });
+});
+
+describe("executeA2AMessage unavailable tool errors", () => {
+  test("recovers unavailable-tool stream errors instead of failing the run", async () => {
+    vi.mocked(AgentModel.findById).mockResolvedValue({
+      id: "agent-child",
+      name: "Child Agent",
+      agentType: "agent",
+      systemPrompt: "Handle the task.",
+      llmApiKeyId: null,
+      modelId: null,
+    } as never);
+    vi.mocked(McpServerModel.getUserPersonalServerForCatalog).mockResolvedValue(
+      null,
+    );
+    mockResolveConversationLlmSelectionForAgent.mockResolvedValue({
+      chatApiKeyId: "org-key",
+      selectedModel: "claude-sonnet-4-6",
+      selectedProvider: "anthropic",
+    });
+    mockGetChatMcpTools.mockResolvedValue({});
+    mockCreateLLMModelForAgent.mockResolvedValue({
+      model: { provider: "mock" },
+      provider: "anthropic",
+      apiKeySource: "org",
+    });
+
+    let capturedOnError: ((error: unknown) => string) | undefined;
+    mockStreamText.mockReturnValue({
+      toUIMessageStream: vi.fn((options) => {
+        capturedOnError = options?.onError;
+        const responseMessage = {
+          id: "msg-1",
+          role: "assistant",
+          parts: [{ type: "text", text: "Recovered response" }],
+        };
+
+        options?.onFinish?.({
+          messages: [responseMessage],
+          isContinuation: false,
+          isAborted: false,
+          responseMessage,
+          finishReason: "stop",
+        });
+
+        return new ReadableStream({
+          start(controller) {
+            controller.close();
+          },
+        });
+      }),
+      text: Promise.resolve("Recovered response"),
+      usage: Promise.resolve(undefined),
+      finishReason: Promise.resolve("stop"),
+    });
+
+    await executeA2AMessage({
+      agentId: "agent-child",
+      message: "Handle this",
+      organizationId: "org-1",
+      userId: "user-1",
+      conversationId: "conv-1",
+    });
+
+    expect(capturedOnError).toBeDefined();
+
+    const fromInstance = capturedOnError?.(
+      new NoSuchToolError({
+        toolName: "ghost_tool",
+        availableTools: ["real_tool"],
+      }),
+    );
+    expect(fromInstance).toContain(
+      "The requested tool is not available in this chat.",
+    );
+    expect(fromInstance).toContain('"requestedToolName": "ghost_tool"');
+
+    // the SDK's duplicate tool-error part arrives pre-stringified; it must be
+    // recognized the same way, not escalated into a failed run
+    const fromString = capturedOnError?.(
+      "Model tried to call unavailable tool 'ghost_tool'. Available tools: real_tool.",
+    );
+    expect(fromString).toBe(fromInstance);
+
+    // unrelated stream errors keep failing the run
+    expect(() => capturedOnError?.(new Error("boom"))).toThrow("boom");
   });
 });
 

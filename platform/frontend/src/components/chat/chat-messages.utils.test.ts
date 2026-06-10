@@ -372,10 +372,59 @@ describe("identifyCompactToolGroups", () => {
 
     expect(groupMap.size).toBe(1);
     expect(group?.entries).toHaveLength(2);
-    expect(group?.entries.map((entry) => entry.toolName)).toEqual([
-      "google__search",
-      "google__maps",
+    expect(
+      group?.entries.map((entry) =>
+        entry.kind === "tool" ? entry.toolName : entry.kind,
+      ),
+    ).toEqual(["google__search", "google__maps"]);
+  });
+
+  it("includes hook-run parts in the row bracketing the tool they apply to", () => {
+    const parts = [
+      {
+        type: "data-hook-run",
+        data: {
+          hookEventName: "PreToolUse",
+          fileName: "guard.py",
+          outcome: "proceeded",
+          exitCode: 0,
+        },
+      },
+      {
+        type: "tool-google__search",
+        toolCallId: "call_1",
+        state: "input-available",
+        input: { q: "weather" },
+      },
+      {
+        type: "tool-google__search",
+        toolCallId: "call_1",
+        state: "output-available",
+        output: "sunny",
+      },
+      {
+        type: "data-hook-run",
+        data: {
+          hookEventName: "PostToolUse",
+          fileName: "audit.py",
+          outcome: "proceeded",
+          exitCode: 0,
+        },
+      },
+    ] as UIMessage["parts"];
+
+    const { groupMap, consumedIndices } = identifyCompactToolGroups(parts, {
+      getToolShortName: () => null,
+    });
+    const group = groupMap.get(0);
+
+    expect(groupMap.size).toBe(1);
+    expect(group?.entries.map((entry) => entry.kind)).toEqual([
+      "hook",
+      "tool",
+      "hook",
     ]);
+    expect(consumedIndices).toEqual(new Set([0, 1, 2, 3]));
   });
 
   it("does not group across a non-compact-eligible tool call", () => {

@@ -333,6 +333,32 @@ describe("handleBeforeHook", () => {
       const result = await handleBeforeHook(ctx);
       expect(result).toBe(ctx);
     });
+
+    test("should pass when invitation ID is provided in request body", async ({
+      makeOrganization,
+      makeUser,
+      makeInvitation,
+    }) => {
+      const org = await makeOrganization();
+      const inviter = await makeUser();
+      const invitation = await makeInvitation(org.id, inviter.id, {
+        email: "body-invite@example.com",
+        status: "pending",
+      });
+
+      const ctx = createMockContext({
+        path: "/sign-up/email",
+        method: "POST",
+        body: {
+          email: "body-invite@example.com",
+          callbackURL: "/chat",
+          invitationId: invitation.id,
+        },
+      });
+
+      const result = await handleBeforeHook(ctx);
+      expect(result).toBe(ctx);
+    });
   });
 });
 
@@ -2173,7 +2199,8 @@ describe("auth event audit logging", () => {
       path: "/sign-up/email",
       method: "POST",
       body: {
-        callbackURL: `http://example.com?invitationId=${invitation.id}`,
+        callbackURL: "/chat",
+        invitationId: invitation.id,
       },
       context: {
         newSession: {

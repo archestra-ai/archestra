@@ -1547,18 +1547,10 @@ Required RBAC permission: None (no additional RBAC permission required)
 | `hint` | `string \| null` | Yes | Actionable guidance when results were truncated or empty. |
 | `tools` | `object[]` | Yes |  |
 | `tools[].toolName` | `string` | Yes | Exact tool name to pass to run_tool. |
-| `tools[].title` | `string \| null` | Yes | Human-friendly title when available. |
 | `tools[].description` | `string \| null` | Yes | Short tool description, if available. |
 | `tools[].source` | `"archestra" \| "mcp" \| "agent_delegation"` | Yes | Where the tool comes from. |
 | `tools[].server` | `string \| null` | Yes | MCP server prefix for third-party MCP tools when available. |
-| `tools[].catalogName` | `string \| null` | Yes | Catalog name for installed MCP tools when available. |
-| `tools[].inputParameters` | `object[]` | Yes |  |
-| `tools[].inputParameters[].name` | `string` | Yes | Top-level input parameter name. |
-| `tools[].inputParameters[].required` | `boolean` | Yes | Whether the parameter is required. |
-| `tools[].inputParameters[].type` | `string \| null` | Yes | JSON Schema type (e.g. 'string', 'number', 'object'). |
-| `tools[].inputParameters[].enum` | `any[] \| null` | Yes | Allowed values when the parameter is constrained by an enum. |
-| `tools[].inputParameters[].description` | `string \| null` | Yes | Parameter description, if available. |
-| `tools[].inputParameters[].properties` | `object[] \| null` | Yes | One-level summary of nested properties for object (or array-of-object) parameters. |
+| `tools[].params` | `string` | Yes | Compact one-line input signature. Parameters are joined by '; ', each rendered as `name<!\|?>:<type>` where `!` marks required and `?` optional. Object parameters are expanded one level as `{child<!\|?>:type, …}`, enums as `enum(<json-values>)`, and a trailing ` — description` is added when available. Empty string when the tool takes no input. Pass matching values inside tool_args when calling run_tool. |
 
 #### run_tool
 

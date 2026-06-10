@@ -24,8 +24,9 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Union
 
@@ -46,6 +47,7 @@ from archestra_client import (
 )
 from contracts import (
     SECRET_KEY_RE,
+    SECRET_TOKEN_RE,
     ClaudeMdItem,
     CommandItem,
     ContractError,
@@ -351,6 +353,26 @@ def _build_payload(decision: Decision, item: Item) -> tuple[str, Built]:
             )
 
 
+def _scrub_secrets(text: str) -> str:
+    """mask credential-shaped tokens embedded in a string before it is printed (e.g. an MCP
+    launch command like ``npx server --token=sk-...``). belt-and-suspenders for dry-run output."""
+    return SECRET_TOKEN_RE.sub("<redacted>", text)
+
+
+# url credentials that aren't token-shaped: basic-auth userinfo and secret-named query params.
+_URL_USERINFO_RE = re.compile(r"(//)[^/@\s]+@")
+_URL_SECRET_QUERY_RE = re.compile(
+    r"([?&][^=&\s#]*(?:key|token|secret|password|auth|credential)[^=&\s#]*=)[^&\s#]*", re.I)
+
+
+def _scrub_url(url: str) -> str:
+    """mask credentials in a remote server URL before printing it (user:pass@ and secret query
+    params, plus any token-shaped value)."""
+    url = _URL_USERINFO_RE.sub(r"\1<redacted>@", url)
+    url = _URL_SECRET_QUERY_RE.sub(r"\1<redacted>", url)
+    return _scrub_secrets(url)
+
+
 def _redacted_for_print(built: Built) -> dict[str, JsonValue]:
     """strip user-supplied secrets before printing a built op in --dry-run."""
     match built:
@@ -365,15 +387,21 @@ def _redacted_for_print(built: Built) -> dict[str, JsonValue]:
         case BuiltAgent(payload) | BuiltSkill(payload):
             return to_payload(payload)
         case BuiltCatalog(payload):
-            shown = to_payload(payload)
-            local = shown.get("localConfig")
-            if isinstance(local, dict):
-                env = local.get("environment")
-                if isinstance(env, list):
-                    for item in env:
-                        if isinstance(item, dict) and "value" in item:
-                            item["value"] = "<redacted>"
-            return shown
+            if payload.serverUrl is not None:
+                payload = replace(payload, serverUrl=_scrub_url(payload.serverUrl))
+            local = payload.localConfig
+            if local is not None:
+                # redact env values, and scrub credentials embedded in the launch command/args
+                # (e.g. --token=sk-...) -- all on the typed dataclass, before serializing.
+                payload = replace(payload, localConfig=replace(
+                    local,
+                    command=_scrub_secrets(local.command),
+                    arguments=[_scrub_secrets(a) for a in local.arguments],
+                    # keep value-less vars value-less (don't fabricate a redacted value).
+                    environment=[replace(e, value="<redacted>" if e.value is not None else None)
+                                 for e in local.environment],
+                ))
+            return to_payload(payload)
         case BuiltPolicy():
             return {"tool_name": built.tool_name,
                     "conditions": [to_jsonable(c) for c in built.conditions],
@@ -393,9 +421,10 @@ def _preview_detail(built: Built) -> str:
                 case "remote":
                     return f"scope={payload.scope}; remote MCP catalog item"
                 case "local":
-                    local = payload.localConfig
-                    command = local.command if local else "<missing command>"
-                    return f"scope={payload.scope}; local MCP catalog item; command={command}"
+                    # don't echo the launch command here -- a flag can carry a plaintext secret
+                    # that token-shape scrubbing won't catch; the verbose --dry-run shows the
+                    # full (scrubbed) payload for anyone who needs the exact command.
+                    return f"scope={payload.scope}; local MCP catalog item"
         case BuiltInstall():
             team = f"; team_id={built.team_id}" if built.team_id else ""
             return (

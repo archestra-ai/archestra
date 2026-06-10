@@ -17,8 +17,11 @@ vi.mock("@sentry/node", () => ({
   captureException: mockSentryCaptureException,
 }));
 
+import { NoSuchToolError } from "ai";
 import {
   EmptyModelResponseError,
+  formatUnavailableToolErrorDetails,
+  getUnavailableToolErrorDetails,
   mapProviderError,
   ProviderError,
   sanitizeChatErrorForFrontend,
@@ -1738,5 +1741,88 @@ describe("mapProviderError - EmptyModelResponseError", () => {
 
     expect(result.code).toBe(ChatErrorCode.EmptyResponse);
     expect(result.isRetryable).toBe(true);
+  });
+});
+
+describe("getUnavailableToolErrorDetails", () => {
+  it("recognizes a NoSuchToolError instance", () => {
+    const details = getUnavailableToolErrorDetails(
+      new NoSuchToolError({
+        toolName: "ghost_tool",
+        availableTools: ["real_tool", "other_tool"],
+      }),
+    );
+
+    expect(details).not.toBeNull();
+    expect(details?.requestedToolName).toBe("ghost_tool");
+    expect(details?.availableToolNames).toEqual(["real_tool", "other_tool"]);
+  });
+
+  it("recognizes the stringified message the SDK emits for the duplicate tool-error part", () => {
+    // runToolsTransformation stringifies the error before onError sees it,
+    // so only the message text is available — no NoSuchToolError identity
+    const details = getUnavailableToolErrorDetails(
+      "Model tried to call unavailable tool 'ghost_tool'. Available tools: real_tool, other_tool.",
+    );
+
+    expect(details).not.toBeNull();
+    expect(details?.requestedToolName).toBe("ghost_tool");
+    expect(details?.availableToolNames).toEqual(["real_tool", "other_tool"]);
+  });
+
+  it("recognizes the message wrapped in a plain Error", () => {
+    const details = getUnavailableToolErrorDetails(
+      new Error(
+        "Model tried to call unavailable tool 'ghost_tool'. Available tools: real_tool.",
+      ),
+    );
+
+    expect(details?.requestedToolName).toBe("ghost_tool");
+    expect(details?.availableToolNames).toEqual(["real_tool"]);
+  });
+
+  it("recognizes the no-tools-available variant", () => {
+    const details = getUnavailableToolErrorDetails(
+      "Model tried to call unavailable tool 'ghost_tool'. No tools are available.",
+    );
+
+    expect(details?.requestedToolName).toBe("ghost_tool");
+    expect(details?.availableToolNames).toEqual([]);
+  });
+
+  it("produces identical formatted payloads for the instance and its stringified duplicate", () => {
+    const instance = new NoSuchToolError({
+      toolName: "ghost_tool",
+      availableTools: ["real_tool"],
+    });
+
+    const fromInstance = getUnavailableToolErrorDetails(instance);
+    const fromString = getUnavailableToolErrorDetails(instance.message);
+
+    expect(fromInstance).not.toBeNull();
+    expect(fromString).not.toBeNull();
+    if (!fromInstance || !fromString) return;
+    expect(formatUnavailableToolErrorDetails(fromString)).toBe(
+      formatUnavailableToolErrorDetails(fromInstance),
+    );
+  });
+
+  it("does not match its own formatted recovery payload", () => {
+    const details = getUnavailableToolErrorDetails(
+      "Model tried to call unavailable tool 'ghost_tool'. Available tools: real_tool.",
+    );
+    expect(details).not.toBeNull();
+    if (!details) return;
+
+    const formatted = formatUnavailableToolErrorDetails(details);
+    expect(getUnavailableToolErrorDetails(formatted)).toBeNull();
+    expect(getUnavailableToolErrorDetails(new Error(formatted))).toBeNull();
+  });
+
+  it("returns null for unrelated errors and non-string values", () => {
+    expect(getUnavailableToolErrorDetails(new Error("boom"))).toBeNull();
+    expect(getUnavailableToolErrorDetails("some other failure")).toBeNull();
+    expect(getUnavailableToolErrorDetails(undefined)).toBeNull();
+    expect(getUnavailableToolErrorDetails({ code: -32601 })).toBeNull();
   });
 });

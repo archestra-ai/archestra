@@ -158,6 +158,25 @@ export class ActiveChatRunService {
           const { done, value } = await reader.read();
           if (done) break;
           await writer.write(value);
+
+          // An error chunk is terminal for the client (the error renders and
+          // the user can immediately retry/resend), but the row only flips to
+          // `failed` once this drain completes — and a wedged upstream stream
+          // can keep it `running` until the stale reaper, 409-blocking every
+          // send in the meantime. Fail the run the moment the error event is
+          // durably flushed: write-then-flush ordering guarantees a replaying
+          // client can never observe the failed status without the error
+          // event, and markTerminal's running-only guard makes the
+          // end-of-stream terminal write below a no-op.
+          if (value.type === "error") {
+            await writer.flush();
+            await this.markTerminal({
+              runId: params.runId,
+              status: "failed",
+              error: value.errorText,
+            });
+            await this.notifyEvent(params.runId);
+          }
         }
 
         await writer.flush();

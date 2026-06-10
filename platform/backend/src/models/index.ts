@@ -25,6 +25,7 @@ export { default as ConversationEnabledToolModel } from "./conversation-enabled-
 export { default as ConversationShareModel } from "./conversation-share";
 export { default as EnvironmentModel } from "./environment";
 export { default as GithubAppConfigModel } from "./github-app-config";
+export { default as HookFileModel } from "./hook-file";
 export { default as InteractionModel } from "./interaction";
 export { default as InternalMcpCatalogModel } from "./internal-mcp-catalog";
 export { default as InvitationModel } from "./invitation";

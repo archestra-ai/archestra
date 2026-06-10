@@ -44,12 +44,15 @@ class ParsedDoc:
 
 def parse_frontmatter(text: str) -> ParsedDoc:
     """split a markdown doc into frontmatter + body, surfacing unparsable frontmatter lines."""
+    # normalize CRLF (the editors that touch these files) so '\r' neither breaks exact fence
+    # matching nor lingers in the body. bare-CR line endings are not handled (not seen in practice).
+    text = text.replace("\r\n", "\n")
     lines = text.split("\n")
-    # the opening fence must be a line that is exactly '---' (not '--- text' or '----').
-    if not lines or lines[0].strip() != _FENCE:
+    # the opening fence must be a line that is exactly '---' (not '--- text', '----', or '  ---').
+    if not lines or lines[0] != _FENCE:
         return ParsedDoc(body=text)
     # find the closing fence (first line that is exactly '---' after the opening one).
-    close = next((i for i in range(1, len(lines)) if lines[i].strip() == _FENCE), None)
+    close = next((i for i in range(1, len(lines)) if lines[i] == _FENCE), None)
     if close is None:
         return ParsedDoc(body=text)
 

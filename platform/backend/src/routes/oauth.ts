@@ -566,7 +566,7 @@ export async function refreshOAuthToken(
       return false;
     }
 
-    const oauthResource = getOAuthResource(oauthConfig);
+    const oauthResource = getOAuthTokenResource(oauthConfig);
     logger.info(
       {
         secretId,
@@ -974,7 +974,7 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
             oauthConfig.token_endpoint || `${oauthConfig.server_url}/token`;
         }
 
-        const oauthResource = getOAuthResource(oauthConfig);
+        const oauthResource = getOAuthTokenResource(oauthConfig);
         const tokenResponse = await fetch(tokenEndpoint, {
           method: "POST",
           headers: {
@@ -1120,6 +1120,13 @@ export function getOAuthResource(oauthConfig: {
   // Prefer the explicit RFC 8707 resource, then legacy audience configs, then
   // the MCP endpoint URL for existing catalog entries.
   return oauthConfig.resource || oauthConfig.audience || oauthConfig.server_url;
+}
+
+export function getOAuthTokenResource(oauthConfig: {
+  audience?: string;
+  resource?: string;
+}): string | undefined {
+  return oauthConfig.resource || oauthConfig.audience;
 }
 
 export function getOAuthResourceUrl(oauthConfig: {

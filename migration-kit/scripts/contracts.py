@@ -42,6 +42,12 @@ SECRET_TOKEN_RE = re.compile(
     r"|AIza[A-Za-z0-9_-]{8,}|ya29\.[A-Za-z0-9_-]{8,}|eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)"
 )
 
+
+def redact_tokens(text: str) -> str:
+    """replace credential-shaped tokens embedded in a string (a hook command, an MCP launch
+    command, a URL) before it is stored or printed."""
+    return SECRET_TOKEN_RE.sub("<redacted>", text)
+
 # --- shared Literal vocabularies (imported by archestra_client to avoid a cycle) ----------
 
 Scope = Literal["personal", "team", "org"]

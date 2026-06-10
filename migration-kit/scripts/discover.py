@@ -54,6 +54,7 @@ from contracts import (
     SubagentItem,
     as_array,
     as_object,
+    redact_tokens,
     require_dict,
     to_jsonable,
 )
@@ -72,11 +73,6 @@ def _style(text: str, code: str) -> str:
 def _is_secret_value(value: str) -> bool:
     # a prefix that looks like a credential, OR a credential-shaped token embedded anywhere.
     return bool(_SECRET_VALUE.match(value) or _SECRET_TOKEN.search(value))
-
-
-def _redact_inline(text: str) -> str:
-    """replace credential-shaped tokens inside a config string (e.g. a hook command)."""
-    return _SECRET_TOKEN.sub("<redacted>", text)
 
 
 def _redact_value(value: str, ref: str, sink: list[str]) -> str:
@@ -375,18 +371,13 @@ def _discover_hooks(inv: Inventory, hooks: JsonValue, rel: str) -> None:
                 if h_obj is None:
                     continue
                 raw_command = h_obj.get("command")
-                command = _redact_inline(raw_command if isinstance(raw_command, str) else "")
+                command = redact_tokens(raw_command if isinstance(raw_command, str) else "")
                 intent = _classify_hook(event, command)
                 inv.items.append(HookItem(
                     id=f"hook:{event}:{i}:{j}", name=f"{event}#{i}.{j}", path=rel,
                     summary=f"{event} hook ({intent})",
                     data=HookData(event=event, matcher=matcher, command=command, intent=intent),
                 ))
-
-
-def _kind_counts(inv: Inventory) -> str:
-    counts = Counter(it.kind for it in inv.items)
-    return ", ".join(f"{kind}={count}" for kind, count in sorted(counts.items())) or "none"
 
 
 def _print_summary(inv: Inventory, out: Path) -> None:
@@ -402,7 +393,9 @@ def _print_summary(inv: Inventory, out: Path) -> None:
     redacted = sum(len(it.redacted_refs) for it in inv.items)
 
     print(_style(f"🔎 discovered {len(inv.items)} items; wrote {out}", "36;1"))
-    print(f"  inventory: {_kind_counts(inv)}")
+    counts = Counter(it.kind for it in inv.items)
+    kinds = ", ".join(f"{kind}={count}" for kind, count in sorted(counts.items())) or "none"
+    print(f"  inventory: {kinds}")
     print(f"  {_style('✅ likely migrates', '32;1')}: {likely} item(s) (agent prompt, skills, commands, local tools)")
     print(f"  {_style('⚠️  needs review', '33;1')}: {review} item(s) (subagents, MCP install choices, guard hooks)")
     print(f"  {_style('🛠️  manual/report-only', '34;1')}: {manual} item(s) (passive hooks, openclaw, unknown files)")

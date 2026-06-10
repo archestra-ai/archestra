@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogFooter,
   DialogHeader,
@@ -188,16 +189,18 @@ function AddHookDialog({ agentId }: { agentId: string }) {
           <DialogTitle>Add hook</DialogTitle>
         </DialogHeader>
 
-        <HookFormFields
-          event={event}
-          onEventChange={setEvent}
-          fileName={fileName}
-          onFileNameChange={setFileName}
-          content={content}
-          onContentChange={setContent}
-          requirements={requirements}
-          onRequirementsChange={setRequirements}
-        />
+        <DialogBody>
+          <HookFormFields
+            event={event}
+            onEventChange={setEvent}
+            fileName={fileName}
+            onFileNameChange={setFileName}
+            content={content}
+            onContentChange={setContent}
+            requirements={requirements}
+            onRequirementsChange={setRequirements}
+          />
+        </DialogBody>
 
         <DialogFooter>
           <Button
@@ -382,16 +385,18 @@ function EditHookDialog({
           <DialogTitle>Edit hook</DialogTitle>
         </DialogHeader>
 
-        <HookFormFields
-          event={event}
-          onEventChange={setEvent}
-          fileName={fileName}
-          onFileNameChange={setFileName}
-          content={content}
-          onContentChange={setContent}
-          requirements={requirements}
-          onRequirementsChange={setRequirements}
-        />
+        <DialogBody>
+          <HookFormFields
+            event={event}
+            onEventChange={setEvent}
+            fileName={fileName}
+            onFileNameChange={setFileName}
+            content={content}
+            onContentChange={setContent}
+            requirements={requirements}
+            onRequirementsChange={setRequirements}
+          />
+        </DialogBody>
 
         <DialogFooter>
           <Button

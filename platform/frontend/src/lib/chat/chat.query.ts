@@ -342,8 +342,9 @@ export function useCompactConversation() {
 
 /**
  * Toggle per-conversation hook debug mode (admin only). Invalidating the
- * conversation query re-runs the server read gate, so on the next conversation
- * load hook debug chips appear (enabled) or disappear (disabled).
+ * conversation query re-runs the server read gate, and the chat page folds the
+ * refetched messages into the live chat state (mergePersistedMessageMetadata),
+ * so hook debug chips appear (enabled) or disappear (disabled) in place.
  */
 export function useToggleHooksDebug() {
   const queryClient = useQueryClient();
@@ -364,7 +365,7 @@ export function useToggleHooksDebug() {
       if (!data) return;
       toast.success(
         data.hooksDebugEnabled
-          ? "Hook debug mode enabled — reload to view past runs"
+          ? "Hook debug mode enabled"
           : "Hook debug mode disabled",
       );
       queryClient.invalidateQueries({

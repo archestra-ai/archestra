@@ -100,8 +100,16 @@ class MSTeamsProvider implements ChatOpsProvider {
       ? new PasswordServiceClientCredentialFactory(appId, appSecret, tenantId)
       : new PasswordServiceClientCredentialFactory(appId, appSecret);
 
+    // A tenant ID means this is a single-tenant Azure Bot. The adapter must be
+    // told so (MicrosoftAppType=SingleTenant) — otherwise it defaults to
+    // MultiTenant and validates tokens against the wrong (common) authority,
+    // rejecting every inbound activity with "Unauthorized. No valid identity."
     const auth = new ConfigurationBotFrameworkAuthentication(
-      { MicrosoftAppId: appId, MicrosoftAppTenantId: tenantId || undefined },
+      {
+        MicrosoftAppId: appId,
+        MicrosoftAppType: tenantId ? "SingleTenant" : "MultiTenant",
+        MicrosoftAppTenantId: tenantId || undefined,
+      },
       credentialsFactory,
     );
 
@@ -238,23 +246,9 @@ class MSTeamsProvider implements ChatOpsProvider {
       return null;
     }
 
-    // In team channels, only respond when the bot is @mentioned.
-    // Normalizes IDs before comparing (strips "28:" prefix, case-insensitive)
-    // since Teams may format recipient.id and mentioned.id differently.
-    if (activity.conversation?.conversationType === "channel") {
-      const botId = activity.recipient?.id;
-      const isBotMentioned =
-        botId &&
-        activity.entities?.some(
-          (e) =>
-            e.type === "mention" &&
-            e.mentioned?.id != null &&
-            normalizeTeamsId(e.mentioned.id) === normalizeTeamsId(botId),
-        );
-      if (!isBotMentioned) {
-        return null;
-      }
-    }
+    // Note: in team channels the bot stays quiet until @mentioned, then keeps
+    // replying to the thread. That gating is enforced by the webhook route via
+    // wasBotMentioned() + channel-activation, not here, so parsing stays pure.
 
     const conversationId = activity.conversation?.id;
     const isThreadReply =
@@ -295,6 +289,34 @@ class MSTeamsProvider implements ChatOpsProvider {
       },
       ...(attachments.length > 0 && { attachments }),
     };
+  }
+
+  /**
+   * Whether this activity @mentions the bot.
+   *
+   * Normalizes IDs before comparing (strips the "28:" prefix, case-insensitive)
+   * since Teams may format recipient.id and the mention's id differently. The
+   * webhook route uses this to gate team-channel replies (see channel-activation).
+   */
+  wasBotMentioned(activity: {
+    recipient?: { id?: string } | null;
+    entities?: Array<{
+      type?: string;
+      mentioned?: { id?: string } | null;
+    } | null> | null;
+  }): boolean {
+    const botId = activity.recipient?.id;
+    if (!botId) {
+      return false;
+    }
+    return Boolean(
+      activity.entities?.some(
+        (e) =>
+          e?.type === "mention" &&
+          e.mentioned?.id != null &&
+          normalizeTeamsId(e.mentioned.id) === normalizeTeamsId(botId),
+      ),
+    );
   }
 
   async sendReply(options: ChatReplyOptions): Promise<string> {

@@ -437,6 +437,8 @@ export interface UsageView {
   cacheReadTokens?: number;
   /** Tokens written to the prompt cache (0/absent for providers that auto-cache without a write surcharge). */
   cacheWriteTokens?: number;
+  /** Portion of cacheWriteTokens written at the 1-hour TTL (billed higher than 5m). Anthropic-only; absent elsewhere. */
+  cacheWrite1hTokens?: number;
 }
 
 /**

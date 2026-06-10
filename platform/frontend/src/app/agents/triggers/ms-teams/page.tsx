@@ -1,20 +1,9 @@
 "use client";
 import { Info } from "lucide-react";
 import { useState } from "react";
-import { CopyButton } from "@/components/copy-button";
 import Divider from "@/components/divider";
 import { MsTeamsSetupDialog } from "@/components/ms-teams-setup-dialog";
-import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogBody,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { NgrokSetupDialog } from "@/components/ngrok-setup-dialog";
 import { useChatOpsStatus } from "@/lib/chatops/chatops.query";
 import config from "@/lib/config/config";
 import { useConfig, usePublicBaseUrl } from "@/lib/config/config.query";
@@ -23,8 +12,8 @@ import { useAppName } from "@/lib/hooks/use-app-name";
 import { ChannelsSection } from "../_components/channels-section";
 import { CollapsibleSetupSection } from "../_components/collapsible-setup-section";
 import { CredentialField } from "../_components/credential-field";
-import { ExternalDocsLink } from "../_components/external-docs-link";
 import { LlmKeySetupStep } from "../_components/llm-key-setup-step";
+import { NgrokStatus } from "../_components/ngrok-status";
 import { SetupStep } from "../_components/setup-step";
 import type { ProviderConfig } from "../_components/types";
 import { useTriggerStatuses } from "../_components/use-trigger-statuses";
@@ -88,21 +77,11 @@ export default function MsTeamsPage() {
             onAction={() => setNgrokDialogOpen(true)}
           >
             {ngrokDomain ? (
-              <>
-                Ngrok domain{" "}
-                <code className="bg-muted px-1 py-0.5 rounded text-xs">
-                  {ngrokDomain}
-                </code>{" "}
-                is configured.
-              </>
+              <NgrokStatus domain={ngrokDomain} />
             ) : (
               <>
-                {configuredAppName}'s webhook{" "}
-                <code className="bg-muted px-1 py-0.5 rounded text-xs">
-                  POST {`${publicBaseUrl}/api/webhooks/chatops/ms-teams`}
-                </code>{" "}
-                needs to be reachable from the Internet. Configure ngrok or
-                deploy to a public URL.
+                Expose {configuredAppName} at a public URL, or configure ngrok
+                to create a tunnel.
               </>
             )}
           </SetupStep>
@@ -169,182 +148,5 @@ export default function MsTeamsPage() {
         onOpenChange={setNgrokDialogOpen}
       />
     </div>
-  );
-}
-
-function NgrokSetupDialog({
-  open,
-  onOpenChange,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-}) {
-  const configuredAppName = useAppName();
-  const [step, setStep] = useState<1 | 2>(1);
-  const [authToken, setAuthToken] = useState("");
-
-  const token = authToken || "<your-ngrok-auth-token>";
-  const dockerCommandUnix = `docker run -p 127.0.0.1:9000:9000 -p 127.0.0.1:3000:3000 \\
-  -e ARCHESTRA_QUICKSTART=true \\
-  -e ARCHESTRA_NGROK_AUTH_TOKEN=${token} \\
-  -v /var/run/docker.sock:/var/run/docker.sock \\
-  -v archestra-postgres-data:/var/lib/postgresql/data \\
-  -v archestra-app-data:/app/data \\
-  archestra/platform`;
-
-  const dockerCommandWindows = `docker run -p 127.0.0.1:9000:9000 -p 127.0.0.1:3000:3000 \`
-  -e ARCHESTRA_QUICKSTART=true \`
-  -e ARCHESTRA_NGROK_AUTH_TOKEN=${token} \`
-  -v /var/run/docker.sock:/var/run/docker.sock \`
-  -v archestra-postgres-data:/var/lib/postgresql/data \`
-  -v archestra-app-data:/app/data \`
-  archestra/platform`;
-
-  const ngrokCommand = `ngrok http --authtoken=${authToken || "<your-ngrok-auth-token>"} 9000`;
-  const envCommand =
-    "ARCHESTRA_NGROK_DOMAIN=<your-ngrok-domain>.ngrok-free.dev";
-
-  const handleOpenChange = (value: boolean) => {
-    onOpenChange(value);
-    if (!value) {
-      setStep(1);
-      setAuthToken("");
-    }
-  };
-
-  return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="sm:max-w-lg">
-        {step === 1 ? (
-          <>
-            <DialogHeader>
-              <DialogTitle>Enter your ngrok auth token</DialogTitle>
-              <DialogDescription>
-                Get one at{" "}
-                <ExternalDocsLink
-                  href="https://dashboard.ngrok.com/get-started/your-authtoken"
-                  className="inline-flex text-primary"
-                >
-                  ngrok.com
-                </ExternalDocsLink>
-              </DialogDescription>
-            </DialogHeader>
-            <DialogBody className="space-y-4 p-3">
-              <Input
-                placeholder="ngrok auth token"
-                value={authToken}
-                onChange={(e) => setAuthToken(e.target.value)}
-              />
-              <Button
-                className="w-full"
-                disabled={!authToken.trim()}
-                onClick={() => setStep(2)}
-              >
-                Continue
-              </Button>
-            </DialogBody>
-          </>
-        ) : (
-          <>
-            <DialogHeader>
-              <DialogTitle>Run {configuredAppName} with ngrok</DialogTitle>
-              <DialogDescription>
-                Choose how you want to set up ngrok with {configuredAppName}.
-              </DialogDescription>
-            </DialogHeader>
-            <DialogBody className="space-y-3 p-3">
-              <Tabs defaultValue="docker">
-                <TabsList className="grid w-full grid-cols-2">
-                  <TabsTrigger value="docker">Docker</TabsTrigger>
-                  <TabsTrigger value="local">Local Development</TabsTrigger>
-                </TabsList>
-                <TabsContent value="docker" className="space-y-3 pt-1">
-                  <p className="text-xs text-muted-foreground">
-                    Restart {configuredAppName} using the following command to
-                    enable ngrok:
-                  </p>
-                  <Tabs defaultValue="unix">
-                    <TabsList className="h-7 p-0.5">
-                      <TabsTrigger value="unix" className="text-xs h-6 px-2">
-                        Mac / Linux
-                      </TabsTrigger>
-                      <TabsTrigger value="windows" className="text-xs h-6 px-2">
-                        Windows
-                      </TabsTrigger>
-                    </TabsList>
-                    <TabsContent value="unix" className="mt-2">
-                      <div className="relative">
-                        <pre className="bg-muted rounded-md p-4 text-xs whitespace-pre-wrap break-all">
-                          {dockerCommandUnix}
-                        </pre>
-                        <div className="absolute top-2 right-2">
-                          <CopyButton text={dockerCommandUnix} />
-                        </div>
-                      </div>
-                    </TabsContent>
-                    <TabsContent value="windows" className="mt-2">
-                      <div className="relative">
-                        <pre className="bg-muted rounded-md p-4 text-xs whitespace-pre-wrap break-all">
-                          {dockerCommandWindows}
-                        </pre>
-                        <div className="absolute top-2 right-2">
-                          <CopyButton text={dockerCommandWindows} />
-                        </div>
-                      </div>
-                    </TabsContent>
-                  </Tabs>
-                  <p className="text-xs text-muted-foreground">
-                    Then open{" "}
-                    <code className="bg-muted px-1 py-0.5 rounded">
-                      localhost:3000
-                    </code>
-                  </p>
-                </TabsContent>
-                <TabsContent value="local" className="space-y-3 pt-1">
-                  <div className="space-y-2 text-sm">
-                    <p>
-                      1. Start an ngrok tunnel pointing to your local{" "}
-                      {configuredAppName}
-                      instance:
-                    </p>
-                    <div className="relative">
-                      <pre className="bg-muted rounded-md p-4 text-xs whitespace-pre-wrap break-all">
-                        {ngrokCommand}
-                      </pre>
-                      <div className="absolute top-0 right-0">
-                        <CopyButton text={ngrokCommand} />
-                      </div>
-                    </div>
-                  </div>
-                  <div className="space-y-2 text-sm">
-                    <p>
-                      2. Set the ngrok domain in your{" "}
-                      <code className="bg-muted px-1 py-0.5 rounded text-xs">
-                        .env
-                      </code>{" "}
-                      file:
-                    </p>
-                    <div className="relative">
-                      <pre className="bg-muted rounded-md p-4 text-xs whitespace-pre-wrap break-all">
-                        {envCommand}
-                      </pre>
-                      <div className="absolute top-0 right-0">
-                        <CopyButton text={envCommand} />
-                      </div>
-                    </div>
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    Then restart {configuredAppName} with{" "}
-                    <code className="bg-muted px-1 py-0.5 rounded">
-                      tilt up
-                    </code>
-                  </p>
-                </TabsContent>
-              </Tabs>
-            </DialogBody>
-          </>
-        )}
-      </DialogContent>
-    </Dialog>
   );
 }

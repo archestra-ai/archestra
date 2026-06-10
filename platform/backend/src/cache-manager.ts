@@ -42,6 +42,8 @@ export const CacheKey = {
   SlackScopeNotification: "slack-scope-notification",
   /** Organization-scoped settings cache */
   OrganizationSettings: "organization-settings",
+  /** MS Teams channel threads where the bot was @mentioned (sticky auto-reply) */
+  TeamsThreadActive: "teams-thread-active",
 } as const;
 
 export type CacheKeyPrefix = (typeof CacheKey)[keyof typeof CacheKey];

@@ -139,13 +139,13 @@ describe("GET /api/llm-virtual-keys", () => {
     expect(names).toEqual(
       expect.arrayContaining(["Org Visible", "My Personal", "Team Visible"]),
     );
-    expect(names).not.toEqual(
-      expect.arrayContaining([
-        "Other Personal",
-        "Other Team Key",
-        "Different Org Key",
-      ]),
-    );
+    for (const hidden of [
+      "Other Personal",
+      "Other Team Key",
+      "Different Org Key",
+    ]) {
+      expect(names).not.toContain(hidden);
+    }
   });
 
   test("GET /api/llm-virtual-keys includes org-scoped keys for llmVirtualKey admins", async ({
@@ -262,13 +262,11 @@ describe("GET /api/llm-virtual-keys", () => {
         }),
       ]),
     );
-    expect(body).not.toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          id: otherResponse.json().id,
-          name: "key-gamma",
-        }),
-      ]),
+    expect(body).not.toContainEqual(
+      expect.objectContaining({
+        id: otherResponse.json().id,
+        name: "key-gamma",
+      }),
     );
     for (const key of body) {
       expect(key.value).toBeUndefined();

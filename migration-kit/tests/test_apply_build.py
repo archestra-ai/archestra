@@ -145,6 +145,26 @@ def test_team_scoped_llm_key_carries_team_id(index: dict[str, Item]) -> None:
     assert built.payload.teamId == "team-a"
 
 
+def test_team_answer_precedence_when_both_present(index: dict[str, Item]) -> None:
+    """pins the divergent precedence: multi-team kinds prefer teamIds, single-team kinds
+    prefer teamId, when a plan carries both answers."""
+    both = {"teamIds": ["team-a", "team-b"], "teamId": "team-c"}
+    _, built = _build_payload(
+        Decision(source_id="claude_md", target_kind="agent", scope="team", user_answers=both),
+        index["claude_md"],
+    )
+    assert isinstance(built, BuiltAgent)
+    assert built.payload.teams == ["team-a", "team-b"]
+    _, built = _build_payload(
+        Decision(
+            source_id="mcp:github", target_kind="mcp_install", scope="team", user_answers=both,
+        ),
+        index["mcp:github"],
+    )
+    assert isinstance(built, BuiltInstall)
+    assert built.team_id == "team-c"
+
+
 def test_stdio_mcp_redacted_env_becomes_prompted_secret(index: dict[str, Item]) -> None:
     _, built = _decide(index, "mcp:github", "mcp_catalog")
     assert isinstance(built, BuiltCatalog)
@@ -284,3 +304,31 @@ def test_real_apply_preflight_invalid_plan_makes_no_network(tmp_path: Path, monk
     finally:
         server.shutdown()
         thread.join()
+
+
+def test_dry_run_writes_planned_result_without_network(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """pins main()'s --dry-run dispatch: exits 0, writes the result file, needs no env vars."""
+    inventory_path = tmp_path / "inventory.json"
+    plan_path = tmp_path / "migration_plan.json"
+    result_path = tmp_path / "migration_result.json"
+    inventory_path.write_text(json.dumps(to_jsonable(discover(FIXTURE))), encoding="utf-8")
+    plan_path.write_text(json.dumps({
+        "schema_version": 1,
+        "default_scope": "personal",
+        "decisions": [{"source_id": "claude_md", "target_kind": "agent", "scope": "personal"}],
+    }), encoding="utf-8")
+
+    monkeypatch.delenv("ARCHESTRA_BASE_URL", raising=False)
+    monkeypatch.delenv("ARCHESTRA_API_KEY", raising=False)
+    monkeypatch.setattr(sys, "argv", [
+        "apply.py",
+        "--inventory", str(inventory_path),
+        "--plan", str(plan_path),
+        "--out", str(result_path),
+        "--dry-run",
+    ])
+
+    assert main() == 0
+    result = json.loads(result_path.read_text(encoding="utf-8"))
+    assert result["summary"] == {"planned": 1}
+    assert result["ops"][0]["target_kind"] == "agent"

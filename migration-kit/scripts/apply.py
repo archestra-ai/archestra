@@ -226,6 +226,9 @@ def _str_answers(value: object, *, ctx: str) -> list[str]:
     return out
 
 
+# when a plan carries both answers, precedence diverges by kind: _team_ids (multi-team
+# payloads: agent/skill/catalog) prefers teamIds; _team_id (single-team payloads:
+# install/llm_key) prefers teamId. each falls back to the other answer.
 def _team_ids(decision: Decision, *, ctx: str) -> list[str] | None:
     if decision.scope != "team":
         return None
@@ -564,11 +567,11 @@ def main() -> int:
     built.sort(key=lambda b: _ORDER.get(b.decision.target_kind, 99))
 
     if args.dry_run:
-        return _finish(_run_dry(built, verbose=args.verbose), args.out)
+        return _finish(_run_validation(built, verbose=args.verbose, label="dry-run"), args.out)
 
     if any(_invalid_build(b) for b in built):
         print("error: migration plan has invalid operations; no network changes were made", file=sys.stderr)
-        return _finish(_run_preflight(built, verbose=args.verbose), args.out)
+        return _finish(_run_validation(built, verbose=args.verbose, label="preflight"), args.out)
 
     base_url = os.environ.get("ARCHESTRA_BASE_URL")
     api_key = os.environ.get("ARCHESTRA_API_KEY")
@@ -577,14 +580,6 @@ def main() -> int:
         return 2
 
     return _finish(_run_apply(built, base_url, api_key), args.out)
-
-
-def _run_dry(built: list[_Built], *, verbose: bool) -> list[ResultOp]:
-    return _run_validation(built, verbose=verbose, label="dry-run")
-
-
-def _run_preflight(built: list[_Built], *, verbose: bool) -> list[ResultOp]:
-    return _run_validation(built, verbose=verbose, label="preflight")
 
 
 def _run_validation(built: list[_Built], *, verbose: bool, label: str) -> list[ResultOp]:

@@ -72,16 +72,7 @@ describe("skillSandboxRuntimeService", () => {
     1.5,
     Number.NaN,
   ])("runCommand rejects invalid timeoutSeconds=%s before initializing", async (timeoutSeconds) => {
-    vi.resetModules();
-    vi.stubEnv("ARCHESTRA_AGENTS_SKILLS_ENABLED", "true");
-    vi.stubEnv("ARCHESTRA_CODE_RUNTIME_ENABLED", "true");
-    vi.stubEnv(
-      "ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST",
-      "tcp://dagger-runtime.dagger.svc.cluster.local:1234",
-    );
-    const { skillSandboxRuntimeService: enabled } = await import(
-      "./skill-sandbox-runtime-service"
-    );
+    const enabled = await importEnabledService();
 
     await expect(
       enabled.runCommand({
@@ -94,16 +85,7 @@ describe("skillSandboxRuntimeService", () => {
   });
 
   test("runCommand rejects empty commands", async () => {
-    vi.resetModules();
-    vi.stubEnv("ARCHESTRA_AGENTS_SKILLS_ENABLED", "true");
-    vi.stubEnv("ARCHESTRA_CODE_RUNTIME_ENABLED", "true");
-    vi.stubEnv(
-      "ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST",
-      "tcp://dagger-runtime.dagger.svc.cluster.local:1234",
-    );
-    const { skillSandboxRuntimeService: enabled } = await import(
-      "./skill-sandbox-runtime-service"
-    );
+    const enabled = await importEnabledService();
 
     await expect(
       enabled.runCommand({
@@ -114,50 +96,14 @@ describe("skillSandboxRuntimeService", () => {
     ).rejects.toThrow("command must be a non-empty string");
   });
 
-  test("runCommand rejects after maxSandboxQueueLength requests for the same sandbox", async () => {
-    vi.resetModules();
-    vi.stubEnv("ARCHESTRA_AGENTS_SKILLS_ENABLED", "true");
-    vi.stubEnv("ARCHESTRA_CODE_RUNTIME_ENABLED", "true");
-    vi.stubEnv(
-      "ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST",
-      "tcp://dagger-runtime.dagger.svc.cluster.local:1234",
-    );
-    const { skillSandboxRuntimeService: enabled } = await import(
-      "./skill-sandbox-runtime-service"
-    );
-    const { SKILL_SANDBOX_LIMITS } = await import("./types");
-
-    const sandboxId = __internals.asSandboxId(crypto.randomUUID());
-    // fire maxSandboxQueueLength+1 concurrent calls; all will fail (no real
-    // Dagger engine) but the first N reach the per-sandbox chain while the
-    // (N+1)th is rejected immediately by the queue-length guard before any await.
-    const calls = Array.from(
-      { length: SKILL_SANDBOX_LIMITS.maxSandboxQueueLength + 1 },
-      () =>
-        enabled.runCommand({
-          sandboxId,
-          caller: { userId: "u", organizationId: "o" },
-          command: "echo hi",
-        }),
-    );
-    const results = await Promise.allSettled(calls);
-    // use message check rather than instanceof: vi.resetModules creates a fresh
-    // class so instanceof against the top-level import would always be false.
-    const queueErrors = results.filter(
-      (r) =>
-        r.status === "rejected" &&
-        (r.reason as Error)?.message?.includes("too many requests"),
-    );
-    expect(queueErrors.length).toBeGreaterThanOrEqual(1);
-  });
-
   test("queue guard rejects exactly the calls beyond maxSandboxQueueLength", async () => {
     const enabled = await importEnabledService();
     const { SKILL_SANDBOX_LIMITS } = await import("./types");
 
     const sandboxId = __internals.asSandboxId(crypto.randomUUID());
     // all N+1 calls are created synchronously, so the first N take queue slots
-    // and only the last one trips the guard.
+    // (and later fail — no real Dagger engine) while only the last one trips
+    // the guard before any await.
     const results = await Promise.allSettled(
       Array.from(
         { length: SKILL_SANDBOX_LIMITS.maxSandboxQueueLength + 1 },
@@ -169,6 +115,8 @@ describe("skillSandboxRuntimeService", () => {
           }),
       ),
     );
+    // use message check rather than instanceof: vi.resetModules creates a fresh
+    // class so instanceof against the top-level import would always be false.
     const queueErrors = results.filter(
       (r) =>
         r.status === "rejected" &&
@@ -220,8 +168,9 @@ describe("skillSandboxRuntimeService", () => {
         command: "echo hi",
       });
 
-    // enqueue the second call in the microtask window where the first call's
-    // queue-cleanup callbacks may still be pending; it must execute normally.
+    // sequential reuse of the same sandbox right after the previous call
+    // settled: guards against cleanup schemes (e.g. tail-attached deletion)
+    // that could evict or reject a freshly enqueued call.
     const [first] = await Promise.allSettled([run()]);
     const [second] = await Promise.allSettled([run()]);
     for (const result of [first, second]) {
@@ -810,9 +759,15 @@ describe("path validation vectors (mirrored with sandbox-core)", () => {
     };
     for (const [path, accepted] of UPLOAD_PATH_VECTORS) {
       if (accepted) {
-        expect(() => stageUpload(path), `upload path: ${JSON.stringify(path)}`).not.toThrow();
+        expect(
+          () => stageUpload(path),
+          `upload path: ${JSON.stringify(path)}`,
+        ).not.toThrow();
       } else {
-        expect(() => stageUpload(path), `upload path: ${JSON.stringify(path)}`).toThrow();
+        expect(
+          () => stageUpload(path),
+          `upload path: ${JSON.stringify(path)}`,
+        ).toThrow();
       }
     }
   });

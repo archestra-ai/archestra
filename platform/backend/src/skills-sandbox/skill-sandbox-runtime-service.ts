@@ -55,6 +55,14 @@ const ATTACHMENTS_DIR = SKILL_SANDBOX_ATTACHMENTS_DIR;
 // subsequent calls hit Dagger's layer cache and finish in ms.
 const REQUIREMENTS_INSTALL_TIMEOUT_SECONDS = 180;
 
+/** per-sandbox serialization chain plus its queued-operation count. */
+interface SandboxQueueState {
+  /** settles once every queued operation has finished; never rejects. */
+  tail: Promise<unknown>;
+  /** operations queued or running; the entry is dropped when the last one settles. */
+  pending: number;
+}
+
 /**
  * Orchestrates DB-backed skill sandboxes: loads snapshots + replay log,
  * delegates execution to the unified `sandboxRuntimeService`, appends the
@@ -64,14 +72,6 @@ const REQUIREMENTS_INSTALL_TIMEOUT_SECONDS = 180;
  * concurrent calls cannot observe stale replay state or record commands out of
  * execution order.
  */
-/** per-sandbox serialization chain plus its queued-operation count. */
-interface SandboxQueueState {
-  /** settles once every queued operation has finished; never rejects. */
-  tail: Promise<unknown>;
-  /** operations queued or running; the entry is dropped when this hits 0. */
-  pending: number;
-}
-
 class SkillSandboxRuntimeService {
   // per-sandbox promise chain: ensures load + exec + append are atomic per sandbox.
   private readonly sandboxQueues = new Map<SandboxId, SandboxQueueState>();

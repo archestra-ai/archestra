@@ -43,7 +43,8 @@ The `project` resource controls access:
 
 - `project:read` allows listing and opening visible projects
 - `project:create` allows creating personal projects
-- `project:update` and `project:delete` allow managing projects the user owns or can administer
-- `project:admin` allows viewing all projects and managing team or organization visibility
+- `project:update` and `project:delete` allow managing personal projects the user owns
+- `project:team-admin` allows managing team projects for teams the user belongs to
+- `project:admin` allows viewing all projects and managing organization-wide visibility
 
 Project visibility limits what a user can see even when they have `project:read`.

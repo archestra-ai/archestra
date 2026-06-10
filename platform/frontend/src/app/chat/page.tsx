@@ -21,6 +21,7 @@ import {
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
+  type ReactNode,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -162,8 +163,16 @@ import { resolveSharedConversationForkState } from "./shared-conversation-fork";
 const BROWSER_OPEN_KEY = "archestra-chat-browser-open";
 
 export function ChatPageContent({
+  buildConversationHref,
+  projectId,
+  projectPanel,
+  projectTabLabel,
   routeConversationId,
 }: {
+  buildConversationHref?: (conversationId: string | undefined) => string;
+  projectId?: string;
+  projectPanel?: ReactNode;
+  projectTabLabel?: string;
   routeConversationId?: string;
 }) {
   const queryClient = useQueryClient();
@@ -279,7 +288,10 @@ export function ChatPageContent({
 
   // Tracks which tab the right-side panel last showed; restored when the panel
   // is re-opened via the header toggle.
-  const [activeRightTab, setActiveRightTab] = useState<RightPanelTab>("files");
+  const [activeRightTab, setActiveRightTab] = useState<RightPanelTab>(
+    projectPanel ? "project" : "files",
+  );
+  const [isProjectPanelOpen, setIsProjectPanelOpen] = useState(!!projectPanel);
 
   // Independent of artifact/browser open state — toggled when the canvas tab is selected.
   const [isCanvasTabOpen, setIsCanvasTabOpen] = useState(false);
@@ -563,18 +575,29 @@ export function ChatPageContent({
   const initialUserPrompt = useMemo(() => {
     return searchParams.get("user_prompt") || undefined;
   }, [searchParams]);
+  const initialProjectId = useMemo(() => {
+    return projectId ?? searchParams.get("projectId") ?? undefined;
+  }, [projectId, searchParams]);
+  const initialModelOverride = useMemo(() => {
+    return searchParams.get("modelId") || undefined;
+  }, [searchParams]);
+  const initialChatApiKeyOverride = useMemo(() => {
+    return searchParams.get("chatApiKeyId") || undefined;
+  }, [searchParams]);
 
   // Update URL when conversation changes
   const selectConversation = useCallback(
     (id: string | undefined) => {
       setConversationId(id);
-      if (id) {
-        router.push(`/chat/${id}`);
-      } else {
-        router.push("/chat");
-      }
+      router.push(
+        buildConversationHref
+          ? buildConversationHref(id)
+          : id
+            ? `/chat/${id}`
+            : "/chat",
+      );
     },
-    [router],
+    [buildConversationHref, router],
   );
 
   // Fetch conversation with messages
@@ -1442,24 +1465,48 @@ export function ChatPageContent({
 
   const isBrowserPanelVisible = isBrowserPanelOpen && !isPlaywrightSetupVisible;
   const isRightPanelOpen =
-    isArtifactOpen || isBrowserPanelVisible || isCanvasTabOpen;
+    isProjectPanelOpen ||
+    isArtifactOpen ||
+    isBrowserPanelVisible ||
+    isCanvasTabOpen;
 
   // Keep the active-tab tracker in sync with which panel is actually shown,
   // so closing+reopening restores the user's last view.
   useEffect(() => {
-    if (isCanvasTabOpen) {
+    if (isProjectPanelOpen) {
+      setActiveRightTab("project");
+    } else if (isCanvasTabOpen) {
       setActiveRightTab("canvas");
     } else if (isBrowserPanelVisible && !isArtifactOpen) {
       setActiveRightTab("browser");
     } else if (isArtifactOpen) {
       setActiveRightTab("files");
     }
-  }, [isArtifactOpen, isBrowserPanelVisible, isCanvasTabOpen]);
+  }, [
+    isArtifactOpen,
+    isBrowserPanelVisible,
+    isCanvasTabOpen,
+    isProjectPanelOpen,
+  ]);
 
   const openRightPanelTab = useCallback(
     (tab: RightPanelTab) => {
-      setActiveRightTab(tab);
-      if (tab === "files") {
+      const effectiveTab = tab === "project" && !projectPanel ? "files" : tab;
+      setActiveRightTab(effectiveTab);
+      if (effectiveTab === "project") {
+        setIsProjectPanelOpen(true);
+        setIsArtifactOpen(false);
+        setIsBrowserPanelOpen(false);
+        setIsCanvasTabOpen(false);
+        if (conversationId) {
+          localStorage.setItem(
+            conversationStorageKeys(conversationId).artifactOpen,
+            "false",
+          );
+        }
+        localStorage.setItem(BROWSER_OPEN_KEY, "false");
+      } else if (effectiveTab === "files") {
+        setIsProjectPanelOpen(false);
         setIsArtifactOpen(true);
         setIsBrowserPanelOpen(false);
         setIsCanvasTabOpen(false);
@@ -1470,7 +1517,8 @@ export function ChatPageContent({
           );
         }
         localStorage.setItem(BROWSER_OPEN_KEY, "false");
-      } else if (tab === "browser") {
+      } else if (effectiveTab === "browser") {
+        setIsProjectPanelOpen(false);
         setIsBrowserPanelOpen(true);
         setIsArtifactOpen(false);
         setIsCanvasTabOpen(false);
@@ -1483,6 +1531,7 @@ export function ChatPageContent({
         localStorage.setItem(BROWSER_OPEN_KEY, "true");
       } else {
         // canvas tab — doesn't own artifact/browser visibility
+        setIsProjectPanelOpen(false);
         setIsCanvasTabOpen(true);
         setIsArtifactOpen(false);
         setIsBrowserPanelOpen(false);
@@ -1495,10 +1544,11 @@ export function ChatPageContent({
         localStorage.setItem(BROWSER_OPEN_KEY, "false");
       }
     },
-    [conversationId],
+    [conversationId, projectPanel],
   );
 
   const closeRightPanel = useCallback(() => {
+    setIsProjectPanelOpen(false);
     setIsArtifactOpen(false);
     setIsBrowserPanelOpen(false);
     setIsCanvasTabOpen(false);
@@ -1594,9 +1644,10 @@ export function ChatPageContent({
 
       const input = buildCreateConversationInput({
         agentId: initialAgentId,
-        modelId: initialModel,
-        chatApiKeyId: initialApiKeyId,
+        modelId: initialModelOverride ?? initialModel,
+        chatApiKeyId: initialChatApiKeyOverride ?? initialApiKeyId,
         title,
+        projectId: initialProjectId,
       });
       if (!input) {
         return false;
@@ -1611,7 +1662,15 @@ export function ChatPageContent({
       });
       return true;
     },
-    [initialAgentId, initialModel, initialApiKeyId, createConversationMutation],
+    [
+      initialAgentId,
+      initialModel,
+      initialApiKeyId,
+      initialProjectId,
+      initialModelOverride,
+      initialChatApiKeyOverride,
+      createConversationMutation,
+    ],
   );
 
   const handleCreateConversationWithUrl = useCallback(
@@ -1811,7 +1870,7 @@ export function ChatPageContent({
 
     createInitialConversation((newConversation) => {
       selectConversation(newConversation.id);
-    });
+    }, initialUserPrompt.trim());
   }, [
     initialUserPrompt,
     conversationId,
@@ -2449,6 +2508,8 @@ export function ChatPageContent({
             onTabChange={openRightPanelTab}
             onClose={closeRightPanel}
             canShowBrowser={showBrowserButton && !isPlaywrightSetupVisible}
+            projectPanel={projectPanel}
+            projectTabLabel={projectTabLabel}
             headerActions={
               conversationId && messages.length > 0 ? (
                 <div className="flex items-center gap-1">
@@ -2583,6 +2644,9 @@ function clearUserPromptQueryParam(params: {
 }) {
   const nextSearchParams = new URLSearchParams(params.searchParams.toString());
   nextSearchParams.delete("user_prompt");
+  nextSearchParams.delete("projectId");
+  nextSearchParams.delete("modelId");
+  nextSearchParams.delete("chatApiKeyId");
   const nextUrl = nextSearchParams.toString()
     ? `${params.pathname}?${nextSearchParams.toString()}`
     : params.pathname;

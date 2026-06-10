@@ -1,18 +1,21 @@
 "use client";
 
 import {
+  ChevronDown,
+  ChevronRight,
+  ExternalLink,
   FolderInput,
   MoreHorizontal,
   Pencil,
   Pin,
   PinOff,
+  SlidersHorizontal,
   Sparkles,
   Trash2,
   UsersRound,
 } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { AgentIcon } from "@/components/agent-icon";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { TruncatedText } from "@/components/truncated-text";
 import { Button } from "@/components/ui/button";
@@ -20,6 +23,9 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuSub,
   DropdownMenuSubContent,
@@ -29,9 +35,8 @@ import {
 import { Input } from "@/components/ui/input";
 import {
   SidebarMenuButton,
-  SidebarMenuSub,
+  SidebarMenuItem,
   SidebarMenuSubButton,
-  SidebarMenuSubItem,
   useSidebar,
 } from "@/components/ui/sidebar";
 import {
@@ -58,8 +63,9 @@ import { useGlobalChat } from "@/lib/chat/global-chat.context";
 import { useProjects } from "@/lib/project.query";
 import { cn } from "@/lib/utils";
 
-const SIDEBAR_CHAT_SLOTS = 3;
 const MAX_TITLE_LENGTH = 100;
+const SIDEBAR_GROUP_SESSION_LIMIT = 5;
+type GroupMode = "none" | "date" | "project";
 
 function AISparkleIcon({ isAnimating = false }: { isAnimating?: boolean }) {
   return (
@@ -68,6 +74,27 @@ function AISparkleIcon({ isAnimating = false }: { isAnimating?: boolean }) {
       aria-label="AI generated"
     />
   );
+}
+
+function groupConversationsByDate<T extends { updatedAt: string }>(
+  conversations: T[],
+): Array<{ label: string; conversations: T[] }> {
+  const groups = new Map<string, T[]>();
+  for (const conversation of conversations) {
+    const label = new Date(conversation.updatedAt).toLocaleDateString(
+      undefined,
+      {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      },
+    );
+    groups.set(label, [...(groups.get(label) ?? []), conversation]);
+  }
+  return Array.from(groups.entries()).map(([label, groupedConversations]) => ({
+    label,
+    conversations: groupedConversations,
+  }));
 }
 
 export function ChatSidebarSection() {
@@ -97,6 +124,10 @@ export function ChatSidebarSection() {
   const [editingTitle, setEditingTitle] = useState("");
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [groupMode, setGroupMode] = useState<GroupMode>("project");
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(
+    () => new Set(),
+  );
   const inputRef = useRef<HTMLInputElement>(null);
 
   const { data: canUpdateConversation } = useHasPermissions({
@@ -116,15 +147,24 @@ export function ChatSidebarSection() {
     : null;
 
   const projects = projectsResponse?.data ?? [];
+  const pinnedConversations = conversations.filter(
+    (conversation) => !!conversation.pinnedAt,
+  );
+  const unpinnedConversations = conversations.filter(
+    (conversation) => !conversation.pinnedAt,
+  );
   const projectConversations = projects.map((project) => ({
     project,
-    conversations: conversations
-      .filter((conversation) => conversation.projectId === project.id)
-      .slice(0, SIDEBAR_CHAT_SLOTS),
+    conversations: unpinnedConversations.filter(
+      (conversation) => conversation.projectId === project.id,
+    ),
   }));
-  const otherConversations = conversations
-    .filter((conversation) => !conversation.projectId)
-    .slice(0, SIDEBAR_CHAT_SLOTS);
+  const otherConversations = unpinnedConversations.filter(
+    (conversation) => !conversation.projectId,
+  );
+  const dateConversationGroups = groupConversationsByDate(
+    unpinnedConversations,
+  );
 
   useEffect(() => {
     if (editingId && inputRef.current) {
@@ -137,7 +177,12 @@ export function ChatSidebarSection() {
     if (isMobile) {
       setOpenMobile(false);
     }
-    router.push(`/chat/${id}`);
+    const conversation = conversations.find((item) => item.id === id);
+    router.push(
+      conversation?.projectId
+        ? `/projects/${conversation.projectId}?conversationId=${id}`
+        : `/chat/${id}`,
+    );
   };
 
   const handleStartEdit = (id: string, currentTitle: string | null) => {
@@ -224,7 +269,7 @@ export function ChatSidebarSection() {
     const isPinned = !!conv.pinnedAt;
 
     return (
-      <SidebarMenuSubItem key={conv.id}>
+      <div key={conv.id} className="group/menu-sub-item relative">
         <div className="flex items-center justify-between w-full gap-1">
           {editingId === conv.id ? (
             <div className="flex items-center gap-1 flex-1">
@@ -279,6 +324,14 @@ export function ChatSidebarSection() {
               className="cursor-pointer flex-1 justify-between"
             >
               <span className="flex items-center gap-2 min-w-0 flex-1">
+                <span
+                  className={cn(
+                    "size-2 shrink-0 rounded-full border",
+                    isCurrentConversation
+                      ? "border-primary bg-primary"
+                      : "border-muted-foreground/45",
+                  )}
+                />
                 {showPinIcon && (
                   <Pin className="h-3 w-3 shrink-0 text-muted-foreground" />
                 )}
@@ -432,7 +485,7 @@ export function ChatSidebarSection() {
             </SidebarMenuButton>
           )}
         </div>
-      </SidebarMenuSubItem>
+      </div>
     );
   };
 
@@ -441,6 +494,125 @@ export function ChatSidebarSection() {
       setOpenMobile(false);
     }
     router.push(`/projects/${id}`);
+  };
+
+  const handleSelectProjectsPage = () => {
+    if (isMobile) {
+      setOpenMobile(false);
+    }
+    router.push("/projects");
+  };
+
+  const toggleGroup = (groupId: string) => {
+    setCollapsedGroups((current) => {
+      const next = new Set(current);
+      if (next.has(groupId)) {
+        next.delete(groupId);
+      } else {
+        next.add(groupId);
+      }
+      return next;
+    });
+  };
+
+  const renderGroupActions = (projectId?: string) => (
+    <div className="flex shrink-0 items-center gap-1">
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              onClick={() =>
+                projectId
+                  ? handleSelectProject(projectId)
+                  : handleSelectProjectsPage()
+              }
+              className="size-5 text-sidebar-foreground/70 hover:text-sidebar-foreground"
+            >
+              <ExternalLink className="h-2.5 w-2.5" />
+              <span className="sr-only">View projects</span>
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="right">
+            {projectId ? "View project" : "View projects"}
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            className="size-5 text-sidebar-foreground/70 hover:text-sidebar-foreground data-[state=open]:bg-sidebar-accent"
+          >
+            <SlidersHorizontal className="h-2.5 w-2.5" />
+            <span className="sr-only">Group chats</span>
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" side="right">
+          <DropdownMenuLabel className="text-muted-foreground">
+            Group by
+          </DropdownMenuLabel>
+          <DropdownMenuRadioGroup
+            value={groupMode}
+            onValueChange={(value) => setGroupMode(value as GroupMode)}
+          >
+            <DropdownMenuRadioItem value="none">None</DropdownMenuRadioItem>
+            <DropdownMenuRadioItem value="date">Date</DropdownMenuRadioItem>
+            <DropdownMenuRadioItem value="project">
+              Project
+            </DropdownMenuRadioItem>
+          </DropdownMenuRadioGroup>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
+  );
+
+  const renderLimitedConversationGroup = (params: {
+    conversations: typeof conversations;
+    emptyMessage?: string;
+    groupId: string;
+    overflowHref?: string;
+    overflowLabel?: string;
+  }) => {
+    const isCollapsed = collapsedGroups.has(params.groupId);
+    if (isCollapsed) return null;
+
+    if (params.conversations.length === 0) {
+      return params.emptyMessage ? (
+        <div className="ml-6 px-2 py-1 text-xs text-muted-foreground">
+          {params.emptyMessage}
+        </div>
+      ) : null;
+    }
+
+    const visibleConversations = params.conversations.slice(
+      0,
+      SIDEBAR_GROUP_SESSION_LIMIT,
+    );
+    const hiddenCount =
+      params.conversations.length - visibleConversations.length;
+
+    return (
+      <>
+        {visibleConversations.map((conv) => renderConversationItem(conv))}
+        {hiddenCount > 0 && params.overflowHref ? (
+          <button
+            type="button"
+            onClick={() => {
+              if (isMobile) setOpenMobile(false);
+              router.push(params.overflowHref ?? "/chat");
+            }}
+            className="w-full px-8 py-1 text-left text-xs text-sidebar-foreground/55 hover:text-sidebar-foreground"
+          >
+            {params.overflowLabel ?? `View ${hiddenCount} more`}
+          </button>
+        ) : null}
+      </>
+    );
   };
 
   if (
@@ -454,70 +626,139 @@ export function ChatSidebarSection() {
 
   return (
     <>
-      <SidebarMenuSub className="mx-0 ml-3.5 px-0 pl-2.5">
-        {isLoading || isProjectsLoading ? (
-          <SidebarMenuSubItem>
-            <div className="flex items-center gap-2 px-2 py-1.5">
-              <div className="h-3 w-3 animate-spin rounded-full border border-muted-foreground border-t-transparent" />
-              <span className="text-xs text-muted-foreground">
-                Loading chats...
-              </span>
-            </div>
-          </SidebarMenuSubItem>
-        ) : (
-          <>
-            {projectConversations.map(({ project, conversations }) => (
-              <SidebarMenuSubItem key={project.id}>
-                <div className="space-y-1">
-                  <SidebarMenuSubButton
-                    className="cursor-pointer text-sidebar-foreground/70"
-                    onClick={() => handleSelectProject(project.id)}
-                  >
-                    <AgentIcon
-                      icon={project.icon}
-                      fallbackType="agent"
-                      size={14}
-                    />
-                    <span className="truncate">{project.name}</span>
-                  </SidebarMenuSubButton>
-                  {conversations.map((conv) => renderConversationItem(conv))}
-                  {conversations.length === 0 && (
-                    <div className="ml-6 px-2 py-1 text-xs text-muted-foreground">
-                      No chats yet
+      <SidebarMenuItem className="group-data-[collapsible=icon]:hidden">
+        <div className="mt-2">
+          <div className="flex min-w-0 flex-col gap-1.5">
+            {isLoading || isProjectsLoading ? (
+              <div>
+                <div className="flex items-center gap-2 px-2 py-1.5">
+                  <div className="h-3 w-3 animate-spin rounded-full border border-muted-foreground border-t-transparent" />
+                  <span className="text-xs text-muted-foreground">
+                    Loading chats...
+                  </span>
+                </div>
+              </div>
+            ) : (
+              <>
+                {groupMode === "project" && pinnedConversations.length > 0 && (
+                  <div className="space-y-0.5">
+                    <div className="px-2 pt-1 text-sm font-medium text-muted-foreground">
+                      Pinned
                     </div>
-                  )}
-                </div>
-              </SidebarMenuSubItem>
-            ))}
-            {otherConversations.length > 0 && (
-              <SidebarMenuSubItem>
-                <div className="px-2 pt-2 text-xs font-medium text-muted-foreground">
-                  Other
-                </div>
-              </SidebarMenuSubItem>
+                    {pinnedConversations.map((conv) =>
+                      renderConversationItem(conv),
+                    )}
+                  </div>
+                )}
+
+                {groupMode === "project" &&
+                  projectConversations.map(({ project, conversations }) => (
+                    <div key={project.id}>
+                      <div className="group/project space-y-0.5">
+                        <div className="flex items-center gap-1">
+                          <SidebarMenuSubButton
+                            className="min-w-0 flex-1 cursor-pointer px-2 text-sidebar-foreground/70 hover:text-sidebar-foreground"
+                            onClick={() => toggleGroup(`project:${project.id}`)}
+                          >
+                            <span className="truncate">{project.name}</span>
+                            <ChevronDown
+                              className={cn(
+                                "h-3.5 w-3.5 text-muted-foreground/70 transition-transform",
+                                collapsedGroups.has(`project:${project.id}`) &&
+                                  "-rotate-90",
+                              )}
+                            />
+                          </SidebarMenuSubButton>
+                          {renderGroupActions(project.id)}
+                        </div>
+                        {renderLimitedConversationGroup({
+                          conversations,
+                          emptyMessage: "No chats yet",
+                          groupId: `project:${project.id}`,
+                          overflowHref: `/projects/${project.id}`,
+                          overflowLabel: `View all ${conversations.length} chats`,
+                        })}
+                      </div>
+                    </div>
+                  ))}
+
+                {groupMode === "project" && (
+                  <>
+                    <div className="group/other">
+                      <div className="flex items-center gap-1 px-2">
+                        <SidebarMenuSubButton
+                          className="h-7 min-w-0 flex-none cursor-pointer px-0 text-sidebar-foreground/70 hover:bg-transparent hover:text-sidebar-foreground"
+                          onClick={() => toggleGroup("other")}
+                        >
+                          Other
+                          <ChevronDown
+                            className={cn(
+                              "h-3.5 w-3.5 text-muted-foreground/70 transition-transform",
+                              collapsedGroups.has("other") && "-rotate-90",
+                            )}
+                          />
+                        </SidebarMenuSubButton>
+                        <button
+                          type="button"
+                          onClick={openConversationSearch}
+                          className="ml-auto flex items-center gap-0.5 text-xs text-sidebar-foreground/55 opacity-0 transition-opacity hover:text-sidebar-foreground group-hover/other:opacity-100 focus-visible:opacity-100"
+                        >
+                          View all
+                          <ChevronRight className="h-3 w-3" />
+                        </button>
+                        {projectConversations.length === 0
+                          ? renderGroupActions()
+                          : null}
+                      </div>
+                    </div>
+                    {renderLimitedConversationGroup({
+                      conversations: otherConversations,
+                      groupId: "other",
+                      overflowHref: "/chat",
+                      overflowLabel: `View all ${otherConversations.length} chats`,
+                    })}
+                  </>
+                )}
+
+                {groupMode === "date" &&
+                  dateConversationGroups.map((group) => (
+                    <div key={group.label}>
+                      <div className="space-y-0.5">
+                        <div className="flex items-center justify-between gap-2 px-2 pt-1">
+                          <div className="text-sm font-medium text-muted-foreground">
+                            {group.label}
+                          </div>
+                          {group === dateConversationGroups[0]
+                            ? renderGroupActions()
+                            : null}
+                        </div>
+                        {group.conversations.map((conv) =>
+                          renderConversationItem(conv, !!conv.pinnedAt),
+                        )}
+                      </div>
+                    </div>
+                  ))}
+
+                {groupMode === "none" && (
+                  <>
+                    <div>
+                      <div className="flex items-center justify-between gap-2 px-2 pt-1">
+                        <div className="text-sm font-medium text-muted-foreground">
+                          Chats
+                        </div>
+                        {renderGroupActions()}
+                      </div>
+                    </div>
+                    {unpinnedConversations.map((conv) =>
+                      renderConversationItem(conv, !!conv.pinnedAt),
+                    )}
+                  </>
+                )}
+              </>
             )}
-            {otherConversations.map((conv) =>
-              renderConversationItem(conv, !!conv.pinnedAt),
-            )}
-            {conversations.length >
-              projectConversations.reduce(
-                (count, group) => count + group.conversations.length,
-                0,
-              ) +
-                otherConversations.length && (
-              <SidebarMenuSubItem>
-                <SidebarMenuSubButton
-                  className="cursor-pointer text-sidebar-foreground/70"
-                  onClick={openConversationSearch}
-                >
-                  <MoreHorizontal />
-                  <span>More</span>
-                </SidebarMenuSubButton>
-              </SidebarMenuSubItem>
-            )}
-          </>
-        )}
-      </SidebarMenuSub>
+          </div>
+        </div>
+      </SidebarMenuItem>
 
       <DeleteConfirmDialog
         open={deleteConfirmId !== null}

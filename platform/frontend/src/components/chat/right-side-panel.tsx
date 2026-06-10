@@ -1,7 +1,16 @@
 "use client";
 
 import { format } from "date-fns";
-import { FileText, Globe, GripVertical, Pin, PinOff, X } from "lucide-react";
+import {
+  AppWindow,
+  FileText,
+  Globe,
+  GripVertical,
+  Info,
+  Pin,
+  PinOff,
+  X,
+} from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { BrowserPanel } from "@/components/chat/browser-panel";
@@ -18,7 +27,7 @@ import {
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 
-export type RightPanelTab = "files" | "browser" | "canvas";
+export type RightPanelTab = "project" | "files" | "browser" | "canvas";
 
 /** Smallest the panel itself may shrink to. */
 const MIN_PANEL_WIDTH = 300;
@@ -33,6 +42,10 @@ interface RightSidePanelProps {
   canShowBrowser: boolean;
   /** Optional action(s) rendered in the tab row, between the tabs and the close button. */
   headerActions?: React.ReactNode;
+
+  // Project props
+  projectPanel?: React.ReactNode;
+  projectTabLabel?: string;
 
   // Artifact props
   artifact?: string | null;
@@ -58,6 +71,8 @@ export function RightSidePanel({
   onClose,
   canShowBrowser,
   headerActions,
+  projectPanel,
+  projectTabLabel = "Details",
   artifact,
   conversationId,
   agentId,
@@ -179,6 +194,7 @@ export function RightSidePanel({
   const portalDivRef = useRef<HTMLDivElement | null>(null);
 
   let resolvedTab: RightPanelTab = activeTab;
+  if (resolvedTab === "project" && !projectPanel) resolvedTab = "files";
   if (resolvedTab === "browser" && !canShowBrowser) resolvedTab = "files";
 
   // Activate the portal target only while the canvas tab is showing — when the
@@ -246,6 +262,12 @@ export function RightSidePanel({
               clipped. */}
           <div className="min-w-0 flex-1 overflow-x-auto">
             <TabsList className="h-8 w-max">
+              {projectPanel ? (
+                <TabsTrigger value="project" className="text-xs px-3">
+                  <Info className="h-3 w-3" />
+                  {projectTabLabel}
+                </TabsTrigger>
+              ) : null}
               <TabsTrigger value="files" className="text-xs px-3">
                 <FileText className="h-3 w-3" />
                 Files
@@ -257,6 +279,7 @@ export function RightSidePanel({
                 </TabsTrigger>
               )}
               <TabsTrigger value="canvas" className="text-xs px-3">
+                <AppWindow className="h-3 w-3" />
                 MCP App
               </TabsTrigger>
             </TabsList>
@@ -277,6 +300,9 @@ export function RightSidePanel({
         </div>
 
         <div className="flex-1 min-h-0 overflow-hidden relative">
+          {resolvedTab === "project" && projectPanel ? (
+            <div className="h-full overflow-y-auto p-4">{projectPanel}</div>
+          ) : null}
           {resolvedTab === "files" && (
             <ConversationFilesPanel
               conversationId={conversationId}

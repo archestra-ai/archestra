@@ -26,7 +26,7 @@ export const allAvailableActions: Record<Resource, Action[]> = {
 
   // Agents
   agent: ["read", "create", "update", "delete", "team-admin", "admin"],
-  project: ["read", "create", "update", "delete", "admin"],
+  project: ["read", "create", "update", "delete", "team-admin", "admin"],
   skill: ["read", "create", "update", "delete", "team-admin", "admin"],
   sandbox: ["execute"],
   agentTrigger: ["read", "create", "update", "delete"],
@@ -90,7 +90,7 @@ export const allAvailableActions: Record<Resource, Action[]> = {
 export const editorPermissions: Record<Resource, Action[]> = {
   // Agents
   agent: ["read", "create", "update", "delete", "team-admin"],
-  project: ["read", "create", "update", "delete"],
+  project: ["read", "create", "update", "delete", "team-admin"],
   skill: ["read", "create", "update", "delete", "team-admin"],
   sandbox: ["execute"],
   agentTrigger: ["read", "create", "update", "delete"],
@@ -249,6 +249,7 @@ export const permissionDescriptions: Record<string, string> = {
   "project:create": "Create personal projects",
   "project:update": "Modify projects you own",
   "project:delete": "Delete projects you own",
+  "project:team-admin": "Manage team assignments for projects",
   "project:admin":
     "Share projects and view or manage all projects regardless of visibility",
   "skill:read":

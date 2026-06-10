@@ -1,4 +1,5 @@
 import ConversationModel from "@/models/conversation";
+import MessageModel from "@/models/message";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -57,6 +58,30 @@ describe("project routes", () => {
     });
   });
 
+  test("member default role can create a personal project", async ({
+    makeMember,
+    makeUser,
+  }) => {
+    const member = await makeUser();
+    await makeMember(member.id, organizationId, { role: "member" });
+    currentUser = member;
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/projects",
+      payload: {
+        name: "Personal member project",
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      name: "Personal member project",
+      scope: "personal",
+      authorId: member.id,
+    });
+  });
+
   test("filters list results to visible projects", async ({
     makeMember,
     makeTeam,
@@ -100,7 +125,7 @@ describe("project routes", () => {
     expect(ids).not.toContain(ownPersonal.id);
   });
 
-  test("requires project admin permission to share a project", async ({
+  test("requires project admin permission to create an org project", async ({
     makeMember,
     makeUser,
   }) => {
@@ -118,6 +143,89 @@ describe("project routes", () => {
     });
 
     expect(response.statusCode).toBe(403);
+  });
+
+  test("requires project team-admin permission to create a team project", async ({
+    makeMember,
+    makeTeam,
+    makeTeamMember,
+    makeUser,
+  }) => {
+    const member = await makeUser();
+    await makeMember(member.id, organizationId, { role: "member" });
+    const team = await makeTeam(organizationId, currentUser.id);
+    await makeTeamMember(team.id, member.id);
+    currentUser = member;
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/projects",
+      payload: {
+        name: "Team project from member",
+        scope: "team",
+        teamIds: [team.id],
+      },
+    });
+
+    expect(response.statusCode).toBe(403);
+    expect(response.json().error.message).toMatch(/team-admin/i);
+  });
+
+  test("project team-admin can create team projects only for their teams", async ({
+    makeCustomRole,
+    makeMember,
+    makeTeam,
+    makeTeamMember,
+    makeUser,
+  }) => {
+    const member = await makeUser();
+    await makeCustomRole(organizationId, {
+      role: "project_team_admin_role",
+      permission: {
+        project: ["read", "create", "update", "delete", "team-admin"],
+        team: ["read"],
+      },
+    });
+    await makeMember(member.id, organizationId, {
+      role: "project_team_admin_role",
+    });
+    const team = await makeTeam(organizationId, currentUser.id);
+    const otherTeam = await makeTeam(organizationId, currentUser.id, {
+      name: "Other team",
+    });
+    await makeTeamMember(team.id, member.id);
+    currentUser = member;
+
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/projects",
+      payload: {
+        name: "Team-admin project",
+        scope: "team",
+        teamIds: [team.id],
+      },
+    });
+
+    expect(created.statusCode).toBe(200);
+    expect(created.json()).toMatchObject({
+      scope: "team",
+      teams: [expect.objectContaining({ id: team.id })],
+    });
+
+    const forbidden = await app.inject({
+      method: "POST",
+      url: "/api/projects",
+      payload: {
+        name: "Wrong team project",
+        scope: "team",
+        teamIds: [otherTeam.id],
+      },
+    });
+
+    expect(forbidden.statusCode).toBe(403);
+    expect(forbidden.json().error.message).toMatch(
+      /only assign teams you are a member of/i,
+    );
   });
 
   test("prevents visible non-owners from updating a project", async ({
@@ -216,6 +324,15 @@ describe("project routes", () => {
       projectId: project.id,
       title: "Investigate regression",
     });
+    await MessageModel.create({
+      conversationId: conversation.id,
+      role: "user",
+      content: {
+        id: "message-1",
+        role: "user",
+        parts: [{ type: "text", text: "Check why the importer is slow" }],
+      },
+    });
 
     const response = await app.inject({
       method: "GET",
@@ -227,6 +344,15 @@ describe("project routes", () => {
       expect.objectContaining({
         id: conversation.id,
         projectId: project.id,
+        messages: [
+          expect.objectContaining({
+            parts: [
+              expect.objectContaining({
+                text: "Check why the importer is slow",
+              }),
+            ],
+          }),
+        ],
       }),
     ]);
   });

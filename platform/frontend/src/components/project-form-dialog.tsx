@@ -2,16 +2,11 @@
 
 import type { ResourceVisibilityScope } from "@archestra/shared";
 import { Globe, User, Users } from "lucide-react";
-import { useEffect, useState } from "react";
-import { AgentIcon } from "@/components/agent-icon";
+import { type FormEvent, useEffect, useState } from "react";
+import { AgentIconPicker } from "@/components/agent-icon-picker";
+import { KnowledgeSourcesSelector } from "@/components/knowledge-sources-selector";
+import { StandardFormDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { MultiSelectCombobox } from "@/components/ui/multi-select-combobox";
@@ -40,7 +35,7 @@ export function ProjectFormDialog({
 }) {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [icon, setIcon] = useState("");
+  const [icon, setIcon] = useState<string | null>(null);
   const [instructions, setInstructions] = useState("");
   const [scope, setScope] = useState<ResourceVisibilityScope>("personal");
   const [teamIds, setTeamIds] = useState<string[]>([]);
@@ -48,7 +43,12 @@ export function ProjectFormDialog({
   const createProject = useCreateProject();
   const updateProject = useUpdateProject();
   const { data: canProjectAdmin } = useHasPermissions({ project: ["admin"] });
-  const { data: teams = [] } = useTeams({ enabled: !!canProjectAdmin });
+  const { data: canProjectTeamAdmin } = useHasPermissions({
+    project: ["team-admin"],
+  });
+  const { data: teams = [] } = useTeams({
+    enabled: !!canProjectAdmin || !!canProjectTeamAdmin,
+  });
   const { data: knowledgeBasesData } = useKnowledgeBases();
   const knowledgeBases = knowledgeBasesData ?? [];
 
@@ -56,7 +56,7 @@ export function ProjectFormDialog({
     if (!open) return;
     setName(project?.name ?? "");
     setDescription(project?.description ?? "");
-    setIcon(project?.icon ?? "");
+    setIcon(project?.icon ?? null);
     setInstructions(project?.instructions ?? "");
     setScope(project?.scope ?? "personal");
     setTeamIds(project?.teams.map((team) => team.id) ?? []);
@@ -64,7 +64,7 @@ export function ProjectFormDialog({
   }, [open, project]);
 
   const isPending = createProject.isPending || updateProject.isPending;
-  const canShare = !!canProjectAdmin;
+  const canShareWithTeams = !!canProjectAdmin || !!canProjectTeamAdmin;
   const hasNoTeams = teams.length === 0;
   const options: VisibilityOption<ResourceVisibilityScope>[] = [
     {
@@ -78,9 +78,9 @@ export function ProjectFormDialog({
       label: "Teams",
       description: "Share this project with selected teams",
       icon: Users,
-      disabled: scope !== "team" && (!canShare || hasNoTeams),
-      disabledReason: !canShare
-        ? "You need project:admin permission to share projects"
+      disabled: scope !== "team" && (!canShareWithTeams || hasNoTeams),
+      disabledReason: !canShareWithTeams
+        ? "You need project:team-admin permission to share projects with teams"
         : hasNoTeams
           ? "No teams are available"
           : undefined,
@@ -90,18 +90,19 @@ export function ProjectFormDialog({
       label: "Organization",
       description: "Anyone in your org can use this project",
       icon: Globe,
-      disabled: scope !== "org" && !canShare,
-      disabledReason: !canShare
+      disabled: scope !== "org" && !canProjectAdmin,
+      disabledReason: !canProjectAdmin
         ? "You need project:admin permission to share projects"
         : undefined,
     },
   ];
 
-  const handleSubmit = async () => {
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
     const payload = {
       name,
       description: description || null,
-      icon: icon || null,
+      icon,
       instructions: instructions || null,
       scope,
       teamIds: scope === "team" ? teamIds : [],
@@ -114,64 +115,82 @@ export function ProjectFormDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>{project ? "Edit project" : "New project"}</DialogTitle>
-        </DialogHeader>
-        <div className="grid gap-4">
-          <div className="grid grid-cols-[72px_1fr] gap-3">
-            <div className="space-y-2">
-              <Label>Icon</Label>
-              <div className="flex h-10 items-center justify-center rounded-md border">
-                <AgentIcon icon={icon || null} fallbackType="agent" size={18} />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label>Name</Label>
+    <StandardFormDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title={project ? "Edit project" : "New project"}
+      onSubmit={handleSubmit}
+      footer={
+        <>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+          >
+            Cancel
+          </Button>
+          <Button type="submit" disabled={!name.trim() || isPending}>
+            {project ? "Save" : "Create"}
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        <div className="rounded-lg border bg-card p-4">
+          <div className="flex items-start gap-4">
+            <AgentIconPicker
+              value={icon}
+              onChange={setIcon}
+              fallbackType="agent"
+            />
+            <div className="min-w-0 flex-1 space-y-2">
+              <Label htmlFor="project-name">Name *</Label>
               <Input
+                id="project-name"
                 value={name}
                 onChange={(event) => setName(event.target.value)}
+                placeholder="Customer support triage"
+                autoFocus
               />
+              <div className="space-y-2 pt-2">
+                <Label htmlFor="project-description">Description</Label>
+                <Textarea
+                  id="project-description"
+                  value={description}
+                  onChange={(event) => setDescription(event.target.value)}
+                  placeholder="What is this project for?"
+                  className="min-h-[70px]"
+                />
+              </div>
             </div>
           </div>
+        </div>
+
+        <div className="rounded-lg border bg-card p-4 space-y-4">
           <div className="space-y-2">
-            <Label>Icon</Label>
-            <Input
-              value={icon}
-              onChange={(event) => setIcon(event.target.value)}
-              placeholder="Emoji, letter, or data URL"
+            <Label>Knowledge Sources</Label>
+            <p className="text-xs text-muted-foreground">
+              Choose which knowledge this project can draw from in chat.
+            </p>
+            <KnowledgeSourcesSelector
+              knowledgeBases={knowledgeBases}
+              selectedKnowledgeBaseIds={knowledgeBaseIds}
+              onKnowledgeBaseIdsChange={setKnowledgeBaseIds}
             />
           </div>
           <div className="space-y-2">
-            <Label>Knowledge sources</Label>
-            <MultiSelectCombobox
-              options={knowledgeBases.map((knowledgeBase) => ({
-                value: knowledgeBase.id,
-                label: knowledgeBase.name,
-              }))}
-              value={knowledgeBaseIds}
-              onChange={setKnowledgeBaseIds}
-              placeholder="Search knowledge sources..."
-              emptyMessage="No knowledge sources found."
-            />
-          </div>
-          <div className="space-y-2">
-            <Label>Description</Label>
+            <Label htmlFor="project-instructions">Instructions</Label>
             <Textarea
-              value={description}
-              onChange={(event) => setDescription(event.target.value)}
-              rows={2}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label>Instructions</Label>
-            <Textarea
+              id="project-instructions"
               value={instructions}
               onChange={(event) => setInstructions(event.target.value)}
-              rows={5}
+              placeholder="How should agents behave in this project?"
+              className="min-h-[120px]"
             />
           </div>
+        </div>
+
+        <div className="rounded-lg border bg-card p-4">
           <VisibilitySelector
             heading="Who can use this project"
             value={scope}
@@ -182,7 +201,7 @@ export function ProjectFormDialog({
               <div className="space-y-2">
                 <Label>Teams</Label>
                 <MultiSelectCombobox
-                  disabled={!canShare || hasNoTeams}
+                  disabled={!canShareWithTeams || hasNoTeams}
                   options={teams.map((team) => ({
                     value: team.id,
                     label: team.name,
@@ -198,15 +217,7 @@ export function ProjectFormDialog({
             )}
           </VisibilitySelector>
         </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
-          </Button>
-          <Button disabled={!name.trim() || isPending} onClick={handleSubmit}>
-            {project ? "Save" : "Create"}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+      </div>
+    </StandardFormDialog>
   );
 }

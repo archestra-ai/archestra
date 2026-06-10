@@ -14,6 +14,7 @@ import {
   Bug,
   Cable,
   Database,
+  FolderOpen,
   Github,
   type LucideIcon,
   MessageCircle,
@@ -91,6 +92,17 @@ const headerNavItems: NavItem[] = [
 // Labeled groups shown in the scrollable content (like sidebar-10 Favorites/Workspaces)
 const contentNavGroups: NavGroup[] = [
   {
+    label: "Work",
+    items: [
+      {
+        title: "Projects",
+        url: "/projects",
+        icon: FolderOpen,
+        customIsActive: (pathname: string) => pathname.startsWith("/projects"),
+      },
+    ],
+  },
+  {
     label: "Agents",
     items: [
       {
@@ -102,12 +114,6 @@ const contentNavGroups: NavGroup[] = [
           !pathname.startsWith("/agents/triggers") &&
           !pathname.startsWith("/agents/skills"),
         subItems: [
-          {
-            title: "Projects",
-            url: "/projects",
-            customIsActive: (pathname: string) =>
-              pathname.startsWith("/projects"),
-          },
           {
             title: "Skills",
             url: "/agents/skills",
@@ -271,7 +277,6 @@ const NavPrimary = ({
           <span>{item.title}</span>
         </SidebarPrefetchLink>
       </SidebarMenuButton>
-      {item.title === "New Chat" && chatSection}
       {item.subItems && item.subItems.length > 0 && (
         <SidebarMenuSub className="mx-0 ml-3.5 px-0 pl-2.5">
           {item.subItems
@@ -310,6 +315,12 @@ const NavPrimary = ({
     <SidebarGroup>
       <SidebarMenu>
         {permittedHeaderItems.map(renderItem)}
+        {chatSection}
+        {chatSection ? (
+          <SidebarMenuItem className="px-2 py-2 group-data-[collapsible=icon]:hidden">
+            <div className="h-px bg-sidebar-border/70" />
+          </SidebarMenuItem>
+        ) : null}
         <SidebarMenuItem className="hidden group-data-[collapsible=icon]:block">
           <SidebarMenuButton
             tooltip="Search chats"
@@ -453,6 +464,9 @@ const NavSecondary = ({
 export function AppSidebar() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const sidebarContentRef = React.useRef<HTMLDivElement>(null);
+  const [showSidebarFooterFade, setShowSidebarFooterFade] =
+    React.useState(false);
   const isAuthenticated = useIsAuthenticated();
   const showCommunityLinks = !config.enterpriseFeatures.fullWhiteLabeling;
   // GitHub stars are cosmetic and external, so defer them until after the
@@ -472,6 +486,19 @@ export function AppSidebar() {
     mcpGateway: ["read"],
   });
   const showConnect = canReadMcpGateway && canReadLlmProxy;
+
+  const updateSidebarFooterFade = React.useCallback(() => {
+    const element = sidebarContentRef.current;
+    if (!element) {
+      setShowSidebarFooterFade(false);
+      return;
+    }
+
+    const canScroll = element.scrollHeight > element.clientHeight + 1;
+    const hasContentBelow =
+      element.scrollTop + element.clientHeight < element.scrollHeight - 2;
+    setShowSidebarFooterFade(canScroll && hasContentBelow);
+  }, []);
 
   // Skills are gated behind the ARCHESTRA_AGENTS_SKILLS_ENABLED env var.
   const skillsEnabled = useFeature("agentSkillsEnabled") === true;
@@ -497,6 +524,20 @@ export function AppSidebar() {
         ),
     }));
   }, [showConnect, skillsEnabled]);
+
+  React.useEffect(() => {
+    const frame = window.requestAnimationFrame(updateSidebarFooterFade);
+    return () => {
+      window.cancelAnimationFrame(frame);
+    };
+  });
+
+  React.useEffect(() => {
+    window.addEventListener("resize", updateSidebarFooterFade);
+    return () => {
+      window.removeEventListener("resize", updateSidebarFooterFade);
+    };
+  }, [updateSidebarFooterFade]);
 
   // Build additional links for UserButton popout menu
   const userMenuLinks = React.useMemo(() => {
@@ -532,40 +573,58 @@ export function AppSidebar() {
           <img src={appIconLogo} alt="Logo" className="size-7" />
         </SidebarPrefetchLink>
       </SidebarHeader>
-      <SidebarContent>
-        {isAuthenticated && permissionMap && (
-          <>
-            <NavPrimary
-              items={headerNavItems}
-              groups={filteredNavGroups}
-              pathname={pathname}
-              searchParams={searchParams}
-              permissionMap={permissionMap}
-              chatSection={<ChatSidebarSection />}
-            />
+      <div className="relative min-h-0 flex-1">
+        <SidebarContent
+          ref={sidebarContentRef}
+          onScroll={updateSidebarFooterFade}
+          className="h-full overflow-y-scroll pb-8 [scrollbar-gutter:stable]"
+        >
+          {isAuthenticated && permissionMap && (
+            <>
+              <NavPrimary
+                items={headerNavItems}
+                groups={filteredNavGroups}
+                pathname={pathname}
+                searchParams={searchParams}
+                permissionMap={permissionMap}
+                chatSection={<ChatSidebarSection />}
+              />
+              <NavSecondary
+                items={[]}
+                pathname={pathname}
+                searchParams={searchParams}
+                permissionMap={permissionMap}
+                showCommunityLinks={showCommunityLinks}
+                starCount={formattedStarCount}
+                className="mt-auto"
+              />
+            </>
+          )}
+          {!isAuthenticated && showCommunityLinks && (
             <NavSecondary
               items={[]}
               pathname={pathname}
               searchParams={searchParams}
-              permissionMap={permissionMap}
+              permissionMap={{}}
               showCommunityLinks={showCommunityLinks}
               starCount={formattedStarCount}
-              className="mt-auto"
             />
-          </>
+          )}
+        </SidebarContent>
+        <div
+          className={cn(
+            "pointer-events-none absolute inset-x-0 bottom-0 hidden h-20 bg-gradient-to-b from-sidebar/0 via-sidebar/80 to-sidebar opacity-0 transition-opacity group-data-[collapsible=icon]:hidden md:block",
+            showSidebarFooterFade && "opacity-100",
+          )}
+        />
+      </div>
+      <SidebarFooter
+        className={cn(
+          "relative z-10 border-t border-sidebar-border/40 bg-sidebar/95 transition-shadow",
+          showSidebarFooterFade &&
+            "shadow-[0_-34px_44px_hsl(var(--sidebar-background)/0.86)]",
         )}
-        {!isAuthenticated && showCommunityLinks && (
-          <NavSecondary
-            items={[]}
-            pathname={pathname}
-            searchParams={searchParams}
-            permissionMap={{}}
-            showCommunityLinks={showCommunityLinks}
-            starCount={formattedStarCount}
-          />
-        )}
-      </SidebarContent>
-      <SidebarFooter>
+      >
         <SidebarWarningsAccordion />
         <SignedIn>
           <SidebarGroup className="mt-auto p-0">

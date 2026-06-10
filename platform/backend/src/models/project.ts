@@ -6,6 +6,7 @@ import {
   eq,
   getTableColumns,
   ilike,
+  inArray,
   or,
   type SQL,
   sql,
@@ -18,6 +19,7 @@ import {
 import type {
   Conversation,
   InsertProject,
+  Message,
   Project,
   ProjectScope,
   UpdateProject,
@@ -423,6 +425,10 @@ async function findRecentConversationsForProject(
     .orderBy(desc(schema.conversationsTable.lastMessageAt))
     .limit(10);
 
+  const messagesByConversation = await findFirstUserMessagesForConversations(
+    rows.map((row) => row.conversation.id),
+  );
+
   return rows.map((row) => ({
     ...row.conversation,
     project: null,
@@ -437,10 +443,38 @@ async function findRecentConversationsForProject(
         }
       : null,
     share: row.share?.id ? row.share : null,
-    messages: [],
+    messages: messagesByConversation.get(row.conversation.id) ?? [],
     chatErrors: [],
     compactions: [],
   }));
+}
+
+async function findFirstUserMessagesForConversations(
+  conversationIds: string[],
+): Promise<Map<string, Message["content"][]>> {
+  if (conversationIds.length === 0) return new Map();
+
+  const rows = await db
+    .select({
+      conversationId: schema.messagesTable.conversationId,
+      content: schema.messagesTable.content,
+      createdAt: schema.messagesTable.createdAt,
+    })
+    .from(schema.messagesTable)
+    .where(
+      and(
+        inArray(schema.messagesTable.conversationId, conversationIds),
+        eq(schema.messagesTable.role, "user"),
+      ),
+    )
+    .orderBy(asc(schema.messagesTable.createdAt));
+
+  const messagesByConversation = new Map<string, Message["content"][]>();
+  for (const row of rows) {
+    if (messagesByConversation.has(row.conversationId)) continue;
+    messagesByConversation.set(row.conversationId, [row.content]);
+  }
+  return messagesByConversation;
 }
 
 async function findScheduleTriggersForProject(projectId: string) {

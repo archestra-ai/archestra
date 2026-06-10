@@ -223,11 +223,15 @@ describe("buildCreateConversationInput", () => {
         agentId: "agent-1",
         modelId: "uuid-gpt",
         chatApiKeyId: "key-1",
+        title: "What is the weather in Montreal?",
+        projectId: "project-1",
       }),
     ).toEqual({
       agentId: "agent-1",
       modelId: "uuid-gpt",
       chatApiKeyId: "key-1",
+      title: "What is the weather in Montreal?",
+      projectId: "project-1",
     });
   });
 

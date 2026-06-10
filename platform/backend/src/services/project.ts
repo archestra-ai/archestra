@@ -1,5 +1,6 @@
 import { userHasPermission } from "@/auth";
 import ProjectModel from "@/models/project";
+import TeamModel from "@/models/team";
 import type {
   InsertProject,
   Project,
@@ -66,10 +67,12 @@ export async function createProject(params: {
   userId: string;
   data: InsertProject;
 }): Promise<Project> {
+  const scope = params.data.scope ?? "personal";
   await validateProjectScopeWrite({
     organizationId: params.organizationId,
     userId: params.userId,
-    scope: params.data.scope,
+    scope,
+    teamIds: scope === "team" ? (params.data.teamIds ?? []) : [],
   });
 
   return ProjectModel.create({
@@ -92,6 +95,10 @@ export async function updateProject(params: {
     organizationId: params.organizationId,
     userId: params.userId,
     scope: nextScope,
+    teamIds:
+      nextScope === "team"
+        ? (params.data.teamIds ?? project.teams.map((team) => team.id))
+        : [],
   });
 
   const updated = await ProjectModel.update({
@@ -139,10 +146,41 @@ async function getEditableProject(params: {
     "project",
     "admin",
   );
-  if (!isProjectAdmin && project.authorId !== params.userId) {
+  if (isProjectAdmin) return project;
+
+  if (project.scope === "personal") {
+    if (project.authorId !== params.userId) {
+      throw new ApiError(403, "You can only manage your own personal projects");
+    }
+    return project;
+  }
+
+  if (project.scope === "org") {
+    throw new ApiError(403, "Only admins can manage org-scoped projects");
+  }
+
+  const isProjectTeamAdmin = await userHasPermission(
+    params.userId,
+    params.organizationId,
+    "project",
+    "team-admin",
+  );
+  if (!isProjectTeamAdmin) {
     throw new ApiError(
       403,
-      "You do not have permission to modify this project",
+      "You need team-admin permission to manage team-scoped projects",
+    );
+  }
+
+  const userTeamIds = await TeamModel.getUserTeamIds(params.userId);
+  const userTeamIdSet = new Set(userTeamIds);
+  const isMemberOfAnyTeam = project.teams.some((team) =>
+    userTeamIdSet.has(team.id),
+  );
+  if (project.teams.length === 0 || !isMemberOfAnyTeam) {
+    throw new ApiError(
+      403,
+      "You can only manage projects in teams you are a member of",
     );
   }
 
@@ -153,6 +191,7 @@ async function validateProjectScopeWrite(params: {
   organizationId: string;
   userId: string;
   scope: ProjectScope;
+  teamIds: string[];
 }) {
   if (params.scope === "personal") return;
 
@@ -162,10 +201,39 @@ async function validateProjectScopeWrite(params: {
     "project",
     "admin",
   );
-  if (!isProjectAdmin) {
+  if (isProjectAdmin) return;
+
+  if (params.scope === "org") {
     throw new ApiError(
       403,
-      "Project sharing requires project admin permission",
+      "Only admins can create or promote org-scoped projects",
     );
+  }
+
+  if (params.teamIds.length === 0) {
+    throw new ApiError(
+      400,
+      "A team-scoped project must be assigned to at least one team",
+    );
+  }
+
+  const isProjectTeamAdmin = await userHasPermission(
+    params.userId,
+    params.organizationId,
+    "project",
+    "team-admin",
+  );
+  if (!isProjectTeamAdmin) {
+    throw new ApiError(
+      403,
+      "You need team-admin permission to manage team-scoped projects",
+    );
+  }
+
+  const userTeamIds = await TeamModel.getUserTeamIds(params.userId);
+  const userTeamIdSet = new Set(userTeamIds);
+  const invalidTeamIds = params.teamIds.filter((id) => !userTeamIdSet.has(id));
+  if (invalidTeamIds.length > 0) {
+    throw new ApiError(403, "You can only assign teams you are a member of");
   }
 }

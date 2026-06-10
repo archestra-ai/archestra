@@ -223,6 +223,27 @@ describe("OpenAIResponseAdapter", () => {
     });
   });
 
+  describe("getFinishReasons", () => {
+    test("extracts the finish reason from the first choice", () => {
+      const response = createMockResponse({
+        role: "assistant",
+        content: "Hello",
+      });
+
+      const adapter = openaiAdapterFactory.createResponseAdapter(response);
+      expect(adapter.getFinishReasons()).toEqual(["stop"]);
+    });
+
+    test("returns empty array when choices is missing (e.g. upstream error body)", () => {
+      const response = {
+        error: { message: "upstream failure" },
+      } as unknown as OpenAi.Types.ChatCompletionsResponse;
+
+      const adapter = openaiAdapterFactory.createResponseAdapter(response);
+      expect(adapter.getFinishReasons()).toEqual([]);
+    });
+  });
+
   describe("getUsage", () => {
     test("extracts usage tokens from response", () => {
       const response = createMockResponse(

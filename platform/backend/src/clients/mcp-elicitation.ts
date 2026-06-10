@@ -37,7 +37,7 @@ export function withMcpElicitationCapability(
 
 export function configureMcpElicitation(
   client: Client,
-  handler: McpElicitationHandler = defaultMcpElicitationHandler,
+  handler: McpElicitationHandler,
 ): void {
   client.setRequestHandler(ElicitRequestSchema, handler);
   client.setNotificationHandler(
@@ -49,21 +49,4 @@ export function configureMcpElicitation(
       );
     },
   );
-}
-
-// =============================================================================
-// Internal helpers
-// =============================================================================
-
-function defaultMcpElicitationHandler(request: ElicitRequest): ElicitResult {
-  logger.info(
-    {
-      mode: request.params.mode ?? "form",
-      elicitationId:
-        request.params.mode === "url" ? request.params.elicitationId : null,
-    },
-    "Declining MCP elicitation request because no interactive handler is available",
-  );
-
-  return { action: "decline" };
 }

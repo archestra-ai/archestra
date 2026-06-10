@@ -486,7 +486,7 @@ export async function createAgentServer(
                       },
                       "MCP elicitation request was not completed by caller",
                     );
-                    return { action: "decline" };
+                    throw error;
                   }
                 },
               },

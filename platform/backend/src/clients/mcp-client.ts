@@ -57,6 +57,7 @@ import type {
   MCPGatewayAuthMethod,
   McpToolAssignment,
 } from "@/types";
+import type { ClientCapabilitiesWithExtensions } from "@/types/mcp-capabilities";
 import { deriveAuthMethod } from "@/utils/auth-method";
 import { buildMcpClientInfo } from "@/utils/mcp-client-info";
 import { previewToolResultContent } from "@/utils/tool-result-preview";
@@ -438,6 +439,9 @@ class McpClient {
       : `${catalogItem.id}:${targetMcpServerId}`;
     if (externalIdpUserId) {
       connectionKey = `${connectionKey}:ext:${externalIdpUserId}`;
+    }
+    if (options?.elicitationHandler) {
+      connectionKey = `${connectionKey}:elicitation`;
     }
 
     const executeToolCall = async (
@@ -951,7 +955,9 @@ class McpClient {
           this.activeConnectionLastValidatedAt.set(connectionKey, Date.now());
         }
         logger.debug({ connectionKey }, "Reusing cached MCP client");
-        configureMcpElicitation(reusableClient, elicitationHandler);
+        if (elicitationHandler) {
+          configureMcpElicitation(reusableClient, elicitationHandler);
+        }
         this.activeConnections.set(connectionKey, reusableClient);
         this.activeConnectionServerState.set(
           connectionKey,
@@ -983,17 +989,22 @@ class McpClient {
     }
 
     // Create the client with UI extension capabilities
-    const capabilities = withMcpElicitationCapability({
+    const baseCapabilities: ClientCapabilitiesWithExtensions = {
       roots: { listChanged: true },
       extensions: MCP_CLIENT_EXTENSION_CAPABILITIES,
-    });
+    };
+    const capabilities = elicitationHandler
+      ? withMcpElicitationCapability(baseCapabilities)
+      : baseCapabilities;
 
     // Create new client
     logger.info({ connectionKey }, "Creating new MCP client");
     const client = new Client(buildMcpClientInfo("archestra-platform"), {
       capabilities,
     });
-    configureMcpElicitation(client, elicitationHandler);
+    if (elicitationHandler) {
+      configureMcpElicitation(client, elicitationHandler);
+    }
 
     // Track whether we're using a stored session ID (for stale session cleanup)
     const usedStoredSession =
@@ -2521,16 +2532,15 @@ class McpClient {
           secretId,
         );
 
-        const capabilities = withMcpElicitationCapability({
+        const capabilities: ClientCapabilitiesWithExtensions = {
           roots: { listChanged: true },
           extensions: MCP_CLIENT_EXTENSION_CAPABILITIES,
-        });
+        };
 
         // Create client with transport
         const client = new Client(buildMcpClientInfo("archestra-platform"), {
           capabilities,
         });
-        configureMcpElicitation(client);
 
         // Connect with timeout
         await this.raceWithTimeout(
@@ -2643,9 +2653,8 @@ class McpClient {
     );
 
     const client = new Client(buildMcpClientInfo("archestra-inspector"), {
-      capabilities: withMcpElicitationCapability({}),
+      capabilities: {},
     });
-    configureMcpElicitation(client);
 
     try {
       await this.raceWithTimeout(

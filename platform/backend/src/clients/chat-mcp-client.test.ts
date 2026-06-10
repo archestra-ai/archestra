@@ -20,8 +20,6 @@ import mcpClient from "./mcp-client";
 
 const mockConnect = vi.fn().mockRejectedValue(new Error("Connection closed"));
 const mockClose = vi.fn();
-const mockSetRequestHandler = vi.fn();
-const mockSetNotificationHandler = vi.fn();
 
 const createMockClient = () => ({
   connect: mockConnect,
@@ -29,8 +27,6 @@ const createMockClient = () => ({
   callTool: vi.fn(),
   close: mockClose,
   ping: vi.fn(),
-  setRequestHandler: mockSetRequestHandler,
-  setNotificationHandler: mockSetNotificationHandler,
 });
 
 vi.mock("@modelcontextprotocol/sdk/client/index.js", () => ({
@@ -64,8 +60,6 @@ beforeEach(() => {
   vi.mocked(mcpClient.executeToolCall).mockReset();
   vi.mocked(resolveSessionExternalIdpToken).mockResolvedValue(null);
   vi.mocked(StreamableHTTPClientTransport).mockClear();
-  mockSetRequestHandler.mockReset();
-  mockSetNotificationHandler.mockReset();
 });
 
 describe("isBrowserMcpTool", () => {
@@ -1437,38 +1431,6 @@ describe("fetchToolUiResource", () => {
 });
 
 describe("getChatMcpClient", () => {
-  test("declares elicitation support when connecting to the MCP gateway", async () => {
-    mockConnect.mockReset();
-    mockConnect.mockResolvedValue(undefined);
-
-    const agentId = crypto.randomUUID();
-    const userId = crypto.randomUUID();
-    const organizationId = crypto.randomUUID();
-
-    const client = await chatClient.getChatMcpClient(
-      agentId,
-      userId,
-      organizationId,
-      undefined,
-      "internal-token",
-    );
-
-    expect(client).not.toBeNull();
-
-    const clientConstructor = vi.mocked(
-      (await import("@modelcontextprotocol/sdk/client/index.js")).Client,
-    );
-    const options = clientConstructor.mock.calls.at(-1)?.[1] as
-      | { capabilities?: { elicitation?: Record<string, unknown> } }
-      | undefined;
-    expect(options?.capabilities?.elicitation).toEqual({
-      form: { applyDefaults: true },
-      url: {},
-    });
-    expect(mockSetRequestHandler).toHaveBeenCalledOnce();
-    expect(mockSetNotificationHandler).toHaveBeenCalledOnce();
-  });
-
   test("prefers a session-derived external IdP token over internal gateway tokens", async () => {
     mockConnect.mockReset();
     mockConnect.mockResolvedValue(undefined);

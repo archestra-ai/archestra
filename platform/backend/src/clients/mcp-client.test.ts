@@ -290,7 +290,7 @@ describe("McpClient", () => {
       ).toBe("unknown_tool");
     });
 
-    test("declares MCP Apps, enterprise auth, and elicitation capabilities during initialize", async () => {
+    test("declares MCP Apps and enterprise auth extensions during initialize", async () => {
       const tool = await ToolModel.createToolIfNotExists({
         name: "github-mcp-server__declared_extensions",
         description: "Extension declaration test",
@@ -337,6 +337,57 @@ describe("McpClient", () => {
         },
         [MCP_ENTERPRISE_AUTH_EXTENSION_ID]: {},
       });
+      expect(options?.capabilities?.elicitation).toBeUndefined();
+      expect(mockSetRequestHandler).not.toHaveBeenCalled();
+      expect(mockSetNotificationHandler).not.toHaveBeenCalled();
+    });
+
+    test("declares elicitation support when a gateway bridge handler is provided", async () => {
+      const tool = await ToolModel.createToolIfNotExists({
+        name: "github-mcp-server__elicitation_bridge",
+        description: "Elicitation bridge test",
+        parameters: {},
+        catalogId,
+      });
+
+      await AgentToolModel.create(agentId, tool.id, {
+        mcpServerId,
+        credentialResolutionMode: "static",
+      });
+
+      mockConnect.mockResolvedValue(undefined);
+      mockCallTool.mockResolvedValue({
+        content: [{ type: "text", text: "ok" }],
+      });
+
+      const result = await mcpClient.executeToolCall(
+        {
+          id: "call_elicitation",
+          name: tool.name,
+          arguments: {},
+        },
+        agentId,
+        undefined,
+        {
+          elicitationHandler: async () => ({
+            action: "accept",
+            content: {},
+          }),
+        },
+      );
+
+      expect(result.isError).toBe(false);
+
+      const clientConstructor = vi.mocked(
+        (await import("@modelcontextprotocol/sdk/client/index.js")).Client,
+      );
+      const options = clientConstructor.mock.calls.at(-1)?.[1] as
+        | {
+            capabilities?: {
+              elicitation?: Record<string, unknown>;
+            };
+          }
+        | undefined;
       expect(options?.capabilities?.elicitation).toEqual({
         form: { applyDefaults: true },
         url: {},

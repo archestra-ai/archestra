@@ -24,7 +24,6 @@ import os
 import re
 import sys
 from collections import Counter
-from dataclasses import replace
 from pathlib import Path
 
 from contracts import SECRET_KEY_RE as _SECRET_KEY
@@ -58,7 +57,7 @@ from contracts import (
     require_dict,
     to_jsonable,
 )
-from frontmatter import ParsedDoc, parse_frontmatter
+from frontmatter import parse_frontmatter
 
 # events whose hooks can block the action -- candidates for a tool-invocation policy.
 _BLOCKING_EVENTS = {"PreToolUse", "UserPromptSubmit", "PreCompact", "Stop", "SubagentStop"}
@@ -145,13 +144,6 @@ def _read_bundled(path: Path, rel_to: Path) -> BundledFile:
         return BundledFile(path=rel, content=base64.b64encode(raw).decode("ascii"), encoding="base64")
 
 
-def _toolset_name(root: Path) -> str:
-    """skill name for the shared toolset: '<project>-tools', kebab-cased so it is
-    valid as an org-unique Archestra skill name."""
-    base = re.sub(r"[^a-z0-9]+", "-", root.resolve().name.lower()).strip("-") or "project"
-    return f"{base}-tools"
-
-
 def _classify_hook(event: str, command: str) -> HookIntent:
     """advisory intent hint for the model: a deterministic guard vs passive logging. the guard
     logic often lives in a referenced script we don't read, so this is a HINT -- the model must
@@ -189,18 +181,13 @@ def discover(root: Path) -> Inventory:
         for line in doc_unparsed:
             inv.unknowns.append(f"{rel} (unparsed frontmatter: {line.strip()})")
 
-    def warn_doc_secrets(doc: ParsedDoc, rel: str) -> None:
-        _warn_if_secret(doc.body, rel, inv.warnings)
-        # frontmatter is stored verbatim on items, so scan it too
-        _warn_if_secret(json.dumps(doc.frontmatter), f"{rel} (frontmatter)", inv.warnings)
-
     # 1. root CLAUDE.md -> primary agent
     for cm in (root / "CLAUDE.md", root / ".claude" / "CLAUDE.md"):
         if _is_contained_file(cm, root):
             doc = parse_frontmatter(read(cm))
             rel = cm.relative_to(root).as_posix()
             note_unparsed(doc.unparsed_lines, rel)
-            warn_doc_secrets(doc, rel)
+            _warn_if_secret(doc.body, rel, inv.warnings)
             inv.items.append(ClaudeMdItem(
                 id="claude_md", name=root.name or "primary", path=rel,
                 summary="root orchestration prompt -> primary agent system prompt",
@@ -208,40 +195,6 @@ def discover(root: Path) -> Inventory:
             ))
             mark(cm)
             break
-
-    # 1b. instruction files from other ecosystems -> agent prompt material or
-    # skills. AGENTS.md is the cross-vendor convention; Cursor and Copilot
-    # rules are markdown instructions too. The mapping step decides whether to
-    # fold each into the primary agent's system prompt or keep it as a skill.
-    cursor_rules_dir = root / ".cursor" / "rules"
-    instruction_files = [
-        p for p in (
-            root / "AGENTS.md",
-            root / ".cursorrules",
-            root / ".github" / "copilot-instructions.md",
-        )
-        if _is_contained_file(p, root)
-    ] + [
-        # containment is checked against the rules dir itself so a symlink
-        # can't pull an arbitrary repo file into the inventory as a "rule"
-        p for p in sorted(cursor_rules_dir.glob("*"))
-        if _is_contained_file(p, cursor_rules_dir) and p.suffix in (".md", ".mdc")
-    ]
-    for f in instruction_files:
-        doc = parse_frontmatter(read(f))
-        rel = f.relative_to(root).as_posix()
-        note_unparsed(doc.unparsed_lines, rel)
-        warn_doc_secrets(doc, rel)
-        name = f.stem.lstrip(".") or f.name.lstrip(".")
-        inv.items.append(ClaudeMdItem(
-            id=f"claude_md:{rel}", name=name, path=rel,
-            summary=(
-                "agent instructions (non-Claude-Code convention) -> fold into the "
-                "primary agent prompt or keep as a skill"
-            ),
-            data=ClaudeMdData(body=doc.body, frontmatter=doc.frontmatter),
-        ))
-        mark(f)
 
     # 2. subagents -> skills (preferred)
     for f in sorted((root / ".claude" / "agents").glob("*.md")):
@@ -251,7 +204,7 @@ def discover(root: Path) -> Inventory:
         name = _meta_str(doc.frontmatter, "name") or f.stem
         rel = f.relative_to(root).as_posix()
         note_unparsed(doc.unparsed_lines, rel)
-        warn_doc_secrets(doc, rel)
+        _warn_if_secret(doc.body, rel, inv.warnings)
         description = _meta_str(doc.frontmatter, "description")
         tools = doc.frontmatter.get("tools")
         inv.items.append(SubagentItem(
@@ -296,7 +249,7 @@ def discover(root: Path) -> Inventory:
         name = _meta_str(doc.frontmatter, "name") or f.stem
         rel = f.relative_to(root).as_posix()
         note_unparsed(doc.unparsed_lines, rel)
-        warn_doc_secrets(doc, rel)
+        _warn_if_secret(doc.body, rel, inv.warnings)
         inv.items.append(CommandItem(
             id=f"command:{name}", name=name, path=rel,
             summary=(_meta_str(doc.frontmatter, "description") or "")[:200],
@@ -304,90 +257,20 @@ def discover(root: Path) -> Inventory:
         ))
         mark(f)
 
-    # 5. local python tools (best-effort). heuristic: *.py at the top of a
-    # tools/ dir are runnable tools. discovery stays granular — one item per
-    # script — and ALSO emits one shared "<project>-tools" toolset item
-    # bundling the whole tools/ tree, so the mapping step chooses the shape
-    # (default: the toolset; see entity-mapping.md). Migrate one shape, never
-    # both — they bundle the same scripts.
-    tools_dir = root / "tools"
-    # same filters as the toolset tree walk below (tools_dir containment, no
-    # dotfiles) so every entrypoint is guaranteed to be a bundled file
-    tool_scripts = [
-        f for f in sorted(tools_dir.glob("*.py"))
-        if _is_contained_file(f, tools_dir)
-        and not f.name.startswith(".")
-        and f.name != "__init__.py"
-    ]
-    if tool_scripts:
-        # the tools' own requirements are re-rooted to each generated skill's
-        # root, where Archestra auto-installs them on mount. a root-level
-        # requirements.txt is deliberately NOT attached — it usually pins the
-        # whole project, not the tools.
-        reqs = tools_dir / "requirements.txt"
-        bundled_reqs: BundledFile | None = None
-        if _is_contained_file(reqs, root):
-            raw_reqs = _read_bundled(reqs, root)
-            # requirements files commonly embed index credentials
-            # (--extra-index-url https://user:token@...), so warn like any bundle
-            _warn_if_secret(raw_reqs.content, raw_reqs.path, inv.warnings)
-            bundled_reqs = replace(raw_reqs, path="requirements.txt")
-            mark(reqs)
-        elif _is_contained_file(root / "requirements.txt", root):
-            inv.warnings.append(
-                "tools/ has no requirements.txt; the root requirements.txt was NOT "
-                "attached to the generated tool skill(s) — it usually pins the whole "
-                "project. If the tools need third-party imports, copy the relevant "
-                "pins into tools/requirements.txt and re-run discovery."
-            )
-
-        # granular items: one per script, for plans that migrate independent
-        # single-file tools separately. scripts are secret-scanned here, once;
-        # the tree walk below skips re-scanning them.
-        script_rels: set[str] = set()
-        for f in tool_scripts:
-            bundled = _read_bundled(f, root)
-            entry = bundled.path
-            script_rels.add(entry)
-            if bundled.encoding == "utf8":
-                _warn_if_secret(bundled.content, entry, inv.warnings)
-            files = [bundled] + ([bundled_reqs] if bundled_reqs is not None else [])
-            inv.items.append(LocalToolItem(
-                id=f"local_tool:{f.stem}", name=f.stem, path=entry,
-                summary=f"local python tool {f.name}; member of the shared toolset item",
-                data=LocalToolData(entrypoints=[entry]), files=files,
-            ))
-            mark(f)
-
-        # the shared toolset item: the whole tools/ tree (data files and
-        # submodules included), every top-level script as an entrypoint.
-        # containment is checked against tools/ itself (not the repo root) so a
-        # symlink can't pull arbitrary repo files (e.g. ../.env) into the
-        # inventory.
-        bundles: list[BundledFile] = []
-        for f in sorted(tools_dir.rglob("*")):
-            if not _is_contained_file(f, tools_dir) or f == reqs:
-                continue
-            rel_parts = f.relative_to(tools_dir).parts
-            if any(p.startswith(".") or p == "__pycache__" for p in rel_parts) or f.suffix == ".pyc":
-                continue
-            tree_file = _read_bundled(f, root)
-            if tree_file.encoding == "utf8" and tree_file.path not in script_rels:
-                _warn_if_secret(tree_file.content, tree_file.path, inv.warnings)
-            bundles.append(tree_file)
-            mark(f)
-        if bundled_reqs is not None:
-            bundles.append(bundled_reqs)
-        name = _toolset_name(root)
-        entrypoints = [f.relative_to(root).as_posix() for f in tool_scripts]
+    # 5. local python tools -> skills (best-effort). heuristic: *.py under a tools/ dir.
+    for f in sorted((root / "tools").glob("*.py")):
+        if not _is_contained_file(f, root):
+            continue
+        bundled = _read_bundled(f, root)
+        if bundled.encoding == "utf8":
+            _warn_if_secret(bundled.content, bundled.path, inv.warnings)
+        entry = f.relative_to(root).as_posix()
         inv.items.append(LocalToolItem(
-            id=f"local_toolset:{name}", name=name, path="tools",
-            summary=(
-                f"shared toolset skill bundling tools/ ({len(entrypoints)} entrypoint "
-                "script(s)); alternative to the per-tool items — migrate one shape, not both"
-            ),
-            data=LocalToolData(entrypoints=entrypoints), files=bundles,
+            id=f"local_tool:{f.stem}", name=f.stem, path=entry,
+            summary=f"local python tool {f.name} -> skill wrapping the script",
+            data=LocalToolData(entrypoint=entry), files=[bundled],
         ))
+        mark(f)
 
     # 6. mcp servers + hooks from .mcp.json and settings*.json
     for cfg_path in (root / ".mcp.json", root / ".claude" / "settings.json",
@@ -436,14 +319,6 @@ def discover(root: Path) -> Inventory:
         for p in sorted(claude_dir.rglob("*")):
             if p.is_file() and p.resolve() not in seen:
                 inv.unknowns.append(p.relative_to(root).as_posix())
-
-    # 8b. well-known agentic artifacts from other ecosystems we don't parse —
-    # surface them so the report can flag manual follow-up instead of staying
-    # silent about a setup we only partially understood
-    for known in (".windsurfrules", ".clinerules", "GEMINI.md", ".goosehints"):
-        p = root / known
-        if _is_contained_file(p, root) and p.resolve() not in seen:
-            inv.unknowns.append(f"{known} (recognized agent-config artifact; not auto-migrated)")
 
     return inv
 
@@ -515,15 +390,7 @@ def _kind_counts(inv: Inventory) -> str:
 
 
 def _print_summary(inv: Inventory, out: Path) -> None:
-    # local tools are emitted in two shapes (granular + toolset) but only one
-    # migrates, so count the toolset alone when both are present
-    has_toolset = any(it.id.startswith("local_toolset:") for it in inv.items)
-    likely = sum(
-        1 for it in inv.items
-        if it.kind in {"claude_md", "skill", "command"}
-        or (it.kind == "local_tool"
-            and (not has_toolset or it.id.startswith("local_toolset:")))
-    )
+    likely = sum(1 for it in inv.items if it.kind in {"claude_md", "skill", "command", "local_tool"})
     review = sum(
         1 for it in inv.items
         if it.kind in {"subagent", "mcp_server"} or (isinstance(it, HookItem) and it.data.intent == "guard")

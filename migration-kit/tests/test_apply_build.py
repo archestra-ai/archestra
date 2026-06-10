@@ -17,9 +17,7 @@ from apply import (
     BuiltPolicy,
     BuiltSkill,
     _build_payload,
-    _Built,
     _redacted_for_print,
-    _reject_plan_conflicts,
     main,
 )
 from archestra_client import CatalogCreate, LlmKeyCreate, LocalConfig, McpEnvVar
@@ -90,64 +88,11 @@ def test_team_scoped_skill_carries_team_ids(index: dict[str, Item]) -> None:
     assert built.payload.teamIds == ["team-a", "team-b"]
 
 
-def test_local_toolset_builds_shared_skill(index: dict[str, Item]) -> None:
-    _, built = _decide(index, "local_toolset:sample-setup-tools", "skill")
-    assert isinstance(built, BuiltSkill)
-    assert "- `tools/word_count.py`" in built.payload.content
-    assert "python3 /skills/sample-setup-tools/" in built.payload.content
-    assert "automatically when the skill is mounted" in built.payload.content
-    assert {f.path for f in built.payload.files} == {
-        "tools/word_count.py",
-        "requirements.txt",
-    }
-
-
-def test_per_tool_item_builds_standalone_skill(index: dict[str, Item]) -> None:
+def test_local_tool_builds_skill_bundling_script(index: dict[str, Item]) -> None:
     _, built = _decide(index, "local_tool:word_count", "skill")
     assert isinstance(built, BuiltSkill)
-    assert "python3 /skills/word_count/" in built.payload.content
-    assert {f.path for f in built.payload.files} == {
-        "tools/word_count.py",
-        "requirements.txt",
-    }
-
-
-def _built_skill(index: dict[str, Item], source_id: str, **kw: Any) -> _Built:
-    decision = Decision(source_id=source_id, target_kind="skill", scope="personal", **kw)
-    name, op = _build_payload(decision, index[source_id])
-    return _Built(decision, name, op, "")
-
-
-def test_plan_migrating_both_local_tool_shapes_is_rejected(index: dict[str, Item]) -> None:
-    built = _reject_plan_conflicts([
-        _built_skill(index, "local_toolset:sample-setup-tools"),
-        _built_skill(index, "local_tool:word_count"),
-    ])
-    assert all(b.built is None for b in built)
-    assert all("one shape" in b.error for b in built)
-
-
-def test_plan_with_one_local_tool_shape_passes(index: dict[str, Item]) -> None:
-    built = _reject_plan_conflicts([_built_skill(index, "local_toolset:sample-setup-tools")])
-    assert all(b.built is not None for b in built)
-
-
-def test_plan_with_duplicate_skill_names_is_rejected(index: dict[str, Item]) -> None:
-    built = _reject_plan_conflicts([
-        _built_skill(index, "command:greet"),
-        _built_skill(index, "subagent:fact-checker", name_override="greet"),
-    ])
-    assert all(b.built is None for b in built)
-    assert all("name_override" in b.error for b in built)
-
-
-def test_instruction_file_builds_skill(index: dict[str, Item]) -> None:
-    _, built = _decide(index, "claude_md:AGENTS.md", "skill")
-    assert isinstance(built, BuiltSkill)
-    assert built.payload.content.startswith("---")
-    assert '"AGENTS"' in built.payload.content
-    assert "cross-vendor agent instructions" in built.payload.content
-    assert "Always write tests" in built.payload.content
+    assert "python3 tools/word_count.py" in built.payload.content
+    assert built.payload.files[0].path == "tools/word_count.py"
 
 
 def test_remote_mcp_builds_remote_catalog(index: dict[str, Item]) -> None:

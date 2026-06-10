@@ -105,9 +105,7 @@ class CommandData:
 
 @dataclass(frozen=True)
 class LocalToolData:
-    # script paths relative to the source root (e.g. ["tools/extract.py", ...]);
-    # one shared toolset item carries every tools/*.py script
-    entrypoints: list[str]
+    entrypoint: str
 
 
 @dataclass(frozen=True)
@@ -385,13 +383,9 @@ def parse_bundled_file(value: object, *, ctx: str) -> BundledFile:
     encoding = require_str_field(obj, "encoding", ctx=ctx)
     if encoding not in ("utf8", "base64"):
         raise ContractError(f"{ctx}.encoding: {encoding!r} must be 'utf8' or 'base64'")
-    # content may legitimately be empty (e.g. a bundled tools/__init__.py)
-    content = obj.get("content")
-    if not isinstance(content, str):
-        raise ContractError(f"{ctx}: field 'content' must be a string, got {content!r}")
     return BundledFile(
         path=require_str_field(obj, "path", ctx=ctx),
-        content=content,
+        content=require_str_field(obj, "content", ctx=ctx),
         encoding=cast('Literal["utf8", "base64"]', encoding),
     )
 
@@ -478,17 +472,9 @@ def parse_item(value: object, *, ctx: str) -> Item:
                 ),
             )
         case "local_tool":
-            # accept the legacy single-entrypoint shape so inventories written by
-            # older discover runs still load
-            raw_entrypoints = data.get("entrypoints")
-            entrypoints = (
-                _str_list(raw_entrypoints, ctx=f"{dctx}.entrypoints")
-                if raw_entrypoints is not None
-                else [require_str_field(data, "entrypoint", ctx=dctx)]
-            )
             return LocalToolItem(
                 id=item_id, name=name, path=path, summary=summary, files=files, redacted_refs=refs,
-                data=LocalToolData(entrypoints=entrypoints),
+                data=LocalToolData(entrypoint=require_str_field(data, "entrypoint", ctx=dctx)),
             )
         case "mcp_server":
             return McpServerItem(

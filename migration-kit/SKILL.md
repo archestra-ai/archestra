@@ -1,6 +1,6 @@
 ---
 name: migrate-to-archestra
-description: Migrate an existing agentic PoC/pilot (Claude Code project files, AGENTS.md / Cursor / Copilot instruction files, MCP configs, hooks, local tools, openclaw config, or similar hand-rolled setup artifacts) into an Archestra instance. Use when the user wants to move, port, or convert an existing agentic setup into an Archestra pilot.
+description: Migrate an existing agentic PoC/pilot (Claude Code project files, MCP configs, hooks, local tools, openclaw config, or similar hand-rolled setup artifacts) into an Archestra instance. Use when the user wants to move, port, or convert an existing agentic setup into an Archestra pilot.
 license: Apache-2.0
 ---
 
@@ -45,10 +45,7 @@ Ask for the source directory (default: the current working directory). Run:
 ```bash
 python3 "$SKILL_DIR/scripts/discover.py" <source_dir> --out inventory.json
 ```
-This emits a **secret-redacted** inventory: credentials in structured config (MCP env, hook
-commands) are replaced with `<redacted>`; markdown bodies, frontmatter, and bundled files are kept
-verbatim but secret-scanned, with hits reported in `warnings` — review those before sharing the
-inventory. Read
+This emits a **secret-redacted** inventory (it never writes credentials to the file). Read
 `inventory.json`. For items you'll map, skim the relevant bodies. Note anything in `unknowns` — that
 includes any frontmatter line the parser refused to interpret (it supports `key: value` scalars,
 inline `[a, b]` lists, and `- item` block lists; block scalars `|`/`>`, nested maps, anchors, and
@@ -56,11 +53,8 @@ comments are reported here rather than guessed, so read the raw file for those r
 
 After reading the inventory, summarize it in product terms before mapping:
 - likely to migrate cleanly;
-- needs user choice or review — including the local-tools shape (one shared toolset skill vs
-  per-tool skills; `entity-mapping.md`) and where each other-ecosystem instruction file
-  (AGENTS.md, Cursor/Copilot rules) should land (fold into the agent prompt vs standalone skill);
-- report-only/manual follow-up — `unknowns` also lists recognized artifacts from ecosystems the
-  kit doesn't parse (e.g. `.windsurfrules`, `GEMINI.md`);
+- needs user choice or review;
+- report-only/manual follow-up;
 - secret redactions or content warnings;
 - telemetry/observability (OTEL env, metrics-shipping hooks/scripts) — report-only: Archestra emits
   telemetry natively, so guide the user to leverage that rather than migrating it (`entity-mapping.md`).

@@ -26,7 +26,6 @@ import json
 import os
 import re
 import sys
-from collections import Counter
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Union
@@ -169,14 +168,6 @@ def _skill_content_for(item: Item, name: str) -> tuple[str, list[SkillFile]]:
         case SkillItem():
             # verbatim: the original SKILL.md already carries frontmatter.
             return item.data.content, files
-        case ClaudeMdItem():
-            # an instruction file (AGENTS.md, Cursor/Copilot rules) kept as a
-            # standalone skill instead of being folded into the agent prompt
-            desc = (
-                _fm_str(item.data.frontmatter, "description")
-                or f"migrated agent instructions from {item.path}"
-            ).replace("\n", " ")
-            return emit_frontmatter(name, desc) + item.data.body, files
         case SubagentItem():
             desc = (item.data.description or f"migrated subagent {name}").replace("\n", " ")
             note = ""
@@ -193,41 +184,14 @@ def _skill_content_for(item: Item, name: str) -> tuple[str, list[SkillFile]]:
             desc = (_fm_str(item.data.frontmatter, "description") or f"migrated command {name}").replace("\n", " ")
             return emit_frontmatter(name, desc) + item.data.body, files
         case LocalToolItem():
-            entries = item.data.entrypoints
-            has_reqs = any(f.path == "requirements.txt" for f in files)
-            is_toolset = item.id.startswith("local_toolset:")
-            if is_toolset:
-                listing = "\n".join(f"- `{e}`" for e in entries)
-                stems = ", ".join(Path(e).stem for e in entries)
-                intro = (
-                    "Shared toolset skill: bundles the project's local python tools "
-                    "so any skill or instruction that references one of them reuses "
-                    "this single skill instead of a copy per tool.\n\n"
-                    f"## Bundled tools\n{listing}\n"
-                )
-                run_line = f"```bash\npython3 /skills/{name}/<tool path> [args...]\n```"
-                desc = f"Shared toolset: run the bundled scripts ({stems})."
-                if len(desc) > 200:
-                    desc = f"Shared toolset: run the project's {len(entries)} bundled python tools."
-            else:
-                entry = entries[0]
-                intro = f"This skill wraps the local python tool `{entry}`, bundled below.\n"
-                run_line = f"```bash\npython3 /skills/{name}/{entry} [args...]\n```"
-                desc = f"Run the bundled {entry} script."
+            entry = item.data.entrypoint
             body = (
-                f"# {name}\n\n{intro}\n"
-                "## Usage\nActivate this skill, then run it in the skill sandbox:\n"
-                f"{run_line}\n"
-                f"Pass `cwd: /skills/{name}` to `run_command` only when a script reads bundled "
-                "files by relative path; write outputs to absolute paths under `/home/sandbox` "
-                "so they stay visible to the session and `download_file`.\n"
+                f"# {name}\n\nThis skill wraps the local python tool `{entry}`, bundled below.\n\n"
+                "## Usage\nAfter activating this skill, run the bundled script in the skill sandbox:\n"
+                f"```bash\npython3 {entry}\n```\n"
+                f"Use `run_command` with `cwd` set to `/skills/{name}` when sandbox tools are available.\n"
             )
-            if has_reqs:
-                body += (
-                    "\nPython dependencies are bundled in `requirements.txt` and install "
-                    "automatically when the skill is mounted.\n"
-                )
-            return emit_frontmatter(name, desc) + body, files
+            return emit_frontmatter(name, f"Run the bundled {entry} script.") + body, files
         case _:
             raise ContractError(f"cannot build skill content from item kind {item.kind}")
 
@@ -603,7 +567,6 @@ def main() -> int:
             built.append(_Built(decision, name, op, ""))
         except ContractError as exc:
             built.append(_Built(decision, decision.source_id, None, str(exc)))
-    built = _reject_plan_conflicts(built)
     built.sort(key=lambda b: _ORDER.get(b.decision.target_kind, 99))
 
     if args.dry_run:
@@ -652,48 +615,6 @@ def _run_validation(built: list[_Built], *, verbose: bool, label: str) -> list[R
 
 def _invalid_build(b: _Built) -> bool:
     return b.decision.action == "migrate" and b.built is None
-
-
-def _reject_plan_conflicts(built: list[_Built]) -> list[_Built]:
-    """cross-decision checks the per-decision builder cannot see. Conflicting
-    builds are marked invalid (not dropped) so dry-run reports them and a real
-    run refuses before any network call."""
-    migrating = [b for b in built if b.decision.action == "migrate" and b.built is not None]
-
-    # local tools come in two shapes bundling the same scripts; migrating both
-    # uploads duplicates (see entity-mapping.md "pick ONE shape")
-    toolset_ids = {b.decision.source_id for b in migrating
-                   if b.decision.source_id.startswith("local_toolset:")}
-    per_tool_ids = {b.decision.source_id for b in migrating
-                    if b.decision.source_id.startswith("local_tool:")}
-    shape_conflict = bool(toolset_ids) and bool(per_tool_ids)
-
-    # two migrated skills resolving to one name+scope: apply's by-name
-    # idempotency would silently skip the second, dropping its content
-    # (e.g. tools/AGENTS.py vs claude_md:AGENTS.md, or .cursor/rules twins)
-    name_counts = Counter(
-        (b.name, b.decision.scope) for b in migrating if isinstance(b.built, BuiltSkill)
-    )
-    duplicate_names = {key for key, count in name_counts.items() if count > 1}
-
-    out: list[_Built] = []
-    for b in built:
-        if shape_conflict and b.decision.source_id in (toolset_ids | per_tool_ids):
-            out.append(replace(
-                b, built=None,
-                error="plan migrates both the local_toolset:* item and per-tool local_tool:* "
-                      "items — they bundle the same scripts; migrate one shape and skip the other",
-            ))
-        elif isinstance(b.built, BuiltSkill) and (b.name, b.decision.scope) in duplicate_names:
-            out.append(replace(
-                b, built=None,
-                error=f"plan migrates more than one skill named {b.name!r} in scope "
-                      f"{b.decision.scope!r}; the second create would be silently skipped — "
-                      "use name_override to disambiguate",
-            ))
-        else:
-            out.append(b)
-    return out
 
 
 def _run_apply(built: list[_Built], base_url: str, api_key: str) -> list[ResultOp]:

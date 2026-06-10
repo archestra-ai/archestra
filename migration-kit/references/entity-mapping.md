@@ -4,26 +4,24 @@ This is the canonical mapping the model applies when turning `inventory.json` in
 `migration_plan.json`. Each decision references an inventory item by `id` and names a
 `target_kind`; `apply.py` builds the actual payload deterministically.
 
-| Source (inventory `kind`, or id prefix where one kind has shapes) | `target_kind` | Confidence | Notes |
+| Source (inventory `kind`) | `target_kind` | Confidence | Notes |
 |---|---|---|---|
 | `claude_md` (root CLAUDE.md) | `agent` | clean | becomes the **primary agent**'s systemPrompt; one per setup, no model binding (inherits org default) |
-| `claude_md:*` (AGENTS.md, `.cursorrules`, `.cursor/rules/*`, copilot-instructions.md) | `skill` or fold into the primary `agent` | best-effort | other-ecosystem instruction files. To fold, append the file's text to the root `claude_md` item's `body` in `inventory.json` before apply (decisions carry no body override) and `skip` the `claude_md:*` item. Cursor `.mdc` scoping (`globs`, `alwaysApply`) is NOT preserved — the skill is opt-in by description; flag always-applied rules in the report |
 | `skill` (`.claude/skills/*/SKILL.md`) | `skill` | clean | migrated verbatim with bundled files |
 | `subagent` (`.claude/agents/*.md`) | `skill` (preferred) or `agent` | best-effort | default to skill; tool allowlist is **documented, not enforced** |
 | `command` (`.claude/commands/*.md`) | `skill` | best-effort | slash command body → skill |
-| `local_toolset:*` (whole `tools/` tree) | `skill` | best-effort | DEFAULT for local tools: one shared skill bundling every script, sibling data files, and `tools/requirements.txt`; see cross-references below |
-| `local_tool:*` (one `tools/*.py`) | `skill` | best-effort | per-script alternative for independent single-file tools; bundles the script + `tools/requirements.txt` only (no sibling data files) |
+| `local_tool` (`tools/*.py`) | `skill` | best-effort | skill bundles the `.py` and tells the agent to run it |
 | `mcp_server` (remote, has `url`) | `mcp_catalog` (+ optional `mcp_install`) | clean | remote catalog item |
 | `mcp_server` (stdio, has `command`) | `mcp_catalog` (+ optional `mcp_install`) | best-effort | local catalog item; install spins a K8s pod |
+
+When you emit both a `mcp_catalog` and a `mcp_install` decision for the same server, they must share the
+same `name`/`name_override`: the install resolves its catalog item **by name**, so a mismatch fails with
+"no catalog item named …". `apply.py` runs all `mcp_catalog` ops before any `mcp_install`.
 | `hook` (intent `guard`) | `tool_policy` | best-effort, conditional | only if the guarded tool maps to a real Archestra tool — see below |
 | `hook` (intent `passive`) | `manual` | report | logging/inject hooks have no Archestra equivalent |
 | `openclaw` | `manual` | report | runtime config; schema unverified — report, don't translate |
 | LLM key (user-provided) | `llm_key` | best-effort | user pastes the secret in `user_answers.apiKey` |
 | telemetry (OTEL env, observability hooks, metrics-shipping scripts) | `manual` | report | no target — Archestra emits telemetry natively; redirect the collector (see "Telemetry" below) |
-
-When you emit both a `mcp_catalog` and a `mcp_install` decision for the same server, they must share the
-same `name`/`name_override`: the install resolves its catalog item **by name**, so a mismatch fails with
-"no catalog item named …". `apply.py` runs all `mcp_catalog` ops before any `mcp_install`.
 
 ## Scope
 Ask for ONE default migration scope up front (default `personal`); use per-decision overrides only as
@@ -75,32 +73,6 @@ Redirect, don't translate:
 
 Telemetry is **instance-level env config** — no API, no per-agent knob. To keep an existing
 Grafana/collector, the pilot owner sets `ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT` on the instance.
-
-## Local tools: pick ONE shape, then fix cross-references
-Discovery emits the same `tools/` scripts in two shapes: one `local_toolset:*` item (the whole tree
-as a single `<project>-tools` skill) and one `local_tool:*` item per script. **Migrate exactly one
-shape and `skip` the other** — migrating both uploads duplicate copies of every script. Default to
-the toolset: it keeps sibling data files and submodules together and gives referencing skills one
-thing to activate. Split into per-tool skills only when the scripts are genuinely independent
-single-file tools and per-tool catalog discoverability matters more (note: per-tool items do NOT
-carry sibling data files — a tool that reads `tools/config.json` must go through the toolset).
-
-If the tools import third-party packages but discovery warned that no `tools/requirements.txt`
-exists, resolve that before applying: copy the relevant pins from the root `requirements.txt` into
-`tools/requirements.txt` and re-run discovery (the root file is never attached automatically — it
-usually pins the whole project).
-
-Other migrated skills/commands/subagents that tell the agent to run `tools/<x>.py` keep that prose,
-but after migration the script lives inside a skill mount, not next to them. For each such
-reference, ask the user whether to rewrite the body during mapping (preferred: "activate the
-`<project>-tools` skill and run `python3 /skills/<project>-tools/tools/<x>.py`") or leave it and
-list it in the report as a manual follow-up. Don't silently leave dangling references — they fail
-with file-not-found at runtime.
-
-The toolset name defaults to `<project>-tools`. `apply.py` treats an existing skill with the same
-name/scope as already-migrated and skips it — so if an unrelated skill already holds that name, set
-`name_override` on the toolset decision (and use the overridden name in any rewritten references),
-or the local tools silently never migrate.
 
 ## Behavioral differences to put in the report
 - **Subagent isolation & tool allowlists are not preserved.** Archestra skills are instructions, not

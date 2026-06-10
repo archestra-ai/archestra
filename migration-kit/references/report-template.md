@@ -39,8 +39,8 @@ exhaustive command transcript.
 | --- | --- | --- |
 | `<path or source_id>` | `<no direct Archestra equivalent>` | `<specific action>` |
 
-For unresolved guard hooks, include the exact policy JSON that should be created once the target
-Archestra tool exists.
+For a `guard` hook you chose to map to a `tool_policy` but whose target tool does not exist yet, include
+the exact policy JSON to create once it does.
 
 ```json
 {
@@ -60,7 +60,9 @@ List only the differences that apply to this migration.
 - Subagent instructions moved, but Claude Code-style isolation and tool allowlists are not enforced by
   an Archestra skill.
 - Local stdio MCP servers are registered in the private catalog, but run only after install.
-- Passive hooks such as logging, banners, or context injection have no direct Archestra equivalent.
+- Hooks migrated as native lifecycle hooks lose their `matcher` (they fire on every tool call of the
+  event), assume Archestra tool names rather than Claude built-ins, run with `cwd` = the sandbox home,
+  and drop any env/argv the original command set. Hooks for unsupported events were left for manual work.
 - Tool policies only enforce when the organization tool policy mode is restrictive.
 - Prompt-only filename or artifact conventions migrated as instructions, not hard runtime checks.
 - Telemetry: any source telemetry (OTEL env, observability hooks/scripts) is reported, not migrated —

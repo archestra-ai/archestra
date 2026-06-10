@@ -166,33 +166,34 @@ export function clearUiResourceCache(): void {
 }
 
 /**
- * Generate cache key from agentId, userId, and optional conversationId.
- * When conversationId is provided, each conversation gets its own MCP client
- * and therefore its own browser instance for proper isolation.
+ * Generate cache key from agentId, userId, and optional isolation key
+ * (conversation id in UI chat, generated execution key in headless runs).
+ * When provided, each conversation/execution gets its own MCP client and
+ * therefore its own browser instance for proper isolation.
  */
 function getCacheKey(
   agentId: string,
   userId: string,
-  conversationId?: string,
+  isolationKey?: string,
 ): string {
-  if (conversationId) {
-    return `${agentId}:${userId}:${conversationId}`;
+  if (isolationKey) {
+    return `${agentId}:${userId}:${isolationKey}`;
   }
   return `${agentId}:${userId}`;
 }
 
 /**
  * Generate the full cache key for tool cache
- * Includes conversationId because browser tools need correct tab selection
+ * Includes the isolation key because browser tools need correct tab selection
  */
 function getToolCacheKey(
   agentId: string,
   userId: string,
-  conversationId?: string,
+  isolationKey?: string,
 ): `${typeof CacheKey.ChatMcpTools}-${string}` {
   const baseKey = getCacheKey(agentId, userId);
   const parts = [baseKey];
-  if (conversationId) parts.push(conversationId);
+  if (isolationKey) parts.push(isolationKey);
   return `${CacheKey.ChatMcpTools}-${parts.join(":")}`;
 }
 
@@ -423,30 +424,30 @@ export function clearChatMcpClient(agentId: string): void {
 }
 
 /**
- * Close and remove cached MCP client for a specific agent/user/conversation.
+ * Close and remove cached MCP client for a specific agent/user/scope.
  * Should be called when browser stream unsubscribes to free resources.
  *
  * @param agentId - The agent (profile) ID
  * @param userId - The user ID
- * @param conversationId - The conversation ID
+ * @param isolationKey - Conversation id (UI chat) or execution key (headless)
  */
 export function closeChatMcpClient(
   agentId: string,
   userId: string,
-  conversationId: string,
+  isolationKey: string,
 ): void {
-  const cacheKey = getCacheKey(agentId, userId, conversationId);
+  const cacheKey = getCacheKey(agentId, userId, isolationKey);
   const client = clientCache.get(cacheKey);
   if (client) {
     try {
       client.close();
       logger.info(
-        { agentId, userId, conversationId, cacheKey },
+        { agentId, userId, isolationKey, cacheKey },
         "Closed MCP client connection for conversation",
       );
     } catch (error) {
       logger.warn(
-        { agentId, userId, conversationId, cacheKey, error },
+        { agentId, userId, isolationKey, cacheKey, error },
         "Error closing MCP client connection (non-fatal)",
       );
     }
@@ -454,8 +455,8 @@ export function closeChatMcpClient(
     clientLastValidatedAt.delete(cacheKey);
   }
 
-  // Also clear tool cache for this conversation
-  const toolCacheKey = getToolCacheKey(agentId, userId, conversationId);
+  // Also clear tool cache for this conversation/execution
+  const toolCacheKey = getToolCacheKey(agentId, userId, isolationKey);
   toolCache.delete(toolCacheKey);
 }
 
@@ -467,7 +468,7 @@ export function closeChatMcpClient(
  * @param agentId - The agent (profile) ID
  * @param userId - The user ID for token selection
  * @param organizationId - The organization ID for token creation
- * @param conversationId - Optional conversation ID for per-conversation browser isolation
+ * @param isolationKey - Optional conversation id or execution key for per-conversation/per-execution browser isolation
  * @returns MCP Client connected to the gateway, or null if connection fails
  * @public — exported for testability
  */
@@ -475,11 +476,11 @@ export async function getChatMcpClient(
   agentId: string,
   userId: string,
   organizationId: string,
-  conversationId?: string,
+  isolationKey?: string,
   /** Pre-resolved token to avoid a redundant selectMCPGatewayToken call */
   preResolvedTokenValue?: string,
 ): Promise<Client | null> {
-  const cacheKey = getCacheKey(agentId, userId, conversationId);
+  const cacheKey = getCacheKey(agentId, userId, isolationKey);
 
   // Check cache first
   const cachedClient = clientCache.get(cacheKey);
@@ -788,6 +789,7 @@ export async function getChatMcpTools({
   chatOpsThreadId,
   enabledToolIds,
   conversationId,
+  isolationKey,
   sessionId,
   delegationChain,
   abortSignal,
@@ -805,7 +807,18 @@ export async function getChatMcpTools({
   /** ChatOps thread identifier for thread-scoped agent overrides */
   chatOpsThreadId?: string;
   enabledToolIds?: string[];
+  /**
+   * Id of a persisted `conversations` row — tools may persist it as a foreign
+   * key. Absent in headless executions (A2A, ChatOps, schedules, email).
+   */
   conversationId?: string;
+  /**
+   * Opaque key scoping per-execution state: browser tabs, MCP client/tool
+   * caches, headless sandboxes. Defaults to `conversationId`. Headless
+   * executions pass their generated execution key here instead of faking a
+   * conversation id.
+   */
+  isolationKey?: string;
   /** Session ID for grouping related LLM requests in logs */
   sessionId?: string;
   /** Delegation chain of agent IDs for tracking delegated agent calls */
@@ -821,7 +834,8 @@ export async function getChatMcpTools({
   /** Per-turn sink for inline `data-hook-run` entries (chat path only). */
   hookRunCollector?: CollectedHookRun[];
 }): Promise<Record<string, Tool>> {
-  const toolCacheKey = getToolCacheKey(agentId, userId, conversationId);
+  const scopeKey = isolationKey ?? conversationId;
+  const toolCacheKey = getToolCacheKey(agentId, userId, scopeKey);
   const shouldUseToolCache = !abortSignal;
 
   // Check in-memory tool cache first (cannot use distributed cacheManager - Tool objects have execute functions)
@@ -868,13 +882,13 @@ export async function getChatMcpTools({
   }
 
   // Still use MCP client for listing tools (via MCP Gateway)
-  // Pass conversationId for per-conversation browser isolation.
+  // Pass the scope key for per-conversation/per-execution browser isolation.
   // Forward the already-resolved token to avoid a duplicate selectMCPGatewayToken call.
   const client = await getChatMcpClient(
     agentId,
     userId,
     organizationId,
-    conversationId,
+    scopeKey,
     mcpGwToken.tokenValue,
   );
 
@@ -1039,6 +1053,7 @@ export async function getChatMcpTools({
                       {
                         agent: { id: agentId, name: agentName },
                         conversationId,
+                        isolationKey: scopeKey,
                         chatOpsBindingId,
                         chatOpsThreadId,
                         userId,
@@ -1090,7 +1105,7 @@ export async function getChatMcpTools({
                       agentName,
                       userId,
                       organizationId,
-                      conversationId,
+                      isolationKey: scopeKey,
                       mcpGwToken,
                       globalToolPolicy,
                       considerContextUntrusted,
@@ -1171,6 +1186,7 @@ export async function getChatMcpTools({
           organizationId,
           userId,
           conversationId,
+          isolationKey: scopeKey,
           chatOpsBindingId,
           chatOpsThreadId,
           sessionId,
@@ -1490,7 +1506,11 @@ interface ToolExecutionContext {
   agentName: string;
   userId: string;
   organizationId: string;
-  conversationId?: string;
+  /**
+   * Per-conversation/per-execution scope key for browser tab selection and
+   * MCP session reuse. Equals the conversation id in UI chat.
+   */
+  isolationKey?: string;
   mcpGwToken: {
     tokenId: string;
     teamId: string | null;
@@ -1526,7 +1546,7 @@ async function executeMcpTool(ctx: ToolExecutionContext): Promise<{
     agentName,
     userId,
     organizationId,
-    conversationId,
+    isolationKey,
     mcpGwToken,
     abortSignal,
   } = ctx;
@@ -1539,24 +1559,24 @@ async function executeMcpTool(ctx: ToolExecutionContext): Promise<{
   );
 
   if (
-    conversationId &&
+    isolationKey &&
     isBrowserMcpTool(toolName) &&
     browserStreamFeature.isEnabled()
   ) {
     logger.debug(
-      { agentId, userId, conversationId, toolName },
+      { agentId, userId, isolationKey, toolName },
       "Selecting conversation browser tab before executing browser tool",
     );
 
     const tabResult = await browserStreamFeature.selectOrCreateTab(
       agentId,
-      conversationId,
+      isolationKey,
       { userId, organizationId },
     );
 
     if (!tabResult.success) {
       logger.warn(
-        { agentId, conversationId, toolName, error: tabResult.error },
+        { agentId, isolationKey, toolName, error: tabResult.error },
         "Failed to select conversation tab for browser tool, continuing anyway",
       );
     }
@@ -1583,7 +1603,9 @@ async function executeMcpTool(ctx: ToolExecutionContext): Promise<{
             userId,
           }
         : undefined,
-      { conversationId },
+      // mcp-client scopes per-conversation sessions by this key; in UI chat it
+      // is the conversation id, in headless executions the execution key.
+      { conversationId: isolationKey },
     );
     reportToolMetrics({
       toolName,
@@ -1636,10 +1658,10 @@ async function executeMcpTool(ctx: ToolExecutionContext): Promise<{
 
   // Sync browser state if needed
   logger.debug(
-    { conversationId, toolName, isEnabled: browserStreamFeature.isEnabled() },
+    { isolationKey, toolName, isEnabled: browserStreamFeature.isEnabled() },
     "[executeMcpTool] Checking browser sync conditions",
   );
-  if (conversationId && browserStreamFeature.isEnabled()) {
+  if (isolationKey && browserStreamFeature.isEnabled()) {
     // Sync URL for browser_navigate (but not browser_navigate_back/forward)
     const isNavigateTool =
       toolName.endsWith("browser_navigate") ||
@@ -1649,17 +1671,17 @@ async function executeMcpTool(ctx: ToolExecutionContext): Promise<{
         !toolName.includes("_back") &&
         !toolName.includes("_forward"));
     logger.debug(
-      { toolName, isNavigateTool, conversationId },
+      { toolName, isNavigateTool, isolationKey },
       "[executeMcpTool] Checking navigate sync condition",
     );
     if (isNavigateTool) {
       logger.info(
-        { toolName, agentId, conversationId },
+        { toolName, agentId, isolationKey },
         "[executeMcpTool] Syncing URL from navigate tool call",
       );
       await browserStreamFeature.syncUrlFromNavigateToolCall({
         agentId,
-        conversationId,
+        conversationId: isolationKey,
         userContext: { userId, organizationId },
         toolResultContent: mcpContent,
       });

@@ -61,6 +61,7 @@ import { initAuditDecisions } from "@/middleware/audit-decisions";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import { initAuditRegistry } from "@/middleware/audit-log-registry";
 import OrganizationModel from "@/models/organization";
+import { ngrokTunnelManager } from "@/ngrok-tunnel-manager";
 import { initializeObservabilityMetrics } from "@/observability";
 import { enrichOpenApiWithRbac } from "@/openapi/enrich-openapi-with-rbac";
 import { activeChatRunService } from "@/services/active-chat-run";
@@ -923,6 +924,10 @@ const startWebServer = async () => {
     // Seeds DB from env vars on first run, then loads config from DB.
     await chatOpsManager.initialize();
 
+    // Bring up the ngrok tunnel (if ARCHESTRA_NGROK_AUTH_TOKEN is set) so the
+    // instance is reachable from the Internet for inbound chatops webhooks.
+    await ngrokTunnelManager.initialize();
+
     // Start task queue worker for knowledge base connector syncs and embeddings
     // In "web" mode, a separate worker Deployment handles background jobs
     if (shouldRunWorker) {
@@ -1112,7 +1117,9 @@ function registerWebServerShutdown(
         await taskQueueService.stopWorker();
       }
 
-      const completedCleanups = new Set<"emailProvider" | "chatOps">();
+      const completedCleanups = new Set<
+        "emailProvider" | "chatOps" | "ngrok"
+      >();
       const cleanupPromise = Promise.allSettled([
         cleanupEmailProvider().then(() => {
           completedCleanups.add("emailProvider");
@@ -1122,9 +1129,13 @@ function registerWebServerShutdown(
           completedCleanups.add("chatOps");
           fastify.log.info("ChatOps provider cleanup completed");
         }),
+        ngrokTunnelManager.cleanup().then(() => {
+          completedCleanups.add("ngrok");
+          fastify.log.info("ngrok tunnel cleanup completed");
+        }),
       ]).then(() => "completed" as const);
 
-      const allCleanupNames = ["emailProvider", "chatOps"] as const;
+      const allCleanupNames = ["emailProvider", "chatOps", "ngrok"] as const;
       const result = await Promise.race([
         cleanupPromise,
         new Promise<"timeout">((resolve) =>

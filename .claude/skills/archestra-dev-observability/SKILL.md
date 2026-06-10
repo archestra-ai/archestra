@@ -9,6 +9,14 @@ Use this skill before changing tracing, metrics, span naming, metric labels, or 
 
 Run commands from `platform/` unless specifically instructed otherwise.
 
+## Naming new attributes and metrics
+
+Before introducing any new span attribute or metric name, look it up — do not coin a name from intuition.
+
+- **Span attributes**: search the OTEL semantic-convention registry and use the existing attribute verbatim if one fits. Registry: https://opentelemetry.io/docs/specs/semconv/registry/attributes/gen-ai/ (wider set: https://opentelemetry.io/docs/specs/semconv/registry/attributes/). Example: prompt-cache tokens are `gen_ai.usage.cache_read.input_tokens` and `gen_ai.usage.cache_creation.input_tokens`, not a custom `archestra.usage.*`. Only use an `archestra.*` name when nothing in the registry fits, and say why in a comment.
+- **"Not yet stable" is not a reason to avoid a standard name.** The whole `gen_ai.*` namespace is Development-stability, including the `gen_ai.usage.*` attributes already emitted here — match that bar, don't custom-namespace to dodge it.
+- **Metrics**: match the existing `llm_*` / prom-client family and label names in `metrics/`; don't introduce a new metric style. Add a label value to an existing metric only if it won't change what current aggregates mean — otherwise add a dedicated metric (cache tokens use a separate `llm_cache_tokens_total`, not new `type` values on `llm_tokens_total`).
+
 ## Local setup
 
 ```bash
@@ -29,7 +37,7 @@ The docker-compose command is an alternative local setup with pre-configured dat
 
 ## Tracing
 
-- Follow OTEL GenAI Semantic Conventions: https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-agent-spans/.
+- Follow OTEL GenAI Semantic Conventions (see "Naming new attributes and metrics" — check the registry before adding any attribute): https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-agent-spans/.
 - LLM spans use `gen_ai.agent.id`, `gen_ai.agent.name`, `gen_ai.provider.name`, `gen_ai.request.model`, `gen_ai.operation.name`, and `archestra.label.<key>` for dynamic labels.
 - MCP spans use `gen_ai.tool.name` and `mcp.server.name`.
 - Session tracking uses `gen_ai.conversation.id` from the `X-Archestra-Session-Id` header.

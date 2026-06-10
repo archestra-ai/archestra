@@ -1275,7 +1275,15 @@ const config = {
   authRateLimitDisabled:
     process.env.ARCHESTRA_AUTH_RATE_LIMIT_DISABLED === "true",
   isQuickstart: process.env.ARCHESTRA_QUICKSTART === "true",
-  ngrokDomain: process.env.ARCHESTRA_NGROK_DOMAIN || "",
+  ngrok: {
+    // When set, the backend brings up an ngrok tunnel in-process (via the ngrok
+    // agent SDK) so the instance is reachable from the Internet for inbound
+    // chatops webhooks (MS Teams, Slack).
+    authToken: process.env.ARCHESTRA_NGROK_AUTH_TOKEN || "",
+    // Optional reserved domain for a stable public URL across restarts. Without
+    // it ngrok assigns an ephemeral domain that rotates on each restart.
+    domain: process.env.ARCHESTRA_NGROK_DOMAIN || "",
+  },
   processType: parseProcessType(process.env.ARCHESTRA_PROCESS_TYPE),
   maintenanceMode: process.env.ARCHESTRA_MAINTENANCE_MODE_MESSAGE || null,
   auditLog: {

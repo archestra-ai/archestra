@@ -173,10 +173,12 @@ export async function getOptimizedModel<
  */
 export const CACHE_PRICE_MULTIPLIERS: Record<
   string,
-  { read: number; write: number }
+  { read: number; write: number; write1h?: number }
 > = {
-  anthropic: { read: 0.1, write: 1.25 },
-  bedrock: { read: 0.1, write: 1.25 },
+  // write = 5-minute cache-write surcharge; write1h = 1-hour cache-write
+  // surcharge (Anthropic/Bedrock bill the 1h write at 2x input, the 5m at 1.25x).
+  anthropic: { read: 0.1, write: 1.25, write1h: 2 },
+  bedrock: { read: 0.1, write: 1.25, write1h: 2 },
   openai: { read: 0.25, write: 0 },
   gemini: { read: 0.25, write: 0 },
   deepseek: { read: 0.1, write: 0 },
@@ -185,6 +187,8 @@ export const CACHE_PRICE_MULTIPLIERS: Record<
 interface CacheTokenCounts {
   readTokens?: number;
   writeTokens?: number;
+  /** Portion of writeTokens written at the 1-hour TTL (billed at write1h, the rest at write). */
+  write1hTokens?: number;
 }
 
 /**
@@ -214,13 +218,23 @@ export async function calculateCost(
   const pricing = ModelModel.getEffectivePricing(model_entry, model);
   const priceIn = Number.parseFloat(pricing.pricePerMillionInput);
   const priceOut = Number.parseFloat(pricing.pricePerMillionOutput);
-  const mult = CACHE_PRICE_MULTIPLIERS[provider] ?? { read: 0, write: 0 };
+  const mult: { read: number; write: number; write1h?: number } =
+    CACHE_PRICE_MULTIPLIERS[provider] ?? { read: 0, write: 0 };
+
+  // Cache writes are billed per TTL: 1h costs more than the 5m default.
+  const write1h = Math.min(
+    Math.max(cacheTokens?.write1hTokens ?? 0, 0),
+    writeTokens,
+  );
+  const write5m = writeTokens - write1h;
+  const write1hMult = mult.write1h ?? mult.write;
 
   return (
     ((inputTokens ?? 0) / 1_000_000) * priceIn +
     ((outputTokens ?? 0) / 1_000_000) * priceOut +
     (readTokens / 1_000_000) * priceIn * mult.read +
-    (writeTokens / 1_000_000) * priceIn * mult.write
+    (write5m / 1_000_000) * priceIn * mult.write +
+    (write1h / 1_000_000) * priceIn * write1hMult
   );
 }
 
@@ -237,6 +251,8 @@ export async function calculateCacheCost(
   provider: SupportedProvider,
   readTokens: number,
   writeTokens: number,
+  /** Portion of writeTokens written at the 1-hour TTL (the rest is costed at the 5m rate). */
+  write1hTokens = 0,
 ): Promise<{ cacheCost: number; cacheSavings: number } | undefined> {
   if (!readTokens && !writeTokens) {
     return undefined;
@@ -253,11 +269,21 @@ export async function calculateCacheCost(
   const pricing = ModelModel.getEffectivePricing(model_entry, model);
   const priceIn = Number.parseFloat(pricing.pricePerMillionInput);
 
+  // Split writes by TTL: 1h is billed at a higher surcharge than the 5m default.
+  const write1h = Math.min(Math.max(write1hTokens, 0), writeTokens);
+  const write5m = writeTokens - write1h;
+  const write1hMult = mult.write1h ?? mult.write;
+
   const readFull = (readTokens / 1_000_000) * priceIn;
-  const writeFull = (writeTokens / 1_000_000) * priceIn;
-  const cacheCost = readFull * mult.read + writeFull * mult.write;
+  const write5mFull = (write5m / 1_000_000) * priceIn;
+  const write1hFull = (write1h / 1_000_000) * priceIn;
+
+  const cacheCost =
+    readFull * mult.read + write5mFull * mult.write + write1hFull * write1hMult;
   const cacheSavings =
-    readFull * (1 - mult.read) - writeFull * (mult.write - 1);
+    readFull * (1 - mult.read) -
+    write5mFull * (mult.write - 1) -
+    write1hFull * (write1hMult - 1);
 
   return { cacheCost, cacheSavings };
 }

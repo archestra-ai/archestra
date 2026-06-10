@@ -49,6 +49,7 @@ import {
 } from "@/skills/github-import";
 import {
   deriveSkillFileKind,
+  normalizeAllowedTools,
   parseSkillManifest,
   SkillParseError,
 } from "@/skills/parser";
@@ -191,6 +192,13 @@ const SkillManifestInputSchema = z
     files: z.array(SkillFileInputSchema).max(MAX_FILES_PER_SKILL).optional(),
     scope: ResourceVisibilityScopeSchema.optional(),
     teamIds: z.array(z.string()).optional(),
+    allowedTools: z
+      .array(z.string())
+      .optional()
+      .describe(
+        "Tools the skill expects, overriding the SKILL.md `allowed-tools` " +
+          "frontmatter. Omit to use the frontmatter; pass [] to clear.",
+      ),
   })
   .superRefine((data, ctx) => refineUniqueFilePaths(data.files, ctx));
 
@@ -327,7 +335,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
             content: parsed.content,
             license: parsed.license,
             compatibility: parsed.compatibility,
-            allowedTools: parsed.allowedTools,
+            allowedTools: resolveAllowedTools(body, parsed),
             templated: parsed.templated,
             metadata: parsed.metadata,
             sourceType: "manual",
@@ -695,7 +703,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
               content: parsed.content,
               license: parsed.license,
               compatibility: parsed.compatibility,
-              allowedTools: parsed.allowedTools,
+              allowedTools: resolveAllowedTools(body, parsed),
               templated: parsed.templated,
               metadata: parsed.metadata,
               scope: newScope,
@@ -1365,6 +1373,16 @@ function authorizeSkillScope(params: {
       );
     }
   }
+}
+
+/** Explicit `allowedTools` wins over the SKILL.md frontmatter when provided. */
+function resolveAllowedTools(
+  body: { allowedTools?: string[] },
+  parsed: { allowedTools: string | null },
+): string | null {
+  return body.allowedTools === undefined
+    ? parsed.allowedTools
+    : normalizeAllowedTools(body.allowedTools);
 }
 
 function parseManifestOrThrow(raw: string) {

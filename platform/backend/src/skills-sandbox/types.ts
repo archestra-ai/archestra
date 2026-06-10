@@ -13,6 +13,13 @@ export const SKILL_SANDBOX_LIMITS = {
  * Caller identity threaded into the materializing tools so the revocation gate
  * can re-check the caller's `skill:read` on every mounted skill before a
  * container is built.
+ *
+ * Deliberately absent from {@link UploadFileParams} and
+ * {@link MountSkillParams}: those are append-only recipe mutations that build
+ * no container and execute no skill bytes, so the gate re-runs on the next
+ * materializing call (`runCommand` / `exportArtifact`), which is where a
+ * revoked skill must fail closed. A future operation that materializes the
+ * sandbox must take a caller and go through the same gate.
  */
 export interface SandboxCaller {
   userId: string;

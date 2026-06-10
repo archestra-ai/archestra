@@ -1,11 +1,13 @@
 import type { UIMessage } from "@ai-sdk/react";
 import { describe, expect, it } from "vitest";
 import {
+  applyTextEditToMessages,
   getChatExternalAgentId,
   getConversationDisplayTitle,
   getManualCompactionSkippedMessage,
   mergePersistedMessageMetadata,
   PERSISTED_MESSAGE_ID_METADATA_KEY,
+  resolveCanonicalMessageId,
 } from "./chat-utils";
 
 const DEFAULT_SESSION_NAME = "New Chat Session";
@@ -499,5 +501,117 @@ describe("mergePersistedMessageMetadata", () => {
     });
 
     expect(mergedMessages[0]?.parts).toBe(liveMessages[0]?.parts);
+  });
+});
+
+describe("resolveCanonicalMessageId", () => {
+  const liveMessages = [
+    {
+      id: "nanoid-user-1",
+      role: "user",
+      metadata: { [PERSISTED_MESSAGE_ID_METADATA_KEY]: "db-user-1" },
+      parts: [{ type: "text", text: "edited prompt" }],
+    },
+  ] as UIMessage[];
+
+  it("returns the message id when the saved thread already contains it", () => {
+    expect(
+      resolveCanonicalMessageId({
+        messageId: "db-user-1",
+        liveMessages: [],
+        canonicalMessages: [
+          { id: "db-user-1", role: "user", parts: [] },
+        ] as UIMessage[],
+      }),
+    ).toBe("db-user-1");
+  });
+
+  it("maps an in-session nanoid to its DB id via persisted metadata", () => {
+    expect(
+      resolveCanonicalMessageId({
+        messageId: "nanoid-user-1",
+        liveMessages,
+        canonicalMessages: [
+          { id: "db-user-1", role: "user", parts: [] },
+        ] as UIMessage[],
+      }),
+    ).toBe("db-user-1");
+  });
+
+  it("returns null when the live message has no mapping into the saved thread", () => {
+    expect(
+      resolveCanonicalMessageId({
+        messageId: "nanoid-user-1",
+        liveMessages: [
+          { id: "nanoid-user-1", role: "user", parts: [] },
+        ] as UIMessage[],
+        canonicalMessages: [
+          { id: "db-user-other", role: "user", parts: [] },
+        ] as UIMessage[],
+      }),
+    ).toBeNull();
+  });
+
+  it("returns null when the saved thread is missing", () => {
+    expect(
+      resolveCanonicalMessageId({
+        messageId: "nanoid-user-1",
+        liveMessages,
+        canonicalMessages: undefined,
+      }),
+    ).toBeNull();
+  });
+});
+
+describe("applyTextEditToMessages", () => {
+  it("replaces only the targeted text part and keeps other messages untouched", () => {
+    const messages = [
+      {
+        id: "user-1",
+        role: "user",
+        parts: [
+          { type: "file", url: "blob:a", mediaType: "image/png" },
+          { type: "text", text: "old text" },
+        ],
+      },
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [{ type: "text", text: "answer" }],
+      },
+    ] as UIMessage[];
+
+    const updated = applyTextEditToMessages({
+      messages,
+      messageId: "user-1",
+      partIndex: 1,
+      text: "new text",
+    });
+
+    expect(updated[0]?.parts[1]).toMatchObject({
+      type: "text",
+      text: "new text",
+    });
+    expect(updated[0]?.parts[0]).toBe(messages[0]?.parts[0]);
+    expect(updated[1]).toBe(messages[1]);
+  });
+
+  it("does not touch a part whose index matches but is not text", () => {
+    const messages = [
+      {
+        id: "user-1",
+        role: "user",
+        parts: [{ type: "file", url: "blob:a", mediaType: "image/png" }],
+      },
+    ] as UIMessage[];
+
+    const updated = applyTextEditToMessages({
+      messages,
+      messageId: "user-1",
+      partIndex: 0,
+      text: "new text",
+    });
+
+    expect(updated[0]?.parts[0]).toBe(messages[0]?.parts[0]);
   });
 });

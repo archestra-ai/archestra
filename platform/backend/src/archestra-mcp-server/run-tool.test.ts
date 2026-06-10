@@ -307,6 +307,43 @@ describe("run_tool", () => {
     ]);
   });
 
+  test("headless dispatch scopes the MCP session by the isolation key", async ({
+    makeAgentTool,
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const catalog = await makeInternalMcpCatalog();
+    const tool = await makeTool({
+      name: "github__search_repositories",
+      catalogId: catalog.id,
+    });
+    await makeAgentTool(testAgent.id, tool.id);
+
+    vi.mocked(mcpClient.executeToolCall).mockResolvedValueOnce({
+      content: [{ type: "text", text: "ok" }],
+      isError: false,
+    } as any);
+
+    const isolationKey = crypto.randomUUID();
+    await executeArchestraTool(
+      TOOL_RUN_TOOL_FULL_NAME,
+      {
+        tool_name: "github__search_repositories",
+        tool_args: { query: "archestra" },
+      },
+      { ...mockContext, conversationId: undefined, isolationKey },
+    );
+
+    // concurrent headless executions must not share an MCP session (e.g. a
+    // browser context), so the per-execution key scopes the connection.
+    expect(mcpClient.executeToolCall).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "github__search_repositories" }),
+      testAgent.id,
+      mockContext.tokenAuth,
+      { conversationId: isolationKey },
+    );
+  });
+
   describe("per-conversation tool filter", () => {
     test("rejects a third-party tool disabled for the conversation (call-time re-check)", async ({
       makeAgentTool,

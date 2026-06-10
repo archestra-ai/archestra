@@ -155,18 +155,6 @@ If ARCHESTRA_AUTH_SECRET env variable is explicitly set, it will override the au
 - name: ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST
   value: {{ include "archestra-platform.codeRuntimeDaggerRunnerHost" . | quote }}
 {{- end }}
-{{- if not (hasKey .Values.archestra.env "ARCHESTRA_CODE_RUNTIME_TIMEOUT_SECONDS") }}
-- name: ARCHESTRA_CODE_RUNTIME_TIMEOUT_SECONDS
-  value: {{ .Values.archestra.codeRuntime.timeoutSeconds | quote }}
-{{- end }}
-{{- if not (hasKey .Values.archestra.env "ARCHESTRA_CODE_RUNTIME_MAX_CONCURRENT") }}
-- name: ARCHESTRA_CODE_RUNTIME_MAX_CONCURRENT
-  value: {{ .Values.archestra.codeRuntime.maxConcurrent | quote }}
-{{- end }}
-{{- if not (hasKey .Values.archestra.env "ARCHESTRA_CODE_RUNTIME_MAX_OUTPUT_BYTES") }}
-- name: ARCHESTRA_CODE_RUNTIME_MAX_OUTPUT_BYTES
-  value: {{ .Values.archestra.codeRuntime.maxOutputBytes | quote }}
-{{- end }}
 {{- end }}
 {{- if .Values.archestra.diagnostics.enabled }}
 - name: ARCHESTRA_NODE_DIAGNOSTIC_DIR

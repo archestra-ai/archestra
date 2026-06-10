@@ -27,6 +27,7 @@ import {
   ProviderError,
 } from "@/routes/chat/errors";
 import { buildSkillCatalogPrompt } from "@/skills/skill-catalog-prompt";
+import { executionSandboxRegistry } from "@/skills-sandbox/execution-sandbox-registry";
 import {
   promptNeedsRendering,
   renderSystemPrompt,
@@ -80,13 +81,20 @@ export interface A2AExecuteParams {
    */
   parentDelegationChain?: string;
   /**
-   * Conversation ID for browser tab isolation.
-   * When provided (e.g., from chat delegation), sub-agents get their own tab
-   * keyed by (agentId, userId, conversationId).
-   * When not provided (direct A2A call), a unique execution ID is generated
-   * and cleaned up after execution.
+   * Id of a persisted `conversations` row, when the execution belongs to one
+   * (chat delegation). Tools may persist it as a foreign key — never pass a
+   * synthetic id here. When absent, the execution is headless and an isolation
+   * key scopes its per-execution state instead.
    */
   conversationId?: string;
+  /**
+   * Isolation scope inherited from the parent execution (headless
+   * delegation), so sub-agents share the parent's browser tab tracking and
+   * per-execution sandbox. When neither this nor `conversationId` is
+   * provided (root headless call), a unique key is generated and its state is
+   * cleaned up after execution.
+   */
+  isolationKey?: string;
   /** Optional cancellation signal propagated from parent chat/tool execution */
   abortSignal?: AbortSignal;
   /** Optional attachments to include in the message (e.g., images from email, Slack, Teams) */
@@ -148,11 +156,15 @@ export async function executeA2AMessage(
     scheduleTriggerRunId,
   } = params;
 
-  // Generate isolation key for browser tab isolation.
-  // When called from chat delegation, conversationId is provided.
-  // When called directly (A2A route), generate a unique execution ID.
-  const isDirectExecutionOutsideConversation = !params.conversationId;
-  const isolationKey = params.conversationId ?? crypto.randomUUID();
+  // Isolation key scoping per-execution state (browser tabs, MCP client
+  // cache, headless sandboxes). Chat delegation provides the conversation id;
+  // headless delegation inherits the parent execution's key; a root headless
+  // call generates one and cleans its state up after execution. Only
+  // `params.conversationId` may ever be persisted as a conversation id.
+  const isDirectExecutionOutsideConversation =
+    !params.conversationId && !params.isolationKey;
+  const isolationKey =
+    params.conversationId ?? params.isolationKey ?? crypto.randomUUID();
 
   // Build delegation chain: append current agentId to parent chain
   const delegationChain = parentDelegationChain
@@ -214,7 +226,7 @@ export async function executeA2AMessage(
 
   try {
     // Fetch MCP tools for the agent (including delegation tools)
-    // Pass sessionId, delegationChain, and conversationId for browser tab isolation
+    // Pass sessionId, delegationChain, and isolationKey for browser tab isolation
     const mcpTools = await getChatMcpTools({
       agentName: agent.name,
       agentId: agent.id,
@@ -224,7 +236,8 @@ export async function executeA2AMessage(
       chatOpsThreadId,
       sessionId,
       delegationChain,
-      conversationId: isolationKey,
+      conversationId: params.conversationId,
+      isolationKey,
       abortSignal,
       blockOnApprovalRequired: params.blockOnApprovalRequired ?? true,
       scheduleTriggerRunId,
@@ -438,6 +451,12 @@ export async function executeA2AMessage(
     if (!isDirectExecutionOutsideConversation) {
       subagentExecutionTracker.decrement(isolationKey);
     }
+
+    // The root headless execution owns its generated isolation scope; drop the
+    // per-execution sandbox state once the run (and its delegations) finished.
+    if (isDirectExecutionOutsideConversation) {
+      executionSandboxRegistry.release(isolationKey);
+    }
   }
 }
 
@@ -595,8 +614,9 @@ async function cleanupBrowserTab(params: {
     );
   }
 
-  // For direct A2A calls (not delegated from chat), also close MCP client
-  // to free the cache slot. For delegated calls, keep client alive for reuse.
+  // Root executions own the MCP client, so close it to free the cache slot.
+  // Delegated runs (chat or headless) share their parent's scope and keep the
+  // client alive for reuse.
   if (isDirectExecutionOutsideConversation) {
     try {
       closeChatMcpClient(agentId, userId, isolationKey);

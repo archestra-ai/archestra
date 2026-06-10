@@ -1,6 +1,7 @@
 import { and, asc, eq, isNotNull } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type { InsertSkillSandboxFile, SkillSandboxFile } from "@/types";
+import { normalizeByteaField } from "@/utils/normalize-bytea";
 
 /** Artifact row without its bytes — what the Files panel needs to list outputs. */
 type SkillSandboxArtifactMeta = {
@@ -28,7 +29,7 @@ class SkillSandboxFileModel {
     if (!row) {
       throw new Error("failed to insert sandbox artifact");
     }
-    return normalizeFileData(row);
+    return normalizeByteaField(row, "data");
   }
 
   static async findArtifactById(id: string): Promise<SkillSandboxFile | null> {
@@ -41,7 +42,7 @@ class SkillSandboxFileModel {
           eq(schema.skillSandboxFilesTable.kind, "artifact"),
         ),
       );
-    return row ? normalizeFileData(row) : null;
+    return row ? normalizeByteaField(row, "data") : null;
   }
 
   /**
@@ -102,7 +103,7 @@ class SkillSandboxFileModel {
           eq(schema.skillSandboxFilesTable.kind, "upload"),
         ),
       );
-    return row ? normalizeFileData(row) : null;
+    return row ? normalizeByteaField(row, "data") : null;
   }
 
   /**
@@ -128,14 +129,3 @@ class SkillSandboxFileModel {
 }
 
 export default SkillSandboxFileModel;
-
-// === internal helpers ===
-
-/**
- * pg returns `bytea` as Buffer; PGlite returns Uint8Array. Callers rely on
- * Buffer semantics, so normalize at the read boundary.
- */
-function normalizeFileData(row: SkillSandboxFile): SkillSandboxFile {
-  if (Buffer.isBuffer(row.data)) return row;
-  return { ...row, data: Buffer.from(row.data as unknown as Uint8Array) };
-}

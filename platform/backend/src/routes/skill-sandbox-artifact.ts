@@ -64,11 +64,8 @@ const skillSandboxArtifactRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ? artifact.mimeType
         : "application/octet-stream";
 
-      // bytea round-trips as Buffer in production (pg) but as something
-      // string-like under PGlite; coerce so reply.send always streams bytes.
-      const data = Buffer.isBuffer(artifact.data)
-        ? artifact.data
-        : Buffer.from(artifact.data);
+      // findArtifactById normalizes bytea to Buffer at the model boundary
+      const data = artifact.data;
 
       reply
         .header("Content-Type", contentType)

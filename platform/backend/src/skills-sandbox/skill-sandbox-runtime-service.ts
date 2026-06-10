@@ -17,6 +17,7 @@ import {
 import { assertMountedSkillsReadable } from "@/skills/assert-mounted-skills-readable";
 import type { SkillSandbox } from "@/types";
 import { asSandboxId, type SandboxId } from "@/types";
+import { shellQuote } from "@/utils/shell-quote";
 import { resolveArtifactMime } from "./mime-sniff";
 import {
   SKILL_SANDBOX_ATTACHMENTS_DIR,
@@ -664,10 +665,6 @@ function validateCommand(command: string): void {
       `command is too large (> ${SKILL_SANDBOX_LIMITS.maxCommandBytes} bytes)`,
     );
   }
-}
-
-function shellQuote(value: string): string {
-  return `'${value.replace(/'/g, "'\\''")}'`;
 }
 
 /**

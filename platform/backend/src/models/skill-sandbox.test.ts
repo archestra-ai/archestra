@@ -1,7 +1,9 @@
 import { eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import {
+  ConversationModel,
   SkillModel,
+  SkillSandboxConversationGoneError,
   SkillSandboxFileModel,
   SkillSandboxModel,
   SkillSandboxReplayEventModel,
@@ -104,6 +106,41 @@ describe("SkillSandboxModel", () => {
       conversationId: conversation.id,
     });
     expect(found?.id).toBe(first.id);
+  });
+
+  test("create and findOrCreateDefault surface a typed error for a deleted conversation", async ({
+    makeOrganization,
+    makeUser,
+    makeAgent,
+    makeConversation,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const agent = await makeAgent({ organizationId: org.id });
+    const conversation = await makeConversation(agent.id, {
+      userId: user.id,
+      organizationId: org.id,
+    });
+    if (!conversation) throw new Error("conversation seed failed");
+    await ConversationModel.delete(conversation.id, user.id, org.id);
+
+    await expect(
+      SkillSandboxModel.create({
+        organizationId: org.id,
+        userId: user.id,
+        conversationId: conversation.id,
+        defaultCwd: "/home/sandbox",
+      }),
+    ).rejects.toThrow(SkillSandboxConversationGoneError);
+
+    await expect(
+      SkillSandboxModel.findOrCreateDefault({
+        organizationId: org.id,
+        userId: user.id,
+        conversationId: conversation.id,
+        defaultCwd: "/home/sandbox",
+      }),
+    ).rejects.toThrow(SkillSandboxConversationGoneError);
   });
 
   test("findById returns the sandbox or null", async ({

@@ -72,16 +72,7 @@ describe("skillSandboxRuntimeService", () => {
     1.5,
     Number.NaN,
   ])("runCommand rejects invalid timeoutSeconds=%s before initializing", async (timeoutSeconds) => {
-    vi.resetModules();
-    vi.stubEnv("ARCHESTRA_AGENTS_SKILLS_ENABLED", "true");
-    vi.stubEnv("ARCHESTRA_CODE_RUNTIME_ENABLED", "true");
-    vi.stubEnv(
-      "ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST",
-      "tcp://dagger-runtime.dagger.svc.cluster.local:1234",
-    );
-    const { skillSandboxRuntimeService: enabled } = await import(
-      "./skill-sandbox-runtime-service"
-    );
+    const enabled = await importEnabledService();
 
     await expect(
       enabled.runCommand({
@@ -94,16 +85,7 @@ describe("skillSandboxRuntimeService", () => {
   });
 
   test("runCommand rejects empty commands", async () => {
-    vi.resetModules();
-    vi.stubEnv("ARCHESTRA_AGENTS_SKILLS_ENABLED", "true");
-    vi.stubEnv("ARCHESTRA_CODE_RUNTIME_ENABLED", "true");
-    vi.stubEnv(
-      "ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST",
-      "tcp://dagger-runtime.dagger.svc.cluster.local:1234",
-    );
-    const { skillSandboxRuntimeService: enabled } = await import(
-      "./skill-sandbox-runtime-service"
-    );
+    const enabled = await importEnabledService();
 
     await expect(
       enabled.runCommand({
@@ -114,33 +96,25 @@ describe("skillSandboxRuntimeService", () => {
     ).rejects.toThrow("command must be a non-empty string");
   });
 
-  test("runCommand rejects after maxSandboxQueueLength requests for the same sandbox", async () => {
-    vi.resetModules();
-    vi.stubEnv("ARCHESTRA_AGENTS_SKILLS_ENABLED", "true");
-    vi.stubEnv("ARCHESTRA_CODE_RUNTIME_ENABLED", "true");
-    vi.stubEnv(
-      "ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST",
-      "tcp://dagger-runtime.dagger.svc.cluster.local:1234",
-    );
-    const { skillSandboxRuntimeService: enabled } = await import(
-      "./skill-sandbox-runtime-service"
-    );
+  test("queue guard rejects exactly the calls beyond maxSandboxQueueLength", async () => {
+    const enabled = await importEnabledService();
     const { SKILL_SANDBOX_LIMITS } = await import("./types");
 
     const sandboxId = __internals.asSandboxId(crypto.randomUUID());
-    // fire maxSandboxQueueLength+1 concurrent calls; all will fail (no real
-    // Dagger engine) but the first N reach the per-sandbox chain while the
-    // (N+1)th is rejected immediately by the queue-length guard before any await.
-    const calls = Array.from(
-      { length: SKILL_SANDBOX_LIMITS.maxSandboxQueueLength + 1 },
-      () =>
-        enabled.runCommand({
-          sandboxId,
-          caller: { userId: "u", organizationId: "o" },
-          command: "echo hi",
-        }),
+    // all N+1 calls are created synchronously, so the first N take queue slots
+    // (and later fail — no real Dagger engine) while only the last one trips
+    // the guard before any await.
+    const results = await Promise.allSettled(
+      Array.from(
+        { length: SKILL_SANDBOX_LIMITS.maxSandboxQueueLength + 1 },
+        () =>
+          enabled.runCommand({
+            sandboxId,
+            caller: { userId: "u", organizationId: "o" },
+            command: "echo hi",
+          }),
+      ),
     );
-    const results = await Promise.allSettled(calls);
     // use message check rather than instanceof: vi.resetModules creates a fresh
     // class so instanceof against the top-level import would always be false.
     const queueErrors = results.filter(
@@ -148,9 +122,83 @@ describe("skillSandboxRuntimeService", () => {
         r.status === "rejected" &&
         (r.reason as Error)?.message?.includes("too many requests"),
     );
-    expect(queueErrors.length).toBeGreaterThanOrEqual(1);
+    expect(queueErrors).toHaveLength(1);
+  });
+
+  test("queue guard resets after the saturated queue drains", async () => {
+    const enabled = await importEnabledService();
+    const { SKILL_SANDBOX_LIMITS } = await import("./types");
+
+    const sandboxId = __internals.asSandboxId(crypto.randomUUID());
+    await Promise.allSettled(
+      Array.from(
+        { length: SKILL_SANDBOX_LIMITS.maxSandboxQueueLength + 1 },
+        () =>
+          enabled.runCommand({
+            sandboxId,
+            caller: { userId: "u", organizationId: "o" },
+            command: "echo hi",
+          }),
+      ),
+    );
+
+    // the queue fully drained, so the next call must reach the sandbox load
+    // (and fail there — no sandbox row) instead of tripping the queue guard.
+    const [after] = await Promise.allSettled([
+      enabled.runCommand({
+        sandboxId,
+        caller: { userId: "u", organizationId: "o" },
+        command: "echo hi",
+      }),
+    ]);
+    expect(after.status).toBe("rejected");
+    expect((after as PromiseRejectedResult).reason?.message).not.toContain(
+      "too many requests",
+    );
+  });
+
+  test("a call enqueued right as the previous one settles is not lost", async () => {
+    const enabled = await importEnabledService();
+
+    const sandboxId = __internals.asSandboxId(crypto.randomUUID());
+    const run = () =>
+      enabled.runCommand({
+        sandboxId,
+        caller: { userId: "u", organizationId: "o" },
+        command: "echo hi",
+      });
+
+    // sequential reuse of the same sandbox right after the previous call
+    // settled: guards against cleanup schemes (e.g. tail-attached deletion)
+    // that could evict or reject a freshly enqueued call.
+    const [first] = await Promise.allSettled([run()]);
+    const [second] = await Promise.allSettled([run()]);
+    for (const result of [first, second]) {
+      expect(result.status).toBe("rejected");
+      expect((result as PromiseRejectedResult).reason?.message).not.toContain(
+        "too many requests",
+      );
+    }
   });
 });
+
+/**
+ * the queue tests need the service compiled with the sandbox feature on; each
+ * gets a fresh module registry so the singleton's queue state starts empty.
+ */
+async function importEnabledService() {
+  vi.resetModules();
+  vi.stubEnv("ARCHESTRA_AGENTS_SKILLS_ENABLED", "true");
+  vi.stubEnv("ARCHESTRA_CODE_RUNTIME_ENABLED", "true");
+  vi.stubEnv(
+    "ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST",
+    "tcp://dagger-runtime.dagger.svc.cluster.local:1234",
+  );
+  const { skillSandboxRuntimeService: enabled } = await import(
+    "./skill-sandbox-runtime-service"
+  );
+  return enabled;
+}
 
 describe("__internals", () => {
   test("requirementsInstallCommands picks up root and nested requirements.txt in path order", () => {
@@ -644,5 +692,95 @@ describe("uploadFile dedupeId idempotency (db)", () => {
       sandbox.id,
     );
     expect(logFinal.filter((e) => e.kind === "upload")).toHaveLength(3);
+  });
+});
+
+describe("path validation vectors (mirrored with sandbox-core)", () => {
+  // mirrored with UPLOAD_PATH_VECTORS / ARTIFACT_PATH_VECTORS in
+  // archestra-rs/sandbox-core/src/validation.rs — keep the two tables in sync
+  // when adding cases. the Rust module is the trust boundary and stays
+  // authoritative; this layer rejects early for friendlier errors and to keep
+  // unreplayable events out of the log. the third column documents the Rust
+  // verdict on the same string so divergences are explicit.
+  const DEFAULT_CWD = "/home/sandbox";
+
+  // (path, acceptedHere, acceptedByRust)
+  const UPLOAD_PATH_VECTORS: Array<[string, boolean, boolean]> = [
+    ["/home/sandbox/input.csv", true, true],
+    ["/skills/alpha/data/in.bin", true, true],
+    // relative: resolved against defaultCwd before validation, so it is
+    // accepted here while the raw string would be rejected at the boundary
+    ["input.csv", true, false],
+    // outside roots
+    ["/etc/passwd", false, false],
+    // traversal
+    ["/home/sandbox/../etc/passwd", false, false],
+    // directory, not a file
+    ["/home/sandbox/", false, false],
+    // a root itself: rejected here before it is persisted as an unreplayable
+    // event; the boundary alone would accept it
+    ["/home/sandbox", false, true],
+    // shell metacharacters / control chars / null
+    ['/home/sandbox/a"b', false, false],
+    ["/home/sandbox/a$b", false, false],
+    ["/home/sandbox/a`b", false, false],
+    ["/home/sandbox/a\\b", false, false],
+    ["/home/sandbox/a\nb", false, false],
+    ["/home/sandbox/a\rb", false, false],
+    ["/home/sandbox/a\0b", false, false],
+  ];
+
+  // (path, acceptedHere, acceptedByRust)
+  const ARTIFACT_PATH_VECTORS: Array<[string, boolean, boolean]> = [
+    ["/skills/alpha/result.txt", true, true],
+    ["out/report.txt", true, true],
+    // outside roots
+    ["/etc/passwd", false, false],
+    // traversal
+    ["a/../b.txt", false, false],
+    // null byte
+    ["a\0b.txt", false, false],
+    // shell metacharacters: pass through here; the Rust boundary rejects them
+    ['/skills/alpha/foo"bar', true, false],
+    ["/skills/alpha/foo$bar", true, false],
+    ["/skills/alpha/foo`bar", true, false],
+    ["/skills/alpha/foo\\bar", true, false],
+    ["/skills/alpha/foo\nbar", true, false],
+    ["/skills/alpha/foo\rbar", true, false],
+  ];
+
+  test("upload path vectors", () => {
+    const stageUpload = (path: string) => {
+      const resolved = __internals.resolveArtifactPath({
+        path,
+        defaultCwd: DEFAULT_CWD,
+      });
+      __internals.validateUploadPath(resolved);
+    };
+    for (const [path, accepted] of UPLOAD_PATH_VECTORS) {
+      if (accepted) {
+        expect(
+          () => stageUpload(path),
+          `upload path: ${JSON.stringify(path)}`,
+        ).not.toThrow();
+      } else {
+        expect(
+          () => stageUpload(path),
+          `upload path: ${JSON.stringify(path)}`,
+        ).toThrow();
+      }
+    }
+  });
+
+  test("artifact path vectors", () => {
+    for (const [path, accepted] of ARTIFACT_PATH_VECTORS) {
+      const resolve = () =>
+        __internals.resolveArtifactPath({ path, defaultCwd: DEFAULT_CWD });
+      if (accepted) {
+        expect(resolve, `artifact path: ${JSON.stringify(path)}`).not.toThrow();
+      } else {
+        expect(resolve, `artifact path: ${JSON.stringify(path)}`).toThrow();
+      }
+    }
   });
 });

@@ -6,7 +6,12 @@ import {
 import { z } from "zod";
 import config from "@/config";
 import logger from "@/logging";
-import { ConversationAttachmentModel, SkillSandboxModel } from "@/models";
+import {
+  ConversationAttachmentModel,
+  SkillSandboxConversationGoneError,
+  SkillSandboxModel,
+} from "@/models";
+import { executionSandboxRegistry } from "@/skills-sandbox/execution-sandbox-registry";
 import {
   SKILL_SANDBOX_ATTACHMENTS_DIR,
   SKILL_SANDBOX_HOME,
@@ -464,16 +469,23 @@ async function resolveTarget(params: {
 }): Promise<{ sandboxId: SandboxId } | { error: string }> {
   const { target, userCtx, context } = params;
   const conversationId = context.conversationId ?? null;
+  const isolationKey = context.isolationKey ?? null;
 
   if (target && "id" in target) {
     const sandbox = await SkillSandboxModel.findById(target.id);
-    // scope to the same org + user + conversation: an explicit id must not be a
-    // back door to a sandbox from another conversation.
+    // scope to the same org + user + conversation (or, for conversation-less
+    // sandboxes, the same execution): an explicit id must not be a back door
+    // to a sandbox from another conversation or another headless execution.
     if (
       !sandbox ||
       sandbox.organizationId !== userCtx.organizationId ||
       sandbox.userId !== userCtx.userId ||
-      sandbox.conversationId !== conversationId
+      !sandboxConversationInScope({
+        sandbox,
+        userCtx,
+        conversationId,
+        isolationKey,
+      })
     ) {
       logger.warn(
         {
@@ -493,30 +505,98 @@ async function resolveTarget(params: {
   }
 
   if (target && "fresh" in target) {
-    const sandbox = await SkillSandboxModel.create({
-      organizationId: userCtx.organizationId,
-      userId: userCtx.userId,
-      conversationId,
-      defaultCwd: SKILL_SANDBOX_HOME,
-      isDefault: false,
-    });
+    let sandbox: Awaited<ReturnType<typeof SkillSandboxModel.create>>;
+    try {
+      sandbox = await SkillSandboxModel.create({
+        organizationId: userCtx.organizationId,
+        userId: userCtx.userId,
+        conversationId,
+        defaultCwd: SKILL_SANDBOX_HOME,
+        isDefault: false,
+      });
+    } catch (error) {
+      if (error instanceof SkillSandboxConversationGoneError) {
+        return { error: CONVERSATION_GONE_ERROR };
+      }
+      throw error;
+    }
+    if (!conversationId && isolationKey) {
+      executionSandboxRegistry.registerOwned({
+        organizationId: userCtx.organizationId,
+        userId: userCtx.userId,
+        isolationKey,
+        sandboxId: sandbox.id,
+      });
+    }
     return { sandboxId: asSandboxId(sandbox.id) };
   }
 
-  // default sandbox — requires a conversation to scope it to.
-  if (!conversationId) {
-    return {
-      error:
-        "No conversation context for the default sandbox. Pass `target: { fresh: true }` or `target: { id }`.",
-    };
+  // default sandbox — scoped to the conversation, or to the execution when
+  // there is no conversation (headless A2A/ChatOps/schedule/email runs).
+  if (conversationId) {
+    try {
+      const sandbox = await SkillSandboxModel.findOrCreateDefault({
+        organizationId: userCtx.organizationId,
+        userId: userCtx.userId,
+        conversationId,
+        defaultCwd: SKILL_SANDBOX_HOME,
+      });
+      return { sandboxId: asSandboxId(sandbox.id) };
+    } catch (error) {
+      if (error instanceof SkillSandboxConversationGoneError) {
+        return { error: CONVERSATION_GONE_ERROR };
+      }
+      throw error;
+    }
   }
-  const sandbox = await SkillSandboxModel.findOrCreateDefault({
-    organizationId: userCtx.organizationId,
-    userId: userCtx.userId,
-    conversationId,
-    defaultCwd: SKILL_SANDBOX_HOME,
-  });
-  return { sandboxId: asSandboxId(sandbox.id) };
+  if (isolationKey) {
+    const sandbox = await executionSandboxRegistry.getOrCreateDefault({
+      organizationId: userCtx.organizationId,
+      userId: userCtx.userId,
+      isolationKey,
+      defaultCwd: SKILL_SANDBOX_HOME,
+    });
+    return { sandboxId: asSandboxId(sandbox.id) };
+  }
+  return {
+    error:
+      "No conversation context for the default sandbox. Pass `target: { fresh: true }` or `target: { id }`.",
+  };
+}
+
+const CONVERSATION_GONE_ERROR =
+  "This conversation no longer exists, so its sandbox is unavailable.";
+
+/**
+ * Conversation-scope half of the explicit `{id}` check. Conversation-bound
+ * sandboxes must match the caller's conversation. Conversation-less sandboxes
+ * (headless executions, stateless gateway clients) are never reachable from a
+ * conversation; within a headless execution they must belong to that
+ * execution, while gateway callers without an isolation scope keep their
+ * org+user-wide access (they have no narrower scope to check against).
+ */
+function sandboxConversationInScope(params: {
+  sandbox: { id: string; conversationId: string | null };
+  userCtx: UserContext;
+  conversationId: string | null;
+  isolationKey: string | null;
+}): boolean {
+  const { sandbox, userCtx, conversationId, isolationKey } = params;
+  if (sandbox.conversationId !== null) {
+    return sandbox.conversationId === conversationId;
+  }
+  if (conversationId !== null) {
+    return false;
+  }
+  if (isolationKey) {
+    return executionSandboxRegistry.isOwned({
+      organizationId: userCtx.organizationId,
+      userId: userCtx.userId,
+      isolationKey,
+      sandboxId: sandbox.id,
+    });
+  }
+  return true;
 }
 
 function handleRuntimeError(

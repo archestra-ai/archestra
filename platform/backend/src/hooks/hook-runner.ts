@@ -3,6 +3,7 @@ import logger from "@/logging";
 import { skillSandboxRuntimeService } from "@/skills-sandbox/skill-sandbox-runtime-service";
 import type { HookFile, HookOutcome } from "@/types/hook";
 import { asSandboxId } from "@/types/skill-sandbox";
+import { shellQuote } from "@/utils/shell-quote";
 
 interface HookRunResult {
   exitCode: number | null;
@@ -119,7 +120,7 @@ function deterministicUuid(input: string): string {
 
 /**
  * Build the small exec command that runs an already-uploaded script with an
- * already-uploaded payload on stdin.  Paths are single-quoted via `shQuote`.
+ * already-uploaded payload on stdin.  Paths are single-quoted via `shellQuote`.
  * No base64, no mkdir — the files are already in place from `uploadFile`.
  */
 function buildExecCommand(
@@ -129,14 +130,10 @@ function buildExecCommand(
 ): string {
   if (hookFile.fileName.endsWith(".py")) {
     const withs = hookFile.requirements
-      .map((r) => `--with ${shQuote(r)}`)
+      .map((r) => `--with ${shellQuote(r)}`)
       .join(" ");
     const prefix = withs ? `uv run ${withs} python3` : "python3";
-    return `${prefix} ${shQuote(scriptPath)} < ${shQuote(payloadPath)}`;
+    return `${prefix} ${shellQuote(scriptPath)} < ${shellQuote(payloadPath)}`;
   }
-  return `sh ${shQuote(scriptPath)} < ${shQuote(payloadPath)}`;
-}
-
-function shQuote(value: string): string {
-  return `'${value.replace(/'/g, "'\\''")}'`;
+  return `sh ${shellQuote(scriptPath)} < ${shellQuote(payloadPath)}`;
 }

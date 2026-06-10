@@ -755,6 +755,7 @@ def _invalid_build(b: _Built) -> bool:
 def _run_apply(built: list[_Built], base_url: str, api_key: str) -> list[ResultOp]:
     results: list[ResultOp] = []
     created_skill_or_agent = False
+    hook_landed = False
     agent_ids: list[str] = []
     primary_agent_id: str | None = None
     with ArchestraClient(base_url, api_key=api_key) as client:
@@ -786,7 +787,11 @@ def _run_apply(built: list[_Built], base_url: str, api_key: str) -> list[ResultO
                     primary_agent_id = op.archestra_id
             if op.target_kind in ("skill", "agent") and op.outcome in ("created", "skipped"):
                 created_skill_or_agent = True
+            if op.target_kind == "hook" and op.outcome in ("created", "skipped"):
+                hook_landed = True
 
+        if hook_landed:
+            results.append(_hook_feature_check(client))
         if created_skill_or_agent:
             try:
                 client.enable_skill_defaults()
@@ -843,6 +848,27 @@ def _enable_sandbox_tools(client: ArchestraClient, agent_ids: list[str]) -> Resu
         outcome="created",
         detail=f"assigned sandbox tools to {len(agent_ids)} migrated agent(s)",
     )
+
+
+def _hook_feature_check(client: ArchestraClient) -> ResultOp:
+    """warn when migrated hooks landed but the agent-hooks feature is off: POST /api/hooks persists
+    them, yet they never fire and stay hidden in the UI until an admin enables the feature."""
+    try:
+        enabled = client.agent_hooks_enabled()
+    except (ArchestraApiError, ContractError, ValueError) as exc:
+        return _hook_warning(f"could not verify the agent-hooks feature is enabled: {exc}")
+    if enabled:
+        return ResultOp(source_id="-", target_kind="hook", name="agent-hooks-feature",
+                        outcome="created", detail="agent-hooks feature is enabled; migrated hooks will fire")
+    return _hook_warning(
+        "agent-hooks feature is OFF on this instance -- migrated hooks are saved but will not fire "
+        "and stay hidden in the agent UI until an admin sets ARCHESTRA_AGENT_HOOKS_ENABLED=true and the "
+        "sandbox runtime is on")
+
+
+def _hook_warning(detail: str) -> ResultOp:
+    return ResultOp(source_id="-", target_kind="hook", name="agent-hooks-feature",
+                    outcome="manual", detail=f"warning: {detail}")
 
 
 def _sandbox_warning(detail: str) -> ResultOp:

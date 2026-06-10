@@ -100,6 +100,12 @@ Mark openclaw as `action:"manual"` with a `notes` explanation. Do the same for t
 observability hooks/scripts): map it to `manual` and, per `entity-mapping.md`, point the user at
 Archestra's native telemetry instead of migrating it.
 
+Before previewing, do a **reference-rewrite pass**: read each migrating skill/command/subagent/hook body
+and surgically fix paths and shell invocations that assumed the source machine — project-relative or
+`$CLAUDE_PROJECT_DIR` paths, host-only binaries/flags, inline env — so they resolve in the sandbox
+(`apply.py` ships bodies verbatim). See `entity-mapping.md`, "Rewrite environment-specific references".
+List anything you can't safely rewrite as a manual follow-up.
+
 Always show the user a concise preview and get explicit approval before applying. Use this shape:
 
 ```markdown
@@ -116,6 +122,9 @@ Needs your decision
 Manual after migration
 | Source | Why manual | Follow-up |
 | --- | --- | --- |
+
+Sandbox rewrites applied
+- <source body → path/shell reference rewritten for the sandbox, or "none">
 
 Behavior changes to expect
 - <only list differences that apply>

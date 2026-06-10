@@ -15340,7 +15340,7 @@ export type CreateAppData = {
         description?: string;
         templateId?: string;
         scope?: 'personal' | 'team' | 'org';
-        html: string;
+        html?: string;
         uiCsp?: {
             connectDomains?: Array<string>;
             resourceDomains?: Array<string>;

@@ -23,9 +23,9 @@ type CreateFormValues = {
   description: string;
 };
 
-// Create flow: pick a starter template (seeds the HTML client-side) + name the
-// app. Team scope needs team assignment, so the dialog offers personal/org only;
-// re-scoping to a team happens on the detail page.
+// Create flow: pick a starter template (the backend resolves it to the seed
+// HTML) + name the app. Team scope needs team assignment, so the dialog offers
+// personal/org only; re-scoping to a team happens on the detail page.
 export function AppCreateDialog({
   open,
   onOpenChange,
@@ -45,13 +45,10 @@ export function AppCreateDialog({
   });
 
   const onSubmit = form.handleSubmit(async (values) => {
-    const template = templates?.find((t) => t.id === templateId);
-    if (!template) return;
     const created = await createApp.mutateAsync({
       name: values.name.trim(),
       description: values.description.trim() || undefined,
-      templateId: template.id,
-      html: template.html,
+      templateId,
       scope,
     });
     if (created) {

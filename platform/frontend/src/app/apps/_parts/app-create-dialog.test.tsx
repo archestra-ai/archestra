@@ -47,7 +47,7 @@ describe("AppCreateDialog", () => {
     });
   });
 
-  it("seeds the chosen template's html and navigates to the new app", async () => {
+  it("sends the chosen templateId (backend resolves the html) and navigates", async () => {
     const user = userEvent.setup();
     render(<AppCreateDialog open onOpenChange={() => {}} />);
 
@@ -55,13 +55,11 @@ describe("AppCreateDialog", () => {
     await user.click(screen.getByRole("button", { name: "Create" }));
 
     await waitFor(() => expect(createMutateMock).toHaveBeenCalledTimes(1));
-    // Default template is "blank" — its html is seeded into create_app, and the
-    // template id is recorded as provenance.
+    // Default template is "blank"; no html is sent — the backend seeds it.
     expect(createMutateMock).toHaveBeenCalledWith({
       name: "My App",
       description: undefined,
       templateId: "blank",
-      html: "<html><body>BLANK</body></html>",
       scope: "personal",
     });
     expect(pushMock).toHaveBeenCalledWith("/apps/app-123");

@@ -2762,6 +2762,7 @@ export async function generateConversationTitle(
       model,
       system: systemPrompt,
       prompt: titlePrompt,
+      maxOutputTokens: 64,
     });
 
     logger.debug(

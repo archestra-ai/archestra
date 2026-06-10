@@ -1174,7 +1174,29 @@ describe("generateConversationTitle", () => {
       model: "mocked-model",
       system: "Return only a title.",
       prompt: "Chat conversation messages:\n\nUser: Hello\n\nAssistant: Hi!",
+      maxOutputTokens: 64,
     });
+  });
+
+  it("caps output tokens so non-streaming requests stay under the provider limit", async () => {
+    mockGenerateText.mockResolvedValueOnce({ text: "Short Title" });
+
+    await generateConversationTitle({
+      provider: "anthropic",
+      apiKey: "test-key",
+      modelName: "claude-test",
+      baseUrl: null,
+      agentId: "title-agent-id",
+      userId: "user-id",
+      conversationId: "conversation-id",
+      systemPrompt: "Generate a title.",
+      firstUserMessage: "Hello",
+      firstAssistantMessage: "Hi!",
+    });
+
+    const callArg = mockGenerateText.mock.calls[0][0];
+    expect(callArg.maxOutputTokens).toBeLessThanOrEqual(64);
+    expect(callArg.maxOutputTokens).toBeGreaterThan(0);
   });
 });
 

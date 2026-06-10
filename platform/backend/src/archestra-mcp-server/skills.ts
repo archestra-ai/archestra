@@ -17,16 +17,8 @@ import {
   SkillVersionModel,
   TeamModel,
 } from "@/models";
-import {
-  MAX_FILES_PER_SKILL,
-  MAX_SKILL_FILE_BYTES,
-  MAX_SKILL_FILE_CONTENT_CHARS,
-} from "@/skills/github-import";
-import {
-  deriveSkillFileKind,
-  parseSkillManifest,
-  SkillParseError,
-} from "@/skills/parser";
+import { MAX_FILES_PER_SKILL } from "@/skills/github-import";
+import { parseSkillManifest, SkillParseError } from "@/skills/parser";
 import {
   buildSkillActivationPromptContext,
   escapeXmlAttr,
@@ -42,8 +34,11 @@ import {
 import {
   isSkillNameConflict,
   refineUniqueFilePaths,
+  SkillFileInputSchema,
+  SkillManifestContentSchema,
+  toSkillFiles,
 } from "@/skills/validation";
-import { ApiError, type Skill, SkillFileEncodingSchema } from "@/types";
+import { ApiError, type Skill } from "@/types";
 import { archestraMcpBranding } from "./branding";
 import {
   defineArchestraTool,
@@ -91,42 +86,9 @@ const ReadSkillFileSchema = z.object({
     .describe("Resource path from the skill, e.g. references/REFERENCE.md"),
 });
 
-const SkillFileInputSchema = z.object({
-  path: z
-    .string()
-    .min(1)
-    .refine(
-      (p) => !p.startsWith("/") && !p.split("/").some((s) => s === ".."),
-      {
-        message:
-          "path must be relative and must not contain directory traversal sequences",
-      },
-    )
-    .describe("Resource path, e.g. references/API.md or scripts/run.py"),
-  content: z
-    .string()
-    .max(MAX_SKILL_FILE_CONTENT_CHARS)
-    .describe("Text content of the file"),
-  encoding: SkillFileEncodingSchema.optional(),
-});
-
-// the SKILL.md body shared by create_skill and update_skill.
-const manifestContentSchema = z
-  .string()
-  .min(1)
-  .max(MAX_SKILL_FILE_BYTES)
-  .describe(
-    "A complete SKILL.md manifest: a YAML frontmatter block with `name` and " +
-      "`description` (and optional `license`, `compatibility`, `allowed-tools`, " +
-      "`templated`, `metadata`), followed by the Markdown instruction body. Set " +
-      "`templated: true` to render the body through Handlebars (e.g. " +
-      "`{{user.name}}`) at activation. `allowed-tools` is a space-separated " +
-      "list of tools the skill is pre-approved to use.",
-  );
-
 const CreateSkillSchema = z
   .object({
-    content: manifestContentSchema,
+    content: SkillManifestContentSchema,
     files: z
       .array(SkillFileInputSchema)
       .max(MAX_FILES_PER_SKILL)
@@ -149,7 +111,7 @@ const UpdateSkillSchema = z
       .describe(
         "The current name of the skill to update, as named by list_skills.",
       ),
-    content: manifestContentSchema,
+    content: SkillManifestContentSchema,
     files: z
       .array(SkillFileInputSchema)
       .max(MAX_FILES_PER_SKILL)
@@ -594,18 +556,6 @@ function parseManifest(raw: string) {
     if (error instanceof SkillParseError) return error;
     throw error;
   }
-}
-
-/** Classify each submitted resource file by its path prefix. */
-function toSkillFiles(
-  files: { path: string; content: string; encoding?: "utf8" | "base64" }[],
-) {
-  return files.map((file) => ({
-    path: file.path,
-    content: file.content,
-    encoding: file.encoding ?? "utf8",
-    kind: deriveSkillFileKind(file.path),
-  }));
 }
 
 async function listSkillCatalog(

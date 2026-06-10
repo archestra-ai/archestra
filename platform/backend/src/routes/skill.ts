@@ -44,11 +44,9 @@ import {
   importSkills,
   MAX_FILES_PER_SKILL,
   MAX_SKILL_FILE_BYTES,
-  MAX_SKILL_FILE_CONTENT_CHARS,
   SkillImportError,
 } from "@/skills/github-import";
 import {
-  deriveSkillFileKind,
   normalizeAllowedTools,
   parseSkillManifest,
   SkillParseError,
@@ -58,6 +56,9 @@ import { suggestSkillDescription } from "@/skills/skill-description";
 import {
   isSkillNameConflict,
   refineUniqueFilePaths,
+  SkillFileInputSchema,
+  SkillManifestContentSchema,
+  toSkillFiles,
 } from "@/skills/validation";
 import {
   ApiError,
@@ -162,22 +163,6 @@ const ConvertAgentToSkillInputSchema = z.object({
   deleteAgent: z.boolean().optional(),
 });
 
-/** Raw resource file as submitted by the in-app editor. */
-const SkillFileInputSchema = z.object({
-  path: z
-    .string()
-    .min(1)
-    .refine(
-      (p) => !p.startsWith("/") && !p.split("/").some((s) => s === ".."),
-      {
-        message:
-          "path must be relative and must not contain directory traversal sequences",
-      },
-    ),
-  content: z.string().max(MAX_SKILL_FILE_CONTENT_CHARS),
-  encoding: SkillFileEncodingSchema.optional(),
-});
-
 /**
  * Manual create/update payload: raw SKILL.md, resource files, and the skill's
  * visibility scope.
@@ -188,7 +173,7 @@ const SkillFileInputSchema = z.object({
  */
 const SkillManifestInputSchema = z
   .object({
-    content: z.string().min(1).max(MAX_SKILL_FILE_BYTES),
+    content: SkillManifestContentSchema,
     files: z.array(SkillFileInputSchema).max(MAX_FILES_PER_SKILL).optional(),
     scope: ResourceVisibilityScopeSchema.optional(),
     teamIds: z.array(z.string()).optional(),
@@ -1398,17 +1383,6 @@ function parseManifestOrThrow(raw: string) {
 
 function skillNameConflict(name: string): ApiError {
   return new ApiError(409, `A skill named "${name}" already exists`);
-}
-
-function toSkillFiles(
-  files: { path: string; content: string; encoding?: "utf8" | "base64" }[],
-) {
-  return files.map((file) => ({
-    path: file.path,
-    content: file.content,
-    encoding: file.encoding ?? "utf8",
-    kind: deriveSkillFileKind(file.path),
-  }));
 }
 
 /** Run a GitHub operation, converting import/parse failures into 400s. */

@@ -22,17 +22,21 @@ Create an app from a starter template (the HTML seed) and a name. Editing the HT
 
 While the feature is enabled, newly created agents get the app management tools (`create_app`, `update_app`, `render_app`, `list_apps`, `delete_app`) assigned by default, so "build me an app" works in chat without per-agent setup. The tools can be unassigned per agent like any other; agents created before the feature was enabled need them assigned manually.
 
-## App runtime contract
+## The Apps SDK
 
-An app's HTML is pure UI. The platform injects `window.archestra` into every owned app at serve time (the stored HTML never contains it), so apps carry no SDK imports or postMessage wiring — and must not add any: HTML that bootstraps the MCP App SDK itself is rejected on save, because a second connection would race the injected one.
+An app's HTML is pure UI authored against the **Archestra Apps SDK** — a client microframework the platform injects at serve time as `window.archestra` (the stored HTML never contains it). Apps carry no SDK imports or postMessage wiring — and must not add any: HTML that bootstraps the connection itself, or loads the SDK script on its own, is rejected on save, because a second connection would race the injected one.
 
-The injected API:
+The SDK:
 
-- `window.archestra.data.get(key)` / `set(key, value)` / `list()` / `delete(key)` — the App Data Store.
-- `window.archestra.callTool(name, args)` — call the app's assigned tools (see Tools below).
-- `window.archestra.openLink(url)`, `requestDisplayMode(mode)`, `sendMessage(text)` — host features: open an external link, switch inline/fullscreen, inject a user message into the conversation.
+- `archestra.user` — the authenticated viewer as `{ id, name }`. There is no login flow to build: whoever is signed in and opens the app *is* the user.
+- `archestra.storage.user.get(key)` / `set(key, value)` / `list()` / `delete(key)` — persistent storage **private to each viewer** (favorites, drafts, settings). The right default for almost all app state.
+- `archestra.storage.shared.*` — same methods against one store **shared by every user of the app** (leaderboards, collaborative lists).
+- `archestra.tools.call(name, args)` — call an assigned tool **as the viewing user, with their existing MCP credentials** (see Tools below). When the tool's server still needs connecting, the call rejects with a typed `{ code: "auth_required", url }` error the app can render as a link.
+- `archestra.tools.list()` — the app's assigned tools with their schemas.
+- `archestra.ui.openLink(url)`, `archestra.ui.requestDisplayMode(mode)`, `archestra.chat.sendMessage(text)` — host features: open an external link, switch inline/fullscreen, inject a user message into the conversation.
+- `archestra.ready` — a promise resolving when the host connection is up.
 
-All methods are async and usable immediately — the runtime connects to the host on load. Saves also validate structure softly: a document without `<head>`/`<html>` saves with a warning returned in the response.
+All methods are async and usable immediately — the SDK connects to the host on load. Saves also validate structure softly: a document without `<head>`/`<html>` saves with a warning returned in the response.
 
 ## Render diagnostics
 
@@ -40,16 +44,18 @@ Every inline render of an owned app is observed: runtime errors (`window.onerror
 
 ## App Data Store
 
-Each app has its own key-to-document store, exposed to the app's HTML as `window.archestra.data.get/set/list/delete`. No app id is ever passed: the app's MCP endpoint is route-bound, so an app can only ever read and write its own store. Access is gated by the viewing user's RBAC — reads need `app:read`, writes need `app:update`.
+Each app has its own key-to-document store, exposed to the app's HTML as `archestra.storage`. The store is **partitioned**: `storage.user` addresses a partition private to the viewing user (the user is taken from the authenticated session, never from the app), and `storage.shared` addresses one app-wide partition all users share. No app id is ever passed: the app's MCP endpoint is route-bound, so an app can only ever read and write its own store. Access is gated by the viewing user's RBAC — reads need `app:read`, writes need `app:update`.
 
-## Tools
+## Tools and auto-auth
 
-Beyond the data store, an app can be assigned upstream MCP-server tools from the detail page's Tools tab. Assignment mirrors the agent model (scope-aligned, dynamic credentials by default). A running app can call only its assigned tools plus its own data-store tools; everything else is refused at the route.
+Beyond the data store, an app can be assigned upstream MCP-server tools — from the detail page's Tools tab, or directly from chat via the `tools` parameter of `create_app`/`update_app` (declarative: the list replaces the current assignments). Assignment mirrors the agent model (scope-aligned, dynamic credentials by default). A running app can call only its assigned tools plus its own data-store tools; everything else is refused at the route.
+
+Tool calls run **as the viewing user**: the platform resolves the MCP server and credentials per viewer at call time (personal install first, then team, then org), so an app reuses whatever MCP servers the viewer has already connected — no tokens in app code, no per-app auth setup. If the viewer hasn't connected the required server yet, `archestra.tools.call` rejects with `{ code: "auth_required", url }`; the user completes authentication in the MCP registry (apps cannot run OAuth flows themselves) and the next call succeeds.
 
 ## Shared-app trust boundary
 
-A shared (team or org) app is author-written HTML executing in a viewer's browser. The viewer is protected by three layers: the HTML runs in an isolated sandbox iframe; its network access is restricted to a validated `connect-src` allowlist; and every tool and data-store call is gated by the **viewing** user's RBAC, not the author's. Share apps only with people you would grant the app's tool and data access.
+A shared (team or org) app is author-written HTML executing in a viewer's browser. The viewer is protected by three layers: the HTML runs in an isolated sandbox iframe; its network access is restricted to a validated `connect-src` allowlist; and every tool and data-store call is gated by the **viewing** user's RBAC, not the author's. Note the converse too: the app's code sees the viewer's id and display name (`archestra.user`), and tool calls it makes run with the viewer's credentials. Share apps only with people you would grant the app's tool and data access.
 
 ## Templates
 
-Curated starters seed a new app's HTML when no explicit HTML is given on create: `blank` is a styled empty document; `form` wires a note form to the App Data Store as a working example of the runtime API. Resolution is server-side — pass `templateId` to `POST /api/apps` or `create_app` and the template's HTML becomes version 1 (the id is kept as provenance). Explicit HTML always wins over a template.
+Curated starters seed a new app's HTML when no explicit HTML is given on create: `blank` is a styled empty document; `form` greets the viewer by name and wires a note form to the per-user data store as a working example of the SDK. Resolution is server-side — pass `templateId` to `POST /api/apps` or `create_app` and the template's HTML becomes version 1 (the id is kept as provenance). Explicit HTML always wins over a template.

@@ -36,12 +36,19 @@
 <body>
 <script>
 
-// The ext-apps guest SDK, served same-deployment next to this proxy. App
-// templates import it (via window.__ARCHESTRA_APP_SDK_URL__, injected below) to
-// expose window.archestra.data. location.origin is this proxy's real origin
+// The ext-apps guest SDK, served same-deployment next to this proxy. The
+// Archestra Apps SDK imports it (via window.__ARCHESTRA_APP_SDK_URL__, injected
+// below) to connect to the host. location.origin is this proxy's real origin
 // (the proxy is never the opaque srcdoc guest), and /_sandbox/ is proxied to the
 // backend in every mode, so this absolute URL resolves + loads everywhere.
 const APP_SDK_URL = location.origin + "/_sandbox/ext-apps-app.js";
+
+// The Archestra Apps SDK (window.archestra), loaded by the <script src> the
+// backend injects into owned apps at serve time (app-sdk-injection.ts). Its
+// root-relative src resolves against this proxy's base URL — which srcdoc and
+// document.write children inherit — so the absolute form below is what CSP
+// must allowlist.
+const ARCHESTRA_APP_SDK_URL = location.origin + "/_sandbox/archestra-app-sdk.js";
 
 function buildAllowAttribute(permissions) {
   if (!permissions) return "";
@@ -73,7 +80,7 @@ function buildCSP(csp) {
   if (!csp) {
     return [
       "default-src 'none'",
-      "script-src 'unsafe-inline' " + APP_SDK_URL,
+      "script-src 'unsafe-inline' " + APP_SDK_URL + " " + ARCHESTRA_APP_SDK_URL,
       "style-src 'unsafe-inline'",
       "img-src data: blob:",
       "font-src data: blob:",
@@ -99,7 +106,7 @@ function buildCSP(csp) {
 
   return [
     "default-src 'none'",
-    "script-src 'unsafe-inline' " + APP_SDK_URL + " " + resourceSrc,
+    "script-src 'unsafe-inline' " + APP_SDK_URL + " " + ARCHESTRA_APP_SDK_URL + " " + resourceSrc,
     "style-src 'unsafe-inline' " + resourceSrc,
     "img-src " + resourceSrc,
     "font-src " + resourceSrc,
@@ -155,9 +162,9 @@ function injectCSP(html, cspValue) {
   var injection = cspMeta + sdkGlobal + violationListener;
 
   // Anchors tolerate attributes (<head lang="en">) and mirror the backend's
-  // serve-time bridge injection (app-runtime-bridge.ts) exactly: both chains
+  // serve-time SDK injection (app-sdk-injection.ts) exactly: both chains
   // resolve to the SAME first anchor, so this injection always lands before
-  // the bridge script and the SDK URL global is defined when the bridge runs.
+  // the SDK bootstrap and the SDK URL global is defined when the SDK runs.
   // (\s[^>]*)? — attributes allowed, never a longer tag name (<header>).
   var head = /(<head(\s[^>]*)?>)/i.exec(html);
   if (head) {

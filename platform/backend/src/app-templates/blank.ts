@@ -2,8 +2,8 @@ import type { AppTemplate } from "@/types";
 
 // A minimal starting point with a curated style baseline on the design-system
 // variables, so an app scaffolded from "blank" looks decent before any custom
-// CSS. Pure UI: `window.archestra` (data store, tools) is injected by the
-// platform at render time — see services/apps/app-runtime-bridge.ts.
+// CSS. Pure UI: `window.archestra` (user identity, storage, tools) is injected
+// by the platform at render time — see services/apps/app-sdk-injection.ts.
 const html = `<!DOCTYPE html>
 <html lang="en">
 <head>

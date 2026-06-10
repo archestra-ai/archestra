@@ -27,8 +27,12 @@ import {
   AppToolModel,
   AppVersionModel,
   McpToolCallModel,
+  UserModel,
 } from "@/models";
-import { injectAppRuntimeBridge } from "@/services/apps/app-runtime-bridge";
+import {
+  type AppSdkTool,
+  injectAppSdk,
+} from "@/services/apps/app-sdk-injection";
 import type { CommonToolCall } from "@/types";
 import { appOwner } from "@/types";
 import type { App } from "@/types/app";
@@ -131,14 +135,21 @@ export async function createAppServer(
           message: `App resource not found for ${appId}`,
         };
       }
+      const viewer = tokenAuth.userId
+        ? await UserModel.getById(tokenAuth.userId)
+        : null;
       return {
         contents: [
           {
             uri,
             mimeType: RESOURCE_MIME_TYPE,
-            // Owned apps get the runtime bridge (window.archestra) injected at
-            // serve time; the stored HTML stays pure UI.
-            text: injectAppRuntimeBridge(head.html),
+            // Owned apps get the Apps SDK (window.archestra) injected at serve
+            // time; the stored HTML stays pure UI. The bootstrap carries the
+            // viewer identity and the assigned-tool descriptors.
+            text: injectAppSdk(head.html, {
+              user: viewer ? { id: viewer.id, name: viewer.name } : null,
+              tools: await buildAppSdkTools(appId, tokenAuth),
+            }),
             _meta: {
               ui: {
                 ...(head.uiCsp ? { csp: head.uiCsp } : {}),
@@ -219,6 +230,42 @@ export async function createAppServer(
 
   logger.info({ appId }, "MCP app server instance created");
   return { server: mcpServer, app };
+}
+
+/**
+ * The assigned-tool descriptors embedded into the SDK bootstrap for
+ * `archestra.tools.list()`: only tools the app's HTML can actually call —
+ * RBAC-permitted upstream tools that don't exclude the "app" surface via
+ * `_meta.ui.visibility`. The App Data Store built-ins are deliberately absent
+ * (apps reach them through `archestra.storage`, not `tools.call`).
+ */
+async function buildAppSdkTools(
+  appId: string,
+  tokenAuth: TokenAuthContext,
+): Promise<AppSdkTool[]> {
+  const candidates = await buildAppToolList(appId);
+  const permittedNames = await filterToolNamesByPermission(
+    candidates.map((t) => t.name),
+    tokenAuth.userId,
+    tokenAuth.organizationId,
+  );
+  return candidates
+    .filter(
+      (tool) =>
+        permittedNames.has(tool.name) &&
+        !archestraMcpBranding.isToolName(tool.name),
+    )
+    .filter((tool) => {
+      const visibility = (
+        tool._meta as { ui?: { visibility?: string[] } } | undefined
+      )?.ui?.visibility;
+      return !visibility || visibility.includes("app");
+    })
+    .map((tool) => ({
+      name: tool.name,
+      description: tool.description ?? null,
+      inputSchema: tool.inputSchema,
+    }));
 }
 
 async function buildAppToolList(appId: string): Promise<McpListTool[]> {

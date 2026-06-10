@@ -140,6 +140,57 @@ describe("mcpAppProxyRoutes POST /api/mcp/app/:appId", () => {
     expect(body.error?.message).toContain("not assigned to this app");
   });
 
+  // Dispatch (mcp-client validateAndGetTool) resolves an unprefixed name via
+  // the "__<name>" suffix fallback; the guard must apply the same resolution
+  // or a tool reachable at dispatch is rejected before execution.
+  test("the suffix form of an assigned tool passes the guard; an unassigned suffix does not", async ({
+    makeApp,
+    makeUser,
+    makeMember,
+    makeTool,
+    makeAppTool,
+    makeInternalMcpCatalog,
+  }) => {
+    const created = await makeApp();
+    const user = await makeUser();
+    await makeMember(user.id, created.organizationId, { role: "member" });
+    const catalog = await makeInternalMcpCatalog({
+      name: "test-server",
+      serverUrl: "https://example.com/mcp/",
+    });
+    const tool = await makeTool({
+      name: "server__suffix_reachable",
+      parameters: {},
+      catalogId: catalog.id,
+    });
+    await makeAppTool(created.id, tool.id);
+    app = await buildApp(user.id, created.organizationId);
+
+    const call = (name: string) =>
+      app.inject({
+        method: "POST",
+        url: `/api/mcp/app/${created.id}`,
+        headers: JSON_RPC_HEADERS,
+        payload: {
+          jsonrpc: "2.0",
+          method: "tools/call",
+          params: { name, arguments: {} },
+          id: 1,
+        },
+      });
+
+    // bare suffix of an assigned tool: past the guard (the call then proceeds
+    // to real dispatch, whose own failure modes are not the guard's -32601)
+    const allowed = await call("suffix_reachable");
+    expect(allowed.statusCode).toBe(200);
+    expect(JSON.stringify(allowed.json())).not.toContain(
+      "not assigned to this app",
+    );
+
+    const denied = await call("not_a_tool");
+    expect(denied.json().error?.message).toContain("not assigned to this app");
+  });
+
   test("rejects tools/call for an assigned tool whose visibility excludes 'app'", async ({
     makeApp,
     makeUser,
@@ -267,11 +318,16 @@ describe("mcpAppProxyRoutes POST /api/mcp/app/:appId", () => {
 
     expect(response.statusCode).toBe(200);
     const content = response.json().result.contents[0];
-    // The stored HTML is served with the runtime bridge injected at serve
-    // time, so window.archestra exists without any authored glue.
+    // The stored HTML is served with the Apps SDK injected at serve time —
+    // bootstrap context (viewer identity) first, then the SDK script tag — so
+    // window.archestra exists without any authored glue.
     expect(content.text).toContain("<h1>hello app</h1>");
-    expect(content.text).toContain("data-archestra-runtime-bridge");
-    expect(content.text).toContain("window.archestra");
+    expect(content.text).toContain("data-archestra-app-bootstrap");
+    expect(content.text).toContain("window.__ARCHESTRA_APP_CONTEXT__");
+    expect(content.text).toContain('src="/_sandbox/archestra-app-sdk.js"');
+    expect(content.text.indexOf("data-archestra-app-bootstrap")).toBeLessThan(
+      content.text.indexOf("data-archestra-app-sdk"),
+    );
     expect(content.mimeType).toContain("text/html");
   });
 
@@ -309,8 +365,28 @@ describe("mcpAppProxyRoutes POST /api/mcp/app/:appId", () => {
     const body = response.json();
     expect(body.result?.isError ?? false).toBe(false);
 
-    // The write landed on the route app, never on the other accessible app.
-    expect(await AppDataModel.get(routeApp.id, "secret")).toEqual({ n: 42 });
-    expect(await AppDataModel.get(otherApp.id, "secret")).toBeNull();
+    // The write landed on the route app — in the session user's partition,
+    // since scope defaults to "user" — and never on the other accessible app.
+    expect(
+      await AppDataModel.get({
+        appId: routeApp.id,
+        userId: user.id,
+        key: "secret",
+      }),
+    ).toEqual({ n: 42 });
+    expect(
+      await AppDataModel.get({
+        appId: routeApp.id,
+        userId: null,
+        key: "secret",
+      }),
+    ).toBeNull();
+    expect(
+      await AppDataModel.get({
+        appId: otherApp.id,
+        userId: user.id,
+        key: "secret",
+      }),
+    ).toBeNull();
   });
 });

@@ -13,6 +13,9 @@ const config: KnipConfig = {
     // Test infrastructure used by *.test.ts files (dev-only entries)
     "src/test/**/*.ts",
   ],
+  // Browser-side static assets read at runtime via readFileSync (server.ts) —
+  // not part of the backend module graph.
+  ignore: ["src/static/**"],
   ignoreDependencies: [
     // Workspace dependency - resolved by pnpm
     "@archestra/shared",

@@ -70,13 +70,22 @@ export function buildValidatedVersionPayload(params: {
   };
 }
 
-// Markers of the SDK self-bootstrap the runtime bridge replaces. An app that
-// wires the SDK itself would race the bridge's connection handshake, so this
-// is a hard reject — but only inside <script> elements: prose that merely
+// Markers of the SDK self-bootstrap the injected Apps SDK replaces. An app
+// that wires the SDK itself would race the platform's connection handshake, so
+// this is a hard reject — but only inside <script> elements: prose that merely
 // mentions a marker (docs, comments rendered as text) must save fine.
 const SDK_BOOTSTRAP_MARKERS = [
   "__ARCHESTRA_APP_SDK_URL__",
+  "__ARCHESTRA_APP_CONTEXT__",
   "PostMessageTransport",
+] as const;
+
+// Platform-served scripts an app must not load itself: the backend injects the
+// Apps SDK (with its per-viewer bootstrap) at serve time; a second, authored
+// load would run with no bootstrap and race the injected one.
+const PLATFORM_SCRIPT_SRC_MARKERS = [
+  "archestra-app-sdk",
+  "ext-apps-app",
 ] as const;
 
 function validateAppHtml(html: string): string[] {
@@ -89,7 +98,18 @@ function validateAppHtml(html: string): string[] {
     if (scriptText.includes(marker)) {
       throw new ApiError(
         400,
-        `app html must not bootstrap the MCP App SDK itself (found "${marker}" in a <script>). The platform injects window.archestra (data store, callTool, host features) at render time — remove the SDK import and transport wiring and use window.archestra directly.`,
+        `app html must not bootstrap the MCP App SDK itself (found "${marker}" in a <script>). The platform injects window.archestra (storage, tools, user identity, host features) at render time — remove the SDK import and transport wiring and use window.archestra directly.`,
+      );
+    }
+  }
+  const scriptSrcs = $("script[src]")
+    .map((_, el) => $(el).attr("src") ?? "")
+    .get();
+  for (const src of scriptSrcs) {
+    if (PLATFORM_SCRIPT_SRC_MARKERS.some((marker) => src.includes(marker))) {
+      throw new ApiError(
+        400,
+        `app html must not load the platform SDK itself (found <script src="${src}">). The platform injects window.archestra at render time — remove the script tag and use window.archestra directly.`,
       );
     }
   }

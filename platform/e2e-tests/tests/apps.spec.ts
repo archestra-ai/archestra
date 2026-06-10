@@ -47,6 +47,11 @@ test("create an app from a template and run it standalone", async ({
     await expect(appFrame.getByText("Ready.")).toBeVisible({
       timeout: 20_000,
     });
+    // auto-auth: the SDK bootstrap carries the viewer identity and the form
+    // template personalizes its title from archestra.user.name
+    await expect(
+      appFrame.getByRole("heading", { name: /'s notes$/ }),
+    ).toBeVisible();
 
     const diagnostics = await page.evaluate(
       () =>

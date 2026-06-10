@@ -1379,6 +1379,44 @@ class ToolModel {
   }
 
   /** App-owner counterpart of {@link getMcpToolsAssignedToAgent}. */
+  /**
+   * Resolve upstream tool names to rows assignable to an MCP App, scoped to
+   * the caller's organization (a tool is reachable when its catalog entry
+   * belongs to the org or is a global, org-less entry). Archestra built-ins
+   * are excluded — apps reach the data store through `archestra.storage`, and
+   * the management tools are not app-dispatchable. The catalog join also
+   * guarantees a non-null catalogId, which app dispatch requires.
+   */
+  static async findAppAssignableToolsByNames(
+    organizationId: string,
+    names: readonly string[],
+  ): Promise<
+    Array<{ id: string; name: string; clonedPendingDiscovery: boolean }>
+  > {
+    if (names.length === 0) return [];
+    return await db
+      .select({
+        id: schema.toolsTable.id,
+        name: schema.toolsTable.name,
+        clonedPendingDiscovery: schema.toolsTable.clonedPendingDiscovery,
+      })
+      .from(schema.toolsTable)
+      .innerJoin(
+        schema.internalMcpCatalogTable,
+        eq(schema.toolsTable.catalogId, schema.internalMcpCatalogTable.id),
+      )
+      .where(
+        and(
+          inArray(schema.toolsTable.name, [...names]),
+          ne(schema.toolsTable.catalogId, ARCHESTRA_MCP_CATALOG_ID),
+          or(
+            eq(schema.internalMcpCatalogTable.organizationId, organizationId),
+            isNull(schema.internalMcpCatalogTable.organizationId),
+          ),
+        ),
+      );
+  }
+
   static async getMcpToolsAssignedToApp(
     toolNames: string[],
     appId: string,

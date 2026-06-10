@@ -467,9 +467,14 @@ async function makeAppTool(
   });
 }
 
-/** Writes an App Data Store entry via the AppData model. */
-async function makeAppData(appId: string, key: string, value: unknown) {
-  return await AppDataModel.set(appId, key, value);
+/** Writes an App Data Store entry (shared partition unless a userId is given). */
+async function makeAppData(
+  appId: string,
+  key: string,
+  value: unknown,
+  userId: string | null = null,
+) {
+  return await AppDataModel.set({ appId, userId, key, value });
 }
 
 /**

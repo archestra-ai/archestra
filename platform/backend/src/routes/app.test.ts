@@ -143,7 +143,9 @@ describe("appRoutes /api/apps", () => {
       method: "GET",
       url: `/api/apps/${created.json().id}/versions`,
     });
-    expect(versions.json()[0].html).toContain("window.archestra.data.set");
+    expect(versions.json()[0].html).toContain(
+      "window.archestra.storage.user.set",
+    );
 
     const unknown = await app.inject({
       method: "POST",
@@ -477,7 +479,7 @@ describe("appRoutes /api/apps", () => {
     // Templates are pure UI: they use the injected window.archestra runtime
     // and never carry SDK bootstrap glue themselves.
     const form = templates.find((t) => t.id === "form");
-    expect(form?.html).toContain("window.archestra.data.set");
+    expect(form?.html).toContain("window.archestra.storage.user.set");
     expect(form?.html).not.toContain("__ARCHESTRA_APP_SDK_URL__");
     expect(form?.html).not.toContain("PostMessageTransport");
 

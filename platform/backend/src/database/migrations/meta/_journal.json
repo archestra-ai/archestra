@@ -1982,6 +1982,13 @@
       "when": 1781109098625,
       "tag": "0282_mcp_apps",
       "breakpoints": true
+    },
+    {
+      "idx": 283,
+      "version": "7",
+      "when": 1781122252221,
+      "tag": "0283_app_data_user_partitions",
+      "breakpoints": true
     }
   ]
 }

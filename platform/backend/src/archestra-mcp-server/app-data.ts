@@ -18,14 +18,46 @@ import {
 import type { ArchestraContext } from "./types";
 
 /**
- * The App Data Store tools (`window.archestra.data`). They operate strictly on
- * the calling app's own store: `appId` comes from the route-bound context set by
+ * The App Data Store tools (`archestra.storage`). They operate strictly on the
+ * calling app's own store: `appId` comes from the route-bound context set by
  * the app MCP proxy, never from a tool argument, so one app can never read or
- * write another app's data. Outside that proxy `context.appId` is absent and the
- * tools refuse.
+ * write another app's data. The store is partitioned: `scope: "user"` (the
+ * default) addresses the viewing user's private partition — `userId` likewise
+ * comes only from the authenticated context — and `scope: "app"` addresses the
+ * app-wide shared partition. Outside the proxy `context.appId` is absent and
+ * the tools refuse; user scope without an authenticated viewer fails closed
+ * rather than falling back to the shared partition.
  */
-function requireAppId(context: ArchestraContext): string | null {
-  return context.appId ?? null;
+type PartitionResolution =
+  | { ok: true; partition: { appId: string; userId: string | null } }
+  | { ok: false; error: string };
+
+function resolvePartition(
+  context: ArchestraContext,
+  scope: "user" | "app",
+): PartitionResolution {
+  const appId = context.appId;
+  if (!appId) {
+    return {
+      ok: false,
+      error: "App data tools are only available to a running app.",
+    };
+  }
+  switch (scope) {
+    case "app":
+      return { ok: true, partition: { appId, userId: null } };
+    case "user": {
+      const userId = context.userId;
+      if (!userId) {
+        return {
+          ok: false,
+          error:
+            'scope "user" requires an authenticated viewer; this session has none.',
+        };
+      }
+      return { ok: true, partition: { appId, userId } };
+    }
+  }
 }
 
 const keyField = z
@@ -34,47 +66,56 @@ const keyField = z
   .max(APP_DATA_KEY_MAX_LENGTH)
   .describe("The data store key.");
 
-const GetSchema = z.strictObject({ key: keyField });
+const scopeField = z
+  .enum(["user", "app"])
+  .default("user")
+  .describe(
+    'Storage partition: "user" (default) is private to the viewing user, "app" is shared by everyone using the app.',
+  );
+
+const GetSchema = z.strictObject({ key: keyField, scope: scopeField });
 const SetSchema = z.strictObject({
   key: keyField,
   value: z.unknown().describe("Any JSON-serializable value."),
+  scope: scopeField,
 });
-const ListSchema = z.strictObject({});
-const DeleteSchema = z.strictObject({ key: keyField });
+const ListSchema = z.strictObject({ scope: scopeField });
+const DeleteSchema = z.strictObject({ key: keyField, scope: scopeField });
 
 const registry = defineArchestraTools([
   defineArchestraTool({
     shortName: TOOL_APP_DATA_GET_SHORT_NAME,
     title: "Get App Data",
-    description: "Read a value from the calling app's data store.",
+    description:
+      "Read a value from the calling app's data store (per-user or shared partition).",
     schema: GetSchema,
     outputSchema: z.object({ value: z.unknown() }),
     async handler({ args, context }) {
-      const appId = requireAppId(context);
-      if (!appId) {
-        return errorResult(
-          "App data tools are only available to a running app.",
-        );
-      }
-      const value = await AppDataModel.get(appId, args.key);
+      const resolution = resolvePartition(context, args.scope);
+      if (!resolution.ok) return errorResult(resolution.error);
+      const value = await AppDataModel.get({
+        ...resolution.partition,
+        key: args.key,
+      });
       return structuredSuccessResult({ value });
     },
   }),
   defineArchestraTool({
     shortName: TOOL_APP_DATA_SET_SHORT_NAME,
     title: "Set App Data",
-    description: "Write a value to the calling app's data store.",
+    description:
+      "Write a value to the calling app's data store (per-user or shared partition).",
     schema: SetSchema,
     outputSchema: z.object({ key: z.string() }),
     async handler({ args, context }) {
-      const appId = requireAppId(context);
-      if (!appId) {
-        return errorResult(
-          "App data tools are only available to a running app.",
-        );
-      }
+      const resolution = resolvePartition(context, args.scope);
+      if (!resolution.ok) return errorResult(resolution.error);
       try {
-        const entry = await AppDataModel.set(appId, args.key, args.value);
+        const entry = await AppDataModel.set({
+          ...resolution.partition,
+          key: args.key,
+          value: args.value,
+        });
         return structuredSuccessResult({ key: entry.key });
       } catch (error) {
         if (error instanceof ApiError) {
@@ -87,35 +128,32 @@ const registry = defineArchestraTools([
   defineArchestraTool({
     shortName: TOOL_APP_DATA_LIST_SHORT_NAME,
     title: "List App Data",
-    description: "List all entries in the calling app's data store.",
+    description:
+      "List all entries in one partition of the calling app's data store.",
     schema: ListSchema,
     outputSchema: z.object({
       entries: z.array(z.object({ key: z.string(), value: z.unknown() })),
     }),
-    async handler({ context }) {
-      const appId = requireAppId(context);
-      if (!appId) {
-        return errorResult(
-          "App data tools are only available to a running app.",
-        );
-      }
-      const entries = await AppDataModel.list(appId);
+    async handler({ args, context }) {
+      const resolution = resolvePartition(context, args.scope);
+      if (!resolution.ok) return errorResult(resolution.error);
+      const entries = await AppDataModel.list(resolution.partition);
       return structuredSuccessResult({ entries });
     },
   }),
   defineArchestraTool({
     shortName: TOOL_APP_DATA_DELETE_SHORT_NAME,
     title: "Delete App Data",
-    description: "Delete a key from the calling app's data store.",
+    description:
+      "Delete a key from the calling app's data store (per-user or shared partition).",
     schema: DeleteSchema,
     async handler({ args, context }) {
-      const appId = requireAppId(context);
-      if (!appId) {
-        return errorResult(
-          "App data tools are only available to a running app.",
-        );
-      }
-      const deleted = await AppDataModel.delete(appId, args.key);
+      const resolution = resolvePartition(context, args.scope);
+      if (!resolution.ok) return errorResult(resolution.error);
+      const deleted = await AppDataModel.delete({
+        ...resolution.partition,
+        key: args.key,
+      });
       return successResult(
         deleted ? `Deleted "${args.key}".` : `No entry for "${args.key}".`,
       );

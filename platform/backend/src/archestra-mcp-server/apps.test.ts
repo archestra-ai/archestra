@@ -13,7 +13,7 @@ import {
   TOOL_UPDATE_APP_SHORT_NAME,
 } from "@archestra/shared";
 import config from "@/config";
-import { AppModel, AppVersionModel } from "@/models";
+import { AppModel, AppToolModel, AppVersionModel } from "@/models";
 import {
   afterAll,
   beforeAll,
@@ -194,11 +194,11 @@ describe("app tool execution", () => {
     const appId = structured(created).id as string;
 
     const head = await AppVersionModel.findByAppAndVersion(appId, 1);
-    expect(head?.html).toContain("window.archestra.data.set");
+    expect(head?.html).toContain("window.archestra.storage.user.set");
     // Scaffold-then-edit: the seeded html rides the result text so the model
     // can update_app without a read-back.
     expect((created.content[0] as any).text).toContain(
-      "window.archestra.data.set",
+      "window.archestra.storage.user.set",
     );
 
     // Explicit html wins over templateId (provenance only) and returns no seed.
@@ -338,5 +338,194 @@ describe("app data store tools", () => {
     );
     expect(result.isError).toBe(true);
     expect((result.content[0] as any).text).toContain("only available");
+  });
+
+  test("scope defaults to the viewer partition; app scope is shared", async ({
+    makeUser,
+    makeMember,
+  }) => {
+    // biome-ignore lint/style/noNonNullAssertion: set in beforeEach
+    const organizationId = context.organizationId!;
+    const otherUser = await makeUser();
+    await makeMember(otherUser.id, organizationId, { role: "member" });
+    const otherContext = { ...context, userId: otherUser.id };
+
+    await executeArchestraTool(
+      getArchestraToolFullName(TOOL_APP_DATA_SET_SHORT_NAME),
+      { key: "fav", value: "mine" },
+      context,
+    );
+    await executeArchestraTool(
+      getArchestraToolFullName(TOOL_APP_DATA_SET_SHORT_NAME),
+      { key: "fav", value: "everyone", scope: "app" },
+      context,
+    );
+
+    // another viewer sees the shared value but not the first viewer's
+    const theirOwn = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_APP_DATA_GET_SHORT_NAME),
+      { key: "fav" },
+      otherContext,
+    );
+    expect((theirOwn.structuredContent as any).value).toBeNull();
+    const shared = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_APP_DATA_GET_SHORT_NAME),
+      { key: "fav", scope: "app" },
+      otherContext,
+    );
+    expect((shared.structuredContent as any).value).toBe("everyone");
+  });
+
+  test("user scope without an authenticated viewer fails closed", async () => {
+    // the centralized RBAC check rejects a missing userId before the handler's
+    // own guard; either way the call must error rather than fall back to the
+    // shared partition
+    const result = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_APP_DATA_SET_SHORT_NAME),
+      { key: "x", value: 1 },
+      { ...context, userId: undefined },
+    );
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as any).text).toMatch(
+      /user context|authenticated viewer/i,
+    );
+  });
+});
+
+describe("create_app/update_app tools param", () => {
+  let context: ArchestraContext;
+  let organizationId: string;
+  let paperSearchName: string;
+  let statsName: string;
+
+  beforeEach(
+    async ({
+      makeAgent,
+      makeUser,
+      makeMember,
+      makeInternalMcpCatalog,
+      makeTool,
+    }) => {
+      const agent = await makeAgent({ name: "Tools Agent" });
+      organizationId = agent.organizationId;
+      const user = await makeUser();
+      await makeMember(user.id, organizationId, { role: ADMIN_ROLE_NAME });
+      context = {
+        agent: { id: agent.id, name: agent.name },
+        organizationId,
+        userId: user.id,
+      };
+
+      const catalog = await makeInternalMcpCatalog({ organizationId });
+      paperSearchName = `hf__paper_search_${crypto.randomUUID().slice(0, 8)}`;
+      statsName = `hf__stats_${crypto.randomUUID().slice(0, 8)}`;
+      await makeTool({ name: paperSearchName, catalogId: catalog.id });
+      await makeTool({ name: statsName, catalogId: catalog.id });
+    },
+  );
+
+  test("create assigns the tools with dynamic credential resolution", async () => {
+    const created = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_CREATE_APP_SHORT_NAME),
+      { name: "Papers", html: "<p/>", tools: [paperSearchName] },
+      context,
+    );
+    expect(created.isError).toBe(false);
+    expect(structured(created).tools).toEqual([paperSearchName]);
+
+    const assignments = await AppToolModel.getAssignmentsForApp(
+      structured(created).id as string,
+    );
+    expect(assignments).toHaveLength(1);
+    expect(assignments[0].tool.name).toBe(paperSearchName);
+    // dynamic mode: server + credential resolve per viewing user at call time
+    expect(assignments[0].credentialResolutionMode).toBe("dynamic");
+    expect(assignments[0].mcpServerId).toBeNull();
+  });
+
+  test("create with an unknown tool name fails and leaves no app behind", async () => {
+    const created = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_CREATE_APP_SHORT_NAME),
+      { name: "Ghost", html: "<p/>", tools: ["nope__missing"] },
+      context,
+    );
+    expect(created.isError).toBe(true);
+    expect((created.content[0] as any).text).toContain("nope__missing");
+
+    const listed = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_LIST_APPS_SHORT_NAME),
+      { name: "Ghost" },
+      context,
+    );
+    expect(structured(listed).apps).toEqual([]);
+  });
+
+  test("built-in tool names are rejected", async () => {
+    const created = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_CREATE_APP_SHORT_NAME),
+      {
+        name: "Builtin",
+        html: "<p/>",
+        tools: [getArchestraToolFullName(TOOL_APP_DATA_GET_SHORT_NAME)],
+      },
+      context,
+    );
+    expect(created.isError).toBe(true);
+    expect((created.content[0] as any).text).toContain("Built-in");
+  });
+
+  test("another org's tool name does not resolve", async ({
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const foreignCatalog = await makeInternalMcpCatalog();
+    const foreignName = `foreign__tool_${crypto.randomUUID().slice(0, 8)}`;
+    await makeTool({ name: foreignName, catalogId: foreignCatalog.id });
+
+    const created = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_CREATE_APP_SHORT_NAME),
+      { name: "CrossOrg", html: "<p/>", tools: [foreignName] },
+      context,
+    );
+    expect(created.isError).toBe(true);
+    expect((created.content[0] as any).text).toContain("Unknown tool name");
+  });
+
+  test("update replaces the assignment set declaratively; [] clears it", async () => {
+    const created = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_CREATE_APP_SHORT_NAME),
+      { name: "Replace", html: "<p/>", tools: [paperSearchName] },
+      context,
+    );
+    const appId = structured(created).id as string;
+
+    const swapped = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_UPDATE_APP_SHORT_NAME),
+      { appId, tools: [statsName] },
+      context,
+    );
+    expect(swapped.isError).toBe(false);
+    expect(structured(swapped).tools).toEqual([statsName]);
+    let names = (await AppToolModel.getToolsForApp(appId)).map((t) => t.name);
+    expect(names).toEqual([statsName]);
+
+    // an unknown name fails the whole replace — the old set stays intact
+    const failed = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_UPDATE_APP_SHORT_NAME),
+      { appId, tools: [statsName, "nope__missing"] },
+      context,
+    );
+    expect(failed.isError).toBe(true);
+    names = (await AppToolModel.getToolsForApp(appId)).map((t) => t.name);
+    expect(names).toEqual([statsName]);
+
+    const cleared = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_UPDATE_APP_SHORT_NAME),
+      { appId, tools: [] },
+      context,
+    );
+    expect(cleared.isError).toBe(false);
+    expect(structured(cleared).tools).toEqual([]);
+    expect(await AppToolModel.getToolsForApp(appId)).toEqual([]);
   });
 });

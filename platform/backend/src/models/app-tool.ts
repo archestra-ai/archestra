@@ -1,5 +1,5 @@
-import { and, eq } from "drizzle-orm";
-import db, { schema } from "@/database";
+import { and, eq, notInArray } from "drizzle-orm";
+import db, { schema, withDbTransaction } from "@/database";
 import type { CredentialResolutionMode } from "@/types";
 import type { InsertAppTool } from "@/types/app";
 
@@ -36,33 +36,6 @@ class AppToolModel {
         eq(schema.appToolsTable.toolId, schema.toolsTable.id),
       )
       .where(eq(schema.appToolsTable.appId, appId));
-  }
-
-  /**
-   * The assigned tool row (incl. `meta`) for a given name, or null if the tool
-   * is not attached to this app. Mirrors `ToolModel.findByNameForAgent`; the app
-   * MCP proxy uses it to enforce the per-app allowlist and the `_meta.ui`
-   * visibility gate before a tools/call reaches execution.
-   */
-  static async findByNameForApp(
-    appId: string,
-    name: string,
-  ): Promise<typeof schema.toolsTable.$inferSelect | null> {
-    const [result] = await db
-      .select({ tool: schema.toolsTable })
-      .from(schema.appToolsTable)
-      .innerJoin(
-        schema.toolsTable,
-        eq(schema.appToolsTable.toolId, schema.toolsTable.id),
-      )
-      .where(
-        and(
-          eq(schema.appToolsTable.appId, appId),
-          eq(schema.toolsTable.name, name),
-        ),
-      )
-      .limit(1);
-    return result?.tool ?? null;
   }
 
   /** Fail-closed allowlist check: is a tool with this name attached to the app? */
@@ -174,6 +147,61 @@ class AppToolModel {
       });
 
     return { status: existing ? "updated" : "created" };
+  }
+
+  /**
+   * Make the app's assignments exactly `assignments`, in one transaction:
+   * tools not in the desired set are detached, the rest upserted. Callers
+   * validate the tool list first — a failure mid-replace rolls everything
+   * back, never leaving a partial set.
+   */
+  static async replaceAssignments(
+    appId: string,
+    assignments: ReadonlyArray<{
+      toolId: string;
+      mcpServerId: string | null;
+      credentialResolutionMode: CredentialResolutionMode;
+    }>,
+  ): Promise<void> {
+    await withDbTransaction(async (tx) => {
+      // serialize concurrent replacements on the app row — without it two
+      // racing calls interleave their delete+upsert phases and the final set
+      // is a mix of both rather than either caller's list
+      await tx
+        .select({ id: schema.appsTable.id })
+        .from(schema.appsTable)
+        .where(eq(schema.appsTable.id, appId))
+        .for("update");
+      const keptToolIds = assignments.map((a) => a.toolId);
+      await tx
+        .delete(schema.appToolsTable)
+        .where(
+          and(
+            eq(schema.appToolsTable.appId, appId),
+            keptToolIds.length > 0
+              ? notInArray(schema.appToolsTable.toolId, keptToolIds)
+              : undefined,
+          ),
+        );
+      for (const assignment of assignments) {
+        await tx
+          .insert(schema.appToolsTable)
+          .values({
+            appId,
+            toolId: assignment.toolId,
+            mcpServerId: assignment.mcpServerId,
+            credentialResolutionMode: assignment.credentialResolutionMode,
+          })
+          .onConflictDoUpdate({
+            target: [schema.appToolsTable.appId, schema.appToolsTable.toolId],
+            set: {
+              mcpServerId: assignment.mcpServerId,
+              credentialResolutionMode: assignment.credentialResolutionMode,
+              updatedAt: new Date(),
+            },
+          });
+      }
+    });
   }
 
   /** Detach a tool from an app. */

@@ -18,6 +18,7 @@ if (isMainModule) {
 
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
+import path from "node:path";
 import {
   EmbeddingDimensionsSchema,
   LocalConfigEnvironmentDefaultSchema,
@@ -66,6 +67,7 @@ import { ngrokTunnelManager } from "@/ngrok-tunnel-manager";
 import { initializeObservabilityMetrics } from "@/observability";
 import { enrichOpenApiWithRbac } from "@/openapi/enrich-openapi-with-rbac";
 import { activeChatRunService } from "@/services/active-chat-run";
+import { APP_SDK_PATH } from "@/services/apps/app-sdk-injection";
 import { instanceAnalyticsService } from "@/services/instance-analytics";
 import { systemKeyManager } from "@/services/system-key-manager";
 import { skillSandboxRuntimeService } from "@/skills-sandbox/skill-sandbox-runtime-service";
@@ -685,10 +687,10 @@ const sandboxHtml = loadSandboxHtml();
 
 /**
  * Load the ext-apps guest SDK bundle (the `App` client + its deps) so it can be
- * served same-deployment under /_sandbox/. App templates import this to expose
- * `window.archestra.data` to authored HTML without inlining the SDK per app or
- * reaching an external CDN. Resolved from node_modules at startup so it tracks
- * the installed ext-apps version. Returns null (non-fatal) if it can't be read.
+ * served same-deployment under /_sandbox/. The Archestra Apps SDK imports it to
+ * connect to the host — apps never touch it directly. Resolved from
+ * node_modules at startup so it tracks the installed ext-apps version. Returns
+ * null (non-fatal) if it can't be read.
  */
 const loadExtAppsSdk = (): string | null => {
   try {
@@ -706,6 +708,31 @@ const loadExtAppsSdk = (): string | null => {
 };
 
 const extAppsSdk = loadExtAppsSdk();
+
+/**
+ * Load the Archestra Apps SDK (the `window.archestra` microframework injected
+ * into owned apps — see services/apps/app-sdk-injection.ts) so it can be
+ * served same-deployment under /_sandbox/. Returns null (non-fatal) if it
+ * can't be read.
+ */
+const loadArchestraAppSdk = (): string | null => {
+  // co-located with the sandbox proxy HTML in the backend static dir
+  const sdkPath = path.join(
+    path.dirname(config.mcpSandbox.filePath),
+    "archestra-app-sdk.js",
+  );
+  try {
+    return readFileSync(sdkPath, "utf-8");
+  } catch (err) {
+    logger.warn(
+      { err, sdkPath },
+      "Archestra Apps SDK not found — /_sandbox/archestra-app-sdk.js will not be registered",
+    );
+    return null;
+  }
+};
+
+const archestraAppSdk = loadArchestraAppSdk();
 
 /**
  * Register the sandbox proxy route on the main Fastify instance.
@@ -772,6 +799,18 @@ const registerSandboxRoute = (
       void reply.header("Cache-Control", "public, max-age=3600");
       void reply.type("text/javascript");
       return reply.send(extAppsSdk);
+    });
+  }
+
+  // The Archestra Apps SDK (window.archestra), loaded by the <script src>
+  // injected into every owned app at serve time. Same delivery posture as the
+  // ext-apps bundle above: public asset, brief cache so fixes roll out.
+  if (archestraAppSdk) {
+    fastify.get(APP_SDK_PATH, async (_request, reply) => {
+      void reply.header("Access-Control-Allow-Origin", "*");
+      void reply.header("Cache-Control", "public, max-age=3600");
+      void reply.type("text/javascript");
+      return reply.send(archestraAppSdk);
     });
   }
 };

@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { RouteId } from "@archestra/shared";
+import { MCP_SERVER_TOOL_NAME_SEPARATOR, RouteId } from "@archestra/shared";
 import type { McpUiToolMeta } from "@modelcontextprotocol/ext-apps";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
@@ -9,7 +9,7 @@ import { archestraMcpBranding } from "@/archestra-mcp-server";
 import { userHasPermission } from "@/auth/utils";
 import type { TokenAuthContext } from "@/clients/mcp-client";
 import config from "@/config";
-import { AppModel, AppToolModel } from "@/models";
+import { AppModel, ToolModel } from "@/models";
 import { ApiError, type App, UuidIdSchema } from "@/types";
 import { APP_DATA_SHORT_NAMES, createAppServer } from "./mcp-app-gateway.utils";
 import {
@@ -213,7 +213,14 @@ async function rejectDisallowedToolCall(params: {
     );
   }
 
-  const tool = await AppToolModel.findByNameForApp(appId, toolName);
+  // Resolve exactly like dispatch does (clients/mcp-client.ts
+  // validateAndGetTool): exact name first, then — for unprefixed names only —
+  // the "__<name>" suffix fallback, so a tool reachable at dispatch is never
+  // rejected here.
+  let [tool] = await ToolModel.getMcpToolsAssignedToApp([toolName], appId);
+  if (!tool && !toolName.includes(MCP_SERVER_TOOL_NAME_SEPARATOR)) {
+    [tool] = await ToolModel.getMcpToolsAssignedToAppBySuffix(toolName, appId);
+  }
   if (!tool) {
     return jsonRpcError(
       reply,

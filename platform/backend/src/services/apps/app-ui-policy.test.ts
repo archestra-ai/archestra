@@ -84,7 +84,7 @@ describe("buildValidatedVersionPayload", () => {
 
   test("a module script using window.archestra passes clean", () => {
     const { warnings } = buildValidatedVersionPayload({
-      html: '<html><head><script type="module">await window.archestra.data.set("k", 1);</script></head><body/></html>',
+      html: '<html><head><script type="module">await window.archestra.storage.user.set("k", 1);</script></head><body/></html>',
     });
     expect(warnings).toEqual([]);
   });

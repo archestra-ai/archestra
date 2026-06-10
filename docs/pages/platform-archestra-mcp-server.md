@@ -1642,12 +1642,12 @@ Required RBAC permission: `skill:update`
 | `create_app` | Build an interactive app — a to-do list, dashboard, form, tracker, game, or any custom UI — from a single self-contained HTML document. | `app:create` |
 | `list_apps` | List apps visible to the caller, optionally filtered by name. | `app:read` |
 | `render_app` | Render an existing app by id, if the caller may view it. | `app:read` |
-| `update_app` | Change an existing app's HTML and/or metadata. | `app:update` |
+| `update_app` | Change an existing app's HTML, assigned tools, and/or metadata. | `app:update` |
 | `delete_app` | Soft-delete an app the caller owns or administers. | `app:delete` |
-| `app_data_get` | Read a value from the calling app's data store. | `app:read` |
-| `app_data_set` | Write a value to the calling app's data store. | `app:update` |
-| `app_data_list` | List all entries in the calling app's data store. | `app:read` |
-| `app_data_delete` | Delete a key from the calling app's data store. | `app:update` |
+| `app_data_get` | Read a value from the calling app's data store (per-user or shared partition). | `app:read` |
+| `app_data_set` | Write a value to the calling app's data store (per-user or shared partition). | `app:update` |
+| `app_data_list` | List all entries in one partition of the calling app's data store. | `app:read` |
+| `app_data_delete` | Delete a key from the calling app's data store (per-user or shared partition). | `app:update` |
 
 #### create_app
 
@@ -1672,6 +1672,7 @@ Required RBAC permission: `app:create`
 | `uiPermissions.microphone` | `object` | No |  |
 | `uiPermissions.geolocation` | `object` | No |  |
 | `uiPermissions.clipboardWrite` | `object` | No |  |
+| `tools` | `string[]` | No | Upstream MCP tool names to assign to the app (e.g. from search_tools), callable from its HTML via archestra.tools.call with the viewing user's credentials. Declarative: the given list replaces the app's current assignments ([] clears them); omitted leaves them unchanged. |
 
 ##### Output
 
@@ -1682,6 +1683,7 @@ Required RBAC permission: `app:create`
 | `description` | `string \| null` | Yes |  |
 | `scope` | `"personal" \| "team" \| "org"` | Yes |  |
 | `latestVersion` | `number` | Yes |  |
+| `tools` | `string[]` | No | The app's assigned tool names after this call (present when the tools param was given). |
 | `warnings` | `string[]` | No | Soft save-time validation warnings about the html (the save succeeded); fix them via update_app. |
 
 #### list_apps
@@ -1705,6 +1707,7 @@ Required RBAC permission: `app:read`
 | `apps[].description` | `string \| null` | Yes |  |
 | `apps[].scope` | `"personal" \| "team" \| "org"` | Yes |  |
 | `apps[].latestVersion` | `number` | Yes |  |
+| `apps[].tools` | `string[]` | No | The app's assigned tool names after this call (present when the tools param was given). |
 | `apps[].warnings` | `string[]` | No | Soft save-time validation warnings about the html (the save succeeded); fix them via update_app. |
 
 #### render_app
@@ -1726,6 +1729,7 @@ Required RBAC permission: `app:read`
 | `description` | `string \| null` | Yes |  |
 | `scope` | `"personal" \| "team" \| "org"` | Yes |  |
 | `latestVersion` | `number` | Yes |  |
+| `tools` | `string[]` | No | The app's assigned tool names after this call (present when the tools param was given). |
 | `warnings` | `string[]` | No | Soft save-time validation warnings about the html (the save succeeded); fix them via update_app. |
 
 #### update_app
@@ -1741,6 +1745,7 @@ Required RBAC permission: `app:update`
 | `description` | `string \| null` | No |  |
 | `scope` | `"personal" \| "team" \| "org"` | No |  |
 | `html` | `string` | No | New HTML; supplying it forks a new immutable version (no-op if unchanged). |
+| `tools` | `string[]` | No | Upstream MCP tool names to assign to the app (e.g. from search_tools), callable from its HTML via archestra.tools.call with the viewing user's credentials. Declarative: the given list replaces the app's current assignments ([] clears them); omitted leaves them unchanged. |
 | `uiCsp` | `object` | No | New CSP allowlist; part of the version envelope, so it requires html too. |
 | `uiCsp.connectDomains` | `string[]` | No |  |
 | `uiCsp.resourceDomains` | `string[]` | No |  |
@@ -1761,6 +1766,7 @@ Required RBAC permission: `app:update`
 | `description` | `string \| null` | Yes |  |
 | `scope` | `"personal" \| "team" \| "org"` | Yes |  |
 | `latestVersion` | `number` | Yes |  |
+| `tools` | `string[]` | No | The app's assigned tool names after this call (present when the tools param was given). |
 | `warnings` | `string[]` | No | Soft save-time validation warnings about the html (the save succeeded); fix them via update_app. |
 
 #### delete_app
@@ -1783,6 +1789,7 @@ Required RBAC permission: `app:read`
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `key` | `string` | Yes | The data store key. |
+| `scope` | `"user" \| "app"` | No | Storage partition: "user" (default) is private to the viewing user, "app" is shared by everyone using the app. |
 
 ##### Output
 
@@ -1800,6 +1807,7 @@ Required RBAC permission: `app:update`
 |-----------|------|----------|-------------|
 | `key` | `string` | Yes | The data store key. |
 | `value` | `any` | Yes | Any JSON-serializable value. |
+| `scope` | `"user" \| "app"` | No | Storage partition: "user" (default) is private to the viewing user, "app" is shared by everyone using the app. |
 
 ##### Output
 
@@ -1811,7 +1819,11 @@ Required RBAC permission: `app:update`
 
 Required RBAC permission: `app:read`
 
-This tool takes no arguments.
+##### Input
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `scope` | `"user" \| "app"` | No | Storage partition: "user" (default) is private to the viewing user, "app" is shared by everyone using the app. |
 
 ##### Output
 
@@ -1830,4 +1842,5 @@ Required RBAC permission: `app:update`
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `key` | `string` | Yes | The data store key. |
+| `scope` | `"user" \| "app"` | No | Storage partition: "user" (default) is private to the viewing user, "app" is shared by everyone using the app. |
 

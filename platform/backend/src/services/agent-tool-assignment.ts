@@ -1,3 +1,4 @@
+import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import {
   AgentModel,
   AgentToolModel,
@@ -162,6 +163,100 @@ export async function validateAssignment(
   }
 
   return null;
+}
+
+/**
+ * Resolve a declarative tool-name list (the `tools` param of the
+ * `create_app`/`update_app` chat tools) to assignable tool rows — clean or
+ * fail, never a silent partial set. Names resolve strictly within the caller's
+ * organization (`ToolModel.findAppAssignableToolsByNames`; a global lookup
+ * would let a caller attach another org's tool row), built-ins are rejected,
+ * and an ambiguous or unknown name errors with the offenders listed. The
+ * resulting assignments use dynamic credential resolution: the server (and so
+ * the credential) is picked per viewing user at call time, which both makes
+ * the assignment valid without an explicit mcpServerId and gives shared apps
+ * per-viewer auth.
+ */
+export async function resolveAppToolsByName(params: {
+  organizationId: string;
+  toolNames: readonly string[];
+}): Promise<
+  { tools: Array<{ id: string; name: string }> } | ToolAssignmentError
+> {
+  const requested = [...new Set(params.toolNames)];
+
+  const builtIns = requested.filter((name) =>
+    archestraMcpBranding.isToolName(name),
+  );
+  if (builtIns.length > 0) {
+    return appToolsValidationError(
+      `Built-in tools cannot be assigned to apps (app HTML reaches the data store via archestra.storage automatically): ${builtIns.join(", ")}`,
+    );
+  }
+
+  const rows = await ToolModel.findAppAssignableToolsByNames(
+    params.organizationId,
+    requested,
+  );
+  const byName = new Map<string, typeof rows>();
+  for (const row of rows) {
+    byName.set(row.name, [...(byName.get(row.name) ?? []), row]);
+  }
+
+  const unknown = requested.filter((name) => !byName.has(name));
+  if (unknown.length > 0) {
+    return appToolsValidationError(
+      `Unknown tool name(s) for this organization: ${unknown.join(", ")}. Use search_tools to discover available tools.`,
+    );
+  }
+  const ambiguous = requested.filter(
+    (name) => (byName.get(name) ?? []).length > 1,
+  );
+  if (ambiguous.length > 0) {
+    return appToolsValidationError(
+      `Tool name(s) match more than one installed tool and cannot be assigned by name: ${ambiguous.join(", ")}.`,
+    );
+  }
+  const pendingDiscovery = rows.filter((row) => row.clonedPendingDiscovery);
+  if (pendingDiscovery.length > 0) {
+    return appToolsValidationError(
+      `Tool(s) not available until their server is installed: ${pendingDiscovery.map((row) => row.name).join(", ")}`,
+    );
+  }
+
+  return {
+    tools: requested.map((name) => {
+      // biome-ignore lint/style/noNonNullAssertion: unknown names errored above
+      const row = byName.get(name)![0];
+      return { id: row.id, name: row.name };
+    }),
+  };
+}
+
+/**
+ * Replace an app's tool assignments with the resolved set, atomically (a
+ * failure cannot leave a partial set). See {@link resolveAppToolsByName} for
+ * why assignments are dynamic-mode.
+ */
+export async function replaceAppToolAssignments(
+  appId: string,
+  tools: ReadonlyArray<{ id: string }>,
+): Promise<void> {
+  await AppToolModel.replaceAssignments(
+    appId,
+    tools.map((tool) => ({
+      toolId: tool.id,
+      mcpServerId: null,
+      credentialResolutionMode: "dynamic",
+    })),
+  );
+}
+
+function appToolsValidationError(message: string): ToolAssignmentError {
+  return {
+    code: "validation_error",
+    error: { message, type: "validation_error" },
+  };
 }
 
 /**

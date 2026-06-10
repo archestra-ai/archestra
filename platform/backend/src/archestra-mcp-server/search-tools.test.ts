@@ -13,8 +13,11 @@ import {
   TOOL_UPDATE_SKILL_FULL_NAME,
   TOOL_UPLOAD_FILE_FULL_NAME,
 } from "@archestra/shared";
-import config from "@/config";
-import { ConversationEnabledToolModel, ToolModel } from "@/models";
+import {
+  ConversationEnabledToolModel,
+  OrganizationModel,
+  ToolModel,
+} from "@/models";
 import { describe, expect, test } from "@/test";
 import type { ArchestraContext } from ".";
 import { executeArchestraTool } from ".";
@@ -183,7 +186,7 @@ describe("search_tools", () => {
     );
   });
 
-  test("hides unassigned tools when auto-assignment is disabled by config", async ({
+  test("hides unassigned tools when the org disables tool auto-assignment", async ({
     makeAgent,
     makeInternalMcpCatalog,
     makeMember,
@@ -208,6 +211,9 @@ describe("search_tools", () => {
       description: "Search repositories by topic, language, or owner.",
       catalogId: catalog.id,
     });
+    await OrganizationModel.patch(org.id, {
+      allowToolAutoAssignment: false,
+    });
 
     const context: ArchestraContext = {
       agent: { id: agent.id, name: agent.name },
@@ -216,28 +222,18 @@ describe("search_tools", () => {
       userId: user.id,
     };
 
-    const original = config.agents.toolAutoAssignmentDisabled;
-    (
-      config.agents as { toolAutoAssignmentDisabled: boolean }
-    ).toolAutoAssignmentDisabled = true;
-    try {
-      const result = await executeArchestraTool(
-        TOOL_SEARCH_TOOLS_FULL_NAME,
-        { query: "repository search" },
-        context,
-      );
+    const result = await executeArchestraTool(
+      TOOL_SEARCH_TOOLS_FULL_NAME,
+      { query: "repository search" },
+      context,
+    );
 
-      expect(result.isError).toBe(false);
-      const structuredContent =
-        result.structuredContent as SearchToolsStructuredContent;
-      expect(
-        structuredContent.tools.map((tool) => tool.toolName),
-      ).not.toContain("github__search_repositories");
-    } finally {
-      (
-        config.agents as { toolAutoAssignmentDisabled: boolean }
-      ).toolAutoAssignmentDisabled = original;
-    }
+    expect(result.isError).toBe(false);
+    const structuredContent =
+      result.structuredContent as SearchToolsStructuredContent;
+    expect(structuredContent.tools.map((tool) => tool.toolName)).not.toContain(
+      "github__search_repositories",
+    );
   });
 
   test("hides unassigned tools whose catalog the user cannot access", async ({

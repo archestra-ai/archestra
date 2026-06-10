@@ -173392,6 +173392,9 @@
                     "allowChatFileUploads": {
                       "type": "boolean"
                     },
+                    "allowToolAutoAssignment": {
+                      "type": "boolean"
+                    },
                     "embeddingModel": {
                       "nullable": true,
                       "type": "string"
@@ -173749,6 +173752,7 @@
                     "compressionScope",
                     "globalToolPolicy",
                     "allowChatFileUploads",
+                    "allowToolAutoAssignment",
                     "embeddingModel",
                     "embeddingDimensions",
                     "embeddingChatApiKeyId",
@@ -174305,6 +174309,9 @@
                     "allowChatFileUploads": {
                       "type": "boolean"
                     },
+                    "allowToolAutoAssignment": {
+                      "type": "boolean"
+                    },
                     "embeddingModel": {
                       "nullable": true,
                       "type": "string"
@@ -174662,6 +174669,7 @@
                     "compressionScope",
                     "globalToolPolicy",
                     "allowChatFileUploads",
+                    "allowToolAutoAssignment",
                     "embeddingModel",
                     "embeddingDimensions",
                     "embeddingChatApiKeyId",
@@ -175366,7 +175374,7 @@
         "tags": [
           "Organization"
         ],
-        "description": "Update security settings (global tool policy, chat file uploads)\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agentSettings:update`: Modify agent settings (default model, default agent, security engine, file uploads)",
+        "description": "Update security settings (global tool policy, chat file uploads, tool auto-assignment)\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agentSettings:update`: Modify agent settings (default model, default agent, security engine, file uploads)",
         "requestBody": {
           "required": true,
           "content": {
@@ -175382,6 +175390,9 @@
                     ]
                   },
                   "allowChatFileUploads": {
+                    "type": "boolean"
+                  },
+                  "allowToolAutoAssignment": {
                     "type": "boolean"
                   }
                 }
@@ -175488,6 +175499,9 @@
                       ]
                     },
                     "allowChatFileUploads": {
+                      "type": "boolean"
+                    },
+                    "allowToolAutoAssignment": {
                       "type": "boolean"
                     },
                     "embeddingModel": {
@@ -175847,6 +175861,7 @@
                     "compressionScope",
                     "globalToolPolicy",
                     "allowChatFileUploads",
+                    "allowToolAutoAssignment",
                     "embeddingModel",
                     "embeddingDimensions",
                     "embeddingChatApiKeyId",
@@ -176289,6 +176304,9 @@
                     "allowChatFileUploads": {
                       "type": "boolean"
                     },
+                    "allowToolAutoAssignment": {
+                      "type": "boolean"
+                    },
                     "embeddingModel": {
                       "nullable": true,
                       "type": "string"
@@ -176646,6 +176664,7 @@
                     "compressionScope",
                     "globalToolPolicy",
                     "allowChatFileUploads",
+                    "allowToolAutoAssignment",
                     "embeddingModel",
                     "embeddingDimensions",
                     "embeddingChatApiKeyId",
@@ -177071,6 +177090,9 @@
                     "allowChatFileUploads": {
                       "type": "boolean"
                     },
+                    "allowToolAutoAssignment": {
+                      "type": "boolean"
+                    },
                     "embeddingModel": {
                       "nullable": true,
                       "type": "string"
@@ -177428,6 +177450,7 @@
                     "compressionScope",
                     "globalToolPolicy",
                     "allowChatFileUploads",
+                    "allowToolAutoAssignment",
                     "embeddingModel",
                     "embeddingDimensions",
                     "embeddingChatApiKeyId",
@@ -177915,6 +177938,9 @@
                     "allowChatFileUploads": {
                       "type": "boolean"
                     },
+                    "allowToolAutoAssignment": {
+                      "type": "boolean"
+                    },
                     "embeddingModel": {
                       "nullable": true,
                       "type": "string"
@@ -178272,6 +178298,7 @@
                     "compressionScope",
                     "globalToolPolicy",
                     "allowChatFileUploads",
+                    "allowToolAutoAssignment",
                     "embeddingModel",
                     "embeddingDimensions",
                     "embeddingChatApiKeyId",
@@ -178739,6 +178766,9 @@
                     "allowChatFileUploads": {
                       "type": "boolean"
                     },
+                    "allowToolAutoAssignment": {
+                      "type": "boolean"
+                    },
                     "embeddingModel": {
                       "nullable": true,
                       "type": "string"
@@ -179096,6 +179126,7 @@
                     "compressionScope",
                     "globalToolPolicy",
                     "allowChatFileUploads",
+                    "allowToolAutoAssignment",
                     "embeddingModel",
                     "embeddingDimensions",
                     "embeddingChatApiKeyId",
@@ -179508,6 +179539,9 @@
                     "allowChatFileUploads": {
                       "type": "boolean"
                     },
+                    "allowToolAutoAssignment": {
+                      "type": "boolean"
+                    },
                     "embeddingModel": {
                       "nullable": true,
                       "type": "string"
@@ -179865,6 +179899,7 @@
                     "compressionScope",
                     "globalToolPolicy",
                     "allowChatFileUploads",
+                    "allowToolAutoAssignment",
                     "embeddingModel",
                     "embeddingDimensions",
                     "embeddingChatApiKeyId",
@@ -180290,6 +180325,9 @@
                     "allowChatFileUploads": {
                       "type": "boolean"
                     },
+                    "allowToolAutoAssignment": {
+                      "type": "boolean"
+                    },
                     "embeddingModel": {
                       "nullable": true,
                       "type": "string"
@@ -180647,6 +180685,7 @@
                     "compressionScope",
                     "globalToolPolicy",
                     "allowChatFileUploads",
+                    "allowToolAutoAssignment",
                     "embeddingModel",
                     "embeddingDimensions",
                     "embeddingChatApiKeyId",
@@ -181039,6 +181078,9 @@
                     "allowChatFileUploads": {
                       "type": "boolean"
                     },
+                    "allowToolAutoAssignment": {
+                      "type": "boolean"
+                    },
                     "embeddingModel": {
                       "nullable": true,
                       "type": "string"
@@ -181396,6 +181438,7 @@
                     "compressionScope",
                     "globalToolPolicy",
                     "allowChatFileUploads",
+                    "allowToolAutoAssignment",
                     "embeddingModel",
                     "embeddingDimensions",
                     "embeddingChatApiKeyId",
@@ -182101,6 +182144,9 @@
                     "allowChatFileUploads": {
                       "type": "boolean"
                     },
+                    "allowToolAutoAssignment": {
+                      "type": "boolean"
+                    },
                     "embeddingModel": {
                       "nullable": true,
                       "type": "string"
@@ -182458,6 +182504,7 @@
                     "compressionScope",
                     "globalToolPolicy",
                     "allowChatFileUploads",
+                    "allowToolAutoAssignment",
                     "embeddingModel",
                     "embeddingDimensions",
                     "embeddingChatApiKeyId",

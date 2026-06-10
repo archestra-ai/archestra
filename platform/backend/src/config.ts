@@ -772,15 +772,6 @@ const config = {
   },
   agents: {
     skillsEnabled: process.env.ARCHESTRA_AGENTS_SKILLS_ENABLED === "true",
-    /**
-     * Restores the strict pre-relaxation dispatch behavior: search_tools and
-     * run_tool are limited to tools explicitly assigned to the agent — no
-     * user-wide catalog discovery and no first-use auto-assignment. Use when
-     * catalog tool names must not be exposed to users beyond their agents'
-     * assigned toolsets.
-     */
-    toolAutoAssignmentDisabled:
-      process.env.ARCHESTRA_AGENTS_TOOL_AUTO_ASSIGNMENT_DISABLED === "true",
     incomingEmail: {
       provider: parseIncomingEmailProvider(),
       outlook: {

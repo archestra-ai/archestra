@@ -9,8 +9,11 @@ import {
 } from "@archestra/shared";
 import { vi } from "vitest";
 import mcpClient from "@/clients/mcp-client";
-import config from "@/config";
-import { ConversationEnabledToolModel, ToolModel } from "@/models";
+import {
+  ConversationEnabledToolModel,
+  OrganizationModel,
+  ToolModel,
+} from "@/models";
 import { beforeEach, describe, expect, test } from "@/test";
 import type { Agent } from "@/types";
 import { type ArchestraContext, executeArchestraTool } from ".";
@@ -442,43 +445,33 @@ describe("run_tool", () => {
       expect(assignedNames.has("github__search_repositories")).toBe(false);
     });
 
-    test("keeps the strict behavior when auto-assignment is disabled by config", async ({
+    test("keeps the strict behavior when the org disables tool auto-assignment", async ({
       makeInternalMcpCatalog,
       makeTool,
     }) => {
-      const catalog = await makeInternalMcpCatalog({
-        organizationId: mockContext.organizationId,
-      });
+      const organizationId = mockContext.organizationId as string;
+      const catalog = await makeInternalMcpCatalog({ organizationId });
       await makeTool({
         name: "github__search_repositories",
         catalogId: catalog.id,
       });
+      await OrganizationModel.patch(organizationId, {
+        allowToolAutoAssignment: false,
+      });
 
-      const original = config.agents.toolAutoAssignmentDisabled;
-      (
-        config.agents as { toolAutoAssignmentDisabled: boolean }
-      ).toolAutoAssignmentDisabled = true;
-      try {
-        const result = await executeArchestraTool(
-          TOOL_RUN_TOOL_FULL_NAME,
-          { tool_name: "github__search_repositories", tool_args: {} },
-          mockContext,
-        );
+      const result = await executeArchestraTool(
+        TOOL_RUN_TOOL_FULL_NAME,
+        { tool_name: "github__search_repositories", tool_args: {} },
+        mockContext,
+      );
 
-        expect(result.isError).toBe(true);
-        expect((result.content[0] as any).text).toContain(
-          'No tool named "github__search_repositories"',
-        );
-        expect(mcpClient.executeToolCall).not.toHaveBeenCalled();
-        const assignedNames = await ToolModel.getAssignedToolNames(
-          testAgent.id,
-        );
-        expect(assignedNames.has("github__search_repositories")).toBe(false);
-      } finally {
-        (
-          config.agents as { toolAutoAssignmentDisabled: boolean }
-        ).toolAutoAssignmentDisabled = original;
-      }
+      expect(result.isError).toBe(true);
+      expect((result.content[0] as any).text).toContain(
+        'No tool named "github__search_repositories"',
+      );
+      expect(mcpClient.executeToolCall).not.toHaveBeenCalled();
+      const assignedNames = await ToolModel.getAssignedToolNames(testAgent.id);
+      expect(assignedNames.has("github__search_repositories")).toBe(false);
     });
 
     test("tells a team-admin to involve an admin for a team-scoped agent outside their teams", async ({

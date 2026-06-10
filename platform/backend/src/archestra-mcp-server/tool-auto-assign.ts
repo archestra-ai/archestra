@@ -3,9 +3,8 @@ import {
   requireAgentModifyPermission,
 } from "@/auth/agent-type-permissions";
 import { userHasPermission } from "@/auth/utils";
-import config from "@/config";
 import logger from "@/logging";
-import { AgentModel, TeamModel, ToolModel } from "@/models";
+import { AgentModel, OrganizationModel, TeamModel, ToolModel } from "@/models";
 import { assignToolToAgent } from "@/services/agent-tool-assignment";
 import { ApiError, type Tool } from "@/types";
 import { archestraMcpBranding } from "./branding";
@@ -16,9 +15,9 @@ import { archestraMcpBranding } from "./branding";
 // the user can access, and run_tool assigns such a tool to the agent on first
 // use when the user is allowed to modify the agent. Users who cannot modify
 // the agent get a recovery message telling them to ask an admin instead.
-// ARCHESTRA_AGENTS_TOOL_AUTO_ASSIGNMENT_DISABLED restores the strict behavior
-// for deployments where catalog tool names must not be exposed beyond the
-// agents' assigned toolsets.
+// The org-level "allow tool auto-assignment" security setting restores the
+// strict behavior for organizations where catalog tool names must not be
+// exposed beyond the agents' assigned toolsets.
 
 type AutoAssignOutcome =
   /** Tool assigned to the agent (or already was) — proceed with dispatch. */
@@ -40,8 +39,11 @@ export async function autoAssignToolToAgent(params: {
   organizationId?: string;
 }): Promise<AutoAssignOutcome> {
   const { agentId, toolName } = params;
-  const ctx = relaxationContext(params.userId, params.organizationId);
-  if (!ctx || isExcludedFromDiscovery(toolName)) {
+  if (isExcludedFromDiscovery(toolName)) {
+    return "unavailable";
+  }
+  const ctx = await relaxationContext(params.userId, params.organizationId);
+  if (!ctx) {
     return "unavailable";
   }
   const { organizationId, userId } = ctx;
@@ -117,7 +119,7 @@ export async function getUnassignedDiscoverableTools(params: {
   organizationId?: string;
 }): Promise<Tool[]> {
   const { assignedToolNames } = params;
-  const ctx = relaxationContext(params.userId, params.organizationId);
+  const ctx = await relaxationContext(params.userId, params.organizationId);
   if (!ctx) {
     return [];
   }
@@ -137,18 +139,17 @@ export async function getUnassignedDiscoverableTools(params: {
 // Single gate shared by the search widening and the auto-assignment so the
 // two surfaces cannot drift apart: relaxation needs a real authenticated user
 // (org/team-token sessions and the internal "system" user keep the strict
-// assigned-tools-only behavior) and the global kill switch off. Returns the
-// validated user/org pair, or null when the strict behavior applies.
-function relaxationContext(
+// assigned-tools-only behavior) and the org's "allow tool auto-assignment"
+// security setting on. Returns the validated user/org pair, or null when the
+// strict behavior applies.
+async function relaxationContext(
   userId: string | undefined,
   organizationId: string | undefined,
-): { userId: string; organizationId: string } | null {
-  if (
-    config.agents.toolAutoAssignmentDisabled ||
-    !userId ||
-    !organizationId ||
-    userId === "system"
-  ) {
+): Promise<{ userId: string; organizationId: string } | null> {
+  if (!userId || !organizationId || userId === "system") {
+    return null;
+  }
+  if (!(await OrganizationModel.getAllowToolAutoAssignment(organizationId))) {
     return null;
   }
   return { userId, organizationId };

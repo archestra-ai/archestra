@@ -823,10 +823,6 @@ The following environment variables can be used to configure Archestra Platform.
   - Default: `false`
   - Values: `true`, `false`
 
-- **`ARCHESTRA_AGENTS_TOOL_AUTO_ASSIGNMENT_DISABLED`** - Restricts the `search_tools`/`run_tool` dispatch surface to tools explicitly assigned to the agent. By default, signed-in users can also discover third-party tools from MCP catalogs they have access to, and `run_tool` assigns such a tool to the agent on first use when the user may modify the agent. Set to `true` when catalog tool names must not be exposed to users beyond their agents' assigned toolsets.
-  - Default: `false`
-  - Values: `true`, `false`
-
 - **`ARCHESTRA_AGENT_HOOKS_ENABLED`** - Enables agent lifecycle hooks — user-defined scripts that run at chat lifecycle events (and the admin-only `/debug` chip mode in chat). Only takes effect when the agent runtime is also on (`ARCHESTRA_CODE_RUNTIME_ENABLED=true`), since hooks execute in the per-conversation sandbox. When off, the per-agent hooks editor is hidden and no hooks run.
   - Default: `false`
   - Values: `true`, `false`

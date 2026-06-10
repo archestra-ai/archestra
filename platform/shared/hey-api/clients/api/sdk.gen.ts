@@ -4275,7 +4275,7 @@ export const updateAppearanceSettings = <ThrowOnError extends boolean = false>(o
 });
 
 /**
- * Update security settings (global tool policy, chat file uploads)
+ * Update security settings (global tool policy, chat file uploads, tool auto-assignment)
  *
  * Authentication:
  *

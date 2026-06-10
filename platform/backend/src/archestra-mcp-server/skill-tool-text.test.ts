@@ -6,9 +6,8 @@ import { tools as skillTools } from "./skills";
 /**
  * Characterization snapshot of every LLM-facing string in the skill and
  * sandbox tool surfaces: tool names, titles, descriptions, and input schemas
- * (including field `description`s). These strings steer model behavior, so
- * any change must be deliberate — review the snapshot diff as a semantic
- * edit, not as noise.
+ * (including field `description`s). These strings steer model behavior; a
+ * snapshot diff here is a semantic change to what models read.
  */
 describe("skill and sandbox tool text", () => {
   it.each(

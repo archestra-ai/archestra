@@ -23,9 +23,8 @@ import type { Skill, SkillFile } from "@/types";
  * Terminology for every model-facing skill text (tool descriptions, catalog
  * and activation blocks): a skill is *activated* (the `activate_skill` call),
  * which *loads* its instructions into context and *mounts* its files under
- * `/skills` in the sandbox — never "installed" or "live". The sandbox is "the
- * conversation's sandbox" in tool descriptions and "your sandbox" in
- * second-person prompt text, with no "code sandbox" variant.
+ * `/skills` in the sandbox. The sandbox is "the conversation's sandbox" in
+ * tool descriptions and "your sandbox" in second-person prompt text.
  *
  * @see https://agentskills.io/specification
  */

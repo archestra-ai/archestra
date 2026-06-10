@@ -1944,6 +1944,7 @@ const MessageTool = memo(
                 <McpAppSection
                   uiResourceUri={getArchestraAppResourceUri(ownedApp.appId)}
                   appId={ownedApp.appId}
+                  appVersion={ownedApp.latestVersion}
                   agentId={agentId}
                   toolName={mcpAppToolName}
                   toolCallId={part.toolCallId}

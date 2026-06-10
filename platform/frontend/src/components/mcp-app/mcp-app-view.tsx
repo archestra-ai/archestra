@@ -16,7 +16,12 @@ import {
   PostMessageTransport,
 } from "@modelcontextprotocol/ext-apps/app-bridge";
 import { useTheme } from "next-themes";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  clearAppDiagnostics,
+  parseForwardedDiagnostic,
+  reportAppDiagnostic,
+} from "@/lib/chat/app-diagnostics-store";
 import { getMcpSandboxBaseUrl } from "@/lib/config/config";
 import { useFeature } from "@/lib/config/config.query";
 
@@ -65,6 +70,7 @@ export const McpAppRuntime = function McpAppRuntime({
   onSendMessage,
   preloadedResource,
   onResourceStateChange,
+  appVersion,
 }: {
   toolResourceUri: string;
   endpoint: McpAppEndpoint;
@@ -79,6 +85,8 @@ export const McpAppRuntime = function McpAppRuntime({
   /** HTML pre-fetched by the backend — skips the in-browser HTTP fetch to avoid SSE deadlock */
   preloadedResource?: AppResourceMeta;
   onResourceStateChange: (state: "renderable" | "empty") => void;
+  /** Owned-app version this render shows — keys the render-loop diagnostics. */
+  appVersion?: number | null;
 }) {
   const { resolvedTheme } = useTheme();
   const [bridge, setBridge] = useState<AppBridge | null>(null);
@@ -123,6 +131,27 @@ export const McpAppRuntime = function McpAppRuntime({
   const rpcIdRef = useRef(0);
   // Shared cancel ref so the prop-update useEffect can cancel an in-flight fallback fetch.
   const fetchCancelledRef = useRef(false);
+
+  // Render-loop diagnostics (owned apps only): runtime errors / CSP violations
+  // forwarded by the sandbox proxy are validated and collected per
+  // (appId, version) so the chat can hand them back to the authoring model.
+  const ownedAppId = endpoint.kind === "app" ? endpoint.appId : null;
+  const appVersionRef = useRef(appVersion);
+  appVersionRef.current = appVersion;
+  const handleDiagnostic = useCallback(
+    (data: unknown) => {
+      if (!ownedAppId) return;
+      const entry = parseForwardedDiagnostic(data);
+      if (entry) {
+        reportAppDiagnostic(ownedAppId, appVersionRef.current ?? null, entry);
+      }
+    },
+    [ownedAppId],
+  );
+  useEffect(() => {
+    if (!ownedAppId) return;
+    return () => clearAppDiagnostics(ownedAppId);
+  }, [ownedAppId]);
 
   // Create bridge + fetch HTML (once per endpoint/resourceUri — callbacks via refs)
   // biome-ignore lint/correctness/useExhaustiveDependencies: callbacks accessed via stable refs
@@ -515,6 +544,7 @@ export const McpAppRuntime = function McpAppRuntime({
             });
           }}
           useDedicatedOrigin={sandboxResult.hasCrossOrigin}
+          onDiagnostic={ownedAppId ? handleDiagnostic : undefined}
         />
       )}
     </div>
@@ -543,6 +573,7 @@ function SandboxIframe({
   onError,
   onSizeChanged,
   useDedicatedOrigin,
+  onDiagnostic,
 }: {
   html: string;
   sandboxUrl: URL;
@@ -555,6 +586,8 @@ function SandboxIframe({
   onSizeChanged?: (size: { width?: number; height?: number }) => void;
   /** When true, sandbox iframe uses allow-same-origin (dedicated subdomain provides isolation). */
   useDedicatedOrigin?: boolean;
+  /** Raw runtime-error / csp-violation payloads forwarded by the sandbox proxy. */
+  onDiagnostic?: (data: unknown) => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
@@ -563,10 +596,12 @@ function SandboxIframe({
   const [error, setError] = useState<Error | null>(null);
   const onSizeChangedRef = useRef(onSizeChanged);
   const onErrorRef = useRef(onError);
+  const onDiagnosticRef = useRef(onDiagnostic);
 
   useEffect(() => {
     onSizeChangedRef.current = onSizeChanged;
     onErrorRef.current = onError;
+    onDiagnosticRef.current = onDiagnostic;
   });
 
   // Create iframe, wait for proxy-ready, connect bridge
@@ -633,13 +668,34 @@ function SandboxIframe({
       }
     };
 
+    // Persistent diagnostics listener: the proxy forwards runtime errors and
+    // CSP violations from the inner app frame; payloads are untrusted and are
+    // validated by the consumer (parseForwardedDiagnostic).
+    const onDiagnosticMessage = (event: MessageEvent) => {
+      if (
+        event.source !== iframe.contentWindow ||
+        event.origin !== expectedOrigin
+      ) {
+        return;
+      }
+      const type = (event.data as { type?: unknown } | null)?.type;
+      if (
+        type === "mcp-apps:runtime-error" ||
+        type === "mcp-apps:csp-violation"
+      ) {
+        onDiagnosticRef.current?.(event.data);
+      }
+    };
+
     window.addEventListener("message", onMessage);
+    window.addEventListener("message", onDiagnosticMessage);
     container.appendChild(iframe);
 
     return () => {
       cancelled = true;
       clearTimeout(timeout);
       window.removeEventListener("message", onMessage);
+      window.removeEventListener("message", onDiagnosticMessage);
       iframe.remove();
       iframeRef.current = null;
       // Reset connection state so the send effects below don't fire against a

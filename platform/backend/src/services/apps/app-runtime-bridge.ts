@@ -36,6 +36,45 @@ const dataDeleteTool = `${ARCHESTRA_TOOL_PREFIX}${TOOL_APP_DATA_DELETE_SHORT_NAM
 export const APP_RUNTIME_BRIDGE_SCRIPT = `<script ${APP_RUNTIME_BRIDGE_MARKER}>
 (() => {
   "use strict";
+  // Render-loop diagnostics: runtime errors are posted to the parent (the
+  // sandbox proxy forwards them to the host), where they are validated,
+  // capped, and surfaced back to the authoring model. Same channel shape as
+  // the proxy's CSP-violation forwarding.
+  const postDiagnostic = (errorType, message) => {
+    try {
+      window.parent.postMessage(
+        { type: "mcp-apps:runtime-error", errorType, message: String(message).slice(0, 1000), timestamp: Date.now() },
+        "*",
+      );
+    } catch {
+      // never let diagnostics reporting break the app
+    }
+  };
+  window.addEventListener("error", (e) => {
+    postDiagnostic("error", e.message + (e.filename ? " (" + e.filename + ":" + e.lineno + ")" : ""));
+  });
+  window.addEventListener("unhandledrejection", (e) => {
+    const r = e.reason;
+    postDiagnostic("unhandledrejection", (r && (r.stack || r.message)) || String(r));
+  });
+  const consoleError = console.error.bind(console);
+  console.error = (...args) => {
+    consoleError(...args);
+    postDiagnostic(
+      "console.error",
+      args
+        .map((a) => {
+          if (a instanceof Error) return a.message;
+          if (typeof a === "string") return a;
+          try {
+            return JSON.stringify(a);
+          } catch {
+            return String(a);
+          }
+        })
+        .join(" "),
+    );
+  };
   const connectPromise = (async () => {
     const sdkUrl = window.__ARCHESTRA_APP_SDK_URL__;
     if (!sdkUrl) {

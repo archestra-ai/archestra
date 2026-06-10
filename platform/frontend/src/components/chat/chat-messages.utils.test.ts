@@ -405,6 +405,7 @@ describe("extractOwnedAppRender", () => {
     structuredContent: {
       id: "947051c7-ea8e-48ed-8077-a3cc904d9d61",
       name: "To Do App",
+      latestVersion: 3,
     },
   };
 
@@ -422,6 +423,7 @@ describe("extractOwnedAppRender", () => {
     ).toEqual({
       appId: "947051c7-ea8e-48ed-8077-a3cc904d9d61",
       appName: "To Do App",
+      latestVersion: 3,
     });
   });
 
@@ -435,6 +437,7 @@ describe("extractOwnedAppRender", () => {
     ).toEqual({
       appId: "947051c7-ea8e-48ed-8077-a3cc904d9d61",
       appName: "To Do App",
+      latestVersion: 3,
     });
   });
 

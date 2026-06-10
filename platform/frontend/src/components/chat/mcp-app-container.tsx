@@ -9,6 +9,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
 } from "react";
 import { createPortal } from "react-dom";
 import { usePinnedCanvas } from "@/components/chat/pinned-canvas-context";
@@ -19,6 +20,10 @@ import {
   type McpCallToolResult,
 } from "@/components/mcp-app/mcp-app-view";
 import { Button } from "@/components/ui/button";
+import {
+  getAppDiagnosticCounts,
+  subscribeAppDiagnostics,
+} from "@/lib/chat/app-diagnostics-store";
 import { cn } from "@/lib/utils";
 
 /**
@@ -72,6 +77,7 @@ export function McpAppSection({
   uiResourceUri,
   agentId,
   appId,
+  appVersion,
   toolName,
   toolCallId,
   toolInput,
@@ -88,6 +94,8 @@ export function McpAppSection({
    * forwarded into the iframe (they are not app data).
    */
   appId?: string;
+  /** Owned-app version this render shows — keys the render-loop diagnostics. */
+  appVersion?: number | null;
   /** Full prefixed tool name (e.g. "system__get-system-stats") — used to derive the server prefix for oncalltool */
   toolName: string;
   /** Stable identifier for this canvas, used to pin it to the sidebar. */
@@ -162,6 +170,15 @@ export function McpAppSection({
     [resourceKey],
   );
 
+  // Error badge: runtime errors / CSP violations captured from this app's
+  // sandboxed render (owned apps only).
+  const diagnosticCounts = useSyncExternalStore(
+    subscribeAppDiagnostics,
+    getAppDiagnosticCounts,
+    getAppDiagnosticCounts,
+  );
+  const diagnosticCount = appId ? (diagnosticCounts.get(appId) ?? 0) : 0;
+
   if (effectiveResourceState === "empty") {
     return null;
   }
@@ -177,6 +194,14 @@ export function McpAppSection({
         }
         fillContainer={renderInSidebar}
       >
+        {diagnosticCount > 0 && (
+          <div className="mb-2 w-fit rounded-md border border-destructive/50 bg-destructive/10 px-2 py-0.5 text-xs text-destructive">
+            {diagnosticCount === 1
+              ? "1 runtime error"
+              : `${diagnosticCount} runtime errors`}{" "}
+            in this app
+          </div>
+        )}
         <McpAppRuntime
           toolResourceUri={uiResourceUri}
           endpoint={
@@ -197,6 +222,7 @@ export function McpAppSection({
           preloadedResource={preloadedResource}
           onResourceStateChange={handleResourceStateChange}
           onSendMessage={onSendMessage}
+          appVersion={appVersion}
         />
       </McpAppContainer>
     </McpAppErrorBoundary>

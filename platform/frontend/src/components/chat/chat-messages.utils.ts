@@ -77,7 +77,11 @@ export function extractOwnedAppRender(params: {
   toolName: string;
   output: unknown;
   getToolShortName: (toolName: string) => ArchestraToolShortName | null;
-}): { appId: string; appName: string | null } | null {
+}): {
+  appId: string;
+  appName: string | null;
+  latestVersion: number | null;
+} | null {
   const shortName = params.getToolShortName(params.toolName);
   // run_tool also accepts bare archestra short names; a bare name can only be
   // a run_tool target — direct chat tool names are always server-prefixed.
@@ -90,7 +94,13 @@ export function extractOwnedAppRender(params: {
   }
   const structured = (
     params.output as
-      | { structuredContent?: { id?: unknown; name?: unknown } }
+      | {
+          structuredContent?: {
+            id?: unknown;
+            name?: unknown;
+            latestVersion?: unknown;
+          };
+        }
       | undefined
   )?.structuredContent;
   const id = structured?.id;
@@ -100,6 +110,12 @@ export function extractOwnedAppRender(params: {
   return {
     appId: id,
     appName: typeof structured?.name === "string" ? structured.name : null,
+    // Keys the render-loop diagnostics: "app X v3 threw" must point at the
+    // version this render actually showed.
+    latestVersion:
+      typeof structured?.latestVersion === "number"
+        ? structured.latestVersion
+        : null,
   };
 }
 

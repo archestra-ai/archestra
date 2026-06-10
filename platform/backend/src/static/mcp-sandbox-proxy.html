@@ -305,12 +305,17 @@ window.addEventListener("message", async (event) => {
       }
     }
   } else if (event.source === inner.contentWindow) {
-    // Message filtering (Inspector pattern): only forward JSON-RPC 2.0 messages
-    // and CSP violations. Prevents noise from browser extensions or widget internals
-    // from reaching PostMessageTransport and causing parse errors.
+    // Message filtering (Inspector pattern): only forward JSON-RPC 2.0 messages,
+    // CSP violations, and runtime-error diagnostics. Prevents noise from browser
+    // extensions or widget internals from reaching PostMessageTransport and
+    // causing parse errors.
     var data = event.data;
     if (data && typeof data === "object") {
-      if (data.jsonrpc === "2.0" || data.type === "mcp-apps:csp-violation") {
+      if (
+        data.jsonrpc === "2.0" ||
+        data.type === "mcp-apps:csp-violation" ||
+        data.type === "mcp-apps:runtime-error"
+      ) {
         window.parent.postMessage(data, EXPECTED_HOST_ORIGIN || "*");
       }
     }

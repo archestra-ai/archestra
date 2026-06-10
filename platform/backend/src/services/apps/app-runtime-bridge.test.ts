@@ -36,6 +36,13 @@ describe("APP_RUNTIME_BRIDGE_SCRIPT", () => {
     }
   });
 
+  test("installs runtime-error diagnostics hooks", () => {
+    expect(APP_RUNTIME_BRIDGE_SCRIPT).toContain("mcp-apps:runtime-error");
+    for (const hook of ['"error"', '"unhandledrejection"', "console.error ="]) {
+      expect(APP_RUNTIME_BRIDGE_SCRIPT).toContain(hook);
+    }
+  });
+
   test("is a classic script that connects eagerly", () => {
     expect(APP_RUNTIME_BRIDGE_SCRIPT).not.toContain('type="module"');
     // eager connect: the IIFE kicks off the SDK import immediately

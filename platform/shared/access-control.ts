@@ -736,6 +736,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.StreamChat]: {
     chat: ["read"],
   },
+  [RouteId.ResolveChatMcpElicitation]: {
+    chat: ["read"],
+  },
   [RouteId.StopChatStream]: {
     chat: ["read"],
   },

@@ -19576,6 +19576,97 @@ export type StreamChatErrors = {
 
 export type StreamChatError = StreamChatErrors[keyof StreamChatErrors];
 
+export type ResolveChatMcpElicitationData = {
+    body: {
+        conversationId: string;
+        action: 'accept' | 'decline' | 'cancel';
+        content?: {
+            [key: string]: unknown;
+        };
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/chat/elicitation/{id}';
+};
+
+export type ResolveChatMcpElicitationErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ResolveChatMcpElicitationError = ResolveChatMcpElicitationErrors[keyof ResolveChatMcpElicitationErrors];
+
+export type ResolveChatMcpElicitationResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type ResolveChatMcpElicitationResponse = ResolveChatMcpElicitationResponses[keyof ResolveChatMcpElicitationResponses];
+
 export type StopChatStreamData = {
     body?: never;
     path: {

@@ -396,7 +396,7 @@ pnpm rebuild <package-name>  # Enable scripts for specific package
   - **Trusted (policy bypass)**: Archestra tools bypass tool invocation policies and trusted data policies — they are always allowed to execute without policy evaluation
   - **RBAC (user permissions) still enforced**: Every tool is mapped to a `{ resource, action }` permission in `TOOL_PERMISSIONS` (`archestra-mcp-server/rbac.ts`). The `tools/list` endpoint dynamically filters tools so users only see tools they have permission to use. `executeArchestraTool` performs a centralized RBAC check before executing any tool. When adding new tools, add the corresponding entry to `TOOL_PERMISSIONS` (the `Record<ArchestraToolShortName, ...>` type will cause a compile error if a tool is missing).
 
-**Skill Sandbox Runtime** (not released yet — gated behind the sandbox feature flag):
+**Skill Sandbox Runtime** (gated behind the sandbox feature flag):
 
 - DB-backed, Dagger-materialized execution sandbox for Agent Skills. Code lives in `backend/src/skills-sandbox/` (see its README for replay semantics and limits)
 - MCP tools exposed by `archestra-mcp-server/sandbox.ts`, all gated by `sandbox:execute` (`archestra-mcp-server/rbac.ts`). Each accepts a `target?: { fresh: true } | { id }` — omitted resolves a lazy per-conversation default sandbox:

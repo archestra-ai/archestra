@@ -239,14 +239,14 @@ const registry = defineArchestraTools([
     shortName: TOOL_RUN_COMMAND_SHORT_NAME,
     title: "Run Command",
     description:
-      "Execute a shell command in the conversation's code sandbox (Debian, " +
+      "Execute a shell command in the conversation's sandbox (Debian, " +
       "working dir /home/sandbox). Created on first use and persists across " +
       "calls — files written by one command are visible to the next. Python " +
       "runs in a uv project at /home/sandbox: `python3` is the project venv; " +
       "install packages with `uv add --project /home/sandbox <pkg>` (pip is " +
       `disabled). Files the user attached to the chat are auto-staged under ${SKILL_SANDBOX_ATTACHMENTS_DIR}/. ` +
-      "Activated skills live under /skills and are on PYTHONPATH, so their " +
-      "modules import directly. Returns stdout, stderr, " +
+      "Activated skills are mounted under /skills and are on PYTHONPATH, so " +
+      "their modules import directly. Returns stdout, stderr, " +
       "exit code, and timing (text only — use download_file for generated " +
       "files). Requires `sandbox:execute`.",
     schema: RunCommandSchema,

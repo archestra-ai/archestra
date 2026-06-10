@@ -56,7 +56,7 @@ import type { ArchestraContext } from "./types";
  * progressive-disclosure tiers of the Agent Skills spec: `list_skills` returns
  * the catalog, `activate_skill` returns a named skill's SKILL.md body, and
  * bundled resource files are fetched individually via `read_skill_file`.
- * Activating a skill also mounts it into the conversation's code sandbox (when
+ * Activating a skill also mounts it into the conversation's sandbox (when
  * the sandbox feature + `sandbox:execute` are present), so its scripts become
  * runnable under `/skills` via `run_command`.
  *
@@ -76,7 +76,7 @@ const ActivateSkillSchema = z.object({
     .string()
     .trim()
     .min(1)
-    .describe("The skill to load, as named by list_skills."),
+    .describe("The skill to activate, as named by list_skills."),
 });
 
 const ReadSkillFileSchema = z.object({
@@ -231,7 +231,8 @@ const registry = defineArchestraTools([
       "Read a bundled resource file from a skill. Paths come from the " +
       "<skill_resources> list returned by activate_skill. This returns file " +
       "text for inspection only — to execute a script or run shell commands, " +
-      "use run_command (activated skills are available under /skills).",
+      "use run_command (activated skills are mounted under /skills). Prefer " +
+      "running a skill's own scripts and modules over re-implementing them.",
     schema: ReadSkillFileSchema,
     async handler({ args, context }) {
       const ctx = requireOrgContext(context);

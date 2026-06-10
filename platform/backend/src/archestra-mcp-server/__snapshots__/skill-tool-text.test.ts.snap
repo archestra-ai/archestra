@@ -7,7 +7,7 @@ exports[`skill and sandbox tool text > archestra__activate_skill 1`] = `
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "properties": {
       "name": {
-        "description": "The skill to load, as named by list_skills.",
+        "description": "The skill to activate, as named by list_skills.",
         "minLength": 1,
         "type": "string",
       },
@@ -155,7 +155,7 @@ exports[`skill and sandbox tool text > archestra__list_skills 1`] = `
 
 exports[`skill and sandbox tool text > archestra__read_skill_file 1`] = `
 {
-  "description": "Read a bundled resource file from a skill. Paths come from the <skill_resources> list returned by activate_skill. This returns file text for inspection only — to execute a script or run shell commands, use run_command (activated skills are available under /skills).",
+  "description": "Read a bundled resource file from a skill. Paths come from the <skill_resources> list returned by activate_skill. This returns file text for inspection only — to execute a script or run shell commands, use run_command (activated skills are mounted under /skills). Prefer running a skill's own scripts and modules over re-implementing them.",
   "inputSchema": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "properties": {
@@ -181,7 +181,7 @@ exports[`skill and sandbox tool text > archestra__read_skill_file 1`] = `
 
 exports[`skill and sandbox tool text > archestra__run_command 1`] = `
 {
-  "description": "Execute a shell command in the conversation's code sandbox (Debian, working dir /home/sandbox). Created on first use and persists across calls — files written by one command are visible to the next. Python runs in a uv project at /home/sandbox: \`python3\` is the project venv; install packages with \`uv add --project /home/sandbox <pkg>\` (pip is disabled). Files the user attached to the chat are auto-staged under /home/sandbox/attachments/. Activated skills live under /skills and are on PYTHONPATH, so their modules import directly. Returns stdout, stderr, exit code, and timing (text only — use download_file for generated files). Requires \`sandbox:execute\`.",
+  "description": "Execute a shell command in the conversation's sandbox (Debian, working dir /home/sandbox). Created on first use and persists across calls — files written by one command are visible to the next. Python runs in a uv project at /home/sandbox: \`python3\` is the project venv; install packages with \`uv add --project /home/sandbox <pkg>\` (pip is disabled). Files the user attached to the chat are auto-staged under /home/sandbox/attachments/. Activated skills are mounted under /skills and are on PYTHONPATH, so their modules import directly. Returns stdout, stderr, exit code, and timing (text only — use download_file for generated files). Requires \`sandbox:execute\`.",
   "inputSchema": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "additionalProperties": false,

@@ -1,0 +1,114 @@
+import type { ChatMessage } from "@archestra/shared";
+import { afterAll, beforeAll, describe, expect, test } from "vitest";
+import config from "@/config";
+import { injectAppDiagnostics } from "./inject-app-diagnostics";
+
+const APP_ID = "947051c7-ea8e-48ed-8077-a3cc904d9d61";
+
+function userMessage(metadata?: unknown): ChatMessage {
+  return {
+    id: "u1",
+    role: "user",
+    parts: [{ type: "text", text: "it looks broken" }],
+    ...(metadata !== undefined ? { metadata } : {}),
+  };
+}
+
+const diagnosticsMetadata = {
+  appDiagnostics: [
+    {
+      appId: APP_ID,
+      version: 3,
+      entries: [
+        { type: "error", message: "boom is not defined (app:12)" },
+        { type: "csp-violation", message: "CSP violation: connect-src" },
+      ],
+    },
+  ],
+};
+
+const originalAppsEnabled = config.apps.enabled;
+beforeAll(() => {
+  (config.apps as { enabled: boolean }).enabled = true;
+});
+afterAll(() => {
+  (config.apps as { enabled: boolean }).enabled = originalAppsEnabled;
+});
+
+describe("injectAppDiagnostics", () => {
+  test("appends a delimited untrusted block to the last user message", () => {
+    const messages = [userMessage(diagnosticsMetadata)];
+    const result = injectAppDiagnostics(messages);
+
+    const text = result[0].parts?.find((p) => p.type === "text")?.text as
+      | string
+      | undefined;
+    expect(text).toContain("it looks broken");
+    expect(text).toContain("<app-render-diagnostics>");
+    expect(text).toContain("</app-render-diagnostics>");
+    expect(text).toContain("UNTRUSTED");
+    expect(text).toContain(`App ${APP_ID} (version 3):`);
+    expect(text).toContain("- [error] boom is not defined (app:12)");
+    expect(text).toContain("update_app");
+    // the original message is untouched (persistence sees clean text)
+    expect(messages[0].parts?.[0].text).toBe("it looks broken");
+  });
+
+  test("no-op without metadata, with empty entries, and for non-last user messages", () => {
+    const noMetadata = [userMessage()];
+    expect(injectAppDiagnostics(noMetadata)).toBe(noMetadata);
+
+    const emptyEntries = [
+      userMessage({
+        appDiagnostics: [{ appId: APP_ID, version: 1, entries: [] }],
+      }),
+    ];
+    expect(injectAppDiagnostics(emptyEntries)).toBe(emptyEntries);
+
+    // diagnostics on an OLDER user message are not re-injected
+    const history = [
+      userMessage(diagnosticsMetadata),
+      { id: "a1", role: "assistant" as const, parts: [] },
+      { ...userMessage(), id: "u2" },
+    ];
+    const result = injectAppDiagnostics(history);
+    expect(result[2].parts?.[0].text).toBe("it looks broken");
+  });
+
+  test("caps apps and entries and truncates messages", () => {
+    const manyApps = Array.from({ length: 10 }, (_, appIndex) => ({
+      appId: `${appIndex}${APP_ID.slice(1)}`,
+      version: 1,
+      entries: Array.from({ length: 50 }, (_, entryIndex) => ({
+        type: "error",
+        message: `e${entryIndex} ${"x".repeat(1000)}`,
+      })),
+    }));
+    const result = injectAppDiagnostics([
+      userMessage({ appDiagnostics: manyApps }),
+    ]);
+    const text = result[0].parts?.find((p) => p.type === "text")
+      ?.text as string;
+    expect((text.match(/^App /gm) ?? []).length).toBe(5);
+    expect((text.match(/^- \[error\]/gm) ?? []).length).toBe(5 * 20);
+    expect(text).not.toContain("x".repeat(600));
+  });
+
+  test("malformed metadata is ignored", () => {
+    const malformed = [
+      userMessage({ appDiagnostics: [{ appId: 42, entries: "nope" }] }),
+    ];
+    const result = injectAppDiagnostics(malformed);
+    expect(result[0].parts?.[0].text).toBe("it looks broken");
+  });
+
+  test("inert when the apps feature is disabled", () => {
+    (config.apps as { enabled: boolean }).enabled = false;
+    try {
+      const messages = [userMessage(diagnosticsMetadata)];
+      expect(injectAppDiagnostics(messages)).toBe(messages);
+    } finally {
+      (config.apps as { enabled: boolean }).enabled = true;
+    }
+  });
+});

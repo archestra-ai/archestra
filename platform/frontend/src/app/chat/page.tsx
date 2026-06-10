@@ -99,6 +99,10 @@ import {
   getSsoSignInRedirectPath,
 } from "@/lib/auth/sso-sign-in-attempt";
 import {
+  clearAllAppDiagnostics,
+  drainAppDiagnostics,
+} from "@/lib/chat/app-diagnostics-store";
+import {
   fetchConversationEnabledTools,
   useCompactConversation,
   useConversation,
@@ -577,6 +581,12 @@ export function ChatPageContent({
     },
     [router],
   );
+
+  // App render diagnostics are conversation-scoped: drop any leftovers when
+  // switching conversations so they never attach to an unrelated send.
+  useEffect(() => {
+    clearAllAppDiagnostics();
+  }, [conversationId]);
 
   // Fetch conversation with messages
   const { data: conversation, isLoading: isLoadingConversation } =
@@ -1272,12 +1282,16 @@ export function ChatPageContent({
       });
     }
 
+    const initialAppDiagnostics = drainAppDiagnostics();
     sendMessage({
       role: "user",
       parts: ensureNonEmptyParts(parts),
       metadata: {
         createdAt: new Date().toISOString(),
         ...(skillToSend ? { skill: skillToSend } : {}),
+        ...(initialAppDiagnostics.length > 0
+          ? { appDiagnostics: initialAppDiagnostics }
+          : {}),
       },
     });
   }, [
@@ -1427,12 +1441,16 @@ export function ChatPageContent({
       }
     }
 
+    // Attach-once: captured app render diagnostics ride this message's
+    // metadata and the store is drained — a regenerate never re-attaches.
+    const appDiagnostics = drainAppDiagnostics();
     sendMessage?.({
       role: "user",
       parts: ensureNonEmptyParts(parts),
       metadata: {
         createdAt: new Date().toISOString(),
         ...(options?.skill ? { skill: options.skill } : {}),
+        ...(appDiagnostics.length > 0 ? { appDiagnostics } : {}),
       },
     });
   };

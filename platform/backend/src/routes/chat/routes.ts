@@ -120,6 +120,7 @@ import {
   ProviderError,
   sanitizeChatErrorForFrontend,
 } from "./errors";
+import { injectAppDiagnostics } from "./inject-app-diagnostics";
 import { injectSkillActivation } from "./inject-skill-activation";
 import { applyPromptCacheBreakpoints } from "./normalization/apply-prompt-cache";
 import { cloneAttachmentsForFork } from "./normalization/clone-attachments-for-fork";
@@ -512,7 +513,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
             const skillSlashCommandsActive =
               !!organization?.skillSlashCommandsEnabled &&
               !!organization?.skillToolsEnabled;
-            const messagesForLLM = skillSlashCommandsActive
+            const messagesWithSkill = skillSlashCommandsActive
               ? await injectSkillActivation({
                   messages: messages as ChatMessage[],
                   organizationId,
@@ -521,6 +522,12 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   conversationId,
                 })
               : (messages as ChatMessage[]);
+
+            // Render-loop diagnostics from owned MCP App renders ride the last
+            // user message's metadata; inject them (delimited, framed as
+            // untrusted) so the model can fix the app via update_app. No-op
+            // when absent or when the apps feature is off.
+            const messagesForLLM = injectAppDiagnostics(messagesWithSkill);
 
             // Normalize chat history before replaying it to the model.
             // This dedupes repeated tool parts, drops dangling interrupted tool calls,

@@ -285,7 +285,7 @@ const registry = defineArchestraTools([
     shortName: TOOL_UPDATE_APP_SHORT_NAME,
     title: "Update App",
     description:
-      "Change an existing app's HTML and/or metadata. Use this when the user asks to fix, tweak, restyle, or extend an app created earlier — pass the full revised HTML, not a diff. Author pure UI HTML: window.archestra (data store, callTool, host features) is injected by the platform at render time — never add SDK imports or postMessage wiring. Supplying new html forks a new immutable version (suppressed if identical). When called from the chat UI the app's head version is rendered inline in the conversation.",
+      "Change an existing app's HTML and/or metadata. Use this when the user asks to fix, tweak, restyle, or extend an app created earlier — pass the full revised HTML, not a diff. Author pure UI HTML: window.archestra (data store, callTool, host features) is injected by the platform at render time — never add SDK imports or postMessage wiring. Supplying new html forks a new immutable version (suppressed if identical). When called from the chat UI the app's head version is rendered inline in the conversation. If a rendered app threw runtime errors, they arrive as an <app-render-diagnostics> block on the user's next message — use them to correct the HTML here.",
     schema: UpdateAppSchema,
     outputSchema: AppSummaryOutputSchema,
     async handler({ args, context }) {

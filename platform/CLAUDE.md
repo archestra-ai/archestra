@@ -267,8 +267,6 @@ pnpm rebuild <package-name>  # Enable scripts for specific package
 - Refer to backend/architecture.md for backend architecture guidelines.
 - Use Drizzle ORM for database operations through MODELS ONLY!
 - Table exports: Use plural names with "Table" suffix (e.g., `profileLabelsTable`, `sessionsTable`)
-- Colocate test files with source (`.test.ts`)
-- Flat file structure, avoid barrel files
 - **Route permissions (IMPORTANT)**: When adding new API endpoints, you MUST add the route to `requiredEndpointPermissionsMap` in `shared/access-control.ee.ts` or requests will return 403 Forbidden. Match permissions with similar existing routes (e.g., interaction endpoints use `interaction: ["read"]`).
 - **MCP Tool Impact (IMPORTANT)**: When updating an API endpoint's request/response schema, also check if there is an associated Archestra MCP tool in `backend/src/archestra-mcp-server/` that exposes the same functionality. If so, update the MCP tool's `inputSchema` and handler to match the new API schema. Ask the user if you're unsure whether an MCP tool is affected.
 - Only export public APIs

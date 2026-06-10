@@ -9,7 +9,7 @@ archestra:
   # We use the "generic" updater with inline annotation to preserve YAML comments throughout the file.
   # See: https://github.com/googleapis/release-please/blob/main/docs/customizing.md#updating-arbitrary-files
   # See: https://github.com/googleapis/release-please/issues/2195
-  imageTag: "1.2.60" # x-release-please-version
+  imageTag: "1.2.62" # x-release-please-version
 
   # Image pull policy for the Archestra container
   # Options: Always, IfNotPresent, Never
@@ -175,14 +175,8 @@ archestra:
     # enable or disable code execution runtime support.
     enabled: false
 
-    # hard wall-clock limit per run, and the default when the caller omits one.
-    timeoutSeconds: 60
-
-    # maximum number of concurrent runs across all conversations per backend process.
-    maxConcurrent: 10
-
-    # stdout and stderr are each truncated to this many bytes.
-    maxOutputBytes: 65536
+    # runtime limits (timeouts, concurrency, output caps) are env-driven via
+    # ARCHESTRA_SKILLS_SANDBOX_* / ARCHESTRA_DAGGER_RUNTIME_* in archestra.env.
 
     dagger:
       # explicit Dagger runner host. Leave empty to use the kube-pod:// pod target below.

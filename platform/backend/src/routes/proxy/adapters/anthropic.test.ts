@@ -118,6 +118,34 @@ describe("AnthropicResponseAdapter", () => {
       ]);
     });
   });
+
+  describe("getUsage", () => {
+    test("captures the 1h portion of the cache-creation split", () => {
+      const response = {
+        ...createMockResponse([{ type: "text", text: "hi" }]),
+        usage: {
+          input_tokens: 5,
+          output_tokens: 10,
+          cache_read_input_tokens: 2000,
+          cache_creation_input_tokens: 1000,
+          cache_creation: {
+            ephemeral_1h_input_tokens: 400,
+            ephemeral_5m_input_tokens: 600,
+          },
+        },
+      } as Anthropic.Types.MessagesResponse;
+
+      const adapter = anthropicAdapterFactory.createResponseAdapter(response);
+
+      expect(adapter.getUsage()).toEqual({
+        inputTokens: 5,
+        outputTokens: 10,
+        cacheReadTokens: 2000,
+        cacheWriteTokens: 1000,
+        cacheWrite1hTokens: 400,
+      });
+    });
+  });
 });
 
 describe("AnthropicRequestAdapter", () => {

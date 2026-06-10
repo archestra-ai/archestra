@@ -63,13 +63,11 @@ const teamVaultFolderRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Team not found");
       }
 
-      // Check if user is team admin
-      const { success: isTeamAdmin } = await hasPermission(
-        { team: ["admin"] },
+      await assertCanManageTeamVaultFolder({
+        teamId,
+        userId: user.id,
         headers,
-      );
-
-      await TeamModel.checkTeamAccess({ userId: user.id, teamId, isTeamAdmin });
+      });
 
       const folder = await TeamVaultFolderModel.findByTeamId(teamId);
       return reply.send(folder);
@@ -109,13 +107,11 @@ const teamVaultFolderRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Team not found");
       }
 
-      // Check if user is team admin
-      const { success: isTeamAdmin } = await hasPermission(
-        { team: ["admin"] },
+      await assertCanManageTeamVaultFolder({
+        teamId,
+        userId: user.id,
         headers,
-      );
-
-      await TeamModel.checkTeamAccess({ userId: user.id, teamId, isTeamAdmin });
+      });
 
       // Validate the Vault path format (basic validation)
       if (
@@ -165,13 +161,11 @@ const teamVaultFolderRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Team not found");
       }
 
-      // Check if user is team admin
-      const { success: isTeamAdmin } = await hasPermission(
-        { team: ["admin"] },
+      await assertCanManageTeamVaultFolder({
+        teamId,
+        userId: user.id,
         headers,
-      );
-
-      await TeamModel.checkTeamAccess({ userId: user.id, teamId, isTeamAdmin });
+      });
 
       const success = await TeamVaultFolderModel.delete(teamId);
 
@@ -222,13 +216,11 @@ const teamVaultFolderRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Team not found");
       }
 
-      // Check if user is team admin
-      const { success: isTeamAdmin } = await hasPermission(
-        { team: ["admin"] },
+      await assertCanManageTeamVaultFolder({
+        teamId,
+        userId: user.id,
         headers,
-      );
-
-      await TeamModel.checkTeamAccess({ userId: user.id, teamId, isTeamAdmin });
+      });
 
       // Use provided vaultPath or fall back to saved folder
       let pathToTest = body?.vaultPath?.trim();
@@ -294,13 +286,11 @@ const teamVaultFolderRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Team not found");
       }
 
-      // Check if user is team admin
-      const { success: isTeamAdmin } = await hasPermission(
-        { team: ["admin"] },
+      await assertCanManageTeamVaultFolder({
+        teamId,
+        userId: user.id,
         headers,
-      );
-
-      await TeamModel.checkTeamAccess({ userId: user.id, teamId, isTeamAdmin });
+      });
 
       // Get the team's Vault folder
       const folder = await TeamVaultFolderModel.findByTeamId(teamId);
@@ -354,13 +344,11 @@ const teamVaultFolderRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Team not found");
       }
 
-      // Check if user is team admin
-      const { success: isTeamAdmin } = await hasPermission(
-        { team: ["admin"] },
+      await assertCanManageTeamVaultFolder({
+        teamId,
+        userId: user.id,
         headers,
-      );
-
-      await TeamModel.checkTeamAccess({ userId: user.id, teamId, isTeamAdmin });
+      });
 
       // Get the team's Vault folder
       const folder = await TeamVaultFolderModel.findByTeamId(teamId);
@@ -404,3 +392,30 @@ const teamVaultFolderRoutes: FastifyPluginAsyncZod = async (fastify) => {
 };
 
 export default teamVaultFolderRoutes;
+
+async function assertCanManageTeamVaultFolder(params: {
+  teamId: string;
+  userId: string;
+  headers: Parameters<typeof hasPermission>[1];
+}) {
+  const { success: canManageAllTeams } = await hasPermission(
+    { team: ["create"] },
+    params.headers,
+  );
+
+  if (canManageAllTeams) {
+    return;
+  }
+
+  const isTeamAdmin = await TeamModel.isUserTeamAdmin(
+    params.teamId,
+    params.userId,
+  );
+
+  if (!isTeamAdmin) {
+    throw new ApiError(
+      403,
+      "You must be a team admin to manage this team's Vault folder",
+    );
+  }
+}

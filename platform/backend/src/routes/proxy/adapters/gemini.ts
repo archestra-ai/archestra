@@ -504,10 +504,22 @@ class GeminiResponseAdapter implements LLMResponseAdapter<GeminiResponse> {
 
   getUsage(): UsageView {
     if (!this.response.usageMetadata) {
-      return { inputTokens: 0, outputTokens: 0 };
+      return {
+        inputTokens: 0,
+        outputTokens: 0,
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0,
+      };
     }
-    const { input, output } = getUsageTokens(this.response.usageMetadata);
-    return { inputTokens: input ?? 0, outputTokens: output ?? 0 };
+    const { input, output, cacheRead, cacheWrite } = getUsageTokens(
+      this.response.usageMetadata,
+    );
+    return {
+      inputTokens: input,
+      outputTokens: output,
+      cacheReadTokens: cacheRead,
+      cacheWriteTokens: cacheWrite,
+    };
   }
 
   getOriginalResponse(): GeminiResponse {
@@ -596,9 +608,15 @@ class GeminiStreamAdapter
 
     // Handle usage metadata
     if (chunk.usageMetadata) {
+      const cacheReadTokens = chunk.usageMetadata.cachedContentTokenCount ?? 0;
       this.state.usage = {
-        inputTokens: chunk.usageMetadata.promptTokenCount ?? 0,
+        inputTokens: Math.max(
+          0,
+          (chunk.usageMetadata.promptTokenCount ?? 0) - cacheReadTokens,
+        ),
         outputTokens: chunk.usageMetadata.candidatesTokenCount ?? 0,
+        cacheReadTokens,
+        cacheWriteTokens: 0,
       };
     }
 
@@ -994,10 +1012,16 @@ async function convertToolResultsToToon(
 export function getUsageTokens(usage: {
   promptTokenCount?: number;
   candidatesTokenCount?: number;
+  cachedContentTokenCount?: number;
 }) {
+  // Gemini's cachedContentTokenCount is a SUBSET already inside promptTokenCount,
+  // so subtract it to get the uncached input and avoid double-counting.
+  const cacheRead = usage.cachedContentTokenCount ?? 0;
   return {
-    input: usage.promptTokenCount,
-    output: usage.candidatesTokenCount,
+    input: Math.max(0, (usage.promptTokenCount ?? 0) - cacheRead),
+    output: usage.candidatesTokenCount ?? 0,
+    cacheRead,
+    cacheWrite: 0,
   };
 }
 

@@ -30,8 +30,8 @@ import {
 import {
   buildSkillActivationPromptContext,
   escapeXmlAttr,
-  escapeXmlText,
   formatSkillActivation,
+  neutralizeFrameTags,
 } from "@/skills/skill-activation";
 import { buildSkillCatalogPrompt } from "@/skills/skill-catalog-prompt";
 import { isSkillSandboxAvailableForAgent } from "@/skills/skill-sandbox-availability";
@@ -219,6 +219,7 @@ const registry = defineArchestraTools([
         organizationId: ctx.organizationId,
         userId: ctx.userId,
         conversationId: context.conversationId,
+        isolationKey: context.isolationKey,
         canRunSandbox,
       });
       if (!activation) {
@@ -290,6 +291,7 @@ const registry = defineArchestraTools([
         organizationId: ctx.organizationId,
         userId: ctx.userId,
         conversationId: context.conversationId,
+        isolationKey: context.isolationKey,
       });
       const file = version
         ? await SkillVersionModel.findFileByPath(version.id, args.path)
@@ -318,7 +320,7 @@ const registry = defineArchestraTools([
       }
 
       return successResult(
-        `<skill_file skill="${escapeXmlAttr(skill.name)}" path="${escapeXmlAttr(file.path)}">\n${escapeXmlText(file.content)}\n</skill_file>`,
+        `<skill_file skill="${escapeXmlAttr(skill.name)}" path="${escapeXmlAttr(file.path)}">\n${neutralizeFrameTags(file.content)}\n</skill_file>`,
       );
     },
   }),

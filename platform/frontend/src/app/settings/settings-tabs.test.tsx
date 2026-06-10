@@ -256,7 +256,7 @@ describe("useSettingsTabs", () => {
     });
   });
 
-  it("shows Integrations tab when user has githubAppConfig:read permission", async () => {
+  it("shows GitHub tab when user has githubAppConfig:read permission", async () => {
     mockPermissions = { githubAppConfig: ["read"] };
 
     const { result } = renderHook(() => useSettingsTabs(), {
@@ -265,11 +265,11 @@ describe("useSettingsTabs", () => {
 
     await waitFor(() => {
       const labels = getTabLabels(result.current);
-      expect(labels).toContain("Integrations");
+      expect(labels).toContain("GitHub");
     });
   });
 
-  it("hides Integrations tab when user lacks githubAppConfig:read permission", async () => {
+  it("hides GitHub tab when user lacks githubAppConfig:read permission", async () => {
     mockPermissions = {};
 
     const { result } = renderHook(() => useSettingsTabs(), {
@@ -278,7 +278,7 @@ describe("useSettingsTabs", () => {
 
     await waitFor(() => {
       const labels = getTabLabels(result.current);
-      expect(labels).not.toContain("Integrations");
+      expect(labels).not.toContain("GitHub");
     });
   });
 
@@ -314,7 +314,7 @@ describe("useSettingsTabs", () => {
         "Users",
         "Teams",
         "Roles",
-        "Integrations",
+        "GitHub",
         "Identity Providers",
         "Secrets",
         "Organization",

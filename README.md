@@ -49,6 +49,13 @@ docker run -p 127.0.0.1:9000:9000 -p 127.0.0.1:3000:3000 \
 
 [Full Quickstart Guide →](https://archestra.ai/docs/platform-quickstart)
 
+## 🧳 Migrating an existing AI pilot
+
+Already have a Claude Code-style project, MCP config, local tools, hooks, or another hand-rolled
+agentic PoC? Use the migration kit to turn it into an Archestra pilot.
+
+[Migration Kit →](migration-kit/README.md)
+
 ## 👩‍💻 ChatGPT-like chat with MCPs
 
 🎁 with private company-wide prompt registry!

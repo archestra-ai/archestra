@@ -58,6 +58,8 @@ export interface ChatPromptInputToolsProps {
   isModelsLoading?: boolean;
   /** Estimated tokens used in the conversation (for context indicator) */
   tokensUsed?: number;
+  /** Input tokens served from the prompt cache on the latest response (for context indicator) */
+  cachedTokens?: number;
   /** Maximum context length of the selected model (for context indicator) */
   maxContextLength?: number | null;
   /** Input modalities supported by the selected model (for file type filtering) */
@@ -89,6 +91,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
   allowFileUploads = false,
   isModelsLoading = false,
   tokensUsed = 0,
+  cachedTokens,
   maxContextLength,
   inputModalities,
   agentLlmApiKeyId,
@@ -263,6 +266,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
                     </p>
                     <ContextIndicator
                       tokensUsed={tokensUsed}
+                      cachedTokens={cachedTokens}
                       maxTokens={maxContextLength}
                       size="sm"
                     />
@@ -411,6 +415,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
           {tokensUsed > 0 && maxContextLength && (
             <ContextIndicator
               tokensUsed={tokensUsed}
+              cachedTokens={cachedTokens}
               maxTokens={maxContextLength}
               size="sm"
             />

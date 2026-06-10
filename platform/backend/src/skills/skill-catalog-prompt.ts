@@ -1,6 +1,6 @@
 import { getSkillPermissionChecker } from "@/auth/skill-permissions";
 import { SkillModel, SkillTeamModel } from "@/models";
-import { escapeXmlAttr, escapeXmlText } from "./skill-activation";
+import { escapeXmlAttr, neutralizeFrameTags } from "./skill-activation";
 import { isSkillSandboxAvailableForAgent } from "./skill-sandbox-availability";
 
 /**
@@ -42,7 +42,7 @@ export async function buildSkillCatalogPrompt(params: {
   const catalog = skills
     .map(
       (skill) =>
-        `<skill name="${escapeXmlAttr(skill.name)}">${escapeXmlText(
+        `<skill name="${escapeXmlAttr(skill.name)}">${neutralizeFrameTags(
           skill.description,
         )}</skill>`,
     )
@@ -58,7 +58,9 @@ export async function buildSkillCatalogPrompt(params: {
   }))
     ? "Call activate_skill with one of these names to load its instructions. " +
       "Activating a skill mounts it in your sandbox under /skills, so you can " +
-      "then run its scripts or shell commands with run_command."
+      "then run its scripts or shell commands with run_command. A skill " +
+      "appears under /skills/<name> only after you activate it — an empty " +
+      "/skills listing does not mean the skill is unavailable."
     : "Call activate_skill with one of these names to load its instructions.";
 
   return `<available_skills>\n${catalog}\n</available_skills>\n${instructions}`;

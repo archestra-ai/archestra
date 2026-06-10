@@ -122,7 +122,7 @@ impl SandboxBackend for DaggerBackend {
         validate_cwd(&req.cwd)?;
 
         let warm = self.ensure_warm().await?;
-        let materialized = materialize(warm, &req).await?;
+        let materialized = materialize(&self.client, warm, &req).await?;
 
         let argv = supervised_argv(&req.command, req.timeout_seconds, &req.limits);
         let executed = materialized
@@ -172,7 +172,7 @@ impl SandboxBackend for DaggerBackend {
             timeout_seconds: 0,
             traceparent: None,
         };
-        let materialized = materialize(warm, &run).await?;
+        let materialized = materialize(&self.client, warm, &run).await?;
         let bytes_limit = u64::from(req.limits.file_size_limit_bytes);
         let command = format!(
             "[ -e {path} ] || {{ echo 'artifact not found: {path}' >&2; exit {not_found}; }}; _s=$(stat -c '%s' {path}) && [ \"$_s\" -le {limit} ] || {{ echo 'artifact is too large' >&2; exit {too_large}; }}; base64 -w0 {path}",
@@ -367,13 +367,77 @@ async fn build_warm_base(client: &DaggerConn) -> Result<Container> {
         .inspect_err(|err| tracing::warn!(error = %err, "warm base image build failed"))
 }
 
+/// dagger builds one lazily-chained GraphQL query whose response nests one
+/// JSON level per chained call, and the SDK's serde_json parser refuses to
+/// recurse past 128 levels. resolving the chain to a container id (`sync`) and
+/// re-loading it flat every `CHECKPOINT_CHAIN_LINKS` calls bounds every
+/// query/response regardless of replay-log length — the same flattening the
+/// warm base already gets from its `sync()` in [`build_warm_base`]. the layer
+/// cache is content-addressed, so an unchanged replay prefix stays cached
+/// across checkpoints.
+const CHECKPOINT_CHAIN_LINKS: usize = 64;
+
+/// chained calls appended per replayed command: `with_workdir` + `with_exec`.
+const COMMAND_CHAIN_LINKS: usize = 2;
+/// chained calls appended per replayed upload in [`apply_upload_file`]:
+/// `with_user` + `with_new_file` + `with_exec` + `with_user`.
+const UPLOAD_CHAIN_LINKS: usize = 4;
+/// chained calls appended by a skill mount's chown step:
+/// `with_user` + `with_exec` + `with_user`.
+const SKILL_MOUNT_CHOWN_CHAIN_LINKS: usize = 3;
+
+/// chained calls appended per skill snapshot file in [`apply_snapshot_file`].
+fn snapshot_chain_links(encoding: &str) -> usize {
+    match encoding {
+        "utf8" => 1,
+        // base64 stages the bytes with `with_new_file` then decodes via
+        // `with_exec`.
+        _ => 2,
+    }
+}
+
+/// accumulates chained-call counts during replay and signals when the chain is
+/// due for a checkpoint.
+struct ChainBudget {
+    links: usize,
+}
+
+impl ChainBudget {
+    fn new() -> Self {
+        Self { links: 0 }
+    }
+
+    /// records `links` chained calls; returns true (and restarts the count)
+    /// when the accumulated chain is due for a checkpoint.
+    fn charge(&mut self, links: usize) -> bool {
+        self.links += links;
+        if self.links >= CHECKPOINT_CHAIN_LINKS {
+            self.links = 0;
+            true
+        } else {
+            false
+        }
+    }
+}
+
+/// resolve the lazy chain to an id and re-load it so subsequent calls start a
+/// fresh, flat query.
+async fn checkpoint(client: &DaggerConn, container: Container) -> Result<Container> {
+    container
+        .sync()
+        .await
+        .map_err(from_sdk)
+        .map(|id| client.load_container_from_id(id))
+}
+
 #[tracing::instrument(
     name = "sandbox.materialize",
     skip_all,
     fields(replay.len = req.replay_steps.len())
 )]
-async fn materialize(warm: Container, req: &RunRequest) -> Result<Container> {
+async fn materialize(client: &DaggerConn, warm: Container, req: &RunRequest) -> Result<Container> {
     let mut container = warm;
+    let mut budget = ChainBudget::new();
 
     // replay re-applies every prior step on each call (commands re-execute,
     // uploads re-write their bytes, skill mounts re-write their files and extend
@@ -397,14 +461,25 @@ async fn materialize(warm: Container, req: &RunRequest) -> Result<Container> {
                 container = container
                     .with_workdir(cwd)
                     .with_exec_opts(argv, any_exit_opts());
+                if budget.charge(COMMAND_CHAIN_LINKS) {
+                    container = checkpoint(client, container).await?;
+                }
             }
             ReplayStep::File(file) => {
                 container = apply_upload_file(container, index, file)?;
+                if budget.charge(UPLOAD_CHAIN_LINKS) {
+                    container = checkpoint(client, container).await?;
+                }
             }
             ReplayStep::SkillMount(mount) => {
                 let root = skill_root_path(&mount.skill_name)?;
                 for file in &mount.files {
                     container = apply_snapshot_file(container, &root, file)?;
+                    // charged per file: a many-file mount must not exceed the
+                    // chain budget within a single step.
+                    if budget.charge(snapshot_chain_links(&file.encoding)) {
+                        container = checkpoint(client, container).await?;
+                    }
                 }
                 // chown this skill's tree; with_new_file writes as root.
                 container = container
@@ -415,6 +490,7 @@ async fn materialize(warm: Container, req: &RunRequest) -> Result<Container> {
                         format!("chown -R {SKILL_SANDBOX_USER} {}", shell_quote(&root)),
                     ])
                     .with_user(SKILL_SANDBOX_USER);
+                let mut links = SKILL_MOUNT_CHOWN_CHAIN_LINKS;
                 // extend PYTHONPATH as a layer at this sequence point so commands
                 // after the mount can import the skill. commands before it are
                 // byte-identical to before this mount existed -> cache holds.
@@ -422,6 +498,10 @@ async fn materialize(warm: Container, req: &RunRequest) -> Result<Container> {
                     pythonpath_entries.push(root);
                     container =
                         container.with_env_variable("PYTHONPATH", pythonpath_entries.join(":"));
+                    links += 1;
+                }
+                if budget.charge(links) {
+                    container = checkpoint(client, container).await?;
                 }
             }
         }
@@ -723,6 +803,45 @@ mod tests {
         // the shim is the model's only feedback when it reaches for pip; it must
         // point at a command that actually works from any cwd.
         assert!(PIP_SHIM_SETUP.contains("uv add --project /home/sandbox <pkg>"));
+    }
+
+    #[test]
+    fn chain_budget_checkpoints_at_threshold_and_resets() {
+        let mut budget = ChainBudget::new();
+        assert!(!budget.charge(CHECKPOINT_CHAIN_LINKS - 1));
+        assert!(budget.charge(1));
+        // the counter restarts after a checkpoint.
+        assert!(!budget.charge(CHECKPOINT_CHAIN_LINKS - 1));
+        assert!(budget.charge(CHECKPOINT_CHAIN_LINKS));
+    }
+
+    #[test]
+    fn chain_budget_bounds_query_depth_for_hook_heavy_replay() {
+        // a hook fire appends a payload upload (4 links) + a command (2 links).
+        // model a real failing replay log (33 uploads + 18 commands ≈ 168
+        // links): no single query between checkpoints may approach serde_json's
+        // 128-level recursion limit, however long the history grows.
+        let mut budget = ChainBudget::new();
+        let mut chain_depth = 0usize;
+        let mut max_chain_depth = 0usize;
+        let charges = std::iter::repeat_n(UPLOAD_CHAIN_LINKS, 33)
+            .chain(std::iter::repeat_n(COMMAND_CHAIN_LINKS, 18));
+        for links in charges {
+            chain_depth += links;
+            max_chain_depth = max_chain_depth.max(chain_depth);
+            if budget.charge(links) {
+                chain_depth = 0;
+            }
+        }
+        assert!(max_chain_depth <= CHECKPOINT_CHAIN_LINKS + UPLOAD_CHAIN_LINKS);
+    }
+
+    #[test]
+    fn snapshot_chain_links_charges_per_encoding() {
+        // utf8 snapshot files chain a single with_new_file; base64 files add a
+        // decode exec on top.
+        assert_eq!(snapshot_chain_links("utf8"), 1);
+        assert_eq!(snapshot_chain_links("base64"), 2);
     }
 
     #[test]

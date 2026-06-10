@@ -1,6 +1,7 @@
 import type { UIMessage } from "@ai-sdk/react";
 import {
   type ArchestraToolShortName,
+  HOOK_RUN_PART_TYPE,
   isAppRenderingArchestraToolShortName,
   isBrowserMcpTool,
   parseFullToolName,
@@ -12,6 +13,7 @@ import {
   isCompactEligible,
 } from "@/lib/chat/chat-tools-display.utils";
 import type { FileAttachment } from "./editable-user-message";
+import type { HookRunChipData } from "./hook-run-chip";
 import type { CanvasInfo } from "./pinned-canvas-context";
 
 export type OptimisticToolCall = {
@@ -20,15 +22,25 @@ export type OptimisticToolCall = {
   input: unknown;
 };
 
+export type CompactToolGroupEntry =
+  | {
+      kind: "tool";
+      partIndex: number;
+      toolName: string;
+      part: DynamicToolUIPart | ToolUIPart;
+      toolResultPart: DynamicToolUIPart | ToolUIPart | null;
+      errorText: string | undefined;
+    }
+  | {
+      /** An inline `data-hook-run` debug entry rendered as a circle in the row. */
+      kind: "hook";
+      partIndex: number;
+      data: HookRunChipData;
+    };
+
 export type CompactToolGroup = {
   startIndex: number;
-  entries: Array<{
-    partIndex: number;
-    toolName: string;
-    part: DynamicToolUIPart | ToolUIPart;
-    toolResultPart: DynamicToolUIPart | ToolUIPart | null;
-    errorText: string | undefined;
-  }>;
+  entries: CompactToolGroupEntry[];
 };
 
 /**
@@ -295,6 +307,12 @@ export function identifyCompactToolGroups(
 
   for (let i = 0; i < parts.length; i++) {
     const part = parts[i];
+    // Hook-run debug parts join the circle row alongside the tool calls they
+    // bracket (SessionStart at turn start, Pre/PostToolUse around their tool).
+    if (isHookRunPart(part)) {
+      invocationIndices.push(i);
+      continue;
+    }
     // Skip non-tool parts and MCP App tools (they render their own UI)
     // biome-ignore lint/suspicious/noExplicitAny: checking nested _meta shape on unknown output
     if (!isToolPart(part) || (part.output as any)?._meta?.ui?.resourceUri)
@@ -333,6 +351,19 @@ export function identifyCompactToolGroups(
 
   for (const idx of invocationIndices) {
     const rawPart = parts[idx];
+    // Hook runs are always compact-eligible: join (or start) the current row.
+    if (isHookRunPart(rawPart)) {
+      if (!currentGroup) {
+        currentGroup = { startIndex: idx, entries: [] };
+      }
+      currentGroup.entries.push({
+        kind: "hook",
+        partIndex: idx,
+        data: (rawPart.data ?? {}) as HookRunChipData,
+      });
+      consumedIndices.add(idx);
+      continue;
+    }
     if (!isToolPart(rawPart)) {
       finalizeCurrentGroup({ currentGroup, groupMap });
       currentGroup = null;
@@ -371,6 +402,7 @@ export function identifyCompactToolGroups(
         currentGroup = { startIndex: idx, entries: [] };
       }
       currentGroup.entries.push({
+        kind: "tool",
         partIndex: idx,
         toolName,
         part: rawPart,
@@ -389,6 +421,17 @@ export function identifyCompactToolGroups(
 
   finalizeCurrentGroup({ currentGroup, groupMap });
   return { groupMap, consumedIndices };
+}
+
+function isHookRunPart(
+  part: unknown,
+): part is { type: string; data?: unknown } {
+  return (
+    typeof part === "object" &&
+    part !== null &&
+    "type" in part &&
+    part.type === HOOK_RUN_PART_TYPE
+  );
 }
 
 function isToolPart(part: unknown): part is DynamicToolUIPart | ToolUIPart {

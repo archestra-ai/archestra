@@ -44,6 +44,7 @@ import {
   CHATOPS_ATTACHMENT_LIMITS,
   CHATOPS_CHANNEL_DISCOVERY,
   CHATOPS_MESSAGE_RETENTION,
+  CHATOPS_NO_REPLY_SENTINEL,
   SLACK_DEFAULT_CONNECTION_MODE,
 } from "./constants";
 import MSTeamsProvider from "./ms-teams-provider";
@@ -738,6 +739,35 @@ export class ChatOpsManager {
       systemPrefix = contextLines.join("\n");
     }
 
+    // Group conversations: the agent receives every message, so frame the
+    // situation — it's a bot among several humans, told who is speaking —
+    // and give it a way to stay silent. The sentinel reply is swallowed in
+    // replyByMessageExecutionResult(). Note: only assert a mention positively;
+    // people often address the bot by typing its name without a real @mention,
+    // so "not mentioned" must never be presented as "not addressed".
+    const conversationType = message.metadata?.conversationType;
+    if (conversationType === "groupChat" || conversationType === "channel") {
+      const botName =
+        typeof message.metadata?.botName === "string"
+          ? message.metadata.botName
+          : null;
+      const mentionedOthers = Array.isArray(message.metadata?.mentionedOthers)
+        ? (message.metadata.mentionedOthers as string[])
+        : [];
+      const mentionNote =
+        message.metadata?.botMentioned === true
+          ? " It @mentions you directly."
+          : mentionedOthers.length > 0
+            ? ` It @mentions ${mentionedOthers.join(", ")} — another person, not you — so it is most likely addressed to them.`
+            : "";
+      systemPrefix += [
+        `\n\nYou are "${agentToUse.name}"${botName ? ` (appearing in this chat as "${botName}")` : ""} — a bot participating in a group conversation with multiple people.`,
+        `The latest message is from ${message.senderName}.${mentionNote}`,
+        `Default to replying — when in doubt, reply.`,
+        `Stay silent only when the message is clearly not your business: it is addressed to another person, or people are plainly talking to each other about something that doesn't involve you. In that case respond with exactly ${CHATOPS_NO_REPLY_SENTINEL} and nothing else — nothing visible will be posted.`,
+      ].join("\n");
+    }
+
     let fullMessage = `${systemPrefix}\n\n${cleanedMessageText}`;
     if (contextMessages.length > 0) {
       fullMessage = `${systemPrefix}\n\nPrevious conversation:\n${contextMessages.join("\n")}\n\nUser: ${cleanedMessageText}`;
@@ -1311,6 +1341,13 @@ export class ChatOpsManager {
       userId,
     } = params;
 
+    // Stamp the start time so a deliberate no-reply can report how long the
+    // agent thought before deciding (shown in the Teams channel placeholder).
+    message.metadata = {
+      ...message.metadata,
+      processingStartedAt: Date.now(),
+    };
+
     // Send typing indicator before execution starts (non-fatal).
     // Slack always has threadId (falls back to event.ts); Teams may not
     // (only set for thread replies) but doesn't need it (uses conversationReference).
@@ -1393,7 +1430,23 @@ export class ChatOpsManager {
     const text = (resultMessage.parts || [])
       .map((part) => part.text)
       .join("\n");
-    const agentResponse = stripThinkingBlocks(text);
+    let agentResponse = stripThinkingBlocks(text);
+
+    // The agent's way to stay silent in group conversations — post nothing.
+    let agentChoseSilence = false;
+    if (agentResponse.trim() === CHATOPS_NO_REPLY_SENTINEL) {
+      logger.info(
+        { messageId: message.messageId, agentId: agent.id },
+        "[ChatOps] Agent chose not to reply",
+      );
+      agentChoseSilence = true;
+      agentResponse = "";
+    } else if (agentResponse.includes(CHATOPS_NO_REPLY_SENTINEL)) {
+      // Defensive: the sentinel mixed into a real answer is model noise.
+      agentResponse = agentResponse
+        .replaceAll(CHATOPS_NO_REPLY_SENTINEL, "")
+        .trim();
+    }
 
     if (sendReply && agentResponse) {
       await provider.sendReply({
@@ -1407,11 +1460,21 @@ export class ChatOpsManager {
       !agentResponse &&
       message.metadata?.placeholderActivityId
     ) {
-      // Agent returned no visible content but a placeholder "Thinking..."
-      // message was sent (Teams channels) — update it so it doesn't linger.
+      // A placeholder "Thinking..." message was posted (Teams channels) —
+      // update it so it doesn't linger. Deliberate silence gets a subtle
+      // note; an unexpectedly empty result keeps the "(No response)" marker.
+      const startedAt = message.metadata?.processingStartedAt;
+      const seconds =
+        typeof startedAt === "number"
+          ? Math.max(1, Math.round((Date.now() - startedAt) / 1000))
+          : null;
       await provider.sendReply({
         originalMessage: message,
-        text: "_(No response)_",
+        text: agentChoseSilence
+          ? seconds
+            ? `_Thought for ${seconds}s — no reply needed_`
+            : "_No reply needed_"
+          : "_(No response)_",
         conversationReference: message.metadata?.conversationReference,
       });
     }

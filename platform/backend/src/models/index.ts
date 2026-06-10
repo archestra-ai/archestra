@@ -30,6 +30,7 @@ export { default as ConversationEnabledToolModel } from "./conversation-enabled-
 export { default as ConversationShareModel } from "./conversation-share";
 export { default as EnvironmentModel } from "./environment";
 export { default as GithubAppConfigModel } from "./github-app-config";
+export { default as HookFileModel } from "./hook-file";
 export { default as InteractionModel } from "./interaction";
 export { default as InternalMcpCatalogModel } from "./internal-mcp-catalog";
 export { default as InvitationModel } from "./invitation";
@@ -71,6 +72,7 @@ export { default as SkillFileModel } from "./skill-file";
 export {
   default as SkillSandboxModel,
   SkillInvalidFilePathError,
+  SkillSandboxConversationGoneError,
 } from "./skill-sandbox";
 export { default as SkillSandboxFileModel } from "./skill-sandbox-file";
 export { default as SkillSandboxReplayEventModel } from "./skill-sandbox-replay-event";

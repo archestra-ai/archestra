@@ -1,65 +1,56 @@
 "use client";
 
 import { AUTO_PROVISIONED_INVITATION_STATUS } from "@archestra/shared";
-import { AuthView } from "@daveyplate/better-auth-ui";
+import { useQueryClient } from "@tanstack/react-query";
+import { Eye, EyeOff } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useEffect } from "react";
+import { Suspense, useEffect, useState } from "react";
+import { toast } from "sonner";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { AppLogo } from "@/components/app-logo";
 import { CommunityLinks } from "@/components/community-links";
 import { LoadingSpinner } from "@/components/loading";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { authQueryKeys } from "@/lib/auth/auth.query";
 import { useInvitationCheck } from "@/lib/auth/invitation.query";
+import { authClient } from "@/lib/clients/auth/auth-client";
 import { useAppName } from "@/lib/hooks/use-app-name";
 
-function setInputValue(input: HTMLInputElement, value: string) {
-  // Better Auth UI owns these inputs internally, so direct assignment is not
-  // enough to notify its React handlers. Use the native setter to keep the
-  // third-party controlled field state in sync with the DOM value.
-  const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
-    window.HTMLInputElement.prototype,
-    "value",
-  )?.set;
+type AuthClientError = {
+  message?: string;
+  statusText?: string;
+};
 
-  if (nativeInputValueSetter) {
-    nativeInputValueSetter.call(input, value);
-    input.dispatchEvent(new Event("input", { bubbles: true }));
-    return;
-  }
-
-  input.value = value;
-  input.dispatchEvent(new Event("input", { bubbles: true }));
-  input.dispatchEvent(new Event("change", { bubbles: true }));
-}
-
-function prefillInvitationFormField(params: {
-  selector: string;
-  value: string | null;
-}) {
-  if (!params.value) {
-    return true;
-  }
-
-  const input = document.querySelector<HTMLInputElement>(params.selector);
-  if (!input) {
-    return false;
-  }
-
-  if (!input.value) {
-    setInputValue(input, params.value);
-  }
-
-  return input.value === params.value;
-}
+type InvitationSignUpPayload = Parameters<typeof authClient.signUp.email>[0] & {
+  invitationId: string;
+};
 
 function SignUpWithInvitationContent() {
   const appName = useAppName();
   const router = useRouter();
   const searchParams = useSearchParams();
+  const queryClient = useQueryClient();
   const invitationId = searchParams.get("invitationId");
-  const email = searchParams.get("email");
-  const name = searchParams.get("name");
+  const emailParam = searchParams.get("email") ?? "";
+  const nameParam = searchParams.get("name") ?? "";
   const { data: invitationData, isLoading: isCheckingInvitation } =
     useInvitationCheck(invitationId);
+  const [name, setName] = useState(nameParam);
+  const [email, setEmail] = useState(emailParam);
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    setName(nameParam);
+  }, [nameParam]);
+
+  useEffect(() => {
+    setEmail(emailParam);
+  }, [emailParam]);
 
   // Redirect existing users to sign-in (unless auto-provisioned — they need to sign up)
   useEffect(() => {
@@ -74,64 +65,48 @@ function SignUpWithInvitationContent() {
     }
   }, [invitationId, invitationData, router]);
 
-  // Prefill form fields (but keep them editable for form validation)
-  useEffect(() => {
-    if (!email && !name) {
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    if (!invitationId) {
+      toast.error("Invitation link is missing an invitation ID");
       return;
     }
 
-    const prefillFields = () =>
-      prefillInvitationFormField({
-        selector: 'input[name="email"], input[type="email"]',
-        value: email,
-      }) &&
-      prefillInvitationFormField({
-        selector: 'input[name="name"]',
-        value: name,
-      });
+    const trimmedName = name.trim();
+    const trimmedEmail = email.trim();
 
-    if (prefillFields()) {
+    if (!trimmedName || !trimmedEmail || !password) {
+      toast.error("Name, email, and password are required");
       return;
     }
 
-    const cleanupCallbacks: Array<() => void> = [];
+    setIsSubmitting(true);
+    const payload: InvitationSignUpPayload = {
+      name: trimmedName,
+      email: trimmedEmail,
+      password,
+      callbackURL: "/chat",
+      invitationId,
+    };
 
-    const stopWatching = () => {
-      for (const cleanup of cleanupCallbacks) {
-        cleanup();
+    try {
+      const { error } = await authClient.signUp.email(payload);
+
+      if (error) {
+        toast.error(getAuthErrorMessage(error, "Failed to create account"));
+        return;
       }
-    };
 
-    const ensureFieldsPrefilled = () => {
-      if (prefillFields()) {
-        stopWatching();
-      }
-    };
+      await queryClient.invalidateQueries({ queryKey: authQueryKeys.all });
+      router.replace("/chat");
+    } catch {
+      toast.error("Failed to create account");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
-    const observer = new MutationObserver(() => {
-      ensureFieldsPrefilled();
-    });
-
-    observer.observe(document.body, {
-      childList: true,
-      subtree: true,
-      attributes: true,
-      attributeFilter: ["value"],
-    });
-    cleanupCallbacks.push(() => observer.disconnect());
-
-    const interval = window.setInterval(ensureFieldsPrefilled, 100);
-    cleanupCallbacks.push(() => window.clearInterval(interval));
-
-    const timeout = window.setTimeout(stopWatching, 5_000);
-    cleanupCallbacks.push(() => window.clearTimeout(timeout));
-
-    return () => {
-      stopWatching();
-    };
-  }, [email, name]);
-
-  // Show loading while checking session, signing out, or checking invitation
   if (isCheckingInvitation && invitationId) {
     return (
       <main className="h-full flex items-center justify-center">
@@ -158,17 +133,82 @@ function SignUpWithInvitationContent() {
                 )}
               </div>
             )}
-            <div className="w-full flex flex-col items-center justify-center">
-              <AuthView
-                path="sign-up"
-                classNames={{ footer: "hidden" }}
-                callbackURL={
-                  invitationId
-                    ? `/auth/sign-up-with-invitation?invitationId=${invitationId}${email ? `&email=${encodeURIComponent(email)}` : ""}`
-                    : undefined
-                }
-              />
-            </div>
+            <Card>
+              <CardHeader>
+                <CardTitle>Sign Up</CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  Enter your information to create an account
+                </p>
+              </CardHeader>
+              <CardContent>
+                <form className="space-y-4" onSubmit={handleSubmit}>
+                  <div className="space-y-2">
+                    <Label htmlFor="invitation-name">Name</Label>
+                    <Input
+                      id="invitation-name"
+                      name="name"
+                      value={name}
+                      onChange={(event) => setName(event.target.value)}
+                      autoComplete="name"
+                      required
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="invitation-email">Email</Label>
+                    <Input
+                      id="invitation-email"
+                      name="email"
+                      type="email"
+                      value={email}
+                      onChange={(event) => setEmail(event.target.value)}
+                      autoComplete="email"
+                      required
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="invitation-password">Password</Label>
+                    <div className="relative">
+                      <Input
+                        id="invitation-password"
+                        name="password"
+                        type={showPassword ? "text" : "password"}
+                        value={password}
+                        onChange={(event) => setPassword(event.target.value)}
+                        autoComplete="new-password"
+                        className="pr-10"
+                        required
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="absolute right-1 top-1/2 h-8 w-8 -translate-y-1/2 text-muted-foreground"
+                        onClick={() => setShowPassword((value) => !value)}
+                      >
+                        {showPassword ? (
+                          <EyeOff className="h-4 w-4" />
+                        ) : (
+                          <Eye className="h-4 w-4" />
+                        )}
+                        <span className="sr-only">
+                          {showPassword ? "Hide password" : "Show password"}
+                        </span>
+                      </Button>
+                    </div>
+                  </div>
+
+                  <Button
+                    type="submit"
+                    className="w-full"
+                    disabled={isSubmitting || !invitationId}
+                  >
+                    {isSubmitting ? "Creating account..." : "Create an account"}
+                  </Button>
+                </form>
+              </CardContent>
+            </Card>
             <CommunityLinks />
           </div>
         </main>
@@ -185,4 +225,8 @@ export default function SignUpWithInvitationPage() {
       </Suspense>
     </ErrorBoundary>
   );
+}
+
+function getAuthErrorMessage(error: AuthClientError, fallback: string) {
+  return error.message ?? error.statusText ?? fallback;
 }

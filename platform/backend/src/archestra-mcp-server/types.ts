@@ -8,7 +8,18 @@ export interface ArchestraContext {
     id: string;
     name: string;
   };
+  /**
+   * Id of a persisted `conversations` row. Only ever a real conversation id —
+   * tools may persist it as a foreign key. Absent in headless executions
+   * (direct A2A, ChatOps, schedule triggers, incoming email).
+   */
   conversationId?: string;
+  /**
+   * Opaque key scoping per-execution state (browser tabs, MCP client cache,
+   * headless sandboxes). Equals `conversationId` in UI chat; a generated UUID
+   * in headless executions. Never persist it as a conversation id.
+   */
+  isolationKey?: string;
   /** ChatOps channel binding ID for Slack/MS Teams-triggered executions */
   chatOpsBindingId?: string;
   /** ChatOps thread identifier for thread-scoped agent overrides */

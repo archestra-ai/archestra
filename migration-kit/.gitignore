@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+.ty_cache/
+.ruff_cache/
+inventory.json
+migration_plan.json
+migration_result.json
+report.md

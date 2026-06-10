@@ -10,7 +10,7 @@ import {
 } from "./chat";
 
 describe("chat file upload helpers", () => {
-  test("treats text modality as supporting txt, md, and csv uploads", () => {
+  test("treats text modality as supporting txt, md, csv, and json uploads", () => {
     expect(getAcceptedFileTypes(["text"])).toBe(
       [
         "text/plain",
@@ -18,11 +18,12 @@ describe("chat file upload helpers", () => {
         "text/csv",
         "application/csv",
         "application/vnd.ms-excel",
+        "application/json",
       ].join(","),
     );
     expect(supportsFileUploads(["text"])).toBe(true);
     expect(getSupportedFileTypesDescription(["text"])).toBe(
-      "chat prompts, .txt, .csv, and .md uploads",
+      "chat prompts, .txt, .csv, .md, and .json uploads",
     );
   });
 
@@ -34,6 +35,7 @@ describe("chat file upload helpers", () => {
         "text/csv",
         "application/csv",
         "application/vnd.ms-excel",
+        "application/json",
         "application/pdf",
       ].join(","),
     );
@@ -50,7 +52,9 @@ describe("chat file upload helpers", () => {
   test("builds a readable description for multiple upload modalities", () => {
     expect(
       getSupportedFileTypesDescription(["text", "image", "pdf", "audio"]),
-    ).toBe("chat prompts, .txt, .csv, and .md uploads, images, PDFs, audio");
+    ).toBe(
+      "chat prompts, .txt, .csv, .md, and .json uploads, images, PDFs, audio",
+    );
   });
 
   test("uses explicit file media types when present", () => {

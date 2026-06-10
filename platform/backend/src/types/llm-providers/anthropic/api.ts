@@ -96,6 +96,16 @@ export const MessagesRequestSchema = z.object({
 export const UsageSchema = z.object({
   input_tokens: z.number(),
   output_tokens: z.number(),
+  cache_read_input_tokens: z.number().nullish(),
+  cache_creation_input_tokens: z.number().nullish(),
+  // Per-TTL split of cache_creation_input_tokens. 1h writes are billed higher
+  // than 5m, so the cost calc needs the breakdown, not just the total.
+  cache_creation: z
+    .object({
+      ephemeral_1h_input_tokens: z.number().nullish(),
+      ephemeral_5m_input_tokens: z.number().nullish(),
+    })
+    .nullish(),
 });
 
 export const MessagesResponseSchema = z.object({

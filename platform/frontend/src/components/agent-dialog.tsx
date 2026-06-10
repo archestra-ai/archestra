@@ -38,6 +38,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { ConnectorTypeIcon } from "@/app/knowledge/knowledge-bases/_parts/connector-icons";
 import { AgentBadge } from "@/components/agent-badge";
+import { AgentHooksEditor } from "@/components/agent-hooks-editor";
 import type { AgentIconVariant } from "@/components/agent-icon";
 import { AgentIconPicker } from "@/components/agent-icon-picker";
 import {
@@ -129,6 +130,7 @@ import {
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useIdentityProviders } from "@/lib/auth/identity-provider-read.query";
 import { useChatProfileMcpTools } from "@/lib/chat/chat.query";
+import { useFeature } from "@/lib/config/config.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useConnectors } from "@/lib/knowledge/connector.query";
@@ -658,6 +660,7 @@ export function AgentDialog({
   // Determine type-specific visibility based on agentType prop
   const isInternalAgent = agentType === "agent";
   const isBuiltIn = !!agent?.builtIn;
+  const agentHooksEnabled = useFeature("agentHooksEnabled");
   const builtInAgentName = agent?.builtInAgentConfig?.name;
   const isPolicyConfigBuiltIn =
     builtInAgentName === BUILT_IN_AGENT_IDS.POLICY_CONFIG;
@@ -1692,6 +1695,13 @@ export function AgentDialog({
                   )}
                 </div>
               )}
+
+              {/* Hooks (internal agents only, existing agents only; gated by
+                  the agent-hooks feature flag, which requires the agent runtime) */}
+              {agentHooksEnabled &&
+                isInternalAgent &&
+                !isBuiltIn &&
+                agent?.id && <AgentHooksEditor agentId={agent.id} />}
 
               {/* Section 4: Access & LLM */}
               {(!isBuiltIn || isInternalAgent) && (

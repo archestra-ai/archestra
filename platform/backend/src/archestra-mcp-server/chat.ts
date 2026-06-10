@@ -189,8 +189,8 @@ const registry = defineArchestraTools([
       try {
         let successMessage = `Successfully updated artifact (${args.content.length} characters)`;
 
-        // Scheduled run context — write to the run (conversationId is a
-        // synthetic isolation key, not a real DB conversation)
+        // Scheduled run context — write to the run (there is no conversation
+        // to attach the artifact to)
         if (context.scheduleTriggerRunId) {
           const updated = await ScheduleTriggerRunModel.setArtifact(
             context.scheduleTriggerRunId,

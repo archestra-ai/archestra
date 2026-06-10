@@ -10,7 +10,7 @@ This is the canonical mapping the model applies when turning `inventory.json` in
 | `skill` (`.claude/skills/*/SKILL.md`) | `skill` | clean | migrated verbatim with bundled files |
 | `subagent` (`.claude/agents/*.md`) | `skill` (preferred) or `agent` | best-effort | default to skill; tool allowlist is **documented, not enforced** |
 | `command` (`.claude/commands/*.md`) | `skill` | best-effort | slash command body → skill |
-| `local_tool` (`tools/*.py`) | `skill` | best-effort | skill bundles the `.py` and tells the agent to run it |
+| `local_tool` (`tools/*.py`) | `skill` | best-effort | per-script fallback; PREFER consolidating into one toolset skill — see "Local tools" below |
 | `mcp_server` (remote, has `url`) | `mcp_catalog` (+ optional `mcp_install`) | clean | remote catalog item |
 | `mcp_server` (stdio, has `command`) | `mcp_catalog` (+ optional `mcp_install`) | best-effort | local catalog item; install spins a K8s pod |
 
@@ -73,6 +73,30 @@ Redirect, don't translate:
 
 Telemetry is **instance-level env config** — no API, no per-agent knob. To keep an existing
 Grafana/collector, the pilot owner sets `ARCHESTRA_OTEL_EXPORTER_OTLP_ENDPOINT` on the instance.
+
+## Local tools: consolidate before migrating (judgment, not tooling)
+Migrating each `tools/*.py` as its own wrapper skill scatters one toolset across many skills, and
+skills/commands that say "run `python3 tools/<x>.py`" dangle after migration (the script ends up in
+a different skill's mount → file-not-found at runtime). Prefer consolidating, using ordinary file
+edits in the source before applying:
+
+1. Author `.claude/skills/<project>-tools/` in the source: a `SKILL.md` listing each tool and how to
+   run it (`python3 /skills/<project>-tools/tools/<x>.py`; outputs to absolute paths under
+   `/home/sandbox`), the scripts (plus any data files they read), and — if they import third-party
+   packages — a `requirements.txt` at the **skill root**, which Archestra auto-installs when the
+   skill is mounted. Curate it from `tools/requirements.txt`; don't copy the project's root
+   `requirements.txt` wholesale (it usually pins the whole app).
+2. Re-run discovery: the toolset is now a clean `skill` item, bundled verbatim. `skip` the
+   per-script `local_tool` items so nothing migrates twice.
+3. Rewrite references in other migrated skills/commands/subagents from `tools/<x>.py` prose to
+   "activate `<project>-tools`, then `python3 /skills/<project>-tools/tools/<x>.py`" — or list each
+   un-rewritten reference in the report as a manual follow-up. Never leave them dangling silently.
+4. If a skill named `<project>-tools` already exists in the org, pick another name everywhere —
+   `apply.py` treats same-name/scope as already-migrated and records a `skipped` result (no
+   warning or error), so the toolset would quietly not be uploaded.
+
+Fall back to per-script `local_tool` migration only for a single independent script that nothing
+else references.
 
 ## Behavioral differences to put in the report
 - **Subagent isolation & tool allowlists are not preserved.** Archestra skills are instructions, not

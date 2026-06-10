@@ -53,7 +53,8 @@ comments are reported here rather than guessed, so read the raw file for those r
 
 After reading the inventory, summarize it in product terms before mapping:
 - likely to migrate cleanly;
-- needs user choice or review;
+- needs user choice or review — including whether to consolidate `tools/*.py` into one toolset
+  skill before applying (`entity-mapping.md`, "Local tools");
 - report-only/manual follow-up;
 - secret redactions or content warnings;
 - telemetry/observability (OTEL env, metrics-shipping hooks/scripts) — report-only: Archestra emits

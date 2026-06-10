@@ -171,7 +171,10 @@ if [ "$ARCHESTRA_QUICKSTART" = "true" ]; then
         # 2. Traffic never leaves the host machine (container-to-container communication)
         # 3. The certificate is for localhost/127.0.0.1, not the container IP we're using
         # 4. Production deployments use external K8s clusters with proper TLS certificates
-        # Use targeted approach to avoid duplicates and only modify KinD cluster entries
+        # Use targeted approach to avoid duplicates and only modify KinD cluster entries.
+        # certificate-authority-data is dropped alongside enabling insecure-skip-tls-verify:
+        # strict clients (kubectl, and the Dagger kube-pod:// transport) reject a kubeconfig
+        # that sets both, so keeping the CA would break the bundled Dagger Engine connection.
         cat "${KUBECONFIG_PATH}" | \
             sed "s|server: https://127.0.0.1:[0-9][0-9]*|server: https://${CONTROL_PLANE_IP}:6443|g" | \
             awk '
@@ -184,6 +187,7 @@ if [ "$ARCHESTRA_QUICKSTART" = "true" ]; then
                     next
                 }
                 /^    insecure-skip-tls-verify:/ { next }
+                /^    certificate-authority-data:/ { next }
                 { print }
             ' > "${KUBECONFIG_PATH}.tmp"
         mv "${KUBECONFIG_PATH}.tmp" "${KUBECONFIG_PATH}"
@@ -214,6 +218,45 @@ if [ "$ARCHESTRA_QUICKSTART" = "true" ]; then
         export ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE="${ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE:-default}"
         export ARCHESTRA_ORCHESTRATOR_K8S_NODE_HOST="${CONTROL_PLANE_IP}"
         echo "Kubernetes orchestrator configured with embedded KinD cluster"
+    fi
+
+    # Bundle the Dagger Engine that backs the skill sandbox / code runtime
+    # (archestra__run_python). It runs as a privileged pod in the embedded KinD
+    # cluster; the backend reaches it over kube-pod:// (kubectl exec + buildctl
+    # dial-stdio), so no Service or TCP port is needed. The manifest is the
+    # helm/dagger-runtime chart rendered with laptop-sized resources.
+    # Opt out with ARCHESTRA_CODE_RUNTIME_ENABLED=false.
+    if [ "${ARCHESTRA_CODE_RUNTIME_ENABLED:-true}" = "true" ]; then
+        echo "Deploying embedded Dagger Engine for code runtime..."
+        echo "NOTE: the engine is privileged and memory-hungry; ensure Docker has at least 6 GB."
+
+        # Pre-load the engine image straight into the node's containerd. KinD is
+        # recreated each run and its containerd cannot see the host Docker image
+        # cache, so without this every boot would pull ~352MB from the registry.
+        # The image is baked into this image as a docker-archive at build time, so
+        # the engine starts offline (manifest uses imagePullPolicy: IfNotPresent).
+        echo "Loading bundled Dagger Engine image into KinD (offline, no registry pull)..."
+        kind load image-archive /app/dagger-engine.tar --name "${CLUSTER_NAME}" \
+            || echo "WARNING: kind load failed; the engine will fall back to a registry pull"
+
+        # Gate the runtime on the engine actually being Ready: kubectl apply only
+        # proves the API accepted the manifest, not that the pod scheduled and
+        # passed its probe. With the image pre-loaded, 60s is ample on the happy
+        # path; on timeout we leave the feature off rather than advertise a pod
+        # that never came up.
+        if kubectl --kubeconfig "${KUBECONFIG_PATH}" apply -f /app/dagger-engine.quickstart.yaml \
+            && kubectl --kubeconfig "${KUBECONFIG_PATH}" rollout status \
+                statefulset/dagger-runtime-engine -n default --timeout=60s; then
+            # the dagger CLI spawned by the backend uses KUBECONFIG to exec into
+            # the engine pod for the kube-pod:// transport.
+            export KUBECONFIG="${KUBECONFIG_PATH}"
+            export ARCHESTRA_CODE_RUNTIME_ENABLED="true"
+            export ARCHESTRA_AGENTS_SKILLS_ENABLED="${ARCHESTRA_AGENTS_SKILLS_ENABLED:-true}"
+            export ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST="kube-pod://dagger-runtime-engine-0?namespace=default&container=dagger-engine"
+            echo "Dagger Engine ready - code runtime enabled"
+        else
+            echo "WARNING: Dagger Engine did not become ready; code runtime stays disabled"
+        fi
     fi
 fi
 

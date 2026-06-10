@@ -21,6 +21,7 @@ important behavior differences surfaced before anything is applied.
 - A primary agent from project-level instructions.
 - Skills from existing skills, subagents, slash commands, and local tools.
 - Private MCP catalog items, installed only on request.
+- Native lifecycle hooks from Claude Code `SessionStart`/`PreToolUse`/`PostToolUse` hooks.
 - LLM provider keys only when you paste the replacement secret.
 - A report separating what moved, what was skipped, what failed, and what needs hands-on review.
 
@@ -78,8 +79,10 @@ locked-down or air-gapped hosts.
   documented, not enforced.
 - **MCP servers** become catalog items; installing them is opt-in because local stdio servers run
   inside Archestra's Kubernetes-backed runtime.
-- **Guard hooks** become tool policies only when the target tool exists in Archestra.
-- **Passive hooks, openclaw config, and unknown files** are reported for manual follow-up.
+- **Hooks** for `SessionStart`/`PreToolUse`/`PostToolUse` become native Archestra lifecycle hooks (the
+  payload is Claude-compatible, so scripts port near-1:1) — minus the `matcher`, with sandbox `cwd` and
+  no command env/argv. A simple guard can instead become a tool policy when its target tool exists.
+- **Hooks for other events, openclaw config, and unknown files** are reported for manual follow-up.
 - **Secrets inside migrated prose/code** are left intact as part of the artifact; discovery warns so
   you can review before sharing the inventory.
 

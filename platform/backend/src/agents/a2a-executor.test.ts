@@ -461,6 +461,111 @@ describe("executeA2AMessage model selection", () => {
   });
 });
 
+describe("executeA2AMessage isolation scope", () => {
+  function primeExecutionMocks() {
+    mockGetChatMcpTools.mockClear();
+    vi.mocked(AgentModel.findById).mockResolvedValue({
+      id: "agent-child",
+      name: "Child Agent",
+      agentType: "agent",
+      systemPrompt: "Handle the task.",
+      llmApiKeyId: null,
+      modelId: null,
+    } as never);
+    vi.mocked(McpServerModel.getUserPersonalServerForCatalog).mockResolvedValue(
+      null,
+    );
+    mockResolveConversationLlmSelectionForAgent.mockResolvedValue({
+      chatApiKeyId: "org-key",
+      selectedModel: "gemini-2.5-pro",
+      selectedProvider: "gemini",
+    });
+    mockGetChatMcpTools.mockResolvedValue({});
+    mockCreateLLMModelForAgent.mockResolvedValue({
+      model: { provider: "mock" },
+      provider: "gemini",
+      apiKeySource: "org",
+    });
+    mockStreamText.mockReturnValue({
+      toUIMessageStream: vi.fn((options) => {
+        const responseMessage = {
+          id: "msg-1",
+          role: "assistant",
+          parts: [{ type: "text", text: "ok" }],
+        };
+        options?.onFinish?.({
+          messages: [responseMessage],
+          isContinuation: false,
+          isAborted: false,
+          responseMessage,
+          finishReason: "stop",
+        });
+        return new ReadableStream({
+          start(controller) {
+            controller.close();
+          },
+        });
+      }),
+      text: Promise.resolve("ok"),
+      usage: Promise.resolve(undefined),
+      finishReason: Promise.resolve("stop"),
+    });
+  }
+
+  function toolWiring(): { conversationId?: string; isolationKey?: string } {
+    return mockGetChatMcpTools.mock.calls[0][0] as {
+      conversationId?: string;
+      isolationKey?: string;
+    };
+  }
+
+  test("headless executions never fabricate a conversation id for tools", async () => {
+    primeExecutionMocks();
+    await executeA2AMessage({
+      agentId: "agent-child",
+      message: "Handle this",
+      organizationId: "org-1",
+      userId: "user-1",
+    });
+
+    const wiring = toolWiring();
+    // tools may persist conversationId as a foreign key, so it must stay
+    // absent; the generated execution key travels only as isolationKey.
+    expect(wiring.conversationId).toBeUndefined();
+    expect(wiring.isolationKey).toEqual(expect.any(String));
+  });
+
+  test("chat-delegated executions scope isolation by the real conversation id", async () => {
+    primeExecutionMocks();
+    await executeA2AMessage({
+      agentId: "agent-child",
+      message: "Handle this",
+      organizationId: "org-1",
+      userId: "user-1",
+      conversationId: "conv-1",
+    });
+
+    const wiring = toolWiring();
+    expect(wiring.conversationId).toBe("conv-1");
+    expect(wiring.isolationKey).toBe("conv-1");
+  });
+
+  test("headless delegation inherits the parent's isolation key", async () => {
+    primeExecutionMocks();
+    await executeA2AMessage({
+      agentId: "agent-child",
+      message: "Handle this",
+      organizationId: "org-1",
+      userId: "user-1",
+      isolationKey: "parent-execution-key",
+    });
+
+    const wiring = toolWiring();
+    expect(wiring.conversationId).toBeUndefined();
+    expect(wiring.isolationKey).toBe("parent-execution-key");
+  });
+});
+
 describe("executeA2AMessage unavailable tool errors", () => {
   test("recovers unavailable-tool stream errors instead of failing the run", async () => {
     vi.mocked(AgentModel.findById).mockResolvedValue({

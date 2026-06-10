@@ -497,6 +497,115 @@ describe("ChatProvider retries", () => {
     );
   });
 
+  // NOTE: if the regression returns (regenerateUserMessage stops clearing the
+  // restore-on-regression buffer), this test HANGS instead of failing an
+  // assertion: the restore manufactures a new messages identity every render,
+  // the session-sync effect re-fires on it, and the resulting render loop
+  // never yields back to the test runner. A hung CI job here means this bug.
+  it("does not resurrect the pre-edit assistant answer while edit-regenerate rebuilds it", async () => {
+    const latestSessionRef: { current: ChatSessionSnapshot } = {
+      current: undefined,
+    };
+    const userMessage = {
+      id: "user-1",
+      role: "user",
+      parts: [{ type: "text", text: "bye" }],
+    } as UIMessage;
+    const oldAssistant = {
+      id: "assistant-1",
+      role: "assistant",
+      parts: [{ type: "text", text: "Goodbye!" }],
+    } as UIMessage;
+    // Live SDK message list the useChat mock serves on every render.
+    const liveMessages = { current: [userMessage, oldAssistant] };
+    mocks.useChat.mockImplementation((options) => {
+      chatOptions = options;
+      return {
+        addToolApprovalResponse: mocks.addToolApprovalResponse,
+        addToolResult: mocks.addToolResult,
+        clearError: mocks.clearError,
+        error: undefined,
+        messages: liveMessages.current,
+        regenerate: mocks.regenerate,
+        resumeStream: mocks.resumeStream,
+        sendMessage: mocks.sendMessage,
+        setMessages: mocks.setMessages,
+        status: "ready",
+        stop: mocks.stop,
+      };
+    });
+    const editedUser = {
+      ...userMessage,
+      parts: [{ type: "text", text: "bye, edited" }],
+    } as UIMessage;
+    // Persisted thread returned by the edit mutation.
+    mocks.mutateAsync.mockResolvedValue({
+      messages: [editedUser, oldAssistant],
+    });
+    // Mirror the SDK contract: setMessages replaces the live list, and
+    // regenerate({messageId}) synchronously truncates it up to and including
+    // the user anchor before requesting (AbstractChat.regenerate slices
+    // state.messages in the same task).
+    mocks.setMessages.mockImplementation((next: UIMessage[]) => {
+      liveMessages.current = next;
+    });
+    mocks.regenerate.mockImplementation(
+      async ({ messageId }: { messageId: string }) => {
+        const index = liveMessages.current.findIndex((m) => m.id === messageId);
+        liveMessages.current = liveMessages.current.slice(0, index + 1);
+      },
+    );
+
+    // Fresh JSX per render call — reusing one element identity makes React
+    // bail out of re-rendering the subtree, so the regression renders below
+    // would never reach the hook.
+    const makeTree = () => (
+      <ChatProvider>
+        <RegisterChatSession />
+        <CaptureChatSession
+          onSession={(session) => {
+            latestSessionRef.current = session;
+          }}
+        />
+      </ChatProvider>
+    );
+    const { rerender } = render(makeTree());
+    await waitFor(() =>
+      expect(latestSessionRef.current?.messages).toHaveLength(2),
+    );
+
+    await act(async () => {
+      await latestSessionRef.current?.regenerateUserMessage({
+        messageId: "user-1",
+        partIndex: 0,
+        text: "bye, edited",
+      });
+    });
+    expect(mocks.regenerate).toHaveBeenCalledWith({ messageId: "user-1" });
+
+    // First render after the edit: regenerate has truncated the live list to
+    // the user anchor.
+    rerender(makeTree());
+
+    // The regenerate stream then rebuilds the SAME assistant message from
+    // empty. The restore-on-regression buffer must not resurrect the pre-edit
+    // answer here — two writers fighting over one message is the update loop
+    // that crashes the page (React #185, "Maximum update depth").
+    liveMessages.current = [
+      editedUser,
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [],
+      } as unknown as UIMessage,
+    ];
+    rerender(makeTree());
+
+    const lastMessage = latestSessionRef.current?.messages.at(-1);
+    expect(lastMessage?.id).toBe("assistant-1");
+    expect(lastMessage?.parts).toEqual([]);
+  });
+
   it("marks the session as recovering while auto-retrying or reattaching, but not for terminal errors", async () => {
     const latestSessionRef: { current: ChatSessionSnapshot } = {
       current: undefined,

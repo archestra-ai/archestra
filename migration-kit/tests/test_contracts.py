@@ -24,7 +24,9 @@ def test_inventory_roundtrips_through_json() -> None:
                                                  env={"T": "<redacted>"})),
             c.HookItem(id="hook:PreToolUse:0:0", name="h", path="settings.json",
                        data=c.HookData(event="PreToolUse", command="x", intent="guard",
-                                       matcher="Bash")),
+                                       source="bundled", matcher="Bash",
+                                       file_name="guard.py", script_path="hooks/guard.py",
+                                       requirements=["httpx>=0.27"])),
             c.OpenclawItem(id="openclaw", name="openclaw", path="openclaw.json",
                            data=c.OpenclawData(config={"k": 1, "nested": {"a": [1, 2]}})),
         ],
@@ -83,6 +85,63 @@ def test_user_answer_validators_accept_good_values() -> None:
     assert c.require_operator({"operator": "regex"}, ctx="a") == "regex"
     assert c.optional_action({}, ctx="a") == "block_always"  # default
     assert c.optional_action({"action": "require_approval"}, ctx="a") == "require_approval"
+
+
+def test_archestra_hook_event_maps_supported_events_only() -> None:
+    assert c.archestra_hook_event("SessionStart") == "session_start"
+    assert c.archestra_hook_event("PreToolUse") == "pre_tool_use"
+    assert c.archestra_hook_event("PostToolUse") == "post_tool_use"
+    for unsupported in ("UserPromptSubmit", "Stop", "SubagentStop", "PreCompact", "Notification"):
+        assert c.archestra_hook_event(unsupported) is None
+
+
+def test_archestra_file_name_validates_basename_and_extension() -> None:
+    assert c.archestra_file_name("guard.py", ctx="f") == "guard.py"
+    assert c.archestra_file_name("pre_tool-use.sh", ctx="f") == "pre_tool-use.sh"
+    for bad in ("guard.txt", "../guard.py", "dir/guard.py", ".hidden.py", "guard", "a" * 256 + ".py"):
+        with pytest.raises(c.ContractError, match="file name"):
+            c.archestra_file_name(bad, ctx="f")
+
+
+def test_validate_requirements_trims_and_bounds() -> None:
+    assert c.validate_requirements(["  httpx>=0.27 ", "pyyaml"], ctx="r") == ["httpx>=0.27", "pyyaml"]
+    assert c.validate_requirements([], ctx="r") == []
+    with pytest.raises(c.ContractError, match="non-empty"):
+        c.validate_requirements(["  "], ctx="r")
+    with pytest.raises(c.ContractError, match="single line"):
+        c.validate_requirements(["foo\nbar"], ctx="r")
+    with pytest.raises(c.ContractError, match="at most"):
+        c.validate_requirements([f"pkg{i}" for i in range(21)], ctx="r")
+    with pytest.raises(c.ContractError, match="exceeds"):
+        c.validate_requirements(["x" * 201], ctx="r")
+
+
+def test_require_requirements_is_none_when_absent() -> None:
+    assert c.require_requirements({}, ctx="a") is None
+    assert c.require_requirements({"requirements": ["httpx"]}, ctx="a") == ["httpx"]
+
+
+def test_optional_agent_id_requires_uuid_shape() -> None:
+    uid = "0d3f6b1e-1a2b-4c3d-8e9f-0123456789ab"
+    assert c.optional_agent_id({"agentId": uid}, ctx="a") == uid
+    assert c.optional_agent_id({}, ctx="a") is None
+    with pytest.raises(c.ContractError, match="UUID"):
+        c.optional_agent_id({"agentId": "not-a-uuid"}, ctx="a")
+
+
+def test_optional_file_name_validates_when_present() -> None:
+    assert c.optional_file_name({"fileName": "g.sh"}, ctx="a") == "g.sh"
+    assert c.optional_file_name({}, ctx="a") is None
+    with pytest.raises(c.ContractError, match="file name"):
+        c.optional_file_name({"fileName": "g.txt"}, ctx="a")
+
+
+def test_require_hook_content_enforces_length() -> None:
+    assert c.require_hook_content("x", ctx="c") == "x"
+    with pytest.raises(c.ContractError, match="length"):
+        c.require_hook_content("", ctx="c")
+    with pytest.raises(c.ContractError, match="length"):
+        c.require_hook_content("x" * (c.HOOK_CONTENT_MAX + 1), ctx="c")
 
 
 def test_require_dict_and_list_raise_on_wrong_shape() -> None:

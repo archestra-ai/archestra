@@ -2,7 +2,7 @@
   "openapi": "3.0.0",
   "info": {
     "title": "Archestra",
-    "version": "1.2.61"
+    "version": "1.2.62"
   },
   "components": {
     "schemas": {
@@ -194656,6 +194656,13 @@
                     "items": {
                       "type": "string"
                     }
+                  },
+                  "allowedTools": {
+                    "description": "Tools the skill expects, overriding the SKILL.md `allowed-tools` frontmatter. Omit to use the frontmatter; pass [] to clear.",
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
                   }
                 },
                 "required": [
@@ -196388,6 +196395,13 @@
                     ]
                   },
                   "teamIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "allowedTools": {
+                    "description": "Tools the skill expects, overriding the SKILL.md `allowed-tools` frontmatter. Omit to use the frontmatter; pass [] to clear.",
                     "type": "array",
                     "items": {
                       "type": "string"

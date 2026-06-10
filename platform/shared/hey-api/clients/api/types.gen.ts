@@ -1478,6 +1478,10 @@ export type AnthropicMessagesResponseInput = {
         output_tokens: number;
         cache_read_input_tokens?: number | null;
         cache_creation_input_tokens?: number | null;
+        cache_creation?: {
+            ephemeral_1h_input_tokens?: number | null;
+            ephemeral_5m_input_tokens?: number | null;
+        } | null;
     };
 };
 
@@ -6757,6 +6761,10 @@ export type AnthropicMessagesResponse = {
         output_tokens: number;
         cache_read_input_tokens?: number | null;
         cache_creation_input_tokens?: number | null;
+        cache_creation?: {
+            ephemeral_1h_input_tokens?: number | null;
+            ephemeral_5m_input_tokens?: number | null;
+        } | null;
     };
 };
 

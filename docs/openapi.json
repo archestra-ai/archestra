@@ -4121,6 +4121,20 @@
               "cache_creation_input_tokens": {
                 "nullable": true,
                 "type": "number"
+              },
+              "cache_creation": {
+                "nullable": true,
+                "type": "object",
+                "properties": {
+                  "ephemeral_1h_input_tokens": {
+                    "nullable": true,
+                    "type": "number"
+                  },
+                  "ephemeral_5m_input_tokens": {
+                    "nullable": true,
+                    "type": "number"
+                  }
+                }
               }
             },
             "required": [
@@ -21240,6 +21254,21 @@
               "cache_creation_input_tokens": {
                 "nullable": true,
                 "type": "number"
+              },
+              "cache_creation": {
+                "nullable": true,
+                "type": "object",
+                "properties": {
+                  "ephemeral_1h_input_tokens": {
+                    "nullable": true,
+                    "type": "number"
+                  },
+                  "ephemeral_5m_input_tokens": {
+                    "nullable": true,
+                    "type": "number"
+                  }
+                },
+                "additionalProperties": false
               }
             },
             "required": [

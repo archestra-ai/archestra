@@ -82,11 +82,12 @@ describe("injectAppRuntimeBridge", () => {
     expect(result.endsWith("<p>fragment</p>")).toBe(true);
   });
 
-  test("is idempotent", () => {
-    const once = injectAppRuntimeBridge("<html><head></head></html>");
-    const twice = injectAppRuntimeBridge(once);
-    expect(twice).toBe(once);
-    expect(countOccurrences(twice, APP_RUNTIME_BRIDGE_MARKER)).toBe(1);
+  test("a body-text mention of the marker does not suppress injection", () => {
+    const result = injectAppRuntimeBridge(
+      `<html><head></head><body><p>${APP_RUNTIME_BRIDGE_MARKER}</p></body></html>`,
+    );
+    expect(countOccurrences(result, APP_RUNTIME_BRIDGE_MARKER)).toBe(2);
+    expect(result).toContain(`<head><script ${APP_RUNTIME_BRIDGE_MARKER}>`);
   });
 
   test("only the first <head> is targeted", () => {

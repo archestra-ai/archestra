@@ -76,7 +76,9 @@ export const APP_RUNTIME_BRIDGE_SCRIPT = `<script ${APP_RUNTIME_BRIDGE_MARKER}>
  * prepended later at render time and therefore always precedes the bridge.
  */
 export function injectAppRuntimeBridge(html: string): string {
-  if (html.includes(APP_RUNTIME_BRIDGE_MARKER)) return html;
+  // No injected-already guard: stored HTML never contains the bridge (it is
+  // never persisted), and a content-based scan could be tripped by an app
+  // merely mentioning the marker, silently losing window.archestra.
   const bridge = APP_RUNTIME_BRIDGE_SCRIPT;
   if (html.includes("<head>")) {
     return html.replace("<head>", `<head>${bridge}`);

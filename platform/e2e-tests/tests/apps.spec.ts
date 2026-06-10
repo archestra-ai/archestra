@@ -1,43 +1,34 @@
 import { goToPage } from "../fixtures";
 import { expect, test } from "./api-fixtures";
 
-// Standalone-first: seed an app from the `form` template via the API, then open
-// /apps/:id/run and assert the sandboxed runtime mounts. The data-store
-// round-trip itself runs cross-origin inside the sandbox iframe and is covered
-// by the backend app_data tests + the template wiring test; here we prove the
-// route, feature flag, and runtime mount end-to-end.
-test("create an app and open its standalone run page", async ({
+// Seed an app from the `form` template (resolved server-side from templateId),
+// open /apps/:id/run, and assert through the nested sandbox frames
+// (host page → sandbox proxy iframe → inner app iframe) that the form reaches
+// "Ready." — which the template only shows after the injected runtime bridge
+// connected the guest SDK and completed a data-store read round-trip. This is
+// the end-to-end proof of the serve-time bridge injection in a real browser.
+test("create an app from a template and run it standalone", async ({
   page,
   request,
   makeApiRequest,
 }) => {
-  const templatesRes = await makeApiRequest({
-    request,
-    method: "get",
-    urlSuffix: "/api/app-templates",
-  });
-  const templates = (await templatesRes.json()) as Array<{
-    id: string;
-    html: string;
-  }>;
-  const form = templates.find((t) => t.id === "form");
-  expect(form).toBeTruthy();
-
   const name = `e2e-app-${Date.now()}`;
   const createRes = await makeApiRequest({
     request,
     method: "post",
     urlSuffix: "/api/apps",
-    data: { name, html: form?.html, scope: "personal", templateId: "form" },
+    data: { name, scope: "personal", templateId: "form" },
   });
   const app = (await createRes.json()) as { id: string };
 
   try {
     await goToPage(page, `/apps/${app.id}/run`);
     await expect(page.getByText(name)).toBeVisible();
-    // The runtime creates the sandbox proxy iframe once the resource loads.
-    await expect(page.locator("iframe").first()).toBeVisible({
-      timeout: 15_000,
+
+    const proxyFrame = page.frameLocator("iframe");
+    const appFrame = proxyFrame.frameLocator("iframe");
+    await expect(appFrame.getByText("Ready.")).toBeVisible({
+      timeout: 20_000,
     });
   } finally {
     await makeApiRequest({

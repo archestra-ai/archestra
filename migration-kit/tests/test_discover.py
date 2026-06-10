@@ -106,18 +106,18 @@ def test_mcp_secret_env_is_redacted(inv: Inventory) -> None:
 
 
 def test_hooks_classified(inv: Inventory) -> None:
-    guard = _by_id(inv, "hook:PreToolUse:0:0")
+    guard = _by_id(inv, "hook:.claude/settings.json:PreToolUse:0:0")
     assert isinstance(guard, HookItem)
     assert guard.data.event == "PreToolUse"
     assert guard.data.matcher == "Bash"
     assert guard.data.intent == "guard"  # blocking event
-    session = _by_id(inv, "hook:SessionStart:0:0")
+    session = _by_id(inv, "hook:.claude/settings.json:SessionStart:0:0")
     assert isinstance(session, HookItem)
     assert session.data.intent == "passive"
 
 
 def test_bundled_hook_resolves_script_and_pep723(inv: Inventory) -> None:
-    guard = _by_id(inv, "hook:PreToolUse:0:0")
+    guard = _by_id(inv, "hook:.claude/settings.json:PreToolUse:0:0")
     assert isinstance(guard, HookItem)
     assert guard.data.source == "bundled"
     assert guard.data.file_name == "pre_tool_use.py"
@@ -127,7 +127,7 @@ def test_bundled_hook_resolves_script_and_pep723(inv: Inventory) -> None:
 
 
 def test_inline_hook_has_no_bundled_script(inv: Inventory) -> None:
-    post = _by_id(inv, "hook:PostToolUse:0:0")
+    post = _by_id(inv, "hook:.claude/settings.json:PostToolUse:0:0")
     assert isinstance(post, HookItem)
     assert post.data.source == "inline"
     assert post.data.file_name is None
@@ -136,14 +136,14 @@ def test_inline_hook_has_no_bundled_script(inv: Inventory) -> None:
 
 def test_env_prefix_hook_is_flagged_in_summary(inv: Inventory) -> None:
     # the SessionStart command has a `TOKEN=...` env prefix that a hook cannot represent.
-    session = _by_id(inv, "hook:SessionStart:0:0")
+    session = _by_id(inv, "hook:.claude/settings.json:SessionStart:0:0")
     assert isinstance(session, HookItem)
     assert session.data.source == "bundled"
     assert "env/args" in session.summary
 
 
 def test_unsupported_event_hook_noted_for_manual(inv: Inventory) -> None:
-    ups = _by_id(inv, "hook:UserPromptSubmit:0:0")
+    ups = _by_id(inv, "hook:.claude/settings.json:UserPromptSubmit:0:0")
     assert isinstance(ups, HookItem)
     assert "no archestra equivalent" in ups.summary
 
@@ -157,17 +157,43 @@ def test_unresolved_hook_when_script_missing(tmp_path: Path) -> None:
         ]}]}
     }))
     inv = discover(src)
-    hook = _by_id(inv, "hook:PreToolUse:0:0")
+    hook = _by_id(inv, "hook:.claude/settings.json:PreToolUse:0:0")
     assert isinstance(hook, HookItem)
     assert hook.data.source == "unresolved"
     assert hook.data.file_name is None
+
+
+def test_same_hook_slot_in_two_config_files_gets_distinct_ids(tmp_path: Path) -> None:
+    src = tmp_path / "src"
+    (src / ".claude").mkdir(parents=True)
+    entry = {"hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": "echo hi"}]}]}}
+    (src / ".claude" / "settings.json").write_text(json.dumps(entry))
+    (src / ".claude" / "settings.local.json").write_text(json.dumps(entry))
+    inv = discover(src)
+    ids = [it.id for it in inv.items if isinstance(it, HookItem)]
+    assert len(ids) == len(set(ids)) == 2
+
+
+def test_empty_or_env_only_command_is_unresolved(tmp_path: Path) -> None:
+    # neither "" (e.g. a missing command field) nor a bare env assignment runs anything,
+    # so synthesizing an inline wrapper from them would create a no-op hook.
+    src = tmp_path / "src"
+    (src / ".claude").mkdir(parents=True)
+    (src / ".claude" / "settings.json").write_text(json.dumps({
+        "hooks": {"PreToolUse": [{"hooks": [{"type": "command"}, {"type": "command", "command": "FOO=bar"}]}]}
+    }))
+    inv = discover(src)
+    for j in (0, 1):
+        hook = _by_id(inv, f"hook:.claude/settings.json:PreToolUse:0:{j}")
+        assert isinstance(hook, HookItem)
+        assert hook.data.source == "unresolved"
 
 
 def test_bundled_hook_resolves_with_relative_root(monkeypatch: pytest.MonkeyPatch) -> None:
     # discover() resolves the root, so a relative source dir must still bundle referenced scripts.
     monkeypatch.chdir(FIXTURE.parent)
     inv = discover(Path(FIXTURE.name))
-    guard = _by_id(inv, "hook:PreToolUse:0:0")
+    guard = _by_id(inv, "hook:.claude/settings.json:PreToolUse:0:0")
     assert isinstance(guard, HookItem)
     assert guard.data.source == "bundled"
     assert guard.data.script_path == "hooks/pre_tool_use.py"
@@ -200,7 +226,7 @@ def test_script_path_in_echo_argument_is_inline_not_bundled(tmp_path: Path) -> N
 
 
 def test_hook_command_inline_secret_redacted(inv: Inventory) -> None:
-    session = _by_id(inv, "hook:SessionStart:0:0")
+    session = _by_id(inv, "hook:.claude/settings.json:SessionStart:0:0")
     assert isinstance(session, HookItem)
     assert "ghp_hooksecret" not in session.data.command
     assert "<redacted>" in session.data.command

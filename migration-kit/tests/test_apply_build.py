@@ -249,8 +249,8 @@ def test_dry_run_redaction_hides_user_secrets() -> None:
 
 def test_tool_policy_requires_extracted_semantics(index: dict[str, Item]) -> None:
     with pytest.raises(ContractError, match="user_answers"):
-        _decide(index, "hook:PreToolUse:0:0", "tool_policy")
-    _, built = _decide(index, "hook:PreToolUse:0:0", "tool_policy",
+        _decide(index, "hook:.claude/settings.json:PreToolUse:0:0", "tool_policy")
+    _, built = _decide(index, "hook:.claude/settings.json:PreToolUse:0:0", "tool_policy",
                        user_answers={"tool_name": "shell", "key": "command",
                                       "operator": "regex", "value": "rm\\s+-rf\\s+/"})
     assert isinstance(built, BuiltPolicy)
@@ -260,7 +260,7 @@ def test_tool_policy_requires_extracted_semantics(index: dict[str, Item]) -> Non
 
 
 def test_bundled_hook_builds_native_hook_with_pep723_requirements(index: dict[str, Item]) -> None:
-    _, built = _decide(index, "hook:PreToolUse:0:0", "hook")
+    _, built = _decide(index, "hook:.claude/settings.json:PreToolUse:0:0", "hook")
     assert isinstance(built, BuiltHook)
     assert built.event == "pre_tool_use"
     assert built.file_name == "pre_tool_use.py"
@@ -270,7 +270,7 @@ def test_bundled_hook_builds_native_hook_with_pep723_requirements(index: dict[st
 
 
 def test_inline_hook_synthesizes_shell_wrapper(index: dict[str, Item]) -> None:
-    _, built = _decide(index, "hook:PostToolUse:0:0", "hook")
+    _, built = _decide(index, "hook:.claude/settings.json:PostToolUse:0:0", "hook")
     assert isinstance(built, BuiltHook)
     assert built.event == "post_tool_use"
     assert built.file_name == "PostToolUse.sh"
@@ -280,7 +280,7 @@ def test_inline_hook_synthesizes_shell_wrapper(index: dict[str, Item]) -> None:
 
 
 def test_hook_user_answers_override_filename_and_requirements(index: dict[str, Item]) -> None:
-    _, built = _decide(index, "hook:PreToolUse:0:0", "hook",
+    _, built = _decide(index, "hook:.claude/settings.json:PreToolUse:0:0", "hook",
                        user_answers={"fileName": "guard.py", "requirements": ["httpx>=0.27"]})
     assert isinstance(built, BuiltHook)
     assert built.file_name == "guard.py"
@@ -289,24 +289,24 @@ def test_hook_user_answers_override_filename_and_requirements(index: dict[str, I
 
 def test_hook_accepts_explicit_agent_id(index: dict[str, Item]) -> None:
     uid = "0d3f6b1e-1a2b-4c3d-8e9f-0123456789ab"
-    _, built = _decide(index, "hook:PreToolUse:0:0", "hook", user_answers={"agentId": uid})
+    _, built = _decide(index, "hook:.claude/settings.json:PreToolUse:0:0", "hook", user_answers={"agentId": uid})
     assert isinstance(built, BuiltHook)
     assert built.agent_id == uid
 
 
 def test_hook_unsupported_event_is_rejected(index: dict[str, Item]) -> None:
     with pytest.raises(ContractError, match="no archestra equivalent"):
-        _decide(index, "hook:UserPromptSubmit:0:0", "hook")
+        _decide(index, "hook:.claude/settings.json:UserPromptSubmit:0:0", "hook")
 
 
 def test_hook_sh_rejects_requirements(index: dict[str, Item]) -> None:
     with pytest.raises(ContractError, match="no requirements"):
-        _decide(index, "hook:PostToolUse:0:0", "hook", user_answers={"requirements": ["httpx"]})
+        _decide(index, "hook:.claude/settings.json:PostToolUse:0:0", "hook", user_answers={"requirements": ["httpx"]})
 
 
 def test_hook_rejects_bad_file_name_override(index: dict[str, Item]) -> None:
     with pytest.raises(ContractError, match="file name"):
-        _decide(index, "hook:PreToolUse:0:0", "hook", user_answers={"fileName": "guard.txt"})
+        _decide(index, "hook:.claude/settings.json:PreToolUse:0:0", "hook", user_answers={"fileName": "guard.txt"})
 
 
 def test_hook_redacted_print_omits_script_body() -> None:

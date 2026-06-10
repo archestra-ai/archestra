@@ -392,6 +392,8 @@ def _parse_hook_command(command: str, root: Path) -> _HookCmd:
         has_env_prefix = True
         idx += 1
     rest = tokens[idx:]
+    if not rest:  # empty or env-assignments-only command: nothing to run
+        return _HookCmd("unresolved", None, has_env_prefix=has_env_prefix, has_extra_args=False)
     script_pos = _script_position(rest, root)
     if script_pos is None:
         return _HookCmd("inline", None, has_env_prefix=has_env_prefix, has_extra_args=False)
@@ -510,8 +512,10 @@ def _discover_hooks(
                 raw_command = h_obj.get("command")
                 command = redact_tokens(raw_command if isinstance(raw_command, str) else "")
                 intent = _classify_hook(event, command)
+                # the same event/indices can recur across .mcp.json and settings*.json,
+                # so the config path is part of the id.
                 inv.items.append(_build_hook_item(
-                    inv, item_id=f"hook:{event}:{i}:{j}", event=event, name=f"{event}#{i}.{j}",
+                    inv, item_id=f"hook:{rel}:{event}:{i}:{j}", event=event, name=f"{event}#{i}.{j}",
                     rel=rel, matcher=matcher, command=command, intent=intent, root=root, mark=mark,
                 ))
 

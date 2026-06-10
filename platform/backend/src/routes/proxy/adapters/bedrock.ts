@@ -1760,6 +1760,11 @@ export const bedrockAdapterFactory: LLMProvider<
       usage: {
         inputTokens: response.usage?.inputTokens ?? 0,
         outputTokens: response.usage?.outputTokens ?? 0,
+        // Preserve cache usage so getUsage() can report it on the non-streaming
+        // path; cacheDetails carries the per-TTL write split for 1h cost.
+        cacheReadInputTokens: response.usage?.cacheReadInputTokens,
+        cacheWriteInputTokens: response.usage?.cacheWriteInputTokens,
+        cacheDetails: response.usage?.cacheDetails,
       },
       metrics: response.metrics,
       additionalModelResponseFields: response.additionalModelResponseFields as

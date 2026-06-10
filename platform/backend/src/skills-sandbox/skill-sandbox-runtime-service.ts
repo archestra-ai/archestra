@@ -715,6 +715,13 @@ function rejectPath(reason: string, message: string): never {
   throw new SkillSandboxError(message);
 }
 
+/**
+ * TS-side path checks reject bad input at the tool call for an early,
+ * friendly error and to keep unreplayable events out of the log; the Rust
+ * boundary (`archestra-rs/sandbox-core/src/validation.rs`) re-validates
+ * everything and stays authoritative. Mirrored test vectors in this file's
+ * test twin and in `validation.rs` keep the two implementations in sync.
+ */
 function resolveArtifactPath(params: {
   path: string;
   defaultCwd: string;

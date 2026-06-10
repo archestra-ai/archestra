@@ -745,3 +745,87 @@ describe("uploadFile dedupeId idempotency (db)", () => {
     expect(logFinal.filter((e) => e.kind === "upload")).toHaveLength(3);
   });
 });
+
+describe("path validation vectors (mirrored with sandbox-core)", () => {
+  // mirrored with UPLOAD_PATH_VECTORS / ARTIFACT_PATH_VECTORS in
+  // archestra-rs/sandbox-core/src/validation.rs — keep the two tables in sync
+  // when adding cases. the Rust module is the trust boundary and stays
+  // authoritative; this layer rejects early for friendlier errors and to keep
+  // unreplayable events out of the log. the third column documents the Rust
+  // verdict on the same string so divergences are explicit.
+  const DEFAULT_CWD = "/home/sandbox";
+
+  // (path, acceptedHere, acceptedByRust)
+  const UPLOAD_PATH_VECTORS: Array<[string, boolean, boolean]> = [
+    ["/home/sandbox/input.csv", true, true],
+    ["/skills/alpha/data/in.bin", true, true],
+    // relative: resolved against defaultCwd before validation, so it is
+    // accepted here while the raw string would be rejected at the boundary
+    ["input.csv", true, false],
+    // outside roots
+    ["/etc/passwd", false, false],
+    // traversal
+    ["/home/sandbox/../etc/passwd", false, false],
+    // directory, not a file
+    ["/home/sandbox/", false, false],
+    // a root itself: rejected here before it is persisted as an unreplayable
+    // event; the boundary alone would accept it
+    ["/home/sandbox", false, true],
+    // shell metacharacters / control chars / null
+    ['/home/sandbox/a"b', false, false],
+    ["/home/sandbox/a$b", false, false],
+    ["/home/sandbox/a`b", false, false],
+    ["/home/sandbox/a\\b", false, false],
+    ["/home/sandbox/a\nb", false, false],
+    ["/home/sandbox/a\rb", false, false],
+    ["/home/sandbox/a\0b", false, false],
+  ];
+
+  // (path, acceptedHere, acceptedByRust)
+  const ARTIFACT_PATH_VECTORS: Array<[string, boolean, boolean]> = [
+    ["/skills/alpha/result.txt", true, true],
+    ["out/report.txt", true, true],
+    // outside roots
+    ["/etc/passwd", false, false],
+    // traversal
+    ["a/../b.txt", false, false],
+    // null byte
+    ["a\0b.txt", false, false],
+    // shell metacharacters: pass through here; the Rust boundary rejects them
+    ['/skills/alpha/foo"bar', true, false],
+    ["/skills/alpha/foo$bar", true, false],
+    ["/skills/alpha/foo`bar", true, false],
+    ["/skills/alpha/foo\\bar", true, false],
+    ["/skills/alpha/foo\nbar", true, false],
+    ["/skills/alpha/foo\rbar", true, false],
+  ];
+
+  test("upload path vectors", () => {
+    const stageUpload = (path: string) => {
+      const resolved = __internals.resolveArtifactPath({
+        path,
+        defaultCwd: DEFAULT_CWD,
+      });
+      __internals.validateUploadPath(resolved);
+    };
+    for (const [path, accepted] of UPLOAD_PATH_VECTORS) {
+      if (accepted) {
+        expect(() => stageUpload(path), `upload path: ${JSON.stringify(path)}`).not.toThrow();
+      } else {
+        expect(() => stageUpload(path), `upload path: ${JSON.stringify(path)}`).toThrow();
+      }
+    }
+  });
+
+  test("artifact path vectors", () => {
+    for (const [path, accepted] of ARTIFACT_PATH_VECTORS) {
+      const resolve = () =>
+        __internals.resolveArtifactPath({ path, defaultCwd: DEFAULT_CWD });
+      if (accepted) {
+        expect(resolve, `artifact path: ${JSON.stringify(path)}`).not.toThrow();
+      } else {
+        expect(resolve, `artifact path: ${JSON.stringify(path)}`).toThrow();
+      }
+    }
+  });
+});

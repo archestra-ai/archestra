@@ -1,6 +1,12 @@
 //! input validation for the sandbox boundary. all checks run at the public core
 //! entry points (`crate::run_sandbox` / `read_artifact`) over untrusted JS input;
 //! replayed history is trusted on reuse (validated when first accepted).
+//!
+//! the TS adapter (`backend/src/skills-sandbox/skill-sandbox-runtime-service.ts`)
+//! runs twin checks before persistence for early, friendlier errors; this module
+//! is the trust boundary and stays authoritative regardless of what the TS layer
+//! accepts. the mirrored test vectors below and in the TS test twin keep the two
+//! implementations from drifting silently.
 
 use crate::{Result, SandboxError};
 
@@ -149,32 +155,80 @@ mod tests {
         assert!(validate_snapshot_file_path("a/../../etc/passwd").is_err());
     }
 
+    // mirrored with "path validation vectors (mirrored with sandbox-core)" in
+    // backend/src/skills-sandbox/skill-sandbox-runtime-service.test.ts — keep
+    // the two tables in sync when adding cases. the third column documents the
+    // TS layer's verdict on the same string so divergences are explicit:
+    // the TS layer resolves relative paths against the sandbox cwd before this
+    // layer sees them, and rejects uploads onto a root directory itself, while
+    // this layer alone rejects shell metacharacters in artifact paths.
+    //
+    // (path, accepted_here, accepted_by_ts)
+    const UPLOAD_PATH_VECTORS: &[(&str, bool, bool)] = &[
+        ("/home/sandbox/input.csv", true, true),
+        ("/skills/alpha/data/in.bin", true, true),
+        // relative: TS resolves against defaultCwd before this layer runs
+        ("input.csv", false, true),
+        // outside roots
+        ("/etc/passwd", false, false),
+        // traversal
+        ("/home/sandbox/../etc/passwd", false, false),
+        // directory, not a file
+        ("/home/sandbox/", false, false),
+        // a root itself: replay would fail on the existing directory, so the
+        // TS layer rejects it before it is persisted as an unreplayable event
+        ("/home/sandbox", true, false),
+        // shell metacharacters / control chars / null
+        ("/home/sandbox/a\"b", false, false),
+        ("/home/sandbox/a$b", false, false),
+        ("/home/sandbox/a`b", false, false),
+        ("/home/sandbox/a\\b", false, false),
+        ("/home/sandbox/a\nb", false, false),
+        ("/home/sandbox/a\rb", false, false),
+        ("/home/sandbox/a\0b", false, false),
+    ];
+
+    // (path, accepted_here, accepted_by_ts)
+    const ARTIFACT_PATH_VECTORS: &[(&str, bool, bool)] = &[
+        ("/skills/alpha/result.txt", true, true),
+        // relative artifact paths are resolved against cwd downstream
+        ("out/report.txt", true, true),
+        // outside roots
+        ("/etc/passwd", false, false),
+        // traversal
+        ("a/../b.txt", false, false),
+        // null byte
+        ("a\0b.txt", false, false),
+        // shell metacharacters: only this boundary rejects them; the TS layer
+        // passes them through and relies on the rejection here
+        ("/skills/alpha/foo\"bar", false, true),
+        ("/skills/alpha/foo$bar", false, true),
+        ("/skills/alpha/foo`bar", false, true),
+        ("/skills/alpha/foo\\bar", false, true),
+        ("/skills/alpha/foo\nbar", false, true),
+        ("/skills/alpha/foo\rbar", false, true),
+    ];
+
     #[test]
-    fn validate_artifact_path_rejects_shell_metacharacters() {
-        assert!(validate_artifact_path("/skills/alpha/result.txt").is_ok());
-        assert!(validate_artifact_path("/skills/alpha/foo\"bar").is_err());
-        assert!(validate_artifact_path("/skills/alpha/foo$bar").is_err());
-        assert!(validate_artifact_path("/skills/alpha/foo`bar").is_err());
-        assert!(validate_artifact_path("/skills/alpha/foo\\bar").is_err());
-        assert!(validate_artifact_path("/skills/alpha/foo\nbar").is_err());
+    fn validate_upload_path_matches_mirrored_vectors() {
+        for (path, accepted, _ts) in UPLOAD_PATH_VECTORS {
+            assert_eq!(
+                validate_upload_path(path).is_ok(),
+                *accepted,
+                "upload path: {path:?}"
+            );
+        }
     }
 
     #[test]
-    fn validate_upload_path_requires_absolute_file_under_roots() {
-        assert!(validate_upload_path("/home/sandbox/input.csv").is_ok());
-        assert!(validate_upload_path("/skills/alpha/data/in.bin").is_ok());
-        // not absolute
-        assert!(validate_upload_path("input.csv").is_err());
-        // outside roots
-        assert!(validate_upload_path("/etc/passwd").is_err());
-        // traversal
-        assert!(validate_upload_path("/home/sandbox/../etc/passwd").is_err());
-        // directory, not a file
-        assert!(validate_upload_path("/home/sandbox/").is_err());
-        // shell metacharacters / null
-        assert!(validate_upload_path("/home/sandbox/a$b").is_err());
-        assert!(validate_upload_path("/home/sandbox/a`b").is_err());
-        assert!(validate_upload_path("/home/sandbox/a\0b").is_err());
+    fn validate_artifact_path_matches_mirrored_vectors() {
+        for (path, accepted, _ts) in ARTIFACT_PATH_VECTORS {
+            assert_eq!(
+                validate_artifact_path(path).is_ok(),
+                *accepted,
+                "artifact path: {path:?}"
+            );
+        }
     }
 
     #[test]

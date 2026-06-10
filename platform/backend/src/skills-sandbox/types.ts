@@ -78,6 +78,15 @@ export interface UploadFileParams {
   mimeType?: string;
   /** Optional source filename, recorded for provenance. */
   originalName?: string;
+  /**
+   * When set, the upload is idempotent per (sandbox, dedupeId) via the
+   * `skill_sandbox_files_sandbox_attachment_uidx` partial unique index —
+   * a repeat call with the same (sandboxId, dedupeId) is a no-op that returns
+   * the already-staged file's ref rather than inserting a duplicate row or
+   * replay event. Must be a UUID string. When omitted, the upload always
+   * appends a new row (existing tool-upload behavior).
+   */
+  dedupeId?: string;
 }
 
 export interface UploadRef {

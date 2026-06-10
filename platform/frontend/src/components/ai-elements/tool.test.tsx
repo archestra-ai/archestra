@@ -53,6 +53,33 @@ describe("Tool copy actions", () => {
     );
   });
 
+  it("renders a multi-line string parameter as its own block with the raw value", async () => {
+    mockUseTheme.mockReturnValue({ resolvedTheme: "light" });
+    const user = userEvent.setup();
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    mockClipboard(writeText);
+
+    render(
+      <ToolInput
+        defaultOpen
+        input={{ command: "echo hi\necho bye", cwd: "/tmp" }}
+      />,
+    );
+
+    // per-field labels instead of one JSON dump with escaped \n
+    expect(screen.getByText("command")).toBeInTheDocument();
+    expect(screen.getByText("cwd")).toBeInTheDocument();
+    expect(screen.queryByText(/\\n/)).not.toBeInTheDocument();
+
+    // the field copy button copies the raw string, not JSON
+    const copyButtons = screen.getAllByRole("button", {
+      name: "Copy to clipboard",
+    });
+    await user.click(copyButtons[0]);
+
+    expect(writeText).toHaveBeenCalledWith("echo hi\necho bye");
+  });
+
   it("renders MCP tool output using content instead of dumping rawContent metadata", async () => {
     mockUseTheme.mockReturnValue({ resolvedTheme: "light" });
     const user = userEvent.setup();

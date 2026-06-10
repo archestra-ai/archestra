@@ -4,6 +4,7 @@ import {
   type archestraApiTypes,
   ChatMessageMetadataSchema,
   DocsPage,
+  HOOK_RUN_PART_TYPE,
   parseFullToolName,
   type ResourceVisibilityScope,
   SWAP_AGENT_FAILED_POKE_TEXT,
@@ -55,6 +56,10 @@ import {
   ToolInput,
   ToolOutput,
 } from "@/components/ai-elements/tool";
+import {
+  HookRunChip,
+  type HookRunChipData,
+} from "@/components/chat/hook-run-chip";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { StandardFormDialog } from "@/components/standard-dialog";
@@ -560,8 +565,10 @@ export function ChatMessages({
                             message.id,
                             group.startIndex,
                           ),
-                          parts: group.entries.map(
-                            (entry) => entry.toolResultPart ?? entry.part,
+                          parts: group.entries.flatMap((entry) =>
+                            entry.kind === "tool"
+                              ? [entry.toolResultPart ?? entry.part]
+                              : [],
                           ),
                           dividerRef: unsafeBoundaryRef,
                           unsafeContextBoundary,
@@ -573,13 +580,22 @@ export function ChatMessages({
                                 message.id,
                                 group.startIndex,
                               )}
-                              tools={group.entries.map((entry) => ({
-                                key: getToolEntryKey(message.id, entry),
-                                toolName: entry.toolName,
-                                part: entry.part,
-                                toolResultPart: entry.toolResultPart,
-                                errorText: entry.errorText,
-                              }))}
+                              tools={group.entries.map((entry) =>
+                                entry.kind === "hook"
+                                  ? {
+                                      kind: "hook" as const,
+                                      key: `${message.id}-hook-${entry.partIndex}`,
+                                      data: entry.data,
+                                    }
+                                  : {
+                                      kind: "tool" as const,
+                                      key: getToolEntryKey(message.id, entry),
+                                      toolName: entry.toolName,
+                                      part: entry.part,
+                                      toolResultPart: entry.toolResultPart,
+                                      errorText: entry.errorText,
+                                    },
+                              )}
                               toolIconMap={toolIconMap}
                               canExpandToolCalls={canExpandToolCalls}
                               onToolApprovalResponse={onToolApprovalResponse}
@@ -1118,6 +1134,17 @@ export function ChatMessages({
                         }
 
                         default: {
+                          // Inline hook-run debug entry (a model-invisible
+                          // `data-hook-run` part the backend splices into the turn).
+                          if (part.type === HOOK_RUN_PART_TYPE) {
+                            return (
+                              <HookRunChip
+                                key={partKey}
+                                data={(part as { data?: HookRunChipData }).data}
+                              />
+                            );
+                          }
+
                           // data-tool-ui-start: early MCP App initialisation.
                           // This is the canonical render for the tool UI. It looks ahead
                           // in the parts array to find the matching input/output parts so
@@ -1759,6 +1786,7 @@ const MessageTool = memo(
         <CompactToolGroup
           tools={[
             {
+              kind: "tool",
               key: part.toolCallId ?? toolName,
               toolName,
               part,

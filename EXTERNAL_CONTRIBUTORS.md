@@ -574,3 +574,8 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @Vedanti-rgb
 - @AasheeshLikePanner
 - @ymkattun1973
+- @Jagadeesh58
+- @blessedunit
+- @klimnikova
+- @ishashaligram
+- @Wanbogang

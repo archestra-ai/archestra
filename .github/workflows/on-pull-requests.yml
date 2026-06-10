@@ -154,6 +154,26 @@ jobs:
       - name: Enforce docs asset format and size policy
         run: python3 .github/scripts/check-docs-image-policy.py
 
+  migration-kit-checks:
+    name: Migration Kit Checks
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+
+      # the shipped scripts are zero-dependency; this gates the contributor tooling
+      # (pytest + the ty / ruff / zero-dependency gates), pinned to the supported python floor.
+      - name: Run migration-kit gates
+        run: uv run --python 3.10 --frozen --directory migration-kit --group dev pytest -q
+
   dependency-review:
     name: Dependency Review
     if: ${{ github.event_name == 'pull_request' }}

@@ -39,6 +39,7 @@ import { useUpdateChatMessage } from "@/lib/chat/chat-message.query";
 import {
   pruneEmptyTrailingAssistantMessage,
   restoreRenderableAssistantParts,
+  shouldFreezeChatMessages,
 } from "@/lib/chat/chat-session-utils";
 import {
   getChatExternalAgentId,
@@ -129,6 +130,13 @@ interface ChatSession {
     toolCallId: string;
     toolName: string;
   } | null;
+  /**
+   * True while the session is auto-recovering from a transient stream failure
+   * (auto-retry scheduled or reattaching to the still-running response).
+   * The UI should not surface the error while this is set — the recovery
+   * either restores the stream or ends with a terminal error that clears it.
+   */
+  isRecovering: boolean;
   optimisticToolCalls: Array<{
     toolCallId: string;
     toolName: string;
@@ -446,6 +454,29 @@ function ChatSessionHook({
   // Auto-retry state for transient errors
   const retryCountRef = useRef(0);
   const retryTimerRef = useRef<NodeJS.Timeout | null>(null);
+  // Monotonically counts onError invocations. The duplicate-run reattach uses
+  // it to detect that nothing happened between calling resumeStream() and its
+  // promise resolving — the "run already finished" case, where the reconnect
+  // gets a 204 and the SDK early-returns without firing onFinish or onError.
+  const errorSeqRef = useRef(0);
+  // True while a transient failure is being auto-recovered (retry scheduled
+  // or reattaching to the active run); suppresses the inline error flash.
+  // The ref is the source of truth: it is written synchronously inside
+  // onError, BEFORE the SDK's error state reaches the page, so the very
+  // render that delivers the error already sees the suppression. The state
+  // mirror exists only to trigger re-renders/session sync — a state-only
+  // flag commits one render too late and the error card flashes for a frame.
+  const recoveringRef = useRef(false);
+  const [isRecoveringState, setIsRecoveringState] = useState(false);
+  const setIsRecovering = useCallback((value: boolean) => {
+    recoveringRef.current = value;
+    setIsRecoveringState(value);
+  }, []);
+  // Snapshot of the rendered messages at the moment recovery started; shown
+  // instead of the live list while recovery passes through its ugly
+  // intermediate states (answer dropped by regenerate, replay restarting from
+  // empty) so the streamed text never visibly blinks away.
+  const frozenMessagesRef = useRef<UIMessage[]>([]);
   const lastUserMessageIdRef = useRef<string | null>(null);
   const previousMessagesRef = useRef<UIMessage[]>([]);
 
@@ -513,9 +544,19 @@ function ChatSessionHook({
 
     experimental_throttle: 100,
     id: conversationId,
-    onFinish: async ({ message, isAbort }) => {
+    onFinish: async ({ message, isAbort, isError }) => {
       setOptimisticToolCalls([]);
       clearActiveContextCompaction();
+      // The stream concluded — any auto-recovery (retry/reattach) is over.
+      // NOT on stream errors: the SDK fires onFinish from a finally block
+      // right after onError, so clearing here would wipe the recovery flag
+      // the error handler just set (and misroute the auto-retry's 409 to the
+      // genuine-duplicate toast). Error outcomes are owned by onError: it
+      // either keeps a recovery in flight or clears the flag for terminal
+      // errors.
+      if (!isError) {
+        setIsRecovering(false);
+      }
 
       // When the user stops mid-tool-call, the assistant message is left with a
       // tool part that never produced output, which the UI renders as a
@@ -601,6 +642,7 @@ function ChatSessionHook({
       }
     },
     onError: (chatError) => {
+      errorSeqRef.current += 1;
       setOptimisticToolCalls([]);
       clearActiveContextCompaction();
       queryClient.invalidateQueries({
@@ -621,12 +663,68 @@ function ChatSessionHook({
       });
 
       if (isDuplicateActiveRunError(chatError)) {
-        toast.error(
-          "This conversation already has a response in progress. Stop it before sending another message.",
-        );
-        // Clear the SDK error so this benign guard does not also render as a
-        // hard inline error panel; the toast is the only surfaced feedback.
-        clearErrorRef.current?.();
+        if (!recoveringRef.current) {
+          // A 409 outside auto-recovery is a genuine concurrent submit (e.g.
+          // a second tab racing this conversation): reattaching would
+          // silently drop the message the user just typed, so keep the
+          // honest guard instead.
+          toast.error(
+            "This conversation already has a response in progress. Stop it before sending another message.",
+          );
+          // Clear the SDK error so this benign guard does not also render as
+          // a hard inline error panel; the toast is the only surfaced
+          // feedback.
+          clearErrorRef.current?.();
+          return;
+        }
+        // The 409 was provoked by our own auto-recovery: the stream
+        // connection was severed (LB cut, network blip) while the backend
+        // kept generating, and the auto-retry below re-POSTed into the live
+        // run. Reattach to it via the active-run replay endpoint instead of
+        // dead-ending: the user sees the in-progress response (and the Stop
+        // button) again. If the run finished in the meantime, the reconnect
+        // returns 204 and is a no-op — the conversation refetch above
+        // already shows the persisted outcome.
+        //
+        // Clear the restore-on-regression buffer first: the auto-retry's
+        // regenerate() has already dropped the severed turn's partial
+        // assistant message, but previousMessagesRef still holds it and would
+        // keep resurrecting it while the replay rebuilds the same message id
+        // from empty — two writers fighting over one message in an update
+        // loop that crashes the page (React #185, "Maximum update depth").
+        // Emptying the buffer makes this path state-equivalent to the
+        // mount-time resume, which has always been safe; the replay re-streams
+        // everything the buffer was protecting anyway. The frozen snapshot
+        // (captured before clearing) keeps the text on screen meanwhile.
+        if (previousMessagesRef.current.length > 0) {
+          frozenMessagesRef.current = previousMessagesRef.current;
+        }
+        previousMessagesRef.current = [];
+        setIsRecovering(true);
+        const reattachErrorSeq = errorSeqRef.current;
+        void resumeStream().then(() => {
+          // If the run had already finished, reconnectToStream got a 204 and
+          // the SDK resolved this promise WITHOUT firing onFinish or onError
+          // (ai@6 makeRequest early-returns on a null reconnect stream) —
+          // nothing else would clear the recovery flag, and a stuck flag
+          // misroutes the next genuine concurrent submit's 409 into this
+          // reattach path (silently dropping the typed message) and keeps the
+          // frozen snapshot rendered. Detect that nothing happened while we
+          // waited (recovery still flagged, no new error) and conclude the
+          // recovery; the conversation refetch above already shows the
+          // persisted outcome. A successful replay clears the flag in
+          // onFinish; a failed replay re-enters onError (bumping the seq) and
+          // owns the flag from there.
+          if (
+            recoveringRef.current &&
+            errorSeqRef.current === reattachErrorSeq
+          ) {
+            setIsRecovering(false);
+            // Drop the stale duplicate-run error so the SDK returns to
+            // "ready" instead of idling in the suppressed error state.
+            clearErrorRef.current?.();
+          }
+        });
         return;
       }
 
@@ -641,10 +739,25 @@ function ChatSessionHook({
         console.info(
           `[ChatSession] Auto-retrying (${retryCountRef.current}/${MAX_AUTO_RETRIES})...`,
         );
+        setIsRecovering(true);
         retryTimerRef.current = setTimeout(() => {
+          // Capture the view and break the restore-on-regression chain at the
+          // moment the rebuild starts (not earlier — previousMessagesRef is
+          // rebuilt every render, so clearing it before regenerate() would
+          // just re-establish). Without this, the restore logic resurrects
+          // the dropped partial answer while the retried stream rebuilds the
+          // message from empty — the update loop that crashes the page
+          // (React #185). The frozen snapshot keeps the text on screen
+          // instead.
+          frozenMessagesRef.current = previousMessagesRef.current;
+          previousMessagesRef.current = [];
           regenerate();
         }, AUTO_RETRY_DELAY_MS);
+        return;
       }
+
+      // Terminal: no recovery in flight — surface the error.
+      setIsRecovering(false);
     },
     onToolCall: ({ toolCall }) => {
       const toolShortName = getCurrentArchestraToolShortName(
@@ -810,6 +923,20 @@ function ChatSessionHook({
 
   const stableMessages = messagesWithRestoredAssistantParts;
 
+  // While auto-recovery passes through its intermediate states (partial
+  // answer dropped by regenerate, replay restarting from empty), keep showing
+  // the snapshot captured when recovery started so streamed text never blinks
+  // away. The replay delivers its whole backlog in the first batch, so by the
+  // time the live list has renderable assistant content again it is at least
+  // as long as the frozen view.
+  const displayedMessages = shouldFreezeChatMessages({
+    isRecovering: recoveringRef.current,
+    liveMessages: stableMessages,
+    frozenMessages: frozenMessagesRef.current,
+  })
+    ? frozenMessagesRef.current
+    : stableMessages;
+
   // Reset retry counter only when the user sends a genuinely new message.
   // We track the last user message ID to avoid resetting during regenerate(),
   // which manipulates the messages array without a new user message.
@@ -875,7 +1002,7 @@ function ChatSessionHook({
   const sessionRef = useRef<ChatSession>(null as unknown as ChatSession);
   sessionRef.current = {
     conversationId,
-    messages: stableMessages,
+    messages: displayedMessages,
     sendMessage,
     regenerateUserMessage,
     stop,
@@ -885,6 +1012,26 @@ function ChatSessionHook({
     addToolResult,
     addToolApprovalResponse,
     pendingCustomServerToolCall,
+    // Computed, not stored: the page paints the SDK error before onError has
+    // run (so no flag set inside onError can suppress the first frame), and
+    // consumers read the session from a map refreshed an effect-cycle later.
+    // Instead, derive "this error will be auto-recovered" synchronously from
+    // the same predicates onError uses — a pure function of the error and the
+    // retry budget, correct at any render including the very first one.
+    // recoveringRef keeps it true after onError consumed the error (retry
+    // timer pending / reattach in flight) and onFinish/terminal paths clear it.
+    get isRecovering() {
+      if (recoveringRef.current) {
+        return true;
+      }
+      if (!error) {
+        return false;
+      }
+      return (
+        isDuplicateActiveRunError(error) ||
+        (isRetryableError(error) && retryCountRef.current < MAX_AUTO_RETRIES)
+      );
+    },
     optimisticToolCalls,
     setPendingCustomServerToolCall,
     tokenUsage,
@@ -913,6 +1060,7 @@ function ChatSessionHook({
     addToolResult,
     addToolApprovalResponse,
     pendingCustomServerToolCall,
+    isRecoveringState,
     optimisticToolCalls,
     tokenUsage,
     contextTokensUsed,

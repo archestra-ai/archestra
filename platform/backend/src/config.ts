@@ -1082,6 +1082,18 @@ const config = {
     ),
   },
   /**
+   * agent lifecycle hooks — user scripts run at chat lifecycle events. Gated by
+   * `ARCHESTRA_AGENT_HOOKS_ENABLED`, but only effective when the agent runtime
+   * (the code execution sandbox) is also on, since hooks execute in the
+   * conversation sandbox. This `enabled` is the fully-resolved flag — the
+   * dispatcher, the `/debug` toggle, and the chip read-gate all key off it.
+   */
+  hooks: {
+    enabled:
+      process.env.ARCHESTRA_AGENT_HOOKS_ENABLED === "true" &&
+      skillsSandboxEnabled,
+  },
+  /**
    * unified Dagger runtime — one shared session with a pre-warmed base
    * container that hosts the code execution sandbox commands. The Rust crate
    * (`@archestra/sandbox-rs`) owns the session; this block only carries

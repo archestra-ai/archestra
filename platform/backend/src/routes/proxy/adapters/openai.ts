@@ -200,6 +200,8 @@ export class OpenAIEmbeddingResponseAdapter
     return {
       inputTokens: this.response.usage.prompt_tokens,
       outputTokens: 0,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
     };
   }
 
@@ -900,10 +902,22 @@ export class OpenAIResponseAdapter
 
   getUsage(): UsageView {
     if (!this.response.usage) {
-      return { inputTokens: 0, outputTokens: 0 };
+      return {
+        inputTokens: 0,
+        outputTokens: 0,
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0,
+      };
     }
-    const { input, output } = getUsageTokens(this.response.usage);
-    return { inputTokens: input, outputTokens: output };
+    const { input, output, cacheRead, cacheWrite } = getUsageTokens(
+      this.response.usage,
+    );
+    return {
+      inputTokens: input,
+      outputTokens: output,
+      cacheReadTokens: cacheRead,
+      cacheWriteTokens: cacheWrite,
+    };
   }
 
   getOriginalResponse(): OpenAiResponse {
@@ -979,9 +993,20 @@ export class OpenAIStreamAdapter
     // Handle usage first - OpenAI sends usage in a final chunk with empty choices[]
     // when stream_options.include_usage is true
     if (chunk.usage) {
+      const cacheReadTokens =
+        (
+          chunk.usage.prompt_tokens_details as
+            | { cached_tokens?: number }
+            | undefined
+        )?.cached_tokens ?? 0;
       this.state.usage = {
-        inputTokens: chunk.usage.prompt_tokens ?? 0,
+        inputTokens: Math.max(
+          0,
+          (chunk.usage.prompt_tokens ?? 0) - cacheReadTokens,
+        ),
         outputTokens: chunk.usage.completion_tokens ?? 0,
+        cacheReadTokens,
+        cacheWriteTokens: 0,
       };
     }
 
@@ -1314,9 +1339,16 @@ export async function convertToolResultsToToon(
 // =============================================================================
 
 export function getUsageTokens(usage: OpenAi.Types.Usage) {
+  // OpenAI reports cached tokens as a SUBSET already inside prompt_tokens, so
+  // subtract them to get the uncached input and avoid double-counting.
+  const cacheRead =
+    (usage.prompt_tokens_details as { cached_tokens?: number } | undefined)
+      ?.cached_tokens ?? 0;
   return {
-    input: usage.prompt_tokens,
+    input: Math.max(0, usage.prompt_tokens - cacheRead),
     output: usage.completion_tokens,
+    cacheRead,
+    cacheWrite: 0,
   };
 }
 

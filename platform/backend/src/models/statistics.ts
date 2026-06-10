@@ -227,6 +227,13 @@ class StatisticsModel {
         inputTokens: Number(row.inputTokens) || 0,
         outputTokens: Number(row.outputTokens) || 0,
         cost: Number(row.cost) || 0,
+        ...("cacheReadTokens" in row
+          ? {
+              cacheReadTokens:
+                Number((row as { cacheReadTokens: unknown }).cacheReadTokens) ||
+                0,
+            }
+          : {}),
       }));
     }
 
@@ -251,6 +258,9 @@ class StatisticsModel {
           inputTokens: 0,
           outputTokens: 0,
           cost: 0,
+          // Reset before accumulating; the `...row` spread would otherwise leave
+          // the first row's value in place and the merge would never sum it.
+          ...("cacheReadTokens" in row ? { cacheReadTokens: 0 } : {}),
         } as T);
       }
 
@@ -264,6 +274,11 @@ class StatisticsModel {
       if ("cost" in row && "cost" in existing) {
         (existing as { cost: number }).cost +=
           Number((row as { cost: number }).cost) || 0;
+      }
+      // Aggregate cache-read tokens (present only on model/agent series)
+      if ("cacheReadTokens" in row && "cacheReadTokens" in existing) {
+        (existing as { cacheReadTokens: number }).cacheReadTokens +=
+          Number((row as { cacheReadTokens: number }).cacheReadTokens) || 0;
       }
     }
 
@@ -483,6 +498,7 @@ class StatisticsModel {
         requests: sql<number>`CAST(COUNT(*) AS INTEGER)`,
         inputTokens: sql<number>`CAST(COALESCE(SUM(${schema.interactionsTable.inputTokens}), 0) AS INTEGER)`,
         outputTokens: sql<number>`CAST(COALESCE(SUM(${schema.interactionsTable.outputTokens}), 0) AS INTEGER)`,
+        cacheReadTokens: sql<number>`CAST(COALESCE(SUM(${schema.interactionsTable.cacheReadTokens}), 0) AS INTEGER)`,
         cost: sql<number>`CAST(COALESCE(SUM(${schema.interactionsTable.cost}), 0) AS DOUBLE PRECISION)`,
       })
       .from(schema.interactionsTable)
@@ -573,6 +589,7 @@ class StatisticsModel {
           requests: 0,
           inputTokens: 0,
           outputTokens: 0,
+          cacheReadTokens: 0,
           cost: 0,
           timeSeries: [],
         });
@@ -583,6 +600,7 @@ class StatisticsModel {
       agent.requests += Number(row.requests);
       agent.inputTokens += Number(row.inputTokens);
       agent.outputTokens += Number(row.outputTokens);
+      agent.cacheReadTokens += Number(row.cacheReadTokens) || 0;
       agent.cost += cost;
       agent.timeSeries.push({
         timestamp: row.timeBucket,
@@ -625,6 +643,7 @@ class StatisticsModel {
         requests: sql<number>`CAST(COUNT(*) AS INTEGER)`,
         inputTokens: sql<number>`CAST(COALESCE(SUM(${schema.interactionsTable.inputTokens}), 0) AS INTEGER)`,
         outputTokens: sql<number>`CAST(COALESCE(SUM(${schema.interactionsTable.outputTokens}), 0) AS INTEGER)`,
+        cacheReadTokens: sql<number>`CAST(COALESCE(SUM(${schema.interactionsTable.cacheReadTokens}), 0) AS INTEGER)`,
         cost: sql<number>`CAST(COALESCE(SUM(${schema.interactionsTable.cost}), 0) AS DOUBLE PRECISION)`,
       })
       .from(schema.interactionsTable)
@@ -698,6 +717,7 @@ class StatisticsModel {
           requests: 0,
           inputTokens: 0,
           outputTokens: 0,
+          cacheReadTokens: 0,
           cost: 0,
           percentage: 0,
           timeSeries: [],
@@ -709,6 +729,7 @@ class StatisticsModel {
       model.requests += Number(row.requests);
       model.inputTokens += Number(row.inputTokens);
       model.outputTokens += Number(row.outputTokens);
+      model.cacheReadTokens += Number(row.cacheReadTokens) || 0;
       model.cost += cost;
       model.timeSeries.push({
         timestamp: row.timeBucket,
@@ -820,6 +841,7 @@ class StatisticsModel {
           totalSavings: 0,
           totalOptimizationSavings: 0,
           totalToonSavings: 0,
+          totalCacheSavings: 0,
           timeSeries: [],
         };
       }
@@ -831,6 +853,7 @@ class StatisticsModel {
         baselineCost: sql<number>`CAST(COALESCE(SUM(${schema.interactionsTable.baselineCost}), 0) AS DECIMAL)`,
         actualCost: sql<number>`CAST(COALESCE(SUM(${schema.interactionsTable.cost}), 0) AS DECIMAL)`,
         toonSavings: sql<number>`CAST(COALESCE(SUM(${schema.interactionsTable.toonCostSavings}), 0) AS DECIMAL)`,
+        cacheSavings: sql<number>`CAST(COALESCE(SUM(${schema.interactionsTable.cacheSavings}), 0) AS DECIMAL)`,
       })
       .from(schema.interactionsTable)
       .innerJoin(
@@ -885,6 +908,7 @@ class StatisticsModel {
       baselineCost: number;
       actualCost: number;
       toonSavings: number;
+      cacheSavings: number;
     }
 
     const intervalMinutes = StatisticsModel.getBucketIntervalMinutes(timeframe);
@@ -904,6 +928,7 @@ class StatisticsModel {
           baselineCost: 0,
           actualCost: 0,
           toonSavings: 0,
+          cacheSavings: 0,
         });
       }
 
@@ -913,6 +938,7 @@ class StatisticsModel {
       existing.baselineCost += Number(row.baselineCost);
       existing.actualCost += Number(row.actualCost);
       existing.toonSavings += Number(row.toonSavings);
+      existing.cacheSavings += Number(row.cacheSavings);
     }
 
     const timeSeriesData = Array.from(grouped.values()).sort(
@@ -925,11 +951,13 @@ class StatisticsModel {
     let totalActualCost = 0;
     let totalOptimizationSavings = 0;
     let totalToonSavings = 0;
+    let totalCacheSavings = 0;
 
     const timeSeries = timeSeriesData.map((row) => {
       const baselineCost = Number(row.baselineCost);
       const cost = Number(row.actualCost);
       const toonSavings = Number(row.toonSavings);
+      const cacheSavings = Number(row.cacheSavings);
 
       const actualCost = StatisticsModel.calculateActualCost(cost, toonSavings);
       const optimizationSavings = baselineCost - cost;
@@ -938,6 +966,7 @@ class StatisticsModel {
       totalActualCost += actualCost;
       totalOptimizationSavings += optimizationSavings;
       totalToonSavings += toonSavings;
+      totalCacheSavings += cacheSavings;
 
       return {
         timestamp: row.timeBucket,
@@ -945,6 +974,7 @@ class StatisticsModel {
         actualCost,
         optimizationSavings,
         toonSavings,
+        cacheSavings,
       };
     });
 
@@ -956,6 +986,7 @@ class StatisticsModel {
       totalSavings,
       totalOptimizationSavings,
       totalToonSavings,
+      totalCacheSavings,
       timeSeries,
     };
   }

@@ -477,6 +477,35 @@ class ConversationModel {
     return updatedWithAgent;
   }
 
+  /**
+   * Toggle per-conversation hook debug mode. Kept off the generic
+   * {@link UpdateConversation} path on purpose: that schema backs the
+   * member-accessible update route, whereas this flag is admin-gated at the
+   * route layer. Scoped by user + org. Returns the new value, or null if no
+   * conversation matched.
+   */
+  static async setHooksDebugEnabled(params: {
+    id: string;
+    userId: string;
+    organizationId: string;
+    enabled: boolean;
+  }): Promise<boolean | null> {
+    const [updated] = await db
+      .update(schema.conversationsTable)
+      .set({ hooksDebugEnabled: params.enabled })
+      .where(
+        and(
+          eq(schema.conversationsTable.id, params.id),
+          eq(schema.conversationsTable.userId, params.userId),
+          eq(schema.conversationsTable.organizationId, params.organizationId),
+        ),
+      )
+      .returning({
+        hooksDebugEnabled: schema.conversationsTable.hooksDebugEnabled,
+      });
+    return updated ? updated.hooksDebugEnabled : null;
+  }
+
   static async delete(
     id: string,
     userId: string,

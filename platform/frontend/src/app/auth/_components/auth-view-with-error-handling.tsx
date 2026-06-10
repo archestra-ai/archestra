@@ -33,12 +33,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  useChangeAccountPasswordMutation,
-  useSignInWithEmailMutation,
-} from "@/lib/auth/account.query";
-import { clearDefaultPasswordChangePending } from "@/lib/auth/default-password-change";
+import { useSignInWithEmailMutation } from "@/lib/auth/account.query";
 import { usePublicIdentityProviders } from "@/lib/auth/identity-provider-read.query";
 import {
   clearSsoSignInAttempt,
@@ -149,20 +144,7 @@ const SignInFormSchema = z.object({
   password: z.string().min(1, "Password is required"),
 });
 
-const DefaultPasswordChangeFormSchema = z
-  .object({
-    password: z.string().min(8, "Password must be at least 8 characters"),
-    confirmPassword: z.string().min(1, "Confirm your new password"),
-  })
-  .refine((value) => value.password === value.confirmPassword, {
-    message: "Passwords do not match",
-    path: ["confirmPassword"],
-  });
-
 type SignInFormValues = z.infer<typeof SignInFormSchema>;
-type DefaultPasswordChangeFormValues = z.infer<
-  typeof DefaultPasswordChangeFormSchema
->;
 
 interface AuthViewWithErrorHandlingProps {
   path: string;
@@ -519,25 +501,12 @@ export function AuthViewWithErrorHandling({
 }
 
 function SignInView({ callbackURL }: { callbackURL?: string }) {
-  const [defaultPasswordRedirectUrl, setDefaultPasswordRedirectUrl] = useState<
-    string | null
-  >(null);
-  const [defaultAdminCurrentPassword, setDefaultAdminCurrentPassword] =
-    useState<string | null>(null);
   const signIn = useSignInWithEmailMutation();
-  const changePassword = useChangeAccountPasswordMutation();
   const signInForm = useForm<SignInFormValues>({
     resolver: zodResolver(SignInFormSchema),
     defaultValues: {
       email: "",
       password: "",
-    },
-  });
-  const defaultPasswordChangeForm = useForm<DefaultPasswordChangeFormValues>({
-    resolver: zodResolver(DefaultPasswordChangeFormSchema),
-    defaultValues: {
-      password: "",
-      confirmPassword: "",
     },
   });
 
@@ -550,123 +519,7 @@ function SignInView({ callbackURL }: { callbackURL?: string }) {
 
     if (!result) return;
 
-    if (result.requiresDefaultPasswordChange) {
-      setDefaultPasswordRedirectUrl(result.redirectUrl);
-      setDefaultAdminCurrentPassword(values.password);
-      return;
-    }
-
-    clearDefaultPasswordChangePending();
     redirectAfterSignIn(result.redirectUrl);
-  }
-
-  async function onChangeDefaultPassword(
-    values: DefaultPasswordChangeFormValues,
-  ) {
-    if (!defaultAdminCurrentPassword) return;
-
-    const changed = await changePassword.mutateAsync({
-      currentPassword: defaultAdminCurrentPassword,
-      newPassword: values.password,
-      revokeOtherSessions: true,
-    });
-
-    if (changed) {
-      clearDefaultPasswordChangePending();
-      redirectAfterSignIn(defaultPasswordRedirectUrl ?? callbackURL ?? "/");
-    }
-  }
-
-  if (defaultPasswordRedirectUrl) {
-    return (
-      <Card
-        className="w-full"
-        data-testid={E2eTestId.DefaultPasswordChangePrompt}
-      >
-        <CardHeader>
-          <CardTitle>Change Password</CardTitle>
-          <CardDescription>
-            The default administrator password is still active. Choose a new
-            password to secure this account.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Form {...defaultPasswordChangeForm}>
-            <form
-              className="space-y-4"
-              onSubmit={defaultPasswordChangeForm.handleSubmit(
-                onChangeDefaultPassword,
-              )}
-            >
-              <div className="grid gap-2">
-                <Label htmlFor="default-admin-new-password">New password</Label>
-                <Input
-                  id="default-admin-new-password"
-                  type="password"
-                  autoComplete="new-password"
-                  disabled={changePassword.isPending}
-                  aria-invalid={
-                    !!defaultPasswordChangeForm.formState.errors.password
-                  }
-                  {...defaultPasswordChangeForm.register("password")}
-                />
-                {defaultPasswordChangeForm.formState.errors.password && (
-                  <p className="text-destructive text-sm">
-                    {
-                      defaultPasswordChangeForm.formState.errors.password
-                        .message
-                    }
-                  </p>
-                )}
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="default-admin-confirm-password">
-                  Confirm password
-                </Label>
-                <Input
-                  id="default-admin-confirm-password"
-                  type="password"
-                  autoComplete="new-password"
-                  disabled={changePassword.isPending}
-                  aria-invalid={
-                    !!defaultPasswordChangeForm.formState.errors.confirmPassword
-                  }
-                  {...defaultPasswordChangeForm.register("confirmPassword")}
-                />
-                {defaultPasswordChangeForm.formState.errors.confirmPassword && (
-                  <p className="text-destructive text-sm">
-                    {
-                      defaultPasswordChangeForm.formState.errors.confirmPassword
-                        .message
-                    }
-                  </p>
-                )}
-              </div>
-              <div className="flex justify-end gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={changePassword.isPending}
-                  data-testid={E2eTestId.DefaultPasswordChangeSkipButton}
-                  onClick={() => {
-                    clearDefaultPasswordChangePending();
-                    redirectAfterSignIn(defaultPasswordRedirectUrl);
-                  }}
-                >
-                  Skip
-                </Button>
-                <Button type="submit" disabled={changePassword.isPending}>
-                  {changePassword.isPending && (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  )}
-                  Submit
-                </Button>
-              </div>
-            </form>
-          </Form>
-        </CardContent>
-      </Card>
-    );
   }
 
   return (

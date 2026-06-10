@@ -1,0 +1,1 @@
+ALTER TABLE "organization" ALTER COLUMN "theme" SET DEFAULT 'caffeine';

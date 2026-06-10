@@ -54,9 +54,7 @@ test.describe("Origin error handling", {
       await page.goto(`${UI_BASE_URL}/auth/sign-in`);
       await page.waitForLoadState("domcontentloaded");
 
-      await loginViaUi(page, "test@test.com", "test", {
-        skipDefaultPasswordPrompt: false,
-      });
+      await loginViaUi(page, "test@test.com", "test");
 
       // Trigger the 403 through window.fetch to activate the React error detection.
       // The React wrapper intercepts window.fetch calls and detects origin errors,

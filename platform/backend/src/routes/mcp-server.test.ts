@@ -2433,13 +2433,13 @@ describe("mcp server inspect route", () => {
   });
 
   function configurePermissions(opts: {
-    isTeamAdmin: boolean;
+    canManageAllTeams: boolean;
     isEditor: boolean;
   }) {
     hasPermissionMock.mockImplementation(
       async (permission: Record<string, string[]>) => {
-        if (permission.team?.includes("admin")) {
-          return { success: opts.isTeamAdmin };
+        if (permission.team?.includes("create")) {
+          return { success: opts.canManageAllTeams };
         }
         if (permission.mcpServerInstallation?.includes("update")) {
           return { success: opts.isEditor };
@@ -2449,12 +2449,12 @@ describe("mcp server inspect route", () => {
     );
   }
 
-  test("install scope=team: team:admin can install for a non-member team", async ({
+  test("install scope=team: organization-level team manager can install for a non-member team", async ({
     makeInternalMcpCatalog,
     makeTeam,
     makeUser,
   }) => {
-    configurePermissions({ isTeamAdmin: true, isEditor: false });
+    configurePermissions({ canManageAllTeams: true, isEditor: false });
     const otherUser = await makeUser();
     const team = await makeTeam(organizationId, otherUser.id);
     const catalog = await makeInternalMcpCatalog({
@@ -2490,7 +2490,7 @@ describe("mcp server inspect route", () => {
     makeTeamMember,
     makeUser,
   }) => {
-    configurePermissions({ isTeamAdmin: false, isEditor: true });
+    configurePermissions({ canManageAllTeams: false, isEditor: true });
     const otherUser = await makeUser();
     const team = await makeTeam(organizationId, otherUser.id);
     await makeTeamMember(team.id, user.id);
@@ -2526,7 +2526,7 @@ describe("mcp server inspect route", () => {
     makeTeam,
     makeUser,
   }) => {
-    configurePermissions({ isTeamAdmin: false, isEditor: true });
+    configurePermissions({ canManageAllTeams: false, isEditor: true });
     const otherUser = await makeUser();
     const team = await makeTeam(organizationId, otherUser.id);
     const catalog = await makeInternalMcpCatalog({
@@ -2556,7 +2556,7 @@ describe("mcp server inspect route", () => {
     makeTeam,
     makeTeamMember,
   }) => {
-    configurePermissions({ isTeamAdmin: false, isEditor: false });
+    configurePermissions({ canManageAllTeams: false, isEditor: false });
     const team = await makeTeam(organizationId, user.id);
     await makeTeamMember(team.id, user.id);
     const catalog = await makeInternalMcpCatalog({
@@ -2581,13 +2581,13 @@ describe("mcp server inspect route", () => {
     );
   });
 
-  test("revoke team-scoped: team:admin can revoke for a non-member team", async ({
+  test("revoke team-scoped: organization-level team manager can revoke for a non-member team", async ({
     makeInternalMcpCatalog,
     makeMcpServer,
     makeTeam,
     makeUser,
   }) => {
-    configurePermissions({ isTeamAdmin: true, isEditor: false });
+    configurePermissions({ canManageAllTeams: true, isEditor: false });
     const otherUser = await makeUser();
     const team = await makeTeam(organizationId, otherUser.id);
     const catalog = await makeInternalMcpCatalog({ serverType: "remote" });
@@ -2612,7 +2612,7 @@ describe("mcp server inspect route", () => {
     makeTeam,
     makeUser,
   }) => {
-    configurePermissions({ isTeamAdmin: false, isEditor: true });
+    configurePermissions({ canManageAllTeams: false, isEditor: true });
     const otherUser = await makeUser();
     const team = await makeTeam(organizationId, otherUser.id);
     const catalog = await makeInternalMcpCatalog({ serverType: "remote" });

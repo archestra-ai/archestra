@@ -342,6 +342,27 @@ function SessionsTable({
         ),
       },
       {
+        id: "cache",
+        header: "Cache read",
+        size: 120,
+        minSize: 96,
+        cell: ({ row }) => {
+          const read = row.original.totalCacheReadTokens;
+          const write = row.original.totalCacheWriteTokens;
+          if (read === 0 && write === 0) {
+            return <span className="text-muted-foreground text-xs">—</span>;
+          }
+          const totalInput = row.original.totalInputTokens + read + write;
+          const hitRate =
+            totalInput > 0 ? Math.round((read / totalInput) * 100) : 0;
+          return (
+            <span className="font-mono text-xs">
+              {hitRate}% · {read.toLocaleString()}
+            </span>
+          );
+        },
+      },
+      {
         id: "models",
         header: "Models",
         cell: ({ row }) => (

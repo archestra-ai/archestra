@@ -119,6 +119,17 @@ The most common scopes are:
 
 The elevated actions \`:admin\` and \`:team-admin\` are not global shortcuts with identical meaning on every resource. Their effect depends on the resource's runtime authorization rules.
 
+### Team Roles
+
+Team membership has its own role, separate from organization RBAC:
+
+- \`member\`: belongs to the team and can access resources shared with that team
+- \`admin\`: can manage membership and team-scoped settings for that team, such as external group sync mappings
+
+Team admins do **not** automatically receive organization-level team permissions. Renaming a team, editing its description, creating teams, and deleting teams require the matching organization RBAC permission such as \`team:update\`, \`team:create\`, or \`team:delete\`.
+
+Team roles are also separate from resource actions named \`:team-admin\`. For example, \`agent:team-admin\` controls team-scoped agent management; it does not make the user an admin member of every team.
+
 ### Agents, MCP Gateways, and LLM Proxies
 
 \`agent\`, \`mcpGateway\`, and \`llmProxy\` share the same scope model:
@@ -138,7 +149,7 @@ Examples:
 \`llmProviderApiKey\` and \`llmVirtualKey\` also support \`personal\`, \`team\`, and \`org\` scope, but they use different elevated permissions:
 
 - Personal records are limited to their owner
-- Team records require membership in the selected team, with some routes also allowing \`team:admin\`
+- Team records require membership in the selected team, with team member admins able to manage their own team
 - Organization-wide records require the resource-specific admin permission such as \`llmProviderApiKey:admin\` or \`llmVirtualKey:admin\`
 
 These resources do **not** use \`:team-admin\`.
@@ -160,7 +171,7 @@ Some MCP-related resources also apply runtime scope checks in addition to RBAC, 
 
 - Internal MCP catalog items can be \`personal\`, \`team\`, or \`org\`
 - Organization-wide catalog items require \`mcpServerInstallation:admin\`
-- Team MCP server installations depend on team membership, with broader control for users who have \`team:admin\`
+- Team MCP server installations depend on team membership, with broader control for organization-level team managers and admins of the selected team
 
 When designing custom roles, treat the permission matrix as the first gate and the resource's scope rules as the second gate.
 `;

@@ -561,7 +561,7 @@ def _hook_note(parsed: _HookCmd, target: object) -> str:
     if parsed.has_env_prefix or parsed.has_extra_args:
         parts.append("command sets env/args not migratable to a hook")
     if parsed.source == "unresolved":
-        parts.append("script not resolvable -> manual")
+        parts.append("command not resolvable to a runnable script -> manual")
     return f"; {'; '.join(parts)}" if parts else ""
 
 

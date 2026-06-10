@@ -12,6 +12,23 @@ test("create an app from a template and run it standalone", async ({
   request,
   makeApiRequest,
 }) => {
+  // a clean render must forward NO diagnostics to the host — platform noise
+  // (e.g. the guest SDK's caught new Function("") CSP probe) once flagged
+  // every app with a spurious "1 runtime error" badge
+  await page.addInitScript(() => {
+    const w = window as unknown as { __appDiagnostics: unknown[] };
+    w.__appDiagnostics = [];
+    window.addEventListener("message", (event) => {
+      const type = (event.data as { type?: string } | null)?.type;
+      if (
+        type === "mcp-apps:runtime-error" ||
+        type === "mcp-apps:csp-violation"
+      ) {
+        w.__appDiagnostics.push(event.data);
+      }
+    });
+  });
+
   const name = `e2e-app-${Date.now()}`;
   const createRes = await makeApiRequest({
     request,
@@ -30,6 +47,12 @@ test("create an app from a template and run it standalone", async ({
     await expect(appFrame.getByText("Ready.")).toBeVisible({
       timeout: 20_000,
     });
+
+    const diagnostics = await page.evaluate(
+      () =>
+        (window as unknown as { __appDiagnostics: unknown[] }).__appDiagnostics,
+    );
+    expect(diagnostics).toEqual([]);
   } finally {
     await makeApiRequest({
       request,

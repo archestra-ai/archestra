@@ -115,10 +115,18 @@ function buildCSP(csp) {
  * Build CSP violation listener script (Inspector pattern).
  * Forwards securitypolicyviolation events to the host via postMessage
  * so violations can be surfaced for debugging.
+ *
+ * Violations originating from the platform-served guest SDK file are not
+ * forwarded: the SDK probes code-generation support at load with a try/catch
+ * `new Function("")`, and the caught probe still fires a
+ * securitypolicyviolation (script-src blocks eval). That is platform noise an
+ * app author cannot act on — forwarding it would flag every render as
+ * "1 runtime error". The global is injected just before this listener.
  */
 function buildViolationListenerScript() {
   return '<script>\
 document.addEventListener("securitypolicyviolation", function(e) {\
+  if (e.sourceFile === window.__ARCHESTRA_APP_SDK_URL__) return;\
   var violation = {\
     type: "mcp-apps:csp-violation",\
     directive: e.violatedDirective,\

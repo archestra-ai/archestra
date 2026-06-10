@@ -28,6 +28,7 @@ import {
   AppVersionModel,
   McpToolCallModel,
 } from "@/models";
+import { injectAppRuntimeBridge } from "@/services/apps/app-runtime-bridge";
 import type { CommonToolCall } from "@/types";
 import { appOwner } from "@/types";
 import type { App } from "@/types/app";
@@ -135,7 +136,9 @@ export async function createAppServer(
           {
             uri,
             mimeType: RESOURCE_MIME_TYPE,
-            text: head.html,
+            // Owned apps get the runtime bridge (window.archestra) injected at
+            // serve time; the stored HTML stays pure UI.
+            text: injectAppRuntimeBridge(head.html),
             _meta: {
               ui: {
                 ...(head.uiCsp ? { csp: head.uiCsp } : {}),

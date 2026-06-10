@@ -44,6 +44,8 @@ export const CacheKey = {
   OrganizationSettings: "organization-settings",
   /** MS Teams channel threads where the bot was @mentioned (sticky auto-reply) */
   TeamsThreadActive: "teams-thread-active",
+  /** Slack channel threads where the bot was @mentioned (sticky auto-reply) */
+  SlackThreadActive: "slack-thread-active",
 } as const;
 
 export type CacheKeyPrefix = (typeof CacheKey)[keyof typeof CacheKey];

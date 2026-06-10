@@ -257,16 +257,16 @@ export class McpServerRuntimeManager {
     const organizationId =
       params.catalogItem?.organizationId ?? environment?.organizationId ?? null;
 
-    if (!organizationId) {
-      return { source: "built_in", policy: null };
-    }
+    const organization = organizationId
+      ? params.cache
+        ? params.cache.organizationsById.get(organizationId)
+        : await OrganizationModel.getById(organizationId)
+      : await OrganizationModel.getFirst();
 
-    const organization = params.cache
-      ? params.cache.organizationsById.get(organizationId)
-      : await OrganizationModel.getById(organizationId);
+    if (!organization) return { source: "built_in", policy: null };
 
     return resolveEffectiveNetworkPolicy({
-      organizationId,
+      organizationId: organization.id,
       environmentId: params.catalogItem?.environmentId,
       environmentNetworkPolicy: environment?.networkPolicy,
       defaultNetworkPolicy: organization?.defaultNetworkPolicy,

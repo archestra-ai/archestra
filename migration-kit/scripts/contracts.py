@@ -65,9 +65,40 @@ ConditionOperator = Literal[
 ItemKind = Literal[
     "claude_md", "subagent", "skill", "command", "local_tool", "mcp_server", "hook", "openclaw"
 ]
-TargetKind = Literal["agent", "skill", "mcp_catalog", "mcp_install", "llm_key", "tool_policy"]
+TargetKind = Literal[
+    "agent", "skill", "mcp_catalog", "mcp_install", "llm_key", "tool_policy", "hook"
+]
 Outcome = Literal["created", "skipped", "failed", "manual", "planned", "invalid"]
 HookIntent = Literal["guard", "passive"]
+# the three lifecycle events archestra runs hooks for (the rest have no native target).
+HookEvent = Literal["session_start", "pre_tool_use", "post_tool_use"]
+# how a discovered hook's script body was obtained: a bundled referenced file, an inline shell
+# snippet to synthesize a wrapper from, or unresolvable (missing/escaping/unparsable -> manual).
+HookSource = Literal["bundled", "inline", "unresolved"]
+
+# archestra hook-file constraints (single source, mirrors InsertHookFileSchema in the backend).
+HOOK_FILE_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*\.(py|sh)$")
+HOOK_FILE_NAME_MAX = 255
+HOOK_CONTENT_MAX = 65_536
+HOOK_REQUIREMENTS_MAX = 20
+HOOK_REQUIREMENT_MAX_LEN = 200
+_UUID_RE = re.compile(
+    r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+)
+
+
+def archestra_hook_event(claude_event: str) -> HookEvent | None:
+    """map a Claude Code hook event name to its archestra lifecycle event, or None when archestra
+    has no equivalent (UserPromptSubmit, Stop, SubagentStop, PreCompact, Notification, SessionEnd…)."""
+    match claude_event:
+        case "SessionStart":
+            return "session_start"
+        case "PreToolUse":
+            return "pre_tool_use"
+        case "PostToolUse":
+            return "post_tool_use"
+        case _:
+            return None
 
 # an arbitrary decoded-JSON value. used only where the schema is genuinely open (openclaw
 # config, model-authored answer payloads); everything else is precisely typed.
@@ -128,7 +159,13 @@ class HookData:
     event: str
     command: str
     intent: HookIntent
+    source: HookSource
     matcher: str | None = None
+    # set when source == "bundled": the referenced script's basename + source-relative path.
+    file_name: str | None = None
+    script_path: str | None = None
+    # PEP-723 dependencies extracted from a bundled .py hook (empty otherwise / for bash).
+    requirements: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -351,8 +388,9 @@ _ACTIONS: tuple[PolicyAction, ...] = (
 _SCOPES: tuple[Scope, ...] = ("personal", "team", "org")
 _SERVER_TYPES: tuple[ServerType, ...] = ("local", "remote")
 _INTENTS: tuple[HookIntent, ...] = ("guard", "passive")
+_HOOK_SOURCES: tuple[HookSource, ...] = ("bundled", "inline", "unresolved")
 _TARGET_KINDS: tuple[TargetKind, ...] = (
-    "agent", "skill", "mcp_catalog", "mcp_install", "llm_key", "tool_policy",
+    "agent", "skill", "mcp_catalog", "mcp_install", "llm_key", "tool_policy", "hook",
 )
 _PLAN_ACTIONS: tuple[Literal["migrate", "skip", "manual"], ...] = ("migrate", "skip", "manual")
 _ENCODINGS: tuple[Literal["utf8", "base64"], ...] = ("utf8", "base64")
@@ -385,6 +423,75 @@ def optional_action(answers: Mapping[str, JsonValue], *, ctx: str) -> PolicyActi
     if value is None:
         return "block_always"
     return _require_literal(value, _ACTIONS, what="action", ctx=ctx)
+
+
+# --- hook validators (shared by discover PEP-723 extraction + apply build) -----------------
+
+
+def archestra_file_name(value: str, *, ctx: str) -> str:
+    """a plain hook file name ending in .py or .sh (mirrors HookFileNameSchema)."""
+    if len(value) > HOOK_FILE_NAME_MAX or HOOK_FILE_NAME_RE.match(value) is None:
+        raise ContractError(
+            f"{ctx}: hook file name {value!r} must match {HOOK_FILE_NAME_RE.pattern} "
+            f"and be at most {HOOK_FILE_NAME_MAX} chars"
+        )
+    return value
+
+
+def validate_requirements(value: object, *, ctx: str) -> list[str]:
+    """validate a list of pip requirements (mirrors HookRequirementsSchema): each is trimmed,
+    non-empty, single-line, <= 200 chars; at most 20 entries. trimmed values are returned."""
+    raw = _str_list(value, ctx=ctx)
+    if len(raw) > HOOK_REQUIREMENTS_MAX:
+        raise ContractError(f"{ctx}: at most {HOOK_REQUIREMENTS_MAX} requirements, got {len(raw)}")
+    out: list[str] = []
+    for i, item in enumerate(raw):
+        req = item.strip()
+        if not req:
+            raise ContractError(f"{ctx}[{i}]: requirement must be a non-empty string")
+        if len(req) > HOOK_REQUIREMENT_MAX_LEN:
+            raise ContractError(f"{ctx}[{i}]: requirement exceeds {HOOK_REQUIREMENT_MAX_LEN} chars")
+        if any(c in req for c in "\r\n\0"):
+            raise ContractError(f"{ctx}[{i}]: requirement must be a single line")
+        out.append(req)
+    return out
+
+
+def require_requirements(answers: Mapping[str, JsonValue], *, ctx: str) -> list[str] | None:
+    """user-supplied requirements override, or None when the answer omits the key."""
+    raw = answers.get("requirements")
+    if raw is None:
+        return None
+    return validate_requirements(raw, ctx=f"{ctx}.requirements")
+
+
+def optional_agent_id(answers: Mapping[str, JsonValue], *, ctx: str) -> str | None:
+    """a hook may pin an explicit agent id (UUID); absent -> apply attaches the primary agent."""
+    raw = answers.get("agentId")
+    if raw is None:
+        return None
+    if not isinstance(raw, str) or _UUID_RE.match(raw) is None:
+        raise ContractError(f"{ctx}.agentId: must be a UUID string, got {raw!r}")
+    return raw
+
+
+def optional_file_name(answers: Mapping[str, JsonValue], *, ctx: str) -> str | None:
+    """an explicit hook file name override (kept distinct from name_override, a display name)."""
+    raw = answers.get("fileName")
+    if raw is None:
+        return None
+    if not isinstance(raw, str):
+        raise ContractError(f"{ctx}.fileName: must be a string, got {raw!r}")
+    return archestra_file_name(raw, ctx=f"{ctx}.fileName")
+
+
+def require_hook_content(text: str, *, ctx: str) -> str:
+    """hook script body must be non-empty and within the backend's content cap."""
+    if not 1 <= len(text) <= HOOK_CONTENT_MAX:
+        raise ContractError(
+            f"{ctx}: hook content length {len(text)} must be between 1 and {HOOK_CONTENT_MAX}"
+        )
+    return text
 
 
 # --- parsing external JSON into typed objects --------------------------------------------
@@ -477,7 +584,11 @@ def parse_item(value: object, *, ctx: str) -> Item:
                     event=require_str_field(data, "event", ctx=dctx),
                     command=require_str_field(data, "command", ctx=dctx),
                     intent=_require_literal(data.get("intent"), _INTENTS, what="intent", ctx=dctx),
+                    source=_require_literal(data.get("source"), _HOOK_SOURCES, what="source", ctx=dctx),
                     matcher=_opt_str(data, "matcher", ctx=dctx),
+                    file_name=_opt_str(data, "file_name", ctx=dctx),
+                    script_path=_opt_str(data, "script_path", ctx=dctx),
+                    requirements=_str_list(data.get("requirements", []), ctx=f"{dctx}.requirements"),
                 ),
             )
         case "openclaw":

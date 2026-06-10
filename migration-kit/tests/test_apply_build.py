@@ -14,15 +14,18 @@ import yaml
 from apply import (
     BuiltAgent,
     BuiltCatalog,
+    BuiltHook,
     BuiltInstall,
     BuiltLlmKey,
     BuiltPolicy,
     BuiltSkill,
     _build_payload,
+    _Built,
+    _flag_hook_collisions,
     _redacted_for_print,
 )
 from archestra_client import CatalogCreate, LlmKeyCreate, LocalConfig, McpEnvVar
-from contracts import ContractError, Decision, Item, SkillItem, to_jsonable
+from contracts import ContractError, Decision, HookData, HookItem, Item, SkillItem, to_jsonable
 from discover import discover
 
 FIXTURE = Path(__file__).parent / "fixtures" / "sample-setup"
@@ -246,14 +249,105 @@ def test_dry_run_redaction_hides_user_secrets() -> None:
 
 def test_tool_policy_requires_extracted_semantics(index: dict[str, Item]) -> None:
     with pytest.raises(ContractError, match="user_answers"):
-        _decide(index, "hook:PreToolUse:0:0", "tool_policy")
-    _, built = _decide(index, "hook:PreToolUse:0:0", "tool_policy",
+        _decide(index, "hook:.claude/settings.json:PreToolUse:0:0", "tool_policy")
+    _, built = _decide(index, "hook:.claude/settings.json:PreToolUse:0:0", "tool_policy",
                        user_answers={"tool_name": "shell", "key": "command",
                                       "operator": "regex", "value": "rm\\s+-rf\\s+/"})
     assert isinstance(built, BuiltPolicy)
     assert built.tool_name == "shell"
     assert built.conditions[0].operator == "regex"
     assert built.action == "block_always"
+
+
+def test_bundled_hook_builds_native_hook_with_pep723_requirements(index: dict[str, Item]) -> None:
+    _, built = _decide(index, "hook:.claude/settings.json:PreToolUse:0:0", "hook")
+    assert isinstance(built, BuiltHook)
+    assert built.event == "pre_tool_use"
+    assert built.file_name == "pre_tool_use.py"
+    assert built.requirements == ["pyyaml>=6.0"]  # extracted from the script's PEP-723 block
+    assert "rm" in built.content  # the script body is carried verbatim
+    assert built.agent_id is None  # apply fills the primary agent at execute time
+
+
+def test_inline_hook_synthesizes_shell_wrapper(index: dict[str, Item]) -> None:
+    _, built = _decide(index, "hook:.claude/settings.json:PostToolUse:0:0", "hook")
+    assert isinstance(built, BuiltHook)
+    assert built.event == "post_tool_use"
+    assert built.file_name == "PostToolUse.sh"
+    assert built.content.startswith("#!/bin/sh\n")
+    assert "tool-finished" in built.content
+    assert built.requirements == []
+
+
+def test_hook_user_answers_override_filename_and_requirements(index: dict[str, Item]) -> None:
+    _, built = _decide(index, "hook:.claude/settings.json:PreToolUse:0:0", "hook",
+                       user_answers={"fileName": "guard.py", "requirements": ["httpx>=0.27"]})
+    assert isinstance(built, BuiltHook)
+    assert built.file_name == "guard.py"
+    assert built.requirements == ["httpx>=0.27"]
+
+
+def test_hook_accepts_explicit_agent_id(index: dict[str, Item]) -> None:
+    uid = "0d3f6b1e-1a2b-4c3d-8e9f-0123456789ab"
+    _, built = _decide(index, "hook:.claude/settings.json:PreToolUse:0:0", "hook", user_answers={"agentId": uid})
+    assert isinstance(built, BuiltHook)
+    assert built.agent_id == uid
+
+
+def test_hook_unsupported_event_is_rejected(index: dict[str, Item]) -> None:
+    with pytest.raises(ContractError, match="no archestra equivalent"):
+        _decide(index, "hook:.claude/settings.json:UserPromptSubmit:0:0", "hook")
+
+
+def test_hook_sh_rejects_requirements(index: dict[str, Item]) -> None:
+    with pytest.raises(ContractError, match="no requirements"):
+        _decide(index, "hook:.claude/settings.json:PostToolUse:0:0", "hook", user_answers={"requirements": ["httpx"]})
+
+
+def test_hook_rejects_bad_file_name_override(index: dict[str, Item]) -> None:
+    with pytest.raises(ContractError, match="file name"):
+        _decide(index, "hook:.claude/settings.json:PreToolUse:0:0", "hook", user_answers={"fileName": "guard.txt"})
+
+
+def test_hook_redacted_print_omits_script_body() -> None:
+    # the verbatim script body is never echoed in dry-run output (only its size), so a secret
+    # embedded in a bundled hook cannot leak there.
+    content = "#!/bin/sh\ncurl -H 'auth: ghp_realhooktoken000000'\n"
+    shown = _redacted_for_print(BuiltHook(
+        event="session_start", file_name="s.sh", content=content,
+        requirements=[], enabled=True, agent_id=None))
+    assert "content" not in shown
+    assert "ghp_realhooktoken000000" not in json.dumps(shown)
+    assert shown["content_chars"] == len(content)
+
+
+def test_inline_hook_with_redacted_secret_is_refused() -> None:
+    # a synthesized wrapper carrying the literal "<redacted>" would be a silently broken hook.
+    item = HookItem(id="hook:PreToolUse:0:0", name="h", path="settings.json",
+                    data=HookData(event="PreToolUse", command="curl -H 'auth: <redacted>'",
+                                  intent="passive", source="inline"))
+    with pytest.raises(ContractError, match="redacted secret"):
+        _build_payload(Decision(source_id="hook:PreToolUse:0:0", target_kind="hook",
+                                scope="personal"), item)
+
+
+def test_unresolved_hook_is_refused() -> None:
+    item = HookItem(id="hook:PreToolUse:0:0", name="h", path="settings.json",
+                    data=HookData(event="PreToolUse", command="python3 gone.py",
+                                  intent="guard", source="unresolved"))
+    with pytest.raises(ContractError, match="could not be resolved"):
+        _build_payload(Decision(source_id="hook:PreToolUse:0:0", target_kind="hook",
+                                scope="personal"), item)
+
+
+def test_flag_hook_collisions_invalidates_duplicate_event_and_file() -> None:
+    decision = Decision(source_id="hook:x", target_kind="hook", scope="personal")
+    hook = BuiltHook(event="pre_tool_use", file_name="g.py", content="x",
+                     requirements=[], enabled=True, agent_id=None)
+    out = _flag_hook_collisions([_Built(decision, "a", hook, ""), _Built(decision, "b", hook, "")])
+    assert out[0].built is hook
+    assert out[1].built is None
+    assert "distinct user_answers.fileName" in out[1].error
 
 
 def _run_apply_cli(tmp_path: Path, plan: dict[str, object], *args: str,

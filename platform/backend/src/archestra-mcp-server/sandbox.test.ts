@@ -14,6 +14,7 @@ import {
   SkillSandboxReplayEventModel,
   SkillVersionModel,
 } from "@/models";
+import { executionSandboxRegistry } from "@/skills-sandbox/execution-sandbox-registry";
 import { skillSandboxRuntimeService } from "@/skills-sandbox/skill-sandbox-runtime-service";
 import { SkillSandboxError } from "@/skills-sandbox/types";
 import {
@@ -233,7 +234,7 @@ describe("sandbox tools (runtime enabled)", () => {
       expect(sandboxes).toHaveLength(1);
     });
 
-    test("rejects the default sandbox when there is no conversation context", async () => {
+    test("rejects the default sandbox when there is neither a conversation nor an isolation scope", async () => {
       const result = await executeArchestraTool(
         TOOL_RUN_COMMAND_FULL_NAME,
         { command: "echo hi" },
@@ -241,6 +242,24 @@ describe("sandbox tools (runtime enabled)", () => {
       );
       expect(result.isError).toBe(true);
       expect(textOf(result)).toContain("No conversation context");
+    });
+
+    test("returns a clean error when the conversation was deleted mid-run", async () => {
+      const ctx = await makeConversationCtx();
+      stubRunCommand("x");
+      await ConversationModel.delete(
+        ctx.conversationId as string,
+        userId,
+        organizationId,
+      );
+
+      const result = await executeArchestraTool(
+        TOOL_RUN_COMMAND_FULL_NAME,
+        { command: "echo hi" },
+        ctx,
+      );
+      expect(result.isError).toBe(true);
+      expect(textOf(result)).toContain("no longer exists");
     });
 
     test("target {fresh} creates a new non-default sandbox", async () => {
@@ -331,6 +350,152 @@ describe("sandbox tools (runtime enabled)", () => {
       );
       expect(result.isError).toBe(true);
       expect(textOf(result)).toContain("the engine is unreachable");
+    });
+  });
+
+  describe("headless executions (isolation key, no conversation)", () => {
+    function headlessCtx(): ArchestraContext {
+      return { ...context, isolationKey: crypto.randomUUID() };
+    }
+
+    function resolvedSandboxId(
+      runSpy: ReturnType<typeof stubRunCommand>,
+      callIndex: number,
+    ): string {
+      return (runSpy.mock.calls[callIndex][0] as { sandboxId: string })
+        .sandboxId;
+    }
+
+    test("default target creates one conversation-less sandbox and reuses it", async () => {
+      const ctx = headlessCtx();
+      const runSpy = stubRunCommand("x");
+
+      const first = await executeArchestraTool(
+        TOOL_RUN_COMMAND_FULL_NAME,
+        { command: "echo 1" },
+        ctx,
+      );
+      const second = await executeArchestraTool(
+        TOOL_RUN_COMMAND_FULL_NAME,
+        { command: "echo 2" },
+        ctx,
+      );
+      expect(first.isError).toBe(false);
+      expect(second.isError).toBe(false);
+
+      const sandboxId = resolvedSandboxId(runSpy, 0);
+      expect(resolvedSandboxId(runSpy, 1)).toBe(sandboxId);
+
+      // never a fake conversation id, never default-flagged (the partial
+      // unique index cannot protect null-conversation defaults).
+      const row = await SkillSandboxModel.findById(sandboxId);
+      expect(row?.conversationId).toBeNull();
+      expect(row?.isDefault).toBe(false);
+    });
+
+    test("concurrent first calls share a single sandbox", async () => {
+      const ctx = headlessCtx();
+      const runSpy = stubRunCommand("x");
+
+      const [first, second] = await Promise.all([
+        executeArchestraTool(
+          TOOL_RUN_COMMAND_FULL_NAME,
+          { command: "echo 1" },
+          ctx,
+        ),
+        executeArchestraTool(
+          TOOL_RUN_COMMAND_FULL_NAME,
+          { command: "echo 2" },
+          ctx,
+        ),
+      ]);
+      expect(first.isError).toBe(false);
+      expect(second.isError).toBe(false);
+      expect(resolvedSandboxId(runSpy, 0)).toBe(resolvedSandboxId(runSpy, 1));
+    });
+
+    test("explicit {id} is scoped to the owning execution", async () => {
+      const ctxA = headlessCtx();
+      const runSpy = stubRunCommand("x");
+      await executeArchestraTool(
+        TOOL_RUN_COMMAND_FULL_NAME,
+        { command: "echo hi" },
+        ctxA,
+      );
+      const sandboxId = resolvedSandboxId(runSpy, 0);
+
+      // the owning execution can target it explicitly...
+      const sameExecution = await executeArchestraTool(
+        TOOL_RUN_COMMAND_FULL_NAME,
+        { command: "echo hi", target: { id: sandboxId } },
+        ctxA,
+      );
+      expect(sameExecution.isError).toBe(false);
+
+      // ...another execution cannot...
+      const otherExecution = await executeArchestraTool(
+        TOOL_RUN_COMMAND_FULL_NAME,
+        { command: "echo hi", target: { id: sandboxId } },
+        headlessCtx(),
+      );
+      expect(otherExecution.isError).toBe(true);
+      expect(textOf(otherExecution)).toContain("No accessible sandbox");
+
+      // ...and neither can a conversation-scoped caller.
+      const fromConversation = await executeArchestraTool(
+        TOOL_RUN_COMMAND_FULL_NAME,
+        { command: "echo hi", target: { id: sandboxId } },
+        await makeConversationCtx(),
+      );
+      expect(fromConversation.isError).toBe(true);
+    });
+
+    test("{fresh: true} sandbox is addressable by id within the same execution", async () => {
+      const ctx = headlessCtx();
+      const runSpy = stubRunCommand("x");
+      await executeArchestraTool(
+        TOOL_RUN_COMMAND_FULL_NAME,
+        { command: "echo hi", target: { fresh: true } },
+        ctx,
+      );
+      const sandboxId = resolvedSandboxId(runSpy, 0);
+      const row = await SkillSandboxModel.findById(sandboxId);
+      expect(row?.conversationId).toBeNull();
+      expect(row?.isDefault).toBe(false);
+
+      const sameExecution = await executeArchestraTool(
+        TOOL_RUN_COMMAND_FULL_NAME,
+        { command: "echo hi", target: { id: sandboxId } },
+        ctx,
+      );
+      expect(sameExecution.isError).toBe(false);
+
+      const otherExecution = await executeArchestraTool(
+        TOOL_RUN_COMMAND_FULL_NAME,
+        { command: "echo hi", target: { id: sandboxId } },
+        headlessCtx(),
+      );
+      expect(otherExecution.isError).toBe(true);
+    });
+
+    test("a released execution scope gets a fresh sandbox afterwards", async () => {
+      const ctx = headlessCtx();
+      const runSpy = stubRunCommand("x");
+      await executeArchestraTool(
+        TOOL_RUN_COMMAND_FULL_NAME,
+        { command: "echo hi" },
+        ctx,
+      );
+      const before = resolvedSandboxId(runSpy, 0);
+
+      executionSandboxRegistry.release(ctx.isolationKey as string);
+
+      await executeArchestraTool(
+        TOOL_RUN_COMMAND_FULL_NAME,
+        { command: "echo hi" },
+        ctx,
+      );
+      expect(resolvedSandboxId(runSpy, 1)).not.toBe(before);
     });
   });
 

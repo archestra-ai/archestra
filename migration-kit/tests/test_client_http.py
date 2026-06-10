@@ -11,7 +11,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 
 import pytest
 
-from archestra_client import ArchestraApiError, ArchestraClient, _items
+from archestra_client import ArchestraApiError, ArchestraClient, HookCreate, _items
 from contracts import ContractError
 
 
@@ -153,6 +153,54 @@ class _NotReadyHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", "application/json")
         self.end_headers()
         self.wfile.write(b'{"error": "no such route"}')
+
+
+class _HooksHandler(BaseHTTPRequestHandler):
+    received: list[tuple[str, str, dict[str, object] | None]] = []
+
+    def log_message(self, *args: object) -> None:
+        pass
+
+    def _send(self, code: int, body: dict[str, object] | list[object]) -> None:
+        self.send_response(code)
+        self.send_header("Content-Type", "application/json")
+        self.end_headers()
+        self.wfile.write(json.dumps(body).encode())
+
+    def do_GET(self) -> None:
+        self.received.append(("GET", self.path, None))
+        self._send(200, {"items": [{"id": "h1", "event": "pre_tool_use", "fileName": "g.py"}]})
+
+    def do_POST(self) -> None:
+        raw = self.rfile.read(int(self.headers.get("Content-Length", 0)))
+        self.received.append(("POST", self.path, json.loads(raw)))
+        self._send(200, {"id": "new-hook"})
+
+
+def test_hook_list_and_create_serialize_correctly() -> None:
+    _HooksHandler.received = []
+    server = HTTPServer(("127.0.0.1", 0), _HooksHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        with ArchestraClient(f"http://127.0.0.1:{server.server_address[1]}") as client:
+            listed = client.list_hooks("agent-123")
+            assert listed[0]["id"] == "h1"  # the {items: [...]} envelope is unwrapped
+            created = client.create_hook(HookCreate(
+                agentId="agent-123", event="pre_tool_use", fileName="g.py",
+                content="x", requirements=["httpx"], enabled=True))
+            assert created["id"] == "new-hook"
+    finally:
+        server.shutdown()
+        thread.join()
+
+    get_method, get_path, _ = _HooksHandler.received[0]
+    assert get_method == "GET"
+    assert get_path == "/api/hooks?agentId=agent-123"
+    post_method, post_path, body = _HooksHandler.received[1]
+    assert (post_method, post_path) == ("POST", "/api/hooks")
+    assert body == {"agentId": "agent-123", "event": "pre_tool_use", "fileName": "g.py",
+                    "content": "x", "requirements": ["httpx"], "enabled": True}
 
 
 def test_wait_ready_fails_fast_on_client_error() -> None:

@@ -19,6 +19,18 @@ export class SkillInvalidFilePathError extends Error {
   }
 }
 
+/**
+ * Thrown when a sandbox insert references a conversation that no longer
+ * exists (e.g. deleted while the agent run was still in flight). Callers
+ * should surface this as a user-visible error instead of a raw failed query.
+ */
+export class SkillSandboxConversationGoneError extends Error {
+  constructor(conversationId: string) {
+    super(`Conversation ${conversationId} no longer exists`);
+    this.name = "SkillSandboxConversationGoneError";
+  }
+}
+
 class SkillSandboxModel {
   /**
    * Create an empty sandbox row. Skills are no longer fixed at creation — they
@@ -27,10 +39,19 @@ class SkillSandboxModel {
    * as a plain shell with nothing under `/skills`.
    */
   static async create(sandbox: InsertSkillSandbox): Promise<SkillSandbox> {
-    const [row] = await db
-      .insert(schema.skillSandboxesTable)
-      .values(sandbox)
-      .returning();
+    let rows: SkillSandbox[];
+    try {
+      rows = await db
+        .insert(schema.skillSandboxesTable)
+        .values(sandbox)
+        .returning();
+    } catch (error) {
+      if (sandbox.conversationId && isConversationFkViolation(error)) {
+        throw new SkillSandboxConversationGoneError(sandbox.conversationId);
+      }
+      throw error;
+    }
+    const [row] = rows;
     if (!row) {
       throw new Error("failed to insert skill sandbox");
     }
@@ -51,16 +72,25 @@ class SkillSandboxModel {
   }): Promise<SkillSandbox> {
     const { organizationId, userId, conversationId, defaultCwd } = params;
 
-    await db
-      .insert(schema.skillSandboxesTable)
-      .values({
-        organizationId,
-        userId,
-        conversationId,
-        defaultCwd,
-        isDefault: true,
-      })
-      .onConflictDoNothing();
+    try {
+      await db
+        .insert(schema.skillSandboxesTable)
+        .values({
+          organizationId,
+          userId,
+          conversationId,
+          defaultCwd,
+          isDefault: true,
+        })
+        .onConflictDoNothing();
+    } catch (error) {
+      // ON CONFLICT only absorbs unique violations; a deleted conversation
+      // still surfaces as an FK violation here.
+      if (isConversationFkViolation(error)) {
+        throw new SkillSandboxConversationGoneError(conversationId);
+      }
+      throw error;
+    }
 
     const [row] = await db
       .select()
@@ -74,9 +104,10 @@ class SkillSandboxModel {
         ),
       );
     if (!row) {
-      throw new Error(
-        `failed to find-or-create default sandbox for conversation ${conversationId}`,
-      );
+      // the insert succeeded (or hit the unique index), so a missing row means
+      // the conversation was deleted in between: the FK is ON DELETE SET NULL,
+      // which detaches the default sandbox from the conversation.
+      throw new SkillSandboxConversationGoneError(conversationId);
     }
     return row;
   }
@@ -158,3 +189,27 @@ class SkillSandboxModel {
 }
 
 export default SkillSandboxModel;
+
+// === internal helpers ===
+
+const CONVERSATION_FK_CONSTRAINT =
+  "skill_sandboxes_conversation_id_conversations_id_fk";
+
+// drizzle wraps the postgres error as `cause`; walk the chain to find it
+function isConversationFkViolation(error: unknown): boolean {
+  let current: unknown = error;
+  while (current instanceof Error) {
+    const candidate = current as Error & {
+      code?: unknown;
+      constraint?: unknown;
+    };
+    if (
+      candidate.code === "23503" &&
+      candidate.constraint === CONVERSATION_FK_CONSTRAINT
+    ) {
+      return true;
+    }
+    current = candidate.cause;
+  }
+  return false;
+}

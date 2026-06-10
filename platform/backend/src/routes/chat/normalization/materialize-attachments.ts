@@ -112,14 +112,8 @@ function materializePart(
     return { ...part };
   }
 
-  // PGlite (used by tests) returns bytea as a Uint8Array; node-postgres
-  // returns a Buffer. Normalize before encoding so .toString("base64") is the
-  // real Node Buffer method, not Array.prototype.toString (which gives a
-  // comma-separated decimal list).
-  const buffer = Buffer.isBuffer(attachment.fileData)
-    ? attachment.fileData
-    : Buffer.from(attachment.fileData as Uint8Array);
-  const dataUrl = `data:${attachment.mimeType};base64,${buffer.toString("base64")}`;
+  // findByIdsWithData normalizes bytea to Buffer at the model boundary
+  const dataUrl = `data:${attachment.mimeType};base64,${attachment.fileData.toString("base64")}`;
   return {
     ...part,
     url: dataUrl,

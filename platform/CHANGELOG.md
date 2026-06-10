@@ -1,5 +1,39 @@
 # Changelog
 
+## [1.2.62](https://github.com/archestra-ai/archestra/compare/platform-v1.2.61...platform-v1.2.62) (2026-06-10)
+
+
+### Features
+
+* add team roles and improve invitation signup ([#5425](https://github.com/archestra-ai/archestra/issues/5425)) ([bb820f2](https://github.com/archestra-ai/archestra/commit/bb820f225b3a0379bf315d249d535b42b508eec8))
+* **docker:** embed Dagger Engine in quickstart ([#5275](https://github.com/archestra-ai/archestra/issues/5275)) ([cf5f281](https://github.com/archestra-ai/archestra/commit/cf5f281b8df2bc766aa03702d80ea7b9fbd1e635))
+* **hooks:** agent lifecycle hooks ([#5424](https://github.com/archestra-ai/archestra/issues/5424)) ([f5a84a4](https://github.com/archestra-ai/archestra/commit/f5a84a42038f55fa040ca55016a2c4e7a797202a))
+* make ms teams answer to any message in the thread where it was mentioned and refactor ngrok integration ([#5470](https://github.com/archestra-ai/archestra/issues/5470)) ([e79107d](https://github.com/archestra-ai/archestra/commit/e79107df2899125040364c3ba6c6c1e85fb7a3d2))
+
+
+### Bug Fixes
+
+* **chat:** accept .json file attachments ([#5452](https://github.com/archestra-ai/archestra/issues/5452)) ([9f54328](https://github.com/archestra-ai/archestra/commit/9f543280b17f5b0fb316018e2cc997a2ca5f3a4f))
+* **chat:** first in-session edit regenerates pre-edit text; bubble width flickers at stream end ([#5475](https://github.com/archestra-ai/archestra/issues/5475)) ([314e9df](https://github.com/archestra-ai/archestra/commit/314e9df03be22d311c693f88bc4c8050aabcd03b))
+* **chat:** fix frontend crashing when editing second message in conversation ([#5457](https://github.com/archestra-ai/archestra/issues/5457)) ([1a8a8de](https://github.com/archestra-ai/archestra/commit/1a8a8de66261db7c48bc6b311dba30431b7137dd))
+* **chat:** re-land resume-on-409 with crash, error-flash, and text-blink fixes ([#5370](https://github.com/archestra-ai/archestra/issues/5370)) ([e68c48e](https://github.com/archestra-ai/archestra/commit/e68c48e7e477c9fdd980201e24a46b1b98fb4577))
+* **chat:** recover stringified unavailable-tool errors instead of failing the run ([#5453](https://github.com/archestra-ai/archestra/issues/5453)) ([1e7030b](https://github.com/archestra-ai/archestra/commit/1e7030bbe37045f966ce0a6416a244056fdd3dc4))
+* **cost:** bill 1-hour prompt-cache writes at 2x (TTL-aware cache cost) ([#5466](https://github.com/archestra-ai/archestra/issues/5466)) ([4da8d97](https://github.com/archestra-ai/archestra/commit/4da8d97a052bde38630f61b7ff5ff56a2c1a72a4))
+* **cost:** bill Bedrock 1-hour cache writes at 2x ([#5467](https://github.com/archestra-ai/archestra/issues/5467)) ([42466a9](https://github.com/archestra-ai/archestra/commit/42466a9ac3afd4848765e158c0fb89e227bde25a))
+* default theme to caffeine ([#5449](https://github.com/archestra-ai/archestra/issues/5449)) ([63c0240](https://github.com/archestra-ai/archestra/commit/63c0240dfba03068513b851419e1d80df709cb0a))
+* dialog layout in hooks ([#5458](https://github.com/archestra-ai/archestra/issues/5458)) ([1ce5d38](https://github.com/archestra-ai/archestra/commit/1ce5d38e0e23fbbf8f1fb84c44bec339ba30c29f))
+* display hooks consistently with the rest of UI ([#5459](https://github.com/archestra-ai/archestra/issues/5459)) ([310a32f](https://github.com/archestra-ai/archestra/commit/310a32fed1fec95bf6b8452170545759162c007c))
+* **docker:** bump node:24-alpine3.23 digest so cached apk upgrade re-runs (openssl CVEs) ([#5478](https://github.com/archestra-ai/archestra/issues/5478)) ([8783f47](https://github.com/archestra-ai/archestra/commit/8783f47df52b29aa3afe900806bac4302f9984b3))
+* **sandbox:** checkpoint the dagger replay chain to bound query depth ([#5456](https://github.com/archestra-ai/archestra/issues/5456)) ([6b3d84a](https://github.com/archestra-ai/archestra/commit/6b3d84a2ebb7f35264e5549eb5e7908abff9d30c))
+* **sandbox:** stop persisting synthetic execution keys as conversation ids ([#5454](https://github.com/archestra-ai/archestra/issues/5454)) ([1d66123](https://github.com/archestra-ai/archestra/commit/1d661232d1f85ef1d78de3bdfebddd47e6e6811b))
+* **skills:** reduce skill-sandbox friction for bundled tools ([#5468](https://github.com/archestra-ai/archestra/issues/5468)) ([2ddc7c1](https://github.com/archestra-ai/archestra/commit/2ddc7c1b1788f07534ccc2d4bf25ed1688ec8645))
+
+
+### Code Refactoring
+
+* **backend:** per-entity route folders, make virtual-api-key canonical ([#5451](https://github.com/archestra-ai/archestra/issues/5451)) ([6bc953d](https://github.com/archestra-ai/archestra/commit/6bc953d386e7bd5ce1b6051a004ffa1a861df00d))
+* **sandbox:** unify duplicated helpers, queue state, and validation vectors ([#5474](https://github.com/archestra-ai/archestra/issues/5474)) ([44d6ab4](https://github.com/archestra-ai/archestra/commit/44d6ab4092a1623ab4ef97142701cee766a3ca91))
+
 ## [1.2.61](https://github.com/archestra-ai/archestra/compare/platform-v1.2.60...platform-v1.2.61) (2026-06-09)
 
 

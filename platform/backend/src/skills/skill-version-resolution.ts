@@ -1,8 +1,14 @@
 import logger from "@/logging";
 import { SkillSandboxModel, SkillVersionModel } from "@/models";
+import { executionSandboxRegistry } from "@/skills-sandbox/execution-sandbox-registry";
 import { SKILL_SANDBOX_HOME } from "@/skills-sandbox/runtime-image";
 import { skillSandboxRuntimeService } from "@/skills-sandbox/skill-sandbox-runtime-service";
-import { asSandboxId, type Skill, type SkillVersion } from "@/types";
+import {
+  asSandboxId,
+  type Skill,
+  type SkillSandbox,
+  type SkillVersion,
+} from "@/types";
 
 /**
  * Outcome of resolving a skill for activation. `mounted` is true only when this
@@ -32,22 +38,18 @@ export async function resolveEffectiveSkillVersion(params: {
   organizationId: string;
   userId: string | undefined;
   conversationId: string | undefined;
+  /** Per-execution scope for headless runs without a conversation. */
+  isolationKey?: string;
 }): Promise<SkillVersion | null> {
-  if (params.userId && params.conversationId) {
-    const sandbox = await SkillSandboxModel.findDefault({
-      organizationId: params.organizationId,
-      userId: params.userId,
-      conversationId: params.conversationId,
+  const sandbox = await findDefaultSandboxForScope(params);
+  if (sandbox) {
+    const mount = await SkillSandboxModel.findMountBySkill({
+      sandboxId: sandbox.id,
+      skillId: params.skill.id,
     });
-    if (sandbox) {
-      const mount = await SkillSandboxModel.findMountBySkill({
-        sandboxId: sandbox.id,
-        skillId: params.skill.id,
-      });
-      if (mount) {
-        const mounted = await SkillVersionModel.findById(mount.skillVersionId);
-        if (mounted) return mounted;
-      }
+    if (mount) {
+      const mounted = await SkillVersionModel.findById(mount.skillVersionId);
+      if (mounted) return mounted;
     }
   }
 
@@ -72,15 +74,22 @@ export async function resolveActivationVersion(params: {
   organizationId: string;
   userId: string | undefined;
   conversationId: string | undefined;
+  /** Per-execution scope for headless runs without a conversation. */
+  isolationKey?: string;
   canRunSandbox: boolean;
 }): Promise<ActivationVersion | null> {
-  if (params.canRunSandbox && params.userId && params.conversationId) {
+  if (
+    params.canRunSandbox &&
+    params.userId &&
+    (params.conversationId || params.isolationKey)
+  ) {
     try {
       return await mountAndResolve({
         skill: params.skill,
         organizationId: params.organizationId,
         userId: params.userId,
         conversationId: params.conversationId,
+        isolationKey: params.isolationKey,
       });
     } catch (error) {
       logger.error(
@@ -95,6 +104,7 @@ export async function resolveActivationVersion(params: {
     organizationId: params.organizationId,
     userId: params.userId,
     conversationId: params.conversationId,
+    isolationKey: params.isolationKey,
   });
   return version ? { version, mounted: false } : null;
 }
@@ -114,7 +124,8 @@ async function mountAndResolve(params: {
   skill: Pick<Skill, "id" | "name" | "latestVersion">;
   organizationId: string;
   userId: string;
-  conversationId: string;
+  conversationId: string | undefined;
+  isolationKey: string | undefined;
 }): Promise<ActivationVersion | null> {
   const latest = await SkillVersionModel.findBySkillAndVersion(
     params.skill.id,
@@ -122,12 +133,26 @@ async function mountAndResolve(params: {
   );
   if (!latest) return null;
 
-  const sandbox = await SkillSandboxModel.findOrCreateDefault({
-    organizationId: params.organizationId,
-    userId: params.userId,
-    conversationId: params.conversationId,
-    defaultCwd: SKILL_SANDBOX_HOME,
-  });
+  let sandbox: SkillSandbox;
+  if (params.conversationId) {
+    sandbox = await SkillSandboxModel.findOrCreateDefault({
+      organizationId: params.organizationId,
+      userId: params.userId,
+      conversationId: params.conversationId,
+      defaultCwd: SKILL_SANDBOX_HOME,
+    });
+  } else if (params.isolationKey) {
+    sandbox = await executionSandboxRegistry.getOrCreateDefault({
+      organizationId: params.organizationId,
+      userId: params.userId,
+      isolationKey: params.isolationKey,
+      defaultCwd: SKILL_SANDBOX_HOME,
+    });
+  } else {
+    throw new Error(
+      "mountAndResolve requires a conversation or an isolation scope",
+    );
+  }
 
   try {
     await skillSandboxRuntimeService.mountSkill({
@@ -159,4 +184,33 @@ async function mountAndResolve(params: {
   // the mount did not land for this skill (name collision / transient failure):
   // show the latest version read-only, never advertising sandbox runnability.
   return { version: latest, mounted: false };
+}
+
+/**
+ * The default sandbox the caller's scope resolves to, without creating one:
+ * the conversation's default sandbox in chat, the execution's sandbox in
+ * headless runs, null when neither scope applies or nothing was created yet.
+ */
+async function findDefaultSandboxForScope(params: {
+  organizationId: string;
+  userId: string | undefined;
+  conversationId: string | undefined;
+  isolationKey?: string;
+}): Promise<SkillSandbox | null> {
+  if (!params.userId) return null;
+  if (params.conversationId) {
+    return await SkillSandboxModel.findDefault({
+      organizationId: params.organizationId,
+      userId: params.userId,
+      conversationId: params.conversationId,
+    });
+  }
+  if (params.isolationKey) {
+    return await executionSandboxRegistry.findDefault({
+      organizationId: params.organizationId,
+      userId: params.userId,
+      isolationKey: params.isolationKey,
+    });
+  }
+  return null;
 }

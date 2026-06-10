@@ -32,6 +32,7 @@ from typing import Literal
 from contracts import (
     ConditionOperator,
     ContractError,
+    HookEvent,
     JsonValue,
     PolicyAction,
     Provider,
@@ -132,6 +133,16 @@ class ToolInvocationPolicyCreate:
     conditions: list[PolicyCondition]
     action: PolicyAction
     reason: str | None = None
+
+
+@dataclass(frozen=True)
+class HookCreate:
+    agentId: str
+    event: HookEvent
+    fileName: str
+    content: str
+    requirements: list[str] = field(default_factory=list)
+    enabled: bool = True
 
 
 def to_payload(obj: object) -> dict[str, JsonValue]:
@@ -340,6 +351,22 @@ class ArchestraClient:
             self._request("POST", "/api/autonomy-policies/tool-invocation", json_body=to_payload(payload)),
             ctx="POST /api/autonomy-policies/tool-invocation",
         )
+
+    # --- lifecycle hooks -------------------------------------------------------------------
+
+    def list_hooks(self, agent_id: str) -> list[dict[str, JsonValue]]:
+        return _items(self._request("GET", "/api/hooks", params={"agentId": agent_id}))
+
+    def create_hook(self, payload: HookCreate) -> dict[str, JsonValue]:
+        return require_dict(self._request("POST", "/api/hooks", json_body=to_payload(payload)),
+                            ctx="POST /api/hooks")
+
+    def agent_hooks_enabled(self) -> bool:
+        """whether the instance's agent-hooks feature is on (env flag AND the sandbox runtime).
+        When off, POST /api/hooks still persists hooks but they never fire and are hidden in the UI."""
+        config = require_dict(self._request("GET", "/api/config"), ctx="GET /api/config")
+        features = config.get("features")
+        return bool(features.get("agentHooksEnabled")) if isinstance(features, dict) else False
 
 
 # --- response decoding & shape helpers -----------------------------------------------------

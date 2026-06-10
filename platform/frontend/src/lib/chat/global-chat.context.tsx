@@ -42,8 +42,10 @@ import {
   shouldFreezeChatMessages,
 } from "@/lib/chat/chat-session-utils";
 import {
+  applyTextEditToMessages,
   getChatExternalAgentId,
   getConversationDisplayTitle,
+  resolveCanonicalMessageId,
 } from "@/lib/chat/chat-utils";
 import {
   extractSwapTargetAgentName,
@@ -972,11 +974,25 @@ function ChatSessionHook({
       partIndex: number;
       text: string;
     }) => {
+      // Snapshot the live thread before touching any state — it is the only
+      // place that knows the live↔saved id mapping for in-session messages
+      // (metadata.persistedMessageId, stamped by mergePersistedMessageMetadata).
+      const liveMessages = previousMessagesRef.current;
+
       // Persist the (possibly edited) text and get the saved thread back, which
       // carries each message under its DB id.
       const data = await updateChatMessageAsync({ messageId, partIndex, text });
       const canonical = data?.messages as UIMessage[] | undefined;
-      const anchor = canonical?.find((m) => m.id === messageId);
+      // In-session messages keep their AI SDK nanoid as the live id while the
+      // saved thread keys them by DB UUID, so a plain id lookup misses them.
+      // Resolve through metadata.persistedMessageId too — otherwise the first
+      // edit before a reload falls into the regenerate-in-place path below and
+      // re-sends the pre-edit text, making the model answer the old prompt.
+      const anchorId = resolveCanonicalMessageId({
+        messageId,
+        liveMessages,
+        canonicalMessages: canonical,
+      });
 
       // Break the restore-on-regression chain before regenerating, like the
       // auto-retry and 409-reattach paths do: regenerate() rebuilds the edited
@@ -988,11 +1004,11 @@ function ChatSessionHook({
       // snapshot is taken.
       previousMessagesRef.current = [];
 
-      if (canonical && anchor) {
+      if (canonical && anchorId) {
         // Normal path: the message is persisted. Sync to the saved thread and
         // regenerate from it. The server replaces the turn atomically.
         setMessages(canonical);
-        void regenerate({ messageId: anchor.id });
+        void regenerate({ messageId: anchorId });
         return;
       }
 
@@ -1000,7 +1016,17 @@ function ChatSessionHook({
       // After switching agents the target message can still be in-session: its
       // id is an AI SDK nanoid, so it isn't found in the saved thread above.
       // Regenerate in place using the live id (the backend matches it to the
-      // stored row by content id).
+      // stored row by content id). Apply the edited text to the live message
+      // first: regenerate() re-sends the live thread, which otherwise still
+      // holds the pre-edit text.
+      setMessages((current) =>
+        applyTextEditToMessages({
+          messages: current,
+          messageId,
+          partIndex,
+          text,
+        }),
+      );
       void regenerate({ messageId });
     },
     [updateChatMessageAsync, setMessages, regenerate],

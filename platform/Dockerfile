@@ -2,7 +2,7 @@
 # the Alpine packages/binaries have historically lagged on Go patch releases, so
 # we compile these tools ourselves to pick up upstream fixes without local vendoring hacks.
 ARG GOLANG_IMAGE=golang:1.25.11-alpine@sha256:c05ba4b73604069d376c4f41346b05374335b5ca0c46fb6dfede5a59f5196931
-ARG NODE_IMAGE=node:24-alpine3.23@sha256:7fddd9ddeae8196abf4a3ef2de34e11f7b1a722119f91f28ddf1e99dcafdf114
+ARG NODE_IMAGE=node:24-alpine3.23@sha256:2bdb65ed1dab192432bc31c95f94155ca5ad7fc1392fb7eb7526ab682fa5bf14
 ARG KIND_VERSION=v0.31.0
 ARG KIND_COMMIT=a323333ff9efd8099f95a8a6b5c86c75a210d00f
 ARG DOCKER_CLI_VERSION=v29.3.0

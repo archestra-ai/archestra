@@ -34,6 +34,7 @@ export function NgrokSetupDialog({
   const connectNgrok = useConnectNgrok();
   const { data: savedConfig } = useNgrokConfig(open);
   const [authToken, setAuthToken] = useState("");
+  const [tokenFocused, setTokenFocused] = useState(false);
   const [domain, setDomain] = useState("");
   const [domainTouched, setDomainTouched] = useState(false);
 
@@ -41,6 +42,10 @@ export function NgrokSetupDialog({
   // field is left empty — it is never sent back to the browser.
   const hasSavedToken = !!savedConfig?.hasAuthToken;
   const canConnect = !!authToken.trim() || hasSavedToken;
+  // Show bullets as the field value (not just placeholder) so a saved token
+  // reads as prefilled. They only render while the field is blurred and
+  // empty, so they can never be submitted as the token itself.
+  const showSavedTokenMask = hasSavedToken && !tokenFocused && !authToken;
 
   useEffect(() => {
     if (open && savedConfig && !domainTouched) {
@@ -52,6 +57,7 @@ export function NgrokSetupDialog({
     onOpenChange(value);
     if (!value) {
       setAuthToken("");
+      setTokenFocused(false);
       setDomain("");
       setDomainTouched(false);
     }
@@ -73,7 +79,10 @@ export function NgrokSetupDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent
+        className="sm:max-w-lg"
+        onOpenAutoFocus={(e) => e.preventDefault()}
+      >
         <DialogHeader>
           <DialogTitle>Connect {appName} to ngrok</DialogTitle>
           <DialogDescription>
@@ -84,21 +93,23 @@ export function NgrokSetupDialog({
         <DialogBody className="space-y-4 p-3">
           <div className="space-y-1.5">
             <Input
-              // text + -webkit-text-security keeps the token masked without
-              // tripping password-manager autofill (Safari ignores
-              // autoComplete hints on type="password" inputs)
+              // plain text on purpose: -webkit-text-security masking makes
+              // iCloud Passwords treat the field as a password input and
+              // pop its AutoFill prompt over the dialog
               type="text"
               autoComplete="off"
               data-1p-ignore
               data-lpignore="true"
-              className="[-webkit-text-security:disc]"
+              data-bwignore
               placeholder={
                 hasSavedToken
-                  ? "•••••••• (saved token will be reused)"
+                  ? "leave empty to reuse the saved token"
                   : "ngrok auth token"
               }
-              value={authToken}
+              value={showSavedTokenMask ? "••••••••" : authToken}
               onChange={(e) => setAuthToken(e.target.value)}
+              onFocus={() => setTokenFocused(true)}
+              onBlur={() => setTokenFocused(false)}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && canConnect) handleConnect();
               }}

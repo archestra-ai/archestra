@@ -62,10 +62,10 @@ export function useEnterpriseFeature(feature: EnterpriseFeatureKey): boolean {
   return data.enterpriseFeatures[feature] ?? false;
 }
 
-export function usePublicBaseUrl(): string {
+export function usePublicBaseUrl(options?: { ignoreNgrok?: boolean }): string {
   const { data, isLoading } = useConfig();
   if (isLoading || !data) return "";
-  if (data.features.ngrokDomain) {
+  if (!options?.ignoreNgrok && data.features.ngrokDomain) {
     const domain = data.features.ngrokDomain.replace(/^https?:\/\//, "");
     return `https://${domain}`;
   }

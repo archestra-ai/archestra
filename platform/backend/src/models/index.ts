@@ -67,6 +67,7 @@ export { default as SkillFileModel } from "./skill-file";
 export {
   default as SkillSandboxModel,
   SkillInvalidFilePathError,
+  SkillSandboxConversationGoneError,
 } from "./skill-sandbox";
 export { default as SkillSandboxFileModel } from "./skill-sandbox-file";
 export { default as SkillSandboxReplayEventModel } from "./skill-sandbox-replay-event";

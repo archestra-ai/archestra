@@ -7,6 +7,7 @@ import type {
   SkillSandboxSkillMount,
   SkillVersionFile,
 } from "@/types";
+import { normalizeByteaField } from "@/utils/normalize-bytea";
 
 /** Bytes for an uploaded input file, written into the replay log. */
 interface UploadInput {
@@ -123,7 +124,7 @@ class SkillSandboxReplayEventModel {
         kind: "upload",
         fileId: row.id,
       });
-      return normalizeFileData(row);
+      return normalizeByteaField(row, "data");
     });
   }
 
@@ -309,7 +310,7 @@ class SkillSandboxReplayEventModel {
           return {
             kind: "upload",
             sequence: row.sequence,
-            upload: normalizeFileData(row.upload),
+            upload: normalizeByteaField(row.upload, "data"),
           };
         case "skill_mount":
           if (!row.mount || row.versionContent == null) {
@@ -359,13 +360,4 @@ async function allocateSequence(
     );
   }
   return row.next - 1;
-}
-
-/**
- * pg returns `bytea` as Buffer; PGlite returns Uint8Array. Callers rely on
- * Buffer semantics (`.toString("base64")`), so normalize at the read boundary.
- */
-function normalizeFileData(row: SkillSandboxFile): SkillSandboxFile {
-  if (Buffer.isBuffer(row.data)) return row;
-  return { ...row, data: Buffer.from(row.data as unknown as Uint8Array) };
 }

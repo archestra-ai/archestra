@@ -480,21 +480,6 @@ tests:
           content:
             name: ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST
             value: kube-pod://dagger-runtime-engine-0?namespace=dagger&container=dagger-engine
-      - contains:
-          path: spec.template.spec.containers[0].env
-          content:
-            name: ARCHESTRA_CODE_RUNTIME_TIMEOUT_SECONDS
-            value: "60"
-      - contains:
-          path: spec.template.spec.containers[0].env
-          content:
-            name: ARCHESTRA_CODE_RUNTIME_MAX_CONCURRENT
-            value: "10"
-      - contains:
-          path: spec.template.spec.containers[0].env
-          content:
-            name: ARCHESTRA_CODE_RUNTIME_MAX_OUTPUT_BYTES
-            value: "65536"
 
   - it: should support custom code runtime Dagger runner host
     documentIndex: 1

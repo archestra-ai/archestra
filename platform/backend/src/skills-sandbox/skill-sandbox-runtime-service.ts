@@ -17,6 +17,7 @@ import {
 import { assertMountedSkillsReadable } from "@/skills/assert-mounted-skills-readable";
 import type { SkillSandbox } from "@/types";
 import { asSandboxId, type SandboxId } from "@/types";
+import { shellQuote } from "@/utils/shell-quote";
 import { resolveArtifactMime } from "./mime-sniff";
 import {
   SKILL_SANDBOX_ATTACHMENTS_DIR,
@@ -31,6 +32,7 @@ import {
   type MountRef,
   type MountSkillParams,
   type RunCommandParams,
+  type SandboxCaller,
   SKILL_SANDBOX_LIMITS,
   SkillSandboxError,
   type UploadFileParams,
@@ -53,6 +55,14 @@ const ATTACHMENTS_DIR = SKILL_SANDBOX_ATTACHMENTS_DIR;
 // subsequent calls hit Dagger's layer cache and finish in ms.
 const REQUIREMENTS_INSTALL_TIMEOUT_SECONDS = 180;
 
+/** per-sandbox serialization chain plus its queued-operation count. */
+interface SandboxQueueState {
+  /** settles once every queued operation has finished; never rejects. */
+  tail: Promise<unknown>;
+  /** operations queued or running; the entry is dropped when the last one settles. */
+  pending: number;
+}
+
 /**
  * Orchestrates DB-backed skill sandboxes: loads snapshots + replay log,
  * delegates execution to the unified `sandboxRuntimeService`, appends the
@@ -64,9 +74,7 @@ const REQUIREMENTS_INSTALL_TIMEOUT_SECONDS = 180;
  */
 class SkillSandboxRuntimeService {
   // per-sandbox promise chain: ensures load + exec + append are atomic per sandbox.
-  private readonly sandboxQueues = new Map<string, Promise<unknown>>();
-  // per-sandbox pending counter for queue capacity enforcement.
-  private readonly sandboxPendingCounts = new Map<string, number>();
+  private readonly sandboxQueues = new Map<SandboxId, SandboxQueueState>();
 
   get isEnabled(): boolean {
     return config.skillsSandbox.enabled && sandboxRuntimeService.isEnabled;
@@ -90,14 +98,12 @@ class SkillSandboxRuntimeService {
     validateCommand(params.command);
     const timeoutSeconds = this.resolveTimeout(params.timeoutSeconds);
 
-    return this.runExclusive(params.sandboxId, async () => {
-      const sandbox = await this.loadSandbox(params.sandboxId);
-      await this.assertMountsReadable(params.sandboxId, params.caller);
-      // stage chat attachments before building context so they're part of this
-      // run's replay (the model sees them under /home/sandbox/attachments/).
-      const stagingNotices = await stageConversationAttachments(sandbox);
+    return this.runWithSandbox(params.sandboxId, async (sandbox) => {
+      const { stagingNotices, replayEntries } = await this.prepareExecution(
+        sandbox,
+        params.caller,
+      );
       const cwd = params.cwd ?? sandbox.defaultCwd;
-      const { replayEntries } = await this.buildContext(sandbox);
 
       let executed: Awaited<
         ReturnType<typeof sandboxRuntimeService.runCommand>
@@ -182,15 +188,15 @@ class SkillSandboxRuntimeService {
   async exportArtifact(params: ExportArtifactParams): Promise<ArtifactRef> {
     this.ensureEnabled();
 
-    return this.runExclusive(params.sandboxId, async () => {
-      const sandbox = await this.loadSandbox(params.sandboxId);
-      await this.assertMountsReadable(params.sandboxId, params.caller);
-      const stagingNotices = await stageConversationAttachments(sandbox);
+    return this.runWithSandbox(params.sandboxId, async (sandbox) => {
+      const { stagingNotices, replayEntries } = await this.prepareExecution(
+        sandbox,
+        params.caller,
+      );
       const resolvedPath = resolveArtifactPath({
         path: params.path,
         defaultCwd: sandbox.defaultCwd,
       });
-      const { replayEntries } = await this.buildContext(sandbox);
 
       let artifact: Awaited<
         ReturnType<typeof sandboxRuntimeService.readArtifact>
@@ -254,8 +260,7 @@ class SkillSandboxRuntimeService {
   async uploadFile(params: UploadFileParams): Promise<UploadRef> {
     this.ensureEnabled();
 
-    return this.runExclusive(params.sandboxId, async () => {
-      const sandbox = await this.loadSandbox(params.sandboxId);
+    return this.runWithSandbox(params.sandboxId, async (sandbox) => {
       const resolvedPath = resolveArtifactPath({
         path: params.path,
         defaultCwd: sandbox.defaultCwd,
@@ -350,9 +355,7 @@ class SkillSandboxRuntimeService {
   async mountSkill(params: MountSkillParams): Promise<MountRef | null> {
     this.ensureEnabled();
 
-    return this.runExclusive(params.sandboxId, async () => {
-      const sandbox = await this.loadSandbox(params.sandboxId);
-
+    return this.runWithSandbox(params.sandboxId, async (sandbox) => {
       const files = await SkillVersionModel.findFiles(
         params.skill.skillVersionId,
       );
@@ -443,6 +446,38 @@ class SkillSandboxRuntimeService {
       throw new SkillSandboxError(`sandbox ${sandboxId} does not exist`);
     }
     return sandbox;
+  }
+
+  /**
+   * Shared per-operation ceremony: serialize on the sandbox queue, then load
+   * the sandbox row inside the critical section so `fn` observes a replay
+   * state no concurrent operation can move under it.
+   */
+  private runWithSandbox<T>(
+    sandboxId: SandboxId,
+    fn: (sandbox: SkillSandbox) => Promise<T>,
+  ): Promise<T> {
+    return this.runExclusive(sandboxId, async () =>
+      fn(await this.loadSandbox(sandboxId)),
+    );
+  }
+
+  /**
+   * Shared pre-flight for the two operations that materialize a container
+   * (`runCommand`, `exportArtifact`): fail closed if any mounted skill is no
+   * longer readable by the caller, stage chat attachments so they're part of
+   * this run's replay (the model sees them under the attachments dir), and
+   * load the replay context. The append-only recipe mutations (`uploadFile`,
+   * `mountSkill`) deliberately skip this — see {@link SandboxCaller}.
+   */
+  private async prepareExecution(
+    sandbox: SkillSandbox,
+    caller: SandboxCaller,
+  ): Promise<{ stagingNotices: string[]; replayEntries: ReplayEntry[] }> {
+    await this.assertMountsReadable(asSandboxId(sandbox.id), caller);
+    const stagingNotices = await stageConversationAttachments(sandbox);
+    const { replayEntries } = await this.buildContext(sandbox);
+    return { stagingNotices, replayEntries };
   }
 
   /**
@@ -593,49 +628,53 @@ class SkillSandboxRuntimeService {
    * Serializes operations on the same sandbox so concurrent calls observe a
    * consistent replay state. Also enforces a per-sandbox queue cap.
    */
-  private runExclusive<T>(sandboxId: string, fn: () => Promise<T>): Promise<T> {
-    const pending = this.sandboxPendingCounts.get(sandboxId) ?? 0;
-    if (pending >= SKILL_SANDBOX_LIMITS.maxSandboxQueueLength) {
+  private runExclusive<T>(
+    sandboxId: SandboxId,
+    fn: () => Promise<T>,
+  ): Promise<T> {
+    const state = this.sandboxQueues.get(sandboxId);
+    if (state && state.pending >= SKILL_SANDBOX_LIMITS.maxSandboxQueueLength) {
       return Promise.reject(
         new SkillSandboxError(
           "too many requests are already queued for this sandbox",
         ),
       );
     }
-    this.sandboxPendingCounts.set(sandboxId, pending + 1);
 
-    const prev = this.sandboxQueues.get(sandboxId) ?? Promise.resolve();
+    const prev = state?.tail ?? Promise.resolve();
     const next = prev.then(
       () => fn(),
       () => fn(),
     );
     const counted = next.then(
       (v) => {
-        this.decrementSandboxPending(sandboxId);
+        this.releaseQueueSlot(sandboxId);
         return v;
       },
       (e) => {
-        this.decrementSandboxPending(sandboxId);
+        this.releaseQueueSlot(sandboxId);
         throw e;
       },
     );
-    const tail = counted.catch(() => {});
-    this.sandboxQueues.set(sandboxId, tail);
-    tail.then(() => {
-      if (this.sandboxQueues.get(sandboxId) === tail) {
-        this.sandboxQueues.delete(sandboxId);
-      }
+    this.sandboxQueues.set(sandboxId, {
+      tail: counted.catch(() => {}),
+      pending: (state?.pending ?? 0) + 1,
     });
     return counted;
   }
 
-  private decrementSandboxPending(sandboxId: string): void {
-    const count = this.sandboxPendingCounts.get(sandboxId) ?? 0;
-    if (count <= 1) {
-      this.sandboxPendingCounts.delete(sandboxId);
-    } else {
-      this.sandboxPendingCounts.set(sandboxId, count - 1);
+  /**
+   * Slots are released in settle order, one per queued operation, so the
+   * entry's pending count reaches 0 exactly when the chain has drained — at
+   * which point the whole entry is dropped and the map cannot leak.
+   */
+  private releaseQueueSlot(sandboxId: SandboxId): void {
+    const state = this.sandboxQueues.get(sandboxId);
+    if (!state || state.pending <= 1) {
+      this.sandboxQueues.delete(sandboxId);
+      return;
     }
+    state.pending -= 1;
   }
 }
 
@@ -666,10 +705,6 @@ function validateCommand(command: string): void {
   }
 }
 
-function shellQuote(value: string): string {
-  return `'${value.replace(/'/g, "'\\''")}'`;
-}
-
 /**
  * Reject a sandbox path with a stable reason code logged for audit. The raw
  * path stays in the model-facing message only — never in the structured log —
@@ -680,6 +715,13 @@ function rejectPath(reason: string, message: string): never {
   throw new SkillSandboxError(message);
 }
 
+/**
+ * TS-side path checks reject bad input at the tool call for an early,
+ * friendly error and to keep unreplayable events out of the log; the Rust
+ * boundary (`archestra-rs/sandbox-core/src/validation.rs`) re-validates
+ * everything and stays authoritative. Mirrored test vectors in this file's
+ * test twin and in `validation.rs` keep the two implementations in sync.
+ */
 function resolveArtifactPath(params: {
   path: string;
   defaultCwd: string;

@@ -186,6 +186,7 @@ const registry = defineArchestraTools([
         organizationId: ctx.organizationId,
         userId: ctx.userId,
         conversationId: context.conversationId,
+        isolationKey: context.isolationKey,
         canRunSandbox,
       });
       if (!activation) {
@@ -258,6 +259,7 @@ const registry = defineArchestraTools([
         organizationId: ctx.organizationId,
         userId: ctx.userId,
         conversationId: context.conversationId,
+        isolationKey: context.isolationKey,
       });
       const file = version
         ? await SkillVersionModel.findFileByPath(version.id, args.path)

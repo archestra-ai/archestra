@@ -537,4 +537,10 @@ export interface NgrokDbConfig {
   authToken: string;
   /** Optional reserved domain for a stable public URL across restarts. */
   domain: string;
+  /**
+   * False when the user explicitly stopped the tunnel — credentials are kept
+   * for reconnecting, but the tunnel must not come back up on restart.
+   * Missing (older rows) means enabled.
+   */
+  enabled?: boolean;
 }

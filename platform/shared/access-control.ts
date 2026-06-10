@@ -1127,6 +1127,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.DisconnectNgrok]: {
     agentTrigger: ["update"],
   },
+  [RouteId.GetNgrokConfig]: {
+    agentTrigger: ["read"],
+  },
   [RouteId.RefreshChatOpsChannelDiscovery]: {
     agentTrigger: ["read"],
   },

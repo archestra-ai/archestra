@@ -69,14 +69,24 @@ class NgrokTunnelManager {
     await ChatOpsConfigModel.saveNgrokConfig({
       authToken: params.authToken,
       domain,
+      enabled: true,
     });
     return this.publicDomain;
   }
 
-  /** Tear down the tunnel and forget the persisted credentials. */
+  /**
+   * Tear down the tunnel and mark the config disabled. Credentials are kept so
+   * a later reconnect can reuse them, but the disabled marker prevents
+   * `initialize()` (and the env var) from bringing the tunnel back on restart.
+   */
   async stop(): Promise<void> {
     await this.disconnect();
-    await ChatOpsConfigModel.saveNgrokConfig({ authToken: "", domain: "" });
+    const stored = await ChatOpsConfigModel.getNgrokConfig().catch(() => null);
+    await ChatOpsConfigModel.saveNgrokConfig({
+      authToken: stored?.authToken ?? "",
+      domain: stored?.domain ?? "",
+      enabled: false,
+    });
   }
 
   /** Close the active tunnel on shutdown, keeping persisted credentials. */
@@ -87,11 +97,18 @@ class NgrokTunnelManager {
   private async resolveConfig(): Promise<NgrokDbConfig | null> {
     // DB config (set via the UI) takes precedence; the env var seeds the
     // initial value for non-interactive deployments.
-    const dbConfig = await ChatOpsConfigModel.getNgrokConfig().catch((error) => {
-      logger.warn({ err: error }, "Failed to read ngrok config from DB");
-      return null;
-    });
-    if (dbConfig?.authToken) return dbConfig;
+    const dbConfig = await ChatOpsConfigModel.getNgrokConfig().catch(
+      (error) => {
+        logger.warn({ err: error }, "Failed to read ngrok config from DB");
+        return null;
+      },
+    );
+    if (dbConfig) {
+      // An explicit stop must stick across restarts — don't fall through to
+      // the env var either, or it would resurrect a tunnel the user shut down.
+      if (dbConfig.enabled === false) return null;
+      if (dbConfig.authToken) return dbConfig;
+    }
 
     const { authToken, domain } = config.ngrok;
     return authToken ? { authToken, domain } : null;

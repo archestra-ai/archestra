@@ -1,7 +1,15 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { handleApiError } from "@/lib/utils";
+
+export function useNgrokConfig(enabled = true) {
+  return useQuery({
+    queryKey: ["chatops", "ngrok-config"],
+    queryFn: async () => (await archestraApiSdk.getNgrokConfig()).data ?? null,
+    enabled,
+  });
+}
 
 export function useUpdateChatOpsConfigInQuickstart() {
   const queryClient = useQueryClient();
@@ -64,6 +72,7 @@ export function useConnectNgrok() {
       );
       // Refresh config so the resolved ngrok domain (and setup status) update.
       queryClient.invalidateQueries({ queryKey: ["config"] });
+      queryClient.invalidateQueries({ queryKey: ["chatops", "ngrok-config"] });
     },
     onError: (error) => {
       console.error("ngrok connect error:", error);
@@ -90,6 +99,7 @@ export function useDisconnectNgrok() {
       }
       toast.success("ngrok tunnel stopped");
       queryClient.invalidateQueries({ queryKey: ["config"] });
+      queryClient.invalidateQueries({ queryKey: ["chatops", "ngrok-config"] });
     },
     onError: (error) => {
       console.error("ngrok disconnect error:", error);

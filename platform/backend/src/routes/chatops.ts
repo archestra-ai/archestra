@@ -1290,7 +1290,8 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description: "Connect an ngrok tunnel for inbound chatops webhooks",
         tags: ["ChatOps"],
         body: z.object({
-          authToken: z.string().min(1).max(512),
+          // Omitted = reuse the saved token (reconnect after a Stop).
+          authToken: z.string().max(512).optional(),
           domain: z.string().max(256).optional(),
         }),
         response: constructResponseSchema(
@@ -1299,7 +1300,16 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
-      const { authToken, domain } = request.body;
+      const { domain } = request.body;
+      const authToken =
+        request.body.authToken ||
+        (await ChatOpsConfigModel.getNgrokConfig())?.authToken;
+      if (!authToken) {
+        throw new ApiError(
+          400,
+          "No ngrok auth token provided and none is saved — enter a token.",
+        );
+      }
 
       let publicDomain: string;
       try {
@@ -1331,6 +1341,30 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async (_request, reply) => {
       await ngrokTunnelManager.stop();
       return reply.send({ success: true });
+    },
+  );
+  /**
+   * Read the saved ngrok config for prefilling the connect dialog. The token
+   * itself is never returned — only whether one is saved.
+   */
+  fastify.get(
+    "/api/chatops/config/ngrok",
+    {
+      schema: {
+        operationId: RouteId.GetNgrokConfig,
+        description: "Get saved ngrok configuration (token redacted)",
+        tags: ["ChatOps"],
+        response: constructResponseSchema(
+          z.object({ hasAuthToken: z.boolean(), domain: z.string() }),
+        ),
+      },
+    },
+    async (_request, reply) => {
+      const stored = await ChatOpsConfigModel.getNgrokConfig();
+      return reply.send({
+        hasAuthToken: Boolean(stored?.authToken),
+        domain: stored?.domain ?? "",
+      });
     },
   );
   /**

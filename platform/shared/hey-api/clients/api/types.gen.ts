@@ -23176,9 +23176,93 @@ export type DisconnectNgrokResponses = {
 
 export type DisconnectNgrokResponse = DisconnectNgrokResponses[keyof DisconnectNgrokResponses];
 
+export type GetNgrokConfigData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/chatops/config/ngrok';
+};
+
+export type GetNgrokConfigErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetNgrokConfigError = GetNgrokConfigErrors[keyof GetNgrokConfigErrors];
+
+export type GetNgrokConfigResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        hasAuthToken: boolean;
+        domain: string;
+    };
+};
+
+export type GetNgrokConfigResponse = GetNgrokConfigResponses[keyof GetNgrokConfigResponses];
+
 export type ConnectNgrokData = {
     body: {
-        authToken: string;
+        authToken?: string;
         domain?: string;
     };
     path?: never;

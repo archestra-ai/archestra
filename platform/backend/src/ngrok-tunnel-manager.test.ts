@@ -88,6 +88,20 @@ describe("NgrokTunnelManager", () => {
     expect(ngrokTunnelManager.getPublicDomain()).toBe("my-app.ngrok.app");
   });
 
+  test("initialize skips a config the user explicitly stopped, even with an env token", async () => {
+    config.ngrok.authToken = "env_token";
+    mockGetNgrokConfig.mockResolvedValue({
+      authToken: "db_token",
+      domain: "",
+      enabled: false,
+    });
+
+    await ngrokTunnelManager.initialize();
+
+    expect(mockForward).not.toHaveBeenCalled();
+    expect(ngrokTunnelManager.getPublicDomain()).toBe("");
+  });
+
   test("start connects and persists the credentials", async () => {
     mockForward.mockResolvedValue(listener("https://abc123.ngrok-free.dev"));
 
@@ -97,6 +111,7 @@ describe("NgrokTunnelManager", () => {
     expect(mockSaveNgrokConfig).toHaveBeenCalledWith({
       authToken: "tok_123",
       domain: "",
+      enabled: true,
     });
   });
 
@@ -110,16 +125,23 @@ describe("NgrokTunnelManager", () => {
     expect(ngrokTunnelManager.getPublicDomain()).toBe("");
   });
 
-  test("stop disconnects and clears the persisted credentials", async () => {
+  test("stop disconnects but keeps the credentials, marked disabled", async () => {
     mockForward.mockResolvedValue(listener("https://abc123.ngrok-free.dev"));
     await ngrokTunnelManager.start({ authToken: "tok_123" });
+    mockGetNgrokConfig.mockResolvedValue({
+      authToken: "tok_123",
+      domain: "my-app.ngrok.app",
+      enabled: true,
+    });
 
     await ngrokTunnelManager.stop();
 
     expect(ngrokTunnelManager.getPublicDomain()).toBe("");
+    // Credentials survive the stop so a later reconnect can reuse them.
     expect(mockSaveNgrokConfig).toHaveBeenLastCalledWith({
-      authToken: "",
-      domain: "",
+      authToken: "tok_123",
+      domain: "my-app.ngrok.app",
+      enabled: false,
     });
   });
 

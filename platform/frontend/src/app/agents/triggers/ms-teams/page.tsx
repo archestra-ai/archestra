@@ -1,11 +1,5 @@
 "use client";
-import {
-  CheckCircle2,
-  Globe,
-  Info,
-  type LucideIcon,
-  Waypoints,
-} from "lucide-react";
+import { Globe, Info, Waypoints } from "lucide-react";
 import { useState } from "react";
 import Divider from "@/components/divider";
 import { MsTeamsSetupDialog } from "@/components/ms-teams-setup-dialog";
@@ -15,11 +9,11 @@ import config from "@/lib/config/config";
 import { useConfig, usePublicBaseUrl } from "@/lib/config/config.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useAppName } from "@/lib/hooks/use-app-name";
-import { cn } from "@/lib/utils";
 import { ChannelsSection } from "../_components/channels-section";
 import { CollapsibleSetupSection } from "../_components/collapsible-setup-section";
 import { CredentialField } from "../_components/credential-field";
 import { LlmKeySetupStep } from "../_components/llm-key-setup-step";
+import { ModeTile } from "../_components/mode-tile";
 import { NgrokStatus } from "../_components/ngrok-status";
 import { SetupStep } from "../_components/setup-step";
 import type { ProviderConfig } from "../_components/types";
@@ -53,6 +47,9 @@ const msTeamsProviderConfig: ProviderConfig = {
 export default function MsTeamsPage() {
   const configuredAppName = useAppName();
   const publicBaseUrl = usePublicBaseUrl();
+  // The "I will expose myself" tile must show the instance's own origin, not
+  // the ngrok tunnel URL that usePublicBaseUrl prefers when a tunnel is up.
+  const manualWebhookBaseUrl = usePublicBaseUrl({ ignoreNgrok: true });
   const [msTeamsSetupOpen, setMsTeamsSetupOpen] = useState(false);
   const [ngrokDialogOpen, setNgrokDialogOpen] = useState(false);
 
@@ -85,7 +82,7 @@ export default function MsTeamsPage() {
           >
             <div className="flex flex-col gap-3">
               <div className="grid grid-cols-2 gap-2">
-                <ReachabilityTile
+                <ModeTile
                   selected={reachabilityMode === "manual"}
                   onSelect={() => selectReachabilityMode("manual")}
                   icon={Globe}
@@ -93,14 +90,14 @@ export default function MsTeamsPage() {
                   description={
                     <>
                       I will expose{" "}
-                      <code className="bg-muted px-1 py-0.5 rounded text-xs">
-                        {`${publicBaseUrl}/api/webhooks/chatops/ms-teams`}
+                      <code className="bg-muted px-1 py-0.5 rounded text-xs break-all">
+                        {`${manualWebhookBaseUrl}/api/webhooks/chatops/ms-teams`}
                       </code>{" "}
                       myself
                     </>
                   }
                 />
-                <ReachabilityTile
+                <ModeTile
                   selected={reachabilityMode === "ngrok"}
                   onSelect={() => {
                     selectReachabilityMode("ngrok");
@@ -178,42 +175,5 @@ export default function MsTeamsPage() {
         onOpenChange={setNgrokDialogOpen}
       />
     </div>
-  );
-}
-
-function ReachabilityTile({
-  selected,
-  onSelect,
-  icon: Icon,
-  title,
-  description,
-}: {
-  selected: boolean;
-  onSelect: () => void;
-  icon: LucideIcon;
-  title: string;
-  description: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onSelect}
-      aria-pressed={selected}
-      className={cn(
-        "relative flex flex-col items-start gap-1 rounded-lg border p-3 text-left transition-colors",
-        selected
-          ? "border-primary bg-primary/5"
-          : "border-input hover:bg-accent/50",
-      )}
-    >
-      {selected && (
-        <CheckCircle2 className="absolute top-2.5 right-2.5 size-4 text-primary" />
-      )}
-      <span className="flex items-center gap-2 text-sm font-medium text-foreground">
-        <Icon className="size-4 text-muted-foreground" />
-        {title}
-      </span>
-      <span className="text-xs text-muted-foreground">{description}</span>
-    </button>
   );
 }

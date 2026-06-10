@@ -148,7 +148,7 @@ export const TOOL_PERMISSIONS: Record<
   // plus that binding together confine a caller to apps it may use.
   create_app: { resource: "app", action: "create" },
   list_apps: { resource: "app", action: "read" },
-  get_app: { resource: "app", action: "read" },
+  render_app: { resource: "app", action: "read" },
   update_app: { resource: "app", action: "update" },
   delete_app: { resource: "app", action: "delete" },
   app_data_get: { resource: "app", action: "read" },

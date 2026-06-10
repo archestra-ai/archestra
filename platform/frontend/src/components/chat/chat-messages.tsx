@@ -1687,7 +1687,7 @@ const MessageTool = memo(
     const output = mcpOutput?.content ?? rawOutput;
     const errorText = getToolErrorText({ part, toolResultPart });
 
-    // Owned-app management result (create/update/get_app): mount the
+    // Owned-app management result (create/update/render_app): mount the
     // app-bound runtime from structuredContent.id. Standard UI resources,
     // errors, and denials take priority — those results keep their text.
     const ownedApp =

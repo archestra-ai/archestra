@@ -66,7 +66,7 @@ const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
- * Detect an owned-app render: a successful `create_app`/`update_app`/`get_app`
+ * Detect an owned-app render: a successful `create_app`/`update_app`/`render_app`
  * result identifies an Archestra-authored MCP App via `structuredContent.id`,
  * and chat mounts the app-bound runtime from that id. Only archestra-branded
  * tool names match — a foreign server exposing a tool with the same short name
@@ -286,7 +286,7 @@ export function identifyCompactToolGroups(
     // Also skip tools identified as MCP Apps via early UI start or earlyToolUiStarts
     if (part.toolCallId && mcpAppCallIds.has(part.toolCallId)) continue;
     // Owned-app renders escape compaction by OUTPUT, not name, so a run_tool
-    // dispatch targeting create/update/get_app is covered too (its raw name
+    // dispatch targeting create/update/render_app is covered too (its raw name
     // is run_tool, which nonCompactToolNames deliberately does not contain).
     if (
       options?.getToolShortName &&

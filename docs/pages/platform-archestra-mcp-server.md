@@ -68,7 +68,7 @@ Required RBAC permission: `agent:create`
 | `labels[].key` | `string` | Yes |  |
 | `labels[].value` | `string` | Yes |  |
 | `teams` | `string[]` | No | Team IDs to attach when creating a team-scoped resource. |
-| `toolExposureMode` | `"full" \| "search_and_run_only"` | No | How tools should be loaded for MCP clients and models. Use 'search_and_run_only' to keep the initial tool list small while letting search_tools find assigned tools and run_tool execute them. Assigned skill discovery/activation tools (list_skills, activate_skill, read_skill_file) and sandbox runtime tools (run_command, download_file, upload_file) stay directly available in both modes. |
+| `toolExposureMode` | `"full" \| "search_and_run_only"` | No | How tools should be loaded for MCP clients and models. Use 'search_and_run_only' to keep the initial tool list small while letting search_tools find assigned tools and run_tool execute them. Assigned skill discovery/activation tools (list_skills, activate_skill, read_skill_file), sandbox runtime tools (run_command, download_file, upload_file), and app tools (create_app, update_app, render_app, list_apps) stay directly available in both modes. |
 | `description` | `string \| null` | No | Optional human-readable description of the agent. |
 | `icon` | `string \| null` | No | Optional emoji icon for the agent. |
 | `knowledgeBaseIds` | `string[]` | No | Knowledge base IDs to assign to the agent. Use get_knowledge_bases first when you need to look up IDs by name. |
@@ -214,7 +214,7 @@ Required RBAC permission: `llmProxy:create`
 | `labels[].key` | `string` | Yes |  |
 | `labels[].value` | `string` | Yes |  |
 | `teams` | `string[]` | No | Team IDs to attach when creating a team-scoped resource. |
-| `toolExposureMode` | `"full" \| "search_and_run_only"` | No | How tools should be loaded for MCP clients and models. Use 'search_and_run_only' to keep the initial tool list small while letting search_tools find assigned tools and run_tool execute them. Assigned skill discovery/activation tools (list_skills, activate_skill, read_skill_file) and sandbox runtime tools (run_command, download_file, upload_file) stay directly available in both modes. |
+| `toolExposureMode` | `"full" \| "search_and_run_only"` | No | How tools should be loaded for MCP clients and models. Use 'search_and_run_only' to keep the initial tool list small while letting search_tools find assigned tools and run_tool execute them. Assigned skill discovery/activation tools (list_skills, activate_skill, read_skill_file), sandbox runtime tools (run_command, download_file, upload_file), and app tools (create_app, update_app, render_app, list_apps) stay directly available in both modes. |
 
 
 #### get_llm_proxy
@@ -1649,7 +1649,7 @@ Required RBAC permission: `skill:update`
 |------|-------------|--------------------------|
 | `create_app` | Build an interactive app — a to-do list, dashboard, form, tracker, game, or any custom UI — from a single self-contained HTML document. | `app:create` |
 | `list_apps` | List apps visible to the caller, optionally filtered by name. | `app:read` |
-| `get_app` | Open an existing app by id, if the caller may view it. | `app:read` |
+| `render_app` | Render an existing app by id, if the caller may view it. | `app:read` |
 | `update_app` | Change an existing app's HTML and/or metadata. | `app:update` |
 | `delete_app` | Soft-delete an app the caller owns or administers. | `app:delete` |
 | `app_data_get` | Read a value from the calling app's data store. | `app:read` |
@@ -1713,7 +1713,7 @@ Required RBAC permission: `app:read`
 | `apps[].scope` | `"personal" \| "team" \| "org"` | Yes |  |
 | `apps[].latestVersion` | `number` | Yes |  |
 
-#### get_app
+#### render_app
 
 Required RBAC permission: `app:read`
 

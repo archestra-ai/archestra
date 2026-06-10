@@ -121,7 +121,7 @@ export const TOOL_UPLOAD_FILE_SHORT_NAME = "upload_file";
 // MCP Apps — authoring/management (chat) + per-app data store (app runtime).
 export const TOOL_CREATE_APP_SHORT_NAME = "create_app";
 export const TOOL_LIST_APPS_SHORT_NAME = "list_apps";
-export const TOOL_GET_APP_SHORT_NAME = "get_app";
+export const TOOL_RENDER_APP_SHORT_NAME = "render_app";
 export const TOOL_UPDATE_APP_SHORT_NAME = "update_app";
 export const TOOL_DELETE_APP_SHORT_NAME = "delete_app";
 export const TOOL_APP_DATA_GET_SHORT_NAME = "app_data_get";
@@ -203,7 +203,7 @@ export const ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_UPLOAD_FILE_SHORT_NAME,
   TOOL_CREATE_APP_SHORT_NAME,
   TOOL_LIST_APPS_SHORT_NAME,
-  TOOL_GET_APP_SHORT_NAME,
+  TOOL_RENDER_APP_SHORT_NAME,
   TOOL_UPDATE_APP_SHORT_NAME,
   TOOL_DELETE_APP_SHORT_NAME,
   TOOL_APP_DATA_GET_SHORT_NAME,
@@ -396,7 +396,11 @@ export const SKILL_ARCHESTRA_TOOL_SHORT_NAMES = [
  * exposure mode. skills and sandbox runtime interaction are
  * progressive-disclosure mechanisms, so hiding their discover/activate/read/run
  * and file-transfer path behind `search_tools`/`run_tool` would make the common
- * runtime flow depend on deferred tool loading.
+ * runtime flow depend on deferred tool loading. App tools stay top-level
+ * because "build me an app" intents compete with the model's default of
+ * writing code in the reply — the model won't search for a capability it
+ * doesn't know exists. delete_app stays behind search: destructive and never
+ * intent-time-critical.
  */
 export const ALWAYS_EXPOSED_ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_LIST_SKILLS_SHORT_NAME,
@@ -405,6 +409,10 @@ export const ALWAYS_EXPOSED_ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_RUN_COMMAND_SHORT_NAME,
   TOOL_DOWNLOAD_FILE_SHORT_NAME,
   TOOL_UPLOAD_FILE_SHORT_NAME,
+  TOOL_CREATE_APP_SHORT_NAME,
+  TOOL_UPDATE_APP_SHORT_NAME,
+  TOOL_RENDER_APP_SHORT_NAME,
+  TOOL_LIST_APPS_SHORT_NAME,
 ] as const satisfies readonly ArchestraToolShortName[];
 
 const ALWAYS_EXPOSED_ARCHESTRA_TOOL_SHORT_NAME_SET: ReadonlySet<string> =
@@ -426,7 +434,7 @@ export function isAlwaysExposedArchestraToolShortName(
 export const APP_RENDERING_ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_CREATE_APP_SHORT_NAME,
   TOOL_UPDATE_APP_SHORT_NAME,
-  TOOL_GET_APP_SHORT_NAME,
+  TOOL_RENDER_APP_SHORT_NAME,
 ] as const satisfies readonly ArchestraToolShortName[];
 
 const APP_RENDERING_ARCHESTRA_TOOL_SHORT_NAME_SET: ReadonlySet<string> =

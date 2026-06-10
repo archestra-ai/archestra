@@ -411,7 +411,7 @@ describe("extractOwnedAppRender", () => {
   it.each([
     "create_app",
     "update_app",
-    "get_app",
+    "render_app",
   ])("matches archestra__%s with a UUID structuredContent.id", (shortName) => {
     expect(
       extractOwnedAppRender({

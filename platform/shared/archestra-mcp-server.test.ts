@@ -83,7 +83,7 @@ describe("archestra MCP tool names", () => {
     expect(isAgentTool("archestra__whoami")).toBe(false);
   });
 
-  test("flags the skill and sandbox runtime path as always-exposed", () => {
+  test("flags the skill, sandbox, and app runtime path as always-exposed", () => {
     for (const shortName of [
       "list_skills",
       "activate_skill",
@@ -91,9 +91,15 @@ describe("archestra MCP tool names", () => {
       "run_command",
       "download_file",
       "upload_file",
+      "create_app",
+      "update_app",
+      "render_app",
+      "list_apps",
     ]) {
       expect(isAlwaysExposedArchestraToolShortName(shortName)).toBe(true);
     }
+    // destructive and never intent-time-critical, so it stays search-gated
+    expect(isAlwaysExposedArchestraToolShortName("delete_app")).toBe(false);
   });
 
   test("recognizes always-exposed tools through a white-label prefix", () => {

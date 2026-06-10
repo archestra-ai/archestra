@@ -8,8 +8,8 @@ import {
   TOOL_APP_DATA_SET_SHORT_NAME,
   TOOL_CREATE_APP_SHORT_NAME,
   TOOL_DELETE_APP_SHORT_NAME,
-  TOOL_GET_APP_SHORT_NAME,
   TOOL_LIST_APPS_SHORT_NAME,
+  TOOL_RENDER_APP_SHORT_NAME,
   TOOL_UPDATE_APP_SHORT_NAME,
 } from "@archestra/shared";
 import config from "@/config";
@@ -74,7 +74,7 @@ describe("app tool execution", () => {
     expect(structured(listed).apps.map((a: any) => a.id)).toContain(appId);
 
     const got = await executeArchestraTool(
-      getArchestraToolFullName(TOOL_GET_APP_SHORT_NAME),
+      getArchestraToolFullName(TOOL_RENDER_APP_SHORT_NAME),
       { appId },
       context,
     );

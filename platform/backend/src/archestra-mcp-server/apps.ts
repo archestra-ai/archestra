@@ -1,8 +1,8 @@
 import {
   TOOL_CREATE_APP_SHORT_NAME,
   TOOL_DELETE_APP_SHORT_NAME,
-  TOOL_GET_APP_SHORT_NAME,
   TOOL_LIST_APPS_SHORT_NAME,
+  TOOL_RENDER_APP_SHORT_NAME,
   TOOL_UPDATE_APP_SHORT_NAME,
 } from "@archestra/shared";
 import { z } from "zod";
@@ -211,10 +211,10 @@ const registry = defineArchestraTools([
     },
   }),
   defineArchestraTool({
-    shortName: TOOL_GET_APP_SHORT_NAME,
-    title: "Get App",
+    shortName: TOOL_RENDER_APP_SHORT_NAME,
+    title: "Render App",
     description:
-      "Open an existing app by id, if the caller may view it. Use this when the user asks to open, show, or get back to an app: when called from the chat UI the app is rendered inline in the conversation; its standalone page is /apps/<id>/run.",
+      "Render an existing app by id, if the caller may view it. Use this when the user asks to open, show, or get back to an app: when called from the chat UI the app is rendered inline in the conversation; its standalone page is /apps/<id>/run.",
     schema: GetAppSchema,
     outputSchema: AppSummaryOutputSchema,
     async handler({ args, context }) {

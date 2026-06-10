@@ -150,7 +150,7 @@ type SearchCandidate = {
 };
 
 // search_tools only runs in search_and_run_only mode. The meta tools and the
-// always-exposed runtime tools (skills + sandbox) are already top-level there,
+// always-exposed runtime tools (skills + sandbox + apps) are already top-level there,
 // so returning them as search results would be redundant noise. This set spans
 // both categories — not just meta tools — so it gates search-result membership,
 // not "is this a meta tool".

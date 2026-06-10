@@ -1602,7 +1602,7 @@ describe("buildArchestraToolOutput", () => {
   test.for([
     "create_app",
     "update_app",
-    "get_app",
+    "render_app",
   ] as const)("returns the rich shape for a direct %s result so chat can mount the app runtime", async (shortName, {
     makeAgent,
   }) => {

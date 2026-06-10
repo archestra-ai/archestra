@@ -1371,7 +1371,7 @@ describe("owned-app inline rendering", () => {
   it.each([
     "create_app",
     "update_app",
-    "get_app",
+    "render_app",
   ])("mounts the app-bound runtime for a branded %s result", (shortName) => {
     renderAppToolPart({ type: `tool-sparky__${shortName}` });
 

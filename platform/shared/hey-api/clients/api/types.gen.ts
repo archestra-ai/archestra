@@ -18036,6 +18036,10 @@ export type BedrockConverseWithDefaultAgentResponses = {
             totalTokens?: number;
             cacheReadInputTokens?: number;
             cacheWriteInputTokens?: number;
+            cacheDetails?: Array<{
+                ttl?: string;
+                inputTokens?: number;
+            }>;
         };
         metrics?: {
             latencyMs?: number;
@@ -18358,6 +18362,10 @@ export type BedrockConverseWithAgentResponses = {
             totalTokens?: number;
             cacheReadInputTokens?: number;
             cacheWriteInputTokens?: number;
+            cacheDetails?: Array<{
+                ttl?: string;
+                inputTokens?: number;
+            }>;
         };
         metrics?: {
             latencyMs?: number;
@@ -19073,6 +19081,10 @@ export type BedrockConverseWithAgentAndModelResponses = {
             totalTokens?: number;
             cacheReadInputTokens?: number;
             cacheWriteInputTokens?: number;
+            cacheDetails?: Array<{
+                ttl?: string;
+                inputTokens?: number;
+            }>;
         };
         metrics?: {
             latencyMs?: number;
@@ -27153,6 +27165,10 @@ export type GetInteractionsResponses = {
                     totalTokens?: number;
                     cacheReadInputTokens?: number;
                     cacheWriteInputTokens?: number;
+                    cacheDetails?: Array<{
+                        ttl?: string;
+                        inputTokens?: number;
+                    }>;
                 };
                 metrics?: {
                     latencyMs?: number;
@@ -29739,6 +29755,10 @@ export type GetInteractionResponses = {
                 totalTokens?: number;
                 cacheReadInputTokens?: number;
                 cacheWriteInputTokens?: number;
+                cacheDetails?: Array<{
+                    ttl?: string;
+                    inputTokens?: number;
+                }>;
             };
             metrics?: {
                 latencyMs?: number;

@@ -61841,6 +61841,21 @@
                         },
                         "cacheWriteInputTokens": {
                           "type": "number"
+                        },
+                        "cacheDetails": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "ttl": {
+                                "type": "string"
+                              },
+                              "inputTokens": {
+                                "type": "number"
+                              }
+                            },
+                            "additionalProperties": false
+                          }
                         }
                       },
                       "required": [
@@ -63108,6 +63123,21 @@
                         },
                         "cacheWriteInputTokens": {
                           "type": "number"
+                        },
+                        "cacheDetails": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "ttl": {
+                                "type": "string"
+                              },
+                              "inputTokens": {
+                                "type": "number"
+                              }
+                            },
+                            "additionalProperties": false
+                          }
                         }
                       },
                       "required": [
@@ -66014,6 +66044,21 @@
                         },
                         "cacheWriteInputTokens": {
                           "type": "number"
+                        },
+                        "cacheDetails": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "ttl": {
+                                "type": "string"
+                              },
+                              "inputTokens": {
+                                "type": "number"
+                              }
+                            },
+                            "additionalProperties": false
+                          }
                         }
                       },
                       "required": [
@@ -96502,6 +96547,21 @@
                                       },
                                       "cacheWriteInputTokens": {
                                         "type": "number"
+                                      },
+                                      "cacheDetails": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "object",
+                                          "properties": {
+                                            "ttl": {
+                                              "type": "string"
+                                            },
+                                            "inputTokens": {
+                                              "type": "number"
+                                            }
+                                          },
+                                          "additionalProperties": false
+                                        }
                                       }
                                     },
                                     "required": [
@@ -109814,6 +109874,21 @@
                                 },
                                 "cacheWriteInputTokens": {
                                   "type": "number"
+                                },
+                                "cacheDetails": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "ttl": {
+                                        "type": "string"
+                                      },
+                                      "inputTokens": {
+                                        "type": "number"
+                                      }
+                                    },
+                                    "additionalProperties": false
+                                  }
                                 }
                               },
                               "required": [

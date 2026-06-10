@@ -155,7 +155,8 @@ document.addEventListener("securitypolicyviolation", function(e) {\
 function injectCSP(html, cspValue) {
   var cspMeta = '<meta http-equiv="Content-Security-Policy" content="' + cspValue + '">';
   var violationListener = buildViolationListenerScript();
-  // Expose the served SDK URL so app templates can import it. APP_SDK_URL is
+  // Expose the served SDK URL so the injected Apps SDK can import it (apps
+  // themselves never touch it). APP_SDK_URL is
   // location.origin-derived (no user input), but JSON-encode defensively so it
   // can never break out of the inline script.
   var sdkGlobal = '<script>window.__ARCHESTRA_APP_SDK_URL__=' + JSON.stringify(APP_SDK_URL) + ';<\/script>';

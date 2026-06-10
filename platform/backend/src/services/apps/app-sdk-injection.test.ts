@@ -109,6 +109,18 @@ describe("injectAppSdk", () => {
     expect(result).toContain("\\u003c/script\\u003e");
   });
 
+  test("replace-substitution patterns in content are inert", () => {
+    // `$&` in a string replacement re-splices the matched anchor; `$'` splices
+    // the rest of the raw document — both would corrupt the bootstrap script
+    const result = injectAppSdk(COMPLETE_DOC, {
+      user: { id: "u1", name: "$& $' $$ $`" },
+      tools: [{ name: "t", description: "costs $$$ &c.", inputSchema: {} }],
+    });
+    expect(result).toContain('"name":"$& $\' $$ $`"');
+    expect(result).toContain('"costs $$$ &c."');
+    expect(countOccurrences(result, "<head>")).toBe(1);
+  });
+
   test("injects after uppercase <HEAD>", () => {
     const result = injectAppSdk("<HTML><HEAD></HEAD><BODY/></HTML>", CONTEXT);
     expect(result).toContain(`<HEAD><script ${BOOTSTRAP_MARKER}>`);

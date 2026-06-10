@@ -59,17 +59,27 @@ export function injectAppSdk(html: string, context: AppSdkContext): string {
   // its CSP + SDK URL at or before the document start in every combination,
   // i.e. always ahead of the bootstrap.
   // (\s[^>]*)? — attributes allowed, but never a longer tag name (<header>).
+  // Replacements use a function: the injection embeds attacker-influenced JSON
+  // (display names, tool descriptions), and a string replacement would expand
+  // `$&`/`$'`-style substitution patterns in it — splicing raw document text
+  // back into the inline script past the serializer's escaping.
   const head = /(<head(\s[^>]*)?>)/i.exec(html);
   if (head) {
-    return html.replace(head[1], `${head[1]}${injection}`);
+    return html.replace(head[1], () => `${head[1]}${injection}`);
   }
   const htmlTag = /(<html(\s[^>]*)?>)/i.exec(html);
   if (htmlTag) {
-    return html.replace(htmlTag[1], `${htmlTag[1]}<head>${injection}</head>`);
+    return html.replace(
+      htmlTag[1],
+      () => `${htmlTag[1]}<head>${injection}</head>`,
+    );
   }
   const doctype = /(<!DOCTYPE[^>]*>)/i.exec(html);
   if (doctype) {
-    return html.replace(doctype[1], `${doctype[1]}<head>${injection}</head>`);
+    return html.replace(
+      doctype[1],
+      () => `${doctype[1]}<head>${injection}</head>`,
+    );
   }
   return `${injection}${html}`;
 }

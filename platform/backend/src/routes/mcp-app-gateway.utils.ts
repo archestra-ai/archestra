@@ -89,13 +89,7 @@ export async function createAppServer(
   if (!app) throw new Error(`App not found: ${appId}`);
 
   server.setRequestHandler(ListToolsRequestSchema, async () => {
-    const candidates = await buildAppToolList(appId);
-    const permittedNames = await filterToolNamesByPermission(
-      candidates.map((t) => t.name),
-      tokenAuth.userId,
-      tokenAuth.organizationId,
-    );
-    const tools = candidates.filter((t) => permittedNames.has(t.name));
+    const tools = await buildPermittedAppToolList(appId, tokenAuth);
 
     try {
       await McpToolCallModel.create({
@@ -233,6 +227,24 @@ export async function createAppServer(
 }
 
 /**
+ * The app endpoint's tool list (assigned upstream tools + the App Data Store
+ * built-ins), RBAC-filtered for the viewing user. Shared by the MCP
+ * tools/list handler and the SDK bootstrap.
+ */
+async function buildPermittedAppToolList(
+  appId: string,
+  tokenAuth: TokenAuthContext,
+): Promise<McpListTool[]> {
+  const candidates = await buildAppToolList(appId);
+  const permittedNames = await filterToolNamesByPermission(
+    candidates.map((t) => t.name),
+    tokenAuth.userId,
+    tokenAuth.organizationId,
+  );
+  return candidates.filter((t) => permittedNames.has(t.name));
+}
+
+/**
  * The assigned-tool descriptors embedded into the SDK bootstrap for
  * `archestra.tools.list()`: only tools the app's HTML can actually call —
  * RBAC-permitted upstream tools that don't exclude the "app" surface via
@@ -243,18 +255,9 @@ async function buildAppSdkTools(
   appId: string,
   tokenAuth: TokenAuthContext,
 ): Promise<AppSdkTool[]> {
-  const candidates = await buildAppToolList(appId);
-  const permittedNames = await filterToolNamesByPermission(
-    candidates.map((t) => t.name),
-    tokenAuth.userId,
-    tokenAuth.organizationId,
-  );
-  return candidates
-    .filter(
-      (tool) =>
-        permittedNames.has(tool.name) &&
-        !archestraMcpBranding.isToolName(tool.name),
-    )
+  const permitted = await buildPermittedAppToolList(appId, tokenAuth);
+  return permitted
+    .filter((tool) => !archestraMcpBranding.isToolName(tool.name))
     .filter((tool) => {
       const visibility = (
         tool._meta as { ui?: { visibility?: string[] } } | undefined

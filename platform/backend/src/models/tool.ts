@@ -1378,7 +1378,6 @@ class ToolModel {
     return mcpTools;
   }
 
-  /** App-owner counterpart of {@link getMcpToolsAssignedToAgent}. */
   /**
    * Resolve upstream tool names to rows assignable to an MCP App, scoped to
    * the caller's organization (a tool is reachable when its catalog entry
@@ -1417,6 +1416,7 @@ class ToolModel {
       );
   }
 
+  /** App-owner counterpart of {@link getMcpToolsAssignedToAgent}. */
   static async getMcpToolsAssignedToApp(
     toolNames: string[],
     appId: string,

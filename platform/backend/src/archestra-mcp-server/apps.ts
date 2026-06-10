@@ -128,17 +128,21 @@ const AppSummaryOutputSchema = z.object({
   description: z.string().nullable(),
   scope: AppScopeSchema,
   latestVersion: z.number(),
-  tools: z
-    .array(z.string())
-    .optional()
-    .describe(
-      "The app's assigned tool names after this call (present when the tools param was given).",
-    ),
   warnings: z
     .array(z.string())
     .optional()
     .describe(
       "Soft save-time validation warnings about the html (the save succeeded); fix them via update_app.",
+    ),
+});
+
+// create/update additionally echo the assignment set when `tools` was given
+const AppMutationOutputSchema = AppSummaryOutputSchema.extend({
+  tools: z
+    .array(z.string())
+    .optional()
+    .describe(
+      "The app's assigned tool names after this call (present when the tools param was given).",
     ),
 });
 
@@ -148,7 +152,7 @@ const registry = defineArchestraTools([
     title: "Create App",
     description: `Build an interactive app — a to-do list, dashboard, form, tracker, game, or any custom UI — from a single self-contained HTML document. Use this whenever the user asks to make, build, or create an app, tool, or interactive UI: author the complete HTML and pass it as html — do not paste the code into the chat reply or write it as an artifact (artifact_write is for markdown documents, not apps). Author PURE UI HTML against the Archestra Apps SDK the platform injects at render time as window.archestra: archestra.user is the authenticated viewer ({id, name} — no login flow needed); archestra.storage.user.get/set/list/delete persists state private to each viewer (favorites, drafts, settings — the right default) and archestra.storage.shared.* is one store all users of the app share (no app id is passed; the store is always the running app's own); archestra.tools.call(name, args) calls the app's assigned tools as the viewing user, with their existing MCP credentials, and throws {code: "auth_required", url} when the tool's server still needs connecting (render that url as a link); archestra.tools.list() returns the assigned tools; archestra.ui.openLink(url), archestra.ui.requestDisplayMode(mode) and archestra.chat.sendMessage(text) reach the host; await archestra.ready before the first call. TOOL-FIRST RULE: when the app needs data from an external service (search, APIs, SaaS), first look for an installed MCP tool (search_tools), assign it via the tools param, and call it with archestra.tools.call — do NOT hand-roll fetch() calls to external APIs (they run unauthenticated and need CSP domains); raw fetch + uiCsp connectDomains is the fallback only when no tool exists. Do NOT import SDKs, read __ARCHESTRA_APP_SDK_URL__, or wire postMessage yourself — that glue is provided and hand-rolling it breaks the app. Alternatively omit html and pass templateId (one of: ${templateIds}) to scaffold from a curated starter; the result includes the seeded HTML so you can update_app it. When called from the chat UI the app is rendered inline in the conversation automatically; its standalone page is /apps/<id>/run. Defaults to personal scope (owned by the calling user). Returns the created app id and its first version.`,
     schema: CreateAppSchema,
-    outputSchema: AppSummaryOutputSchema,
+    outputSchema: AppMutationOutputSchema,
     async handler({ args, context }) {
       if (!context.userId || !context.organizationId) {
         return errorResult("Authentication required to create an app.");
@@ -194,19 +198,13 @@ const registry = defineArchestraTools([
       }
 
       // Resolve the tools list BEFORE creating the app, so a bad list never
-      // leaves a half-built app behind. An explicit [] is honored (and echoed
-      // in the result) the same way update_app honors it.
-      let resolvedTools: Array<{ id: string; name: string }> | undefined;
-      if (args.tools !== undefined) {
-        const resolution = await resolveAppToolsByName({
-          organizationId: context.organizationId,
-          toolNames: args.tools,
-        });
-        if ("error" in resolution) {
-          return errorResult(resolution.error.message);
-        }
-        resolvedTools = resolution.tools;
-      }
+      // leaves a half-built app behind.
+      const toolsResolution = await resolveToolsParam({
+        organizationId: context.organizationId,
+        tools: args.tools,
+      });
+      if (!toolsResolution.ok) return errorResult(toolsResolution.error);
+      const resolvedTools = toolsResolution.tools;
 
       const app = await AppModel.create({
         app: {
@@ -251,10 +249,7 @@ const registry = defineArchestraTools([
         warnings.length > 0
           ? `\nValidation warnings (save succeeded; fix via update_app):\n- ${warnings.join("\n- ")}`
           : "";
-      const toolsNote =
-        resolvedTools !== undefined && resolvedTools.length > 0
-          ? `\nAssigned tools (callable via archestra.tools.call): ${resolvedTools.map((tool) => tool.name).join(", ")}`
-          : "";
+      const toolsParts = toolsResultParts(resolvedTools);
       return structuredSuccessResult(
         {
           id: app.id,
@@ -262,12 +257,10 @@ const registry = defineArchestraTools([
           description: app.description,
           scope: app.scope,
           latestVersion: app.latestVersion,
-          ...(resolvedTools !== undefined
-            ? { tools: resolvedTools.map((tool) => tool.name) }
-            : {}),
+          ...toolsParts.structured,
           ...(warnings.length > 0 ? { warnings } : {}),
         },
-        `Created app "${app.name}" (${app.id}). Rendered inline when viewed in chat; standalone run page: /apps/${app.id}/run${toolsNote}${warningsNote}${seededHtmlNote}`,
+        `Created app "${app.name}" (${app.id}). Rendered inline when viewed in chat; standalone run page: /apps/${app.id}/run${toolsParts.note}${warningsNote}${seededHtmlNote}`,
       );
     },
   }),
@@ -345,7 +338,7 @@ const registry = defineArchestraTools([
     description:
       "Change an existing app's HTML, assigned tools, and/or metadata. Use this when the user asks to fix, tweak, restyle, or extend an app created earlier — pass the full revised HTML, not a diff. Author pure UI HTML against the injected Apps SDK (window.archestra: archestra.user identity, archestra.storage.user/.shared persistence, archestra.tools.call for assigned tools as the viewing user, archestra.ui.*/archestra.chat.*) — never add SDK imports or postMessage wiring. Prefer assigned MCP tools (tools param + archestra.tools.call) over hand-rolled fetch() to external APIs. Supplying new html forks a new immutable version (suppressed if identical); tools replaces the assignment list declaratively. When called from the chat UI the app's head version is rendered inline in the conversation. If a rendered app threw runtime errors, they arrive as an <app-render-diagnostics> block on the user's next message — use them to correct the HTML here.",
     schema: UpdateAppSchema,
-    outputSchema: AppSummaryOutputSchema,
+    outputSchema: AppMutationOutputSchema,
     async handler({ args, context }) {
       if (!context.userId || !context.organizationId) {
         return errorResult("Authentication required.");
@@ -397,17 +390,12 @@ const registry = defineArchestraTools([
 
       // Resolve the tools list before any mutation, so a bad list fails the
       // whole update instead of landing a partial one. [] clears assignments.
-      let resolvedTools: Array<{ id: string; name: string }> | undefined;
-      if (args.tools !== undefined) {
-        const resolution = await resolveAppToolsByName({
-          organizationId: context.organizationId,
-          toolNames: args.tools,
-        });
-        if ("error" in resolution) {
-          return errorResult(resolution.error.message);
-        }
-        resolvedTools = resolution.tools;
-      }
+      const toolsResolution = await resolveToolsParam({
+        organizationId: context.organizationId,
+        tools: args.tools,
+      });
+      if (!toolsResolution.ok) return errorResult(toolsResolution.error);
+      const resolvedTools = toolsResolution.tools;
 
       const patch: {
         name?: string;
@@ -491,10 +479,7 @@ const registry = defineArchestraTools([
         warnings.length > 0
           ? `\nValidation warnings (save succeeded; fix via update_app):\n- ${warnings.join("\n- ")}`
           : "";
-      const toolsNote =
-        resolvedTools !== undefined
-          ? `\nAssigned tools: ${resolvedTools.length > 0 ? resolvedTools.map((tool) => tool.name).join(", ") : "none (cleared)"}`
-          : "";
+      const toolsParts = toolsResultParts(resolvedTools);
       return structuredSuccessResult(
         {
           id: updated.id,
@@ -502,12 +487,10 @@ const registry = defineArchestraTools([
           description: updated.description,
           scope: updated.scope,
           latestVersion: updated.latestVersion,
-          ...(resolvedTools !== undefined
-            ? { tools: resolvedTools.map((tool) => tool.name) }
-            : {}),
+          ...toolsParts.structured,
           ...(warnings.length > 0 ? { warnings } : {}),
         },
-        `Updated app "${updated.name}" (now at version ${updated.latestVersion}). Rendered inline when viewed in chat; standalone run page: /apps/${updated.id}/run${toolsNote}${warningsNote}`,
+        `Updated app "${updated.name}" (now at version ${updated.latestVersion}). Rendered inline when viewed in chat; standalone run page: /apps/${updated.id}/run${toolsParts.note}${warningsNote}`,
       );
     },
   }),
@@ -559,3 +542,47 @@ const registry = defineArchestraTools([
 
 export const toolEntries = registry.toolEntries;
 export const tools = registry.tools;
+
+// =============================================================================
+// Internal helpers
+// =============================================================================
+
+type ResolvedTools = Array<{ id: string; name: string }>;
+
+/**
+ * Resolve the declarative `tools` param shared by create_app/update_app —
+ * before any mutation, so a bad list fails the whole call. `undefined` means
+ * "leave assignments untouched"; `[]` clears them.
+ */
+async function resolveToolsParam(params: {
+  organizationId: string;
+  tools: string[] | undefined;
+}): Promise<
+  { ok: true; tools: ResolvedTools | undefined } | { ok: false; error: string }
+> {
+  if (params.tools === undefined) return { ok: true, tools: undefined };
+  const resolution = await resolveAppToolsByName({
+    organizationId: params.organizationId,
+    toolNames: params.tools,
+  });
+  if ("error" in resolution) {
+    return { ok: false, error: resolution.error.message };
+  }
+  return { ok: true, tools: resolution.tools };
+}
+
+/** Result-text note + structured-output fragment echoing the assignment set. */
+function toolsResultParts(resolvedTools: ResolvedTools | undefined): {
+  note: string;
+  structured: { tools?: string[] };
+} {
+  if (resolvedTools === undefined) return { note: "", structured: {} };
+  const names = resolvedTools.map((tool) => tool.name);
+  return {
+    note:
+      names.length > 0
+        ? `\nAssigned tools (callable via archestra.tools.call): ${names.join(", ")}`
+        : "\nAssigned tools: none (cleared)",
+    structured: { tools: names },
+  };
+}

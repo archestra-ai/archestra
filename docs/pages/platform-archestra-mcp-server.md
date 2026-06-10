@@ -1683,8 +1683,8 @@ Required RBAC permission: `app:create`
 | `description` | `string \| null` | Yes |  |
 | `scope` | `"personal" \| "team" \| "org"` | Yes |  |
 | `latestVersion` | `number` | Yes |  |
-| `tools` | `string[]` | No | The app's assigned tool names after this call (present when the tools param was given). |
 | `warnings` | `string[]` | No | Soft save-time validation warnings about the html (the save succeeded); fix them via update_app. |
+| `tools` | `string[]` | No | The app's assigned tool names after this call (present when the tools param was given). |
 
 #### list_apps
 
@@ -1707,7 +1707,6 @@ Required RBAC permission: `app:read`
 | `apps[].description` | `string \| null` | Yes |  |
 | `apps[].scope` | `"personal" \| "team" \| "org"` | Yes |  |
 | `apps[].latestVersion` | `number` | Yes |  |
-| `apps[].tools` | `string[]` | No | The app's assigned tool names after this call (present when the tools param was given). |
 | `apps[].warnings` | `string[]` | No | Soft save-time validation warnings about the html (the save succeeded); fix them via update_app. |
 
 #### render_app
@@ -1729,7 +1728,6 @@ Required RBAC permission: `app:read`
 | `description` | `string \| null` | Yes |  |
 | `scope` | `"personal" \| "team" \| "org"` | Yes |  |
 | `latestVersion` | `number` | Yes |  |
-| `tools` | `string[]` | No | The app's assigned tool names after this call (present when the tools param was given). |
 | `warnings` | `string[]` | No | Soft save-time validation warnings about the html (the save succeeded); fix them via update_app. |
 
 #### update_app
@@ -1766,8 +1764,8 @@ Required RBAC permission: `app:update`
 | `description` | `string \| null` | Yes |  |
 | `scope` | `"personal" \| "team" \| "org"` | Yes |  |
 | `latestVersion` | `number` | Yes |  |
-| `tools` | `string[]` | No | The app's assigned tool names after this call (present when the tools param was given). |
 | `warnings` | `string[]` | No | Soft save-time validation warnings about the html (the save succeeded); fix them via update_app. |
+| `tools` | `string[]` | No | The app's assigned tool names after this call (present when the tools param was given). |
 
 #### delete_app
 

@@ -49,7 +49,7 @@ const ALLOWED_PERMISSION_KEYS = [
  * Validate an app's CSP + permissions and assemble the version payload to
  * persist. Throws `ApiError(400)` on any malformed domain, unknown permission
  * key, or html that bootstraps the MCP App SDK itself (the platform injects
- * `window.archestra` — see app-runtime-bridge.ts). Absent CSP/permissions
+ * `window.archestra` — see app-sdk-injection.ts). Absent CSP/permissions
  * normalize to `null` (the restrictive default). Soft structural issues come
  * back as `warnings` (the save succeeds); they ride the create/update
  * responses so authors — human or model — see them.

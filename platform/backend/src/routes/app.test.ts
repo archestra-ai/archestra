@@ -387,10 +387,12 @@ describe("appRoutes /api/apps", () => {
     const ids = templates.map((t) => t.id);
     expect(ids).toContain("blank");
     expect(ids).toContain("form");
-    // The form template wires the data store through the host-provided SDK URL.
+    // Templates are pure UI: they use the injected window.archestra runtime
+    // and never carry SDK bootstrap glue themselves.
     const form = templates.find((t) => t.id === "form");
-    expect(form?.html).toContain("__ARCHESTRA_APP_SDK_URL__");
-    expect(form?.html).toContain("archestra__app_data_set");
+    expect(form?.html).toContain("window.archestra.data.set");
+    expect(form?.html).not.toContain("__ARCHESTRA_APP_SDK_URL__");
+    expect(form?.html).not.toContain("PostMessageTransport");
 
     (config.apps as { enabled: boolean }).enabled = false;
     const off = await app.inject({ method: "GET", url: "/api/app-templates" });

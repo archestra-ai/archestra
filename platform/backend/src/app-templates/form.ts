@@ -1,11 +1,10 @@
 import type { AppTemplate } from "@/types";
 
-// A form wired to the App Data Store, so the author sees a complete read/write
-// round-trip. The host injects window.__ARCHESTRA_APP_SDK_URL__ (the served
-// ext-apps guest SDK); we import it, connect an App client, and expose
-// window.archestra.data as a thin wrapper over the app_data_* tools — the API
-// authors are documented against. No app_id is ever passed: the app's MCP
-// endpoint is route-bound, so the store is always this app's own.
+// A form wired to the App Data Store, demonstrating a complete read/write
+// round-trip through `window.archestra.data` — the runtime API the platform
+// injects into every owned app (see services/apps/app-runtime-bridge.ts).
+// Pure UI: no SDK import, no transport wiring. No app_id is ever passed: the
+// app's MCP endpoint is route-bound, so the store is always this app's own.
 const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -38,33 +37,17 @@ const html = `<!DOCTYPE html>
       statusEl.dataset.error = String(isError);
     };
 
-    const sdkUrl = window.__ARCHESTRA_APP_SDK_URL__;
-    if (!sdkUrl) {
-      setStatus("Host did not provide the app SDK — data store unavailable.", true);
-      throw new Error("missing __ARCHESTRA_APP_SDK_URL__");
-    }
-
-    const { App, PostMessageTransport } = await import(sdkUrl);
-    const app = new App({ name: "archestra-app-form", version: "1.0.0" }, {});
-    await app.connect(new PostMessageTransport(window.parent, window.parent));
-
-    const call = (name, args) => app.callServerTool({ name, arguments: args });
-    // The author-facing data API. Keys are app-scoped; values are any JSON.
-    window.archestra = {
-      data: {
-        get: async (key) => (await call("archestra__app_data_get", { key })).structuredContent?.value,
-        set: (key, value) => call("archestra__app_data_set", { key, value }),
-        list: async () => (await call("archestra__app_data_list", {})).structuredContent?.entries ?? [],
-        delete: (key) => call("archestra__app_data_delete", { key }),
-      },
-    };
-
     const noteEl = document.getElementById("note");
     const saveBtn = document.getElementById("save");
 
-    const existing = await window.archestra.data.get("note");
-    if (typeof existing === "string") noteEl.value = existing;
-    setStatus("Ready.");
+    try {
+      const existing = await window.archestra.data.get("note");
+      if (typeof existing === "string") noteEl.value = existing;
+      setStatus("Ready.");
+    } catch (err) {
+      setStatus("Data store unavailable: " + (err?.message ?? String(err)), true);
+      throw err;
+    }
 
     document.getElementById("note-form").addEventListener("submit", async (e) => {
       e.preventDefault();

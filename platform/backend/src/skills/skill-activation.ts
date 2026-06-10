@@ -20,6 +20,12 @@ import type { Skill, SkillFile } from "@/types";
  * activating user's context (`{{user.name}}`, `{{currentDate}}`, …), mirroring
  * an agent system prompt. Bundled files (`read_skill_file`) stay literal.
  *
+ * Terminology for every model-facing skill text (tool descriptions, catalog
+ * and activation blocks): a skill is *activated* (the `activate_skill` call),
+ * which *loads* its instructions into context and *mounts* its files under
+ * `/skills` in the sandbox. The sandbox is "the conversation's sandbox" in
+ * tool descriptions and "your sandbox" in second-person prompt text.
+ *
  * @see https://agentskills.io/specification
  */
 export function formatSkillActivation({

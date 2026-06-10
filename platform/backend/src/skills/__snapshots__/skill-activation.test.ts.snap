@@ -1,0 +1,26 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`formatSkillActivation > pins the full activation text with the sandbox hint 1`] = `
+"<skill_content name="Research">
+Do research.
+</skill_content>
+<skill_compatibility>Python 3.11</skill_compatibility>
+If this environment cannot meet that requirement, tell the user and proceed with what is possible.
+<skill_allowed_tools>slack__send jira__create</skill_allowed_tools>
+This skill expects these tools; enable any that are not already active.
+<skill_resources>
+references/REF.md (reference)
+scripts/run.py (script)
+</skill_resources>
+Inspect any resource with read_skill_file before re-implementing — prefer importing and running the skill's own modules over rewriting them. This skill is mounted in your sandbox at /skills/Research and is on PYTHONPATH, so its modules import directly in run_command (no path setup of any kind). Run a bundled script via run_command (\`python3 /skills/Research/<script>\`); pass cwd: /skills/Research only when a script reads bundled files by relative path — direct outputs to absolute paths under /home/sandbox, and note that a script computing paths relative to its own file writes under /skills/Research, not your cwd. Python is the uv project venv at /home/sandbox (\`python3\`) — install packages with \`uv add --project /home/sandbox <pkg>\`. Files the user attached are under /home/sandbox/attachments/. Use download_file to retrieve generated files, upload_file to add inputs."
+`;
+
+exports[`formatSkillActivation > pins the full activation text without the sandbox hint 1`] = `
+"<skill_content name="Research">
+Do research.
+</skill_content>
+<skill_resources>
+scripts/run.py (script)
+</skill_resources>
+Inspect any resource with read_skill_file before re-implementing — prefer importing and running the skill's own modules over rewriting them."
+`;

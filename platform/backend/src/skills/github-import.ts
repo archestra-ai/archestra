@@ -184,7 +184,7 @@ export async function discoverSkills(params: {
 
 /**
  * Fetch the full contents of the selected skill directories. Binary files are
- * skipped — only text resources are imported.
+ * imported base64-encoded (`encoding: "base64"`); text resources stay utf8.
  */
 export async function importSkills(params: {
   repoUrl: string;

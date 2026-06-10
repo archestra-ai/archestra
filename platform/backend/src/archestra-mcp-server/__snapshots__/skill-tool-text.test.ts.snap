@@ -1,0 +1,450 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`skill and sandbox tool text > archestra__activate_skill 1`] = `
+{
+  "description": "Activate a specialized Agent Skill — a reusable SKILL.md instruction set. Call list_skills first to discover what is available, then call this with a skill name to load its full instructions. Activate a skill before attempting the task it covers. To inspect bundled resources use read_skill_file. Where a sandbox is available, activation also mounts the skill under /skills.",
+  "inputSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+      "name": {
+        "description": "The skill to activate, as named by list_skills.",
+        "minLength": 1,
+        "type": "string",
+      },
+    },
+    "required": [
+      "name",
+    ],
+    "type": "object",
+  },
+  "name": "archestra__activate_skill",
+  "title": "Activate Skill",
+}
+`;
+
+exports[`skill and sandbox tool text > archestra__create_skill 1`] = `
+{
+  "description": "Create a new Agent Skill from a SKILL.md manifest. The skill is created as a personal skill owned by you, available via list_skills and as a chat slash-command. Draft the SKILL.md (and any bundled resource files) with the user, then call this to persist it. To share a skill with a team or the whole organization, change its scope in the Skills UI.",
+  "inputSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "content": {
+        "description": "A complete SKILL.md manifest: a YAML frontmatter block with \`name\` and \`description\` (and optional \`license\`, \`compatibility\`, \`allowed-tools\`, \`templated\`, \`metadata\`), followed by the Markdown instruction body. Set \`templated: true\` to render the body through Handlebars (e.g. \`{{user.name}}\`) at activation. \`allowed-tools\` is a space-separated list of tools the skill is pre-approved to use.",
+        "maxLength": 10485760,
+        "minLength": 1,
+        "type": "string",
+      },
+      "files": {
+        "description": "Optional bundled resource files. Each is \`{ path, content }\` with text content; the path prefix classifies the file — \`references/\` for docs, \`scripts/\` for code, \`assets/\` for other files.",
+        "items": {
+          "properties": {
+            "content": {
+              "description": "Text content of the file",
+              "maxLength": 13981016,
+              "type": "string",
+            },
+            "encoding": {
+              "enum": [
+                "utf8",
+                "base64",
+              ],
+              "type": "string",
+            },
+            "path": {
+              "description": "Resource path, e.g. references/API.md or scripts/run.py",
+              "minLength": 1,
+              "type": "string",
+            },
+          },
+          "required": [
+            "path",
+            "content",
+          ],
+          "type": "object",
+        },
+        "maxItems": 500,
+        "type": "array",
+      },
+    },
+    "required": [
+      "content",
+    ],
+    "type": "object",
+  },
+  "name": "archestra__create_skill",
+  "title": "Create Skill",
+}
+`;
+
+exports[`skill and sandbox tool text > archestra__download_file 1`] = `
+{
+  "description": "Copy a file out of the conversation's sandbox into durable storage and return a download URL. Use this for any binary or generated output — run_command only returns text. To read a skill's own source files, use read_skill_file instead. Requires \`sandbox:execute\`.",
+  "inputSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "description": "Copy a file out of the sandbox into durable storage and return a download URL. Use this for any binary or generated output — run_command only returns text. (To read a skill's source files, use read_skill_file.)",
+    "properties": {
+      "mimeType": {
+        "description": "Optional MIME type recorded with the file. Sniffed from the bytes when omitted.",
+        "minLength": 1,
+        "type": "string",
+      },
+      "path": {
+        "description": "Path to the file inside the container — absolute, or relative to the sandbox's working directory.",
+        "minLength": 1,
+        "type": "string",
+      },
+      "target": {
+        "anyOf": [
+          {
+            "additionalProperties": false,
+            "description": "Run against a brand-new isolated sandbox; its id is returned.",
+            "properties": {
+              "fresh": {
+                "const": true,
+                "type": "boolean",
+              },
+            },
+            "required": [
+              "fresh",
+            ],
+            "type": "object",
+          },
+          {
+            "additionalProperties": false,
+            "description": "Run against a specific existing sandbox.",
+            "properties": {
+              "id": {
+                "description": "An existing sandbox id returned by an earlier call.",
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                "type": "string",
+              },
+            },
+            "required": [
+              "id",
+            ],
+            "type": "object",
+          },
+        ],
+        "description": "Which sandbox to use. Omit for the conversation's default sandbox (created on first use). Pass \`{ "fresh": true }\` for a new isolated sandbox, or \`{ "id": "<uuid>" }\` to target a specific one.",
+      },
+    },
+    "required": [
+      "path",
+    ],
+    "type": "object",
+  },
+  "name": "archestra__download_file",
+  "title": "Download File",
+}
+`;
+
+exports[`skill and sandbox tool text > archestra__list_skills 1`] = `
+{
+  "description": "List the Agent Skills available in this organization — one line per skill (name and description). Call activate_skill with a skill name to load its full instructions.",
+  "inputSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {},
+    "type": "object",
+  },
+  "name": "archestra__list_skills",
+  "title": "List Skills",
+}
+`;
+
+exports[`skill and sandbox tool text > archestra__read_skill_file 1`] = `
+{
+  "description": "Read a bundled resource file from a skill. Paths come from the <skill_resources> list returned by activate_skill. This returns file text for inspection only — to execute a script or run shell commands, use run_command (activated skills are mounted under /skills). Prefer running a skill's own scripts and modules over re-implementing them.",
+  "inputSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+      "path": {
+        "description": "Resource path from the skill, e.g. references/REFERENCE.md",
+        "type": "string",
+      },
+      "skill": {
+        "description": "The skill that owns the file",
+        "type": "string",
+      },
+    },
+    "required": [
+      "skill",
+      "path",
+    ],
+    "type": "object",
+  },
+  "name": "archestra__read_skill_file",
+  "title": "Read Skill File",
+}
+`;
+
+exports[`skill and sandbox tool text > archestra__run_command 1`] = `
+{
+  "description": "Execute a shell command in the conversation's sandbox (Debian, working dir /home/sandbox). Created on first use and persists across calls — files written by one command are visible to the next. Python runs in a uv project at /home/sandbox: \`python3\` is the project venv; install packages with \`uv add --project /home/sandbox <pkg>\` (pip is disabled). Files the user attached to the chat are auto-staged under /home/sandbox/attachments/. Activated skills are mounted under /skills and are on PYTHONPATH, so their modules import directly. Returns stdout, stderr, exit code, and timing (text only — use download_file for generated files). Requires \`sandbox:execute\`.",
+  "inputSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "description": "Run a shell command in the conversation's sandbox. State persists across calls. Returns stdout, stderr, exit code, and timing.",
+    "properties": {
+      "command": {
+        "description": "Shell command to execute (bash). Runs in the sandbox's working directory (or \`cwd\` when provided). Returns text output only — use download_file for generated files.",
+        "maxLength": 16384,
+        "minLength": 1,
+        "type": "string",
+      },
+      "cwd": {
+        "description": "Optional absolute path inside the container. Defaults to the sandbox's working directory (/home/sandbox).",
+        "minLength": 1,
+        "type": "string",
+      },
+      "target": {
+        "anyOf": [
+          {
+            "additionalProperties": false,
+            "description": "Run against a brand-new isolated sandbox; its id is returned.",
+            "properties": {
+              "fresh": {
+                "const": true,
+                "type": "boolean",
+              },
+            },
+            "required": [
+              "fresh",
+            ],
+            "type": "object",
+          },
+          {
+            "additionalProperties": false,
+            "description": "Run against a specific existing sandbox.",
+            "properties": {
+              "id": {
+                "description": "An existing sandbox id returned by an earlier call.",
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                "type": "string",
+              },
+            },
+            "required": [
+              "id",
+            ],
+            "type": "object",
+          },
+        ],
+        "description": "Which sandbox to use. Omit for the conversation's default sandbox (created on first use). Pass \`{ "fresh": true }\` for a new isolated sandbox, or \`{ "id": "<uuid>" }\` to target a specific one.",
+      },
+      "timeoutSeconds": {
+        "description": "Optional wall-clock limit in seconds, capped at the deployment maximum.",
+        "exclusiveMinimum": 0,
+        "maximum": 9007199254740991,
+        "type": "integer",
+      },
+    },
+    "required": [
+      "command",
+    ],
+    "type": "object",
+  },
+  "name": "archestra__run_command",
+  "title": "Run Command",
+}
+`;
+
+exports[`skill and sandbox tool text > archestra__update_skill 1`] = `
+{
+  "description": "Update an existing Agent Skill from a SKILL.md manifest. Passing \`files\` replaces the skill's entire bundled file set; omit it to edit only the SKILL.md. The manifest's \`name\` may differ from the target to rename the skill. You can only update skills you are allowed to manage; the skill keeps its current visibility scope.",
+  "inputSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+      "content": {
+        "description": "A complete SKILL.md manifest: a YAML frontmatter block with \`name\` and \`description\` (and optional \`license\`, \`compatibility\`, \`allowed-tools\`, \`templated\`, \`metadata\`), followed by the Markdown instruction body. Set \`templated: true\` to render the body through Handlebars (e.g. \`{{user.name}}\`) at activation. \`allowed-tools\` is a space-separated list of tools the skill is pre-approved to use.",
+        "maxLength": 10485760,
+        "minLength": 1,
+        "type": "string",
+      },
+      "files": {
+        "description": "Optional. WHEN PROVIDED, REPLACES THE SKILL'S ENTIRE bundled file set. Omit it to leave the existing resource files untouched. There is no per-file patch: to change one file you must resend all of them — read the current files back first with activate_skill + read_skill_file.",
+        "items": {
+          "properties": {
+            "content": {
+              "description": "Text content of the file",
+              "maxLength": 13981016,
+              "type": "string",
+            },
+            "encoding": {
+              "enum": [
+                "utf8",
+                "base64",
+              ],
+              "type": "string",
+            },
+            "path": {
+              "description": "Resource path, e.g. references/API.md or scripts/run.py",
+              "minLength": 1,
+              "type": "string",
+            },
+          },
+          "required": [
+            "path",
+            "content",
+          ],
+          "type": "object",
+        },
+        "maxItems": 500,
+        "type": "array",
+      },
+      "name": {
+        "description": "The current name of the skill to update, as named by list_skills.",
+        "minLength": 1,
+        "type": "string",
+      },
+    },
+    "required": [
+      "name",
+      "content",
+    ],
+    "type": "object",
+  },
+  "name": "archestra__update_skill",
+  "title": "Update Skill",
+}
+`;
+
+exports[`skill and sandbox tool text > archestra__upload_file 1`] = `
+{
+  "description": "Upload a file into the conversation's sandbox from a chat attachment, inline base64, or inline text. The bytes become part of the sandbox recipe, so the file is present on every later run_command and download_file call. Note: files the user attached to the chat are already auto-staged under /home/sandbox/attachments/ — use this tool to write inline content, place a file at a specific path, or upload into a non-default sandbox. Requires \`sandbox:execute\`.",
+  "inputSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "description": "Upload a file into the conversation's sandbox. The bytes become part of the sandbox recipe, so the file is present on every subsequent run_command and download_file call.",
+    "properties": {
+      "path": {
+        "description": "Destination path inside the container — absolute under /skills or /home/sandbox, or relative to the sandbox's working directory.",
+        "minLength": 1,
+        "type": "string",
+      },
+      "source": {
+        "description": "Where the file bytes come from: a chat attachment, inline base64, or inline text. Use this to place input bytes; to create a file the sandbox will then run or read, write it with run_command instead.",
+        "oneOf": [
+          {
+            "additionalProperties": false,
+            "description": "Copy bytes from a file the user attached to this conversation.",
+            "properties": {
+              "attachmentId": {
+                "description": "Id of an attachment in the CURRENT conversation. The bytes are read server-side; they never pass through the model context.",
+                "minLength": 1,
+                "type": "string",
+              },
+              "type": {
+                "const": "chat_attachment",
+                "type": "string",
+              },
+            },
+            "required": [
+              "type",
+              "attachmentId",
+            ],
+            "type": "object",
+          },
+          {
+            "additionalProperties": false,
+            "description": "Upload raw bytes provided inline as base64.",
+            "properties": {
+              "dataBase64": {
+                "description": "Base64-encoded file bytes.",
+                "minLength": 1,
+                "type": "string",
+              },
+              "mimeType": {
+                "minLength": 1,
+                "type": "string",
+              },
+              "originalName": {
+                "minLength": 1,
+                "type": "string",
+              },
+              "type": {
+                "const": "base64",
+                "type": "string",
+              },
+            },
+            "required": [
+              "type",
+              "dataBase64",
+            ],
+            "type": "object",
+          },
+          {
+            "additionalProperties": false,
+            "description": "Upload a UTF-8 text file provided inline.",
+            "properties": {
+              "mimeType": {
+                "minLength": 1,
+                "type": "string",
+              },
+              "originalName": {
+                "minLength": 1,
+                "type": "string",
+              },
+              "text": {
+                "description": "UTF-8 text content of the file.",
+                "type": "string",
+              },
+              "type": {
+                "const": "text",
+                "type": "string",
+              },
+            },
+            "required": [
+              "type",
+              "text",
+            ],
+            "type": "object",
+          },
+        ],
+      },
+      "target": {
+        "anyOf": [
+          {
+            "additionalProperties": false,
+            "description": "Run against a brand-new isolated sandbox; its id is returned.",
+            "properties": {
+              "fresh": {
+                "const": true,
+                "type": "boolean",
+              },
+            },
+            "required": [
+              "fresh",
+            ],
+            "type": "object",
+          },
+          {
+            "additionalProperties": false,
+            "description": "Run against a specific existing sandbox.",
+            "properties": {
+              "id": {
+                "description": "An existing sandbox id returned by an earlier call.",
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                "type": "string",
+              },
+            },
+            "required": [
+              "id",
+            ],
+            "type": "object",
+          },
+        ],
+        "description": "Which sandbox to use. Omit for the conversation's default sandbox (created on first use). Pass \`{ "fresh": true }\` for a new isolated sandbox, or \`{ "id": "<uuid>" }\` to target a specific one.",
+      },
+    },
+    "required": [
+      "path",
+      "source",
+    ],
+    "type": "object",
+  },
+  "name": "archestra__upload_file",
+  "title": "Upload File",
+}
+`;

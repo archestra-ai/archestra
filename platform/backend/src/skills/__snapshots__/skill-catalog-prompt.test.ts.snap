@@ -1,0 +1,15 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`buildSkillCatalogPrompt (sandbox available) > pins the catalog block and sandbox activation instruction 1`] = `
+"<available_skills>
+<skill name="pdf-processing">Extract text from PDF files.</skill>
+</available_skills>
+Call activate_skill with one of these names to load its instructions. Activating a skill mounts it in your sandbox under /skills, so you can then run its scripts or shell commands with run_command. A skill appears under /skills/<name> only after you activate it — an empty /skills listing does not mean the skill is unavailable."
+`;
+
+exports[`buildSkillCatalogPrompt (sandbox unavailable) > pins the catalog block and base activation instruction 1`] = `
+"<available_skills>
+<skill name="pdf-processing">Extract text from PDF files.</skill>
+</available_skills>
+Call activate_skill with one of these names to load its instructions."
+`;

@@ -2,9 +2,8 @@
 
 DB-backed, Dagger-materialized execution sandbox for Agent Skills.
 
-> Not released yet: the sandbox is gated behind the sandbox feature flag
-> (`config.skillsSandbox`, derived from `ARCHESTRA_CODE_RUNTIME_ENABLED` + a
-> Dagger runner host).
+> Gated behind the sandbox feature flag (`config.skillsSandbox`, derived from
+> `ARCHESTRA_CODE_RUNTIME_ENABLED` + a Dagger runner host).
 
 ## What this directory contains
 
@@ -12,9 +11,10 @@ DB-backed, Dagger-materialized execution sandbox for Agent Skills.
   client. Materializes a sandbox from its DB replay log, replays it, executes a
   new command, and exports files as artifacts (status FSM, per-sandbox queue,
   lifecycle hooks).
-- `runtime-image.ts` — base image (`ghcr.io/astral-sh/uv:…`), apt-package
-  baseline (bash, curl, git, jq, nodejs, npm, build-essential), non-root user
-  (`1000:1000`), and skill-root layout (`/skills/<skill-name>`).
+- `runtime-image.ts` — container path layout: skill root (`/skills/<skill-name>`),
+  sandbox home, and attachment staging dir. The image itself (base image,
+  apt-package baseline, non-root user) is defined in the Rust Dagger backend
+  (`platform/archestra-rs/sandbox-core/src/backends/dagger.rs`).
 - `types.ts` — `SkillSandboxLimits`, `CommandResult`, `ArtifactRef`,
   `UploadRef`, `SkillSandboxError`, runtime status enum. Tool-layer code in
   `../archestra-mcp-server/sandbox.ts` re-uses these so the service/tool

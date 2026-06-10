@@ -275,13 +275,6 @@ function ExpandedToolCard({
   const artifact = errorText ? null : extractArtifact(toolResultPart, part);
   const hasInput = part.input && Object.keys(part.input).length > 0;
   const isApprovalRequested = part.state === "approval-requested";
-  const hasContent = Boolean(
-    hasInput ||
-      errorText ||
-      isApprovalRequested ||
-      (toolResultPart && Boolean(toolResultPart.output)) ||
-      (!toolResultPart && Boolean(part.output)),
-  );
 
   const logsButton = errorText ? (
     <ToolErrorLogsButton toolName={toolName} />
@@ -293,11 +286,11 @@ function ExpandedToolCard({
   });
 
   return (
-    <Tool defaultOpen={true}>
+    <Tool open>
       <ToolHeader
         type={`tool-${toolName}`}
         state={headerState}
-        isCollapsible={hasContent}
+        isCollapsible={false}
         actionButton={logsButton}
       />
       <ToolContent>

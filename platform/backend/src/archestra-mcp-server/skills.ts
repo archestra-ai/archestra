@@ -17,16 +17,8 @@ import {
   SkillVersionModel,
   TeamModel,
 } from "@/models";
-import {
-  MAX_FILES_PER_SKILL,
-  MAX_SKILL_FILE_BYTES,
-  MAX_SKILL_FILE_CONTENT_CHARS,
-} from "@/skills/github-import";
-import {
-  deriveSkillFileKind,
-  parseSkillManifest,
-  SkillParseError,
-} from "@/skills/parser";
+import { MAX_FILES_PER_SKILL } from "@/skills/github-import";
+import { parseSkillManifest, SkillParseError } from "@/skills/parser";
 import {
   buildSkillActivationPromptContext,
   escapeXmlAttr,
@@ -42,8 +34,11 @@ import {
 import {
   isSkillNameConflict,
   refineUniqueFilePaths,
+  SkillFileInputSchema,
+  SkillManifestContentSchema,
+  toSkillFiles,
 } from "@/skills/validation";
-import { ApiError, type Skill, SkillFileEncodingSchema } from "@/types";
+import { ApiError, type Skill } from "@/types";
 import { archestraMcpBranding } from "./branding";
 import {
   defineArchestraTool,
@@ -61,7 +56,7 @@ import type { ArchestraContext } from "./types";
  * progressive-disclosure tiers of the Agent Skills spec: `list_skills` returns
  * the catalog, `activate_skill` returns a named skill's SKILL.md body, and
  * bundled resource files are fetched individually via `read_skill_file`.
- * Activating a skill also mounts it into the conversation's code sandbox (when
+ * Activating a skill also mounts it into the conversation's sandbox (when
  * the sandbox feature + `sandbox:execute` are present), so its scripts become
  * runnable under `/skills` via `run_command`.
  *
@@ -70,6 +65,9 @@ import type { ArchestraContext } from "./types";
  * sharing a skill with a team or the whole org stays a deliberate action in
  * the Skills UI. `update_skill` re-checks the target skill's scope so a user
  * cannot edit a skill they only have read access to.
+ *
+ * Model-facing text in this file follows the skill terminology glossary in
+ * `skills/skill-activation.ts` and is pinned by `skill-tool-text.test.ts`.
  *
  * @see https://agentskills.io/specification
  */
@@ -81,7 +79,7 @@ const ActivateSkillSchema = z.object({
     .string()
     .trim()
     .min(1)
-    .describe("The skill to load, as named by list_skills."),
+    .describe("The skill to activate, as named by list_skills."),
 });
 
 const ReadSkillFileSchema = z.object({
@@ -91,42 +89,9 @@ const ReadSkillFileSchema = z.object({
     .describe("Resource path from the skill, e.g. references/REFERENCE.md"),
 });
 
-const SkillFileInputSchema = z.object({
-  path: z
-    .string()
-    .min(1)
-    .refine(
-      (p) => !p.startsWith("/") && !p.split("/").some((s) => s === ".."),
-      {
-        message:
-          "path must be relative and must not contain directory traversal sequences",
-      },
-    )
-    .describe("Resource path, e.g. references/API.md or scripts/run.py"),
-  content: z
-    .string()
-    .max(MAX_SKILL_FILE_CONTENT_CHARS)
-    .describe("Text content of the file"),
-  encoding: SkillFileEncodingSchema.optional(),
-});
-
-// the SKILL.md body shared by create_skill and update_skill.
-const manifestContentSchema = z
-  .string()
-  .min(1)
-  .max(MAX_SKILL_FILE_BYTES)
-  .describe(
-    "A complete SKILL.md manifest: a YAML frontmatter block with `name` and " +
-      "`description` (and optional `license`, `compatibility`, `allowed-tools`, " +
-      "`templated`, `metadata`), followed by the Markdown instruction body. Set " +
-      "`templated: true` to render the body through Handlebars (e.g. " +
-      "`{{user.name}}`) at activation. `allowed-tools` is a space-separated " +
-      "list of tools the skill is pre-approved to use.",
-  );
-
 const CreateSkillSchema = z
   .object({
-    content: manifestContentSchema,
+    content: SkillManifestContentSchema,
     files: z
       .array(SkillFileInputSchema)
       .max(MAX_FILES_PER_SKILL)
@@ -149,7 +114,7 @@ const UpdateSkillSchema = z
       .describe(
         "The current name of the skill to update, as named by list_skills.",
       ),
-    content: manifestContentSchema,
+    content: SkillManifestContentSchema,
     files: z
       .array(SkillFileInputSchema)
       .max(MAX_FILES_PER_SKILL)
@@ -187,15 +152,18 @@ const registry = defineArchestraTools([
     shortName: TOOL_ACTIVATE_SKILL_SHORT_NAME,
     title: "Activate Skill",
     // a static tool description can't know whether the sandbox tools are
-    // enabled, permitted, and assigned to the calling agent, so it does not
-    // mention them. The activate_skill *result* adds an agent-aware sandbox
-    // hint (see formatSkillActivation) only when they are genuinely available.
+    // enabled, permitted, and assigned to the calling agent, so mounting is
+    // mentioned only conditionally ("where a sandbox is available"). The
+    // activate_skill *result* adds an agent-aware sandbox hint (see
+    // formatSkillActivation) only when they are genuinely available.
     description:
-      "Load a specialized Agent Skill — a reusable SKILL.md instruction set. " +
+      "Activate a specialized Agent Skill — a reusable SKILL.md instruction " +
+      "set. " +
       "Call list_skills first to discover what is available, then call this " +
       "with a skill name to load its full instructions. Activate a skill " +
       "before attempting the task it covers. To inspect bundled resources " +
-      "use read_skill_file.",
+      "use read_skill_file. Where a sandbox is available, activation also " +
+      "mounts the skill under /skills.",
     schema: ActivateSkillSchema,
     async handler({ args, context }) {
       const ctx = requireOrgContext(context);
@@ -270,7 +238,8 @@ const registry = defineArchestraTools([
       "Read a bundled resource file from a skill. Paths come from the " +
       "<skill_resources> list returned by activate_skill. This returns file " +
       "text for inspection only — to execute a script or run shell commands, " +
-      "use run_command (activated skills are available under /skills).",
+      "use run_command (activated skills are mounted under /skills). Prefer " +
+      "running a skill's own scripts and modules over re-implementing them.",
     schema: ReadSkillFileSchema,
     async handler({ args, context }) {
       const ctx = requireOrgContext(context);
@@ -596,18 +565,6 @@ function parseManifest(raw: string) {
     if (error instanceof SkillParseError) return error;
     throw error;
   }
-}
-
-/** Classify each submitted resource file by its path prefix. */
-function toSkillFiles(
-  files: { path: string; content: string; encoding?: "utf8" | "base64" }[],
-) {
-  return files.map((file) => ({
-    path: file.path,
-    content: file.content,
-    encoding: file.encoding ?? "utf8",
-    kind: deriveSkillFileKind(file.path),
-  }));
 }
 
 async function listSkillCatalog(

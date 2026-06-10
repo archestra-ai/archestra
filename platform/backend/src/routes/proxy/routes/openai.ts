@@ -1,9 +1,11 @@
+import { RouteId } from "@archestra/shared";
 import fastifyHttpProxy from "@fastify/http-proxy";
-import { RouteId } from "@shared";
+import type { FastifyRequest } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import config from "@/config";
 import logger from "@/logging";
+import { fetchOpenAiModels } from "@/routes/chat/model-fetchers/openai";
 import { constructResponseSchema, OpenAi, UuidIdSchema } from "@/types";
 import {
   openAiEmbeddingsAdapterFactory,
@@ -12,6 +14,13 @@ import {
 } from "../adapters";
 import { PROXY_API_PREFIX, PROXY_BODY_LIMIT } from "../common";
 import { handleLLMProxy } from "../llm-proxy-handler";
+import {
+  extractBearerToken,
+  OpenAiModelsHeadersSchema,
+  OpenAiModelsListResponseSchema,
+  resolveProxyModelsApiKey,
+  toOpenAiModelsList,
+} from "./proxy-model-listing";
 import { createProxyPreHandler } from "./proxy-prehandler";
 
 const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
@@ -203,6 +212,56 @@ const openAiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       );
       return handleLLMProxy(request.body, request, reply, openaiAdapterFactory);
     },
+  );
+
+  /**
+   * Lists OpenAI models for a virtual or raw key. A dedicated route is needed
+   * so it takes precedence over this prefix's catch-all http-proxy, which
+   * would otherwise forward an `arch_*` key to api.openai.com unresolved and
+   * 401. Returns OpenAI's native models shape.
+   */
+  async function handleListModels(
+    request: FastifyRequest,
+    agentId: string | undefined,
+  ) {
+    const { apiKey, baseUrl, extraHeaders } = await resolveProxyModelsApiKey({
+      request,
+      provider: "openai",
+      token: extractBearerToken(request.headers.authorization),
+    });
+    logger.debug({ agentId }, "[UnifiedProxy] Listing OpenAI models");
+    return toOpenAiModelsList(
+      await fetchOpenAiModels(apiKey, baseUrl, extraHeaders),
+    );
+  }
+
+  fastify.get(
+    `${API_PREFIX}/models`,
+    {
+      schema: {
+        operationId: RouteId.OpenAiListModelsWithDefaultAgent,
+        description: "List OpenAI models (default agent)",
+        tags: ["LLM Proxy"],
+        headers: OpenAiModelsHeadersSchema,
+        response: constructResponseSchema(OpenAiModelsListResponseSchema),
+      },
+    },
+    async (request) => handleListModels(request, undefined),
+  );
+
+  fastify.get(
+    `${API_PREFIX}/:agentId/models`,
+    {
+      schema: {
+        operationId: RouteId.OpenAiListModelsWithAgent,
+        description: "List OpenAI models (specific agent)",
+        tags: ["LLM Proxy"],
+        params: z.object({ agentId: UuidIdSchema }),
+        headers: OpenAiModelsHeadersSchema,
+        response: constructResponseSchema(OpenAiModelsListResponseSchema),
+      },
+    },
+    async (request) => handleListModels(request, request.params.agentId),
   );
 };
 

@@ -1,0 +1,576 @@
+# /// script
+# requires-python = ">=3.10"
+# dependencies = []
+# ///
+"""typed, zero-dependency contracts shared by discover.py and apply.py.
+
+this module is the lowest layer: it depends only on the standard library, and both the
+discoverer (which emits inventory.json) and the applier (which reads it back) share these
+dataclasses so the cross-script JSON boundary is no longer ``dict[str, Any]``.
+
+guarantees come from two places, since there is no pydantic at runtime:
+  * static: ``ty``/``mypy`` over fully-typed dataclasses + Literals.
+  * runtime: the ``parse_*`` functions below validate every value crossing a trust boundary
+    (external JSON, model-authored answers, API responses) and raise ``ContractError`` with
+    the offending path. nothing is silently coerced.
+"""
+
+from __future__ import annotations
+
+import re
+from dataclasses import dataclass, field, fields, is_dataclass
+from typing import Literal, Mapping, Union, cast
+
+SCHEMA_VERSION = 1
+
+# --- secret detection (single source, shared by discover redaction + apply env handling) --
+# key names whose values must be treated as secrets.
+SECRET_KEY_RE = re.compile(r"(key|token|secret|password|passwd|api[_-]?key|authorization|credential)", re.I)
+# value shapes that look like credentials even under an innocuous key (anchored prefix).
+SECRET_VALUE_RE = re.compile(r"^(sk-|gh[psoru]_|xox[baprs]-|AIza|ya29\.|eyJ[A-Za-z0-9_-]{10,})")
+# credential-shaped tokens embedded anywhere inside a string (commands, prose, config values).
+SECRET_TOKEN_RE = re.compile(
+    r"(sk-[A-Za-z0-9_-]{8,}|gh[psoru]_[A-Za-z0-9]{8,}|xox[baprs]-[A-Za-z0-9-]{8,}"
+    r"|AIza[A-Za-z0-9_-]{8,}|ya29\.[A-Za-z0-9_-]{8,}|eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)"
+)
+
+# --- shared Literal vocabularies (imported by archestra_client to avoid a cycle) ----------
+
+Scope = Literal["personal", "team", "org"]
+ServerType = Literal["local", "remote"]
+Provider = Literal["anthropic", "openai", "gemini", "azure", "bedrock", "vertex"]
+PolicyAction = Literal[
+    "allow_when_context_is_untrusted",
+    "block_when_context_is_untrusted",
+    "block_always",
+    "require_approval",
+]
+ConditionOperator = Literal[
+    "equal", "notEqual", "contains", "notContains", "startsWith", "endsWith", "regex"
+]
+ItemKind = Literal[
+    "claude_md", "subagent", "skill", "command", "local_tool", "mcp_server", "hook", "openclaw"
+]
+TargetKind = Literal["agent", "skill", "mcp_catalog", "mcp_install", "llm_key", "tool_policy"]
+Outcome = Literal["created", "skipped", "failed", "manual", "planned", "invalid"]
+HookIntent = Literal["guard", "passive"]
+
+# an arbitrary decoded-JSON value. used only where the schema is genuinely open (openclaw
+# config, model-authored answer payloads); everything else is precisely typed.
+JsonValue = Union[str, int, float, bool, None, list["JsonValue"], dict[str, "JsonValue"]]
+# frontmatter, as produced by frontmatter.parse_frontmatter (scalars + simple lists only).
+FrontMatterValue = Union[str, list[str]]
+FrontMatter = dict[str, FrontMatterValue]
+
+
+class ContractError(ValueError):
+    """a value crossing a trust boundary failed validation. carries the JSON path."""
+
+
+# --- per-kind item data ------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class ClaudeMdData:
+    body: str
+    frontmatter: FrontMatter = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class SubagentData:
+    body: str
+    description: str | None = None
+    tools: str | list[str] | None = None
+
+
+@dataclass(frozen=True)
+class SkillData:
+    content: str
+    frontmatter: FrontMatter = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class CommandData:
+    body: str
+    frontmatter: FrontMatter = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class LocalToolData:
+    entrypoint: str
+
+
+@dataclass(frozen=True)
+class McpServerData:
+    transport: ServerType
+    command: str | None = None
+    args: list[str] = field(default_factory=list)
+    env: dict[str, str] = field(default_factory=dict)
+    url: str | None = None
+
+
+@dataclass(frozen=True)
+class HookData:
+    event: str
+    command: str
+    intent: HookIntent
+    matcher: str | None = None
+
+
+@dataclass(frozen=True)
+class OpenclawData:
+    # report-only; the openclaw schema is unverified, so the redacted config stays open.
+    config: dict[str, JsonValue] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class BundledFile:
+    path: str
+    content: str
+    encoding: Literal["utf8", "base64"]
+
+
+# --- items: a discriminated union so kind <-> data is correlated at the type level --------
+
+
+@dataclass(frozen=True, kw_only=True)
+class _ItemBase:
+    id: str
+    name: str
+    path: str
+    summary: str = ""
+    files: list[BundledFile] = field(default_factory=list)
+    redacted_refs: list[str] = field(default_factory=list)
+
+
+@dataclass(frozen=True, kw_only=True)
+class ClaudeMdItem(_ItemBase):
+    data: ClaudeMdData
+    kind: Literal["claude_md"] = "claude_md"
+
+
+@dataclass(frozen=True, kw_only=True)
+class SubagentItem(_ItemBase):
+    data: SubagentData
+    kind: Literal["subagent"] = "subagent"
+
+
+@dataclass(frozen=True, kw_only=True)
+class SkillItem(_ItemBase):
+    data: SkillData
+    kind: Literal["skill"] = "skill"
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommandItem(_ItemBase):
+    data: CommandData
+    kind: Literal["command"] = "command"
+
+
+@dataclass(frozen=True, kw_only=True)
+class LocalToolItem(_ItemBase):
+    data: LocalToolData
+    kind: Literal["local_tool"] = "local_tool"
+
+
+@dataclass(frozen=True, kw_only=True)
+class McpServerItem(_ItemBase):
+    data: McpServerData
+    kind: Literal["mcp_server"] = "mcp_server"
+
+
+@dataclass(frozen=True, kw_only=True)
+class HookItem(_ItemBase):
+    data: HookData
+    kind: Literal["hook"] = "hook"
+
+
+@dataclass(frozen=True, kw_only=True)
+class OpenclawItem(_ItemBase):
+    data: OpenclawData
+    kind: Literal["openclaw"] = "openclaw"
+
+
+Item = Union[
+    ClaudeMdItem, SubagentItem, SkillItem, CommandItem,
+    LocalToolItem, McpServerItem, HookItem, OpenclawItem,
+]
+
+
+@dataclass(frozen=True)
+class Inventory:
+    source_root: str
+    schema_version: int = SCHEMA_VERSION
+    items: list[Item] = field(default_factory=list)
+    unknowns: list[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
+
+
+# --- migration plan + result -------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class Decision:
+    source_id: str
+    target_kind: TargetKind
+    scope: Scope
+    action: Literal["migrate", "skip", "manual"] = "migrate"
+    name_override: str | None = None
+    notes: str | None = None
+    # model-authored; consumed ONLY through the require_* validators below, never raw.
+    user_answers: dict[str, JsonValue] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class MigrationPlan:
+    schema_version: int
+    default_scope: Scope
+    decisions: list[Decision] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class ResultOp:
+    source_id: str
+    target_kind: str
+    name: str
+    outcome: Outcome
+    archestra_id: str | None = None
+    error: str | None = None
+    detail: str | None = None
+
+
+# --- generic JSON readers (raise loudly, never coerce) -----------------------------------
+
+
+def require_dict(value: object, *, ctx: str) -> dict[str, JsonValue]:
+    if not isinstance(value, dict):
+        raise ContractError(f"{ctx}: expected an object, got {type(value).__name__}")
+    # JSON object keys are always strings and values are JsonValue (this is only ever called
+    # on json.loads output or dataclass asdict output); assert that for the type system.
+    return cast("dict[str, JsonValue]", value)
+
+
+def require_list(value: object, *, ctx: str) -> list[JsonValue]:
+    if not isinstance(value, list):
+        raise ContractError(f"{ctx}: expected an array, got {type(value).__name__}")
+    return cast("list[JsonValue]", value)
+
+
+def as_object(value: JsonValue) -> dict[str, JsonValue] | None:
+    """typed, non-raising view of a JSON value as an object (or None). use for best-effort
+    parsing where a malformed shape should be skipped rather than rejected."""
+    return cast("dict[str, JsonValue]", value) if isinstance(value, dict) else None
+
+
+def as_array(value: JsonValue) -> list[JsonValue] | None:
+    """typed, non-raising view of a JSON value as an array (or None)."""
+    return cast("list[JsonValue]", value) if isinstance(value, list) else None
+
+
+def require_str_field(obj: Mapping[str, JsonValue], key: str, *, ctx: str) -> str:
+    value = obj.get(key)
+    if not isinstance(value, str) or not value:
+        raise ContractError(f"{ctx}: field {key!r} must be a non-empty string, got {value!r}")
+    return value
+
+
+def _opt_str(obj: Mapping[str, JsonValue], key: str, *, ctx: str) -> str | None:
+    value = obj.get(key)
+    match value:
+        case None:
+            return None
+        case str():
+            return value
+        case _:
+            raise ContractError(f"{ctx}: field {key!r} must be a string or absent, got {value!r}")
+
+
+def _str_list(value: object, *, ctx: str) -> list[str]:
+    out: list[str] = []
+    for i, item in enumerate(require_list(value, ctx=ctx)):
+        if not isinstance(item, str):
+            raise ContractError(f"{ctx}[{i}]: expected string, got {type(item).__name__}")
+        out.append(item)
+    return out
+
+
+def _str_map(value: object, *, ctx: str) -> dict[str, str]:
+    out: dict[str, str] = {}
+    for key, item in require_dict(value, ctx=ctx).items():
+        if not isinstance(item, str):
+            raise ContractError(f"{ctx}.{key}: expected string value, got {type(item).__name__}")
+        out[key] = item
+    return out
+
+
+def _frontmatter(value: object, *, ctx: str) -> FrontMatter:
+    out: FrontMatter = {}
+    for key, item in require_dict(value, ctx=ctx).items():
+        match item:
+            case str():
+                out[key] = item
+            case list():
+                out[key] = _str_list(item, ctx=f"{ctx}.{key}")
+            case _:
+                raise ContractError(
+                    f"{ctx}.{key}: frontmatter value must be a string or list of strings"
+                )
+    return out
+
+
+# --- user_answers validators (model-authored -> Literal fields) --------------------------
+
+
+def require_answer(answers: Mapping[str, JsonValue], key: str, *, ctx: str) -> str:
+    """a required non-empty string answer."""
+    return require_str_field(answers, key, ctx=ctx)
+
+
+_PROVIDERS: tuple[Provider, ...] = ("anthropic", "openai", "gemini", "azure", "bedrock", "vertex")
+_OPERATORS: tuple[ConditionOperator, ...] = (
+    "equal", "notEqual", "contains", "notContains", "startsWith", "endsWith", "regex",
+)
+_ACTIONS: tuple[PolicyAction, ...] = (
+    "allow_when_context_is_untrusted", "block_when_context_is_untrusted",
+    "block_always", "require_approval",
+)
+_SCOPES: tuple[Scope, ...] = ("personal", "team", "org")
+_SERVER_TYPES: tuple[ServerType, ...] = ("local", "remote")
+_INTENTS: tuple[HookIntent, ...] = ("guard", "passive")
+_TARGET_KINDS: tuple[TargetKind, ...] = (
+    "agent", "skill", "mcp_catalog", "mcp_install", "llm_key", "tool_policy",
+)
+_PLAN_ACTIONS: tuple[Literal["migrate", "skip", "manual"], ...] = ("migrate", "skip", "manual")
+
+
+def require_provider(answers: Mapping[str, JsonValue], *, ctx: str) -> Provider:
+    value = require_str_field(answers, "provider", ctx=ctx)
+    if value not in _PROVIDERS:
+        raise ContractError(f"{ctx}: provider {value!r} is not a known provider")
+    return cast("Provider", value)
+
+
+def require_operator(answers: Mapping[str, JsonValue], *, ctx: str) -> ConditionOperator:
+    value = require_str_field(answers, "operator", ctx=ctx)
+    if value not in _OPERATORS:
+        raise ContractError(f"{ctx}: operator {value!r} is not a known condition operator")
+    return cast("ConditionOperator", value)
+
+
+def optional_action(answers: Mapping[str, JsonValue], *, ctx: str) -> PolicyAction:
+    """policy action defaults to block_always when the answer omits it."""
+    value = answers.get("action")
+    if value is None:
+        return "block_always"
+    if value not in _ACTIONS:
+        raise ContractError(f"{ctx}: action {value!r} is not a known policy action")
+    return cast("PolicyAction", value)
+
+
+# --- parsing external JSON into typed objects --------------------------------------------
+
+
+def parse_bundled_file(value: object, *, ctx: str) -> BundledFile:
+    obj = require_dict(value, ctx=ctx)
+    encoding = require_str_field(obj, "encoding", ctx=ctx)
+    if encoding not in ("utf8", "base64"):
+        raise ContractError(f"{ctx}.encoding: {encoding!r} must be 'utf8' or 'base64'")
+    return BundledFile(
+        path=require_str_field(obj, "path", ctx=ctx),
+        content=require_str_field(obj, "content", ctx=ctx),
+        encoding=cast('Literal["utf8", "base64"]', encoding),
+    )
+
+
+def _scope(value: object, *, ctx: str) -> Scope:
+    if value not in _SCOPES:
+        raise ContractError(f"{ctx}: scope {value!r} must be personal|team|org")
+    return cast("Scope", value)
+
+
+def _server_type(value: object, *, ctx: str) -> ServerType:
+    if value not in _SERVER_TYPES:
+        raise ContractError(f"{ctx}: transport {value!r} must be local|remote")
+    return cast("ServerType", value)
+
+
+def _intent(value: object, *, ctx: str) -> HookIntent:
+    if value not in _INTENTS:
+        raise ContractError(f"{ctx}: intent {value!r} must be guard|passive")
+    return cast("HookIntent", value)
+
+
+def _target_kind(value: object, *, ctx: str) -> TargetKind:
+    if value not in _TARGET_KINDS:
+        raise ContractError(f"{ctx}: {value!r} is not a known target kind")
+    return cast("TargetKind", value)
+
+
+def _plan_action(value: object, *, ctx: str) -> Literal["migrate", "skip", "manual"]:
+    if value not in _PLAN_ACTIONS:
+        raise ContractError(f"{ctx}: {value!r} must be migrate|skip|manual")
+    return cast('Literal["migrate", "skip", "manual"]', value)
+
+
+def parse_item(value: object, *, ctx: str) -> Item:
+    obj = require_dict(value, ctx=ctx)
+    kind = require_str_field(obj, "kind", ctx=ctx)
+    item_id = require_str_field(obj, "id", ctx=ctx)
+    name = require_str_field(obj, "name", ctx=ctx)
+    path = require_str_field(obj, "path", ctx=ctx)
+    summary = _opt_str(obj, "summary", ctx=ctx) or ""
+    files = [
+        parse_bundled_file(f, ctx=f"{ctx}.files[{i}]")
+        for i, f in enumerate(require_list(obj.get("files", []), ctx=f"{ctx}.files"))
+    ]
+    refs = _str_list(obj.get("redacted_refs", []), ctx=f"{ctx}.redacted_refs")
+    data = require_dict(obj.get("data", {}), ctx=f"{ctx}.data")
+    dctx = f"{ctx}.data"
+
+    # the base fields are identical across kinds; only kind + data differ. construction is
+    # explicit per branch (not **kwargs) so each item is fully type-checked.
+    match kind:
+        case "claude_md":
+            return ClaudeMdItem(
+                id=item_id, name=name, path=path, summary=summary, files=files, redacted_refs=refs,
+                data=ClaudeMdData(
+                    body=require_str_field(data, "body", ctx=dctx),
+                    frontmatter=_frontmatter(data.get("frontmatter", {}), ctx=f"{dctx}.frontmatter"),
+                ),
+            )
+        case "subagent":
+            return SubagentItem(
+                id=item_id, name=name, path=path, summary=summary, files=files, redacted_refs=refs,
+                data=SubagentData(
+                    body=require_str_field(data, "body", ctx=dctx),
+                    description=_opt_str(data, "description", ctx=dctx),
+                    tools=_parse_tools(data.get("tools"), ctx=f"{dctx}.tools"),
+                ),
+            )
+        case "skill":
+            return SkillItem(
+                id=item_id, name=name, path=path, summary=summary, files=files, redacted_refs=refs,
+                data=SkillData(
+                    content=require_str_field(data, "content", ctx=dctx),
+                    frontmatter=_frontmatter(data.get("frontmatter", {}), ctx=f"{dctx}.frontmatter"),
+                ),
+            )
+        case "command":
+            return CommandItem(
+                id=item_id, name=name, path=path, summary=summary, files=files, redacted_refs=refs,
+                data=CommandData(
+                    body=require_str_field(data, "body", ctx=dctx),
+                    frontmatter=_frontmatter(data.get("frontmatter", {}), ctx=f"{dctx}.frontmatter"),
+                ),
+            )
+        case "local_tool":
+            return LocalToolItem(
+                id=item_id, name=name, path=path, summary=summary, files=files, redacted_refs=refs,
+                data=LocalToolData(entrypoint=require_str_field(data, "entrypoint", ctx=dctx)),
+            )
+        case "mcp_server":
+            return McpServerItem(
+                id=item_id, name=name, path=path, summary=summary, files=files, redacted_refs=refs,
+                data=McpServerData(
+                    transport=_server_type(data.get("transport"), ctx=dctx),
+                    command=_opt_str(data, "command", ctx=dctx),
+                    args=_str_list(data.get("args", []), ctx=f"{dctx}.args"),
+                    env=_str_map(data.get("env", {}), ctx=f"{dctx}.env"),
+                    url=_opt_str(data, "url", ctx=dctx),
+                ),
+            )
+        case "hook":
+            return HookItem(
+                id=item_id, name=name, path=path, summary=summary, files=files, redacted_refs=refs,
+                data=HookData(
+                    event=require_str_field(data, "event", ctx=dctx),
+                    command=require_str_field(data, "command", ctx=dctx),
+                    intent=_intent(data.get("intent"), ctx=dctx),
+                    matcher=_opt_str(data, "matcher", ctx=dctx),
+                ),
+            )
+        case "openclaw":
+            return OpenclawItem(
+                id=item_id, name=name, path=path, summary=summary, files=files, redacted_refs=refs,
+                data=OpenclawData(config=require_dict(data.get("config", {}), ctx=f"{dctx}.config")),
+            )
+        case _:
+            raise ContractError(f"{ctx}: unknown item kind {kind!r}")
+
+
+def _parse_tools(value: object, *, ctx: str) -> str | list[str] | None:
+    match value:
+        case None:
+            return None
+        case str():
+            return value
+        case list():
+            return _str_list(value, ctx=ctx)
+        case _:
+            raise ContractError(f"{ctx}: tools must be a string, list of strings, or absent")
+
+
+def parse_inventory(value: object, *, ctx: str = "inventory") -> Inventory:
+    obj = require_dict(value, ctx=ctx)
+    items = [
+        parse_item(it, ctx=f"{ctx}.items[{i}]")
+        for i, it in enumerate(require_list(obj.get("items", []), ctx=f"{ctx}.items"))
+    ]
+    return Inventory(
+        source_root=require_str_field(obj, "source_root", ctx=ctx),
+        schema_version=_require_int(obj.get("schema_version", SCHEMA_VERSION), ctx=f"{ctx}.schema_version"),
+        items=items,
+        unknowns=_str_list(obj.get("unknowns", []), ctx=f"{ctx}.unknowns"),
+        warnings=_str_list(obj.get("warnings", []), ctx=f"{ctx}.warnings"),
+    )
+
+
+def parse_decision(value: object, *, ctx: str) -> Decision:
+    obj = require_dict(value, ctx=ctx)
+    return Decision(
+        source_id=require_str_field(obj, "source_id", ctx=ctx),
+        target_kind=_target_kind(obj.get("target_kind"), ctx=f"{ctx}.target_kind"),
+        scope=_scope(obj.get("scope"), ctx=f"{ctx}.scope"),
+        action=_plan_action(obj.get("action", "migrate"), ctx=f"{ctx}.action"),
+        name_override=_opt_str(obj, "name_override", ctx=ctx),
+        notes=_opt_str(obj, "notes", ctx=ctx),
+        user_answers=require_dict(obj.get("user_answers", {}), ctx=f"{ctx}.user_answers"),
+    )
+
+
+def parse_plan(value: object, *, ctx: str = "plan") -> MigrationPlan:
+    obj = require_dict(value, ctx=ctx)
+    decisions = [
+        parse_decision(d, ctx=f"{ctx}.decisions[{i}]")
+        for i, d in enumerate(require_list(obj.get("decisions", []), ctx=f"{ctx}.decisions"))
+    ]
+    return MigrationPlan(
+        schema_version=_require_int(obj.get("schema_version", SCHEMA_VERSION), ctx=f"{ctx}.schema_version"),
+        default_scope=_scope(obj.get("default_scope"), ctx=f"{ctx}.default_scope"),
+        decisions=decisions,
+    )
+
+
+def _require_int(value: object, *, ctx: str) -> int:
+    # bool is an int subclass; reject it explicitly so True can't masquerade as 1.
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ContractError(f"{ctx}: expected an integer, got {value!r}")
+    return value
+
+
+# --- serialization -----------------------------------------------------------------------
+
+
+def to_jsonable(obj: object) -> JsonValue:
+    """recursively convert dataclasses/lists/dicts to plain JSON-able values."""
+    if is_dataclass(obj) and not isinstance(obj, type):
+        return {f.name: to_jsonable(getattr(obj, f.name)) for f in fields(obj)}
+    match obj:
+        case bool() | int() | float() | str() | None:
+            return obj
+        case list():
+            return [to_jsonable(v) for v in obj]
+        case dict():
+            return {str(k): to_jsonable(v) for k, v in obj.items()}
+        case _:
+            raise TypeError(f"cannot serialize {type(obj).__name__} to JSON")

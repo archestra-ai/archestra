@@ -1,4 +1,4 @@
-import type { SupportedProvider } from "@shared";
+import type { SupportedProvider } from "@archestra/shared";
 import { expect, test } from "../api-fixtures";
 
 // Run all provider tests sequentially to avoid WireMock stub timing issues

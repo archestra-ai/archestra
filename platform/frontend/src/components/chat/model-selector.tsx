@@ -7,7 +7,7 @@ import {
   type ModelInputModality,
   providerDisplayNames,
   type SupportedProvider,
-} from "@shared";
+} from "@archestra/shared";
 import {
   CheckIcon,
   CopyIcon,

@@ -1,7 +1,7 @@
 import {
   InteractionSourceSchema,
   SupportedProvidersDiscriminatorSchema,
-} from "@shared";
+} from "@archestra/shared";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
@@ -361,9 +361,12 @@ export const SessionSummarySchema = z.object({
   requestCount: z.number(),
   totalInputTokens: z.number(),
   totalOutputTokens: z.number(),
+  totalCacheReadTokens: z.number(),
+  totalCacheWriteTokens: z.number(),
   totalCost: z.string().nullable(),
   totalBaselineCost: z.string().nullable(),
   totalToonCostSavings: z.string().nullable(),
+  totalCacheSavings: z.string().nullable(),
   toonSkipReasonCounts: ToonSkipReasonCountsSchema,
   firstRequestTime: z.date(),
   lastRequestTime: z.date(),

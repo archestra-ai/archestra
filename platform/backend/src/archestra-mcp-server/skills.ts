@@ -4,7 +4,7 @@ import {
   TOOL_LIST_SKILLS_SHORT_NAME,
   TOOL_READ_SKILL_FILE_SHORT_NAME,
   TOOL_UPDATE_SKILL_SHORT_NAME,
-} from "@shared";
+} from "@archestra/shared";
 import { z } from "zod";
 import {
   getSkillPermissionChecker,
@@ -12,9 +12,9 @@ import {
 } from "@/auth/skill-permissions";
 import logger from "@/logging";
 import {
-  SkillFileModel,
   SkillModel,
   SkillTeamModel,
+  SkillVersionModel,
   TeamModel,
 } from "@/models";
 import {
@@ -33,16 +33,23 @@ import {
   escapeXmlText,
   formatSkillActivation,
 } from "@/skills/skill-activation";
+import { buildSkillCatalogPrompt } from "@/skills/skill-catalog-prompt";
 import { isSkillSandboxAvailableForAgent } from "@/skills/skill-sandbox-availability";
+import {
+  resolveActivationVersion,
+  resolveEffectiveSkillVersion,
+} from "@/skills/skill-version-resolution";
 import {
   isSkillNameConflict,
   refineUniqueFilePaths,
 } from "@/skills/validation";
 import { ApiError, type Skill, SkillFileEncodingSchema } from "@/types";
+import { archestraMcpBranding } from "./branding";
 import {
   defineArchestraTool,
   defineArchestraTools,
   errorResult,
+  structuredToolErrorResult,
   successResult,
 } from "./helpers";
 import type { ArchestraContext } from "./types";
@@ -53,11 +60,10 @@ import type { ArchestraContext } from "./types";
  * `list_skills`, `activate_skill`, and `read_skill_file` implement the
  * progressive-disclosure tiers of the Agent Skills spec: `list_skills` returns
  * the catalog, `activate_skill` returns a named skill's SKILL.md body, and
- * bundled resource files are fetched individually via `read_skill_file`. To
- * execute a skill's scripts or shell commands, the sandbox tools
- * (`create_skill_sandbox`, `run_skill_command`, `get_skill_sandbox_artifact`)
- * materialize the selected skills into an isolated container and run commands
- * from the skill root.
+ * bundled resource files are fetched individually via `read_skill_file`.
+ * Activating a skill also mounts it into the conversation's code sandbox (when
+ * the sandbox feature + `sandbox:execute` are present), so its scripts become
+ * runnable under `/skills` via `run_command`.
  *
  * `create_skill` and `update_skill` let an agent author skills during a
  * conversation. Chat-authored skills are always `personal` to their author;
@@ -199,16 +205,34 @@ const registry = defineArchestraTools([
 
       const skill = await findAccessibleSkill(ctx, args.name);
       if (!skill) {
-        return errorResult(
-          `No skill named "${args.name}" exists. Call list_skills to see available skills.`,
-        );
+        return unknownSkillError(args.name);
       }
 
-      const files = await SkillFileModel.findBySkillId(skill.id);
+      const canRunSandbox = await canRunSkillSandbox(ctx, context.agent.id);
+
+      // resolve the effective version and, when the sandbox is usable, pin it by
+      // mounting it under /skills. The same version drives the response and the
+      // mount, so the model never sees bytes that differ from what run_command
+      // will execute. Idempotent per skill per sandbox.
+      const activation = await resolveActivationVersion({
+        skill,
+        organizationId: ctx.organizationId,
+        userId: ctx.userId,
+        conversationId: context.conversationId,
+        canRunSandbox,
+      });
+      if (!activation) {
+        return errorResult(`Skill "${skill.name}" has no readable version.`);
+      }
+      const { version, mounted } = activation;
+      const files = await SkillVersionModel.findFiles(version.id);
+
       logger.info(
         {
           organizationId: ctx.organizationId,
           skillName: skill.name,
+          version: version.version,
+          mounted,
           fileCount: files.length,
         },
         "[Skills] Skill activated",
@@ -216,9 +240,18 @@ const registry = defineArchestraTools([
 
       return successResult(
         formatSkillActivation({
-          skill,
+          skill: {
+            name: skill.name,
+            content: version.content,
+            compatibility: skill.compatibility,
+            allowedTools: skill.allowedTools,
+            templated: skill.templated,
+          },
           files,
-          canRunSandbox: await canRunSkillSandbox(ctx, context.agent.id),
+          // only advertise sandbox runnability when this skill's bytes are
+          // actually mounted under /skills/<name> (not when a same-named skill
+          // won the path).
+          canRunSandbox: mounted,
           promptContext: skill.templated
             ? await buildSkillActivationPromptContext({
                 userId: ctx.userId,
@@ -236,7 +269,7 @@ const registry = defineArchestraTools([
       "Read a bundled resource file from a skill. Paths come from the " +
       "<skill_resources> list returned by activate_skill. This returns file " +
       "text for inspection only — to execute a script or run shell commands, " +
-      "create a sandbox with create_skill_sandbox and call run_skill_command.",
+      "use run_command (activated skills are available under /skills).",
     schema: ReadSkillFileSchema,
     async handler({ args, context }) {
       const ctx = requireOrgContext(context);
@@ -246,14 +279,32 @@ const registry = defineArchestraTools([
 
       const skill = await findAccessibleSkill(ctx, args.skill);
       if (!skill) {
-        return errorResult(`No skill named "${args.skill}" exists.`);
+        return unknownSkillError(args.skill);
       }
 
-      const file = await SkillFileModel.findBySkillAndPath(skill.id, args.path);
+      // read from the effective version (the mounted one if mounted, else
+      // latest) so read_skill_file shows the same bytes as activation + the
+      // sandbox.
+      const version = await resolveEffectiveSkillVersion({
+        skill,
+        organizationId: ctx.organizationId,
+        userId: ctx.userId,
+        conversationId: context.conversationId,
+      });
+      const file = version
+        ? await SkillVersionModel.findFileByPath(version.id, args.path)
+        : null;
       if (!file) {
-        return errorResult(
-          `Skill "${args.skill}" has no file at "${args.path}".`,
+        const activateSkillName = archestraMcpBranding.getToolName(
+          TOOL_ACTIVATE_SKILL_SHORT_NAME,
         );
+        return structuredToolErrorResult({
+          error: {
+            type: "tool_state",
+            code: "unknown_skill_file",
+            message: `Skill "${args.skill}" has no file at "${args.path}". Check the <skill_resources> list returned by ${activateSkillName} for the available file paths.`,
+          },
+        });
       }
 
       if (file.encoding === "base64") {
@@ -342,9 +393,7 @@ const registry = defineArchestraTools([
 
       const skill = await findAccessibleSkill(ctx, args.name);
       if (!skill) {
-        return errorResult(
-          `No skill named "${args.name}" exists. Call list_skills to see available skills.`,
-        );
+        return unknownSkillError(args.name);
       }
 
       // read access (findAccessibleSkill) is not enough to modify a skill —
@@ -394,6 +443,21 @@ const registry = defineArchestraTools([
 
 // ===== Internal helpers =====
 
+// recovery errors steer the model by a tool's exposed (branded) name, so a
+// white-label org receives a name the model can actually call back.
+function unknownSkillError(skillName: string) {
+  const listSkillsName = archestraMcpBranding.getToolName(
+    TOOL_LIST_SKILLS_SHORT_NAME,
+  );
+  return structuredToolErrorResult({
+    error: {
+      type: "tool_state",
+      code: "unknown_skill",
+      message: `No skill named "${skillName}" exists. Call ${listSkillsName} to see available skills.`,
+    },
+  });
+}
+
 interface UserContext {
   organizationId: string;
   userId: string;
@@ -425,12 +489,11 @@ async function canRunSkillSandbox(
   ctx: SkillReadContext,
   agentId: string | undefined,
 ): Promise<boolean> {
-  if (ctx.userId === undefined) return false;
-  const checker = await getSkillPermissionChecker({
+  return isSkillSandboxAvailableForAgent({
     userId: ctx.userId,
     organizationId: ctx.organizationId,
+    agentId,
   });
-  return isSkillSandboxAvailableForAgent({ checker, agentId });
 }
 
 /**
@@ -549,55 +612,17 @@ async function listSkillCatalog(
   ctx: SkillReadContext,
   agentId: string | undefined,
 ) {
-  const checker =
-    ctx.userId !== undefined
-      ? await getSkillPermissionChecker({
-          userId: ctx.userId,
-          organizationId: ctx.organizationId,
-        })
-      : null;
-  const isSkillAdmin = checker?.isAdmin ?? false;
-  const accessibleSkillIds = isSkillAdmin
-    ? undefined
-    : await SkillTeamModel.getUserAccessibleSkillIds({
-        organizationId: ctx.organizationId,
-        userId: ctx.userId,
-      });
-
-  const skills = await SkillModel.findByOrganization({
+  const catalog = await buildSkillCatalogPrompt({
     organizationId: ctx.organizationId,
-    accessibleSkillIds,
+    userId: ctx.userId,
+    agentId,
   });
-  if (skills.length === 0) {
+  if (catalog === null) {
     return successResult(
       "No skills are available in this organization. Skills can be added under Agents → Skills.",
     );
   }
-
-  const catalog = skills
-    .map(
-      (skill) =>
-        `<skill name="${escapeXmlAttr(skill.name)}">${escapeXmlText(
-          skill.description,
-        )}</skill>`,
-    )
-    .join("\n");
-
-  // only advertise the sandbox path when it would actually work: the feature
-  // is enabled, the caller can execute skills, and the sandbox tools are
-  // assigned to this agent (so they appear in its tools/list).
-  const instructions = (await isSkillSandboxAvailableForAgent({
-    checker,
-    agentId,
-  }))
-    ? "Call activate_skill with one of these names to load its instructions. " +
-      "To run a skill's scripts or shell commands, create_skill_sandbox with " +
-      "the skill name, then run_skill_command."
-    : "Call activate_skill with one of these names to load its instructions.";
-
-  return successResult(
-    `<available_skills>\n${catalog}\n</available_skills>\n${instructions}`,
-  );
+  return successResult(catalog);
 }
 
 export const toolEntries = registry.toolEntries;

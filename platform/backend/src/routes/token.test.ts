@@ -1,5 +1,5 @@
 import type { IncomingHttpHeaders } from "node:http";
-import type { Permissions } from "@shared";
+import type { Permissions } from "@archestra/shared";
 import { type Mock, vi } from "vitest";
 import { TeamModel, TeamTokenModel } from "@/models";
 import { beforeEach, describe, expect, test } from "@/test";

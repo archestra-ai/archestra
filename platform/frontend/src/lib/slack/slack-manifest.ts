@@ -1,4 +1,7 @@
-import { buildSlackSlashCommands, SLACK_REQUIRED_BOT_SCOPES } from "@shared";
+import {
+  buildSlackSlashCommands,
+  SLACK_REQUIRED_BOT_SCOPES,
+} from "@archestra/shared";
 
 type SlackManifestConnectionMode = "socket" | "webhook";
 

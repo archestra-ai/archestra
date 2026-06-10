@@ -1,4 +1,4 @@
-import { ADMIN_ROLE_NAME, BUILT_IN_AGENT_IDS } from "@shared";
+import { ADMIN_ROLE_NAME, BUILT_IN_AGENT_IDS } from "@archestra/shared";
 import { vi } from "vitest";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";

@@ -5,8 +5,8 @@ import {
   type Permissions,
   type PredefinedRoleName,
   roleDescriptions,
-} from "@shared";
-import { allAvailableActions } from "@shared/access-control";
+} from "@archestra/shared";
+import { allAvailableActions } from "@archestra/shared/access-control";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Copy, Download, Eye, Pencil, Plus, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";

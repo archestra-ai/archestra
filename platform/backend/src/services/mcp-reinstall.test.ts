@@ -34,7 +34,11 @@ vi.mock("@/websocket", () => ({
   broadcastMcpInstallationStatus: vi.fn(),
 }));
 
-import { CASCADE_SCENARIOS, CATALOG_SHAPES, isMetadataOnlyEdit } from "@shared";
+import {
+  CASCADE_SCENARIOS,
+  CATALOG_SHAPES,
+  isMetadataOnlyEdit,
+} from "@archestra/shared";
 import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
 import { InternalMcpCatalogModel, McpServerModel, ToolModel } from "@/models";
 import { beforeEach, describe, expect, test } from "@/test";
@@ -886,7 +890,7 @@ describe("mcp-reinstall", () => {
     test("static header `default` value change returns false (pod restart needed, auto path)", () => {
       // `userConfigChangedBreakingly` would naively skip a `default`
       // change as cosmetic, but for a static header-mapped userConfig
-      // entry (no install/preset prompt) `default` IS the actual runtime
+      // entry (no install prompt) `default` IS the actual runtime
       // header value the form writes from the admin's input. A change
       // there must route through the auto path so pods restart and pick
       // up the new value — install owners don't need to re-supply

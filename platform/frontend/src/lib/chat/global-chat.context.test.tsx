@@ -12,9 +12,11 @@ type ChatSessionSnapshot = ReturnType<
 const mocks = vi.hoisted(() => ({
   addToolApprovalResponse: vi.fn(),
   addToolResult: vi.fn(),
+  clearError: vi.fn(),
   getQueryData: vi.fn(),
   invalidateQueries: vi.fn(),
   mutate: vi.fn(),
+  mutateAsync: vi.fn(),
   regenerate: vi.fn(),
   resumeStream: vi.fn(),
   sendMessage: vi.fn(),
@@ -43,6 +45,9 @@ vi.mock("@tanstack/react-query", () => ({
   useQueryClient: () => ({
     getQueryData: mocks.getQueryData,
     invalidateQueries: mocks.invalidateQueries,
+  }),
+  useMutation: () => ({
+    mutateAsync: mocks.mutateAsync,
   }),
 }));
 
@@ -82,6 +87,7 @@ describe("ChatProvider retries", () => {
       return {
         addToolApprovalResponse: mocks.addToolApprovalResponse,
         addToolResult: mocks.addToolResult,
+        clearError: mocks.clearError,
         error: undefined,
         messages,
         regenerate: mocks.regenerate,
@@ -354,6 +360,9 @@ describe("ChatProvider retries", () => {
       "This conversation already has a response in progress. Stop it before sending another message.",
     );
     expect(mocks.regenerate).not.toHaveBeenCalled();
+    // The SDK error is cleared so the benign guard never renders as a hard
+    // inline error panel — the toast is the only surfaced feedback.
+    expect(mocks.clearError).toHaveBeenCalledTimes(1);
   });
 });
 

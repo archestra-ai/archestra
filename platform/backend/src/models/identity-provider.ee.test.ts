@@ -1,9 +1,9 @@
-import type { IdpRoleMappingConfig } from "@shared";
+import type { IdpRoleMappingConfig } from "@archestra/shared";
 import {
   IDENTITY_TRUSTED_PROVIDER_IDS,
   MEMBER_ROLE_NAME,
   OAUTH_TOKEN_TYPE,
-} from "@shared";
+} from "@archestra/shared";
 import { APIError } from "better-auth";
 import { vi } from "vitest";
 import { retrieveIdpGroups } from "@/auth/idp-team-sync-cache.ee";

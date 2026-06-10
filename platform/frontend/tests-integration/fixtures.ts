@@ -49,6 +49,7 @@ export const test = base.extend<Fixtures & AutoFixtures>({
       throw new Error("baseURL is required for mswControl fixture");
     }
     const control = new MswControl(request, page, baseURL);
+    await control.reset();
     await use(control);
     // Reset after each test so overrides and unhandled-request lists don't
     // leak across tests when the Next.js dev server is reused

@@ -1,11 +1,12 @@
 {
   "name": "@frontend",
-  "version": "1.2.56",
+  "version": "1.2.60",
   "private": true,
   "type": "module",
   "scripts": {
-    "//dev": "TEMP local workaround: next@16.2.6 turbopack dev server pegs CPU (300-760%) at idle on macOS arm64 (vercel/next.js#92055). Reverted from --turbopack to --webpack. Restore --turbopack once a fixed next ships.",
-    "dev": "next dev --webpack -H 127.0.0.1",
+    "//dev": "Auto-selects the Next dev bundler in scripts/dev.mjs: Turbopack on Linux/CI/Intel-Mac (2-6x faster compiles), webpack on macOS arm64 to dodge the unfixed @next/swc-darwin-arm64 IOAccelerator (Apple GPU) memory leak under Turbopack (vercel/next.js#92055). Override with ARCHESTRA_DEV_BUNDLER=turbopack|webpack, or use dev:turbo / dev:webpack.",
+    "dev": "node ./scripts/dev.mjs",
+    "dev:webpack": "next dev --webpack -H 127.0.0.1",
     "dev:profile": "next dev --webpack --experimental-cpu-prof -H 127.0.0.1",
     "dev:turbo": "next dev --turbopack -H 127.0.0.1",
     "dev:turbo:profile": "next dev --turbopack --experimental-cpu-prof -H 127.0.0.1",
@@ -24,7 +25,7 @@
     "knip": "knip"
   },
   "dependencies": {
-    "@ai-sdk/react": "^3.0.118",
+    "@ai-sdk/react": "^3.0.195",
     "@better-auth/core": "catalog:",
     "@better-auth/oauth-provider": "catalog:",
     "@better-auth/sso": "catalog:",
@@ -57,7 +58,7 @@
     "@radix-ui/react-tooltip": "^1.2.8",
     "@radix-ui/react-use-controllable-state": "^1.2.2",
     "@sentry/nextjs": "^10.42.0",
-    "@shared": "workspace:*",
+    "@archestra/shared": "workspace:*",
     "@tanstack/react-query": "^5.90.21",
     "@tanstack/react-table": "^8.21.3",
     "@uidotdev/usehooks": "^2.4.1",
@@ -79,7 +80,7 @@
     "jszip": "^3.10.1",
     "lodash-es": "^4.18.1",
     "lucide-react": "^0.577.0",
-    "mermaid": "^11.12.3",
+    "mermaid": "^11.15.0",
     "nanoid": "^5.1.6",
     "next": "16.2.6",
     "next-runtime-env": "^3.3.0",

@@ -1,5 +1,5 @@
 import AnthropicProvider from "@anthropic-ai/sdk";
-import { ArchestraInternalErrorCode } from "@shared";
+import { ArchestraInternalErrorCode } from "@archestra/shared";
 import { encode as toonEncode } from "@toon-format/toon";
 import { get } from "lodash-es";
 import {
@@ -555,8 +555,15 @@ class AnthropicResponseAdapter
   }
 
   getUsage(): UsageView {
-    const { input, output } = getUsageTokens(this.response.usage);
-    return { inputTokens: input, outputTokens: output };
+    const { input, output, cacheRead, cacheWrite } = getUsageTokens(
+      this.response.usage,
+    );
+    return {
+      inputTokens: input,
+      outputTokens: output,
+      cacheReadTokens: cacheRead,
+      cacheWriteTokens: cacheWrite,
+    };
   }
 
   getOriginalResponse(): AnthropicResponse {
@@ -632,6 +639,9 @@ class AnthropicStreamAdapter
           this.state.usage = {
             inputTokens: chunk.message.usage.input_tokens,
             outputTokens: chunk.message.usage.output_tokens,
+            cacheReadTokens: chunk.message.usage.cache_read_input_tokens ?? 0,
+            cacheWriteTokens:
+              chunk.message.usage.cache_creation_input_tokens ?? 0,
           };
         }
         sseData = `event: message_start\ndata: ${JSON.stringify(chunk)}\n\n`;
@@ -1087,6 +1097,8 @@ export function getUsageTokens(usage: Anthropic.Types.Usage) {
   return {
     input: usage.input_tokens,
     output: usage.output_tokens,
+    cacheRead: usage.cache_read_input_tokens ?? 0,
+    cacheWrite: usage.cache_creation_input_tokens ?? 0,
   };
 }
 
@@ -1197,18 +1209,15 @@ export const anthropicAdapterFactory: LLMProvider<
     request: AnthropicRequest,
   ): Promise<AsyncIterable<AnthropicStreamChunk>> {
     const anthropicClient = client as AnthropicProvider;
-    const stream = anthropicClient.messages.stream({
+    // use the raw create() stream rather than the messages.stream() helper: the
+    // helper eagerly partial-parses accumulated input_json_delta fragments and
+    // throws (unguarded) when a non-conformant upstream emits deltas that
+    // concatenate into more than one JSON value. we do our own guarded tool-call
+    // accumulation in processChunk, so the raw event stream is all we need.
+    return anthropicClient.messages.create({
       ...request,
+      stream: true,
     } as AnthropicProvider.Messages.MessageCreateParamsStreaming);
-
-    // Return async iterable that yields stream events
-    return {
-      [Symbol.asyncIterator]: async function* () {
-        for await (const event of stream) {
-          yield event;
-        }
-      },
-    };
   },
 
   extractInternalCode(error: unknown): ArchestraInternalErrorCode | undefined {

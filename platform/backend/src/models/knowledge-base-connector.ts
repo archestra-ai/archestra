@@ -393,6 +393,30 @@ class KnowledgeBaseConnectorModel {
     return result ?? null;
   }
 
+  static async countReferencingGithubAppConfig(params: {
+    githubAppConfigId: string;
+    organizationId: string;
+  }): Promise<number> {
+    const [row] = await db
+      .select({ value: count() })
+      .from(schema.knowledgeBaseConnectorsTable)
+      .where(
+        and(
+          eq(
+            schema.knowledgeBaseConnectorsTable.organizationId,
+            params.organizationId,
+          ),
+          // only connectors actively authenticating via this App config count;
+          // a stale githubAppConfigId left in the JSON after switching to PAT
+          // must not block deletion
+          sql`${schema.knowledgeBaseConnectorsTable.config}->>'authMethod' = 'github_app'`,
+          sql`${schema.knowledgeBaseConnectorsTable.config}->>'githubAppConfigId' = ${params.githubAppConfigId}`,
+        ),
+      );
+
+    return row?.value ?? 0;
+  }
+
   static async findByIdForAudit(
     id: string,
     organizationId: string,

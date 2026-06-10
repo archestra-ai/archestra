@@ -3,8 +3,8 @@
  * No-op when the regex is null/empty (validation disabled) or values is empty.
  * Throws a plain Error so the caller can decide HTTP status / framing.
  *
- * `targetName` is woven into the error message so the user sees which preset /
- * default scope rejected their value (e.g. "context7", "Default"). The regex
+ * `targetName` is woven into the error message so the user sees which
+ * environment rejected their value (e.g. "staging", "Default"). The regex
  * itself is intentionally NOT included — surfacing it to end users leaks
  * security/policy intent and tends to be noisy.
  */

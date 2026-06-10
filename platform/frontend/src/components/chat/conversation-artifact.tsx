@@ -1,6 +1,5 @@
 "use client";
 
-import DOMPurify from "dompurify";
 import { Copy, Download, FileText, GripVertical, X } from "lucide-react";
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -13,6 +12,7 @@ import {
   CodeBlockCopyButton,
 } from "@/components/ai-elements/code-block";
 import { Button } from "@/components/ui/button";
+import { printMarkdownElementAsPdf } from "@/lib/chat/print-markdown";
 import { cn } from "@/lib/utils";
 
 const MermaidDiagram = dynamic(
@@ -209,182 +209,7 @@ export function ConversationArtifactPanel({
       toast.error("No artifact to download");
       return;
     }
-
-    // Use browser's print functionality to save as PDF
-    const printWindow = window.open("", "_blank");
-
-    if (!printWindow || !contentRef.current) {
-      toast.error("Unable to generate PDF. Please check popup settings.");
-      return;
-    }
-
-    // Get the content HTML and sanitize it before writing to the print window
-    const content = DOMPurify.sanitize(contentRef.current.innerHTML);
-
-    // Create a complete HTML document with print-optimized styles
-    const printDocument = `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <meta charset="UTF-8">
-          <title>Conversation Artifact</title>
-          <style>
-            @page {
-              size: A4;
-              margin: 20mm;
-            }
-            
-            @media print {
-              body {
-                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-                line-height: 1.6;
-                color: #000;
-                background: #fff;
-              }
-            }
-            
-            body {
-              font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-              line-height: 1.6;
-              padding: 20px;
-              max-width: 800px;
-              margin: 0 auto;
-              color: #333;
-            }
-            
-            h1 {
-              font-size: 2em;
-              font-weight: bold;
-              margin: 0.67em 0;
-              page-break-after: avoid;
-            }
-            
-            h2 {
-              font-size: 1.5em;
-              font-weight: bold;
-              margin: 0.75em 0;
-              page-break-after: avoid;
-            }
-            
-            h3 {
-              font-size: 1.17em;
-              font-weight: semibold;
-              margin: 0.83em 0;
-              page-break-after: avoid;
-            }
-            
-            p {
-              margin: 1em 0;
-            }
-            
-            ul, ol {
-              margin: 1em 0;
-              padding-left: 2em;
-            }
-            
-            li {
-              margin: 0.5em 0;
-            }
-            
-            code {
-              background: #f4f4f4;
-              padding: 0.2em 0.4em;
-              border-radius: 3px;
-              font-family: monospace;
-            }
-            
-            pre {
-              background: #f4f4f4;
-              padding: 1em;
-              border-radius: 5px;
-              overflow-x: auto;
-              page-break-inside: avoid;
-            }
-            
-            pre code {
-              background: none;
-              padding: 0;
-            }
-            
-            table {
-              border-collapse: collapse;
-              width: 100%;
-              margin: 1em 0;
-              page-break-inside: avoid;
-            }
-            
-            th, td {
-              border: 1px solid #ddd;
-              padding: 8px;
-              text-align: left;
-            }
-            
-            th {
-              background-color: #f4f4f4;
-              font-weight: bold;
-            }
-            
-            blockquote {
-              border-left: 4px solid #ddd;
-              padding-left: 1em;
-              margin-left: 0;
-              color: #666;
-              font-style: italic;
-            }
-            
-            hr {
-              border: none;
-              border-top: 1px solid #ddd;
-              margin: 2em 0;
-            }
-            
-            a {
-              color: #0066cc;
-              text-decoration: underline;
-            }
-            
-            strong {
-              font-weight: bold;
-            }
-            
-            em {
-              font-style: italic;
-            }
-            
-            del {
-              text-decoration: line-through;
-            }
-            
-            /* Hide Mermaid diagrams in print as they won't render properly */
-            svg {
-              max-width: 100%;
-              page-break-inside: avoid;
-            }
-          </style>
-        </head>
-        <body>
-          ${content}
-        </body>
-      </html>
-    `;
-
-    // Write the content to the new window
-    printWindow.document.write(printDocument);
-    printWindow.document.close();
-
-    // Wait for content to load then trigger print
-    printWindow.onload = () => {
-      setTimeout(() => {
-        printWindow.print();
-        // The user can save as PDF from the print dialog
-        toast.success("Print dialog opened - select 'Save as PDF' to download");
-
-        // Close the window after print dialog is closed
-        printWindow.onafterprint = () => {
-          printWindow.close();
-        };
-      }, 500);
-    };
+    printMarkdownElementAsPdf(contentRef.current, "Conversation Artifact");
   };
 
   if (!isOpen) {
@@ -423,36 +248,33 @@ export function ConversationArtifactPanel({
         </div>
       )}
 
-      {/* Panel header */}
-      <div className="border-b px-2 pr-1 py-1 flex items-center justify-between">
-        {hideHeader ? (
-          <div />
-        ) : (
+      {/* Panel header. Hidden when embedded in the Files panel, which renders
+          its own header + actions — otherwise the controls would duplicate. */}
+      {!hideHeader && (
+        <div className="border-b px-2 pr-1 py-1 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <FileText className="h-4 w-4 text-muted-foreground" />
             <h3 className="font-medium text-xs">Conversation Artifact</h3>
           </div>
-        )}
-        <div className="flex items-center gap-1">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8"
-            onClick={handleCopy}
-            title="Copy to clipboard"
-          >
-            <Copy className="h-3.5 w-3.5" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8"
-            onClick={handleDownload}
-            title="Download as PDF"
-          >
-            <Download className="h-3.5 w-3.5" />
-          </Button>
-          {!hideHeader && (
+          <div className="flex items-center gap-1">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              onClick={handleCopy}
+              title="Copy to clipboard"
+            >
+              <Copy className="h-3.5 w-3.5" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              onClick={handleDownload}
+              title="Download as PDF"
+            >
+              <Download className="h-3.5 w-3.5" />
+            </Button>
             <Button
               variant="ghost"
               size="icon"
@@ -462,9 +284,9 @@ export function ConversationArtifactPanel({
             >
               <X className="h-3.5 w-3.5" />
             </Button>
-          )}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Panel content */}
       <div className="flex-1 overflow-y-auto">

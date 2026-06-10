@@ -7,7 +7,7 @@ import {
   DEFAULT_APP_NAME,
   MEMBER_ROLE_NAME,
   type SupportedProvider,
-} from "@shared";
+} from "@archestra/shared";
 import { beforeEach as baseBeforeEach, test as baseTest } from "vitest";
 import db, { schema } from "@/database";
 import {
@@ -808,7 +808,13 @@ async function makeLlmProviderApiKey(
   overrides: Partial<
     Pick<
       InsertLlmProviderApiKey,
-      "name" | "provider" | "scope" | "userId" | "teamId"
+      | "name"
+      | "provider"
+      | "scope"
+      | "userId"
+      | "teamId"
+      | "baseUrl"
+      | "inferenceBaseUrl"
     >
   > = {},
 ) {
@@ -821,6 +827,8 @@ async function makeLlmProviderApiKey(
     scope: overrides.scope ?? "org",
     userId: overrides.userId ?? null,
     teamId: overrides.teamId ?? null,
+    baseUrl: overrides.baseUrl ?? null,
+    inferenceBaseUrl: overrides.inferenceBaseUrl ?? null,
   });
 }
 

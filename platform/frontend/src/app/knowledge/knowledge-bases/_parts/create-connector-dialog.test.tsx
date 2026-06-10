@@ -472,6 +472,78 @@ describe("CreateConnectorDialog", () => {
     });
   });
 
+  describe("Web Crawler-specific flow", () => {
+    async function renderWebCrawlerConfigureStep() {
+      const user = userEvent.setup();
+      const result = renderDialog();
+      await user.click(screen.getByText("Web Crawler"));
+      await waitFor(() => {
+        expect(screen.getByLabelText(/^Name$/)).toBeInTheDocument();
+      });
+      return { ...result, user };
+    }
+
+    it("shows crawl fields and hides credential fields", async () => {
+      await renderWebCrawlerConfigureStep();
+
+      expect(screen.getByLabelText(/^Start URL$/)).toBeInTheDocument();
+      expect(screen.queryByLabelText(/^Email$/)).not.toBeInTheDocument();
+      expect(screen.queryByLabelText(/Token/)).not.toBeInTheDocument();
+    });
+
+    it("submits crawl config without credentials", async () => {
+      mockMutateAsync.mockResolvedValue({ id: "connector-1" });
+      const { user } = await renderWebCrawlerConfigureStep();
+
+      fireEvent.change(screen.getByLabelText(/^Name$/), {
+        target: { value: "Product Docs" },
+      });
+      fireEvent.change(screen.getByLabelText(/^Start URL$/), {
+        target: { value: "https://docs.example.com/docs/" },
+      });
+
+      await user.click(screen.getByRole("button", { name: /Advanced/ }));
+      await waitFor(() => {
+        expect(
+          screen.getByLabelText(/Include Path Prefixes/),
+        ).toBeInTheDocument();
+      });
+      fireEvent.change(screen.getByLabelText(/Include Path Prefixes/), {
+        target: { value: "/docs/, /guides/" },
+      });
+      fireEvent.change(screen.getByLabelText(/Exclude Selectors/), {
+        target: { value: ".sidebar, .toc" },
+      });
+      fireEvent.change(screen.getByLabelText(/^Max Pages/), {
+        target: { value: "100" },
+      });
+
+      await user.click(
+        screen.getByRole("button", { name: "Create Connector" }),
+      );
+
+      await waitFor(() => {
+        expect(mockMutateAsync).toHaveBeenCalledTimes(1);
+      });
+
+      const [call] = mockMutateAsync.mock.calls;
+      expect(call[0]).toMatchObject({
+        name: "Product Docs",
+        connectorType: "web_crawler",
+      });
+      expect(call[0]).not.toHaveProperty("credentials");
+      expect(call[0].config).toMatchObject({
+        type: "web_crawler",
+        startUrl: "https://docs.example.com/docs/",
+        includePathPrefixes: ["/docs/", "/guides/"],
+        excludeSelectors: [".sidebar", ".toc"],
+        maxPages: 100,
+        maxDepth: 3,
+        batchSize: 25,
+      });
+    });
+  });
+
   describe("Salesforce-specific flow", () => {
     async function renderSalesforceConfigureStep() {
       const user = userEvent.setup();

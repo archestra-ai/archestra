@@ -1,5 +1,5 @@
+import { hasArchestraTokenPrefix } from "@archestra/shared";
 import type { APIRequestContext } from "@playwright/test";
-import { hasArchestraTokenPrefix } from "@shared";
 import { API_BASE_URL, WIREMOCK_INTERNAL_URL } from "../../consts";
 import { expect, LLM_PROVIDER_API_KEYS_ROUTE, test } from "../api-fixtures";
 

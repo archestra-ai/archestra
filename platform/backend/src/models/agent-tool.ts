@@ -2,7 +2,7 @@ import {
   ARCHESTRA_MCP_CATALOG_ID,
   type PaginationQuery,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
-} from "@shared";
+} from "@archestra/shared";
 import {
   and,
   asc,

@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
+import { RouteId } from "@archestra/shared";
 import { exchangeAuthorization } from "@modelcontextprotocol/sdk/client/auth.js";
-import { RouteId } from "@shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { CacheKey, cacheManager } from "@/cache-manager";
@@ -566,6 +566,7 @@ export async function refreshOAuthToken(
       return false;
     }
 
+    const oauthResource = getOAuthResource(oauthConfig);
     logger.info(
       {
         secretId,
@@ -591,6 +592,9 @@ export async function refreshOAuthToken(
         client_id: clientId,
         ...(clientSecret && {
           client_secret: clientSecret,
+        }),
+        ...(oauthResource && {
+          resource: oauthResource,
         }),
       }),
     });
@@ -708,6 +712,12 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Use the redirect URI stored in the catalog (set by frontend based on window.location.origin)
       // This ensures the redirect URI matches where the user initiated the OAuth flow from
       const redirectUri = oauthConfig.redirect_uris[0];
+      if (isSsoCallbackRedirectUri(redirectUri)) {
+        throw new ApiError(
+          400,
+          "MCP OAuth redirect URI must use /oauth-callback, not the SSO callback URL.",
+        );
+      }
 
       let clientId = oauthConfig.client_id;
       let clientSecret = oauthConfig.client_secret;
@@ -842,8 +852,9 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // RFC 8707: Include resource parameter for audience binding
       // Required by MCP servers like Windmill that need to know which
       // protected resource the token is intended for
-      if (oauthConfig.server_url) {
-        authUrl.searchParams.set("resource", oauthConfig.server_url);
+      const oauthResource = getOAuthResource(oauthConfig);
+      if (oauthResource) {
+        authUrl.searchParams.set("resource", oauthResource);
       }
 
       return reply.send({
@@ -922,6 +933,7 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
         try {
           // Use MCP SDK's exchangeAuthorization - it handles all discovery and authentication
+          const oauthResourceUrl = getOAuthResourceUrl(oauthConfig);
           const tokens = await exchangeAuthorization(oauthConfig.server_url, {
             clientInformation: {
               client_id: clientId,
@@ -930,8 +942,7 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
             authorizationCode: code,
             codeVerifier: oauthState.codeVerifier,
             redirectUri,
-            // For GitHub Copilot, pass the MCP server URL as resource
-            resource: new URL(oauthConfig.server_url),
+            resource: oauthResourceUrl,
           });
 
           fastify.log.info("MCP SDK token exchange successful");
@@ -963,6 +974,7 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
             oauthConfig.token_endpoint || `${oauthConfig.server_url}/token`;
         }
 
+        const oauthResource = getOAuthResource(oauthConfig);
         const tokenResponse = await fetch(tokenEndpoint, {
           method: "POST",
           headers: {
@@ -977,6 +989,9 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
             code_verifier: oauthState.codeVerifier,
             ...(clientSecret && {
               client_secret: clientSecret,
+            }),
+            ...(oauthResource && {
+              resource: oauthResource,
             }),
           }),
         });
@@ -1083,6 +1098,71 @@ function getExplicitOAuthEndpoints(oauthConfig: {
     authorizationEndpoint: oauthConfig.authorization_endpoint,
     tokenEndpoint: oauthConfig.token_endpoint,
   };
+}
+
+function isSsoCallbackRedirectUri(redirectUri: string | undefined): boolean {
+  if (!redirectUri) {
+    return false;
+  }
+
+  try {
+    return new URL(redirectUri).pathname.startsWith("/api/auth/sso/callback");
+  } catch {
+    return redirectUri.includes("/api/auth/sso/callback");
+  }
+}
+
+export function getOAuthResource(oauthConfig: {
+  audience?: string;
+  resource?: string;
+  server_url?: string;
+}): string | undefined {
+  // Prefer the explicit RFC 8707 resource, then legacy audience configs, then
+  // the MCP endpoint URL for existing catalog entries.
+  return oauthConfig.resource || oauthConfig.audience || oauthConfig.server_url;
+}
+
+export function getOAuthResourceUrl(oauthConfig: {
+  audience?: string;
+  resource?: string;
+  server_url?: string;
+}): URL {
+  if (oauthConfig.resource) {
+    return parseOAuthResourceUrl(oauthConfig.resource);
+  }
+
+  if (oauthConfig.audience) {
+    const audienceUrl = tryParseOAuthResourceUrl(oauthConfig.audience);
+    if (audienceUrl) {
+      return audienceUrl;
+    }
+  }
+
+  if (oauthConfig.server_url) {
+    return parseOAuthResourceUrl(oauthConfig.server_url);
+  }
+
+  throw new ApiError(400, "OAuth resource is not configured");
+}
+
+function parseOAuthResourceUrl(oauthResource: string): URL {
+  const resourceUrl = tryParseOAuthResourceUrl(oauthResource);
+  if (!resourceUrl) {
+    throw new ApiError(
+      400,
+      `Invalid OAuth resource URL: ${oauthResource}. Use a full URI such as https://api.example.com or api://client-id.`,
+    );
+  }
+
+  return resourceUrl;
+}
+
+function tryParseOAuthResourceUrl(oauthResource: string): URL | null {
+  try {
+    return new URL(oauthResource);
+  } catch {
+    return null;
+  }
 }
 
 export default oauthRoutes;

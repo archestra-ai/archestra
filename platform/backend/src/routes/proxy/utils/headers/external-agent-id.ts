@@ -1,4 +1,4 @@
-import { EXTERNAL_AGENT_ID_HEADER } from "@shared";
+import { EXTERNAL_AGENT_ID_HEADER } from "@archestra/shared";
 import { getHeaderValue, parseMetaHeader } from "./meta-header";
 
 /**

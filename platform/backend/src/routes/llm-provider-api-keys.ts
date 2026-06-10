@@ -4,7 +4,7 @@ import {
   RouteId,
   type SupportedProvider,
   SupportedProvidersSchema,
-} from "@shared";
+} from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { capitalize } from "lodash-es";
 import { z } from "zod";

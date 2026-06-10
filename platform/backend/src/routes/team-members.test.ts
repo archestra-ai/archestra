@@ -650,4 +650,35 @@ describe("team routes", () => {
       expect(response.statusCode).toBe(404);
     });
   });
+
+  describe("GET /api/teams ?mine", () => {
+    test("team:admin sees all teams by default but only member teams with ?mine", async ({
+      makeTeam,
+      makeTeamMember,
+    }) => {
+      // hasPermission is mocked to success in beforeEach, so the caller is a
+      // team:admin (would otherwise see every team).
+      const teamA = await makeTeam(organizationId, adminUser.id, {
+        name: "Team A",
+      });
+      const teamB = await makeTeam(organizationId, adminUser.id, {
+        name: "Team B",
+      });
+      await makeTeamMember(teamA.id, adminUser.id);
+
+      const all = await app.inject({ method: "GET", url: "/api/teams" });
+      expect(all.statusCode).toBe(200);
+      const allIds = (all.json().data as { id: string }[]).map((t) => t.id);
+      expect(allIds).toEqual(expect.arrayContaining([teamA.id, teamB.id]));
+
+      const mine = await app.inject({
+        method: "GET",
+        url: "/api/teams?mine=true",
+      });
+      expect(mine.statusCode).toBe(200);
+      const mineIds = (mine.json().data as { id: string }[]).map((t) => t.id);
+      expect(mineIds).toContain(teamA.id);
+      expect(mineIds).not.toContain(teamB.id);
+    });
+  });
 });

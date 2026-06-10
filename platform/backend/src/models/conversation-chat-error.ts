@@ -2,7 +2,7 @@ import {
   ChatErrorCode,
   type ChatErrorResponse,
   ChatErrorResponseSchema,
-} from "@shared";
+} from "@archestra/shared";
 import { eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import logger from "@/logging";

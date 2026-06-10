@@ -1,3 +1,9 @@
+import {
+  type archestraApiTypes,
+  buildFullToolName,
+  MCP_SERVER_TOOL_NAME_SEPARATOR,
+  parseFullToolName,
+} from "@archestra/shared";
 import type {
   McpUiDisplayMode,
   McpUiResourceCsp,
@@ -8,12 +14,6 @@ import {
   AppBridge,
   PostMessageTransport,
 } from "@modelcontextprotocol/ext-apps/app-bridge";
-import {
-  type archestraApiTypes,
-  buildFullToolName,
-  MCP_SERVER_TOOL_NAME_SEPARATOR,
-  parseFullToolName,
-} from "@shared";
 import { PanelRightOpen } from "lucide-react";
 import { useTheme } from "next-themes";
 import type React from "react";
@@ -728,6 +728,13 @@ function SandboxIframe({
       window.removeEventListener("message", onMessage);
       iframe.remove();
       iframeRef.current = null;
+      // Reset connection state so the send effects below don't fire against a
+      // bridge whose iframe we just removed. Without this, ready/initialized
+      // stay stale-true after a re-render that re-runs this effect (e.g.
+      // editing a message re-renders the message list), and sendToolInput
+      // throws "Not connected".
+      setReady(false);
+      setInitialized(false);
     };
   }, [sandboxUrl.href, appBridge, useDedicatedOrigin]);
 
@@ -766,15 +773,32 @@ function SandboxIframe({
   // Send tool input when available
   useEffect(() => {
     if (!ready || !initialized || !toolInput) return;
-    appBridge.sendToolInput({ arguments: toolInput });
+    // Guard the synchronous send: the bridge can drop between render and effect
+    // (iframe closed by a re-render). A dropped bridge is transient — the effect
+    // re-fires once it reconnects — so swallow rather than crash the page.
+    try {
+      appBridge.sendToolInput({ arguments: toolInput });
+    } catch (err) {
+      console.warn(
+        "[mcp-app] sendToolInput skipped (bridge not connected)",
+        err,
+      );
+    }
   }, [ready, initialized, toolInput, appBridge]);
 
   // Send tool result when available
   useEffect(() => {
     if (!ready || !initialized || !toolResult) return;
-    // Cast needed: our McpCallToolResult is looser than the SDK's strict union type
-    // biome-ignore lint/suspicious/noExplicitAny: McpCallToolResult is structurally compatible but TypeScript can't prove it
-    appBridge.sendToolResult(toolResult as any);
+    try {
+      // Cast needed: our McpCallToolResult is looser than the SDK's strict union type
+      // biome-ignore lint/suspicious/noExplicitAny: McpCallToolResult is structurally compatible but TypeScript can't prove it
+      appBridge.sendToolResult(toolResult as any);
+    } catch (err) {
+      console.warn(
+        "[mcp-app] sendToolResult skipped (bridge not connected)",
+        err,
+      );
+    }
   }, [ready, initialized, toolResult, appBridge]);
 
   return (
@@ -1241,6 +1265,14 @@ function isRenderableMcpAppHtml(html: string): boolean {
 
   const parser = new DOMParser();
   const document = parser.parseFromString(trimmedHtml, "text/html");
+
+  // A script anywhere in the document (commonly a <head> module script that
+  // mounts the app into an otherwise-empty <body>, e.g. Excalidraw) can build
+  // the UI at runtime, so the resource is renderable even with an empty body.
+  if (document.querySelector("script")) {
+    return true;
+  }
+
   const body = document.body;
 
   if (body.textContent?.trim()) {
@@ -1250,7 +1282,6 @@ function isRenderableMcpAppHtml(html: string): boolean {
   return Boolean(
     body.querySelector(
       [
-        "script",
         "canvas",
         "svg",
         "img",

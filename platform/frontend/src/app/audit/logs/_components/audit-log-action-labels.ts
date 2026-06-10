@@ -45,6 +45,10 @@ export const ACTION_LABEL: Record<AuditEventName, string> = {
   "environment.created": "Environment created",
   "environment.updated": "Environment updated",
   "environment.deleted": "Environment deleted",
+  // GitHub App configuration
+  "githubAppConfig.created": "GitHub App configuration created",
+  "githubAppConfig.updated": "GitHub App configuration updated",
+  "githubAppConfig.deleted": "GitHub App configuration deleted",
   // Identity provider
   "identityProvider.created": "Identity provider created",
   "identityProvider.updated": "Identity provider updated",
@@ -235,6 +239,7 @@ export const KNOWN_RESOURCE_TYPES: readonly string[] = [
   "chatOpsConfig",
   "connector",
   "environment",
+  "githubAppConfig",
   "identityProvider",
   "internalMcpCatalog",
   "invitation",
@@ -266,6 +271,7 @@ const RESOURCE_LABEL_OVERRIDES: Record<string, string> = {
   auth: "Auth",
   chatOpsBinding: "ChatOps channel binding",
   chatOpsConfig: "ChatOps configuration",
+  githubAppConfig: "GitHub App configuration",
   internalMcpCatalog: "Internal MCP catalog",
   llmModel: "LLM model",
   llmOauthClient: "LLM OAuth client",

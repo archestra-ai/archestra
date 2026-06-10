@@ -18,7 +18,7 @@ import {
   TOOL_SWAP_TO_DEFAULT_AGENT_SHORT_NAME,
   TOOL_TODO_WRITE_FULL_NAME,
   TOOL_TODO_WRITE_SHORT_NAME,
-} from "@shared";
+} from "@archestra/shared";
 import type { ChatStatus, DynamicToolUIPart, ToolUIPart } from "ai";
 import { BotIcon, CheckCircleIcon, ClockIcon } from "lucide-react";
 import Link from "next/link";
@@ -144,11 +144,11 @@ interface ChatMessagesProps {
   }>;
   isLoadingConversation?: boolean;
   onMessagesUpdate?: (messages: UIMessage[]) => void;
-  onUserMessageEdit?: (
-    editedMessage: UIMessage,
-    updatedMessages: UIMessage[],
-    editedPartIndex: number,
-  ) => void;
+  onRegenerateUserMessage?: (args: {
+    messageId: string;
+    partIndex: number;
+    text: string;
+  }) => Promise<void>;
   error?: Error | null;
   chatErrors?: archestraApiTypes.GetChatConversationResponses["200"]["chatErrors"];
   compactions?: archestraApiTypes.GetChatConversationResponses["200"]["compactions"];
@@ -210,7 +210,7 @@ export function ChatMessages({
   optimisticToolCalls = [],
   isLoadingConversation = false,
   onMessagesUpdate,
-  onUserMessageEdit,
+  onRegenerateUserMessage,
   error = null,
   chatErrors = [],
   compactions = [],
@@ -354,30 +354,7 @@ export function ChatMessages({
     partIndex: number,
     newText: string,
   ) => {
-    const data = await updateChatMessageMutation.mutateAsync({
-      messageId,
-      partIndex,
-      text: newText,
-      deleteSubsequentMessages: true,
-    });
-
-    // Don't call onMessagesUpdate here - let onUserMessageEdit handle state
-    // to avoid race condition with old messages reappearing
-
-    // Find the edited message and trigger regeneration
-    // Pass the partIndex so the caller knows which specific part was edited
-    if (onUserMessageEdit && data?.messages) {
-      const editedMessage = (data.messages as UIMessage[]).find(
-        (m) => m.id === messageId,
-      );
-      if (editedMessage) {
-        onUserMessageEdit(
-          editedMessage,
-          data.messages as UIMessage[],
-          partIndex,
-        );
-      }
-    }
+    await onRegenerateUserMessage?.({ messageId, partIndex, text: newText });
   };
 
   const pendingToolCalls = useMemo(
@@ -1679,6 +1656,21 @@ const MessageTool = memo(
       (mcpOutput?._meta?.ui as { resourceUri?: string } | undefined)
         ?.resourceUri ?? earlyToolUiData?.uiResourceUri;
 
+    // When the model dispatched through run_tool, the MCP App belongs to the
+    // *target* tool. Unwrap so the app receives the target tool's name (for the
+    // sandbox origin and tool callbacks) and its real arguments (e.g. Excalidraw
+    // elements) instead of the run_tool wrapper.
+    const runToolInput =
+      getToolShortName(toolName) === TOOL_RUN_TOOL_SHORT_NAME
+        ? (part.input as {
+            tool_name?: string;
+            tool_args?: Record<string, unknown>;
+          } | null)
+        : null;
+    const mcpAppToolName = runToolInput?.tool_name ?? toolName;
+    const mcpAppToolInput =
+      runToolInput?.tool_args ?? (part.input as Record<string, unknown>);
+
     // Use the text content string when available; fall back to the raw output for non-MCP tools.
     const output = mcpOutput?.content ?? rawOutput;
     const errorText = getToolErrorText({ part, toolResultPart });
@@ -1908,9 +1900,9 @@ const MessageTool = memo(
               <McpAppSection
                 uiResourceUri={uiResourceUri}
                 agentId={agentId}
-                toolName={toolName}
+                toolName={mcpAppToolName}
                 toolCallId={part.toolCallId}
-                toolInput={part.input as Record<string, unknown>}
+                toolInput={mcpAppToolInput}
                 rawOutput={mcpOutput}
                 preloadedResource={
                   earlyToolUiData?.html
@@ -2002,9 +1994,9 @@ const MessageTool = memo(
               <McpAppSection
                 uiResourceUri={uiResourceUri}
                 agentId={agentId}
-                toolName={toolName}
+                toolName={mcpAppToolName}
                 toolCallId={part.toolCallId}
-                toolInput={part.input as Record<string, unknown>}
+                toolInput={mcpAppToolInput}
                 rawOutput={mcpOutput}
                 preloadedResource={
                   earlyToolUiData?.html

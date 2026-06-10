@@ -1,7 +1,7 @@
 import {
   ARCHESTRA_TOKEN_PREFIX,
   LEGACY_ARCHESTRA_TOKEN_PREFIXES,
-} from "@shared";
+} from "@archestra/shared";
 import type { FastifyRequest } from "fastify";
 import { vi } from "vitest";
 import { VirtualApiKeyModel } from "@/models";

@@ -8,7 +8,7 @@ import {
   type SupportedProvider,
   SupportedProvidersSchema,
   TimeInMs,
-} from "@shared";
+} from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { LRUCacheManager } from "@/cache-manager";

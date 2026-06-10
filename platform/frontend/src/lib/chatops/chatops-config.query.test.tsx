@@ -1,4 +1,4 @@
-import { archestraApiSdk } from "@shared";
+import { archestraApiSdk } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { renderHook } from "@testing-library/react";
 import type React from "react";
@@ -6,8 +6,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { handleApiError } from "@/lib/utils";
 import { useUpdateChatOpsConfigInQuickstart } from "./chatops-config.query";
 
-vi.mock("@shared", async () => {
-  const actual = await vi.importActual("@shared");
+vi.mock("@archestra/shared", async () => {
+  const actual = await vi.importActual("@archestra/shared");
   return {
     ...actual,
     archestraApiSdk: {

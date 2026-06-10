@@ -12,10 +12,11 @@ import {
   RouteId,
   type SupportedProvider,
   TimeInMs,
+  TOOL_ACTIVATE_SKILL_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
   type TokenUsage,
-} from "@shared";
+} from "@archestra/shared";
 import {
   convertToModelMessages,
   createUIMessageStream,
@@ -73,6 +74,8 @@ import {
   ACTIVE_CHAT_RUN_TERMINAL_REPLAY_GRACE_MS,
   activeChatRunService,
 } from "@/services/active-chat-run";
+import { conversationFilesService } from "@/services/conversation-files";
+import { buildSkillCatalogPrompt } from "@/skills/skill-catalog-prompt";
 import {
   promptNeedsRendering,
   renderSystemPrompt,
@@ -93,6 +96,7 @@ import {
   UpdateConversationSchema,
   UuidIdSchema,
 } from "@/types";
+import { ConversationFilesResponseSchema } from "@/types/conversation-file";
 import {
   resolveAgentLlmOrDefault,
   resolveConversationLlmSelectionForAgent,
@@ -125,6 +129,7 @@ import {
   sanitizeChatErrorForFrontend,
 } from "./errors";
 import { injectSkillActivation } from "./inject-skill-activation";
+import { applyPromptCacheBreakpoints } from "./normalization/apply-prompt-cache";
 import { cloneAttachmentsForFork } from "./normalization/clone-attachments-for-fork";
 import { extractInlineAttachments } from "./normalization/extract-inline-attachments";
 import { materializeAttachments } from "./normalization/materialize-attachments";
@@ -184,7 +189,7 @@ function buildLoadToolsWhenNeededSystemPrompt(): string {
     TOOL_RUN_TOOL_SHORT_NAME,
   );
 
-  return `Some available tools are not listed upfront. If the visible tools do not fit the task, use \`${searchToolsName}\` to find relevant tools, then call \`${runToolName}\` with the selected tool name and arguments. Do not guess hidden tool names without searching unless the exact tool name is already known from the conversation.`;
+  return `Some available tools are not listed upfront and must be discovered. If the visible tools do not fit the task, call \`${searchToolsName}\` to find relevant tools, then call \`${runToolName}\` with a tool name it returned. Only pass \`${runToolName}\` a tool name that \`${searchToolsName}\` returned or that appeared verbatim earlier in this conversation; if you do not have an exact name, call \`${searchToolsName}\` first.`;
 }
 
 const UNAVAILABLE_TOOL_ERROR_MESSAGE =
@@ -218,7 +223,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       const {
-        body: { id: conversationId, messages },
+        body: { id: conversationId, messages, trigger },
         user,
         organizationId,
       } = request;
@@ -278,6 +283,12 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       });
 
       if (!activeRun) {
+        if (activeChatRunService.shuttingDown) {
+          throw new ApiError(
+            503,
+            "The server is shutting down. Please retry in a moment.",
+          );
+        }
         throw new ApiError(
           409,
           "This conversation already has an active response. Stop it before sending another message.",
@@ -302,7 +313,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           uploadedByUserId: user.id,
         });
       } catch (error) {
-        await ActiveChatRunModel.markTerminal({
+        await activeChatRunService.markTerminal({
           runId: activeRun.id,
           status: "failed",
           error: error instanceof Error ? error.message : String(error),
@@ -430,10 +441,23 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
             ? buildLoadToolsWhenNeededSystemPrompt()
             : "";
 
+        // eagerly list the agent's skills in the prompt (like Claude Code /
+        // opencode), but only when the agent can actually activate them.
+        const skillCatalogPrompt =
+          archestraMcpBranding.getToolName(TOOL_ACTIVATE_SKILL_SHORT_NAME) in
+          mcpTools
+            ? await buildSkillCatalogPrompt({
+                organizationId,
+                userId: user.id,
+                agentId,
+              })
+            : null;
+
         systemPrompt =
           [
             toolLoadingInstructions,
             renderedPrompt,
+            skillCatalogPrompt,
             toolDenialInstruction,
             toolResultInstructions,
           ]
@@ -502,6 +526,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   organizationId,
                   userId: user.id,
                   agentId: conversation.agentId ?? undefined,
+                  conversationId,
                 })
               : (messages as ChatMessage[]);
 
@@ -786,10 +811,14 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   );
                 }
 
-                const modelMessages = await buildModelMessagesForProvider({
-                  messages: compactionResult.messages,
+                const modelMessages = applyPromptCacheBreakpoints({
                   provider,
-                  conversationId,
+                  model: selectedModel,
+                  messages: await buildModelMessagesForProvider({
+                    messages: compactionResult.messages,
+                    provider,
+                    conversationId,
+                  }),
                 });
                 const streamTextConfig: Parameters<typeof streamText>[0] = {
                   model,
@@ -1130,11 +1159,22 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                     // Only persist if not already persisted by onError
                     if (!messagesPersisted && conversationId) {
                       try {
-                        await persistNewMessages(
-                          conversationId,
-                          finalMessages,
-                          "onFinish",
-                        );
+                        if (trigger === "regenerate-message") {
+                          // Replace the regenerated turn atomically: delete the
+                          // stale messages below the anchor and write the new
+                          // turn in one transaction (no destructive pre-delete).
+                          await persistRegeneratedTurn({
+                            conversationId,
+                            requestMessages: messages,
+                            finalMessages,
+                          });
+                        } else {
+                          await persistNewMessages(
+                            conversationId,
+                            finalMessages,
+                            "onFinish",
+                          );
+                        }
                         messagesPersisted = true;
                       } catch (error) {
                         logger.error(
@@ -1253,7 +1293,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           chatAbortController.abort();
         }
         stopActiveRunPolling();
-        await ActiveChatRunModel.markTerminal({
+        await activeChatRunService.markTerminal({
           runId: activeRun.id,
           status: "failed",
           error: error instanceof Error ? error.message : String(error),
@@ -1422,6 +1462,37 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       return reply.send(conversation);
+    },
+  );
+
+  fastify.get(
+    "/api/chat/conversations/:id/files",
+    {
+      schema: {
+        operationId: RouteId.GetChatConversationFiles,
+        description:
+          "List files for a conversation: download_file outputs and user attachments (metadata only).",
+        tags: ["Chat"],
+        params: z.object({ id: UuidIdSchema }),
+        response: constructResponseSchema(ConversationFilesResponseSchema),
+      },
+    },
+    async ({ params: { id }, user, organizationId }, reply) => {
+      const conversation = await findReadableConversationById({
+        conversationId: id,
+        userId: user.id,
+        organizationId,
+      });
+      if (!conversation) {
+        throw new ApiError(404, "Conversation not found");
+      }
+
+      return reply.send(
+        await conversationFilesService.list({
+          conversationId: id,
+          organizationId,
+        }),
+      );
     },
   );
 
@@ -2688,6 +2759,70 @@ function formatUnavailableToolErrorDetails(
     null,
     2,
   )}`;
+}
+
+/**
+ * Regenerate a turn: find the user message being regenerated, delete the stale
+ * messages below it, and persist the freshly generated turn — atomically.
+ *
+ * The reads (what's stale, what's new) run first; the transaction then wraps
+ * only the two writes, so they commit together. That is the point: nothing is
+ * deleted unless the new turn is written in the same commit, so an interrupted
+ * or failed regenerate can never leave the conversation with the old turn gone
+ * and no replacement. Anchor and deletion are matched by id, never `createdAt`.
+ *
+ * @param requestMessages - the thread the client sent, ending at the user
+ *   message being regenerated (the anchor)
+ * @param finalMessages - the server-authoritative thread after generation
+ */
+async function persistRegeneratedTurn(params: {
+  conversationId: string;
+  requestMessages: unknown[];
+  finalMessages: unknown[];
+}): Promise<void> {
+  const { conversationId, requestMessages, finalMessages } = params;
+  const existing = await MessageModel.findByConversation(conversationId);
+
+  // The user message being regenerated is the last one the client sent.
+  // Everything stored below it is the stale turn to replace.
+  const anchor = (requestMessages as ChatMessage[]).at(-1);
+  const anchorIds = new Set(anchor ? getUiMessageIdentityIds(anchor) : []);
+  const anchorIndex = existing.findIndex((row) =>
+    storedMessageIds(row).some((id) => anchorIds.has(id)),
+  );
+  const staleIds =
+    anchorIndex < 0 ? [] : existing.slice(anchorIndex + 1).map((row) => row.id);
+
+  // The new turn is what the model just produced (not already stored).
+  const newMessages = getMessagesNotYetPersisted({
+    existingMessages: existing,
+    uiMessages: finalMessages as ChatMessage[],
+  });
+  const now = Date.now();
+  const newRows = normalizeChatMessagesForPersistence(newMessages).map(
+    (msg, index) => ({
+      conversationId,
+      role: msg.role ?? "assistant",
+      content: msg,
+      createdAt: new Date(now + index),
+    }),
+  );
+
+  await withDbTransaction(async (tx) => {
+    await MessageModel.deleteByIds(staleIds, tx);
+    await MessageModel.bulkCreate(newRows, tx);
+  });
+
+  logger.info(
+    { conversationId, deleted: staleIds.length, persisted: newRows.length },
+    "Regenerate: atomically replaced trailing turn",
+  );
+}
+
+/** A stored row's identity: its primary key plus the AI SDK id in its content. */
+function storedMessageIds(row: { id: string; content: unknown }): string[] {
+  const contentId = getMessageContentId(row.content);
+  return contentId ? [row.id, contentId] : [row.id];
 }
 
 /**

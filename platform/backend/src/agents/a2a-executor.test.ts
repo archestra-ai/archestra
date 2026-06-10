@@ -1,3 +1,4 @@
+import { TOOL_ACTIVATE_SKILL_FULL_NAME } from "@archestra/shared";
 import { describe, expect, test, vi } from "vitest";
 import { MIN_IMAGE_ATTACHMENT_SIZE } from "@/agents/incoming-email/constants";
 import {
@@ -11,11 +12,13 @@ const {
   mockGetChatMcpTools,
   mockCreateLLMModelForAgent,
   mockResolveConversationLlmSelectionForAgent,
+  mockBuildSkillCatalogPrompt,
 } = vi.hoisted(() => ({
   mockStreamText: vi.fn(),
   mockGetChatMcpTools: vi.fn(),
   mockCreateLLMModelForAgent: vi.fn(),
   mockResolveConversationLlmSelectionForAgent: vi.fn(),
+  mockBuildSkillCatalogPrompt: vi.fn(),
 }));
 
 vi.mock("ai", async () => {
@@ -59,6 +62,11 @@ vi.mock("@/clients/mcp-client", () => ({
   default: {
     closeSession: vi.fn(),
   },
+}));
+
+vi.mock("@/skills/skill-catalog-prompt", () => ({
+  buildSkillCatalogPrompt: (...args: unknown[]) =>
+    mockBuildSkillCatalogPrompt(...args),
 }));
 
 vi.mock("@/models", async () => {
@@ -449,5 +457,101 @@ describe("executeA2AMessage model selection", () => {
       role: "assistant",
       parts: [{ type: "text", text: "Delegated response" }],
     });
+  });
+});
+
+describe("executeA2AMessage skill catalog", () => {
+  function primeMocks(tools: Record<string, unknown>) {
+    mockStreamText.mockClear();
+    mockBuildSkillCatalogPrompt.mockClear();
+    vi.mocked(AgentModel.findById).mockResolvedValue({
+      id: "agent-skill",
+      name: "Skill Agent",
+      agentType: "agent",
+      systemPrompt: "Handle the task.",
+      llmApiKeyId: null,
+      modelId: null,
+    } as never);
+    vi.mocked(McpServerModel.getUserPersonalServerForCatalog).mockResolvedValue(
+      null,
+    );
+    mockResolveConversationLlmSelectionForAgent.mockResolvedValue({
+      chatApiKeyId: "org-key",
+      selectedModel: "gemini-2.5-pro",
+      selectedProvider: "gemini",
+    });
+    mockCreateLLMModelForAgent.mockResolvedValue({
+      model: { provider: "mock" },
+      provider: "gemini",
+      apiKeySource: "org",
+    });
+    mockGetChatMcpTools.mockResolvedValue(tools);
+    mockStreamText.mockReturnValue({
+      toUIMessageStream: vi.fn((options) => {
+        const responseMessage = {
+          id: "msg-1",
+          role: "assistant",
+          parts: [{ type: "text", text: "done" }],
+        };
+        options?.onFinish?.({
+          messages: [responseMessage],
+          isContinuation: false,
+          isAborted: false,
+          responseMessage,
+          finishReason: "stop",
+        });
+        return new ReadableStream({
+          start(controller) {
+            controller.close();
+          },
+        });
+      }),
+      text: Promise.resolve("done"),
+      usage: Promise.resolve(undefined),
+      finishReason: Promise.resolve("stop"),
+    });
+  }
+
+  test("appends the skill catalog to the system prompt when the agent can activate skills", async () => {
+    primeMocks({
+      [TOOL_ACTIVATE_SKILL_FULL_NAME]: { description: "Activate" },
+    });
+    mockBuildSkillCatalogPrompt.mockResolvedValue(
+      '<available_skills>\n<skill name="pdf">x</skill>\n</available_skills>',
+    );
+
+    await executeA2AMessage({
+      agentId: "agent-skill",
+      message: "do it",
+      organizationId: "org-1",
+      userId: "user-1",
+      conversationId: "conv-1",
+    });
+
+    expect(mockBuildSkillCatalogPrompt).toHaveBeenCalledWith({
+      organizationId: "org-1",
+      userId: "user-1",
+      agentId: "agent-skill",
+    });
+    const system = mockStreamText.mock.calls[0]?.[0].system;
+    expect(system).toContain("Handle the task.");
+    expect(system).toContain("<available_skills>");
+  });
+
+  test("leaves the system prompt unchanged when no skill tools are available", async () => {
+    primeMocks({});
+    mockBuildSkillCatalogPrompt.mockResolvedValue("<available_skills>...");
+
+    await executeA2AMessage({
+      agentId: "agent-skill",
+      message: "do it",
+      organizationId: "org-1",
+      userId: "user-1",
+      conversationId: "conv-1",
+    });
+
+    expect(mockBuildSkillCatalogPrompt).not.toHaveBeenCalled();
+    const system = mockStreamText.mock.calls[0]?.[0].system;
+    expect(system).toBe("Handle the task.");
   });
 });

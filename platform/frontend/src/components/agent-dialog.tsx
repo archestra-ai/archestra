@@ -19,7 +19,7 @@ import {
   type SupportedProvider,
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
-} from "@shared";
+} from "@archestra/shared";
 import {
   AlertTriangle,
   Bot,
@@ -135,7 +135,7 @@ import { useConnectors } from "@/lib/knowledge/connector.query";
 import { useKnowledgeBases } from "@/lib/knowledge/knowledge-base.query";
 import { useLlmModelsByProvider } from "@/lib/llm-models.query";
 import { useAvailableLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
-import { useTeams } from "@/lib/teams/team.query";
+import { useAssignableTeams } from "@/lib/teams/team.query";
 import { cn } from "@/lib/utils";
 import {
   getDescriptionPlaceholder,
@@ -606,15 +606,18 @@ export function AgentDialog({
 
   // Fetch fresh agent data when dialog opens
   const { data: freshAgent, refetch: refetchAgent } = useProfile(agent?.id);
-  const { data: teams } = useTeams({
-    enabled: open && !!canReadTeams,
-  });
   const resource = getResourceForAgentType(agentType);
   const { data: isAdmin } = useHasPermissions({
     [resource]: ["admin"],
   });
   const { data: isTeamAdmin } = useHasPermissions({
     [resource]: ["team-admin"],
+  });
+  // Picker offers all teams to a full resource-admin, otherwise only the teams
+  // the user belongs to (the only ones the backend lets a team-admin assign).
+  const { data: teams } = useAssignableTeams({
+    isResourceAdmin: !!isAdmin,
+    enabled: open && !!canReadTeams,
   });
   const agentLabelsRef = useRef<ProfileLabelsRef>(null);
   const agentToolsEditorRef = useRef<AgentToolsEditorRef>(null);

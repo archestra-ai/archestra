@@ -1,4 +1,4 @@
-import { OAUTH_TOKEN_ID_PREFIX } from "@shared";
+import { OAUTH_TOKEN_ID_PREFIX } from "@archestra/shared";
 import type { MCPGatewayAuthMethod } from "@/types";
 
 /**

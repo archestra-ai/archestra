@@ -1476,6 +1476,8 @@ export type AnthropicMessagesResponseInput = {
     usage: {
         input_tokens: number;
         output_tokens: number;
+        cache_read_input_tokens?: number | null;
+        cache_creation_input_tokens?: number | null;
     };
 };
 
@@ -5271,7 +5273,6 @@ export type UserConfigFieldInput = {
     title: string;
     description: string;
     promptOnInstallation?: boolean;
-    promptOnPreset?: boolean;
     required?: boolean;
     default?: UserConfigFieldDefaultInput;
     multiple?: boolean;
@@ -6754,6 +6755,8 @@ export type AnthropicMessagesResponse = {
     usage: {
         input_tokens: number;
         output_tokens: number;
+        cache_read_input_tokens?: number | null;
+        cache_creation_input_tokens?: number | null;
     };
 };
 
@@ -10549,7 +10552,6 @@ export type UserConfigField = {
     title: string;
     description: string;
     promptOnInstallation?: boolean;
-    promptOnPreset?: boolean;
     required?: boolean;
     default?: UserConfigFieldDefault;
     multiple?: boolean;
@@ -11785,7 +11787,7 @@ export type ImportAgentData = {
             /**
              * Connector type (e.g. confluence, github)
              */
-            connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'file_upload' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce';
+            connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'file_upload' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler';
         }>;
     };
     path?: never;
@@ -12771,7 +12773,7 @@ export type ExportAgentResponses = {
             /**
              * Connector type (e.g. confluence, github)
              */
-            connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'file_upload' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce';
+            connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'file_upload' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler';
         }>;
     };
 };
@@ -14654,6 +14656,196 @@ export type AnthropicMessagesWithAgentResponses = {
 
 export type AnthropicMessagesWithAgentResponse = AnthropicMessagesWithAgentResponses[keyof AnthropicMessagesWithAgentResponses];
 
+export type AnthropicListModelsWithDefaultAgentData = {
+    body?: never;
+    headers?: {
+        'x-api-key'?: string;
+        authorization?: string;
+        'anthropic-version'?: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/v1/anthropic/v1/models';
+};
+
+export type AnthropicListModelsWithDefaultAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type AnthropicListModelsWithDefaultAgentError = AnthropicListModelsWithDefaultAgentErrors[keyof AnthropicListModelsWithDefaultAgentErrors];
+
+export type AnthropicListModelsWithDefaultAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        data: Array<{
+            type: 'model';
+            id: string;
+            display_name: string;
+            created_at?: string;
+        }>;
+        has_more: boolean;
+    };
+};
+
+export type AnthropicListModelsWithDefaultAgentResponse = AnthropicListModelsWithDefaultAgentResponses[keyof AnthropicListModelsWithDefaultAgentResponses];
+
+export type AnthropicListModelsWithAgentData = {
+    body?: never;
+    headers?: {
+        'x-api-key'?: string;
+        authorization?: string;
+        'anthropic-version'?: string;
+    };
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/v1/anthropic/{agentId}/v1/models';
+};
+
+export type AnthropicListModelsWithAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type AnthropicListModelsWithAgentError = AnthropicListModelsWithAgentErrors[keyof AnthropicListModelsWithAgentErrors];
+
+export type AnthropicListModelsWithAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        data: Array<{
+            type: 'model';
+            id: string;
+            display_name: string;
+            created_at?: string;
+        }>;
+        has_more: boolean;
+    };
+};
+
+export type AnthropicListModelsWithAgentResponse = AnthropicListModelsWithAgentResponses[keyof AnthropicListModelsWithAgentResponses];
+
 export type GetApiKeysData = {
     body?: never;
     path?: never;
@@ -15058,7 +15250,7 @@ export type GetAuditLogsData = {
         /**
          * Filter by action type (dotted name, e.g. agent.created)
          */
-        action?: 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'apiKey.created' | 'apiKey.deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'limit.created' | 'limit.updated' | 'limit.deleted' | 'llmModel.updated' | 'llmModel.synced' | 'llmOauthClient.created' | 'llmOauthClient.updated' | 'llmOauthClient.deleted' | 'llmProviderApiKey.created' | 'llmProviderApiKey.deleted' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.reinstalled' | 'mcpServerInstallationRequest.created' | 'mcpServerInstallationRequest.updated' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'optimizationRule.created' | 'optimizationRule.updated' | 'optimizationRule.deleted' | 'organization.updated' | 'role.created' | 'role.updated' | 'role.deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'skill.created' | 'skill.updated' | 'skill.deleted' | 'skill.imported' | 'team.created' | 'team.updated' | 'team.deleted' | 'teamToken.rotated' | 'tool.deleted' | 'toolInvocationPolicy.created' | 'toolInvocationPolicy.updated' | 'toolInvocationPolicy.deleted' | 'toolInvocationPolicy.bulk_defaulted' | 'toolInvocationPolicy.auto_configured' | 'trustedDataPolicy.created' | 'trustedDataPolicy.updated' | 'trustedDataPolicy.deleted' | 'trustedDataPolicy.bulk_defaulted' | 'userToken.rotated' | 'virtualApiKey.created' | 'virtualApiKey.deleted' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted';
+        action?: 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'apiKey.created' | 'apiKey.deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'githubAppConfig.created' | 'githubAppConfig.updated' | 'githubAppConfig.deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'limit.created' | 'limit.updated' | 'limit.deleted' | 'llmModel.updated' | 'llmModel.synced' | 'llmOauthClient.created' | 'llmOauthClient.updated' | 'llmOauthClient.deleted' | 'llmProviderApiKey.created' | 'llmProviderApiKey.deleted' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.reinstalled' | 'mcpServerInstallationRequest.created' | 'mcpServerInstallationRequest.updated' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'optimizationRule.created' | 'optimizationRule.updated' | 'optimizationRule.deleted' | 'organization.updated' | 'role.created' | 'role.updated' | 'role.deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'skill.created' | 'skill.updated' | 'skill.deleted' | 'skill.imported' | 'team.created' | 'team.updated' | 'team.deleted' | 'teamToken.rotated' | 'tool.deleted' | 'toolInvocationPolicy.created' | 'toolInvocationPolicy.updated' | 'toolInvocationPolicy.deleted' | 'toolInvocationPolicy.bulk_defaulted' | 'toolInvocationPolicy.auto_configured' | 'trustedDataPolicy.created' | 'trustedDataPolicy.updated' | 'trustedDataPolicy.deleted' | 'trustedDataPolicy.bulk_defaulted' | 'userToken.rotated' | 'virtualApiKey.created' | 'virtualApiKey.deleted' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted';
         /**
          * Filter by outcome (success, failure, or denied)
          */
@@ -15162,7 +15354,7 @@ export type GetAuditLogsResponses = {
             actorType: 'user' | 'api_key' | 'service_account' | 'system' | 'sso';
             actorName: string | null;
             actorEmail: string | null;
-            action: 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'apiKey.created' | 'apiKey.deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'limit.created' | 'limit.updated' | 'limit.deleted' | 'llmModel.updated' | 'llmModel.synced' | 'llmOauthClient.created' | 'llmOauthClient.updated' | 'llmOauthClient.deleted' | 'llmProviderApiKey.created' | 'llmProviderApiKey.deleted' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.reinstalled' | 'mcpServerInstallationRequest.created' | 'mcpServerInstallationRequest.updated' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'optimizationRule.created' | 'optimizationRule.updated' | 'optimizationRule.deleted' | 'organization.updated' | 'role.created' | 'role.updated' | 'role.deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'skill.created' | 'skill.updated' | 'skill.deleted' | 'skill.imported' | 'team.created' | 'team.updated' | 'team.deleted' | 'teamToken.rotated' | 'tool.deleted' | 'toolInvocationPolicy.created' | 'toolInvocationPolicy.updated' | 'toolInvocationPolicy.deleted' | 'toolInvocationPolicy.bulk_defaulted' | 'toolInvocationPolicy.auto_configured' | 'trustedDataPolicy.created' | 'trustedDataPolicy.updated' | 'trustedDataPolicy.deleted' | 'trustedDataPolicy.bulk_defaulted' | 'userToken.rotated' | 'virtualApiKey.created' | 'virtualApiKey.deleted' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted';
+            action: 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'apiKey.created' | 'apiKey.deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'githubAppConfig.created' | 'githubAppConfig.updated' | 'githubAppConfig.deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'limit.created' | 'limit.updated' | 'limit.deleted' | 'llmModel.updated' | 'llmModel.synced' | 'llmOauthClient.created' | 'llmOauthClient.updated' | 'llmOauthClient.deleted' | 'llmProviderApiKey.created' | 'llmProviderApiKey.deleted' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.reinstalled' | 'mcpServerInstallationRequest.created' | 'mcpServerInstallationRequest.updated' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'optimizationRule.created' | 'optimizationRule.updated' | 'optimizationRule.deleted' | 'organization.updated' | 'role.created' | 'role.updated' | 'role.deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'skill.created' | 'skill.updated' | 'skill.deleted' | 'skill.imported' | 'team.created' | 'team.updated' | 'team.deleted' | 'teamToken.rotated' | 'tool.deleted' | 'toolInvocationPolicy.created' | 'toolInvocationPolicy.updated' | 'toolInvocationPolicy.deleted' | 'toolInvocationPolicy.bulk_defaulted' | 'toolInvocationPolicy.auto_configured' | 'trustedDataPolicy.created' | 'trustedDataPolicy.updated' | 'trustedDataPolicy.deleted' | 'trustedDataPolicy.bulk_defaulted' | 'userToken.rotated' | 'virtualApiKey.created' | 'virtualApiKey.deleted' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted';
             outcome: 'success' | 'failure' | 'denied';
             resourceType: string | null;
             resourceId: string | null;
@@ -16814,7 +17006,7 @@ export type AzureResponsesWithDefaultAgentData = {
     body: {
         model: string;
         input?: string | Array<{
-            type: string;
+            type?: string;
             [key: string]: unknown;
         }>;
         instructions?: string | null;
@@ -16983,7 +17175,7 @@ export type AzureResponsesWithAgentData = {
     body: {
         model: string;
         input?: string | Array<{
-            type: string;
+            type?: string;
             [key: string]: unknown;
         }>;
         instructions?: string | null;
@@ -17633,6 +17825,11 @@ export type BedrockConverseWithDefaultAgentData = {
                     }>;
                     status?: 'success' | 'error';
                 };
+            } | {
+                cachePoint: {
+                    type: string;
+                    ttl?: string;
+                };
             }>;
         }>;
         system?: Array<{
@@ -17646,6 +17843,11 @@ export type BedrockConverseWithDefaultAgentData = {
                     text: string;
                     qualifiers?: Array<'grounding_source' | 'query' | 'guard_content'>;
                 };
+            };
+        } | {
+            cachePoint: {
+                type: string;
+                ttl?: string;
             };
         }>;
         inferenceConfig?: {
@@ -17943,6 +18145,11 @@ export type BedrockConverseWithAgentData = {
                     }>;
                     status?: 'success' | 'error';
                 };
+            } | {
+                cachePoint: {
+                    type: string;
+                    ttl?: string;
+                };
             }>;
         }>;
         system?: Array<{
@@ -17956,6 +18163,11 @@ export type BedrockConverseWithAgentData = {
                     text: string;
                     qualifiers?: Array<'grounding_source' | 'query' | 'guard_content'>;
                 };
+            };
+        } | {
+            cachePoint: {
+                type: string;
+                ttl?: string;
             };
         }>;
         inferenceConfig?: {
@@ -18255,6 +18467,11 @@ export type BedrockConverseStreamWithDefaultAgentData = {
                     }>;
                     status?: 'success' | 'error';
                 };
+            } | {
+                cachePoint: {
+                    type: string;
+                    ttl?: string;
+                };
             }>;
         }>;
         system?: Array<{
@@ -18268,6 +18485,11 @@ export type BedrockConverseStreamWithDefaultAgentData = {
                     text: string;
                     qualifiers?: Array<'grounding_source' | 'query' | 'guard_content'>;
                 };
+            };
+        } | {
+            cachePoint: {
+                type: string;
+                ttl?: string;
             };
         }>;
         inferenceConfig?: {
@@ -18440,6 +18662,11 @@ export type BedrockConverseStreamWithAgentData = {
                     }>;
                     status?: 'success' | 'error';
                 };
+            } | {
+                cachePoint: {
+                    type: string;
+                    ttl?: string;
+                };
             }>;
         }>;
         system?: Array<{
@@ -18453,6 +18680,11 @@ export type BedrockConverseStreamWithAgentData = {
                     text: string;
                     qualifiers?: Array<'grounding_source' | 'query' | 'guard_content'>;
                 };
+            };
+        } | {
+            cachePoint: {
+                type: string;
+                ttl?: string;
             };
         }>;
         inferenceConfig?: {
@@ -18627,6 +18859,11 @@ export type BedrockConverseWithAgentAndModelData = {
                     }>;
                     status?: 'success' | 'error';
                 };
+            } | {
+                cachePoint: {
+                    type: string;
+                    ttl?: string;
+                };
             }>;
         }>;
         system?: Array<{
@@ -18640,6 +18877,11 @@ export type BedrockConverseWithAgentAndModelData = {
                     text: string;
                     qualifiers?: Array<'grounding_source' | 'query' | 'guard_content'>;
                 };
+            };
+        } | {
+            cachePoint: {
+                type: string;
+                ttl?: string;
             };
         }>;
         inferenceConfig?: {
@@ -18940,6 +19182,11 @@ export type BedrockConverseStreamWithAgentAndModelData = {
                     }>;
                     status?: 'success' | 'error';
                 };
+            } | {
+                cachePoint: {
+                    type: string;
+                    ttl?: string;
+                };
             }>;
         }>;
         system?: Array<{
@@ -18953,6 +19200,11 @@ export type BedrockConverseStreamWithAgentAndModelData = {
                     text: string;
                     qualifiers?: Array<'grounding_source' | 'query' | 'guard_content'>;
                 };
+            };
+        } | {
+            cachePoint: {
+                type: string;
+                ttl?: string;
             };
         }>;
         inferenceConfig?: {
@@ -20166,6 +20418,104 @@ export type UpdateChatConversationResponses = {
 };
 
 export type UpdateChatConversationResponse = UpdateChatConversationResponses[keyof UpdateChatConversationResponses];
+
+export type GetChatConversationFilesData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/chat/conversations/{id}/files';
+};
+
+export type GetChatConversationFilesErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetChatConversationFilesError = GetChatConversationFilesErrors[keyof GetChatConversationFilesErrors];
+
+export type GetChatConversationFilesResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        generated: Array<{
+            id: string;
+            name: string;
+            mimeType: string;
+            contentUrl: string;
+            createdAt: string;
+        }>;
+        attachments: Array<{
+            id: string;
+            name: string;
+            mimeType: string;
+            contentUrl: string;
+            createdAt: string;
+        }>;
+    };
+};
+
+export type GetChatConversationFilesResponse = GetChatConversationFilesResponses[keyof GetChatConversationFilesResponses];
 
 export type GetChatAttachmentContentData = {
     body?: never;
@@ -23153,7 +23503,7 @@ export type GetConfigResponses = {
         };
         features: {
             orchestratorK8sRuntime: boolean;
-            codeRuntime: boolean;
+            sandbox: boolean;
             agentSkillsEnabled: boolean;
             byosEnabled: boolean;
             byosVaultKvVersion: '1' | '2';
@@ -23458,6 +23808,7 @@ export type ListEnvironmentsResponses = {
                 allowedDomains: Array<string>;
                 allowedCidrs: Array<string>;
             } | null;
+            validationRegex: string | null;
             restricted: boolean;
             sortOrder: number;
             createdAt: string;
@@ -23482,6 +23833,7 @@ export type CreateEnvironmentData = {
             allowedCidrs?: Array<string>;
         } | null;
         restricted?: boolean;
+        validationRegex?: string | null;
     };
     path?: never;
     query?: never;
@@ -23569,6 +23921,7 @@ export type CreateEnvironmentResponses = {
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
         } | null;
+        validationRegex: string | null;
         restricted: boolean;
         sortOrder: number;
         createdAt: string;
@@ -23675,6 +24028,7 @@ export type UpdateEnvironmentData = {
             allowedCidrs?: Array<string>;
         } | null;
         restricted?: boolean;
+        validationRegex?: string | null;
     };
     path: {
         id: string;
@@ -23764,6 +24118,7 @@ export type UpdateEnvironmentResponses = {
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
         } | null;
+        validationRegex: string | null;
         restricted: boolean;
         sortOrder: number;
         createdAt: string;
@@ -24140,6 +24495,473 @@ export type PostV1GeminiByAgentIdV1BetaModelsByModelStreamGenerateContentErrors 
 };
 
 export type PostV1GeminiByAgentIdV1BetaModelsByModelStreamGenerateContentError = PostV1GeminiByAgentIdV1BetaModelsByModelStreamGenerateContentErrors[keyof PostV1GeminiByAgentIdV1BetaModelsByModelStreamGenerateContentErrors];
+
+export type ListGithubAppConfigsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/github-app-configs';
+};
+
+export type ListGithubAppConfigsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ListGithubAppConfigsError = ListGithubAppConfigsErrors[keyof ListGithubAppConfigsErrors];
+
+export type ListGithubAppConfigsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        organizationId: string;
+        name: string;
+        githubUrl: string;
+        appId: string;
+        installationId: string;
+        createdAt: string;
+        updatedAt: string;
+    }>;
+};
+
+export type ListGithubAppConfigsResponse = ListGithubAppConfigsResponses[keyof ListGithubAppConfigsResponses];
+
+export type CreateGithubAppConfigData = {
+    body: {
+        name: string;
+        githubUrl?: string;
+        appId: string;
+        installationId: string;
+        /**
+         * GitHub App private key PEM
+         */
+        privateKey: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/github-app-configs';
+};
+
+export type CreateGithubAppConfigErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type CreateGithubAppConfigError = CreateGithubAppConfigErrors[keyof CreateGithubAppConfigErrors];
+
+export type CreateGithubAppConfigResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        name: string;
+        githubUrl: string;
+        appId: string;
+        installationId: string;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type CreateGithubAppConfigResponse = CreateGithubAppConfigResponses[keyof CreateGithubAppConfigResponses];
+
+export type DeleteGithubAppConfigData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/github-app-configs/{id}';
+};
+
+export type DeleteGithubAppConfigErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type DeleteGithubAppConfigError = DeleteGithubAppConfigErrors[keyof DeleteGithubAppConfigErrors];
+
+export type DeleteGithubAppConfigResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type DeleteGithubAppConfigResponse = DeleteGithubAppConfigResponses[keyof DeleteGithubAppConfigResponses];
+
+export type GetGithubAppConfigData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/github-app-configs/{id}';
+};
+
+export type GetGithubAppConfigErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetGithubAppConfigError = GetGithubAppConfigErrors[keyof GetGithubAppConfigErrors];
+
+export type GetGithubAppConfigResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        name: string;
+        githubUrl: string;
+        appId: string;
+        installationId: string;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type GetGithubAppConfigResponse = GetGithubAppConfigResponses[keyof GetGithubAppConfigResponses];
+
+export type UpdateGithubAppConfigData = {
+    body: {
+        name?: string;
+        githubUrl?: string;
+        appId?: string;
+        installationId?: string;
+        /**
+         * GitHub App private key PEM
+         */
+        privateKey?: string;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/github-app-configs/{id}';
+};
+
+export type UpdateGithubAppConfigErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type UpdateGithubAppConfigError = UpdateGithubAppConfigErrors[keyof UpdateGithubAppConfigErrors];
+
+export type UpdateGithubAppConfigResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        name: string;
+        githubUrl: string;
+        appId: string;
+        installationId: string;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type UpdateGithubAppConfigResponse = UpdateGithubAppConfigResponses[keyof UpdateGithubAppConfigResponses];
 
 export type GroqChatCompletionsWithDefaultAgentData = {
     body: XaiChatCompletionRequestInput;
@@ -25003,8 +25825,12 @@ export type GetInteractionsResponses = {
             baselineModel: string | null;
             inputTokens: number | null;
             outputTokens: number | null;
+            cacheReadTokens: number | null;
+            cacheWriteTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
+            cacheCost: string | null;
+            cacheSavings: string | null;
             toonTokensBefore: number | null;
             toonTokensAfter: number | null;
             toonCostSavings: string | null;
@@ -25053,7 +25879,7 @@ export type GetInteractionsResponses = {
             request: {
                 model: string;
                 input?: string | Array<{
-                    type: string;
+                    type?: string;
                     [key: string]: unknown;
                 }>;
                 instructions?: string | null;
@@ -25089,7 +25915,7 @@ export type GetInteractionsResponses = {
             processedRequest?: {
                 model: string;
                 input?: string | Array<{
-                    type: string;
+                    type?: string;
                     [key: string]: unknown;
                 }>;
                 instructions?: string | null;
@@ -25188,8 +26014,12 @@ export type GetInteractionsResponses = {
             baselineModel: string | null;
             inputTokens: number | null;
             outputTokens: number | null;
+            cacheReadTokens: number | null;
+            cacheWriteTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
+            cacheCost: string | null;
+            cacheSavings: string | null;
             toonTokensBefore: number | null;
             toonTokensAfter: number | null;
             toonCostSavings: string | null;
@@ -25279,8 +26109,12 @@ export type GetInteractionsResponses = {
             baselineModel: string | null;
             inputTokens: number | null;
             outputTokens: number | null;
+            cacheReadTokens: number | null;
+            cacheWriteTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
+            cacheCost: string | null;
+            cacheSavings: string | null;
             toonTokensBefore: number | null;
             toonTokensAfter: number | null;
             toonCostSavings: string | null;
@@ -25346,8 +26180,12 @@ export type GetInteractionsResponses = {
             baselineModel: string | null;
             inputTokens: number | null;
             outputTokens: number | null;
+            cacheReadTokens: number | null;
+            cacheWriteTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
+            cacheCost: string | null;
+            cacheSavings: string | null;
             toonTokensBefore: number | null;
             toonTokensAfter: number | null;
             toonCostSavings: string | null;
@@ -25415,8 +26253,12 @@ export type GetInteractionsResponses = {
             baselineModel: string | null;
             inputTokens: number | null;
             outputTokens: number | null;
+            cacheReadTokens: number | null;
+            cacheWriteTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
+            cacheCost: string | null;
+            cacheSavings: string | null;
             toonTokensBefore: number | null;
             toonTokensAfter: number | null;
             toonCostSavings: string | null;
@@ -25542,6 +26384,11 @@ export type GetInteractionsResponses = {
                             }>;
                             status?: 'success' | 'error';
                         };
+                    } | {
+                        cachePoint: {
+                            type: string;
+                            ttl?: string;
+                        };
                     }>;
                 }>;
                 system?: Array<{
@@ -25552,6 +26399,11 @@ export type GetInteractionsResponses = {
                             text: string;
                             qualifiers?: Array<'grounding_source' | 'query' | 'guard_content'>;
                         };
+                    };
+                } | {
+                    cachePoint: {
+                        type: string;
+                        ttl?: string;
                     };
                 }>;
                 inferenceConfig?: {
@@ -25701,6 +26553,11 @@ export type GetInteractionsResponses = {
                             }>;
                             status?: 'success' | 'error';
                         };
+                    } | {
+                        cachePoint: {
+                            type: string;
+                            ttl?: string;
+                        };
                     }>;
                 }>;
                 system?: Array<{
@@ -25711,6 +26568,11 @@ export type GetInteractionsResponses = {
                             text: string;
                             qualifiers?: Array<'grounding_source' | 'query' | 'guard_content'>;
                         };
+                    };
+                } | {
+                    cachePoint: {
+                        type: string;
+                        ttl?: string;
                     };
                 }>;
                 inferenceConfig?: {
@@ -25858,8 +26720,12 @@ export type GetInteractionsResponses = {
             baselineModel: string | null;
             inputTokens: number | null;
             outputTokens: number | null;
+            cacheReadTokens: number | null;
+            cacheWriteTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
+            cacheCost: string | null;
+            cacheSavings: string | null;
             toonTokensBefore: number | null;
             toonTokensAfter: number | null;
             toonCostSavings: string | null;
@@ -25927,8 +26793,12 @@ export type GetInteractionsResponses = {
             baselineModel: string | null;
             inputTokens: number | null;
             outputTokens: number | null;
+            cacheReadTokens: number | null;
+            cacheWriteTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
+            cacheCost: string | null;
+            cacheSavings: string | null;
             toonTokensBefore: number | null;
             toonTokensAfter: number | null;
             toonCostSavings: string | null;
@@ -25996,8 +26866,12 @@ export type GetInteractionsResponses = {
             baselineModel: string | null;
             inputTokens: number | null;
             outputTokens: number | null;
+            cacheReadTokens: number | null;
+            cacheWriteTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
+            cacheCost: string | null;
+            cacheSavings: string | null;
             toonTokensBefore: number | null;
             toonTokensAfter: number | null;
             toonCostSavings: string | null;
@@ -26065,8 +26939,12 @@ export type GetInteractionsResponses = {
             baselineModel: string | null;
             inputTokens: number | null;
             outputTokens: number | null;
+            cacheReadTokens: number | null;
+            cacheWriteTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
+            cacheCost: string | null;
+            cacheSavings: string | null;
             toonTokensBefore: number | null;
             toonTokensAfter: number | null;
             toonCostSavings: string | null;
@@ -26134,8 +27012,12 @@ export type GetInteractionsResponses = {
             baselineModel: string | null;
             inputTokens: number | null;
             outputTokens: number | null;
+            cacheReadTokens: number | null;
+            cacheWriteTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
+            cacheCost: string | null;
+            cacheSavings: string | null;
             toonTokensBefore: number | null;
             toonTokensAfter: number | null;
             toonCostSavings: string | null;
@@ -26203,8 +27085,12 @@ export type GetInteractionsResponses = {
             baselineModel: string | null;
             inputTokens: number | null;
             outputTokens: number | null;
+            cacheReadTokens: number | null;
+            cacheWriteTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
+            cacheCost: string | null;
+            cacheSavings: string | null;
             toonTokensBefore: number | null;
             toonTokensAfter: number | null;
             toonCostSavings: string | null;
@@ -26272,8 +27158,12 @@ export type GetInteractionsResponses = {
             baselineModel: string | null;
             inputTokens: number | null;
             outputTokens: number | null;
+            cacheReadTokens: number | null;
+            cacheWriteTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
+            cacheCost: string | null;
+            cacheSavings: string | null;
             toonTokensBefore: number | null;
             toonTokensAfter: number | null;
             toonCostSavings: string | null;
@@ -26341,8 +27231,12 @@ export type GetInteractionsResponses = {
             baselineModel: string | null;
             inputTokens: number | null;
             outputTokens: number | null;
+            cacheReadTokens: number | null;
+            cacheWriteTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
+            cacheCost: string | null;
+            cacheSavings: string | null;
             toonTokensBefore: number | null;
             toonTokensAfter: number | null;
             toonCostSavings: string | null;
@@ -26408,8 +27302,12 @@ export type GetInteractionsResponses = {
             baselineModel: string | null;
             inputTokens: number | null;
             outputTokens: number | null;
+            cacheReadTokens: number | null;
+            cacheWriteTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
+            cacheCost: string | null;
+            cacheSavings: string | null;
             toonTokensBefore: number | null;
             toonTokensAfter: number | null;
             toonCostSavings: string | null;
@@ -26475,8 +27373,12 @@ export type GetInteractionsResponses = {
             baselineModel: string | null;
             inputTokens: number | null;
             outputTokens: number | null;
+            cacheReadTokens: number | null;
+            cacheWriteTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
+            cacheCost: string | null;
+            cacheSavings: string | null;
             toonTokensBefore: number | null;
             toonTokensAfter: number | null;
             toonCostSavings: string | null;
@@ -26544,8 +27446,12 @@ export type GetInteractionsResponses = {
             baselineModel: string | null;
             inputTokens: number | null;
             outputTokens: number | null;
+            cacheReadTokens: number | null;
+            cacheWriteTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
+            cacheCost: string | null;
+            cacheSavings: string | null;
             toonTokensBefore: number | null;
             toonTokensAfter: number | null;
             toonCostSavings: string | null;
@@ -26613,8 +27519,12 @@ export type GetInteractionsResponses = {
             baselineModel: string | null;
             inputTokens: number | null;
             outputTokens: number | null;
+            cacheReadTokens: number | null;
+            cacheWriteTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
+            cacheCost: string | null;
+            cacheSavings: string | null;
             toonTokensBefore: number | null;
             toonTokensAfter: number | null;
             toonCostSavings: string | null;
@@ -26682,8 +27592,12 @@ export type GetInteractionsResponses = {
             baselineModel: string | null;
             inputTokens: number | null;
             outputTokens: number | null;
+            cacheReadTokens: number | null;
+            cacheWriteTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
+            cacheCost: string | null;
+            cacheSavings: string | null;
             toonTokensBefore: number | null;
             toonTokensAfter: number | null;
             toonCostSavings: string | null;
@@ -26818,8 +27732,12 @@ export type GetInteractionsResponses = {
             baselineModel: string | null;
             inputTokens: number | null;
             outputTokens: number | null;
+            cacheReadTokens: number | null;
+            cacheWriteTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
+            cacheCost: string | null;
+            cacheSavings: string | null;
             toonTokensBefore: number | null;
             toonTokensAfter: number | null;
             toonCostSavings: string | null;
@@ -26868,7 +27786,7 @@ export type GetInteractionsResponses = {
             request: {
                 model: string;
                 input?: string | Array<{
-                    type: string;
+                    type?: string;
                     [key: string]: unknown;
                 }>;
                 instructions?: string | null;
@@ -26904,7 +27822,7 @@ export type GetInteractionsResponses = {
             processedRequest?: {
                 model: string;
                 input?: string | Array<{
-                    type: string;
+                    type?: string;
                     [key: string]: unknown;
                 }>;
                 instructions?: string | null;
@@ -27003,8 +27921,12 @@ export type GetInteractionsResponses = {
             baselineModel: string | null;
             inputTokens: number | null;
             outputTokens: number | null;
+            cacheReadTokens: number | null;
+            cacheWriteTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
+            cacheCost: string | null;
+            cacheSavings: string | null;
             toonTokensBefore: number | null;
             toonTokensAfter: number | null;
             toonCostSavings: string | null;
@@ -27165,9 +28087,12 @@ export type GetInteractionSessionsResponses = {
             requestCount: number;
             totalInputTokens: number;
             totalOutputTokens: number;
+            totalCacheReadTokens: number;
+            totalCacheWriteTokens: number;
             totalCost: string | null;
             totalBaselineCost: string | null;
             totalToonCostSavings: string | null;
+            totalCacheSavings: string | null;
             toonSkipReasonCounts: {
                 applied: number;
                 notEnabled: number;
@@ -27486,8 +28411,12 @@ export type GetInteractionResponses = {
         baselineModel: string | null;
         inputTokens: number | null;
         outputTokens: number | null;
+        cacheReadTokens: number | null;
+        cacheWriteTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
+        cacheCost: string | null;
+        cacheSavings: string | null;
         toonTokensBefore: number | null;
         toonTokensAfter: number | null;
         toonCostSavings: string | null;
@@ -27536,7 +28465,7 @@ export type GetInteractionResponses = {
         request: {
             model: string;
             input?: string | Array<{
-                type: string;
+                type?: string;
                 [key: string]: unknown;
             }>;
             instructions?: string | null;
@@ -27572,7 +28501,7 @@ export type GetInteractionResponses = {
         processedRequest?: {
             model: string;
             input?: string | Array<{
-                type: string;
+                type?: string;
                 [key: string]: unknown;
             }>;
             instructions?: string | null;
@@ -27671,8 +28600,12 @@ export type GetInteractionResponses = {
         baselineModel: string | null;
         inputTokens: number | null;
         outputTokens: number | null;
+        cacheReadTokens: number | null;
+        cacheWriteTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
+        cacheCost: string | null;
+        cacheSavings: string | null;
         toonTokensBefore: number | null;
         toonTokensAfter: number | null;
         toonCostSavings: string | null;
@@ -27762,8 +28695,12 @@ export type GetInteractionResponses = {
         baselineModel: string | null;
         inputTokens: number | null;
         outputTokens: number | null;
+        cacheReadTokens: number | null;
+        cacheWriteTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
+        cacheCost: string | null;
+        cacheSavings: string | null;
         toonTokensBefore: number | null;
         toonTokensAfter: number | null;
         toonCostSavings: string | null;
@@ -27829,8 +28766,12 @@ export type GetInteractionResponses = {
         baselineModel: string | null;
         inputTokens: number | null;
         outputTokens: number | null;
+        cacheReadTokens: number | null;
+        cacheWriteTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
+        cacheCost: string | null;
+        cacheSavings: string | null;
         toonTokensBefore: number | null;
         toonTokensAfter: number | null;
         toonCostSavings: string | null;
@@ -27898,8 +28839,12 @@ export type GetInteractionResponses = {
         baselineModel: string | null;
         inputTokens: number | null;
         outputTokens: number | null;
+        cacheReadTokens: number | null;
+        cacheWriteTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
+        cacheCost: string | null;
+        cacheSavings: string | null;
         toonTokensBefore: number | null;
         toonTokensAfter: number | null;
         toonCostSavings: string | null;
@@ -28025,6 +28970,11 @@ export type GetInteractionResponses = {
                         }>;
                         status?: 'success' | 'error';
                     };
+                } | {
+                    cachePoint: {
+                        type: string;
+                        ttl?: string;
+                    };
                 }>;
             }>;
             system?: Array<{
@@ -28035,6 +28985,11 @@ export type GetInteractionResponses = {
                         text: string;
                         qualifiers?: Array<'grounding_source' | 'query' | 'guard_content'>;
                     };
+                };
+            } | {
+                cachePoint: {
+                    type: string;
+                    ttl?: string;
                 };
             }>;
             inferenceConfig?: {
@@ -28184,6 +29139,11 @@ export type GetInteractionResponses = {
                         }>;
                         status?: 'success' | 'error';
                     };
+                } | {
+                    cachePoint: {
+                        type: string;
+                        ttl?: string;
+                    };
                 }>;
             }>;
             system?: Array<{
@@ -28194,6 +29154,11 @@ export type GetInteractionResponses = {
                         text: string;
                         qualifiers?: Array<'grounding_source' | 'query' | 'guard_content'>;
                     };
+                };
+            } | {
+                cachePoint: {
+                    type: string;
+                    ttl?: string;
                 };
             }>;
             inferenceConfig?: {
@@ -28341,8 +29306,12 @@ export type GetInteractionResponses = {
         baselineModel: string | null;
         inputTokens: number | null;
         outputTokens: number | null;
+        cacheReadTokens: number | null;
+        cacheWriteTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
+        cacheCost: string | null;
+        cacheSavings: string | null;
         toonTokensBefore: number | null;
         toonTokensAfter: number | null;
         toonCostSavings: string | null;
@@ -28410,8 +29379,12 @@ export type GetInteractionResponses = {
         baselineModel: string | null;
         inputTokens: number | null;
         outputTokens: number | null;
+        cacheReadTokens: number | null;
+        cacheWriteTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
+        cacheCost: string | null;
+        cacheSavings: string | null;
         toonTokensBefore: number | null;
         toonTokensAfter: number | null;
         toonCostSavings: string | null;
@@ -28479,8 +29452,12 @@ export type GetInteractionResponses = {
         baselineModel: string | null;
         inputTokens: number | null;
         outputTokens: number | null;
+        cacheReadTokens: number | null;
+        cacheWriteTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
+        cacheCost: string | null;
+        cacheSavings: string | null;
         toonTokensBefore: number | null;
         toonTokensAfter: number | null;
         toonCostSavings: string | null;
@@ -28548,8 +29525,12 @@ export type GetInteractionResponses = {
         baselineModel: string | null;
         inputTokens: number | null;
         outputTokens: number | null;
+        cacheReadTokens: number | null;
+        cacheWriteTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
+        cacheCost: string | null;
+        cacheSavings: string | null;
         toonTokensBefore: number | null;
         toonTokensAfter: number | null;
         toonCostSavings: string | null;
@@ -28617,8 +29598,12 @@ export type GetInteractionResponses = {
         baselineModel: string | null;
         inputTokens: number | null;
         outputTokens: number | null;
+        cacheReadTokens: number | null;
+        cacheWriteTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
+        cacheCost: string | null;
+        cacheSavings: string | null;
         toonTokensBefore: number | null;
         toonTokensAfter: number | null;
         toonCostSavings: string | null;
@@ -28686,8 +29671,12 @@ export type GetInteractionResponses = {
         baselineModel: string | null;
         inputTokens: number | null;
         outputTokens: number | null;
+        cacheReadTokens: number | null;
+        cacheWriteTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
+        cacheCost: string | null;
+        cacheSavings: string | null;
         toonTokensBefore: number | null;
         toonTokensAfter: number | null;
         toonCostSavings: string | null;
@@ -28755,8 +29744,12 @@ export type GetInteractionResponses = {
         baselineModel: string | null;
         inputTokens: number | null;
         outputTokens: number | null;
+        cacheReadTokens: number | null;
+        cacheWriteTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
+        cacheCost: string | null;
+        cacheSavings: string | null;
         toonTokensBefore: number | null;
         toonTokensAfter: number | null;
         toonCostSavings: string | null;
@@ -28824,8 +29817,12 @@ export type GetInteractionResponses = {
         baselineModel: string | null;
         inputTokens: number | null;
         outputTokens: number | null;
+        cacheReadTokens: number | null;
+        cacheWriteTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
+        cacheCost: string | null;
+        cacheSavings: string | null;
         toonTokensBefore: number | null;
         toonTokensAfter: number | null;
         toonCostSavings: string | null;
@@ -28891,8 +29888,12 @@ export type GetInteractionResponses = {
         baselineModel: string | null;
         inputTokens: number | null;
         outputTokens: number | null;
+        cacheReadTokens: number | null;
+        cacheWriteTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
+        cacheCost: string | null;
+        cacheSavings: string | null;
         toonTokensBefore: number | null;
         toonTokensAfter: number | null;
         toonCostSavings: string | null;
@@ -28958,8 +29959,12 @@ export type GetInteractionResponses = {
         baselineModel: string | null;
         inputTokens: number | null;
         outputTokens: number | null;
+        cacheReadTokens: number | null;
+        cacheWriteTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
+        cacheCost: string | null;
+        cacheSavings: string | null;
         toonTokensBefore: number | null;
         toonTokensAfter: number | null;
         toonCostSavings: string | null;
@@ -29027,8 +30032,12 @@ export type GetInteractionResponses = {
         baselineModel: string | null;
         inputTokens: number | null;
         outputTokens: number | null;
+        cacheReadTokens: number | null;
+        cacheWriteTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
+        cacheCost: string | null;
+        cacheSavings: string | null;
         toonTokensBefore: number | null;
         toonTokensAfter: number | null;
         toonCostSavings: string | null;
@@ -29096,8 +30105,12 @@ export type GetInteractionResponses = {
         baselineModel: string | null;
         inputTokens: number | null;
         outputTokens: number | null;
+        cacheReadTokens: number | null;
+        cacheWriteTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
+        cacheCost: string | null;
+        cacheSavings: string | null;
         toonTokensBefore: number | null;
         toonTokensAfter: number | null;
         toonCostSavings: string | null;
@@ -29165,8 +30178,12 @@ export type GetInteractionResponses = {
         baselineModel: string | null;
         inputTokens: number | null;
         outputTokens: number | null;
+        cacheReadTokens: number | null;
+        cacheWriteTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
+        cacheCost: string | null;
+        cacheSavings: string | null;
         toonTokensBefore: number | null;
         toonTokensAfter: number | null;
         toonCostSavings: string | null;
@@ -29301,8 +30318,12 @@ export type GetInteractionResponses = {
         baselineModel: string | null;
         inputTokens: number | null;
         outputTokens: number | null;
+        cacheReadTokens: number | null;
+        cacheWriteTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
+        cacheCost: string | null;
+        cacheSavings: string | null;
         toonTokensBefore: number | null;
         toonTokensAfter: number | null;
         toonCostSavings: string | null;
@@ -29351,7 +30372,7 @@ export type GetInteractionResponses = {
         request: {
             model: string;
             input?: string | Array<{
-                type: string;
+                type?: string;
                 [key: string]: unknown;
             }>;
             instructions?: string | null;
@@ -29387,7 +30408,7 @@ export type GetInteractionResponses = {
         processedRequest?: {
             model: string;
             input?: string | Array<{
-                type: string;
+                type?: string;
                 [key: string]: unknown;
             }>;
             instructions?: string | null;
@@ -29486,8 +30507,12 @@ export type GetInteractionResponses = {
         baselineModel: string | null;
         inputTokens: number | null;
         outputTokens: number | null;
+        cacheReadTokens: number | null;
+        cacheWriteTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
+        cacheCost: string | null;
+        cacheSavings: string | null;
         toonTokensBefore: number | null;
         toonTokensAfter: number | null;
         toonCostSavings: string | null;
@@ -29525,9 +30550,7 @@ export type GetInteractionResponse = GetInteractionResponses[keyof GetInteractio
 export type GetInternalMcpCatalogData = {
     body?: never;
     path?: never;
-    query?: {
-        includeChildren?: boolean | 'true' | 'false';
-    };
+    query?: never;
     url: '/api/internal_mcp_catalog';
 };
 
@@ -29631,7 +30654,6 @@ export type GetInternalMcpCatalogResponses = {
                 type: 'plain_text' | 'secret' | 'boolean' | 'number';
                 value?: string;
                 promptOnInstallation: boolean;
-                promptOnPreset?: boolean;
                 required?: boolean;
                 description?: string;
                 default?: LocalConfigEnvironmentDefault;
@@ -29673,6 +30695,7 @@ export type GetInternalMcpCatalogResponses = {
             client_id: string;
             client_secret?: string;
             audience?: string;
+            resource?: string;
             redirect_uris: Array<string>;
             scopes: Array<string>;
             description?: string;
@@ -29711,14 +30734,7 @@ export type GetInternalMcpCatalogResponses = {
         organizationId: string | null;
         authorId: string | null;
         scope: 'personal' | 'team' | 'org';
-        parentCatalogItemId: string | null;
-        childName: string | null;
         clonedFrom: string | null;
-        presetEntryId: string | null;
-        presetFieldValues: {
-            [key: string]: UserConfigFieldDefault;
-        };
-        presetSecretId: string | null;
         environmentId: string | null;
         catalogReinstallRequired: boolean;
         createdAt: string;
@@ -29770,7 +30786,6 @@ export type CreateInternalMcpCatalogItemData = {
                 type: 'plain_text' | 'secret' | 'boolean' | 'number';
                 value?: string;
                 promptOnInstallation: boolean;
-                promptOnPreset?: boolean;
                 required?: boolean;
                 description?: string;
                 default?: LocalConfigEnvironmentDefaultInput;
@@ -29812,6 +30827,7 @@ export type CreateInternalMcpCatalogItemData = {
             client_id: string;
             client_secret?: string;
             audience?: string;
+            resource?: string;
             redirect_uris: Array<string>;
             scopes: Array<string>;
             description?: string;
@@ -29848,14 +30864,7 @@ export type CreateInternalMcpCatalogItemData = {
         } | null;
         icon?: string | null;
         scope?: 'personal' | 'team' | 'org';
-        parentCatalogItemId?: string | null;
-        childName?: string | null;
         clonedFrom?: string | null;
-        presetEntryId?: string | null;
-        presetFieldValues?: {
-            [key: string]: UserConfigFieldDefaultInput;
-        };
-        presetSecretId?: string | null;
         environmentId?: string | null;
         catalogReinstallRequired?: boolean;
         labels?: Array<{
@@ -29973,7 +30982,6 @@ export type CreateInternalMcpCatalogItemResponses = {
                 type: 'plain_text' | 'secret' | 'boolean' | 'number';
                 value?: string;
                 promptOnInstallation: boolean;
-                promptOnPreset?: boolean;
                 required?: boolean;
                 description?: string;
                 default?: LocalConfigEnvironmentDefault;
@@ -30015,6 +31023,7 @@ export type CreateInternalMcpCatalogItemResponses = {
             client_id: string;
             client_secret?: string;
             audience?: string;
+            resource?: string;
             redirect_uris: Array<string>;
             scopes: Array<string>;
             description?: string;
@@ -30053,14 +31062,7 @@ export type CreateInternalMcpCatalogItemResponses = {
         organizationId: string | null;
         authorId: string | null;
         scope: 'personal' | 'team' | 'org';
-        parentCatalogItemId: string | null;
-        childName: string | null;
         clonedFrom: string | null;
-        presetEntryId: string | null;
-        presetFieldValues: {
-            [key: string]: UserConfigFieldDefault;
-        };
-        presetSecretId: string | null;
         environmentId: string | null;
         catalogReinstallRequired: boolean;
         createdAt: string;
@@ -30273,7 +31275,6 @@ export type GetInternalMcpCatalogItemResponses = {
                 type: 'plain_text' | 'secret' | 'boolean' | 'number';
                 value?: string;
                 promptOnInstallation: boolean;
-                promptOnPreset?: boolean;
                 required?: boolean;
                 description?: string;
                 default?: LocalConfigEnvironmentDefault;
@@ -30315,6 +31316,7 @@ export type GetInternalMcpCatalogItemResponses = {
             client_id: string;
             client_secret?: string;
             audience?: string;
+            resource?: string;
             redirect_uris: Array<string>;
             scopes: Array<string>;
             description?: string;
@@ -30353,14 +31355,7 @@ export type GetInternalMcpCatalogItemResponses = {
         organizationId: string | null;
         authorId: string | null;
         scope: 'personal' | 'team' | 'org';
-        parentCatalogItemId: string | null;
-        childName: string | null;
         clonedFrom: string | null;
-        presetEntryId: string | null;
-        presetFieldValues: {
-            [key: string]: UserConfigFieldDefault;
-        };
-        presetSecretId: string | null;
         environmentId: string | null;
         catalogReinstallRequired: boolean;
         createdAt: string;
@@ -30409,7 +31404,6 @@ export type UpdateInternalMcpCatalogItemData = {
                 type: 'plain_text' | 'secret' | 'boolean' | 'number';
                 value?: string;
                 promptOnInstallation: boolean;
-                promptOnPreset?: boolean;
                 required?: boolean;
                 description?: string;
                 default?: LocalConfigEnvironmentDefaultInput;
@@ -30451,6 +31445,7 @@ export type UpdateInternalMcpCatalogItemData = {
             client_id: string;
             client_secret?: string;
             audience?: string;
+            resource?: string;
             redirect_uris: Array<string>;
             scopes: Array<string>;
             description?: string;
@@ -30487,12 +31482,6 @@ export type UpdateInternalMcpCatalogItemData = {
         } | null;
         icon?: string | null;
         scope?: 'personal' | 'team' | 'org';
-        childName?: string | null;
-        presetEntryId?: string | null;
-        presetFieldValues?: {
-            [key: string]: UserConfigFieldDefaultInput;
-        };
-        presetSecretId?: string | null;
         environmentId?: string | null;
         catalogReinstallRequired?: boolean;
         labels?: Array<{
@@ -30612,7 +31601,6 @@ export type UpdateInternalMcpCatalogItemResponses = {
                 type: 'plain_text' | 'secret' | 'boolean' | 'number';
                 value?: string;
                 promptOnInstallation: boolean;
-                promptOnPreset?: boolean;
                 required?: boolean;
                 description?: string;
                 default?: LocalConfigEnvironmentDefault;
@@ -30654,6 +31642,7 @@ export type UpdateInternalMcpCatalogItemResponses = {
             client_id: string;
             client_secret?: string;
             audience?: string;
+            resource?: string;
             redirect_uris: Array<string>;
             scopes: Array<string>;
             description?: string;
@@ -30692,14 +31681,7 @@ export type UpdateInternalMcpCatalogItemResponses = {
         organizationId: string | null;
         authorId: string | null;
         scope: 'personal' | 'team' | 'org';
-        parentCatalogItemId: string | null;
-        childName: string | null;
         clonedFrom: string | null;
-        presetEntryId: string | null;
-        presetFieldValues: {
-            [key: string]: UserConfigFieldDefault;
-        };
-        presetSecretId: string | null;
         environmentId: string | null;
         catalogReinstallRequired: boolean;
         createdAt: string;
@@ -31404,6 +32386,7 @@ export type GetK8sImagePullSecretsResponses = {
      */
     200: Array<{
         name: string;
+        registryServers: Array<string>;
     }>;
 };
 
@@ -31489,661 +32472,6 @@ export type GetInternalMcpCatalogLabelKeysResponses = {
 };
 
 export type GetInternalMcpCatalogLabelKeysResponse = GetInternalMcpCatalogLabelKeysResponses[keyof GetInternalMcpCatalogLabelKeysResponses];
-
-export type GetCatalogChildrenData = {
-    body?: never;
-    path: {
-        catalogId: string;
-    };
-    query?: never;
-    url: '/api/internal_mcp_catalog/{catalogId}/children';
-};
-
-export type GetCatalogChildrenErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type GetCatalogChildrenError = GetCatalogChildrenErrors[keyof GetCatalogChildrenErrors];
-
-export type GetCatalogChildrenResponses = {
-    /**
-     * Default Response
-     */
-    200: Array<{
-        id: string;
-        name: string;
-        version: string | null;
-        description: string | null;
-        instructions: string | null;
-        repository: string | null;
-        installationCommand: string | null;
-        requiresAuth: boolean;
-        authDescription: string | null;
-        authFields: Array<{
-            name: string;
-            label: string;
-            type: string;
-            required: boolean;
-            description?: string;
-        }> | null;
-        serverType: 'local' | 'remote' | 'builtin';
-        multitenant: boolean;
-        serverUrl: string | null;
-        docsUrl: string | null;
-        clientSecretId: string | null;
-        localConfigSecretId: string | null;
-        localConfig: {
-            command?: string;
-            arguments?: Array<string>;
-            environment?: Array<{
-                key: string;
-                type: 'plain_text' | 'secret' | 'boolean' | 'number';
-                value?: string;
-                promptOnInstallation: boolean;
-                promptOnPreset?: boolean;
-                required?: boolean;
-                description?: string;
-                default?: LocalConfigEnvironmentDefault;
-                mounted?: boolean;
-            }>;
-            envFrom?: Array<{
-                type: 'secret' | 'configMap';
-                name: string;
-                prefix?: string;
-            }>;
-            dockerImage?: string;
-            serviceAccount?: string;
-            transportType?: 'stdio' | 'streamable-http';
-            httpPort?: number;
-            httpPath?: string;
-            nodePort?: number;
-            imagePullSecrets?: Array<{
-                source: 'existing';
-                name: string;
-            } | {
-                source: 'credentials';
-                server: string;
-                username: string;
-                password?: string;
-                email?: string;
-            }>;
-        } | null;
-        deploymentSpecYaml: string | null;
-        userConfig: {
-            [key: string]: UserConfigField;
-        } | null;
-        oauthConfig: {
-            name: string;
-            server_url: string;
-            grant_type?: 'authorization_code' | 'client_credentials';
-            auth_server_url?: string;
-            authorization_endpoint?: string;
-            resource_metadata_url?: string;
-            client_id: string;
-            client_secret?: string;
-            audience?: string;
-            redirect_uris: Array<string>;
-            scopes: Array<string>;
-            description?: string;
-            well_known_url?: string;
-            default_scopes: Array<string>;
-            supports_resource_metadata: boolean;
-            generic_oauth?: boolean;
-            token_endpoint?: string;
-            access_token_env_var?: string;
-            requires_proxy?: boolean;
-            provider_name?: string;
-            browser_auth?: boolean;
-            streamable_http_url?: string;
-            streamable_http_port?: number;
-        } | null;
-        enterpriseManagedConfig: {
-            identityProviderId?: string;
-            assertionMode?: 'exchange' | 'passthrough';
-            resourceType?: 'mcp' | 'oauth_protected_resource' | 'secret' | 'service_account' | 'custom_http';
-            resourceIdentifier?: string;
-            requestedIssuer?: string;
-            requestedCredentialType?: 'id_jag' | 'bearer_token' | 'secret' | 'service_account' | 'opaque_json';
-            scopes?: Array<string>;
-            audience?: string;
-            clientIdOverride?: string;
-            clientSecretOverride?: string;
-            tokenInjectionMode?: 'authorization_bearer' | 'raw_authorization' | 'header' | 'env' | 'body_field';
-            headerName?: string;
-            envVarName?: string;
-            bodyFieldName?: string;
-            responseFieldPath?: string;
-            fallbackMode?: 'fail_closed' | 'fallback_to_dynamic' | 'fallback_to_static';
-            cacheTtlSeconds?: number;
-        } | null;
-        icon: string | null;
-        organizationId: string | null;
-        authorId: string | null;
-        scope: 'personal' | 'team' | 'org';
-        parentCatalogItemId: string | null;
-        childName: string | null;
-        clonedFrom: string | null;
-        presetEntryId: string | null;
-        presetFieldValues: {
-            [key: string]: UserConfigFieldDefault;
-        };
-        presetSecretId: string | null;
-        environmentId: string | null;
-        catalogReinstallRequired: boolean;
-        createdAt: string;
-        updatedAt: string;
-        labels: Array<{
-            key: string;
-            value: string;
-        }>;
-        teams: Array<{
-            id: string;
-            name: string;
-        }>;
-        authorName?: string | null;
-    }>;
-};
-
-export type GetCatalogChildrenResponse = GetCatalogChildrenResponses[keyof GetCatalogChildrenResponses];
-
-export type CreateCatalogChildData = {
-    body: {
-        presetEntryId: string;
-        presetFieldValues?: {
-            [key: string]: UserConfigFieldDefaultInput;
-        };
-    };
-    path: {
-        catalogId: string;
-    };
-    query?: never;
-    url: '/api/internal_mcp_catalog/{catalogId}/children';
-};
-
-export type CreateCatalogChildErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type CreateCatalogChildError = CreateCatalogChildErrors[keyof CreateCatalogChildErrors];
-
-export type CreateCatalogChildResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        name: string;
-        version: string | null;
-        description: string | null;
-        instructions: string | null;
-        repository: string | null;
-        installationCommand: string | null;
-        requiresAuth: boolean;
-        authDescription: string | null;
-        authFields: Array<{
-            name: string;
-            label: string;
-            type: string;
-            required: boolean;
-            description?: string;
-        }> | null;
-        serverType: 'local' | 'remote' | 'builtin';
-        multitenant: boolean;
-        serverUrl: string | null;
-        docsUrl: string | null;
-        clientSecretId: string | null;
-        localConfigSecretId: string | null;
-        localConfig: {
-            command?: string;
-            arguments?: Array<string>;
-            environment?: Array<{
-                key: string;
-                type: 'plain_text' | 'secret' | 'boolean' | 'number';
-                value?: string;
-                promptOnInstallation: boolean;
-                promptOnPreset?: boolean;
-                required?: boolean;
-                description?: string;
-                default?: LocalConfigEnvironmentDefault;
-                mounted?: boolean;
-            }>;
-            envFrom?: Array<{
-                type: 'secret' | 'configMap';
-                name: string;
-                prefix?: string;
-            }>;
-            dockerImage?: string;
-            serviceAccount?: string;
-            transportType?: 'stdio' | 'streamable-http';
-            httpPort?: number;
-            httpPath?: string;
-            nodePort?: number;
-            imagePullSecrets?: Array<{
-                source: 'existing';
-                name: string;
-            } | {
-                source: 'credentials';
-                server: string;
-                username: string;
-                password?: string;
-                email?: string;
-            }>;
-        } | null;
-        deploymentSpecYaml: string | null;
-        userConfig: {
-            [key: string]: UserConfigField;
-        } | null;
-        oauthConfig: {
-            name: string;
-            server_url: string;
-            grant_type?: 'authorization_code' | 'client_credentials';
-            auth_server_url?: string;
-            authorization_endpoint?: string;
-            resource_metadata_url?: string;
-            client_id: string;
-            client_secret?: string;
-            audience?: string;
-            redirect_uris: Array<string>;
-            scopes: Array<string>;
-            description?: string;
-            well_known_url?: string;
-            default_scopes: Array<string>;
-            supports_resource_metadata: boolean;
-            generic_oauth?: boolean;
-            token_endpoint?: string;
-            access_token_env_var?: string;
-            requires_proxy?: boolean;
-            provider_name?: string;
-            browser_auth?: boolean;
-            streamable_http_url?: string;
-            streamable_http_port?: number;
-        } | null;
-        enterpriseManagedConfig: {
-            identityProviderId?: string;
-            assertionMode?: 'exchange' | 'passthrough';
-            resourceType?: 'mcp' | 'oauth_protected_resource' | 'secret' | 'service_account' | 'custom_http';
-            resourceIdentifier?: string;
-            requestedIssuer?: string;
-            requestedCredentialType?: 'id_jag' | 'bearer_token' | 'secret' | 'service_account' | 'opaque_json';
-            scopes?: Array<string>;
-            audience?: string;
-            clientIdOverride?: string;
-            clientSecretOverride?: string;
-            tokenInjectionMode?: 'authorization_bearer' | 'raw_authorization' | 'header' | 'env' | 'body_field';
-            headerName?: string;
-            envVarName?: string;
-            bodyFieldName?: string;
-            responseFieldPath?: string;
-            fallbackMode?: 'fail_closed' | 'fallback_to_dynamic' | 'fallback_to_static';
-            cacheTtlSeconds?: number;
-        } | null;
-        icon: string | null;
-        organizationId: string | null;
-        authorId: string | null;
-        scope: 'personal' | 'team' | 'org';
-        parentCatalogItemId: string | null;
-        childName: string | null;
-        clonedFrom: string | null;
-        presetEntryId: string | null;
-        presetFieldValues: {
-            [key: string]: UserConfigFieldDefault;
-        };
-        presetSecretId: string | null;
-        environmentId: string | null;
-        catalogReinstallRequired: boolean;
-        createdAt: string;
-        updatedAt: string;
-        labels: Array<{
-            key: string;
-            value: string;
-        }>;
-        teams: Array<{
-            id: string;
-            name: string;
-        }>;
-        authorName?: string | null;
-    };
-};
-
-export type CreateCatalogChildResponse = CreateCatalogChildResponses[keyof CreateCatalogChildResponses];
-
-export type UpdateCatalogChildData = {
-    body: {
-        presetFieldValues?: {
-            [key: string]: UserConfigFieldDefaultInput;
-        };
-    };
-    path: {
-        catalogId: string;
-        childId: string;
-    };
-    query?: never;
-    url: '/api/internal_mcp_catalog/{catalogId}/children/{childId}';
-};
-
-export type UpdateCatalogChildErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type UpdateCatalogChildError = UpdateCatalogChildErrors[keyof UpdateCatalogChildErrors];
-
-export type UpdateCatalogChildResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        name: string;
-        version: string | null;
-        description: string | null;
-        instructions: string | null;
-        repository: string | null;
-        installationCommand: string | null;
-        requiresAuth: boolean;
-        authDescription: string | null;
-        authFields: Array<{
-            name: string;
-            label: string;
-            type: string;
-            required: boolean;
-            description?: string;
-        }> | null;
-        serverType: 'local' | 'remote' | 'builtin';
-        multitenant: boolean;
-        serverUrl: string | null;
-        docsUrl: string | null;
-        clientSecretId: string | null;
-        localConfigSecretId: string | null;
-        localConfig: {
-            command?: string;
-            arguments?: Array<string>;
-            environment?: Array<{
-                key: string;
-                type: 'plain_text' | 'secret' | 'boolean' | 'number';
-                value?: string;
-                promptOnInstallation: boolean;
-                promptOnPreset?: boolean;
-                required?: boolean;
-                description?: string;
-                default?: LocalConfigEnvironmentDefault;
-                mounted?: boolean;
-            }>;
-            envFrom?: Array<{
-                type: 'secret' | 'configMap';
-                name: string;
-                prefix?: string;
-            }>;
-            dockerImage?: string;
-            serviceAccount?: string;
-            transportType?: 'stdio' | 'streamable-http';
-            httpPort?: number;
-            httpPath?: string;
-            nodePort?: number;
-            imagePullSecrets?: Array<{
-                source: 'existing';
-                name: string;
-            } | {
-                source: 'credentials';
-                server: string;
-                username: string;
-                password?: string;
-                email?: string;
-            }>;
-        } | null;
-        deploymentSpecYaml: string | null;
-        userConfig: {
-            [key: string]: UserConfigField;
-        } | null;
-        oauthConfig: {
-            name: string;
-            server_url: string;
-            grant_type?: 'authorization_code' | 'client_credentials';
-            auth_server_url?: string;
-            authorization_endpoint?: string;
-            resource_metadata_url?: string;
-            client_id: string;
-            client_secret?: string;
-            audience?: string;
-            redirect_uris: Array<string>;
-            scopes: Array<string>;
-            description?: string;
-            well_known_url?: string;
-            default_scopes: Array<string>;
-            supports_resource_metadata: boolean;
-            generic_oauth?: boolean;
-            token_endpoint?: string;
-            access_token_env_var?: string;
-            requires_proxy?: boolean;
-            provider_name?: string;
-            browser_auth?: boolean;
-            streamable_http_url?: string;
-            streamable_http_port?: number;
-        } | null;
-        enterpriseManagedConfig: {
-            identityProviderId?: string;
-            assertionMode?: 'exchange' | 'passthrough';
-            resourceType?: 'mcp' | 'oauth_protected_resource' | 'secret' | 'service_account' | 'custom_http';
-            resourceIdentifier?: string;
-            requestedIssuer?: string;
-            requestedCredentialType?: 'id_jag' | 'bearer_token' | 'secret' | 'service_account' | 'opaque_json';
-            scopes?: Array<string>;
-            audience?: string;
-            clientIdOverride?: string;
-            clientSecretOverride?: string;
-            tokenInjectionMode?: 'authorization_bearer' | 'raw_authorization' | 'header' | 'env' | 'body_field';
-            headerName?: string;
-            envVarName?: string;
-            bodyFieldName?: string;
-            responseFieldPath?: string;
-            fallbackMode?: 'fail_closed' | 'fallback_to_dynamic' | 'fallback_to_static';
-            cacheTtlSeconds?: number;
-        } | null;
-        icon: string | null;
-        organizationId: string | null;
-        authorId: string | null;
-        scope: 'personal' | 'team' | 'org';
-        parentCatalogItemId: string | null;
-        childName: string | null;
-        clonedFrom: string | null;
-        presetEntryId: string | null;
-        presetFieldValues: {
-            [key: string]: UserConfigFieldDefault;
-        };
-        presetSecretId: string | null;
-        environmentId: string | null;
-        catalogReinstallRequired: boolean;
-        createdAt: string;
-        updatedAt: string;
-        labels: Array<{
-            key: string;
-            value: string;
-        }>;
-        teams: Array<{
-            id: string;
-            name: string;
-        }>;
-        authorName?: string | null;
-    };
-};
-
-export type UpdateCatalogChildResponse = UpdateCatalogChildResponses[keyof UpdateCatalogChildResponses];
 
 export type GetInternalMcpCatalogLabelValuesData = {
     body?: never;
@@ -32507,7 +32835,7 @@ export type GetKnowledgeBasesResponses = {
             connectors: Array<{
                 id: string;
                 name: string;
-                connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'file_upload' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce';
+                connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'file_upload' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler';
             }>;
             totalDocsIndexed: number;
             assignedAgents: Array<{
@@ -32985,7 +33313,7 @@ export type GetConnectorsData = {
         offset?: number;
         knowledgeBaseId?: string;
         search?: string;
-        connectorType?: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'file_upload' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce';
+        connectorType?: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'file_upload' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler';
     };
     url: '/api/connectors';
 };
@@ -33067,7 +33395,7 @@ export type GetConnectorsResponses = {
             description: string | null;
             visibility: 'org-wide' | 'team-scoped';
             teamIds: Array<string>;
-            connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'file_upload' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce';
+            connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'file_upload' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler';
             config: {
                 type: 'jira';
                 jiraBaseUrl: unknown;
@@ -33090,8 +33418,7 @@ export type GetConnectorsResponses = {
                 githubUrl: unknown;
                 owner: string;
                 authMethod?: 'pat' | 'github_app';
-                githubAppId?: string;
-                githubAppInstallationId?: string;
+                githubAppConfigId?: string;
                 repos?: Array<string>;
                 includeIssues?: boolean;
                 includePullRequests?: boolean;
@@ -33186,6 +33513,18 @@ export type GetConnectorsResponses = {
                 loginUrl: unknown;
                 objects?: Array<string>;
                 advancedObjectConfigJson?: string;
+            } | {
+                type: 'web_crawler';
+                startUrl: unknown;
+                includePathPrefixes?: Array<string>;
+                excludePathPatterns?: Array<string>;
+                contentSelector?: string;
+                excludeSelectors?: Array<string>;
+                maxPages?: number;
+                maxDepth?: number;
+                batchSize?: number;
+                requestDelayMs?: number;
+                userAgent?: string;
             };
             secretId: string | null;
             schedule: string;
@@ -33223,7 +33562,7 @@ export type CreateConnectorData = {
         description?: string | null;
         visibility?: 'org-wide' | 'team-scoped';
         teamIds?: Array<string>;
-        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'file_upload' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce';
+        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'file_upload' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler';
         config: {
             type: 'jira';
             jiraBaseUrl: string;
@@ -33246,8 +33585,7 @@ export type CreateConnectorData = {
             githubUrl: string;
             owner: string;
             authMethod?: 'pat' | 'github_app';
-            githubAppId?: string;
-            githubAppInstallationId?: string;
+            githubAppConfigId?: string;
             repos?: Array<string>;
             includeIssues?: boolean;
             includePullRequests?: boolean;
@@ -33342,10 +33680,27 @@ export type CreateConnectorData = {
             loginUrl?: string;
             objects?: Array<string>;
             advancedObjectConfigJson?: string;
+        } | {
+            type: 'web_crawler';
+            startUrl: string;
+            includePathPrefixes?: Array<string>;
+            excludePathPatterns?: Array<string>;
+            contentSelector?: string;
+            excludeSelectors?: Array<string>;
+            maxPages?: number;
+            maxDepth?: number;
+            batchSize?: number;
+            requestDelayMs?: number;
+            userAgent?: string;
         };
-        credentials: {
+        credentials?: {
             email?: string;
             apiToken: string;
+            githubApp?: {
+                githubUrl: string;
+                appId: string;
+                installationId: string;
+            };
         };
         schedule?: string;
         enabled?: boolean;
@@ -33432,7 +33787,7 @@ export type CreateConnectorResponses = {
         description: string | null;
         visibility: 'org-wide' | 'team-scoped';
         teamIds: Array<string>;
-        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'file_upload' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce';
+        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'file_upload' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler';
         config: {
             type: 'jira';
             jiraBaseUrl: unknown;
@@ -33455,8 +33810,7 @@ export type CreateConnectorResponses = {
             githubUrl: unknown;
             owner: string;
             authMethod?: 'pat' | 'github_app';
-            githubAppId?: string;
-            githubAppInstallationId?: string;
+            githubAppConfigId?: string;
             repos?: Array<string>;
             includeIssues?: boolean;
             includePullRequests?: boolean;
@@ -33551,6 +33905,18 @@ export type CreateConnectorResponses = {
             loginUrl: unknown;
             objects?: Array<string>;
             advancedObjectConfigJson?: string;
+        } | {
+            type: 'web_crawler';
+            startUrl: unknown;
+            includePathPrefixes?: Array<string>;
+            excludePathPatterns?: Array<string>;
+            contentSelector?: string;
+            excludeSelectors?: Array<string>;
+            maxPages?: number;
+            maxDepth?: number;
+            batchSize?: number;
+            requestDelayMs?: number;
+            userAgent?: string;
         };
         secretId: string | null;
         schedule: string;
@@ -33738,7 +34104,7 @@ export type GetConnectorResponses = {
         description: string | null;
         visibility: 'org-wide' | 'team-scoped';
         teamIds: Array<string>;
-        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'file_upload' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce';
+        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'file_upload' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler';
         config: {
             type: 'jira';
             jiraBaseUrl: unknown;
@@ -33761,8 +34127,7 @@ export type GetConnectorResponses = {
             githubUrl: unknown;
             owner: string;
             authMethod?: 'pat' | 'github_app';
-            githubAppId?: string;
-            githubAppInstallationId?: string;
+            githubAppConfigId?: string;
             repos?: Array<string>;
             includeIssues?: boolean;
             includePullRequests?: boolean;
@@ -33857,6 +34222,18 @@ export type GetConnectorResponses = {
             loginUrl: unknown;
             objects?: Array<string>;
             advancedObjectConfigJson?: string;
+        } | {
+            type: 'web_crawler';
+            startUrl: unknown;
+            includePathPrefixes?: Array<string>;
+            excludePathPatterns?: Array<string>;
+            contentSelector?: string;
+            excludeSelectors?: Array<string>;
+            maxPages?: number;
+            maxDepth?: number;
+            batchSize?: number;
+            requestDelayMs?: number;
+            userAgent?: string;
         };
         secretId: string | null;
         schedule: string;
@@ -33903,8 +34280,7 @@ export type UpdateConnectorData = {
             githubUrl: string;
             owner: string;
             authMethod?: 'pat' | 'github_app';
-            githubAppId?: string;
-            githubAppInstallationId?: string;
+            githubAppConfigId?: string;
             repos?: Array<string>;
             includeIssues?: boolean;
             includePullRequests?: boolean;
@@ -33999,10 +34375,27 @@ export type UpdateConnectorData = {
             loginUrl?: string;
             objects?: Array<string>;
             advancedObjectConfigJson?: string;
+        } | {
+            type: 'web_crawler';
+            startUrl: string;
+            includePathPrefixes?: Array<string>;
+            excludePathPatterns?: Array<string>;
+            contentSelector?: string;
+            excludeSelectors?: Array<string>;
+            maxPages?: number;
+            maxDepth?: number;
+            batchSize?: number;
+            requestDelayMs?: number;
+            userAgent?: string;
         };
         credentials?: {
             email?: string;
             apiToken: string;
+            githubApp?: {
+                githubUrl: string;
+                appId: string;
+                installationId: string;
+            };
         };
         schedule?: string;
         enabled?: boolean;
@@ -34090,7 +34483,7 @@ export type UpdateConnectorResponses = {
         description: string | null;
         visibility: 'org-wide' | 'team-scoped';
         teamIds: Array<string>;
-        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'file_upload' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce';
+        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'file_upload' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler';
         config: {
             type: 'jira';
             jiraBaseUrl: unknown;
@@ -34113,8 +34506,7 @@ export type UpdateConnectorResponses = {
             githubUrl: unknown;
             owner: string;
             authMethod?: 'pat' | 'github_app';
-            githubAppId?: string;
-            githubAppInstallationId?: string;
+            githubAppConfigId?: string;
             repos?: Array<string>;
             includeIssues?: boolean;
             includePullRequests?: boolean;
@@ -34209,6 +34601,18 @@ export type UpdateConnectorResponses = {
             loginUrl: unknown;
             objects?: Array<string>;
             advancedObjectConfigJson?: string;
+        } | {
+            type: 'web_crawler';
+            startUrl: unknown;
+            includePathPrefixes?: Array<string>;
+            excludePathPatterns?: Array<string>;
+            contentSelector?: string;
+            excludeSelectors?: Array<string>;
+            maxPages?: number;
+            maxDepth?: number;
+            batchSize?: number;
+            requestDelayMs?: number;
+            userAgent?: string;
         };
         secretId: string | null;
         schedule: string;
@@ -34325,7 +34729,7 @@ export type GetConnectorDocumentsResponses = {
             chunkCount: number;
             createdAt: string;
             updatedAt: string;
-            connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'file_upload' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce';
+            connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'file_upload' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler';
         }>;
         pagination: {
             currentPage: number;
@@ -34522,7 +34926,7 @@ export type GetConnectorDocumentResponses = {
         chunkCount: number;
         createdAt: string;
         updatedAt: string;
-        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'file_upload' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce';
+        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'file_upload' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler';
     };
 };
 
@@ -38037,95 +38441,6 @@ export type McpGatewayPostResponses = {
     200: unknown;
 };
 
-export type ListMcpPresetEntriesData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/organization/mcp-preset-entries';
-};
-
-export type ListMcpPresetEntriesErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type ListMcpPresetEntriesError = ListMcpPresetEntriesErrors[keyof ListMcpPresetEntriesErrors];
-
-export type ListMcpPresetEntriesResponses = {
-    /**
-     * Default Response
-     */
-    200: Array<{
-        id: string;
-        organizationId: string;
-        name: string;
-        sortOrder: number;
-        validationRegex: string | null;
-        createdAt: string;
-        assignedCatalogCount: number;
-    }>;
-};
-
-export type ListMcpPresetEntriesResponse = ListMcpPresetEntriesResponses[keyof ListMcpPresetEntriesResponses];
-
 export type McpProxyPostData = {
     body: {
         [key: string]: unknown;
@@ -38252,6 +38567,7 @@ export type GetMcpServerInstallationRequestsResponses = {
                 client_id: string;
                 client_secret?: string;
                 audience?: string;
+                resource?: string;
                 redirect_uris: Array<string>;
                 scopes: Array<string>;
                 description?: string;
@@ -38281,7 +38597,6 @@ export type GetMcpServerInstallationRequestsResponses = {
                     type: 'plain_text' | 'secret' | 'boolean' | 'number';
                     value?: string;
                     promptOnInstallation: boolean;
-                    promptOnPreset?: boolean;
                     required?: boolean;
                     description?: string;
                     default?: LocalConfigEnvironmentDefault;
@@ -38352,6 +38667,7 @@ export type CreateMcpServerInstallationRequestData = {
                 client_id: string;
                 client_secret?: string;
                 audience?: string;
+                resource?: string;
                 redirect_uris: Array<string>;
                 scopes: Array<string>;
                 description?: string;
@@ -38381,7 +38697,6 @@ export type CreateMcpServerInstallationRequestData = {
                     type: 'plain_text' | 'secret' | 'boolean' | 'number';
                     value?: string;
                     promptOnInstallation: boolean;
-                    promptOnPreset?: boolean;
                     required?: boolean;
                     description?: string;
                     default?: LocalConfigEnvironmentDefaultInput;
@@ -38512,6 +38827,7 @@ export type CreateMcpServerInstallationRequestResponses = {
                 client_id: string;
                 client_secret?: string;
                 audience?: string;
+                resource?: string;
                 redirect_uris: Array<string>;
                 scopes: Array<string>;
                 description?: string;
@@ -38541,7 +38857,6 @@ export type CreateMcpServerInstallationRequestResponses = {
                     type: 'plain_text' | 'secret' | 'boolean' | 'number';
                     value?: string;
                     promptOnInstallation: boolean;
-                    promptOnPreset?: boolean;
                     required?: boolean;
                     description?: string;
                     default?: LocalConfigEnvironmentDefault;
@@ -38777,6 +39092,7 @@ export type GetMcpServerInstallationRequestResponses = {
                 client_id: string;
                 client_secret?: string;
                 audience?: string;
+                resource?: string;
                 redirect_uris: Array<string>;
                 scopes: Array<string>;
                 description?: string;
@@ -38806,7 +39122,6 @@ export type GetMcpServerInstallationRequestResponses = {
                     type: 'plain_text' | 'secret' | 'boolean' | 'number';
                     value?: string;
                     promptOnInstallation: boolean;
-                    promptOnPreset?: boolean;
                     required?: boolean;
                     description?: string;
                     default?: LocalConfigEnvironmentDefault;
@@ -38877,6 +39192,7 @@ export type UpdateMcpServerInstallationRequestData = {
                 client_id: string;
                 client_secret?: string;
                 audience?: string;
+                resource?: string;
                 redirect_uris: Array<string>;
                 scopes: Array<string>;
                 description?: string;
@@ -38906,7 +39222,6 @@ export type UpdateMcpServerInstallationRequestData = {
                     type: 'plain_text' | 'secret' | 'boolean' | 'number';
                     value?: string;
                     promptOnInstallation: boolean;
-                    promptOnPreset?: boolean;
                     required?: boolean;
                     description?: string;
                     default?: LocalConfigEnvironmentDefaultInput;
@@ -39049,6 +39364,7 @@ export type UpdateMcpServerInstallationRequestResponses = {
                 client_id: string;
                 client_secret?: string;
                 audience?: string;
+                resource?: string;
                 redirect_uris: Array<string>;
                 scopes: Array<string>;
                 description?: string;
@@ -39078,7 +39394,6 @@ export type UpdateMcpServerInstallationRequestResponses = {
                     type: 'plain_text' | 'secret' | 'boolean' | 'number';
                     value?: string;
                     promptOnInstallation: boolean;
-                    promptOnPreset?: boolean;
                     required?: boolean;
                     description?: string;
                     default?: LocalConfigEnvironmentDefault;
@@ -39231,6 +39546,7 @@ export type ApproveMcpServerInstallationRequestResponses = {
                 client_id: string;
                 client_secret?: string;
                 audience?: string;
+                resource?: string;
                 redirect_uris: Array<string>;
                 scopes: Array<string>;
                 description?: string;
@@ -39260,7 +39576,6 @@ export type ApproveMcpServerInstallationRequestResponses = {
                     type: 'plain_text' | 'secret' | 'boolean' | 'number';
                     value?: string;
                     promptOnInstallation: boolean;
-                    promptOnPreset?: boolean;
                     required?: boolean;
                     description?: string;
                     default?: LocalConfigEnvironmentDefault;
@@ -39413,6 +39728,7 @@ export type DeclineMcpServerInstallationRequestResponses = {
                 client_id: string;
                 client_secret?: string;
                 audience?: string;
+                resource?: string;
                 redirect_uris: Array<string>;
                 scopes: Array<string>;
                 description?: string;
@@ -39442,7 +39758,6 @@ export type DeclineMcpServerInstallationRequestResponses = {
                     type: 'plain_text' | 'secret' | 'boolean' | 'number';
                     value?: string;
                     promptOnInstallation: boolean;
-                    promptOnPreset?: boolean;
                     required?: boolean;
                     description?: string;
                     default?: LocalConfigEnvironmentDefault;
@@ -39595,6 +39910,7 @@ export type AddMcpServerInstallationRequestNoteResponses = {
                 client_id: string;
                 client_secret?: string;
                 audience?: string;
+                resource?: string;
                 redirect_uris: Array<string>;
                 scopes: Array<string>;
                 description?: string;
@@ -39624,7 +39940,6 @@ export type AddMcpServerInstallationRequestNoteResponses = {
                     type: 'plain_text' | 'secret' | 'boolean' | 'number';
                     value?: string;
                     promptOnInstallation: boolean;
-                    promptOnPreset?: boolean;
                     required?: boolean;
                     description?: string;
                     default?: LocalConfigEnvironmentDefault;
@@ -41536,7 +41851,7 @@ export type ModelRouterResponsesWithDefaultAgentData = {
     body: {
         model: string;
         input?: string | Array<{
-            type: string;
+            type?: string;
             [key: string]: unknown;
         }>;
         instructions?: string | null;
@@ -41705,7 +42020,7 @@ export type ModelRouterResponsesWithAgentData = {
     body: {
         model: string;
         input?: string | Array<{
-            type: string;
+            type?: string;
             [key: string]: unknown;
         }>;
         instructions?: string | null;
@@ -42910,7 +43225,7 @@ export type OpenAiResponsesWithDefaultAgentData = {
     body: {
         model: string;
         input?: string | Array<{
-            type: string;
+            type?: string;
             [key: string]: unknown;
         }>;
         instructions?: string | null;
@@ -43079,7 +43394,7 @@ export type OpenAiResponsesWithAgentData = {
     body: {
         model: string;
         input?: string | Array<{
-            type: string;
+            type?: string;
             [key: string]: unknown;
         }>;
         instructions?: string | null;
@@ -43426,6 +43741,192 @@ export type OpenAiChatCompletionsWithAgentResponses = {
 };
 
 export type OpenAiChatCompletionsWithAgentResponse = OpenAiChatCompletionsWithAgentResponses[keyof OpenAiChatCompletionsWithAgentResponses];
+
+export type OpenAiListModelsWithDefaultAgentData = {
+    body?: never;
+    headers?: {
+        authorization?: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/v1/openai/models';
+};
+
+export type OpenAiListModelsWithDefaultAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type OpenAiListModelsWithDefaultAgentError = OpenAiListModelsWithDefaultAgentErrors[keyof OpenAiListModelsWithDefaultAgentErrors];
+
+export type OpenAiListModelsWithDefaultAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        object: 'list';
+        data: Array<{
+            id: string;
+            object: 'model';
+            created: number;
+            owned_by: string;
+        }>;
+    };
+};
+
+export type OpenAiListModelsWithDefaultAgentResponse = OpenAiListModelsWithDefaultAgentResponses[keyof OpenAiListModelsWithDefaultAgentResponses];
+
+export type OpenAiListModelsWithAgentData = {
+    body?: never;
+    headers?: {
+        authorization?: string;
+    };
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/v1/openai/{agentId}/models';
+};
+
+export type OpenAiListModelsWithAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type OpenAiListModelsWithAgentError = OpenAiListModelsWithAgentErrors[keyof OpenAiListModelsWithAgentErrors];
+
+export type OpenAiListModelsWithAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        object: 'list';
+        data: Array<{
+            id: string;
+            object: 'model';
+            created: number;
+            owned_by: string;
+        }>;
+    };
+};
+
+export type OpenAiListModelsWithAgentResponse = OpenAiListModelsWithAgentResponses[keyof OpenAiListModelsWithAgentResponses];
 
 export type OpenrouterChatCompletionsWithDefaultAgentData = {
     body: XaiChatCompletionRequestInput;
@@ -44743,9 +45244,6 @@ export type GetOrganizationResponses = {
             isDefault: boolean;
             visible: boolean;
         }> | null;
-        presetEntityName: string | null;
-        presetEntityNamePlural: string | null;
-        presetEntityDefaultLabel: string | null;
         defaultEnvironmentName: string | null;
         defaultEnvironmentNamespace: string | null;
         defaultEnvironmentDescription: string | null;
@@ -44756,9 +45254,9 @@ export type GetOrganizationResponses = {
             allowedCidrs: Array<string>;
         } | null;
         defaultEnvironmentRestricted: boolean;
+        defaultEnvironmentValidationRegex: string | null;
         skillToolsEnabled: boolean;
         skillSlashCommandsEnabled: boolean;
-        presetEntityDefaultValidationRegex: string | null;
     };
 };
 
@@ -45035,9 +45533,6 @@ export type UpdateAppearanceSettingsResponses = {
             isDefault: boolean;
             visible: boolean;
         }> | null;
-        presetEntityName: string | null;
-        presetEntityNamePlural: string | null;
-        presetEntityDefaultLabel: string | null;
         defaultEnvironmentName: string | null;
         defaultEnvironmentNamespace: string | null;
         defaultEnvironmentDescription: string | null;
@@ -45048,9 +45543,9 @@ export type UpdateAppearanceSettingsResponses = {
             allowedCidrs: Array<string>;
         } | null;
         defaultEnvironmentRestricted: boolean;
+        defaultEnvironmentValidationRegex: string | null;
         skillToolsEnabled: boolean;
         skillSlashCommandsEnabled: boolean;
-        presetEntityDefaultValidationRegex: string | null;
     };
 };
 
@@ -45198,9 +45693,6 @@ export type UpdateSecuritySettingsResponses = {
             isDefault: boolean;
             visible: boolean;
         }> | null;
-        presetEntityName: string | null;
-        presetEntityNamePlural: string | null;
-        presetEntityDefaultLabel: string | null;
         defaultEnvironmentName: string | null;
         defaultEnvironmentNamespace: string | null;
         defaultEnvironmentDescription: string | null;
@@ -45211,9 +45703,9 @@ export type UpdateSecuritySettingsResponses = {
             allowedCidrs: Array<string>;
         } | null;
         defaultEnvironmentRestricted: boolean;
+        defaultEnvironmentValidationRegex: string | null;
         skillToolsEnabled: boolean;
         skillSlashCommandsEnabled: boolean;
-        presetEntityDefaultValidationRegex: string | null;
     };
 };
 
@@ -45364,9 +45856,6 @@ export type UpdateLlmSettingsResponses = {
             isDefault: boolean;
             visible: boolean;
         }> | null;
-        presetEntityName: string | null;
-        presetEntityNamePlural: string | null;
-        presetEntityDefaultLabel: string | null;
         defaultEnvironmentName: string | null;
         defaultEnvironmentNamespace: string | null;
         defaultEnvironmentDescription: string | null;
@@ -45377,9 +45866,9 @@ export type UpdateLlmSettingsResponses = {
             allowedCidrs: Array<string>;
         } | null;
         defaultEnvironmentRestricted: boolean;
+        defaultEnvironmentValidationRegex: string | null;
         skillToolsEnabled: boolean;
         skillSlashCommandsEnabled: boolean;
-        presetEntityDefaultValidationRegex: string | null;
     };
 };
 
@@ -45529,9 +46018,6 @@ export type UpdateAgentSettingsResponses = {
             isDefault: boolean;
             visible: boolean;
         }> | null;
-        presetEntityName: string | null;
-        presetEntityNamePlural: string | null;
-        presetEntityDefaultLabel: string | null;
         defaultEnvironmentName: string | null;
         defaultEnvironmentNamespace: string | null;
         defaultEnvironmentDescription: string | null;
@@ -45542,9 +46028,9 @@ export type UpdateAgentSettingsResponses = {
             allowedCidrs: Array<string>;
         } | null;
         defaultEnvironmentRestricted: boolean;
+        defaultEnvironmentValidationRegex: string | null;
         skillToolsEnabled: boolean;
         skillSlashCommandsEnabled: boolean;
-        presetEntityDefaultValidationRegex: string | null;
     };
 };
 
@@ -45701,9 +46187,6 @@ export type UpdateConnectionSettingsResponses = {
             isDefault: boolean;
             visible: boolean;
         }> | null;
-        presetEntityName: string | null;
-        presetEntityNamePlural: string | null;
-        presetEntityDefaultLabel: string | null;
         defaultEnvironmentName: string | null;
         defaultEnvironmentNamespace: string | null;
         defaultEnvironmentDescription: string | null;
@@ -45714,9 +46197,9 @@ export type UpdateConnectionSettingsResponses = {
             allowedCidrs: Array<string>;
         } | null;
         defaultEnvironmentRestricted: boolean;
+        defaultEnvironmentValidationRegex: string | null;
         skillToolsEnabled: boolean;
         skillSlashCommandsEnabled: boolean;
-        presetEntityDefaultValidationRegex: string | null;
     };
 };
 
@@ -45734,6 +46217,7 @@ export type UpdateDefaultEnvironmentData = {
             allowedCidrs?: Array<string>;
         } | null;
         restricted?: boolean;
+        validationRegex?: string | null;
     };
     path?: never;
     query?: never;
@@ -45872,9 +46356,6 @@ export type UpdateDefaultEnvironmentResponses = {
             isDefault: boolean;
             visible: boolean;
         }> | null;
-        presetEntityName: string | null;
-        presetEntityNamePlural: string | null;
-        presetEntityDefaultLabel: string | null;
         defaultEnvironmentName: string | null;
         defaultEnvironmentNamespace: string | null;
         defaultEnvironmentDescription: string | null;
@@ -45885,9 +46366,9 @@ export type UpdateDefaultEnvironmentResponses = {
             allowedCidrs: Array<string>;
         } | null;
         defaultEnvironmentRestricted: boolean;
+        defaultEnvironmentValidationRegex: string | null;
         skillToolsEnabled: boolean;
         skillSlashCommandsEnabled: boolean;
-        presetEntityDefaultValidationRegex: string | null;
     };
 };
 
@@ -46035,9 +46516,6 @@ export type UpdateAuthSettingsResponses = {
             isDefault: boolean;
             visible: boolean;
         }> | null;
-        presetEntityName: string | null;
-        presetEntityNamePlural: string | null;
-        presetEntityDefaultLabel: string | null;
         defaultEnvironmentName: string | null;
         defaultEnvironmentNamespace: string | null;
         defaultEnvironmentDescription: string | null;
@@ -46048,9 +46526,9 @@ export type UpdateAuthSettingsResponses = {
             allowedCidrs: Array<string>;
         } | null;
         defaultEnvironmentRestricted: boolean;
+        defaultEnvironmentValidationRegex: string | null;
         skillToolsEnabled: boolean;
         skillSlashCommandsEnabled: boolean;
-        presetEntityDefaultValidationRegex: string | null;
     };
 };
 
@@ -46200,9 +46678,6 @@ export type UpdateKnowledgeSettingsResponses = {
             isDefault: boolean;
             visible: boolean;
         }> | null;
-        presetEntityName: string | null;
-        presetEntityNamePlural: string | null;
-        presetEntityDefaultLabel: string | null;
         defaultEnvironmentName: string | null;
         defaultEnvironmentNamespace: string | null;
         defaultEnvironmentDescription: string | null;
@@ -46213,9 +46688,9 @@ export type UpdateKnowledgeSettingsResponses = {
             allowedCidrs: Array<string>;
         } | null;
         defaultEnvironmentRestricted: boolean;
+        defaultEnvironmentValidationRegex: string | null;
         skillToolsEnabled: boolean;
         skillSlashCommandsEnabled: boolean;
-        presetEntityDefaultValidationRegex: string | null;
     };
 };
 
@@ -46360,9 +46835,6 @@ export type DropEmbeddingConfigResponses = {
             isDefault: boolean;
             visible: boolean;
         }> | null;
-        presetEntityName: string | null;
-        presetEntityNamePlural: string | null;
-        presetEntityDefaultLabel: string | null;
         defaultEnvironmentName: string | null;
         defaultEnvironmentNamespace: string | null;
         defaultEnvironmentDescription: string | null;
@@ -46373,9 +46845,9 @@ export type DropEmbeddingConfigResponses = {
             allowedCidrs: Array<string>;
         } | null;
         defaultEnvironmentRestricted: boolean;
+        defaultEnvironmentValidationRegex: string | null;
         skillToolsEnabled: boolean;
         skillSlashCommandsEnabled: boolean;
-        presetEntityDefaultValidationRegex: string | null;
     };
 };
 
@@ -46609,9 +47081,6 @@ export type CompleteOnboardingResponses = {
             isDefault: boolean;
             visible: boolean;
         }> | null;
-        presetEntityName: string | null;
-        presetEntityNamePlural: string | null;
-        presetEntityDefaultLabel: string | null;
         defaultEnvironmentName: string | null;
         defaultEnvironmentNamespace: string | null;
         defaultEnvironmentDescription: string | null;
@@ -46622,9 +47091,9 @@ export type CompleteOnboardingResponses = {
             allowedCidrs: Array<string>;
         } | null;
         defaultEnvironmentRestricted: boolean;
+        defaultEnvironmentValidationRegex: string | null;
         skillToolsEnabled: boolean;
         skillSlashCommandsEnabled: boolean;
-        presetEntityDefaultValidationRegex: string | null;
     };
 };
 
@@ -50000,6 +50469,7 @@ export type GetSkillsResponses = {
             name: string;
             description: string;
             content: string;
+            latestVersion: number;
             license: string | null;
             compatibility: string | null;
             allowedTools: string | null;
@@ -50125,6 +50595,7 @@ export type CreateSkillResponses = {
         name: string;
         description: string;
         content: string;
+        latestVersion: number;
         license: string | null;
         compatibility: string | null;
         allowedTools: string | null;
@@ -50245,6 +50716,7 @@ export type ConvertAgentToSkillResponses = {
             name: string;
             description: string;
             content: string;
+            latestVersion: number;
             license: string | null;
             compatibility: string | null;
             allowedTools: string | null;
@@ -50543,6 +51015,7 @@ export type GetSkillResponses = {
         name: string;
         description: string;
         content: string;
+        latestVersion: number;
         license: string | null;
         compatibility: string | null;
         allowedTools: string | null;
@@ -50668,6 +51141,7 @@ export type UpdateSkillResponses = {
         name: string;
         description: string;
         content: string;
+        latestVersion: number;
         license: string | null;
         compatibility: string | null;
         allowedTools: string | null;
@@ -50867,6 +51341,7 @@ export type ResetSkillResponses = {
         name: string;
         description: string;
         content: string;
+        latestVersion: number;
         license: string | null;
         compatibility: string | null;
         allowedTools: string | null;
@@ -51080,6 +51555,7 @@ export type DiscoverGithubSkillsData = {
         repoUrl: string;
         path?: string;
         githubToken?: string;
+        githubAppConfigId?: string;
     };
     path?: never;
     query?: never;
@@ -51178,6 +51654,7 @@ export type PreviewGithubSkillData = {
         repoUrl: string;
         path?: string;
         githubToken?: string;
+        githubAppConfigId?: string;
         skillPath: string;
     };
     path?: never;
@@ -51283,6 +51760,7 @@ export type ImportGithubSkillsData = {
         repoUrl: string;
         path?: string;
         githubToken?: string;
+        githubAppConfigId?: string;
         skillPaths: Array<string>;
         scope?: 'personal' | 'team' | 'org';
         teamIds?: Array<string>;
@@ -51370,6 +51848,7 @@ export type ImportGithubSkillsResponses = {
             name: string;
             description: string;
             content: string;
+            latestVersion: number;
             license: string | null;
             compatibility: string | null;
             allowedTools: string | null;
@@ -51883,6 +52362,7 @@ export type GetAgentStatisticsResponses = {
         requests: number;
         inputTokens: number;
         outputTokens: number;
+        cacheReadTokens: number;
         cost: number;
         timeSeries: Array<{
             timestamp: string;
@@ -51976,6 +52456,7 @@ export type GetModelStatisticsResponses = {
         requests: number;
         inputTokens: number;
         outputTokens: number;
+        cacheReadTokens: number;
         cost: number;
         percentage: number;
         timeSeries: Array<{
@@ -52161,12 +52642,14 @@ export type GetCostSavingsStatisticsResponses = {
         totalSavings: number;
         totalOptimizationSavings: number;
         totalToonSavings: number;
+        totalCacheSavings: number;
         timeSeries: Array<{
             timestamp: string;
             baselineCost: number;
             actualCost: number;
             optimizationSavings: number;
             toonSavings: number;
+            cacheSavings: number;
         }>;
     };
 };
@@ -52180,6 +52663,7 @@ export type GetTeamsData = {
         limit?: number;
         offset?: number;
         name?: string;
+        mine?: boolean;
     };
     url: '/api/teams';
 };
@@ -56034,6 +56518,10 @@ export type GetIdentityProviderLatestIdTokenClaimsResponses = {
         claims: {
             [key: string]: unknown;
         } | null;
+        accessTokenClaims: {
+            [key: string]: unknown;
+        } | null;
+        accessTokenExpiresAt: string | null;
         updatedAt: string | null;
     };
 };

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import config from "@/config";
 import logger from "@/logging";
+import { joinBaseUrl } from "@/utils/base-url";
 import { fetchModelsWithBearerAuth } from "./openai-compatible";
 import type { FetchedModelCapabilities, ModelInfo } from "./types";
 
@@ -48,14 +49,14 @@ export async function fetchOpenrouterModels(
   const baseUrl = baseUrlOverride || config.llm.openrouter.baseUrl;
   const [generationResult, embeddingResult] = await Promise.allSettled([
     fetchModelsWithBearerAuth({
-      url: `${baseUrl}/models`,
+      url: joinBaseUrl(baseUrl, "/models"),
       apiKey,
       errorLabel: "OpenRouter models",
       extraHeaders,
       schema: OpenRouterGenerationModelsResponseSchema,
     }),
     fetchModelsWithBearerAuth({
-      url: `${baseUrl}/embeddings/models`,
+      url: joinBaseUrl(baseUrl, "/embeddings/models"),
       apiKey,
       errorLabel: "OpenRouter embedding models",
       extraHeaders,

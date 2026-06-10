@@ -1,4 +1,4 @@
-import { buildUserSystemPromptContext } from "@shared";
+import { buildUserSystemPromptContext } from "@archestra/shared";
 import { describe, expect, test } from "@/test";
 import {
   buildSkillActivationPromptContext,
@@ -85,9 +85,11 @@ describe("formatSkillActivation", () => {
     });
 
     expect(result).toContain("read_skill_file");
-    expect(result).toContain("create_skill_sandbox");
-    expect(result).toContain("run_skill_command");
-    expect(result).toContain("get_skill_sandbox_artifact");
+    expect(result).toContain("run_command");
+    expect(result).toContain("download_file");
+    expect(result).toContain("upload_file");
+    // nudge to use the skill's own modules instead of re-implementing them.
+    expect(result).toContain("before re-implementing");
     expect(result).not.toMatch(/not executed/i);
   });
 
@@ -105,9 +107,9 @@ describe("formatSkillActivation", () => {
     });
 
     expect(result).toContain("read_skill_file");
-    expect(result).not.toContain("create_skill_sandbox");
-    expect(result).not.toContain("run_skill_command");
-    expect(result).not.toContain("get_skill_sandbox_artifact");
+    expect(result).not.toContain("run_command");
+    expect(result).not.toContain("download_file");
+    expect(result).not.toContain("upload_file");
   });
 
   test("omits sandbox guidance when the skill has no resource files", () => {
@@ -124,7 +126,7 @@ describe("formatSkillActivation", () => {
     });
 
     expect(result).not.toContain("read_skill_file");
-    expect(result).not.toContain("create_skill_sandbox");
+    expect(result).not.toContain("run_command");
   });
 
   test("renders Handlebars in the body when the skill is templated", () => {

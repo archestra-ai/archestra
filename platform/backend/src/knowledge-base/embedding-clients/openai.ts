@@ -1,4 +1,4 @@
-import { isNomicModel } from "@shared";
+import { isNomicModel } from "@archestra/shared";
 import OpenAI from "openai";
 import type { EmbeddingApiResponse, EmbeddingInput } from "./types";
 

@@ -31,6 +31,12 @@
       "source": "https://github.com/derek-watson/jsUri/blob/master/LICENSE",
       "verifiedBy": "manual inspection",
       "verifiedDate": "2026-03-07"
+    },
+    "map-stream": {
+      "license": "MIT",
+      "source": "https://github.com/dominictarr/map-stream",
+      "verifiedBy": "npm registry metadata",
+      "verifiedDate": "2026-06-05"
     }
   }
 }

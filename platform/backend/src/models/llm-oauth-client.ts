@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { LLM_PROXY_OAUTH_SCOPE } from "@shared";
+import { LLM_PROXY_OAUTH_SCOPE } from "@archestra/shared";
 import { hashPassword, verifyPassword } from "better-auth/crypto";
 import { and, eq, ilike, inArray, sql } from "drizzle-orm";
 import db, { schema } from "@/database";

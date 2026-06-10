@@ -9,7 +9,7 @@ const config: KnipConfig = {
   ],
   ignoreDependencies: [
     // Workspace dependency - resolved by pnpm
-    "@shared",
+    "@archestra/shared",
   ],
   ignoreBinaries: [
     // biome and concurrently are in root package.json

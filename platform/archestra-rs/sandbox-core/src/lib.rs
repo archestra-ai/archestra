@@ -10,7 +10,10 @@ pub mod telemetry;
 mod tracing_ctx;
 mod validation;
 
-use crate::validation::{validate_artifact_path, validate_cwd, validate_pythonpath};
+use crate::validation::{
+    skill_root_path, validate_artifact_path, validate_cwd, validate_file_encoding,
+    validate_snapshot_file_path, validate_upload_path,
+};
 
 pub use backends::dagger::{DEFAULT_APT_PACKAGES, DEFAULT_BASE_IMAGE};
 
@@ -112,6 +115,100 @@ pub struct ReplayCommand {
     pub timeout_seconds: u32,
 }
 
+/// a file written into the sandbox during replay. unlike [`SnapshotFile`]
+/// (relative to a skill root), `path` is absolute and bounded to the sandbox
+/// roots — uploads can target the home dir as well as a skill root.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "napi", napi_derive::napi(object))]
+#[serde(rename_all = "camelCase")]
+pub struct ReplayInputFile {
+    pub path: String,
+    pub encoding: String,
+    pub content: String,
+}
+
+/// a skill mounted into the sandbox at its replay sequence point. `files` are
+/// the skill's snapshotted files (`path` relative to the skill root); the
+/// materialize layer writes them under `/skills/<skill_name>` and extends
+/// PYTHONPATH at this point. mounts are append-only, so a mount never changes a
+/// prior layer's parent chain (the Dagger layer cache stays warm).
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "napi", napi_derive::napi(object))]
+#[serde(rename_all = "camelCase")]
+pub struct ReplaySkillMount {
+    #[cfg_attr(feature = "napi", napi(js_name = "skillName"))]
+    pub skill_name: String,
+    pub files: Vec<SnapshotFile>,
+}
+
+/// a single ordered replay step crossing the NAPI boundary. exactly one of
+/// `command` / `file` / `skill_mount` is populated, keyed by `kind`
+/// (`"command"` | `"file"` | `"skill_mount"`); the core converts it into the
+/// internal [`ReplayStep`] enum at the entry point, where invalid combinations
+/// are rejected.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "napi", napi_derive::napi(object))]
+#[serde(rename_all = "camelCase")]
+pub struct ReplayEntry {
+    pub kind: String,
+    pub command: Option<ReplayCommand>,
+    pub file: Option<ReplayInputFile>,
+    #[cfg_attr(feature = "napi", napi(js_name = "skillMount"))]
+    pub skill_mount: Option<ReplaySkillMount>,
+}
+
+/// internal, fully-typed replay step. constructed only via
+/// [`replay_entry_to_step`] so a `ReplayStep::File` always carries a validated
+/// path and encoding — the materialize layer can trust it without re-checking.
+#[derive(Clone, Debug)]
+pub(crate) enum ReplayStep {
+    Command(ReplayCommand),
+    File(ReplayInputFile),
+    SkillMount(ReplaySkillMount),
+}
+
+fn replay_entries_to_steps(entries: Vec<ReplayEntry>) -> Result<Vec<ReplayStep>> {
+    entries.into_iter().map(replay_entry_to_step).collect()
+}
+
+fn replay_entry_to_step(entry: ReplayEntry) -> Result<ReplayStep> {
+    match entry.kind.as_str() {
+        "command" => entry.command.map(ReplayStep::Command).ok_or_else(|| {
+            SandboxError::InvalidInput(
+                "replay entry with kind=command is missing its command".to_string(),
+            )
+        }),
+        "file" => {
+            let file = entry.file.ok_or_else(|| {
+                SandboxError::InvalidInput(
+                    "replay entry with kind=file is missing its file".to_string(),
+                )
+            })?;
+            validate_upload_path(&file.path)?;
+            validate_file_encoding(&file.encoding)?;
+            Ok(ReplayStep::File(file))
+        }
+        "skill_mount" => {
+            let mount = entry.skill_mount.ok_or_else(|| {
+                SandboxError::InvalidInput(
+                    "replay entry with kind=skill_mount is missing its skillMount".to_string(),
+                )
+            })?;
+            // skill name must form a valid root, and every file must be a
+            // traversal-free skill-relative path with a known encoding.
+            skill_root_path(&mount.skill_name)?;
+            for file in &mount.files {
+                validate_snapshot_file_path(&file.path)?;
+                validate_file_encoding(&file.encoding)?;
+            }
+            Ok(ReplayStep::SkillMount(mount))
+        }
+        other => Err(SandboxError::InvalidInput(format!(
+            "unknown replay entry kind: {other:?}"
+        ))),
+    }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "napi", napi_derive::napi(object))]
 #[serde(rename_all = "camelCase")]
@@ -138,17 +235,13 @@ pub struct CheckSessionInput {
 #[serde(rename_all = "camelCase")]
 pub struct RunSandboxInput {
     pub traceparent: Option<String>,
-    pub snapshots: Vec<SnapshotFile>,
-    #[cfg_attr(feature = "napi", napi(js_name = "replayCommands"))]
-    pub replay_commands: Vec<ReplayCommand>,
+    #[cfg_attr(feature = "napi", napi(js_name = "replayEntries"))]
+    pub replay_entries: Vec<ReplayEntry>,
     pub limits: Limits,
     pub command: String,
     pub cwd: String,
     #[cfg_attr(feature = "napi", napi(js_name = "timeoutSeconds"))]
     pub timeout_seconds: u32,
-    /// PYTHONPATH applied to the materialized container. Lets skill modules
-    /// (`/skills/<name>`) resolve via `import` from any cwd.
-    pub pythonpath: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -156,9 +249,8 @@ pub struct RunSandboxInput {
 #[serde(rename_all = "camelCase")]
 pub struct ReadArtifactInput {
     pub traceparent: Option<String>,
-    pub snapshots: Vec<SnapshotFile>,
-    #[cfg_attr(feature = "napi", napi(js_name = "replayCommands"))]
-    pub replay_commands: Vec<ReplayCommand>,
+    #[cfg_attr(feature = "napi", napi(js_name = "replayEntries"))]
+    pub replay_entries: Vec<ReplayEntry>,
     pub limits: Limits,
     pub path: String,
     /// the cwd a replayed entry with `cwd: None` should default to. matches
@@ -166,9 +258,6 @@ pub struct ReadArtifactInput {
     /// the same directory as the original commands.
     #[cfg_attr(feature = "napi", napi(js_name = "defaultCwd"))]
     pub default_cwd: String,
-    /// PYTHONPATH applied during the replay used to read the artifact. Should
-    /// match what was set on the original runs so imports resolve identically.
-    pub pythonpath: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -220,18 +309,14 @@ pub async fn run_sandbox(input: RunSandboxInput) -> Result<CommandExecution> {
     // nests under it; fall back to the caller traceparent when otel is inactive.
     let traceparent = tracing_ctx::current_traceparent(&span).or_else(|| input.traceparent.clone());
     validate_cwd(&input.cwd)?;
-    if let Some(pp) = input.pythonpath.as_deref() {
-        validate_pythonpath(pp)?;
-    }
+    let replay_steps = replay_entries_to_steps(input.replay_entries)?;
     let req = backend::RunRequest {
-        snapshots: input.snapshots,
-        replay_commands: input.replay_commands,
+        replay_steps,
         limits: input.limits,
         command: input.command,
         cwd: input.cwd,
         timeout_seconds: input.timeout_seconds,
         traceparent,
-        pythonpath: input.pythonpath,
     };
     session::submit(move |reply| session::SessionMsg::Run {
         req: req.clone(),
@@ -247,17 +332,13 @@ pub async fn read_artifact(input: ReadArtifactInput) -> Result<ArtifactBytes> {
     let traceparent = tracing_ctx::current_traceparent(&span).or_else(|| input.traceparent.clone());
     validate_artifact_path(&input.path)?;
     validate_cwd(&input.default_cwd)?;
-    if let Some(pp) = input.pythonpath.as_deref() {
-        validate_pythonpath(pp)?;
-    }
+    let replay_steps = replay_entries_to_steps(input.replay_entries)?;
     let req = backend::ArtifactRequest {
-        snapshots: input.snapshots,
-        replay_commands: input.replay_commands,
+        replay_steps,
         limits: input.limits,
         path: input.path,
         default_cwd: input.default_cwd,
         traceparent,
-        pythonpath: input.pythonpath,
     };
     session::submit(move |reply| session::SessionMsg::ReadArtifact {
         req: req.clone(),

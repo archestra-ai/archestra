@@ -12,6 +12,24 @@ const MAX_APPS = 5;
 const MAX_ENTRIES_PER_APP = 20;
 const MAX_MESSAGE_LENGTH = 500;
 
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const TYPE_PATTERN = /^[a-z.-]{1,32}$/;
+
+/** Only the known diagnostic type shape survives; anything else is forged. */
+function sanitizeType(type: string): string {
+  return TYPE_PATTERN.test(type) ? type : "unknown";
+}
+
+/**
+ * Neutralize tag syntax in untrusted text so a forged message containing
+ * `</app-render-diagnostics>` cannot close the delimiter block and smuggle
+ * instructions outside the "treat as data" framing.
+ */
+function escapeAngleBrackets(text: string): string {
+  return text.replaceAll("<", "&lt;").replaceAll(">", "&gt;");
+}
+
 /**
  * When the last user message carries `metadata.appDiagnostics` (runtime
  * errors / CSP violations the chat UI captured from owned MCP App renders),
@@ -42,12 +60,15 @@ export function injectAppDiagnostics(messages: ChatMessage[]): ChatMessage[] {
   }
 
   const blocks = diagnostics
-    .filter((d) => d.entries.length > 0)
+    .filter((d) => d.entries.length > 0 && UUID_PATTERN.test(d.appId))
     .slice(0, MAX_APPS)
     .map((d) => {
       const entries = d.entries
         .slice(0, MAX_ENTRIES_PER_APP)
-        .map((e) => `- [${e.type}] ${e.message.slice(0, MAX_MESSAGE_LENGTH)}`)
+        .map(
+          (e) =>
+            `- [${sanitizeType(e.type)}] ${escapeAngleBrackets(e.message.slice(0, MAX_MESSAGE_LENGTH))}`,
+        )
         .join("\n");
       const versionLabel = d.version !== null ? ` (version ${d.version})` : "";
       return `App ${d.appId}${versionLabel}:\n${entries}`;

@@ -3,7 +3,7 @@ title: "Access Control"
 category: Administration
 description: "Role-based access control (RBAC) system for managing user permissions in Archestra"
 order: 1
-lastUpdated: 2026-06-09
+lastUpdated: 2026-06-10
 ---
 <!--
 Check ../docs_writer_prompt.md before changing this file.
@@ -37,6 +37,7 @@ Full access to core resources and settings, but cannot manage users, roles, or i
 | Resource | Actions |
 |----------|--------|
 | Agents | `read`, `create`, `update`, `delete`, `team-admin` |
+| Projects | `read`, `create`, `update`, `delete`, `team-admin` |
 | Skills | `read`, `create`, `update`, `delete`, `team-admin` |
 | Code Sandbox | `execute` |
 | Agent Triggers | `read`, `create`, `update`, `delete` |
@@ -82,6 +83,7 @@ Can manage agents, tools, and chat, with read-only access to most other resource
 | Resource | Actions |
 |----------|--------|
 | Agents | `read`, `create`, `update`, `delete` |
+| Projects | `read`, `create`, `update`, `delete` |
 | Skills | `read`, `create`, `update`, `delete` |
 | Code Sandbox | `execute` |
 | Scheduled Tasks | `read`, `create`, `update`, `delete` |
@@ -231,6 +233,12 @@ The following table lists all available permissions that can be assigned to cust
 | `optimizationRule:delete` | Remove optimization rules |
 | `organizationSettings:read` | View organization settings (appearance, authentication, etc) |
 | `organizationSettings:update` | Customize organization appearance, authentication, etc |
+| `project:read` | View visible projects |
+| `project:create` | Create personal projects |
+| `project:update` | Modify projects you own |
+| `project:delete` | Delete projects you own |
+| `project:team-admin` | Manage team assignments for projects |
+| `project:admin` | Share projects and view or manage all projects regardless of visibility |
 | `sandbox:execute` | Run commands and upload/download files in code execution sandboxes |
 | `scheduledTask:read` | View scheduled tasks and their run history |
 | `scheduledTask:create` | Create new scheduled tasks and trigger runs |

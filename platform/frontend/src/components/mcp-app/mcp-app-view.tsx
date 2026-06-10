@@ -600,9 +600,14 @@ function SandboxIframe({
       }
     }, SANDBOX_READY_TIMEOUT);
 
+    // Without allow-same-origin the sandboxed proxy iframe runs on an opaque
+    // origin, which postMessage reports as the literal string "null".
+    const expectedOrigin = useDedicatedOrigin ? sandboxUrl.origin : "null";
+
     const onMessage = (event: MessageEvent) => {
       if (
         event.source === iframe.contentWindow &&
+        event.origin === expectedOrigin &&
         event.data?.method === SANDBOX_PROXY_READY
       ) {
         if (cancelled) return;

@@ -194613,7 +194613,8 @@
                   "content": {
                     "type": "string",
                     "minLength": 1,
-                    "maxLength": 10485760
+                    "maxLength": 10485760,
+                    "description": "A complete SKILL.md manifest: a YAML frontmatter block with `name` and `description` (and optional `license`, `compatibility`, `allowed-tools`, `templated`, `metadata`), followed by the Markdown instruction body. Set `templated: true` to render the body through Handlebars (e.g. `{{user.name}}`) at activation. `allowed-tools` is a space-separated list of tools the skill is pre-approved to use."
                   },
                   "files": {
                     "maxItems": 500,
@@ -194623,11 +194624,13 @@
                       "properties": {
                         "path": {
                           "type": "string",
-                          "minLength": 1
+                          "minLength": 1,
+                          "description": "Resource path, e.g. references/API.md or scripts/run.py"
                         },
                         "content": {
                           "type": "string",
-                          "maxLength": 13981016
+                          "maxLength": 13981016,
+                          "description": "Text content of the file"
                         },
                         "encoding": {
                           "type": "string",
@@ -196356,7 +196359,8 @@
                   "content": {
                     "type": "string",
                     "minLength": 1,
-                    "maxLength": 10485760
+                    "maxLength": 10485760,
+                    "description": "A complete SKILL.md manifest: a YAML frontmatter block with `name` and `description` (and optional `license`, `compatibility`, `allowed-tools`, `templated`, `metadata`), followed by the Markdown instruction body. Set `templated: true` to render the body through Handlebars (e.g. `{{user.name}}`) at activation. `allowed-tools` is a space-separated list of tools the skill is pre-approved to use."
                   },
                   "files": {
                     "maxItems": 500,
@@ -196366,11 +196370,13 @@
                       "properties": {
                         "path": {
                           "type": "string",
-                          "minLength": 1
+                          "minLength": 1,
+                          "description": "Resource path, e.g. references/API.md or scripts/run.py"
                         },
                         "content": {
                           "type": "string",
-                          "maxLength": 13981016
+                          "maxLength": 13981016,
+                          "description": "Text content of the file"
                         },
                         "encoding": {
                           "type": "string",

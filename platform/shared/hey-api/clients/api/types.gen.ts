@@ -51263,9 +51263,18 @@ export type GetSkillsResponse = GetSkillsResponses[keyof GetSkillsResponses];
 
 export type CreateSkillData = {
     body: {
+        /**
+         * A complete SKILL.md manifest: a YAML frontmatter block with `name` and `description` (and optional `license`, `compatibility`, `allowed-tools`, `templated`, `metadata`), followed by the Markdown instruction body. Set `templated: true` to render the body through Handlebars (e.g. `{{user.name}}`) at activation. `allowed-tools` is a space-separated list of tools the skill is pre-approved to use.
+         */
         content: string;
         files?: Array<{
+            /**
+             * Resource path, e.g. references/API.md or scripts/run.py
+             */
             path: string;
+            /**
+             * Text content of the file
+             */
             content: string;
             encoding?: 'utf8' | 'base64';
         }>;
@@ -51811,9 +51820,18 @@ export type GetSkillResponse = GetSkillResponses[keyof GetSkillResponses];
 
 export type UpdateSkillData = {
     body: {
+        /**
+         * A complete SKILL.md manifest: a YAML frontmatter block with `name` and `description` (and optional `license`, `compatibility`, `allowed-tools`, `templated`, `metadata`), followed by the Markdown instruction body. Set `templated: true` to render the body through Handlebars (e.g. `{{user.name}}`) at activation. `allowed-tools` is a space-separated list of tools the skill is pre-approved to use.
+         */
         content: string;
         files?: Array<{
+            /**
+             * Resource path, e.g. references/API.md or scripts/run.py
+             */
             path: string;
+            /**
+             * Text content of the file
+             */
             content: string;
             encoding?: 'utf8' | 'base64';
         }>;

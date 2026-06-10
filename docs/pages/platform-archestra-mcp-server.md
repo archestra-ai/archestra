@@ -1569,7 +1569,7 @@ Required RBAC permission: None (no additional RBAC permission required)
 | Tool | Description | Required RBAC Permission |
 |------|-------------|--------------------------|
 | `list_skills` | List the Agent Skills available in this organization — one line per skill (name and description). | `skill:read` |
-| `activate_skill` | Load a specialized Agent Skill — a reusable SKILL.md instruction set. | `skill:read` |
+| `activate_skill` | Activate a specialized Agent Skill — a reusable SKILL.md instruction set. | `skill:read` |
 | `read_skill_file` | Read a bundled resource file from a skill. | `skill:read` |
 | `create_skill` | Create a new Agent Skill from a SKILL.md manifest. | `skill:create` |
 | `update_skill` | Update an existing Agent Skill from a SKILL.md manifest. | `skill:update` |
@@ -1589,7 +1589,7 @@ Required RBAC permission: `skill:read`
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `name` | `string` | Yes | The skill to load, as named by list_skills. |
+| `name` | `string` | Yes | The skill to activate, as named by list_skills. |
 
 
 #### read_skill_file

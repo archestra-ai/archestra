@@ -1,13 +1,7 @@
 "use client";
 
 import type { ToolUIPart } from "ai";
-import {
-  CheckCircleIcon,
-  ChevronDownIcon,
-  CircleIcon,
-  ClockIcon,
-  XCircleIcon,
-} from "lucide-react";
+import { ChevronDownIcon } from "lucide-react";
 import type { ComponentProps, ReactNode } from "react";
 import { createContext, useContext, useRef, useState } from "react";
 import { CopyButton } from "@/components/copy-button";
@@ -329,9 +323,7 @@ const TruncatedCodeBlock = ({
             onClick={(e) => {
               e.stopPropagation();
               const el = containerRef.current;
-              const scrollTop = el
-                ? el.getBoundingClientRect().top
-                : undefined;
+              const scrollTop = el ? el.getBoundingClientRect().top : undefined;
               setIsExpanded(!isExpanded);
               if (el && scrollTop !== undefined) {
                 requestAnimationFrame(() => {
@@ -477,9 +469,7 @@ export const ToolOutput = ({
       <div
         className={cn(
           "overflow-x-auto rounded-md text-xs [&_table]:w-full",
-          errorText
-            ? "bg-destructive/10 text-destructive"
-            : "text-foreground",
+          errorText ? "bg-destructive/10 text-destructive" : "text-foreground",
         )}
       >
         {Output}

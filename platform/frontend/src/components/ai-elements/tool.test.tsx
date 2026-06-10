@@ -56,9 +56,7 @@ describe("Tool copy actions", () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     mockClipboard(writeText);
 
-    render(
-      <ToolInput input={{ command: "echo hi\necho bye", cwd: "/tmp" }} />,
-    );
+    render(<ToolInput input={{ command: "echo hi\necho bye", cwd: "/tmp" }} />);
 
     // per-field blocks instead of one JSON dump with escaped \n
     expect(screen.getByText("echo hi")).toBeInTheDocument();

@@ -14,9 +14,10 @@ import {
   TOOL_TODO_WRITE_SHORT_NAME,
 } from "@archestra/shared";
 import { and, eq } from "drizzle-orm";
-import { vi } from "vitest";
+import { afterAll, beforeAll, vi } from "vitest";
 import { archestraMcpBranding } from "@/archestra-mcp-server";
 import { getArchestraMcpCatalogMetadata } from "@/archestra-mcp-server/metadata";
+import config from "@/config";
 import db, { schema } from "@/database";
 import { describe, expect, test } from "@/test";
 import AgentToolModel from "./agent-tool";
@@ -25,6 +26,18 @@ import TeamModel from "./team";
 import ToolModel, { parseArchestraBuiltInName } from "./tool";
 import ToolInvocationPolicyModel from "./tool-invocation-policy";
 import TrustedDataPolicyModel from "./trusted-data-policy";
+
+// these suites assert exact assigned-tool sets after agent creation; pin the
+// apps feature off so a local ARCHESTRA_APPS_ENABLED=true does not leak
+// auto-assigned app tools into them (app-tool assignment is covered in
+// tool-archestra-assignment.test.ts)
+const originalAppsEnabled = config.apps.enabled;
+beforeAll(() => {
+  (config.apps as { enabled: boolean }).enabled = false;
+});
+afterAll(() => {
+  (config.apps as { enabled: boolean }).enabled = originalAppsEnabled;
+});
 
 describe("ToolModel", () => {
   describe("slugifyName", () => {

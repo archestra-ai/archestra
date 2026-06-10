@@ -392,6 +392,21 @@ export const SKILL_ARCHESTRA_TOOL_SHORT_NAMES = [
 ] as const satisfies readonly ArchestraToolShortName[];
 
 /**
+ * MCP App management tools — assigned to new agents by default when the apps
+ * feature (`ARCHESTRA_APPS_ENABLED`) is on, so "build me an app" works
+ * without per-agent setup. delete_app completes the lifecycle but stays
+ * search-gated in `search_and_run_only` mode (see
+ * ALWAYS_EXPOSED_ARCHESTRA_TOOL_SHORT_NAMES).
+ */
+export const APP_ARCHESTRA_TOOL_SHORT_NAMES = [
+  TOOL_CREATE_APP_SHORT_NAME,
+  TOOL_UPDATE_APP_SHORT_NAME,
+  TOOL_RENDER_APP_SHORT_NAME,
+  TOOL_LIST_APPS_SHORT_NAME,
+  TOOL_DELETE_APP_SHORT_NAME,
+] as const satisfies readonly ArchestraToolShortName[];
+
+/**
  * tools that stay top-level in `tools/list` regardless of an agent's
  * exposure mode. skills and sandbox runtime interaction are
  * progressive-disclosure mechanisms, so hiding their discover/activate/read/run

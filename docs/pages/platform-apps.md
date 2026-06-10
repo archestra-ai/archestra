@@ -20,6 +20,8 @@ Ships behind `ARCHESTRA_APPS_ENABLED` (off by default). See [Deployment](./platf
 
 Create an app from a starter template (the HTML seed) and a name. Editing the HTML forks a new immutable version; the head version is served when the app runs. Run an app standalone at `/apps/:id/run` (no chat chrome), or from chat: a successful `create_app`, `update_app`, or `render_app` call renders the app inline in the conversation. Both surfaces drive the same app-bound runtime, so behavior is identical.
 
+While the feature is enabled, newly created agents get the app management tools (`create_app`, `update_app`, `render_app`, `list_apps`, `delete_app`) assigned by default, so "build me an app" works in chat without per-agent setup. The tools can be unassigned per agent like any other; agents created before the feature was enabled need them assigned manually.
+
 ## App runtime contract
 
 An app's HTML is pure UI. The platform injects `window.archestra` into every owned app at serve time (the stored HTML never contains it), so apps carry no SDK imports or postMessage wiring — and must not add any: HTML that bootstraps the MCP App SDK itself is rejected on save, because a second connection would race the injected one.

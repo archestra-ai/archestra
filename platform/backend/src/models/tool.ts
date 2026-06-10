@@ -1,5 +1,6 @@
 import {
   AGENT_TOOL_PREFIX,
+  APP_ARCHESTRA_TOOL_SHORT_NAMES,
   ARCHESTRA_MCP_CATALOG_ID,
   ARCHESTRA_TOOL_SHORT_NAMES,
   type ArchestraToolShortName,
@@ -34,6 +35,7 @@ import { alias } from "drizzle-orm/pg-core";
 import { getArchestraMcpTools } from "@/archestra-mcp-server";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { getArchestraMcpCatalogMetadata } from "@/archestra-mcp-server/metadata";
+import config from "@/config";
 import db, { schema } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import {
@@ -1059,7 +1061,10 @@ class ToolModel {
   static async backfillSkillToolsToOrgAgents(
     organizationId: string,
   ): Promise<number> {
-    const toolIds = await ToolModel.getSkillToolIdsForOrg(organizationId);
+    const toolIds = await ToolModel.getToolIdsForOrgByShortNames(
+      organizationId,
+      SKILL_ARCHESTRA_TOOL_SHORT_NAMES,
+    );
     if (toolIds.length === 0) return 0;
 
     const agentIds = await AgentModel.findIdsByOrganizationId(organizationId);
@@ -1118,31 +1123,64 @@ class ToolModel {
     const organization = await OrganizationModel.getById(organizationId);
     if (!organization?.skillToolsEnabled) return;
 
-    const toolIds = await ToolModel.getSkillToolIdsForOrg(organizationId, {
-      organization,
-    });
+    const toolIds = await ToolModel.getToolIdsForOrgByShortNames(
+      organizationId,
+      SKILL_ARCHESTRA_TOOL_SHORT_NAMES,
+      { organization },
+    );
     if (toolIds.length === 0) return;
 
     await AgentToolModel.createManyIfNotExists(agentId, toolIds);
   }
 
-  private static async getSkillToolIdsForOrg(
+  /**
+   * Assign the MCP App management tools to a single agent when the apps
+   * feature is enabled. No-op otherwise.
+   *
+   * Called from `AgentModel.create` so new agents can build and use apps by
+   * default. With the feature dark the app tools are not even seeded, so
+   * there is nothing to assign.
+   */
+  static async assignAppToolsToAgent(
+    agentId: string,
     organizationId: string,
+  ): Promise<void> {
+    if (!config.apps.enabled) return;
+
+    const toolIds = await ToolModel.getToolIdsForOrgByShortNames(
+      organizationId,
+      APP_ARCHESTRA_TOOL_SHORT_NAMES,
+    );
+    if (toolIds.length === 0) return;
+
+    await AgentToolModel.createManyIfNotExists(agentId, toolIds);
+  }
+
+  private static async getToolIdsForOrgByShortNames(
+    organizationId: string,
+    shortNames: readonly ArchestraToolShortName[],
     options?: { organization?: Organization | null },
   ): Promise<string[]> {
     const organization =
       options?.organization ??
       (await OrganizationModel.getById(organizationId));
     archestraMcpBranding.syncFromOrganization(organization);
-    const skillToolNames = SKILL_ARCHESTRA_TOOL_SHORT_NAMES.map((shortName) =>
+    const toolNames = shortNames.map((shortName) =>
       archestraMcpBranding.getToolName(shortName),
     );
 
-    const skillTools = await db
+    // pinned to the Archestra catalog: a non-built-in tool that happens to
+    // share a built-in's prefixed name must never be auto-assigned
+    const tools = await db
       .select({ id: schema.toolsTable.id })
       .from(schema.toolsTable)
-      .where(inArray(schema.toolsTable.name, skillToolNames));
-    return skillTools.map((tool) => tool.id);
+      .where(
+        and(
+          eq(schema.toolsTable.catalogId, ARCHESTRA_MCP_CATALOG_ID),
+          inArray(schema.toolsTable.name, toolNames),
+        ),
+      );
+    return tools.map((tool) => tool.id);
   }
 
   static async syncArchestraBuiltInCatalog(params: {

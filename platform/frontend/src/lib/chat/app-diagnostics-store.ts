@@ -106,10 +106,16 @@ function dedupKey(entry: AppDiagnosticEntry): string {
   return `${entry.type}:${entry.message.slice(0, DEDUP_PREFIX_LENGTH)}`;
 }
 
+// Several mounts of the same app can report concurrently (the old create_app
+// card and the new update_app card both render the head version), so reports
+// are ordered by version: a newer version resets the collection, an older
+// (stale-labeled) mount is ignored, equal versions append. Unknown versions
+// rank below any known one.
+const versionRank = (version: number | null) => version ?? -1;
+
 /**
- * Record a diagnostic for an owned app render. A version change resets the
- * app's collection (diagnostics describe one render of one version); entries
- * are deduped by type+message-prefix and capped per app.
+ * Record a diagnostic for an owned app render. Entries are deduped by
+ * type+message-prefix and capped per app; see version ordering above.
  */
 export function reportAppDiagnostic(
   appId: string,
@@ -117,7 +123,10 @@ export function reportAppDiagnostic(
   entry: AppDiagnosticEntry,
 ): void {
   let current = diagnosticsByApp.get(appId);
-  if (!current || current.version !== version) {
+  if (current && versionRank(version) < versionRank(current.version)) {
+    return;
+  }
+  if (!current || versionRank(version) > versionRank(current.version)) {
     current = { appId, version, entries: [] };
     diagnosticsByApp.set(appId, current);
   }
@@ -128,12 +137,7 @@ export function reportAppDiagnostic(
   emit();
 }
 
-/** Drop an app's diagnostics (render unmounted / re-rendered). */
-export function clearAppDiagnostics(appId: string): void {
-  if (diagnosticsByApp.delete(appId)) emit();
-}
-
-/** Drop everything (conversation switch). */
+/** Drop everything (conversation switch / chat mount). */
 export function clearAllAppDiagnostics(): void {
   if (diagnosticsByApp.size === 0) return;
   diagnosticsByApp.clear();

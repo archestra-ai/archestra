@@ -18,7 +18,6 @@ import {
 import { useTheme } from "next-themes";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  clearAppDiagnostics,
   parseForwardedDiagnostic,
   reportAppDiagnostic,
 } from "@/lib/chat/app-diagnostics-store";
@@ -148,10 +147,9 @@ export const McpAppRuntime = function McpAppRuntime({
     },
     [ownedAppId],
   );
-  useEffect(() => {
-    if (!ownedAppId) return;
-    return () => clearAppDiagnostics(ownedAppId);
-  }, [ownedAppId]);
+  // No unmount clear: several mounts of one app coexist (inline card + sidebar
+  // portal), so one unmount must not wipe another's entries. Lifecycle is
+  // handled by drain-at-send, newer-version reset, and conversation switch.
 
   // Create bridge + fetch HTML (once per endpoint/resourceUri — callbacks via refs)
   // biome-ignore lint/correctness/useExhaustiveDependencies: callbacks accessed via stable refs

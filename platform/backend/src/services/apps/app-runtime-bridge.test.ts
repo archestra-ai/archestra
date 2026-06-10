@@ -68,6 +68,21 @@ describe("injectAppRuntimeBridge", () => {
     expect(result).toContain(`<HEAD><script ${MARKER}>`);
   });
 
+  test("injects after an attribute-bearing <head lang=...> (no duplicate head)", () => {
+    const result = injectAppRuntimeBridge(
+      '<html lang="en"><head lang="en"></head><body/></html>',
+    );
+    expect(result).toContain(`<head lang="en"><script ${MARKER}>`);
+    expect(countOccurrences(result, "<head")).toBe(1);
+  });
+
+  test("<header> does not count as a head anchor", () => {
+    const result = injectAppRuntimeBridge(
+      "<header>nav</header><p>fragment</p>",
+    );
+    expect(result.startsWith(`<script ${MARKER}>`)).toBe(true);
+  });
+
   test("creates a head when only <html> exists", () => {
     const result = injectAppRuntimeBridge("<html><body>hi</body></html>");
     expect(result).toContain(`<html><head><script ${MARKER}>`);

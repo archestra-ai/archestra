@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import {
   clearAllAppDiagnostics,
-  clearAppDiagnostics,
   drainAppDiagnostics,
   getAppDiagnosticCounts,
   MAX_DIAGNOSTIC_MESSAGE_LENGTH,
@@ -86,9 +85,13 @@ describe("diagnostics store", () => {
     expect(getAppDiagnosticCounts().get(APP)).toBe(2);
   });
 
-  it("resets the collection when the version changes", () => {
+  it("a newer version resets the collection; a stale mount is ignored", () => {
     reportAppDiagnostic(APP, 1, { type: "error", message: "v1 error" });
     reportAppDiagnostic(APP, 2, { type: "error", message: "v2 error" });
+    // the old create_app card (still mounted, labeled v1) reports late
+    reportAppDiagnostic(APP, 1, { type: "error", message: "stale v1 report" });
+    // an unknown-version mount ranks below any known version
+    reportAppDiagnostic(APP, null, { type: "error", message: "unknown" });
     const drained = drainAppDiagnostics();
     expect(drained).toEqual([
       {
@@ -104,11 +107,5 @@ describe("diagnostics store", () => {
     expect(drainAppDiagnostics()).toHaveLength(1);
     expect(drainAppDiagnostics()).toHaveLength(0);
     expect(getAppDiagnosticCounts().get(APP)).toBeUndefined();
-  });
-
-  it("clearAppDiagnostics drops one app's entries (unmount/re-render)", () => {
-    reportAppDiagnostic(APP, 1, { type: "error", message: "boom" });
-    clearAppDiagnostics(APP);
-    expect(drainAppDiagnostics()).toHaveLength(0);
   });
 });

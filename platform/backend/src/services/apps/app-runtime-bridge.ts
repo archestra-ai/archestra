@@ -119,18 +119,20 @@ export function injectAppRuntimeBridge(html: string): string {
   // No injected-already guard: stored HTML never contains the bridge (it is
   // never persisted), and a content-based scan could be tripped by an app
   // merely mentioning the marker, silently losing window.archestra.
+  // Anchors tolerate attributes (<head lang="en">) — matching the save-time
+  // validator's predicate — so an attribute-bearing head never falls through
+  // to a duplicate-head branch. The proxy's exact-match injectCSP still lands
+  // its CSP + SDK URL at or before the document start in every combination,
+  // i.e. always ahead of the bridge.
   const bridge = APP_RUNTIME_BRIDGE_SCRIPT;
-  if (html.includes("<head>")) {
-    return html.replace("<head>", `<head>${bridge}`);
+  // (\s[^>]*)? — attributes allowed, but never a longer tag name (<header>).
+  const head = /(<head(\s[^>]*)?>)/i.exec(html);
+  if (head) {
+    return html.replace(head[1], `${head[1]}${bridge}`);
   }
-  if (html.includes("<HEAD>")) {
-    return html.replace("<HEAD>", `<HEAD>${bridge}`);
-  }
-  if (html.includes("<html>")) {
-    return html.replace("<html>", `<html><head>${bridge}</head>`);
-  }
-  if (html.includes("<HTML>")) {
-    return html.replace("<HTML>", `<HTML><head>${bridge}</head>`);
+  const htmlTag = /(<html(\s[^>]*)?>)/i.exec(html);
+  if (htmlTag) {
+    return html.replace(htmlTag[1], `${htmlTag[1]}<head>${bridge}</head>`);
   }
   const doctype = /(<!DOCTYPE[^>]*>)/i.exec(html);
   if (doctype) {

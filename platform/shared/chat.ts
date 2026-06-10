@@ -214,13 +214,22 @@ export type ChatSkillMetadata = z.infer<typeof ChatSkillMetadataSchema>;
  * sandboxed iframe — the backend re-validates and frames them as data, never
  * as instructions, when injecting into the prompt.
  */
-export const ChatAppDiagnosticsMetadataSchema = z.array(
-  z.object({
-    appId: z.string(),
-    version: z.number().nullable(),
-    entries: z.array(z.object({ type: z.string(), message: z.string() })),
-  }),
-);
+export const ChatAppDiagnosticsMetadataSchema = z
+  .array(
+    z.object({
+      appId: z.string().uuid(),
+      version: z.number().nullable(),
+      entries: z
+        .array(
+          z.object({
+            type: z.string().max(32),
+            message: z.string().max(1000),
+          }),
+        )
+        .max(50),
+    }),
+  )
+  .max(10);
 
 export type ChatAppDiagnosticsMetadata = z.infer<
   typeof ChatAppDiagnosticsMetadataSchema

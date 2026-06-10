@@ -55,12 +55,18 @@ export class ProviderError extends Error {
  */
 export class EmptyModelResponseError extends Error {
   public readonly finishReason: string;
+  public readonly rawFinishReason?: string;
   public readonly attempts: number;
 
-  constructor(params: { finishReason: string; attempts: number }) {
+  constructor(params: {
+    finishReason: string;
+    rawFinishReason?: string;
+    attempts: number;
+  }) {
     super(`Model returned an empty response after ${params.attempts} attempts`);
     this.name = "EmptyModelResponseError";
     this.finishReason = params.finishReason;
+    this.rawFinishReason = params.rawFinishReason;
     this.attempts = params.attempts;
   }
 }
@@ -1646,7 +1652,11 @@ export function mapProviderError(
       undefined,
       ChatErrorMessages[code],
       "EmptyModelResponseError",
-      { finishReason: error.finishReason, attempts: error.attempts },
+      {
+        finishReason: error.finishReason,
+        rawFinishReason: error.rawFinishReason,
+        attempts: error.attempts,
+      },
     );
   }
 

@@ -1209,6 +1209,16 @@ const EMPTY_STREAM_EVENTS = [
   { type: "start" },
   { type: "finish", finishReason: "stop" },
 ];
+// Gemini MALFORMED_FUNCTION_CALL shape: a clean finish with unified "error",
+// the raw provider reason, and no content or error parts.
+const MALFORMED_FUNCTION_CALL_STREAM_EVENTS = [
+  { type: "start" },
+  {
+    type: "finish",
+    finishReason: "error",
+    rawFinishReason: "MALFORMED_FUNCTION_CALL",
+  },
+];
 const RENDERABLE_STREAM_EVENTS = [
   { type: "text-delta", text: "hi" },
   { type: "finish", finishReason: "stop" },
@@ -1333,6 +1343,40 @@ describe("POST /api/chat empty-response retry", () => {
 
     expect(mockStreamText).toHaveBeenCalledTimes(2);
     expect(capturedOuterErrorPayload).toBeUndefined();
+  });
+
+  test("retries an empty error finish (malformed tool call), then streams the renderable one", async ({
+    expect,
+  }) => {
+    mockStreamText
+      .mockImplementationOnce(() =>
+        fakeStreamResult(MALFORMED_FUNCTION_CALL_STREAM_EVENTS),
+      )
+      .mockImplementationOnce(() => fakeStreamResult(RENDERABLE_STREAM_EVENTS));
+
+    const response = await postMessage();
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+
+    expect(mockStreamText).toHaveBeenCalledTimes(2);
+    expect(capturedOuterErrorPayload).toBeUndefined();
+  });
+
+  test("surfaces an EmptyResponse stream error after exhausting retries on error finishes", async ({
+    expect,
+  }) => {
+    mockStreamText.mockImplementation(() =>
+      fakeStreamResult(MALFORMED_FUNCTION_CALL_STREAM_EVENTS),
+    );
+
+    const response = await postMessage();
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+
+    expect(mockStreamText).toHaveBeenCalledTimes(3);
+    expect(capturedOuterErrorPayload).toBeDefined();
+    const payload = JSON.parse(capturedOuterErrorPayload ?? "{}");
+    expect(payload.code).toBe("empty_response");
   });
 
   test("surfaces an EmptyResponse stream error after exhausting retries", async ({

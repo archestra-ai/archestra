@@ -1109,6 +1109,7 @@ async function handleStreaming<
             {
               readTokens: state.usage.cacheReadTokens,
               writeTokens: state.usage.cacheWriteTokens,
+              write1hTokens: state.usage.cacheWrite1hTokens,
             },
           );
           if (cost !== undefined) {
@@ -1417,6 +1418,7 @@ async function handleNonStreaming<
         {
           readTokens: usage.cacheReadTokens,
           writeTokens: usage.cacheWriteTokens,
+          write1hTokens: usage.cacheWrite1hTokens,
         },
       );
       if (cost !== undefined) {

@@ -187,6 +187,8 @@ export const CACHE_PRICE_MULTIPLIERS: Record<
 interface CacheTokenCounts {
   readTokens?: number;
   writeTokens?: number;
+  /** Portion of writeTokens written at the 1-hour TTL (billed at write1h, the rest at write). */
+  write1hTokens?: number;
 }
 
 /**
@@ -216,13 +218,23 @@ export async function calculateCost(
   const pricing = ModelModel.getEffectivePricing(model_entry, model);
   const priceIn = Number.parseFloat(pricing.pricePerMillionInput);
   const priceOut = Number.parseFloat(pricing.pricePerMillionOutput);
-  const mult = CACHE_PRICE_MULTIPLIERS[provider] ?? { read: 0, write: 0 };
+  const mult: { read: number; write: number; write1h?: number } =
+    CACHE_PRICE_MULTIPLIERS[provider] ?? { read: 0, write: 0 };
+
+  // Cache writes are billed per TTL: 1h costs more than the 5m default.
+  const write1h = Math.min(
+    Math.max(cacheTokens?.write1hTokens ?? 0, 0),
+    writeTokens,
+  );
+  const write5m = writeTokens - write1h;
+  const write1hMult = mult.write1h ?? mult.write;
 
   return (
     ((inputTokens ?? 0) / 1_000_000) * priceIn +
     ((outputTokens ?? 0) / 1_000_000) * priceOut +
     (readTokens / 1_000_000) * priceIn * mult.read +
-    (writeTokens / 1_000_000) * priceIn * mult.write
+    (write5m / 1_000_000) * priceIn * mult.write +
+    (write1h / 1_000_000) * priceIn * write1hMult
   );
 }
 

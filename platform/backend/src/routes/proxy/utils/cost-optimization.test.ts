@@ -143,6 +143,29 @@ describe("calculateCost", () => {
     });
     expect(cost).toBeCloseTo(0.0395);
   });
+
+  test("bills the 1h cache-write portion at 2x in the all-in cost", async () => {
+    await ModelModel.create({
+      externalId: "anthropic/cache-cost-1h",
+      provider: "anthropic",
+      modelId: "cache-cost-1h",
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+      promptPricePerToken: "0.000010", // $10/M input
+      completionPricePerToken: "0.000030", // $30/M output
+      lastSyncedAt: new Date(),
+    });
+
+    // input 0.01 + output 0.015 + read 0.002 (2000*$10*0.1)
+    // of 1000 writes, 400 are 1h (2x = 0.008) and 600 are 5m (1.25x = 0.0075)
+    // total = 0.01 + 0.015 + 0.002 + 0.0075 + 0.008 = 0.0425
+    const cost = await calculateCost("cache-cost-1h", 1000, 500, "anthropic", {
+      readTokens: 2000,
+      writeTokens: 1000,
+      write1hTokens: 400,
+    });
+    expect(cost).toBeCloseTo(0.0425);
+  });
 });
 
 describe("calculateCacheCost", () => {

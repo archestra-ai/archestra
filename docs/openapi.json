@@ -52833,8 +52833,7 @@
                   }
                 },
                 "required": [
-                  "name",
-                  "html"
+                  "name"
                 ]
               }
             }

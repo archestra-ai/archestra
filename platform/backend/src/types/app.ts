@@ -111,7 +111,9 @@ export const CreateAppSchema = z.object({
   description: z.string().max(APP_DESCRIPTION_MAX_LENGTH).optional(),
   templateId: z.string().max(APP_TEMPLATE_ID_MAX_LENGTH).optional(),
   scope: AppScopeSchema.optional(),
-  html: htmlField,
+  // One of html/templateId is required (resolveCreateAppHtml enforces it):
+  // explicit html wins, otherwise the template seeds the first version.
+  html: htmlField.optional(),
   uiCsp: AppUiCspSchema.optional(),
   uiPermissions: AppUiPermissionsSchema.optional(),
 });

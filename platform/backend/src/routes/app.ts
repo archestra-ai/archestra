@@ -6,7 +6,7 @@ import {
 } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { getAppTemplates } from "@/app-templates";
+import { getAppTemplates, resolveCreateAppHtml } from "@/app-templates";
 import config from "@/config";
 import logger from "@/logging";
 import {
@@ -141,8 +141,12 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
         authorId: user.id,
         resourceTeamIds: teamIds,
       });
-      const payload = buildValidatedVersionPayload({
+      const { html } = resolveCreateAppHtml({
         html: body.html,
+        templateId: body.templateId,
+      });
+      const payload = buildValidatedVersionPayload({
+        html,
         uiCsp: body.uiCsp,
         uiPermissions: body.uiPermissions,
       });

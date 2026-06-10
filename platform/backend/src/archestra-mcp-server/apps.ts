@@ -6,6 +6,7 @@ import {
   TOOL_UPDATE_APP_SHORT_NAME,
 } from "@archestra/shared";
 import { z } from "zod";
+import { getAppTemplates, resolveCreateAppHtml } from "@/app-templates";
 import logger from "@/logging";
 import { AppModel, AppTeamModel, AppVersionModel } from "@/models";
 import type { VersionPayload } from "@/models/app-version";
@@ -42,6 +43,10 @@ const htmlField = z
     "The app's complete, self-contained HTML document — inline all CSS/JS (rendered in a sandboxed iframe).",
   );
 
+const templateIds = getAppTemplates()
+  .map((t) => t.id)
+  .join(", ");
+
 const CreateAppSchema = z.strictObject({
   name: z.string().min(1).max(APP_NAME_MAX_LENGTH).describe("App name."),
   description: z
@@ -49,7 +54,11 @@ const CreateAppSchema = z.strictObject({
     .max(APP_DESCRIPTION_MAX_LENGTH)
     .optional()
     .describe("Optional description."),
-  html: htmlField,
+  html: htmlField
+    .optional()
+    .describe(
+      "The app's complete, self-contained HTML document — inline all CSS/JS (rendered in a sandboxed iframe). Omit it to scaffold from templateId instead.",
+    ),
   scope: AppScopeSchema.optional().describe(
     "Visibility scope. Defaults to personal (owned by the calling user).",
   ),
@@ -57,7 +66,9 @@ const CreateAppSchema = z.strictObject({
     .string()
     .max(APP_TEMPLATE_ID_MAX_LENGTH)
     .optional()
-    .describe("Optional id of the template this app was seeded from."),
+    .describe(
+      `Template to scaffold from when html is omitted (one of: ${templateIds}); the result returns the seeded HTML for editing. With html present it is recorded as provenance only.`,
+    ),
   uiCsp: AppUiCspSchema.optional().describe(
     "Optional CSP allowlist (bare hostnames). Omitted = restrictive default (own origin only).",
   ),
@@ -109,8 +120,7 @@ const registry = defineArchestraTools([
   defineArchestraTool({
     shortName: TOOL_CREATE_APP_SHORT_NAME,
     title: "Create App",
-    description:
-      "Build an interactive app — a to-do list, dashboard, form, tracker, game, or any custom UI — from a single self-contained HTML document. Use this whenever the user asks to make, build, or create an app, tool, or interactive UI: author the complete HTML and pass it as html — do not paste the code into the chat reply or write it as an artifact (artifact_write is for markdown documents, not apps). When called from the chat UI the app is rendered inline in the conversation automatically; its standalone page is /apps/<id>/run. Defaults to personal scope (owned by the calling user). Returns the created app id and its first version. The app's HTML runs sandboxed and can persist app-scoped state through window.archestra.data.get/set/list/delete (backed by the app_data_* tools; no app id is passed — the store is always the running app's own).",
+    description: `Build an interactive app — a to-do list, dashboard, form, tracker, game, or any custom UI — from a single self-contained HTML document. Use this whenever the user asks to make, build, or create an app, tool, or interactive UI: author the complete HTML and pass it as html — do not paste the code into the chat reply or write it as an artifact (artifact_write is for markdown documents, not apps). Author PURE UI HTML: the platform injects window.archestra into every app at render time — window.archestra.data.get/set/list/delete persists app-scoped state (no app id is passed; the store is always the running app's own), window.archestra.callTool(name, args) calls the app's assigned tools, and openLink(url)/requestDisplayMode(mode)/sendMessage(text) reach the host. Do NOT import SDKs, read __ARCHESTRA_APP_SDK_URL__, or wire postMessage yourself — that glue is provided and hand-rolling it breaks the app. Alternatively omit html and pass templateId (one of: ${templateIds}) to scaffold from a curated starter; the result includes the seeded HTML so you can update_app it. When called from the chat UI the app is rendered inline in the conversation automatically; its standalone page is /apps/<id>/run. Defaults to personal scope (owned by the calling user). Returns the created app id and its first version.`,
     schema: CreateAppSchema,
     outputSchema: AppSummaryOutputSchema,
     async handler({ args, context }) {
@@ -128,6 +138,7 @@ const registry = defineArchestraTools([
         );
       }
       let payload: VersionPayload;
+      let seededFromTemplate: boolean;
       try {
         // Creating a shared (org) app needs the matching authority; a plain
         // member may only create personal apps they author.
@@ -138,8 +149,13 @@ const registry = defineArchestraTools([
           authorId: context.userId,
           resourceTeamIds: [],
         });
-        payload = buildValidatedVersionPayload({
+        const resolved = resolveCreateAppHtml({
           html: args.html,
+          templateId: args.templateId,
+        });
+        seededFromTemplate = resolved.seededFromTemplate;
+        payload = buildValidatedVersionPayload({
+          html: resolved.html,
           uiCsp: args.uiCsp,
           uiPermissions: args.uiPermissions,
         });
@@ -166,6 +182,11 @@ const registry = defineArchestraTools([
         );
       }
 
+      // Scaffold-then-edit: when the template seeded the html, return it so
+      // the model can immediately update_app without a read-back round-trip.
+      const seededHtmlNote = seededFromTemplate
+        ? `\nSeeded from template "${args.templateId}"; current HTML (edit via update_app):\n${payload.html}`
+        : "";
       return structuredSuccessResult(
         {
           id: app.id,
@@ -174,7 +195,7 @@ const registry = defineArchestraTools([
           scope: app.scope,
           latestVersion: app.latestVersion,
         },
-        `Created app "${app.name}" (${app.id}). Rendered inline when viewed in chat; standalone run page: /apps/${app.id}/run`,
+        `Created app "${app.name}" (${app.id}). Rendered inline when viewed in chat; standalone run page: /apps/${app.id}/run${seededHtmlNote}`,
       );
     },
   }),
@@ -250,7 +271,7 @@ const registry = defineArchestraTools([
     shortName: TOOL_UPDATE_APP_SHORT_NAME,
     title: "Update App",
     description:
-      "Change an existing app's HTML and/or metadata. Use this when the user asks to fix, tweak, restyle, or extend an app created earlier — pass the full revised HTML, not a diff. Supplying new html forks a new immutable version (suppressed if identical). When called from the chat UI the app's head version is rendered inline in the conversation.",
+      "Change an existing app's HTML and/or metadata. Use this when the user asks to fix, tweak, restyle, or extend an app created earlier — pass the full revised HTML, not a diff. Author pure UI HTML: window.archestra (data store, callTool, host features) is injected by the platform at render time — never add SDK imports or postMessage wiring. Supplying new html forks a new immutable version (suppressed if identical). When called from the chat UI the app's head version is rendered inline in the conversation.",
     schema: UpdateAppSchema,
     outputSchema: AppSummaryOutputSchema,
     async handler({ args, context }) {

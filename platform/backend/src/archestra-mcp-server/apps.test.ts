@@ -184,6 +184,58 @@ describe("app tool execution", () => {
     expect(head?.uiCsp).toEqual({ connectDomains: ["api.example.com"] });
   });
 
+  test("create seeds from a template when html is omitted", async () => {
+    const created = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_CREATE_APP_SHORT_NAME),
+      { name: "From Template", templateId: "form" },
+      context,
+    );
+    expect(created.isError).toBe(false);
+    const appId = structured(created).id as string;
+
+    const head = await AppVersionModel.findByAppAndVersion(appId, 1);
+    expect(head?.html).toContain("window.archestra.data.set");
+    // Scaffold-then-edit: the seeded html rides the result text so the model
+    // can update_app without a read-back.
+    expect((created.content[0] as any).text).toContain(
+      "window.archestra.data.set",
+    );
+
+    // Explicit html wins over templateId (provenance only) and returns no seed.
+    const explicit = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_CREATE_APP_SHORT_NAME),
+      { name: "Explicit", html: "<h1>mine</h1>", templateId: "form" },
+      context,
+    );
+    expect(explicit.isError).toBe(false);
+    const explicitHead = await AppVersionModel.findByAppAndVersion(
+      structured(explicit).id as string,
+      1,
+    );
+    expect(explicitHead?.html).toBe("<h1>mine</h1>");
+    expect((explicit.content[0] as any).text).not.toContain("Seeded from");
+  });
+
+  test("create rejects unknown templateId and missing html+templateId", async () => {
+    const unknown = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_CREATE_APP_SHORT_NAME),
+      { name: "Nope", templateId: "no-such-template" },
+      context,
+    );
+    expect(unknown.isError).toBe(true);
+    expect((unknown.content[0] as any).text).toContain("Unknown templateId");
+
+    const neither = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_CREATE_APP_SHORT_NAME),
+      { name: "Empty" },
+      context,
+    );
+    expect(neither.isError).toBe(true);
+    expect((neither.content[0] as any).text).toContain(
+      "Either html or templateId",
+    );
+  });
+
   test("create reports a name conflict cleanly", async () => {
     await executeArchestraTool(
       getArchestraToolFullName(TOOL_CREATE_APP_SHORT_NAME),

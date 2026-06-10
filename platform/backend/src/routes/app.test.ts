@@ -122,6 +122,46 @@ describe("appRoutes /api/apps", () => {
     expect(deleted.json().success).toBe(true);
   });
 
+  test("create resolves templateId server-side when html is omitted", async ({
+    makeUser,
+    makeOrganization,
+    makeMember,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: ADMIN_ROLE_NAME });
+    app = await buildApp(user.id, org.id);
+
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/apps",
+      headers: JSON_HEADERS,
+      payload: { name: "Seeded", templateId: "form" },
+    });
+    expect(created.statusCode).toBe(200);
+    const versions = await app.inject({
+      method: "GET",
+      url: `/api/apps/${created.json().id}/versions`,
+    });
+    expect(versions.json()[0].html).toContain("window.archestra.data.set");
+
+    const unknown = await app.inject({
+      method: "POST",
+      url: "/api/apps",
+      headers: JSON_HEADERS,
+      payload: { name: "Unknown", templateId: "no-such-template" },
+    });
+    expect(unknown.statusCode).toBe(400);
+
+    const neither = await app.inject({
+      method: "POST",
+      url: "/api/apps",
+      headers: JSON_HEADERS,
+      payload: { name: "Neither" },
+    });
+    expect(neither.statusCode).toBe(400);
+  });
+
   test("a plain member cannot create an org-scoped app", async ({
     makeUser,
     makeOrganization,

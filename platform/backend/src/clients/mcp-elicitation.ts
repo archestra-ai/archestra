@@ -16,7 +16,7 @@ import type { ClientCapabilitiesWithExtensions } from "@/types/mcp-capabilities"
 // MCP elicitation support
 // =============================================================================
 
-export const MCP_ELICITATION_CLIENT_CAPABILITY = {
+const MCP_ELICITATION_CLIENT_CAPABILITY = {
   form: { applyDefaults: true },
   url: {},
 } as const;

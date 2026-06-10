@@ -18,7 +18,7 @@ export const ChatMcpElicitationResponseSchema = ElicitResultSchema.pick({
   conversationId: UuidIdSchema,
 });
 
-export type ChatMcpElicitationStreamData = {
+type ChatMcpElicitationStreamData = {
   id: string;
   conversationId: string;
   toolName: string;

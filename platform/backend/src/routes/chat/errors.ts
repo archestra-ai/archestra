@@ -1640,8 +1640,8 @@ export function mapProviderError(
   if (error instanceof EmptyModelResponseError) {
     // A content-filter finish is a deterministic block, not a transient empty
     // turn — surface it as the non-retryable ContentFiltered card so the UI
-    // doesn't offer a pointless retry. Exhausted stop/length/unknown turns stay
-    // the retryable EmptyResponse.
+    // doesn't offer a pointless retry. Every other exhausted finish stays the
+    // retryable EmptyResponse.
     const code =
       error.finishReason === "content-filter"
         ? ChatErrorCode.ContentFiltered

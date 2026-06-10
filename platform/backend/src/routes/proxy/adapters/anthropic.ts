@@ -555,14 +555,14 @@ class AnthropicResponseAdapter
   }
 
   getUsage(): UsageView {
-    const { input, output, cacheRead, cacheWrite } = getUsageTokens(
-      this.response.usage,
-    );
+    const { input, output, cacheRead, cacheWrite, cacheWrite1h } =
+      getUsageTokens(this.response.usage);
     return {
       inputTokens: input,
       outputTokens: output,
       cacheReadTokens: cacheRead,
       cacheWriteTokens: cacheWrite,
+      cacheWrite1hTokens: cacheWrite1h,
     };
   }
 
@@ -642,6 +642,9 @@ class AnthropicStreamAdapter
             cacheReadTokens: chunk.message.usage.cache_read_input_tokens ?? 0,
             cacheWriteTokens:
               chunk.message.usage.cache_creation_input_tokens ?? 0,
+            cacheWrite1hTokens:
+              chunk.message.usage.cache_creation?.ephemeral_1h_input_tokens ??
+              0,
           };
         }
         sseData = `event: message_start\ndata: ${JSON.stringify(chunk)}\n\n`;
@@ -1099,6 +1102,7 @@ export function getUsageTokens(usage: Anthropic.Types.Usage) {
     output: usage.output_tokens,
     cacheRead: usage.cache_read_input_tokens ?? 0,
     cacheWrite: usage.cache_creation_input_tokens ?? 0,
+    cacheWrite1h: usage.cache_creation?.ephemeral_1h_input_tokens ?? 0,
   };
 }
 

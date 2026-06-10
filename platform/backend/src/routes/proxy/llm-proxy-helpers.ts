@@ -106,6 +106,7 @@ export async function calculateInteractionCosts(params: {
     params.providerName,
     cacheTokens.readTokens,
     cacheTokens.writeTokens,
+    params.usage.cacheWrite1hTokens ?? 0,
   );
   return {
     baselineCost,

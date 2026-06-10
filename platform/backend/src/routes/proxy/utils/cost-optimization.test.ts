@@ -173,6 +173,33 @@ describe("calculateCacheCost", () => {
     expect(result?.cacheCost).toBeCloseTo(0.0145);
     expect(result?.cacheSavings).toBeCloseTo(0.0155);
   });
+
+  test("bills the 1-hour write portion at 2x, the rest at the 5m rate", async () => {
+    await ModelModel.create({
+      externalId: "anthropic/cache-1h",
+      provider: "anthropic",
+      modelId: "cache-1h",
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+      promptPricePerToken: "0.000010", // $10/M input
+      completionPricePerToken: "0.000030",
+      lastSyncedAt: new Date(),
+    });
+
+    // read 2000 → 0.002 cost / 0.018 saved.
+    // of 1000 write tokens, 400 are 1h (2x) and 600 are 5m (1.25x):
+    //   cost  = 0.002 + 600/1M*$10*1.25 (0.0075) + 400/1M*$10*2 (0.008) = 0.0175
+    //   saved = 0.018 - 600/1M*$10*0.25 (0.0015) - 400/1M*$10*1.0 (0.004) = 0.0125
+    const result = await calculateCacheCost(
+      "cache-1h",
+      "anthropic",
+      2000,
+      1000,
+      400,
+    );
+    expect(result?.cacheCost).toBeCloseTo(0.0175);
+    expect(result?.cacheSavings).toBeCloseTo(0.0125);
+  });
 });
 
 describe("estimateToolTokens", () => {

@@ -149,15 +149,17 @@ const registry = defineArchestraTools([
     shortName: TOOL_ACTIVATE_SKILL_SHORT_NAME,
     title: "Activate Skill",
     // a static tool description can't know whether the sandbox tools are
-    // enabled, permitted, and assigned to the calling agent, so it does not
-    // mention them. The activate_skill *result* adds an agent-aware sandbox
-    // hint (see formatSkillActivation) only when they are genuinely available.
+    // enabled, permitted, and assigned to the calling agent, so mounting is
+    // mentioned only conditionally ("where a sandbox is available"). The
+    // activate_skill *result* adds an agent-aware sandbox hint (see
+    // formatSkillActivation) only when they are genuinely available.
     description:
       "Load a specialized Agent Skill — a reusable SKILL.md instruction set. " +
       "Call list_skills first to discover what is available, then call this " +
       "with a skill name to load its full instructions. Activate a skill " +
       "before attempting the task it covers. To inspect bundled resources " +
-      "use read_skill_file.",
+      "use read_skill_file. Where a sandbox is available, activation also " +
+      "mounts the skill under /skills.",
     schema: ActivateSkillSchema,
     async handler({ args, context }) {
       const ctx = requireOrgContext(context);

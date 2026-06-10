@@ -50,8 +50,13 @@ test.describe("MCP Catalog promotion", () => {
     });
     await expect(settingsDialog).toBeVisible({ timeout: 30_000 });
 
-    // Switch visibility Personal -> Teams. The Teams option's description is
-    // unique within the visibility selector, so match on it.
+    // Switch visibility Personal -> Teams. The visibility selector renders
+    // collapsed (showing only the current Personal option), so expand it
+    // first; the Teams option's description is unique within the expanded
+    // list, so match on it.
+    await settingsDialog
+      .getByRole("button", { name: /Only you can access this MCP server/i })
+      .click();
     await settingsDialog
       .getByRole("button", {
         name: /Share this MCP server with selected teams/i,

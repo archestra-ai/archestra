@@ -1,3 +1,4 @@
+import * as cheerio from "cheerio";
 import type { VersionPayload } from "@/models/app-version";
 import { ApiError } from "@/types";
 import {
@@ -46,19 +47,63 @@ const ALLOWED_PERMISSION_KEYS = [
 
 /**
  * Validate an app's CSP + permissions and assemble the version payload to
- * persist. Throws `ApiError(400)` on any malformed domain or unknown permission
- * key. Absent CSP/permissions normalize to `null` (the restrictive default).
+ * persist. Throws `ApiError(400)` on any malformed domain, unknown permission
+ * key, or html that bootstraps the MCP App SDK itself (the platform injects
+ * `window.archestra` — see app-runtime-bridge.ts). Absent CSP/permissions
+ * normalize to `null` (the restrictive default). Soft structural issues come
+ * back as `warnings` (the save succeeds); they ride the create/update
+ * responses so authors — human or model — see them.
  */
 export function buildValidatedVersionPayload(params: {
   html: string;
   uiCsp?: AppUiCsp | null;
   uiPermissions?: AppUiPermissions | null;
-}): VersionPayload {
+}): { payload: VersionPayload; warnings: string[] } {
+  const warnings = validateAppHtml(params.html);
   return {
-    html: params.html,
-    uiCsp: validateAppUiCsp(params.uiCsp ?? null),
-    uiPermissions: validateAppUiPermissions(params.uiPermissions ?? null),
+    payload: {
+      html: params.html,
+      uiCsp: validateAppUiCsp(params.uiCsp ?? null),
+      uiPermissions: validateAppUiPermissions(params.uiPermissions ?? null),
+    },
+    warnings,
   };
+}
+
+// Markers of the SDK self-bootstrap the runtime bridge replaces. An app that
+// wires the SDK itself would race the bridge's connection handshake, so this
+// is a hard reject — but only inside <script> elements: prose that merely
+// mentions a marker (docs, comments rendered as text) must save fine.
+const SDK_BOOTSTRAP_MARKERS = [
+  "__ARCHESTRA_APP_SDK_URL__",
+  "PostMessageTransport",
+] as const;
+
+function validateAppHtml(html: string): string[] {
+  const $ = cheerio.load(html);
+  const scriptText = $("script")
+    .map((_, el) => $(el).text())
+    .get()
+    .join("\n");
+  for (const marker of SDK_BOOTSTRAP_MARKERS) {
+    if (scriptText.includes(marker)) {
+      throw new ApiError(
+        400,
+        `app html must not bootstrap the MCP App SDK itself (found "${marker}" in a <script>). The platform injects window.archestra (data store, callTool, host features) at render time — remove the SDK import and transport wiring and use window.archestra directly.`,
+      );
+    }
+  }
+
+  const warnings: string[] = [];
+  // cheerio normalizes fragments into a full document, so anchor checks run on
+  // the raw input. Without <head>/<html> the bridge injection falls back to
+  // prepending — workable, but the document is likely malformed.
+  if (!/<head[\s>]/i.test(html) && !/<html[\s>]/i.test(html)) {
+    warnings.push(
+      "html has no <head> or <html> element; provide a complete HTML document (the injected runtime is prepended as a fallback).",
+    );
+  }
+  return warnings;
 }
 
 function validateAppUiCsp(csp: AppUiCsp | null): AppUiCsp | null {

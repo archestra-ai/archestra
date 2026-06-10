@@ -114,6 +114,12 @@ const AppSummaryOutputSchema = z.object({
   description: z.string().nullable(),
   scope: AppScopeSchema,
   latestVersion: z.number(),
+  warnings: z
+    .array(z.string())
+    .optional()
+    .describe(
+      "Soft save-time validation warnings about the html (the save succeeded); fix them via update_app.",
+    ),
 });
 
 const registry = defineArchestraTools([
@@ -138,6 +144,7 @@ const registry = defineArchestraTools([
         );
       }
       let payload: VersionPayload;
+      let warnings: string[];
       let seededFromTemplate: boolean;
       try {
         // Creating a shared (org) app needs the matching authority; a plain
@@ -154,11 +161,13 @@ const registry = defineArchestraTools([
           templateId: args.templateId,
         });
         seededFromTemplate = resolved.seededFromTemplate;
-        payload = buildValidatedVersionPayload({
+        const validated = buildValidatedVersionPayload({
           html: resolved.html,
           uiCsp: args.uiCsp,
           uiPermissions: args.uiPermissions,
         });
+        payload = validated.payload;
+        warnings = validated.warnings;
       } catch (error) {
         if (error instanceof ApiError) return errorResult(error.message);
         throw error;
@@ -187,6 +196,10 @@ const registry = defineArchestraTools([
       const seededHtmlNote = seededFromTemplate
         ? `\nSeeded from template "${args.templateId}"; current HTML (edit via update_app):\n${payload.html}`
         : "";
+      const warningsNote =
+        warnings.length > 0
+          ? `\nValidation warnings (save succeeded; fix via update_app):\n- ${warnings.join("\n- ")}`
+          : "";
       return structuredSuccessResult(
         {
           id: app.id,
@@ -194,8 +207,9 @@ const registry = defineArchestraTools([
           description: app.description,
           scope: app.scope,
           latestVersion: app.latestVersion,
+          ...(warnings.length > 0 ? { warnings } : {}),
         },
-        `Created app "${app.name}" (${app.id}). Rendered inline when viewed in chat; standalone run page: /apps/${app.id}/run${seededHtmlNote}`,
+        `Created app "${app.name}" (${app.id}). Rendered inline when viewed in chat; standalone run page: /apps/${app.id}/run${warningsNote}${seededHtmlNote}`,
       );
     },
   }),
@@ -343,6 +357,7 @@ const registry = defineArchestraTools([
         );
       }
       let version: VersionPayload | undefined;
+      let warnings: string[] = [];
       if (args.html !== undefined) {
         // CSP/permissions are versioned with the html. An omitted field inherits
         // the current head's value (an html-only edit must not silently drop an
@@ -352,7 +367,7 @@ const registry = defineArchestraTools([
           app.latestVersion,
         );
         try {
-          version = buildValidatedVersionPayload({
+          const validated = buildValidatedVersionPayload({
             html: args.html,
             uiCsp:
               args.uiCsp !== undefined ? args.uiCsp : (head?.uiCsp ?? null),
@@ -361,6 +376,8 @@ const registry = defineArchestraTools([
                 ? args.uiPermissions
                 : (head?.uiPermissions ?? null),
           });
+          version = validated.payload;
+          warnings = validated.warnings;
         } catch (error) {
           if (error instanceof ApiError) return errorResult(error.message);
           throw error;
@@ -381,6 +398,10 @@ const registry = defineArchestraTools([
       if (!updated) {
         return errorResult(`Failed to update app ${args.appId}.`);
       }
+      const warningsNote =
+        warnings.length > 0
+          ? `\nValidation warnings (save succeeded; fix via update_app):\n- ${warnings.join("\n- ")}`
+          : "";
       return structuredSuccessResult(
         {
           id: updated.id,
@@ -388,8 +409,9 @@ const registry = defineArchestraTools([
           description: updated.description,
           scope: updated.scope,
           latestVersion: updated.latestVersion,
+          ...(warnings.length > 0 ? { warnings } : {}),
         },
-        `Updated app "${updated.name}" (now at version ${updated.latestVersion}). Rendered inline when viewed in chat; standalone run page: /apps/${updated.id}/run`,
+        `Updated app "${updated.name}" (now at version ${updated.latestVersion}). Rendered inline when viewed in chat; standalone run page: /apps/${updated.id}/run${warningsNote}`,
       );
     },
   }),

@@ -15449,6 +15449,7 @@ export type CreateAppResponses = {
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
+        warnings?: Array<string>;
     };
 };
 
@@ -15836,6 +15837,7 @@ export type UpdateAppResponses = {
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
+        warnings?: Array<string>;
     };
 };
 

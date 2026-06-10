@@ -16,6 +16,7 @@ import {
   AppVersionModel,
   TeamModel,
 } from "@/models";
+import type { VersionPayload } from "@/models/app-version";
 import {
   assignToolToApp,
   type ToolAssignmentError,
@@ -48,6 +49,12 @@ const CreateAppBodySchema = CreateAppSchema.extend({
 });
 const UpdateAppBodySchema = UpdateAppSchema.extend({
   teamIds: z.array(UuidIdSchema).optional(),
+});
+
+// Create/update responses carry soft save-time validation warnings (the save
+// succeeded; the html has structural issues worth surfacing to the author).
+const AppWithWarningsSchema = SelectAppSchema.extend({
+  warnings: z.array(z.string()).optional(),
 });
 
 const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
@@ -122,7 +129,7 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description: "Create a new MCP App.",
         tags: ["Apps"],
         body: CreateAppBodySchema,
-        response: constructResponseSchema(SelectAppSchema),
+        response: constructResponseSchema(AppWithWarningsSchema),
       },
     },
     async ({ body, user, organizationId }, reply) => {
@@ -145,7 +152,7 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
         html: body.html,
         templateId: body.templateId,
       });
-      const payload = buildValidatedVersionPayload({
+      const { payload, warnings } = buildValidatedVersionPayload({
         html,
         uiCsp: body.uiCsp,
         uiPermissions: body.uiPermissions,
@@ -168,7 +175,7 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
           `An app named "${body.name}" already exists in this scope.`,
         );
       }
-      return reply.send(app);
+      return reply.send(warnings.length > 0 ? { ...app, warnings } : app);
     },
   );
 
@@ -203,7 +210,7 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tags: ["Apps"],
         params: z.object({ appId: UuidIdSchema }),
         body: UpdateAppBodySchema,
-        response: constructResponseSchema(SelectAppSchema),
+        response: constructResponseSchema(AppWithWarningsSchema),
       },
     },
     async ({ params: { appId }, body, user, organizationId }, reply) => {
@@ -266,13 +273,14 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // CSP/permissions ride the version envelope; an html-bearing edit inherits
       // the current head's values for any field the caller omits.
-      let version: ReturnType<typeof buildValidatedVersionPayload> | undefined;
+      let version: VersionPayload | undefined;
+      let warnings: string[] = [];
       if (body.html !== undefined) {
         const head = await AppVersionModel.findByAppAndVersion(
           app.id,
           app.latestVersion,
         );
-        version = buildValidatedVersionPayload({
+        const validated = buildValidatedVersionPayload({
           html: body.html,
           uiCsp: body.uiCsp !== undefined ? body.uiCsp : (head?.uiCsp ?? null),
           uiPermissions:
@@ -280,6 +288,8 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
               ? body.uiPermissions
               : (head?.uiPermissions ?? null),
         });
+        version = validated.payload;
+        warnings = validated.warnings;
       }
 
       const updated = await AppModel.update({
@@ -291,7 +301,9 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (!updated) {
         throw new ApiError(404, `No app found with id ${appId}.`);
       }
-      return reply.send(updated);
+      return reply.send(
+        warnings.length > 0 ? { ...updated, warnings } : updated,
+      );
     },
   );
 

@@ -162,6 +162,53 @@ describe("appRoutes /api/apps", () => {
     expect(neither.statusCode).toBe(400);
   });
 
+  test("create rejects SDK self-bootstrap html and surfaces soft warnings", async ({
+    makeUser,
+    makeOrganization,
+    makeMember,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: ADMIN_ROLE_NAME });
+    app = await buildApp(user.id, org.id);
+
+    const bootstrap = await app.inject({
+      method: "POST",
+      url: "/api/apps",
+      headers: JSON_HEADERS,
+      payload: {
+        name: "Bootstrapper",
+        html: "<html><head><script>import(window.__ARCHESTRA_APP_SDK_URL__);</script></head><body/></html>",
+      },
+    });
+    expect(bootstrap.statusCode).toBe(400);
+    expect(bootstrap.json().error.message).toContain("window.archestra");
+
+    // A fragment saves fine but the response carries a structural warning.
+    const fragment = await app.inject({
+      method: "POST",
+      url: "/api/apps",
+      headers: JSON_HEADERS,
+      payload: { name: "Fragment", html: "<h1>just a heading</h1>" },
+    });
+    expect(fragment.statusCode).toBe(200);
+    expect(fragment.json().warnings).toHaveLength(1);
+    expect(fragment.json().warnings[0]).toContain("no <head> or <html>");
+
+    // A complete document carries no warnings field at all.
+    const clean = await app.inject({
+      method: "POST",
+      url: "/api/apps",
+      headers: JSON_HEADERS,
+      payload: {
+        name: "Clean",
+        html: "<html><head></head><body><h1>ok</h1></body></html>",
+      },
+    });
+    expect(clean.statusCode).toBe(200);
+    expect(clean.json().warnings).toBeUndefined();
+  });
+
   test("a plain member cannot create an org-scoped app", async ({
     makeUser,
     makeOrganization,

@@ -52895,6 +52895,12 @@
                       "nullable": true,
                       "type": "string",
                       "format": "date-time"
+                    },
+                    "warnings": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
                     }
                   },
                   "required": [
@@ -53930,6 +53936,12 @@
                       "nullable": true,
                       "type": "string",
                       "format": "date-time"
+                    },
+                    "warnings": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
                     }
                   },
                   "required": [

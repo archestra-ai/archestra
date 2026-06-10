@@ -236,6 +236,35 @@ describe("app tool execution", () => {
     );
   });
 
+  test("create rejects SDK self-bootstrap html; update surfaces warnings", async () => {
+    const bootstrap = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_CREATE_APP_SHORT_NAME),
+      {
+        name: "Bootstrapper",
+        html: "<html><head><script>const t = new PostMessageTransport(window.parent, window.parent);</script></head><body/></html>",
+      },
+      context,
+    );
+    expect(bootstrap.isError).toBe(true);
+    expect((bootstrap.content[0] as any).text).toContain("window.archestra");
+
+    const created = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_CREATE_APP_SHORT_NAME),
+      { name: "Warned", html: "<html><head></head><body/></html>" },
+      context,
+    );
+    expect(structured(created).warnings).toBeUndefined();
+
+    const updated = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_UPDATE_APP_SHORT_NAME),
+      { appId: structured(created).id, html: "<h1>fragment</h1>" },
+      context,
+    );
+    expect(updated.isError).toBe(false);
+    expect(structured(updated).warnings).toHaveLength(1);
+    expect((updated.content[0] as any).text).toContain("Validation warnings");
+  });
+
   test("create reports a name conflict cleanly", async () => {
     await executeArchestraTool(
       getArchestraToolFullName(TOOL_CREATE_APP_SHORT_NAME),

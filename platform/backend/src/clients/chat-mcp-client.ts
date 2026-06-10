@@ -60,6 +60,10 @@ import type {
 import { UNSAFE_CONTEXT_BOUNDARY_REASON } from "@/types";
 import type { ClientCapabilitiesWithExtensions } from "@/types/mcp-capabilities";
 import { buildMcpClientInfo } from "@/utils/mcp-client-info";
+import {
+  configureMcpElicitation,
+  withMcpElicitationCapability,
+} from "./mcp-elicitation";
 
 /**
  * MIME types that indicate a renderable UI resource (SEP-1865).
@@ -588,15 +592,17 @@ export async function getChatMcpClient(
       },
     );
 
-    const capabilities: ClientCapabilitiesWithExtensions = {
-      roots: { listChanged: true },
-      extensions: MCP_APPS_CLIENT_EXTENSION_CAPABILITIES,
-    };
+    const capabilities: ClientCapabilitiesWithExtensions =
+      withMcpElicitationCapability({
+        roots: { listChanged: true },
+        extensions: MCP_APPS_CLIENT_EXTENSION_CAPABILITIES,
+      });
 
     // Create MCP client
     const client = new Client(buildMcpClientInfo("chat-mcp-client"), {
       capabilities,
     });
+    configureMcpElicitation(client);
 
     logger.info(
       { agentId, userId, url: mcpGatewayUrl },

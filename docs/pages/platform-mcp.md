@@ -3,7 +3,7 @@ title: Overview
 category: MCP
 order: -1
 description: How MCP servers, gateways, authentication, and orchestration fit together
-lastUpdated: 2026-05-05
+lastUpdated: 2026-06-10
 ---
 
 <!--
@@ -48,6 +48,10 @@ Self-hosted MCP servers run inside your Kubernetes cluster through the MCP Orche
 Both types can be assigned to Agents and MCP Gateways. The client does not need to know which runtime backs each tool.
 
 Some MCP servers expose resources through `resources/list` instead of callable tools through `tools/list`. When a remote server has resources but no tools, Archestra creates read-resource tools during installation so agents can access those resources through the normal tool assignment flow.
+
+## Protocol Behaviors
+
+Archestra advertises MCP elicitation support when it connects to upstream MCP servers. If a downstream server asks for user input during a gateway tool call, Archestra forwards that `elicitation/create` request to the connected MCP client and returns the client's response to the downstream server. Backend-only clients decline elicitation requests by default because there is no interactive user surface.
 
 ## Authentication Model
 

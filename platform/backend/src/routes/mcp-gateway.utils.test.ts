@@ -19,6 +19,7 @@ import {
 import type { ListToolsResult } from "@modelcontextprotocol/sdk/types.js";
 import { vi } from "vitest";
 import { archestraMcpBranding } from "@/archestra-mcp-server";
+import mcpClient from "@/clients/mcp-client";
 import type * as originalConfigModule from "@/config";
 import {
   AgentTeamModel,
@@ -59,6 +60,14 @@ const {
 } = await import("./mcp-gateway.utils");
 
 type TestListToolsHandler = (request: unknown) => Promise<ListToolsResult>;
+type TestCallToolHandler = (
+  request: unknown,
+  extra: { sendRequest: ReturnType<typeof vi.fn> },
+) => Promise<{
+  content: Array<{ type: string; text: string }>;
+  isError?: boolean;
+  structuredContent?: { items?: unknown[] };
+}>;
 
 describe("ensureRequestSocketDestroySoon", () => {
   test("adds destroySoon to injected request sockets", () => {
@@ -1629,6 +1638,102 @@ describe("createAgentServer tools/list", () => {
     expect(response.content[0]?.text).not.toContain(
       "User context not available",
     );
+  });
+
+  test("forwards downstream elicitation requests to the MCP caller", async ({
+    makeAgent,
+    makeAgentTool,
+    makeInternalMcpCatalog,
+    makeOrganization,
+    makeTool,
+  }) => {
+    const org = await makeOrganization();
+    const agent = await makeAgent({ organizationId: org.id });
+    const catalog = await makeInternalMcpCatalog({
+      organizationId: org.id,
+      name: "workspace",
+    });
+    const tool = await makeTool({
+      catalogId: catalog.id,
+      name: "workspace__create_event",
+      parameters: { type: "object", properties: {} },
+    });
+    await makeAgentTool(agent.id, tool.id);
+
+    const executeToolCallSpy = vi
+      .spyOn(mcpClient, "executeToolCall")
+      .mockResolvedValueOnce({
+        id: "call_123",
+        name: "workspace__create_event",
+        content: [{ type: "text", text: "ok" }],
+        isError: false,
+      });
+
+    try {
+      const { server } = await createAgentServer(agent.id);
+      const callToolHandler = (
+        server.server as unknown as {
+          _requestHandlers: Map<string, TestCallToolHandler>;
+        }
+      )._requestHandlers.get("tools/call");
+
+      expect(callToolHandler).toBeDefined();
+      if (!callToolHandler) {
+        throw new Error("Expected tools/call handler to be registered");
+      }
+
+      const sendRequest = vi.fn().mockResolvedValue({
+        action: "accept",
+        content: { title: "Team sync" },
+      });
+
+      await callToolHandler(
+        {
+          method: "tools/call",
+          params: {
+            name: "workspace__create_event",
+            arguments: {},
+          },
+        },
+        { sendRequest },
+      );
+
+      const options = executeToolCallSpy.mock.calls.at(-1)?.[3];
+      const elicitationHandler = options?.elicitationHandler;
+      expect(elicitationHandler).toBeTypeOf("function");
+
+      const elicitationRequest = {
+        method: "elicitation/create" as const,
+        params: {
+          mode: "form" as const,
+          message: "Provide event details",
+          requestedSchema: {
+            type: "object" as const,
+            properties: {
+              title: { type: "string" as const },
+            },
+          },
+        },
+      };
+
+      const result = await elicitationHandler?.(elicitationRequest, {
+        signal: new AbortController().signal,
+        requestId: "downstream-elicitation",
+        sendNotification: vi.fn(),
+        sendRequest: vi.fn(),
+      });
+
+      expect(sendRequest).toHaveBeenCalledWith(
+        elicitationRequest,
+        expect.any(Object),
+      );
+      expect(result).toEqual({
+        action: "accept",
+        content: { title: "Team sync" },
+      });
+    } finally {
+      executeToolCallSpy.mockRestore();
+    }
   });
 });
 

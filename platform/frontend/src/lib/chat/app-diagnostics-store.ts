@@ -121,20 +121,21 @@ export function reportAppDiagnostic(
   appId: string,
   version: number | null,
   entry: AppDiagnosticEntry,
-): void {
+): boolean {
   let current = diagnosticsByApp.get(appId);
   if (current && versionRank(version) < versionRank(current.version)) {
-    return;
+    return false;
   }
   if (!current || versionRank(version) > versionRank(current.version)) {
     current = { appId, version, entries: [] };
     diagnosticsByApp.set(appId, current);
   }
-  if (current.entries.length >= MAX_DIAGNOSTICS_PER_APP) return;
+  if (current.entries.length >= MAX_DIAGNOSTICS_PER_APP) return false;
   const key = dedupKey(entry);
-  if (current.entries.some((e) => dedupKey(e) === key)) return;
+  if (current.entries.some((e) => dedupKey(e) === key)) return false;
   current.entries.push(entry);
   emit();
+  return true;
 }
 
 /** Drop everything (conversation switch / chat mount). */
@@ -167,4 +168,9 @@ export function subscribeAppDiagnostics(listener: Listener): () => void {
 
 export function getAppDiagnosticCounts(): ReadonlyMap<string, number> {
   return countsSnapshot;
+}
+
+/** The diagnostics collected for one app at its latest reported version. */
+export function getAppDiagnostics(appId: string): AppDiagnostics | null {
+  return diagnosticsByApp.get(appId) ?? null;
 }

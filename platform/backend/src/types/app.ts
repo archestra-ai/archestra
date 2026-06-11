@@ -2,6 +2,7 @@ import { ResourceVisibilityScopeSchema } from "@archestra/shared";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
+import { AppRenderDiagnosticEntrySchema } from "./app-diagnostics";
 import { CredentialResolutionModeSchema } from "./enterprise-managed-credentials";
 
 /** Apps share the personal/team/org visibility model of agents and skills. */
@@ -96,6 +97,11 @@ export const InsertAppDataSchema = createInsertSchema(schema.appDataTable).omit(
 
 export const SelectAppTeamSchema = createSelectSchema(schema.appTeamTable);
 
+export const SelectAppRenderDiagnosticsSchema = createSelectSchema(
+  schema.appRenderDiagnosticsTable,
+  { entries: z.array(AppRenderDiagnosticEntrySchema) },
+);
+
 // Public payloads (create_app/update_app tools + REST CRUD). HTML and its
 // security envelope live in app_versions, so these are hand-authored composites
 // rather than table inserts.
@@ -147,3 +153,6 @@ export type AppTeam = z.infer<typeof SelectAppTeamSchema>;
 export type CreateApp = z.infer<typeof CreateAppSchema>;
 export type UpdateApp = z.infer<typeof UpdateAppSchema>;
 export type AppTemplate = z.infer<typeof AppTemplateSchema>;
+export type AppRenderDiagnostics = z.infer<
+  typeof SelectAppRenderDiagnosticsSchema
+>;

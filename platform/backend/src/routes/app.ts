@@ -11,6 +11,7 @@ import config from "@/config";
 import logger from "@/logging";
 import {
   AppModel,
+  AppRenderDiagnosticsModel,
   AppTeamModel,
   AppToolModel,
   AppVersionModel,
@@ -29,6 +30,7 @@ import { buildValidatedVersionPayload } from "@/services/apps/app-ui-policy";
 import {
   ApiError,
   type App,
+  AppRenderDiagnosticEntrySchema,
   AppTemplateSchema,
   CreateAppSchema,
   CredentialResolutionModeSchema,
@@ -390,6 +392,50 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async ({ params: { appId }, user, organizationId }, reply) => {
       await loadViewableApp({ appId, userId: user.id, organizationId });
       return reply.send(await AppToolModel.getToolsForApp(appId));
+    },
+  );
+
+  fastify.post(
+    "/api/apps/:appId/diagnostics",
+    {
+      schema: {
+        operationId: RouteId.PostAppRenderDiagnostics,
+        description:
+          "Record the calling user's latest render diagnostics for an app. An empty entries array means the render was clean.",
+        tags: ["Apps"],
+        params: z.object({ appId: UuidIdSchema }),
+        body: z.object({
+          version: z.number().int().positive(),
+          entries: z.array(AppRenderDiagnosticEntrySchema).max(50),
+        }),
+        response: constructResponseSchema(z.object({ success: z.boolean() })),
+      },
+    },
+    async ({ params: { appId }, body, user, organizationId }, reply) => {
+      // The iframe never calls this — the trusted host page does — but the
+      // endpoint must not trust an arbitrary appId regardless. user_id comes
+      // only from the session.
+      const app = await loadViewableApp({
+        appId,
+        userId: user.id,
+        organizationId,
+      });
+      // An app cannot have rendered a version it doesn't have yet; rejecting a
+      // future version stops a stale/buggy client from pinning a snapshot that
+      // masks the real head from get_app_diagnostics.
+      if (body.version > app.latestVersion) {
+        throw new ApiError(
+          400,
+          `version ${body.version} exceeds the app's latest version ${app.latestVersion}.`,
+        );
+      }
+      await AppRenderDiagnosticsModel.record({
+        appId,
+        userId: user.id,
+        version: body.version,
+        entries: body.entries,
+      });
+      return reply.send({ success: true });
     },
   );
 

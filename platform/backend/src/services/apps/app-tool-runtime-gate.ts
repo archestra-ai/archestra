@@ -26,7 +26,7 @@ export const APP_DATA_SHORT_NAMES = new Set<string>([
   TOOL_APP_DATA_DELETE_SHORT_NAME,
 ]);
 
-export type AppToolGateDecision =
+type AppToolGateDecision =
   | { allowed: true; kind: "app-data" }
   | { allowed: true; kind: "upstream"; resolvedToolName: string }
   | { allowed: false; code: number; reason: string };

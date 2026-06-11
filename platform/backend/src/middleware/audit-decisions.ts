@@ -300,6 +300,11 @@ export const AUDIT_DECISIONS = {
     reason:
       "app-scoped runtime data store; written by app HTML, no admin signal",
   },
+  appRenderDiagnosticsTable: {
+    audited: false,
+    reason:
+      "ephemeral per-viewer render diagnostics; best-effort, not admin state",
+  },
   labelKeysTable: { audited: false, reason: "label taxonomy; low-value churn" },
   labelValuesTable: {
     audited: false,

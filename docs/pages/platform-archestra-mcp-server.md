@@ -1646,6 +1646,7 @@ Required RBAC permission: `skill:update`
 | `update_app` | Replace an existing app's HTML wholesale, and/or change its assigned tools or metadata. | `app:update` |
 | `edit_app` | Apply targeted str_replace edits to an existing app's HTML — the efficient path for small changes (fix a bug, tweak a style, add a section) without re-streaming the whole document. | `app:update` |
 | `preview_app_tool` | Run one of an app's assigned MCP tools server-side, exactly as the rendered app would (as you, the viewing user, with your MCP credentials), and return its real output. | `app:update` |
+| `get_app_diagnostics` | Check how the app's current version actually rendered for you — the autonomous build→render→fix loop. | `app:read` |
 | `delete_app` | Soft-delete an app the caller owns or administers. | `app:delete` |
 | `app_data_get` | Read a value from the calling app's data store (per-user or shared partition). | `app:read` |
 | `app_data_set` | Write a value to the calling app's data store (per-user or shared partition). | `app:update` |
@@ -1828,6 +1829,27 @@ Required RBAC permission: `app:update`
 | `isError` | `boolean` | Yes |  |
 | `truncated` | `boolean` | Yes |  |
 | `output` | `string` | Yes | The tool's output, framed as untrusted data. |
+
+#### get_app_diagnostics
+
+Required RBAC permission: `app:read`
+
+##### Input
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `appId` | `string` | Yes | The app id. |
+
+##### Output
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `status` | `"no_render_observed" \| "clean" \| "errors"` | Yes |  |
+| `version` | `number \| null` | Yes | The rendered version, or the current head when none observed. |
+| `entries` | `object[]` | Yes |  |
+| `entries[].type` | `string` | Yes |  |
+| `entries[].message` | `string` | Yes |  |
+| `renderedAt` | `string \| null` | Yes |  |
 
 #### delete_app
 

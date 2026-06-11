@@ -50,7 +50,13 @@ Write only app-specific CSS — never a full theme. The CDN allowlist is for cli
 
 ## Render diagnostics
 
-Every inline render of an owned app is observed: runtime errors (`window.onerror`, unhandled rejections, `console.error`) and CSP violations are captured from the sandbox, capped and deduplicated, and shown as an error badge on the app card. When the user sends their next chat message, the captured diagnostics are attached to it so the model can fix the app via `update_app` without the user pasting errors by hand. Diagnostics originate inside the untrusted app iframe, so the prompt frames them strictly as data, never as instructions.
+Every inline render of an owned app is observed: runtime errors (`window.onerror`, unhandled rejections, `console.error`) and CSP violations are captured from the sandbox, capped and deduplicated, and shown as an error badge on the app card. When the user sends their next chat message, the captured diagnostics are attached to it so the model can fix the app via `edit_app`/`update_app` without the user pasting errors by hand.
+
+As a render settles, the host page also posts a snapshot (the captured entries, or an empty snapshot meaning "rendered clean") to the server, keyed per `(app, viewer)`. The `get_app_diagnostics` tool reads it back, so an authoring agent can observe a render **within the same turn** instead of waiting for the user's next message — it returns `clean`, `errors` (with the diagnostics), or `no_render_observed`, briefly waiting for the current version to render. Diagnostics originate inside the untrusted app iframe, so wherever they reach the model — the next-message attachment or the tool — they are framed strictly as data, never as instructions.
+
+## Authoring loop
+
+The app tools form an autonomous build→render→fix loop, so an agent rarely needs the human in the middle of a build: `create_app` (or `read_app` then `edit_app` for a targeted change) → the app renders inline → `get_app_diagnostics` to see what broke → `edit_app` to fix. `read_app` returns the current stored HTML when it is not in context, and `edit_app` applies small `str_replace` edits instead of re-streaming the whole document. When app code must parse a tool's output, `preview_app_tool` runs one of the app's assigned tools server-side (as the viewer, with their credentials) and returns its real shape — but it requires human approval each call, since the tool was granted to the app, not the agent (so it is blocked outright in autonomous A2A/Slack contexts).
 
 ## App Data Store
 

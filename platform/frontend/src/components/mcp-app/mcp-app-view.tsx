@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  archestraApiSdk,
   buildFullToolName,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
   parseFullToolName,
@@ -18,6 +19,7 @@ import {
 import { useTheme } from "next-themes";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  getAppDiagnostics,
   parseForwardedDiagnostic,
   reportAppDiagnostic,
 } from "@/lib/chat/app-diagnostics-store";
@@ -137,15 +139,70 @@ export const McpAppRuntime = function McpAppRuntime({
   const ownedAppId = endpoint.kind === "app" ? endpoint.appId : null;
   const appVersionRef = useRef(appVersion);
   appVersionRef.current = appVersion;
+
+  // Persist a snapshot of this render server-side so get_app_diagnostics can
+  // read it within the authoring turn (the next-user-message attachment path is
+  // untouched). Best-effort, fire-and-forget; the backend orders by version and
+  // merges same-version posts, so concurrent mounts are safe.
+  const postDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // The version whose first diagnostics were already posted early, so a noisy
+  // app can't drive an unbounded stream of network writes (the settle timer
+  // still posts the final state).
+  const earlyPostedVersionRef = useRef<number | null>(null);
+  const postRenderSnapshot = useCallback(() => {
+    if (!ownedAppId) return;
+    const version = appVersionRef.current;
+    if (version == null) return; // the server keys snapshots by a concrete version
+    const current = getAppDiagnostics(ownedAppId);
+    const entries =
+      current && current.version === version ? current.entries : [];
+    void archestraApiSdk
+      .postAppRenderDiagnostics({
+        path: { appId: ownedAppId },
+        body: { version, entries },
+      })
+      .catch(() => {});
+  }, [ownedAppId]);
+
   const handleDiagnostic = useCallback(
     (data: unknown) => {
       if (!ownedAppId) return;
       const entry = parseForwardedDiagnostic(data);
-      if (entry) {
-        reportAppDiagnostic(ownedAppId, appVersionRef.current ?? null, entry);
+      if (!entry) return;
+      const version = appVersionRef.current ?? null;
+      const changed = reportAppDiagnostic(ownedAppId, version, entry);
+      // One early post per version (debounced to coalesce a burst), so the
+      // model sees failures without waiting for the settle timer below.
+      if (
+        changed &&
+        version != null &&
+        earlyPostedVersionRef.current !== version &&
+        !postDebounceRef.current
+      ) {
+        earlyPostedVersionRef.current = version;
+        postDebounceRef.current = setTimeout(() => {
+          postDebounceRef.current = null;
+          postRenderSnapshot();
+        }, RENDER_DIAGNOSTIC_POST_DEBOUNCE_MS);
       }
     },
-    [ownedAppId],
+    [ownedAppId, postRenderSnapshot],
+  );
+
+  // Once the resource is renderable, post one snapshot after a short settle
+  // window — including the empty (rendered-clean) case — keyed on the version so
+  // each new render reports.
+  useEffect(() => {
+    if (!ownedAppId || !appResource || appVersion == null) return;
+    const timer = setTimeout(postRenderSnapshot, RENDER_SETTLE_POST_MS);
+    return () => clearTimeout(timer);
+  }, [ownedAppId, appResource, appVersion, postRenderSnapshot]);
+
+  useEffect(
+    () => () => {
+      if (postDebounceRef.current) clearTimeout(postDebounceRef.current);
+    },
+    [],
   );
   // No unmount clear: several mounts of one app coexist (inline card + sidebar
   // portal), so one unmount must not wipe another's entries. Lifecycle is
@@ -551,6 +608,11 @@ export const McpAppRuntime = function McpAppRuntime({
 
 const SANDBOX_PROXY_READY = "ui/notifications/sandbox-proxy-ready";
 const SANDBOX_READY_TIMEOUT = 10_000;
+// Coalesce a burst of render errors into one early server post.
+const RENDER_DIAGNOSTIC_POST_DEBOUNCE_MS = 400;
+// Settle window after a resource becomes renderable before posting the snapshot
+// (incl. the rendered-clean empty case).
+const RENDER_SETTLE_POST_MS = 1_500;
 
 /**
  * Creates a sandboxed iframe pointing to the sandbox proxy HTML and connects

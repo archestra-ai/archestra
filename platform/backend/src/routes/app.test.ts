@@ -6,7 +6,7 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import config from "@/config";
-import { AppVersionModel } from "@/models";
+import { AppRenderDiagnosticsModel, AppVersionModel } from "@/models";
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "@/test";
 import { ApiError } from "@/types";
 import appRoutes from "./app";
@@ -495,5 +495,71 @@ describe("appRoutes /api/apps", () => {
     const off = await app.inject({ method: "GET", url: "/api/app-templates" });
     (config.apps as { enabled: boolean }).enabled = true;
     expect(off.statusCode).toBe(404);
+  });
+
+  test("POST diagnostics stores the snapshot for the session user", async ({
+    makeUser,
+    makeOrganization,
+    makeMember,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: ADMIN_ROLE_NAME });
+    const app = await buildApp(user.id, org.id);
+
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/apps",
+      payload: { name: "Diag", html: "<h1>v1</h1>", scope: "org" },
+    });
+    const appId = created.json().id as string;
+
+    const posted = await app.inject({
+      method: "POST",
+      url: `/api/apps/${appId}/diagnostics`,
+      payload: { version: 1, entries: [{ type: "error", message: "boom" }] },
+    });
+    expect(posted.statusCode).toBe(200);
+
+    const stored = await AppRenderDiagnosticsModel.getForUser(appId, user.id);
+    expect(stored?.entries).toEqual([{ type: "error", message: "boom" }]);
+
+    // a version past the app's head is rejected (can't have rendered yet)
+    const future = await app.inject({
+      method: "POST",
+      url: `/api/apps/${appId}/diagnostics`,
+      payload: { version: 99, entries: [] },
+    });
+    expect(future.statusCode).toBe(400);
+  });
+
+  test("POST diagnostics 404s for an app the caller cannot see", async ({
+    makeUser,
+    makeOrganization,
+    makeMember,
+    makeApp,
+  }) => {
+    const org = await makeOrganization();
+    const author = await makeUser();
+    await makeMember(author.id, org.id, { role: ADMIN_ROLE_NAME });
+    // a personal app owned by the author is invisible to another member
+    const personalApp = await makeApp({
+      organizationId: org.id,
+      scope: "personal",
+      authorId: author.id,
+    });
+    const other = await makeUser();
+    await makeMember(other.id, org.id, { role: "member" });
+    const app = await buildApp(other.id, org.id);
+
+    const posted = await app.inject({
+      method: "POST",
+      url: `/api/apps/${personalApp.id}/diagnostics`,
+      payload: { version: 1, entries: [] },
+    });
+    expect(posted.statusCode).toBe(404);
+    expect(
+      await AppRenderDiagnosticsModel.getForUser(personalApp.id, other.id),
+    ).toBeNull();
   });
 });

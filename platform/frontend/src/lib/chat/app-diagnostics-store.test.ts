@@ -3,6 +3,7 @@ import {
   clearAllAppDiagnostics,
   drainAppDiagnostics,
   getAppDiagnosticCounts,
+  getAppDiagnostics,
   MAX_DIAGNOSTIC_MESSAGE_LENGTH,
   MAX_DIAGNOSTICS_PER_APP,
   parseForwardedDiagnostic,
@@ -107,5 +108,15 @@ describe("diagnostics store", () => {
     expect(drainAppDiagnostics()).toHaveLength(1);
     expect(drainAppDiagnostics()).toHaveLength(0);
     expect(getAppDiagnosticCounts().get(APP)).toBeUndefined();
+  });
+
+  it("getAppDiagnostics returns the current snapshot (for the render POST)", () => {
+    expect(getAppDiagnostics(APP)).toBeNull();
+    reportAppDiagnostic(APP, 3, { type: "error", message: "boom" });
+    expect(getAppDiagnostics(APP)).toEqual({
+      appId: APP,
+      version: 3,
+      entries: [{ type: "error", message: "boom" }],
+    });
   });
 });

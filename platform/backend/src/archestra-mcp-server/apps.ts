@@ -2,6 +2,7 @@ import {
   TOOL_CREATE_APP_SHORT_NAME,
   TOOL_DELETE_APP_SHORT_NAME,
   TOOL_EDIT_APP_SHORT_NAME,
+  TOOL_GET_APP_DIAGNOSTICS_SHORT_NAME,
   TOOL_LIST_APPS_SHORT_NAME,
   TOOL_PREVIEW_APP_TOOL_SHORT_NAME,
   TOOL_READ_APP_SHORT_NAME,
@@ -12,7 +13,12 @@ import { z } from "zod";
 import { getAppTemplates, resolveCreateAppHtml } from "@/app-templates";
 import mcpClient, { type TokenAuthContext } from "@/clients/mcp-client";
 import logger from "@/logging";
-import { AppModel, AppTeamModel, AppVersionModel } from "@/models";
+import {
+  AppModel,
+  AppRenderDiagnosticsModel,
+  AppTeamModel,
+  AppVersionModel,
+} from "@/models";
 import type { VersionPayload } from "@/models/app-version";
 import {
   replaceAppToolAssignments,
@@ -22,6 +28,14 @@ import {
   assertCallerMayModifyApp,
   callerIsAppAdmin,
 } from "@/services/apps/app-authorization";
+import {
+  capDiagnosticEntries,
+  DIAGNOSTICS_BLOCK_CLOSE,
+  DIAGNOSTICS_BLOCK_OPEN,
+  DIAGNOSTICS_UNTRUSTED_PREAMBLE,
+  escapeAngleBrackets,
+  formatDiagnosticEntryLines,
+} from "@/services/apps/app-diagnostics";
 import { gateAppToolCall } from "@/services/apps/app-tool-runtime-gate";
 import { buildValidatedVersionPayload } from "@/services/apps/app-ui-policy";
 import { ApiError, appOwner, type CommonToolResult } from "@/types";
@@ -161,6 +175,20 @@ const PreviewAppToolOutputSchema = z.object({
   output: z.string().describe("The tool's output, framed as untrusted data."),
 });
 
+const GetAppDiagnosticsSchema = z.strictObject({
+  appId: z.string().uuid().describe("The app id."),
+});
+
+const GetAppDiagnosticsOutputSchema = z.object({
+  status: z.enum(["no_render_observed", "clean", "errors"]),
+  version: z
+    .number()
+    .nullable()
+    .describe("The rendered version, or the current head when none observed."),
+  entries: z.array(z.object({ type: z.string(), message: z.string() })),
+  renderedAt: z.string().nullable(),
+});
+
 const UpdateAppSchema = z.strictObject({
   appId: z.string().uuid().describe("The app id."),
   name: z.string().min(1).max(APP_NAME_MAX_LENGTH).optional(),
@@ -220,7 +248,7 @@ const registry = defineArchestraTools([
   defineArchestraTool({
     shortName: TOOL_CREATE_APP_SHORT_NAME,
     title: "Create App",
-    description: `Build an interactive app — a to-do list, dashboard, form, tracker, game, or any custom UI — from a single self-contained HTML document. Use this whenever the user asks to make, build, or create an app, tool, or interactive UI: author the complete HTML and pass it as html — do not paste the code into the chat reply or write it as an artifact (artifact_write is for markdown documents, not apps). Author PURE UI HTML against the Archestra Apps SDK the platform injects at render time as window.archestra: archestra.user is the authenticated viewer ({id, name} — no login flow needed); archestra.storage.user.get/set/list/delete persists state private to each viewer (favorites, drafts, settings — the right default) and archestra.storage.shared.* is one store all users of the app share (no app id is passed; the store is always the running app's own) — values are plain JSON: set(key, obj) stores the object itself and get(key) returns exactly what was stored (no JSON.stringify/JSON.parse round-trip; null means absent), and list() returns [{key, value}] entries with values included, NOT an array of keys; archestra.tools.call(name, args) calls the app's assigned tools as the viewing user, with their existing MCP credentials, and throws {code: "auth_required", url} when the tool's server still needs connecting (render that url as a link); archestra.tools.list() returns the assigned tools; archestra.ui.openLink(url), archestra.ui.requestDisplayMode(mode) and archestra.chat.sendMessage(text) reach the host; await archestra.ready before the first call. TOOLS-ONLY RULE: ALL external data must come through assigned MCP tools — find one with search_tools, assign it via the tools param, call it with archestra.tools.call. The sandbox blocks network access entirely (connect-src 'none'): fetch()/XHR/WebSocket to any external API WILL FAIL, and there is no per-app CSP override. The one external allowance is static assets: scripts, styles, fonts, and images may load from the platform CDN allowlist — cdn.jsdelivr.net, unpkg.com, cdnjs.cloudflare.com, fonts.googleapis.com, fonts.gstatic.com — use it for client-side libraries (charts, markdown renderers), never as a data channel. A platform stylesheet is also injected at render time — theme variables (--color-text-primary, --color-background-primary, --color-border-primary, --border-radius-md, --font-sans, … with light/dark), themed defaults for body/headings/buttons/inputs, and a small .arch-* component set (.arch-card, .arch-btn, .arch-tabs, .arch-spinner, .arch-badge) — so write only app-specific CSS, never a full theme, and never <link> the platform stylesheet yourself. Do NOT import SDKs, read __ARCHESTRA_APP_SDK_URL__, or wire postMessage yourself — that glue is provided and hand-rolling it breaks the app. Alternatively omit html and pass templateId (one of: ${templateIds}) to scaffold from a curated starter; the result includes the seeded HTML so you can refine it. To change an app afterwards, prefer edit_app for small targeted edits (str_replace, no need to re-send the whole document) and update_app for a full rewrite; read_app returns the current stored HTML when it is not in context. When called from the chat UI the app is rendered inline in the conversation automatically; its standalone page is /apps/<id>/run. Defaults to personal scope (owned by the calling user). Returns the created app id and its first version.`,
+    description: `Build an interactive app — a to-do list, dashboard, form, tracker, game, or any custom UI — from a single self-contained HTML document. Use this whenever the user asks to make, build, or create an app, tool, or interactive UI: author the complete HTML and pass it as html — do not paste the code into the chat reply or write it as an artifact (artifact_write is for markdown documents, not apps). Author PURE UI HTML against the Archestra Apps SDK the platform injects at render time as window.archestra: archestra.user is the authenticated viewer ({id, name} — no login flow needed); archestra.storage.user.get/set/list/delete persists state private to each viewer (favorites, drafts, settings — the right default) and archestra.storage.shared.* is one store all users of the app share (no app id is passed; the store is always the running app's own) — values are plain JSON: set(key, obj) stores the object itself and get(key) returns exactly what was stored (no JSON.stringify/JSON.parse round-trip; null means absent), and list() returns [{key, value}] entries with values included, NOT an array of keys; archestra.tools.call(name, args) calls the app's assigned tools as the viewing user, with their existing MCP credentials, and throws {code: "auth_required", url} when the tool's server still needs connecting (render that url as a link); archestra.tools.list() returns the assigned tools; archestra.ui.openLink(url), archestra.ui.requestDisplayMode(mode) and archestra.chat.sendMessage(text) reach the host; await archestra.ready before the first call. TOOLS-ONLY RULE: ALL external data must come through assigned MCP tools — find one with search_tools, assign it via the tools param, call it with archestra.tools.call. Before writing code that parses a tool's output, call preview_app_tool to observe its real shape (never guess the schema); after creating/editing, call get_app_diagnostics to see how it actually rendered and fix any errors — read_app → edit_app → get_app_diagnostics is the autonomous build loop. The sandbox blocks network access entirely (connect-src 'none'): fetch()/XHR/WebSocket to any external API WILL FAIL, and there is no per-app CSP override. The one external allowance is static assets: scripts, styles, fonts, and images may load from the platform CDN allowlist — cdn.jsdelivr.net, unpkg.com, cdnjs.cloudflare.com, fonts.googleapis.com, fonts.gstatic.com — use it for client-side libraries (charts, markdown renderers), never as a data channel. A platform stylesheet is also injected at render time — theme variables (--color-text-primary, --color-background-primary, --color-border-primary, --border-radius-md, --font-sans, … with light/dark), themed defaults for body/headings/buttons/inputs, and a small .arch-* component set (.arch-card, .arch-btn, .arch-tabs, .arch-spinner, .arch-badge) — so write only app-specific CSS, never a full theme, and never <link> the platform stylesheet yourself. Do NOT import SDKs, read __ARCHESTRA_APP_SDK_URL__, or wire postMessage yourself — that glue is provided and hand-rolling it breaks the app. Alternatively omit html and pass templateId (one of: ${templateIds}) to scaffold from a curated starter; the result includes the seeded HTML so you can refine it. To change an app afterwards, prefer edit_app for small targeted edits (str_replace, no need to re-send the whole document) and update_app for a full rewrite; read_app returns the current stored HTML when it is not in context. When called from the chat UI the app is rendered inline in the conversation automatically; its standalone page is /apps/<id>/run. Defaults to personal scope (owned by the calling user). Returns the created app id and its first version.`,
     schema: CreateAppSchema,
     outputSchema: AppMutationOutputSchema,
     async handler({ args, context }) {
@@ -604,7 +632,7 @@ const registry = defineArchestraTools([
     shortName: TOOL_EDIT_APP_SHORT_NAME,
     title: "Edit App",
     description:
-      "Apply targeted str_replace edits to an existing app's HTML — the efficient path for small changes (fix a bug, tweak a style, add a section) without re-streaming the whole document. Read the current HTML with read_app first if it is not already in context, pass that read's version as baseVersion, and supply edits as [{old_str, new_str}] pairs. Each old_str must match the current HTML exactly once (include enough surrounding context to be unique); edits apply in order and the whole call is atomic — any non-match or stale baseVersion leaves the app untouched. Supplying new HTML forks a new immutable version; assigned tools and metadata are unchanged. For a full rewrite use update_app instead.",
+      "Apply targeted str_replace edits to an existing app's HTML — the efficient path for small changes (fix a bug, tweak a style, add a section) without re-streaming the whole document. Read the current HTML with read_app first if it is not already in context, pass that read's version as baseVersion, and supply edits as [{old_str, new_str}] pairs. Each old_str must match the current HTML exactly once (include enough surrounding context to be unique); edits apply in order and the whole call is atomic — any non-match or stale baseVersion leaves the app untouched. Supplying new HTML forks a new immutable version; assigned tools and metadata are unchanged. For a full rewrite use update_app instead. After editing, call get_app_diagnostics to see how the new version rendered (runtime errors / CSP violations) and iterate; call preview_app_tool first when you need a tool's real output shape.",
     schema: EditAppSchema,
     outputSchema: AppMutationOutputSchema,
     async handler({ args, context }) {
@@ -799,6 +827,92 @@ const registry = defineArchestraTools([
     },
   }),
   defineArchestraTool({
+    shortName: TOOL_GET_APP_DIAGNOSTICS_SHORT_NAME,
+    title: "Get App Diagnostics",
+    description:
+      "Check how the app's current version actually rendered for you — the autonomous build→render→fix loop. After create_app/update_app/edit_app, call this to get the runtime errors and CSP violations the sandboxed render reported (or confirmation it rendered clean), without waiting for the user's next message. Returns status `clean` (rendered, no problems), `errors` (with the captured diagnostics, framed as untrusted data), or `no_render_observed` (the current version hasn't been rendered for you yet). Briefly waits for a render to settle before answering, so a single call suffices.",
+    schema: GetAppDiagnosticsSchema,
+    outputSchema: GetAppDiagnosticsOutputSchema,
+    async handler({ args, context }) {
+      if (!context.userId || !context.organizationId) {
+        return errorResult("Authentication required.");
+      }
+      const app = await AppModel.findByIdForCaller({
+        id: args.appId,
+        organizationId: context.organizationId,
+        userId: context.userId,
+        isAppAdmin: await callerIsAppAdmin(
+          context.userId,
+          context.organizationId,
+        ),
+      });
+      if (!app) {
+        return errorResult(`No app found with id ${args.appId}.`);
+      }
+
+      const head = app.latestVersion;
+      // The app name is author-set; collapse whitespace and escape angle
+      // brackets so it can't break the diagnostics framing in the text below.
+      const safeName = escapeAngleBrackets(app.name)
+        .replace(/\s+/g, " ")
+        .trim();
+      const deadline = Date.now() + GET_APP_DIAGNOSTICS_WAIT_MS;
+      let snapshot = await AppRenderDiagnosticsModel.getForUser(
+        app.id,
+        context.userId,
+      );
+      // Wait briefly for a render of the current head to land, so the agent gets
+      // a definitive answer in one call instead of busy-retrying.
+      while (
+        (!snapshot || snapshot.version < head) &&
+        Date.now() < deadline &&
+        !context.abortSignal?.aborted
+      ) {
+        await delay(GET_APP_DIAGNOSTICS_POLL_MS);
+        snapshot = await AppRenderDiagnosticsModel.getForUser(
+          app.id,
+          context.userId,
+        );
+      }
+
+      if (!snapshot || snapshot.version < head) {
+        return structuredSuccessResult(
+          {
+            status: "no_render_observed",
+            version: head,
+            entries: [],
+            renderedAt: null,
+          },
+          `No render of app "${safeName}" version ${head} has been observed for you yet. Open or re-render the app, then check again.`,
+        );
+      }
+
+      const status = snapshot.entries.length > 0 ? "errors" : "clean";
+      const renderedAt = snapshot.renderedAt.toISOString();
+      // Re-cap and escape for the structured surface too — diagnostics are
+      // untrusted iframe content wherever they appear, and the read side must
+      // not trust the stored jsonb to have been capped.
+      const capped = capDiagnosticEntries(snapshot.entries);
+      const safeEntries = capped.map((entry) => ({
+        type: entry.type,
+        message: escapeAngleBrackets(entry.message),
+      }));
+      const text =
+        status === "errors"
+          ? `App "${safeName}" version ${snapshot.version} (rendered ${renderedAt}) reported ${capped.length} diagnostic(s):\n${DIAGNOSTICS_BLOCK_OPEN}\n${DIAGNOSTICS_UNTRUSTED_PREAMBLE}\n\n${formatDiagnosticEntryLines(snapshot.entries)}\n${DIAGNOSTICS_BLOCK_CLOSE}`
+          : `App "${safeName}" version ${snapshot.version} rendered clean (no runtime errors or CSP violations) at ${renderedAt}.`;
+      return structuredSuccessResult(
+        {
+          status,
+          version: snapshot.version,
+          entries: safeEntries,
+          renderedAt,
+        },
+        text,
+      );
+    },
+  }),
+  defineArchestraTool({
     shortName: TOOL_DELETE_APP_SHORT_NAME,
     title: "Delete App",
     description: "Soft-delete an app the caller owns or administers.",
@@ -893,6 +1007,15 @@ function applyStrReplaceEdits(
 }
 
 const PREVIEW_OUTPUT_MAX_BYTES = 16_384;
+
+// get_app_diagnostics waits this long for a render of the head to settle,
+// polling at this cadence — well under request timeouts so a single call is
+// definitive without the agent busy-retrying.
+const GET_APP_DIAGNOSTICS_WAIT_MS = 10_000;
+const GET_APP_DIAGNOSTICS_POLL_MS = 500;
+
+const delay = (ms: number): Promise<void> =>
+  new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
  * Frame a previewed tool's result as untrusted data for the authoring model:

@@ -113,8 +113,6 @@ Those two tools are enabled implicitly and do not appear in the built-in tool pi
 
 Use this when the full tool list is too large or noisy to send to the model on every turn, but the gateway still needs the same underlying tool access.
 
-When the request is authenticated as a specific user (not an org or team token), `search_tools` also returns third-party tools from MCP catalogs that user can access. Running such a tool is not silent: `run_tool` proposes granting it to the gateway, and the user confirms before it runs when they have permission to modify the gateway. Users who cannot modify the gateway are told to ask an admin instead. Admins can turn this off with the **Tool Auto-Assignment** security setting on the agent settings page.
-
 Tool call policies still apply to the target tool. `run_tool` does not bypass input conditions, team conditions, untrusted-context rules, or approval-required rules.
 
 ## Custom Headers

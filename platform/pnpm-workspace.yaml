@@ -65,6 +65,8 @@ overrides:
   yaml: '>=2.8.3'
   '@opentelemetry/exporter-prometheus': 0.217.0
   '@opentelemetry/sdk-node': 0.217.0
+  # CVE-2026-48068 / CVE-2026-48069 (uncaught exception) fixed in 1.14.4
+  '@grpc/grpc-js': '>=1.14.4'
 packageExtensions:
   '@hookform/resolvers@*':
     dependencies:

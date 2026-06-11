@@ -376,7 +376,6 @@ describe("POST /api/connection-setups", () => {
     makeAgent,
     makeSecret,
     makeLlmProviderApiKey,
-    makeUser,
   }) => {
     const proxy = await makeAgent({ organizationId, agentType: "llm_proxy" });
     // a personal key that would win the precedence guess...

@@ -4,7 +4,13 @@ import {
   providerDisplayNames,
   type SupportedProvider,
 } from "@archestra/shared";
-import { Check, Loader2, RotateCcw, Terminal } from "lucide-react";
+import {
+  Check,
+  CircleDashed,
+  Loader2,
+  RotateCcw,
+  Terminal,
+} from "lucide-react";
 import { useCallback, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -58,6 +64,11 @@ interface ConnectCommandStepProps {
   /** null when the proxy step is hidden, no proxy available, or no provider picked. */
   llmProxy: { id: string; name: string; provider: SupportedProvider } | null;
   proxyAuth: ConnectProxyAuth;
+  /**
+   * True when a proxy is available but no provider is selected yet, so it
+   * would be silently omitted from the command — prompt the user to pick one.
+   */
+  proxyNeedsProvider: boolean;
   expanded: boolean;
   onToggle: (() => void) | undefined;
 }
@@ -68,6 +79,7 @@ export function ConnectCommandStep({
   mcpGateway,
   llmProxy,
   proxyAuth,
+  proxyNeedsProvider,
   expanded,
   onToggle,
 }: ConnectCommandStepProps) {
@@ -137,6 +149,7 @@ export function ConnectCommandStep({
           mcpGateway={mcpGateway}
           llmProxy={llmProxy}
           proxyAuth={proxyAuth}
+          proxyNeedsProvider={proxyNeedsProvider}
           includeSkills={includeSkills && skillsEligible}
           totalSkills={totalSkills ?? 0}
         />
@@ -226,6 +239,7 @@ function SetupSummary({
   mcpGateway,
   llmProxy,
   proxyAuth,
+  proxyNeedsProvider,
   includeSkills,
   totalSkills,
 }: {
@@ -233,6 +247,7 @@ function SetupSummary({
   mcpGateway: { id: string; name: string } | null;
   llmProxy: { id: string; name: string; provider: SupportedProvider } | null;
   proxyAuth: ConnectProxyAuth;
+  proxyNeedsProvider: boolean;
   includeSkills: boolean;
   totalSkills: number;
 }) {
@@ -255,7 +270,7 @@ function SetupSummary({
     );
   }
 
-  if (rows.length === 0) {
+  if (rows.length === 0 && !proxyNeedsProvider) {
     return (
       <p className="text-sm text-muted-foreground">
         Pick an MCP gateway or an LLM proxy provider above — the generated
@@ -272,6 +287,15 @@ function SetupSummary({
           <span>{row}</span>
         </li>
       ))}
+      {proxyNeedsProvider && (
+        <li className="flex items-start gap-2 text-sm text-muted-foreground">
+          <CircleDashed className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>
+            Pick a provider in the LLM Proxy step above to also route model
+            traffic through the proxy.
+          </span>
+        </li>
+      )}
     </ul>
   );
 }

@@ -1,4 +1,4 @@
-import type { SupportedProvider } from "@archestra/shared";
+import { DEFAULT_APP_NAME, type SupportedProvider } from "@archestra/shared";
 import type {
   ConnectionSetupClientId,
   ConnectionSetupProxyAuth,
@@ -148,8 +148,58 @@ fi`
 # credentials — do not share or commit it.
 set -euo pipefail
 
+${banner(ctx)}
+
 say() { printf '\\n==> %s\\n' "$1"; }
 say ${sh(`${ctx.appName} setup: ${label}`)}${requireBinary}`;
+}
+
+/**
+ * Splash printed at the very top of every script: the Archestra ASCII mark
+ * (only when not white-labeled — printing the Archestra icon under a custom
+ * brand would be wrong) plus a portable, plain-ASCII details block. Printed
+ * through a quoted heredoc so nothing in it is ever expanded by bash.
+ */
+function banner(ctx: SetupScriptContext): string {
+  const label = CLIENT_LABELS[ctx.clientId];
+
+  const configures: string[] = [];
+  if (ctx.mcp) configures.push("MCP gateway (OAuth)");
+  if (ctx.proxy) {
+    configures.push(
+      `${ctx.proxy.providerLabel} via the LLM proxy${
+        ctx.proxy.virtualKey ? " (virtual key)" : ""
+      }`,
+    );
+  }
+  if (ctx.skills) configures.push("Skills marketplace");
+
+  const logo =
+    ctx.appName === DEFAULT_APP_NAME
+      ? `   .----------------.
+   |       __       |
+   |      / /       |
+   |     / /        |     ${ctx.appName}
+   |    / /  __     |     Secure access to your AI tools
+   |   /_/  |__|    |
+   '----------------'`
+      : `   ${ctx.appName}
+   Secure access to your AI tools`;
+
+  const details = [
+    `   Client:     ${label}`,
+    configures.length > 0 ? `   Configures: ${configures.join(", ")}` : null,
+    `   Note:       one-time setup — this link expires after first use.`,
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  return `cat <<'ARCHESTRA_BANNER'
+
+${logo}
+
+${details}
+ARCHESTRA_BANNER`;
 }
 
 function footer(ctx: SetupScriptContext): string {

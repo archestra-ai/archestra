@@ -187,6 +187,27 @@ describe("shell-injection resistance", () => {
   });
 });
 
+describe("banner", () => {
+  test("default app shows the ASCII mark + details; white-label drops the mark", async () => {
+    const branded = renderSetupScript(fullContext("claude-code"));
+    await expectValidBash(branded);
+    expect(branded).toContain("cat <<'ARCHESTRA_BANNER'");
+    expect(branded).toContain("Secure access to your AI tools");
+    expect(branded).toContain("Client:     Claude Code");
+    expect(branded).toContain("Configures:");
+    expect(branded).toContain("one-time setup");
+
+    const whiteLabel = renderSetupScript({
+      ...fullContext("claude-code"),
+      appName: "Acme AI",
+    });
+    await expectValidBash(whiteLabel);
+    expect(whiteLabel).toContain("Acme AI");
+    // the Archestra slash-mark is not printed under a custom brand
+    expect(whiteLabel).not.toContain("/_/");
+  });
+});
+
 describe("appName sanitization", () => {
   test("collapses control characters so they cannot break out of comments", async () => {
     const script = renderSetupScript({

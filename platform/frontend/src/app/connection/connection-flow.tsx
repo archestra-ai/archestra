@@ -411,6 +411,14 @@ export function ConnectionFlow({
               : null
           }
           proxyAuth={proxyAuth}
+          proxyNeedsProvider={
+            !!(
+              canReadLlmProxy &&
+              selectedProxy &&
+              effectiveProxyId &&
+              !selectedProvider
+            )
+          }
           expanded={isOpen("connect")}
           onToggle={() => toggleOne("connect")}
         />

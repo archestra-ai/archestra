@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import {
   boolean,
   index,
@@ -6,6 +7,7 @@ import {
   text,
   timestamp,
   unique,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 import type { ToolParametersContent } from "@/types";
@@ -79,6 +81,15 @@ const toolsTable = pgTable(
       table.agentId,
       table.delegateToAgentId,
     ),
+    // Built-in Archestra tools have agent_id and delegate_to_agent_id NULL, so the
+    // composite unique() above is NULLS-DISTINCT and never enforces uniqueness for them.
+    // Enforce one row per (catalog_id, name) within the Archestra built-in catalog.
+    // Literal is ARCHESTRA_MCP_CATALOG_ID (index predicates require an immutable literal).
+    uniqueIndex("tools_archestra_catalog_name_uidx")
+      .on(table.catalogId, table.name)
+      .where(
+        sql`${table.catalogId} = '00000000-0000-4000-8000-000000000001' and ${table.agentId} is null and ${table.delegateToAgentId} is null`,
+      ),
     // Index for delegation tool lookups
     index("tools_delegate_to_agent_id_idx").on(table.delegateToAgentId),
     index("tools_cloned_pending_discovery_idx").on(

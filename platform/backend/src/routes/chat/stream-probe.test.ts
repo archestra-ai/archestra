@@ -105,6 +105,29 @@ describe("probeFirstRenderableEvent", () => {
     });
   });
 
+  test("surfaces the provider's raw finish reason on an empty error finish", async () => {
+    const events: StreamProbeEvent[] = [
+      { type: "start" },
+      { type: "start-step" },
+      {
+        type: "finish-step",
+        finishReason: "error",
+        rawFinishReason: "MALFORMED_FUNCTION_CALL",
+      },
+      {
+        type: "finish",
+        finishReason: "error",
+        rawFinishReason: "MALFORMED_FUNCTION_CALL",
+      },
+    ];
+
+    expect(await probeFirstRenderableEvent(iteratorOf(events))).toEqual({
+      kind: "empty",
+      finishReason: "error",
+      rawFinishReason: "MALFORMED_FUNCTION_CALL",
+    });
+  });
+
   test("reports empty with unknown when the stream ends without a finish event", async () => {
     const events: StreamProbeEvent[] = [{ type: "start" }];
 
@@ -171,15 +194,16 @@ describe("probeFirstRenderableEvent", () => {
 });
 
 describe("isRetryableEmptyFinishReason", () => {
-  test("retries on stop, length, and unknown", () => {
+  test("retries on stop, length, unknown, error, and other", () => {
     expect(isRetryableEmptyFinishReason("stop")).toBe(true);
     expect(isRetryableEmptyFinishReason("length")).toBe(true);
     expect(isRetryableEmptyFinishReason("unknown")).toBe(true);
+    expect(isRetryableEmptyFinishReason("error")).toBe(true);
+    expect(isRetryableEmptyFinishReason("other")).toBe(true);
   });
 
-  test("does not retry on content-filter or other terminal reasons", () => {
+  test("does not retry on deterministic terminal reasons", () => {
     expect(isRetryableEmptyFinishReason("content-filter")).toBe(false);
-    expect(isRetryableEmptyFinishReason("error")).toBe(false);
-    expect(isRetryableEmptyFinishReason("other")).toBe(false);
+    expect(isRetryableEmptyFinishReason("tool-calls")).toBe(false);
   });
 });

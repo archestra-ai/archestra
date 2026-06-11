@@ -29,9 +29,13 @@ import {
   executeArchestraTool,
   getAgentTools,
 } from "@/archestra-mcp-server";
+import { isToolGrantApprovable } from "@/archestra-mcp-server/tool-auto-assign";
 import { CacheKey, LRUCacheManager } from "@/cache-manager";
+import type { ChatMcpElicitationBridge } from "@/clients/chat-mcp-elicitation";
 import mcpClient, { type TokenAuthContext } from "@/clients/mcp-client";
 import config from "@/config";
+import { hookDispatcherService } from "@/hooks/hook-dispatcher-service";
+import { type CollectedHookRun, toCollectedRuns } from "@/hooks/hook-run-parts";
 import logger from "@/logging";
 import {
   AgentModel,
@@ -164,33 +168,34 @@ export function clearUiResourceCache(): void {
 }
 
 /**
- * Generate cache key from agentId, userId, and optional conversationId.
- * When conversationId is provided, each conversation gets its own MCP client
- * and therefore its own browser instance for proper isolation.
+ * Generate cache key from agentId, userId, and optional isolation key
+ * (conversation id in UI chat, generated execution key in headless runs).
+ * When provided, each conversation/execution gets its own MCP client and
+ * therefore its own browser instance for proper isolation.
  */
 function getCacheKey(
   agentId: string,
   userId: string,
-  conversationId?: string,
+  isolationKey?: string,
 ): string {
-  if (conversationId) {
-    return `${agentId}:${userId}:${conversationId}`;
+  if (isolationKey) {
+    return `${agentId}:${userId}:${isolationKey}`;
   }
   return `${agentId}:${userId}`;
 }
 
 /**
  * Generate the full cache key for tool cache
- * Includes conversationId because browser tools need correct tab selection
+ * Includes the isolation key because browser tools need correct tab selection
  */
 function getToolCacheKey(
   agentId: string,
   userId: string,
-  conversationId?: string,
+  isolationKey?: string,
 ): `${typeof CacheKey.ChatMcpTools}-${string}` {
   const baseKey = getCacheKey(agentId, userId);
   const parts = [baseKey];
-  if (conversationId) parts.push(conversationId);
+  if (isolationKey) parts.push(isolationKey);
   return `${CacheKey.ChatMcpTools}-${parts.join(":")}`;
 }
 
@@ -218,6 +223,12 @@ export const __test = {
   pingClientWithTimeout,
   resolveApprovalPolicyTarget,
   throwIfApprovalRequired,
+  // Hook helpers — exposed for focused unit tests
+  firePreToolUseHook,
+  firePostToolUseHook,
+  appendHookFeedbackToToolResult,
+  buildPreToolUseBlockedResult,
+  toolResultText,
 };
 
 /**
@@ -415,30 +426,30 @@ export function clearChatMcpClient(agentId: string): void {
 }
 
 /**
- * Close and remove cached MCP client for a specific agent/user/conversation.
+ * Close and remove cached MCP client for a specific agent/user/scope.
  * Should be called when browser stream unsubscribes to free resources.
  *
  * @param agentId - The agent (profile) ID
  * @param userId - The user ID
- * @param conversationId - The conversation ID
+ * @param isolationKey - Conversation id (UI chat) or execution key (headless)
  */
 export function closeChatMcpClient(
   agentId: string,
   userId: string,
-  conversationId: string,
+  isolationKey: string,
 ): void {
-  const cacheKey = getCacheKey(agentId, userId, conversationId);
+  const cacheKey = getCacheKey(agentId, userId, isolationKey);
   const client = clientCache.get(cacheKey);
   if (client) {
     try {
       client.close();
       logger.info(
-        { agentId, userId, conversationId, cacheKey },
+        { agentId, userId, isolationKey, cacheKey },
         "Closed MCP client connection for conversation",
       );
     } catch (error) {
       logger.warn(
-        { agentId, userId, conversationId, cacheKey, error },
+        { agentId, userId, isolationKey, cacheKey, error },
         "Error closing MCP client connection (non-fatal)",
       );
     }
@@ -446,8 +457,8 @@ export function closeChatMcpClient(
     clientLastValidatedAt.delete(cacheKey);
   }
 
-  // Also clear tool cache for this conversation
-  const toolCacheKey = getToolCacheKey(agentId, userId, conversationId);
+  // Also clear tool cache for this conversation/execution
+  const toolCacheKey = getToolCacheKey(agentId, userId, isolationKey);
   toolCache.delete(toolCacheKey);
 }
 
@@ -459,7 +470,7 @@ export function closeChatMcpClient(
  * @param agentId - The agent (profile) ID
  * @param userId - The user ID for token selection
  * @param organizationId - The organization ID for token creation
- * @param conversationId - Optional conversation ID for per-conversation browser isolation
+ * @param isolationKey - Optional conversation id or execution key for per-conversation/per-execution browser isolation
  * @returns MCP Client connected to the gateway, or null if connection fails
  * @public — exported for testability
  */
@@ -467,11 +478,11 @@ export async function getChatMcpClient(
   agentId: string,
   userId: string,
   organizationId: string,
-  conversationId?: string,
+  isolationKey?: string,
   /** Pre-resolved token to avoid a redundant selectMCPGatewayToken call */
   preResolvedTokenValue?: string,
 ): Promise<Client | null> {
-  const cacheKey = getCacheKey(agentId, userId, conversationId);
+  const cacheKey = getCacheKey(agentId, userId, isolationKey);
 
   // Check cache first
   const cachedClient = clientCache.get(cacheKey);
@@ -780,12 +791,15 @@ export async function getChatMcpTools({
   chatOpsThreadId,
   enabledToolIds,
   conversationId,
+  isolationKey,
   sessionId,
   delegationChain,
   abortSignal,
+  elicitation,
   user,
   blockOnApprovalRequired,
   scheduleTriggerRunId,
+  hookRunCollector,
 }: {
   agentName: string;
   agentId: string;
@@ -796,21 +810,37 @@ export async function getChatMcpTools({
   /** ChatOps thread identifier for thread-scoped agent overrides */
   chatOpsThreadId?: string;
   enabledToolIds?: string[];
+  /**
+   * Id of a persisted `conversations` row — tools may persist it as a foreign
+   * key. Absent in headless executions (A2A, ChatOps, schedules, email).
+   */
   conversationId?: string;
+  /**
+   * Opaque key scoping per-execution state: browser tabs, MCP client/tool
+   * caches, headless sandboxes. Defaults to `conversationId`. Headless
+   * executions pass their generated execution key here instead of faking a
+   * conversation id.
+   */
+  isolationKey?: string;
   /** Session ID for grouping related LLM requests in logs */
   sessionId?: string;
   /** Delegation chain of agent IDs for tracking delegated agent calls */
   delegationChain?: string;
   /** Optional cancellation signal from parent stream execution */
   abortSignal?: AbortSignal;
+  /** Optional MCP elicitation bridge for interactive chat clients */
+  elicitation?: ChatMcpElicitationBridge;
   /** User identity for OTEL span attributes */
   user?: { id: string; email?: string; name?: string };
   /** Block tool execution when policy is require_approval (for A2A/autonomous contexts where no one can approve) */
   blockOnApprovalRequired?: boolean;
   /** Schedule trigger run ID — enables artifact_write to target the run */
   scheduleTriggerRunId?: string;
+  /** Per-turn sink for inline `data-hook-run` entries (chat path only). */
+  hookRunCollector?: CollectedHookRun[];
 }): Promise<Record<string, Tool>> {
-  const toolCacheKey = getToolCacheKey(agentId, userId, conversationId);
+  const scopeKey = isolationKey ?? conversationId;
+  const toolCacheKey = getToolCacheKey(agentId, userId, scopeKey);
   const shouldUseToolCache = !abortSignal;
 
   // Check in-memory tool cache first (cannot use distributed cacheManager - Tool objects have execute functions)
@@ -857,13 +887,13 @@ export async function getChatMcpTools({
   }
 
   // Still use MCP client for listing tools (via MCP Gateway)
-  // Pass conversationId for per-conversation browser isolation.
+  // Pass the scope key for per-conversation/per-execution browser isolation.
   // Forward the already-resolved token to avoid a duplicate selectMCPGatewayToken call.
   const client = await getChatMcpClient(
     agentId,
     userId,
     organizationId,
-    conversationId,
+    scopeKey,
     mcpGwToken.tokenValue,
   );
 
@@ -928,15 +958,36 @@ export async function getChatMcpTools({
                     mcpTool.name,
                     args,
                   );
-                  return ToolInvocationPolicyModel.checkApprovalRequired(
-                    approvalTarget.toolName,
-                    approvalTarget.toolInput,
-                    {
-                      teamIds: [],
-                      externalAgentId: getChatExternalAgentId(),
-                    },
-                    globalToolPolicy,
-                  );
+                  if (
+                    await ToolInvocationPolicyModel.checkApprovalRequired(
+                      approvalTarget.toolName,
+                      approvalTarget.toolInput,
+                      {
+                        teamIds: [],
+                        externalAgentId: getChatExternalAgentId(),
+                      },
+                      globalToolPolicy,
+                    )
+                  ) {
+                    return true;
+                  }
+                  // Grant approval: only run_tool can target a tool the agent
+                  // does not yet have. Propose granting an accessible-but-
+                  // unassigned target so the user confirms (and the tool is added
+                  // to the agent) before it runs. The frontend assigns the tool,
+                  // then resumes this same call — by which point it is assigned.
+                  if (
+                    archestraMcpBranding.getToolShortName(mcpTool.name) !==
+                    TOOL_RUN_TOOL_SHORT_NAME
+                  ) {
+                    return false;
+                  }
+                  return isToolGrantApprovable({
+                    toolName: approvalTarget.toolName,
+                    agentId,
+                    userId,
+                    organizationId,
+                  });
                 },
               }
             : {}),
@@ -969,6 +1020,37 @@ export async function getChatMcpTools({
               callback: async (span) => {
                 try {
                   throwIfAborted(abortSignal);
+
+                  // PreToolUse lifecycle hook: a block short-circuits execution
+                  // and returns an explanatory tool-result instead of running.
+                  const hookCtx: ToolHookContext = {
+                    agentId,
+                    organizationId,
+                    userId,
+                    conversationId,
+                    hookRunCollector,
+                  };
+                  const preBlockReason = await firePreToolUseHook({
+                    ctx: hookCtx,
+                    toolName: mcpTool.name,
+                    toolInput: toolArguments,
+                    toolCallId: options.toolCallId,
+                  });
+                  if (preBlockReason !== null) {
+                    span.setAttribute(ATTR_MCP_IS_ERROR_RESULT, true);
+                    reportToolMetrics({
+                      toolName: mcpTool.name,
+                      agentId,
+                      agentName,
+                      startTime: toolStartTime,
+                      isError: true,
+                    });
+                    return buildPreToolUseBlockedResult(preBlockReason);
+                  }
+
+                  let toolResult:
+                    | string
+                    | { content: string; [key: string]: unknown };
                   // Check if this is an Archestra tool - handle directly without DB lookup
                   if (archestraMcpBranding.isToolName(mcpTool.name)) {
                     logger.debug(
@@ -997,6 +1079,7 @@ export async function getChatMcpTools({
                       {
                         agent: { id: agentId, name: agentName },
                         conversationId,
+                        isolationKey: scopeKey,
                         chatOpsBindingId,
                         chatOpsThreadId,
                         userId,
@@ -1033,28 +1116,42 @@ export async function getChatMcpTools({
                     // When run_tool dispatches to an interactive tool, attach
                     // that tool's MCP App UI resource so the frontend renders it
                     // (the model still only sees the plain-text summary).
-                    return await buildArchestraToolOutput({
+                    toolResult = await buildArchestraToolOutput({
                       response: archestraResponse,
                       toolName: mcpTool.name,
                       toolArguments,
                       agentId,
                     });
+                  } else {
+                    // Execute non-Archestra tools via shared helper with browser sync
+                    toolResult = await executeMcpTool({
+                      toolName: mcpTool.name,
+                      toolArguments,
+                      agentId,
+                      agentName,
+                      userId,
+                      organizationId,
+                      isolationKey: scopeKey,
+                      mcpGwToken,
+                      globalToolPolicy,
+                      considerContextUntrusted,
+                      abortSignal,
+                      elicitation,
+                    });
                   }
 
-                  // Execute non-Archestra tools via shared helper with browser sync
-                  return await executeMcpTool({
+                  // PostToolUse lifecycle hook: append any block feedback to the
+                  // tool result the model sees, preserving its shape.
+                  const postFeedback = await firePostToolUseHook({
+                    ctx: hookCtx,
                     toolName: mcpTool.name,
-                    toolArguments,
-                    agentId,
-                    agentName,
-                    userId,
-                    organizationId,
-                    conversationId,
-                    mcpGwToken,
-                    globalToolPolicy,
-                    considerContextUntrusted,
-                    abortSignal,
+                    toolInput: toolArguments,
+                    toolResponse: toolResultText(toolResult),
+                    toolCallId: options.toolCallId,
                   });
+                  return postFeedback
+                    ? appendHookFeedbackToToolResult(toolResult, postFeedback)
+                    : toolResult;
                 } catch (error) {
                   reportToolMetrics({
                     toolName: mcpTool.name,
@@ -1116,6 +1213,7 @@ export async function getChatMcpTools({
           organizationId,
           userId,
           conversationId,
+          isolationKey: scopeKey,
           chatOpsBindingId,
           chatOpsThreadId,
           sessionId,
@@ -1435,7 +1533,11 @@ interface ToolExecutionContext {
   agentName: string;
   userId: string;
   organizationId: string;
-  conversationId?: string;
+  /**
+   * Per-conversation/per-execution scope key for browser tab selection and
+   * MCP session reuse. Equals the conversation id in UI chat.
+   */
+  isolationKey?: string;
   mcpGwToken: {
     tokenId: string;
     teamId: string | null;
@@ -1444,6 +1546,7 @@ interface ToolExecutionContext {
   globalToolPolicy: GlobalToolPolicy;
   considerContextUntrusted: boolean;
   abortSignal?: AbortSignal;
+  elicitation?: ChatMcpElicitationBridge;
 }
 
 /**
@@ -1471,9 +1574,10 @@ async function executeMcpTool(ctx: ToolExecutionContext): Promise<{
     agentName,
     userId,
     organizationId,
-    conversationId,
+    isolationKey,
     mcpGwToken,
     abortSignal,
+    elicitation,
   } = ctx;
   throwIfAborted(abortSignal);
   const startTime = Date.now();
@@ -1484,24 +1588,24 @@ async function executeMcpTool(ctx: ToolExecutionContext): Promise<{
   );
 
   if (
-    conversationId &&
+    isolationKey &&
     isBrowserMcpTool(toolName) &&
     browserStreamFeature.isEnabled()
   ) {
     logger.debug(
-      { agentId, userId, conversationId, toolName },
+      { agentId, userId, isolationKey, toolName },
       "Selecting conversation browser tab before executing browser tool",
     );
 
     const tabResult = await browserStreamFeature.selectOrCreateTab(
       agentId,
-      conversationId,
+      isolationKey,
       { userId, organizationId },
     );
 
     if (!tabResult.success) {
       logger.warn(
-        { agentId, conversationId, toolName, error: tabResult.error },
+        { agentId, isolationKey, toolName, error: tabResult.error },
         "Failed to select conversation tab for browser tool, continuing anyway",
       );
     }
@@ -1528,7 +1632,14 @@ async function executeMcpTool(ctx: ToolExecutionContext): Promise<{
             userId,
           }
         : undefined,
-      { conversationId },
+      {
+        // mcp-client scopes per-conversation sessions by this key; in UI chat it
+        // is the conversation id, in headless executions the execution key.
+        conversationId: isolationKey,
+        ...(elicitation
+          ? { elicitationHandler: elicitation.createHandler({ toolName }) }
+          : {}),
+      },
     );
     reportToolMetrics({
       toolName,
@@ -1581,10 +1692,10 @@ async function executeMcpTool(ctx: ToolExecutionContext): Promise<{
 
   // Sync browser state if needed
   logger.debug(
-    { conversationId, toolName, isEnabled: browserStreamFeature.isEnabled() },
+    { isolationKey, toolName, isEnabled: browserStreamFeature.isEnabled() },
     "[executeMcpTool] Checking browser sync conditions",
   );
-  if (conversationId && browserStreamFeature.isEnabled()) {
+  if (isolationKey && browserStreamFeature.isEnabled()) {
     // Sync URL for browser_navigate (but not browser_navigate_back/forward)
     const isNavigateTool =
       toolName.endsWith("browser_navigate") ||
@@ -1594,17 +1705,17 @@ async function executeMcpTool(ctx: ToolExecutionContext): Promise<{
         !toolName.includes("_back") &&
         !toolName.includes("_forward"));
     logger.debug(
-      { toolName, isNavigateTool, conversationId },
+      { toolName, isNavigateTool, isolationKey },
       "[executeMcpTool] Checking navigate sync condition",
     );
     if (isNavigateTool) {
       logger.info(
-        { toolName, agentId, conversationId },
+        { toolName, agentId, isolationKey },
         "[executeMcpTool] Syncing URL from navigate tool call",
       );
       await browserStreamFeature.syncUrlFromNavigateToolCall({
         agentId,
-        conversationId,
+        conversationId: isolationKey,
         userContext: { userId, organizationId },
         toolResultContent: mcpContent,
       });
@@ -2063,4 +2174,161 @@ function reportToolMetrics(params: {
     durationSeconds: (Date.now() - params.startTime) / 1000,
     isError: params.isError,
   });
+}
+
+/**
+ * Context needed to fire the PreToolUse / PostToolUse lifecycle hooks against a
+ * conversation's default sandbox. Hooks require a conversationId (the sandbox
+ * session key) and the conversation's user id, so the caller passes both.
+ */
+interface ToolHookContext {
+  agentId: string;
+  organizationId: string;
+  /** Conversation user id — the default sandbox is keyed per org/user/conversation. */
+  userId: string;
+  conversationId?: string;
+  /**
+   * Per-turn sink the chat route drains into inline `data-hook-run` entries.
+   * Pre/PostToolUse runs are appended here, tagged with the tool call's id so
+   * they render next to that tool call. Absent for non-chat callers.
+   */
+  hookRunCollector?: CollectedHookRun[];
+}
+
+/**
+ * Fires the PreToolUse lifecycle hook before a tool executes. Returns a block
+ * reason string when a hook blocks (the caller must NOT execute the tool and
+ * should return a tool-result describing the block); returns null to proceed.
+ * Cheap no-op when no conversation context or no hooks. Fails open on error.
+ */
+async function firePreToolUseHook(params: {
+  ctx: ToolHookContext;
+  toolName: string;
+  toolInput: unknown;
+  toolCallId?: string;
+}): Promise<string | null> {
+  const { ctx, toolName, toolInput, toolCallId } = params;
+  if (!ctx.conversationId) {
+    return null;
+  }
+  try {
+    const result = await hookDispatcherService.fire({
+      event: "pre_tool_use",
+      conversationId: ctx.conversationId,
+      agentId: ctx.agentId,
+      organizationId: ctx.organizationId,
+      userId: ctx.userId,
+      fields: { tool_name: toolName, tool_input: toolInput ?? {} },
+    });
+    // Record the run for inline display, anchored before this tool call.
+    if (ctx.hookRunCollector && toolCallId) {
+      ctx.hookRunCollector.push(
+        ...toCollectedRuns(
+          result.runs,
+          { kind: "tool-pre", toolCallId },
+          toolName,
+        ),
+      );
+    }
+    if (result.decision === "block") {
+      return result.reason ?? null;
+    }
+  } catch (error) {
+    logger.warn(
+      { error, toolName, agentId: ctx.agentId },
+      "PreToolUse hook dispatch failed, proceeding",
+    );
+  }
+  return null;
+}
+
+/** Tool-result text returned to the model when a PreToolUse hook blocks a call. */
+function buildPreToolUseBlockedResult(reason: string | null): string {
+  return `Tool call blocked by a PreToolUse hook. Reason: ${reason ?? "no reason given"}. Do not retry; explain the block to the user.`;
+}
+
+/** Max chars of tool output passed to a PostToolUse hook payload. */
+const POST_TOOL_USE_RESPONSE_CAP = 50_000;
+
+/**
+ * Fires the PostToolUse lifecycle hook after a tool executes. When a hook blocks
+ * and supplies a reason, returns hook feedback to append to the tool result;
+ * otherwise returns null (return the result unchanged). Cheap no-op without
+ * conversation context or hooks. Fails open on error.
+ */
+async function firePostToolUseHook(params: {
+  ctx: ToolHookContext;
+  toolName: string;
+  toolInput: unknown;
+  toolResponse: string;
+  toolCallId?: string;
+}): Promise<string | null> {
+  const { ctx, toolName, toolInput, toolResponse, toolCallId } = params;
+  if (!ctx.conversationId) {
+    return null;
+  }
+  try {
+    const result = await hookDispatcherService.fire({
+      event: "post_tool_use",
+      conversationId: ctx.conversationId,
+      agentId: ctx.agentId,
+      organizationId: ctx.organizationId,
+      userId: ctx.userId,
+      fields: {
+        tool_name: toolName,
+        tool_input: toolInput ?? {},
+        tool_response: toolResponse.slice(0, POST_TOOL_USE_RESPONSE_CAP),
+      },
+    });
+    // Record the run for inline display, anchored after this tool call.
+    if (ctx.hookRunCollector && toolCallId) {
+      ctx.hookRunCollector.push(
+        ...toCollectedRuns(
+          result.runs,
+          { kind: "tool-post", toolCallId },
+          toolName,
+        ),
+      );
+    }
+    // Phase 1: only a blocking hook's stderr becomes [hook feedback].
+    // injectedContext (stdout on proceed) does not reach the model in this phase.
+    if (result.decision === "block" && result.reason) {
+      return result.reason;
+    }
+  } catch (error) {
+    logger.warn(
+      { error, toolName, agentId: ctx.agentId },
+      "PostToolUse hook dispatch failed, proceeding",
+    );
+  }
+  return null;
+}
+
+/**
+ * Extracts the plain-text body of a tool-execution result for the PostToolUse
+ * hook payload and for appending hook feedback. Tool results are either a plain
+ * string or a rich `{ content }` object (see executeMcpTool / buildArchestraToolOutput).
+ */
+function toolResultText(
+  result: string | { content: string; [key: string]: unknown },
+): string {
+  return typeof result === "string" ? result : result.content;
+}
+
+/**
+ * Appends PostToolUse hook feedback to a tool result, preserving its shape: a
+ * string stays a string; a rich `{ content }` object keeps its other fields.
+ */
+function appendHookFeedbackToToolResult<
+  T extends string | { content: string; [key: string]: unknown },
+>(result: T, feedback: string): T {
+  const suffix = `\n\n[hook feedback] ${feedback}`;
+  if (typeof result === "string") {
+    return (result + suffix) as T;
+  }
+  const objectResult = result as { content: string; [key: string]: unknown };
+  return {
+    ...objectResult,
+    content: objectResult.content + suffix,
+  } as T;
 }

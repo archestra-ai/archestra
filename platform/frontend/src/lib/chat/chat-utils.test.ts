@@ -1,11 +1,13 @@
 import type { UIMessage } from "@ai-sdk/react";
 import { describe, expect, it } from "vitest";
 import {
+  applyTextEditToMessages,
   getChatExternalAgentId,
   getConversationDisplayTitle,
   getManualCompactionSkippedMessage,
   mergePersistedMessageMetadata,
   PERSISTED_MESSAGE_ID_METADATA_KEY,
+  resolveCanonicalMessageId,
 } from "./chat-utils";
 
 const DEFAULT_SESSION_NAME = "New Chat Session";
@@ -355,5 +357,261 @@ describe("mergePersistedMessageMetadata", () => {
 
     expect(mergedMessages).not.toBe(liveMessages);
     expect(mergedMessages[0]?.parts).toBe(persistedMessages[0]?.parts);
+  });
+
+  const hookRunPart = (fileName: string) => ({
+    type: "data-hook-run",
+    data: {
+      hookEventName: "PreToolUse",
+      fileName,
+      outcome: "proceed",
+      exitCode: 0,
+    },
+  });
+
+  it("splices persisted hook-run parts into the live message at their persisted slot", () => {
+    const liveMessages = [
+      {
+        id: "live-assistant-1",
+        role: "assistant",
+        parts: [
+          { type: "text", text: "running the tool" },
+          {
+            type: "tool-run_command",
+            toolCallId: "tc-1",
+            state: "output-available",
+          },
+        ],
+      },
+    ] as UIMessage[];
+    const persistedMessages = [
+      {
+        id: "db-assistant-1",
+        role: "assistant",
+        parts: [
+          { type: "text", text: "running the tool" },
+          hookRunPart("guard.py"),
+          {
+            type: "tool-run_command",
+            toolCallId: "tc-1",
+            state: "output-available",
+          },
+          hookRunPart("audit.py"),
+        ],
+      },
+    ] as UIMessage[];
+
+    const mergedMessages = mergePersistedMessageMetadata({
+      liveMessages,
+      persistedMessages,
+    });
+
+    expect(mergedMessages[0]?.parts.map((part) => part.type)).toEqual([
+      "text",
+      "data-hook-run",
+      "tool-run_command",
+      "data-hook-run",
+    ]);
+  });
+
+  it("strips live hook-run parts the server no longer returns", () => {
+    const liveMessages = [
+      {
+        id: "live-assistant-1",
+        role: "assistant",
+        metadata: {
+          [PERSISTED_MESSAGE_ID_METADATA_KEY]: "db-assistant-1",
+        },
+        parts: [
+          hookRunPart("guard.py"),
+          { type: "text", text: "already saved" },
+        ],
+      },
+    ] as UIMessage[];
+    const persistedMessages = [
+      {
+        id: "db-assistant-1",
+        role: "assistant",
+        parts: [{ type: "text", text: "already saved" }],
+      },
+    ] as UIMessage[];
+
+    const mergedMessages = mergePersistedMessageMetadata({
+      liveMessages,
+      persistedMessages,
+    });
+
+    expect(mergedMessages[0]?.parts.map((part) => part.type)).toEqual(["text"]);
+  });
+
+  it("returns the original array when live hook-run parts already match", () => {
+    const parts = [
+      hookRunPart("guard.py"),
+      { type: "text", text: "already saved" },
+    ];
+    const liveMessages = [
+      {
+        id: "live-assistant-1",
+        role: "assistant",
+        metadata: {
+          [PERSISTED_MESSAGE_ID_METADATA_KEY]: "db-assistant-1",
+        },
+        parts,
+      },
+    ] as UIMessage[];
+    // structurally equal but different object identities, like a refetch
+    const persistedMessages = [
+      {
+        id: "db-assistant-1",
+        role: "assistant",
+        parts: structuredClone(parts),
+      },
+    ] as UIMessage[];
+
+    const mergedMessages = mergePersistedMessageMetadata({
+      liveMessages,
+      persistedMessages,
+    });
+
+    expect(mergedMessages).toBe(liveMessages);
+  });
+
+  it("keeps live hook-run parts when stripping would leave nothing renderable", () => {
+    const liveMessages = [
+      {
+        id: "live-assistant-1",
+        role: "assistant",
+        metadata: {
+          [PERSISTED_MESSAGE_ID_METADATA_KEY]: "db-assistant-1",
+        },
+        parts: [{ type: "step-start" }, hookRunPart("guard.py")],
+      },
+    ] as UIMessage[];
+    const persistedMessages = [
+      {
+        id: "db-assistant-1",
+        role: "assistant",
+        parts: [{ type: "step-start" }],
+      },
+    ] as UIMessage[];
+
+    const mergedMessages = mergePersistedMessageMetadata({
+      liveMessages,
+      persistedMessages,
+    });
+
+    expect(mergedMessages[0]?.parts).toBe(liveMessages[0]?.parts);
+  });
+});
+
+describe("resolveCanonicalMessageId", () => {
+  const liveMessages = [
+    {
+      id: "nanoid-user-1",
+      role: "user",
+      metadata: { [PERSISTED_MESSAGE_ID_METADATA_KEY]: "db-user-1" },
+      parts: [{ type: "text", text: "edited prompt" }],
+    },
+  ] as UIMessage[];
+
+  it("returns the message id when the saved thread already contains it", () => {
+    expect(
+      resolveCanonicalMessageId({
+        messageId: "db-user-1",
+        liveMessages: [],
+        canonicalMessages: [
+          { id: "db-user-1", role: "user", parts: [] },
+        ] as UIMessage[],
+      }),
+    ).toBe("db-user-1");
+  });
+
+  it("maps an in-session nanoid to its DB id via persisted metadata", () => {
+    expect(
+      resolveCanonicalMessageId({
+        messageId: "nanoid-user-1",
+        liveMessages,
+        canonicalMessages: [
+          { id: "db-user-1", role: "user", parts: [] },
+        ] as UIMessage[],
+      }),
+    ).toBe("db-user-1");
+  });
+
+  it("returns null when the live message has no mapping into the saved thread", () => {
+    expect(
+      resolveCanonicalMessageId({
+        messageId: "nanoid-user-1",
+        liveMessages: [
+          { id: "nanoid-user-1", role: "user", parts: [] },
+        ] as UIMessage[],
+        canonicalMessages: [
+          { id: "db-user-other", role: "user", parts: [] },
+        ] as UIMessage[],
+      }),
+    ).toBeNull();
+  });
+
+  it("returns null when the saved thread is missing", () => {
+    expect(
+      resolveCanonicalMessageId({
+        messageId: "nanoid-user-1",
+        liveMessages,
+        canonicalMessages: undefined,
+      }),
+    ).toBeNull();
+  });
+});
+
+describe("applyTextEditToMessages", () => {
+  it("replaces only the targeted text part and keeps other messages untouched", () => {
+    const messages = [
+      {
+        id: "user-1",
+        role: "user",
+        parts: [
+          { type: "file", url: "blob:a", mediaType: "image/png" },
+          { type: "text", text: "old text" },
+        ],
+      },
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [{ type: "text", text: "answer" }],
+      },
+    ] as UIMessage[];
+
+    const updated = applyTextEditToMessages({
+      messages,
+      messageId: "user-1",
+      partIndex: 1,
+      text: "new text",
+    });
+
+    expect(updated[0]?.parts[1]).toMatchObject({
+      type: "text",
+      text: "new text",
+    });
+    expect(updated[0]?.parts[0]).toBe(messages[0]?.parts[0]);
+    expect(updated[1]).toBe(messages[1]);
+  });
+
+  it("does not touch a part whose index matches but is not text", () => {
+    const messages = [
+      {
+        id: "user-1",
+        role: "user",
+        parts: [{ type: "file", url: "blob:a", mediaType: "image/png" }],
+      },
+    ] as UIMessage[];
+
+    const updated = applyTextEditToMessages({
+      messages,
+      messageId: "user-1",
+      partIndex: 0,
+      text: "new text",
+    });
+
+    expect(updated[0]?.parts[0]).toBe(messages[0]?.parts[0]);
   });
 });

@@ -9,12 +9,14 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import config from "@/config";
 import db, { schema } from "@/database";
+import mcpServerRuntimeManager from "@/k8s/mcp-server-runtime/manager";
 import { callEmbedding } from "@/knowledge-base/embedding-clients";
 import { resolveApiKeyFromChatApiKey } from "@/knowledge-base/kb-llm-client";
 import logger from "@/logging";
 import {
   AgentModel,
   InteractionModel,
+  InternalMcpCatalogModel,
   InvitationModel,
   KbDocumentModel,
   KnowledgeBaseConnectorModel,
@@ -27,11 +29,13 @@ import {
   UserModel,
   UserTokenModel,
 } from "@/models";
+import { reconcileCatalogDeployments } from "@/services/environments/deployment-reconciliation";
 import {
   ApiError,
   AppearanceSettingsSchema,
   CompleteOnboardingSchema,
   constructResponseSchema,
+  type NetworkPolicy,
   SelectOrganizationSchema,
   UpdateAgentSettingsSchema,
   UpdateAppearanceSettingsSchema,
@@ -117,7 +121,7 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.UpdateSecuritySettings,
         description:
-          "Update security settings (global tool policy, chat file uploads)",
+          "Update security settings (global tool policy, chat file uploads, tool auto-assignment)",
         tags: ["Organization"],
         body: UpdateSecuritySettingsSchema,
         response: constructResponseSchema(SelectOrganizationSchema),
@@ -231,7 +235,7 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
-      // Skill slash commands inject skill content that points at read_skill_file,
+      // Skill slash commands inject skill content that points at load_skill,
       // so they require the skill tools to be enabled for the organization.
       if (body.skillSlashCommandsEnabled === true) {
         const currentOrg = await OrganizationModel.getById(organizationId);
@@ -293,6 +297,26 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
+      if (body.connectionDefaultProviderKeys) {
+        const keyIds = Object.values(body.connectionDefaultProviderKeys);
+        const keys = await LlmProviderApiKeyModel.findByIds(keyIds);
+        const keysById = new Map(keys.map((k) => [k.id, k]));
+        for (const [provider, keyId] of Object.entries(
+          body.connectionDefaultProviderKeys,
+        )) {
+          const key = keysById.get(keyId);
+          if (!key || key.organizationId !== organizationId) {
+            throw new ApiError(404, "Provider API key not found");
+          }
+          if (key.provider !== provider) {
+            throw new ApiError(
+              400,
+              `Key "${key.name}" is for provider "${key.provider}", not "${provider}"`,
+            );
+          }
+        }
+      }
+
       const organization = await OrganizationModel.patch(organizationId, body);
 
       if (!organization) {
@@ -316,6 +340,18 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ organizationId, body }, reply) => {
+      const currentOrganization =
+        "networkPolicy" in body
+          ? await OrganizationModel.getById(organizationId)
+          : null;
+      const networkPolicyActuallyChanging =
+        "networkPolicy" in body &&
+        currentOrganization !== null &&
+        !sameNetworkPolicy(
+          body.networkPolicy ?? null,
+          currentOrganization?.defaultNetworkPolicy ?? null,
+        );
+
       // Map the clean API shape to DB columns, including only keys that are
       // present in the body so omitting a field leaves it unchanged (an
       // explicit null clears the column).
@@ -350,6 +386,17 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       if (!organization) {
         throw new ApiError(404, "Organization not found");
+      }
+
+      if (networkPolicyActuallyChanging && mcpServerRuntimeManager.isEnabled) {
+        const catalogs =
+          await InternalMcpCatalogModel.findDefaultEnvironmentLocalCatalogs(
+            organizationId,
+          );
+        await reconcileCatalogDeployments({
+          catalogs,
+          reason: "default environment network policy change",
+        });
       }
 
       return reply.send(organization);
@@ -917,3 +964,12 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
 };
 
 export default organizationRoutes;
+
+// === Internal helpers ===
+
+function sameNetworkPolicy(
+  a: NetworkPolicy | null,
+  b: NetworkPolicy | null,
+): boolean {
+  return JSON.stringify(a) === JSON.stringify(b);
+}

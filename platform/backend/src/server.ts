@@ -61,6 +61,7 @@ import { initAuditDecisions } from "@/middleware/audit-decisions";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import { initAuditRegistry } from "@/middleware/audit-log-registry";
 import OrganizationModel from "@/models/organization";
+import { ngrokTunnelManager } from "@/ngrok-tunnel-manager";
 import { initializeObservabilityMetrics } from "@/observability";
 import { enrichOpenApiWithRbac } from "@/openapi/enrich-openapi-with-rbac";
 import { activeChatRunService } from "@/services/active-chat-run";
@@ -91,6 +92,7 @@ import websocketService from "@/websocket";
 import * as routes from "./routes";
 import { publicConfigRoutes } from "./routes/config";
 import {
+  CONNECTION_SETUP_SCRIPT_PREFIX,
   HEALTH_PATH,
   MCP_GATEWAY_PREFIX,
   READY_PATH,
@@ -794,6 +796,8 @@ const startWebServer = async () => {
       return true;
     // token is embedded in the URL path; never log it
     if (url.startsWith(`${SKILL_MARKETPLACE_PREFIX}/`)) return true;
+    // one-time setup token is embedded in the URL path; never log it
+    if (url.startsWith(`${CONNECTION_SETUP_SCRIPT_PREFIX}/`)) return true;
     return false;
   };
 
@@ -922,6 +926,10 @@ const startWebServer = async () => {
     // Initialize chatops providers (MS Teams, Slack, etc.)
     // Seeds DB from env vars on first run, then loads config from DB.
     await chatOpsManager.initialize();
+
+    // Bring up the ngrok tunnel (if ARCHESTRA_NGROK_AUTH_TOKEN is set) so the
+    // instance is reachable from the Internet for inbound chatops webhooks.
+    await ngrokTunnelManager.initialize();
 
     // Start task queue worker for knowledge base connector syncs and embeddings
     // In "web" mode, a separate worker Deployment handles background jobs
@@ -1112,7 +1120,9 @@ function registerWebServerShutdown(
         await taskQueueService.stopWorker();
       }
 
-      const completedCleanups = new Set<"emailProvider" | "chatOps">();
+      const completedCleanups = new Set<
+        "emailProvider" | "chatOps" | "ngrok"
+      >();
       const cleanupPromise = Promise.allSettled([
         cleanupEmailProvider().then(() => {
           completedCleanups.add("emailProvider");
@@ -1122,9 +1132,13 @@ function registerWebServerShutdown(
           completedCleanups.add("chatOps");
           fastify.log.info("ChatOps provider cleanup completed");
         }),
+        ngrokTunnelManager.cleanup().then(() => {
+          completedCleanups.add("ngrok");
+          fastify.log.info("ngrok tunnel cleanup completed");
+        }),
       ]).then(() => "completed" as const);
 
-      const allCleanupNames = ["emailProvider", "chatOps"] as const;
+      const allCleanupNames = ["emailProvider", "chatOps", "ngrok"] as const;
       const result = await Promise.race([
         cleanupPromise,
         new Promise<"timeout">((resolve) =>

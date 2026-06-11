@@ -301,6 +301,14 @@ export const auth = betterAuth({
               "[databaseHooks:user] Failed to delete personal MCP gateways",
             );
           }
+          try {
+            await AgentModel.deletePersonalLlmProxiesForUser(user.id);
+          } catch (error) {
+            logger.error(
+              { err: error, userId: user.id },
+              "[databaseHooks:user] Failed to delete personal LLM proxies",
+            );
+          }
         },
       },
     },
@@ -722,7 +730,7 @@ export async function handleBeforeHook(ctx: HookEndpointContext) {
   // Block direct sign-up without invitation (invitation-only registration)
   if (path.startsWith("/sign-up/email") && method === "POST") {
     const callbackURL = body.callbackURL as string | undefined;
-    const invitationId = callbackURL?.split("invitationId=")[1]?.split("&")[0];
+    const invitationId = getInvitationIdFromSignUpBody(body, callbackURL);
 
     logger.debug(
       { email: body.email, hasInvitationId: !!invitationId },
@@ -1273,9 +1281,7 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
 
       // Check if this is an invitation sign-up
       const callbackURL = body.callbackURL as string | undefined;
-      const invitationId = callbackURL
-        ?.split("invitationId=")[1]
-        ?.split("&")[0];
+      const invitationId = getInvitationIdFromSignUpBody(body, callbackURL);
 
       if (invitationId) {
         logger.debug(
@@ -1433,6 +1439,17 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
           logger.error(
             { err: error },
             "Failed to ensure personal MCP gateway on sign-in",
+          );
+        }
+        try {
+          await AgentModel.ensurePersonalLlmProxy({
+            userId,
+            organizationId: orgId,
+          });
+        } catch (error) {
+          logger.error(
+            { err: error },
+            "Failed to ensure personal LLM proxy on sign-in",
           );
         }
       }
@@ -1672,4 +1689,25 @@ function resolveAuthClientIp(request: Request | undefined): string | null {
     if (first) return first;
   }
   return null;
+}
+
+function getInvitationIdFromSignUpBody(
+  body: Record<string, unknown>,
+  callbackURL: string | undefined,
+): string | undefined {
+  const bodyInvitationId = body.invitationId;
+  if (typeof bodyInvitationId === "string" && bodyInvitationId.trim()) {
+    return bodyInvitationId.trim();
+  }
+
+  if (!callbackURL) {
+    return undefined;
+  }
+
+  try {
+    const url = new URL(callbackURL, "http://localhost");
+    return url.searchParams.get("invitationId") ?? undefined;
+  } catch {
+    return undefined;
+  }
 }

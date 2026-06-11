@@ -7,6 +7,7 @@ type ToolStatusRowAction =
       onClick: () => void;
       variant?: "secondary" | "outline" | "default";
       icon?: ReactNode;
+      disabled?: boolean;
     }
   | {
       label: string;
@@ -88,6 +89,7 @@ export function ToolStatusRow({
                   variant={action.variant ?? "secondary"}
                   size="sm"
                   onClick={action.onClick}
+                  disabled={action.disabled}
                 >
                   {action.icon}
                   {action.label}

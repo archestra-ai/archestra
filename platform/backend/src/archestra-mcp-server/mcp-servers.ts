@@ -1550,15 +1550,21 @@ async function authorizeDeployScope(params: {
     if (!team) {
       return "Team not found.";
     }
-    const isTeamAdmin = await userHasPermission(
+    const canManageAllTeams = await userHasPermission(
       userId,
       organizationId,
       "team",
-      "admin",
+      "create",
     );
-    if (isTeamAdmin) {
+    if (canManageAllTeams) {
       return null;
     }
+
+    const isLiteralTeamAdmin = await TeamModel.isUserTeamAdmin(teamId, userId);
+    if (isLiteralTeamAdmin) {
+      return null;
+    }
+
     const hasMcpServerUpdate = await userHasPermission(
       userId,
       organizationId,

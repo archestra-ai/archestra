@@ -203,6 +203,66 @@ class VirtualApiKeyModel {
   }
 
   /**
+   * Find a key by its identity tuple. Used by the connection-setup flow to
+   * reuse the per-user auto-provisioned key instead of creating duplicates.
+   * Names are not unique in this table, so the oldest row wins
+   * deterministically — concurrent creators converge on it (see
+   * ensureConnectionVirtualKey's create-then-dedupe).
+   */
+  static async findByAuthorScopeName(params: {
+    organizationId: string;
+    authorId: string;
+    scope: ResourceVisibilityScope;
+    name: string;
+  }): Promise<SelectVirtualApiKey | null> {
+    const [row] = await db
+      .select()
+      .from(schema.virtualApiKeysTable)
+      .where(
+        and(
+          eq(schema.virtualApiKeysTable.organizationId, params.organizationId),
+          eq(schema.virtualApiKeysTable.authorId, params.authorId),
+          eq(schema.virtualApiKeysTable.scope, params.scope),
+          eq(schema.virtualApiKeysTable.name, params.name),
+        ),
+      )
+      .orderBy(
+        schema.virtualApiKeysTable.createdAt,
+        schema.virtualApiKeysTable.id,
+      )
+      .limit(1);
+
+    return row ?? null;
+  }
+
+  /**
+   * Upsert a single provider mapping on the (virtualApiKeyId, provider) PK.
+   * Replaces a stale same-provider mapping with the newly resolved key while
+   * leaving other providers' mappings untouched — unlike update(), whose
+   * syncProviderApiKeys deletes all mappings first.
+   */
+  static async ensureProviderMapping(params: {
+    virtualApiKeyId: string;
+    provider: SupportedProvider;
+    providerApiKeyId: string;
+  }): Promise<void> {
+    await db
+      .insert(schema.virtualApiKeyProviderApiKeysTable)
+      .values({
+        virtualApiKeyId: params.virtualApiKeyId,
+        provider: params.provider,
+        providerApiKeyId: params.providerApiKeyId,
+      })
+      .onConflictDoUpdate({
+        target: [
+          schema.virtualApiKeyProviderApiKeysTable.virtualApiKeyId,
+          schema.virtualApiKeyProviderApiKeysTable.provider,
+        ],
+        set: { providerApiKeyId: params.providerApiKeyId },
+      });
+  }
+
+  /**
    * List visible virtual keys for a provider API key.
    */
   static async findByProviderApiKeyId(

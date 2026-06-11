@@ -938,12 +938,12 @@ async function validateScopeAndAuthorization(params: {
 
   // For team-scoped keys, verify user has access to the team
   if (scope === "team" && teamId) {
-    const { success: isTeamAdmin } = await hasPermission(
-      { team: ["admin"] },
+    const { success: canManageAllTeams } = await hasPermission(
+      { team: ["create"] },
       headers,
     );
 
-    if (!isTeamAdmin) {
+    if (!canManageAllTeams) {
       const isUserInTeam = await TeamModel.isUserInTeam(teamId, userId);
       if (!isUserInTeam) {
         throw new ApiError(
@@ -990,14 +990,14 @@ async function authorizeApiKeyAccess(params: {
     return;
   }
 
-  // Team keys: require team membership or team admin
+  // Team keys: require team membership or organization-level team management
   if (apiKey.scope === "team") {
-    const { success: isTeamAdmin } = await hasPermission(
-      { team: ["admin"] },
+    const { success: canManageAllTeams } = await hasPermission(
+      { team: ["create"] },
       headers,
     );
 
-    if (!isTeamAdmin && apiKey.teamId) {
+    if (!canManageAllTeams && apiKey.teamId) {
       const isUserInTeam = await TeamModel.isUserInTeam(apiKey.teamId, userId);
       if (!isUserInTeam) {
         throw new ApiError(

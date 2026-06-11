@@ -25,6 +25,7 @@ const {
   getChatAgentMcpTools,
   createChatConversation,
   updateChatConversation,
+  setConversationHooksDebug,
   compactChatConversation,
   deleteChatConversation,
   generateChatConversationTitle,
@@ -39,6 +40,7 @@ const {
   bulkAssignTools,
   stopChatStream,
   getMemberDefaultModel,
+  resolveChatMcpElicitation,
   updateMemberDefaultModel,
 } = archestraApiSdk;
 
@@ -339,6 +341,41 @@ export function useCompactConversation() {
   });
 }
 
+/**
+ * Toggle per-conversation hook debug mode (admin only). Invalidating the
+ * conversation query re-runs the server read gate, and the chat page folds the
+ * refetched messages into the live chat state (mergePersistedMessageMetadata),
+ * so hook debug chips appear (enabled) or disappear (disabled) in place.
+ */
+export function useToggleHooksDebug() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ id, enabled }: { id: string; enabled: boolean }) => {
+      const { data, error } = await setConversationHooksDebug({
+        path: { id },
+        body: { enabled },
+      });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data;
+    },
+    onSuccess: (data, variables) => {
+      if (!data) return;
+      toast.success(
+        data.hooksDebugEnabled
+          ? "Hook debug mode enabled"
+          : "Hook debug mode disabled",
+      );
+      queryClient.invalidateQueries({
+        queryKey: ["conversation", variables.id],
+      });
+    },
+  });
+}
+
 export function useDeleteConversation() {
   const queryClient = useQueryClient();
 
@@ -407,6 +444,36 @@ export function useStopChatStream() {
     mutationFn: async (conversationId: string) => {
       const { data, error } = await stopChatStream({
         path: { id: conversationId },
+      });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data;
+    },
+  });
+}
+
+export function useResolveChatMcpElicitation() {
+  type ResolveChatMcpElicitationBody = NonNullable<
+    archestraApiTypes.ResolveChatMcpElicitationData["body"]
+  >;
+
+  return useMutation({
+    mutationFn: async ({
+      id,
+      conversationId,
+      action,
+      content,
+    }: {
+      id: string;
+      conversationId: string;
+      action: ResolveChatMcpElicitationBody["action"];
+      content?: ResolveChatMcpElicitationBody["content"];
+    }) => {
+      const { data, error } = await resolveChatMcpElicitation({
+        path: { id },
+        body: { conversationId, action, content },
       });
       if (error) {
         handleApiError(error);

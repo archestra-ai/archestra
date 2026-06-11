@@ -1,6 +1,6 @@
 import {
   ADMIN_ROLE_NAME,
-  TOOL_ACTIVATE_SKILL_SHORT_NAME,
+  TOOL_LOAD_SKILL_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
 } from "@archestra/shared";
@@ -437,11 +437,16 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
       availableTools: ["known_tool"],
     });
     const payload1 = capturedInnerOnError?.(unavailableToolError);
-    // the AI SDK re-invokes onError downstream with `new Error(errorText)`,
-    // wrapping the first return value — that duplicate must replay the payload.
-    const payload2 = capturedInnerOnError?.(new Error(payload1));
+    // the SDK emits a duplicate tool-error part for the same invalid call and
+    // stringifies its error in runToolsTransformation, so the second onError
+    // invocation receives the raw message string — no NoSuchToolError identity
+    const payload2 = capturedInnerOnError?.(unavailableToolError.message);
+    // stream-level error chunks can also re-fire onError with the previous
+    // return value wrapped in `new Error(errorText)` — replay, don't reprocess
+    const payload3 = capturedInnerOnError?.(new Error(payload1));
 
-    expect(payload1).toBe(payload2);
+    expect(payload2).toBe(payload1);
+    expect(payload3).toBe(payload1);
     expect(payload1).toContain(
       "The requested tool is not available in this chat.",
     );
@@ -449,6 +454,50 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
     expect(payload1).toContain('"availableToolNames"');
     expect(payload1).toContain("known_tool");
     expect(payload1).toContain("Model tried to call unavailable tool");
+
+    await new Promise((resolve) => setImmediate(resolve));
+    const persistedErrors =
+      await ConversationChatErrorModel.findByConversation(conversationId);
+    expect(persistedErrors).toHaveLength(0);
+  });
+
+  test("recovers when only the stringified unavailable-tool message reaches onError", async ({
+    expect,
+  }) => {
+    const { default: ConversationChatErrorModel } = await import(
+      "@/models/conversation-chat-error"
+    );
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/chat",
+      payload: {
+        id: conversationId,
+        messages: [
+          {
+            id: "msg-1",
+            role: "user",
+            parts: [{ type: "text", text: "hello" }],
+          },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+    expect(capturedInnerOnError).toBeDefined();
+
+    // regression: this exact shape used to fall through to mapProviderError,
+    // marking the run failed and persisting a fatal chat error
+    const payload = capturedInnerOnError?.(
+      "Model tried to call unavailable tool 'missing_tool'. Available tools: known_tool.",
+    );
+
+    expect(payload).toContain(
+      "The requested tool is not available in this chat.",
+    );
+    expect(payload).toContain('"requestedToolName": "missing_tool"');
+    expect(payload).toContain("known_tool");
 
     await new Promise((resolve) => setImmediate(resolve));
     const persistedErrors =
@@ -599,9 +648,12 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
     expect(mockStreamText).toHaveBeenCalledTimes(1);
     // applyPromptCacheBreakpoints marks the first and last message (the stable
     // prefix + rolling tail) with Anthropic cache_control before streamText, so
-    // the compacted messages reach the model carrying that breakpoint.
+    // the compacted messages reach the model carrying that breakpoint. The
+    // default chat model is a Claude 4.5+ model, which uses the 1h cache TTL.
     const cacheBreakpoint = {
-      providerOptions: { anthropic: { cacheControl: { type: "ephemeral" } } },
+      providerOptions: {
+        anthropic: { cacheControl: { type: "ephemeral", ttl: "1h" } },
+      },
     };
     expect(mockStreamText.mock.calls[0]?.[0].messages).toEqual([
       { ...compactedMessages[0], ...cacheBreakpoint },
@@ -780,8 +832,8 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
     const { AgentModel } = await import("@/models");
     await AgentModel.update(agentId, { systemPrompt: "You are helpful." });
     mockGetChatMcpTools.mockResolvedValue({
-      [archestraMcpBranding.getToolName(TOOL_ACTIVATE_SKILL_SHORT_NAME)]: {
-        description: "Activate a skill",
+      [archestraMcpBranding.getToolName(TOOL_LOAD_SKILL_SHORT_NAME)]: {
+        description: "Load a skill",
         inputSchema: { jsonSchema: { type: "object", properties: {} } },
       },
     });
@@ -827,7 +879,7 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
       },
       files: [],
     });
-    // beforeEach resets getChatMcpTools to {}, so no activate_skill is exposed
+    // beforeEach resets getChatMcpTools to {}, so no load_skill is exposed
     mockStreamText.mockClear();
 
     const response = await app.inject({
@@ -1157,6 +1209,16 @@ const EMPTY_STREAM_EVENTS = [
   { type: "start" },
   { type: "finish", finishReason: "stop" },
 ];
+// Gemini MALFORMED_FUNCTION_CALL shape: a clean finish with unified "error",
+// the raw provider reason, and no content or error parts.
+const MALFORMED_FUNCTION_CALL_STREAM_EVENTS = [
+  { type: "start" },
+  {
+    type: "finish",
+    finishReason: "error",
+    rawFinishReason: "MALFORMED_FUNCTION_CALL",
+  },
+];
 const RENDERABLE_STREAM_EVENTS = [
   { type: "text-delta", text: "hi" },
   { type: "finish", finishReason: "stop" },
@@ -1281,6 +1343,40 @@ describe("POST /api/chat empty-response retry", () => {
 
     expect(mockStreamText).toHaveBeenCalledTimes(2);
     expect(capturedOuterErrorPayload).toBeUndefined();
+  });
+
+  test("retries an empty error finish (malformed tool call), then streams the renderable one", async ({
+    expect,
+  }) => {
+    mockStreamText
+      .mockImplementationOnce(() =>
+        fakeStreamResult(MALFORMED_FUNCTION_CALL_STREAM_EVENTS),
+      )
+      .mockImplementationOnce(() => fakeStreamResult(RENDERABLE_STREAM_EVENTS));
+
+    const response = await postMessage();
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+
+    expect(mockStreamText).toHaveBeenCalledTimes(2);
+    expect(capturedOuterErrorPayload).toBeUndefined();
+  });
+
+  test("surfaces an EmptyResponse stream error after exhausting retries on error finishes", async ({
+    expect,
+  }) => {
+    mockStreamText.mockImplementation(() =>
+      fakeStreamResult(MALFORMED_FUNCTION_CALL_STREAM_EVENTS),
+    );
+
+    const response = await postMessage();
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+
+    expect(mockStreamText).toHaveBeenCalledTimes(3);
+    expect(capturedOuterErrorPayload).toBeDefined();
+    const payload = JSON.parse(capturedOuterErrorPayload ?? "{}");
+    expect(payload.code).toBe("empty_response");
   });
 
   test("surfaces an EmptyResponse stream error after exhausting retries", async ({

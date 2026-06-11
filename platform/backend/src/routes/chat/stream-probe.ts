@@ -10,12 +10,13 @@
 export type StreamProbeEvent = {
   type: string;
   finishReason?: unknown;
+  rawFinishReason?: unknown;
   error?: unknown;
 };
 
 export type StreamProbeOutcome =
   | { kind: "renderable" }
-  | { kind: "empty"; finishReason: string }
+  | { kind: "empty"; finishReason: string; rawFinishReason?: string }
   | { kind: "aborted" }
   | { kind: "error"; error: unknown };
 
@@ -42,12 +43,20 @@ const RENDERABLE_EVENT_TYPES: ReadonlySet<string> = new Set([
 ]);
 
 // finishReasons where a content-free turn is plausibly a transient model/inference
-// glitch worth retrying. Excludes e.g. "content-filter" (deterministic block) and
-// "tool-calls" (which only finishes that way when tool calls — renderable — exist).
+// glitch worth retrying. A *finish* event carrying "error" or "other" with no content
+// is a provider-glitch shape, not a real API failure — those reach the probe as error
+// parts (or thrown stream errors) before any finish. Gemini's frequent
+// MALFORMED_FUNCTION_CALL maps to "error" and OTHER/FINISH_REASON_UNSPECIFIED to
+// "other"; some "other" raws may be deterministic, but with the hard attempt cap the
+// worst case is two wasted calls before the same error card. Excludes "content-filter"
+// (deterministic block) and "tool-calls" (which only finishes that way when tool
+// calls — renderable — exist).
 const RETRYABLE_EMPTY_FINISH_REASONS: ReadonlySet<string> = new Set([
   "stop",
   "length",
   "unknown",
+  "error",
+  "other",
 ]);
 
 export function isRetryableEmptyFinishReason(finishReason: string): boolean {
@@ -88,6 +97,9 @@ export async function probeFirstRenderableEvent(
             typeof event.finishReason === "string"
               ? event.finishReason
               : "unknown",
+          ...(typeof event.rawFinishReason === "string" && {
+            rawFinishReason: event.rawFinishReason,
+          }),
         };
       // control parts (start, start-step, finish-step, text-end, ...) carry no
       // content on their own — keep pulling until content, finish, or error.

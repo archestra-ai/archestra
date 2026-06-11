@@ -229,6 +229,8 @@ vi.mock("@/lib/chat/chat.query", () => ({
     isLoading: false,
     error: null,
   }),
+  useConversation: () => ({ data: null }),
+  useToggleHooksDebug: () => ({ mutate: vi.fn() }),
 }));
 
 vi.mock("@/lib/organization.query", () => ({
@@ -368,7 +370,7 @@ describe("ArchestraPromptInput", () => {
         screen.getByTestId(E2eTestId.ChatFileUploadButton),
       ).toBeInTheDocument();
       expect(screen.getByTestId("tooltip-content")).toHaveTextContent(
-        "Supports: chat prompts, .txt, .csv, and .md uploads",
+        "Supports: chat prompts, .txt, .csv, .md, and .json uploads",
       );
     });
 

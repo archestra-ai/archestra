@@ -34,6 +34,37 @@ export function unavailableThirdPartyToolMessage(toolName: string): string {
 }
 
 /**
+ * Recovery message for a tool that exists and is assigned but has been disabled
+ * for the current conversation via the per-conversation tool selection. Distinct
+ * from `unavailableThirdPartyToolMessage` (which is about non-existent / not
+ * assigned tools): here the tool is real, just not enabled in this conversation.
+ */
+export function toolNotEnabledForConversationMessage(toolName: string): string {
+  const searchToolsName = archestraMcpBranding.getToolName(
+    TOOL_SEARCH_TOOLS_SHORT_NAME,
+  );
+  return (
+    `Tool "${toolName}" is not enabled for this conversation. Call ` +
+    `${searchToolsName} to see the tools available here, then call run_tool ` +
+    "with one of those. Do not guess tool names."
+  );
+}
+
+/**
+ * Recovery message for a tool that exists and is visible to the user but is
+ * not assigned to the agent, when the user lacks permission to modify the
+ * agent's tools (so run_tool could not auto-assign it). The actionable next
+ * step lies with the user, not the model.
+ */
+export function toolNotAssignedAskAdminMessage(toolName: string): string {
+  return (
+    `Tool "${toolName}" exists but is not assigned to this agent, and the ` +
+    "current user is not allowed to change the agent's tools. Tell the user " +
+    `to ask an admin to assign "${toolName}" to this agent, then retry.`
+  );
+}
+
+/**
  * Generic discovery steer appended after an "unknown tool"/"not assigned"
  * preamble. Single source of truth for the dispatch-surface recovery hint used
  * by `executeArchestraTool` (`index.ts`).

@@ -15,7 +15,7 @@ import {
 /**
  * Check if user has access to a specific token based on permissions.
  * - Org tokens: require ac:update permission
- * - Team tokens: require team:admin OR (team:update AND team membership)
+ * - Team tokens: require organization-level team management OR team admin role
  */
 async function checkTokenAccess(
   token: SelectTeamToken,
@@ -32,23 +32,14 @@ async function checkTokenAccess(
       throw new ApiError(403, "Not authorized to access organization token");
     }
   } else if (token.teamId) {
-    // Team tokens require team:admin OR (team:update AND team membership)
-    const { success: isTeamAdmin } = await hasPermission(
-      { team: ["admin"] },
+    const { success: canManageAllTeams } = await hasPermission(
+      { team: ["create"] },
       headers,
     );
 
-    if (!isTeamAdmin) {
-      const { success: hasTeamUpdate } = await hasPermission(
-        { team: ["update"] },
-        headers,
-      );
-      if (!hasTeamUpdate) {
-        throw new ApiError(403, "Not authorized to access this token");
-      }
-
-      const isMember = await TeamModel.isUserInTeam(token.teamId, userId);
-      if (!isMember) {
+    if (!canManageAllTeams) {
+      const isTeamAdmin = await TeamModel.isUserTeamAdmin(token.teamId, userId);
+      if (!isTeamAdmin) {
         throw new ApiError(403, "Not authorized to access this token");
       }
     }
@@ -59,8 +50,8 @@ const tokenRoutes: FastifyPluginAsyncZod = async (fastify) => {
   /**
    * Get tokens visible to the user based on their permissions:
    * - ac:update: can see org-wide token
-   * - team:admin: can see all team tokens
-   * - team:update + team membership: can see own team tokens only
+   * - team:create: can see all team tokens
+   * - team admin role: can see tokens for teams they administer
    *
    * When profileId is provided, team tokens are further filtered to only
    * include tokens for teams that the profile is also assigned to.
@@ -97,12 +88,8 @@ const tokenRoutes: FastifyPluginAsyncZod = async (fastify) => {
         { ac: ["update"] },
         headers,
       );
-      const { success: isTeamAdmin } = await hasPermission(
-        { team: ["admin"] },
-        headers,
-      );
-      const { success: hasTeamUpdate } = await hasPermission(
-        { team: ["update"] },
+      const { success: canManageAllTeams } = await hasPermission(
+        { team: ["create"] },
         headers,
       );
       const { success: hasMcpGatewayTeamAdmin } = await hasPermission(
@@ -110,9 +97,11 @@ const tokenRoutes: FastifyPluginAsyncZod = async (fastify) => {
         headers,
       );
 
-      // User can access team tokens if they have team:admin OR team:update OR mcpGateway:team-admin
+      const adminTeamIds = canManageAllTeams
+        ? []
+        : await TeamModel.getUserAdminTeamIds(user.id);
       const canAccessTeamTokens =
-        isTeamAdmin || hasTeamUpdate || hasMcpGatewayTeamAdmin;
+        canManageAllTeams || hasMcpGatewayTeamAdmin || adminTeamIds.length > 0;
 
       // Ensure org token exists
       await TeamTokenModel.ensureOrganizationToken();
@@ -131,15 +120,15 @@ const tokenRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       // Filter team tokens based on user permissions
-      if (!isTeamAdmin) {
-        if (!hasTeamUpdate && !hasMcpGatewayTeamAdmin) {
-          // No team:update or mcpGateway:team-admin permission = no team tokens visible
+      if (!canManageAllTeams) {
+        if (!hasMcpGatewayTeamAdmin && adminTeamIds.length === 0) {
           visibleTokens = visibleTokens.filter(
             (token) => token.isOrganizationToken,
           );
         } else {
-          // Only own team tokens visible (team:update or mcpGateway:team-admin + membership)
-          const userTeamIds = await TeamModel.getUserTeamIds(user.id);
+          const userTeamIds = hasMcpGatewayTeamAdmin
+            ? await TeamModel.getUserTeamIds(user.id)
+            : adminTeamIds;
           visibleTokens = visibleTokens.filter(
             (token) =>
               token.isOrganizationToken ||

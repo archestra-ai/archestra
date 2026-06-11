@@ -4,6 +4,7 @@ import {
   type archestraApiTypes,
   ChatMessageMetadataSchema,
   DocsPage,
+  HOOK_RUN_PART_TYPE,
   parseFullToolName,
   type ResourceVisibilityScope,
   SWAP_AGENT_FAILED_POKE_TEXT,
@@ -55,6 +56,10 @@ import {
   ToolInput,
   ToolOutput,
 } from "@/components/ai-elements/tool";
+import {
+  HookRunChip,
+  type HookRunChipData,
+} from "@/components/chat/hook-run-chip";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { StandardFormDialog } from "@/components/standard-dialog";
@@ -130,6 +135,7 @@ import {
 } from "./swap-agent-boundary";
 import { TodoWriteTool } from "./todo-write-tool";
 import { ToolErrorLogsButton } from "./tool-error-logs-button";
+import { ToolGrantApprovalCard } from "./tool-grant-approval-card";
 import { ToolStatusRow } from "./tool-status-row";
 
 interface ChatMessagesProps {
@@ -296,6 +302,7 @@ export function ChatMessages({
   const session = conversationId ? getSession(conversationId) : null;
   const earlyToolUiStarts = session?.earlyToolUiStarts || {};
   const contextCompaction = session?.contextCompaction;
+  const hasPendingMcpElicitation = Boolean(session?.pendingMcpElicitation);
 
   // Debounce resize mode change when exiting edit mode to let DOM settle
   const isEditing = editingPartKey !== null;
@@ -560,8 +567,10 @@ export function ChatMessages({
                             message.id,
                             group.startIndex,
                           ),
-                          parts: group.entries.map(
-                            (entry) => entry.toolResultPart ?? entry.part,
+                          parts: group.entries.flatMap((entry) =>
+                            entry.kind === "tool"
+                              ? [entry.toolResultPart ?? entry.part]
+                              : [],
                           ),
                           dividerRef: unsafeBoundaryRef,
                           unsafeContextBoundary,
@@ -573,13 +582,22 @@ export function ChatMessages({
                                 message.id,
                                 group.startIndex,
                               )}
-                              tools={group.entries.map((entry) => ({
-                                key: getToolEntryKey(message.id, entry),
-                                toolName: entry.toolName,
-                                part: entry.part,
-                                toolResultPart: entry.toolResultPart,
-                                errorText: entry.errorText,
-                              }))}
+                              tools={group.entries.map((entry) =>
+                                entry.kind === "hook"
+                                  ? {
+                                      kind: "hook" as const,
+                                      key: `${message.id}-hook-${entry.partIndex}`,
+                                      data: entry.data,
+                                    }
+                                  : {
+                                      kind: "tool" as const,
+                                      key: getToolEntryKey(message.id, entry),
+                                      toolName: entry.toolName,
+                                      part: entry.part,
+                                      toolResultPart: entry.toolResultPart,
+                                      errorText: entry.errorText,
+                                    },
+                              )}
                               toolIconMap={toolIconMap}
                               canExpandToolCalls={canExpandToolCalls}
                               onToolApprovalResponse={onToolApprovalResponse}
@@ -1118,6 +1136,17 @@ export function ChatMessages({
                         }
 
                         default: {
+                          // Inline hook-run debug entry (a model-invisible
+                          // `data-hook-run` part the backend splices into the turn).
+                          if (part.type === HOOK_RUN_PART_TYPE) {
+                            return (
+                              <HookRunChip
+                                key={partKey}
+                                data={(part as { data?: HookRunChipData }).data}
+                              />
+                            );
+                          }
+
                           // data-tool-ui-start: early MCP App initialisation.
                           // This is the canonical render for the tool UI. It looks ahead
                           // in the parts array to find the matching input/output parts so
@@ -1338,7 +1367,7 @@ export function ChatMessages({
               }
               feedback={contextCompactionFeedback}
             />
-            {isResponseInProgress && (
+            {isResponseInProgress && !hasPendingMcpElicitation && (
               <div className="absolute bottom-[-10] left-0">
                 <Message from="assistant">
                   <img
@@ -1759,6 +1788,7 @@ const MessageTool = memo(
         <CompactToolGroup
           tools={[
             {
+              kind: "tool",
               key: part.toolCallId ?? toolName,
               toolName,
               part,
@@ -1946,7 +1976,17 @@ const MessageTool = memo(
           {isApprovalRequested &&
             onToolApprovalResponse &&
             "approval" in part &&
-            part.approval?.id && (
+            part.approval?.id &&
+            (runToolInput?.tool_name && agentId ? (
+              // run_tool targeting a tool the agent may not have yet — propose
+              // granting it (assign + run) rather than a bare approve/deny.
+              <ToolGrantApprovalCard
+                targetToolName={runToolInput.tool_name}
+                agentId={agentId}
+                approvalId={part.approval.id}
+                onRespond={onToolApprovalResponse}
+              />
+            ) : (
               <ToolStatusRow
                 icon={
                   <ClockIcon className="mt-0.5 size-4 flex-none text-amber-600" />
@@ -1978,7 +2018,7 @@ const MessageTool = memo(
                   },
                 ]}
               />
-            )}
+            ))}
           {errorText && !authToolBody ? (
             <ToolErrorDetails errorText={errorText} />
           ) : null}

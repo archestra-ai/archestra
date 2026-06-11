@@ -7,6 +7,7 @@ import type {
   SkillSandboxSkillMount,
   SkillVersionFile,
 } from "@/types";
+import { normalizeByteaField } from "@/utils/normalize-bytea";
 
 /** Bytes for an uploaded input file, written into the replay log. */
 interface UploadInput {
@@ -123,7 +124,7 @@ class SkillSandboxReplayEventModel {
         kind: "upload",
         fileId: row.id,
       });
-      return normalizeFileData(row);
+      return normalizeByteaField(row, "data");
     });
   }
 
@@ -137,21 +138,25 @@ class SkillSandboxReplayEventModel {
    * Idempotent and race-safe: the insert uses
    * `ON CONFLICT (sandbox_id, skill_id) DO NOTHING`, so a concurrent or repeated
    * activation of the same skill is a no-op that returns `null` without
-   * appending a second mount (or its install command).
+   * appending a second mount (or its install commands).
    *
-   * When the version ships a `requirements.txt`, `installCommand` is appended as
-   * a `command` event in the SAME transaction right after the mount, so a mount
-   * can never be recorded without its install (which would leave the deps
-   * permanently missing once the idempotency check skips the skill on
-   * re-activation).
+   * When the version ships `requirements.txt` files, `installCommands` are
+   * appended as `command` events in the SAME transaction right after the mount
+   * (in the given order), so a mount can never be recorded without its installs
+   * (which would leave the deps permanently missing once the idempotency check
+   * skips the skill on re-activation).
    */
   static async appendSkillMount(params: {
     sandboxId: string;
     organizationId: string;
     mount: SkillMountRef;
-    installCommand?: { command: string; cwd: string; timeoutSeconds: number };
+    installCommands?: Array<{
+      command: string;
+      cwd: string;
+      timeoutSeconds: number;
+    }>;
   }): Promise<SkillSandboxSkillMount | null> {
-    const { sandboxId, organizationId, mount, installCommand } = params;
+    const { sandboxId, organizationId, mount, installCommands } = params;
 
     return await db.transaction(async (tx) => {
       const [row] = await tx
@@ -180,7 +185,7 @@ class SkillSandboxReplayEventModel {
         skillMountId: row.id,
       });
 
-      if (installCommand) {
+      for (const installCommand of installCommands ?? []) {
         const [commandRow] = await tx
           .insert(schema.skillSandboxCommandsTable)
           .values({
@@ -305,7 +310,7 @@ class SkillSandboxReplayEventModel {
           return {
             kind: "upload",
             sequence: row.sequence,
-            upload: normalizeFileData(row.upload),
+            upload: normalizeByteaField(row.upload, "data"),
           };
         case "skill_mount":
           if (!row.mount || row.versionContent == null) {
@@ -355,13 +360,4 @@ async function allocateSequence(
     );
   }
   return row.next - 1;
-}
-
-/**
- * pg returns `bytea` as Buffer; PGlite returns Uint8Array. Callers rely on
- * Buffer semantics (`.toString("base64")`), so normalize at the read boundary.
- */
-function normalizeFileData(row: SkillSandboxFile): SkillSandboxFile {
-  if (Buffer.isBuffer(row.data)) return row;
-  return { ...row, data: Buffer.from(row.data as unknown as Uint8Array) };
 }

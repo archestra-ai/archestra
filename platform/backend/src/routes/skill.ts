@@ -44,11 +44,10 @@ import {
   importSkills,
   MAX_FILES_PER_SKILL,
   MAX_SKILL_FILE_BYTES,
-  MAX_SKILL_FILE_CONTENT_CHARS,
   SkillImportError,
 } from "@/skills/github-import";
 import {
-  deriveSkillFileKind,
+  normalizeAllowedTools,
   parseSkillManifest,
   SkillParseError,
 } from "@/skills/parser";
@@ -57,6 +56,9 @@ import { suggestSkillDescription } from "@/skills/skill-description";
 import {
   isSkillNameConflict,
   refineUniqueFilePaths,
+  SkillFileInputSchema,
+  SkillManifestContentSchema,
+  toSkillFiles,
 } from "@/skills/validation";
 import {
   ApiError,
@@ -161,22 +163,6 @@ const ConvertAgentToSkillInputSchema = z.object({
   deleteAgent: z.boolean().optional(),
 });
 
-/** Raw resource file as submitted by the in-app editor. */
-const SkillFileInputSchema = z.object({
-  path: z
-    .string()
-    .min(1)
-    .refine(
-      (p) => !p.startsWith("/") && !p.split("/").some((s) => s === ".."),
-      {
-        message:
-          "path must be relative and must not contain directory traversal sequences",
-      },
-    ),
-  content: z.string().max(MAX_SKILL_FILE_CONTENT_CHARS),
-  encoding: SkillFileEncodingSchema.optional(),
-});
-
 /**
  * Manual create/update payload: raw SKILL.md, resource files, and the skill's
  * visibility scope.
@@ -187,10 +173,17 @@ const SkillFileInputSchema = z.object({
  */
 const SkillManifestInputSchema = z
   .object({
-    content: z.string().min(1).max(MAX_SKILL_FILE_BYTES),
+    content: SkillManifestContentSchema,
     files: z.array(SkillFileInputSchema).max(MAX_FILES_PER_SKILL).optional(),
     scope: ResourceVisibilityScopeSchema.optional(),
     teamIds: z.array(z.string()).optional(),
+    allowedTools: z
+      .array(z.string())
+      .optional()
+      .describe(
+        "Tools the skill expects, overriding the SKILL.md `allowed-tools` " +
+          "frontmatter. Omit to use the frontmatter; pass [] to clear.",
+      ),
   })
   .superRefine((data, ctx) => refineUniqueFilePaths(data.files, ctx));
 
@@ -327,7 +320,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
             content: parsed.content,
             license: parsed.license,
             compatibility: parsed.compatibility,
-            allowedTools: parsed.allowedTools,
+            allowedTools: resolveAllowedTools(body, parsed),
             templated: parsed.templated,
             metadata: parsed.metadata,
             sourceType: "manual",
@@ -695,7 +688,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
               content: parsed.content,
               license: parsed.license,
               compatibility: parsed.compatibility,
-              allowedTools: parsed.allowedTools,
+              allowedTools: resolveAllowedTools(body, parsed),
               templated: parsed.templated,
               metadata: parsed.metadata,
               scope: newScope,
@@ -888,7 +881,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.EnableSkillToolDefaults,
         description:
-          "Enable the Agent Skill tools (`list_skills`, `activate_skill`, `read_skill_file`) for this organization. Sets the org-level flag and backfills the tools onto every existing agent. Idempotent.",
+          "Enable the Agent Skill tools (`list_skills`, `load_skill`) for this organization. Sets the org-level flag and backfills the tools onto every existing agent. Idempotent.",
         tags: ["Skills"],
         response: constructResponseSchema(
           z.object({ enabled: z.literal(true), agentsBackfilled: z.number() }),
@@ -1367,6 +1360,16 @@ function authorizeSkillScope(params: {
   }
 }
 
+/** Explicit `allowedTools` wins over the SKILL.md frontmatter when provided. */
+function resolveAllowedTools(
+  body: { allowedTools?: string[] },
+  parsed: { allowedTools: string | null },
+): string | null {
+  return body.allowedTools === undefined
+    ? parsed.allowedTools
+    : normalizeAllowedTools(body.allowedTools);
+}
+
 function parseManifestOrThrow(raw: string) {
   try {
     return parseSkillManifest(raw);
@@ -1380,17 +1383,6 @@ function parseManifestOrThrow(raw: string) {
 
 function skillNameConflict(name: string): ApiError {
   return new ApiError(409, `A skill named "${name}" already exists`);
-}
-
-function toSkillFiles(
-  files: { path: string; content: string; encoding?: "utf8" | "base64" }[],
-) {
-  return files.map((file) => ({
-    path: file.path,
-    content: file.content,
-    encoding: file.encoding ?? "utf8",
-    kind: deriveSkillFileKind(file.path),
-  }));
 }
 
 /** Run a GitHub operation, converting import/parse failures into 400s. */

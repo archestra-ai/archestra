@@ -2,27 +2,26 @@ import { ModelModel } from "@/models";
 import { describe, expect, test } from "@/test";
 import { TiktokenTokenizer } from "@/tokenizers";
 import type { CommonMcpToolDefinition } from "@/types";
-import { calculateCost, estimateToolTokens } from "./cost-optimization";
+import {
+  calculateCacheCost,
+  calculateCost,
+  estimateToolTokens,
+} from "./cost-optimization";
 
 describe("calculateCost", () => {
-  test("returns undefined when inputTokens is null", async () => {
-    const cost = await calculateCost("gpt-4o", null, 100, "openai");
-    expect(cost).toBeUndefined();
+  test("returns undefined when there is no usage at all", async () => {
+    expect(await calculateCost("gpt-4o", null, null, "openai")).toBeUndefined();
+    expect(await calculateCost("gpt-4o", 0, 0, "openai")).toBeUndefined();
   });
 
-  test("returns undefined when outputTokens is null", async () => {
-    const cost = await calculateCost("gpt-4o", 100, null, "openai");
-    expect(cost).toBeUndefined();
-  });
-
-  test("returns undefined when inputTokens is 0", async () => {
-    const cost = await calculateCost("gpt-4o", 0, 100, "openai");
-    expect(cost).toBeUndefined();
-  });
-
-  test("returns undefined when outputTokens is 0", async () => {
-    const cost = await calculateCost("gpt-4o", 100, 0, "openai");
-    expect(cost).toBeUndefined();
+  test("costs output even when input is 0 (fully-cached request)", async () => {
+    // Default pricing $50/M: 100 output = 100/1M * $50 = $0.005. A fully-cached
+    // turn has inputTokens 0 but must still be costed (cache read + output).
+    const cost = await calculateCost("unknown-cached", 0, 100, "openai", {
+      readTokens: 1000,
+    });
+    // output $0.005 + cache read 1000/1M * $50 * 0.25 = $0.0125 => $0.0175
+    expect(cost).toBeCloseTo(0.0175);
   });
 
   test("calculates cost using models.dev synced pricing", async () => {
@@ -120,6 +119,109 @@ describe("calculateCost", () => {
       "anthropic",
     );
     expect(anthropicCost).toBeCloseTo(0.004);
+  });
+
+  test("adds cache read + write cost using provider multipliers", async () => {
+    await ModelModel.create({
+      externalId: "anthropic/cache-model",
+      provider: "anthropic",
+      modelId: "cache-model",
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+      promptPricePerToken: "0.000010", // $10/M input
+      completionPricePerToken: "0.000030", // $30/M output
+      lastSyncedAt: new Date(),
+    });
+
+    // input 1000 = $0.01, output 500 = $0.015
+    // cache read 2000/1M * $10 * 0.1 = $0.002
+    // cache write 1000/1M * $10 * 1.25 = $0.0125
+    // total = 0.0395
+    const cost = await calculateCost("cache-model", 1000, 500, "anthropic", {
+      readTokens: 2000,
+      writeTokens: 1000,
+    });
+    expect(cost).toBeCloseTo(0.0395);
+  });
+
+  test("bills the 1h cache-write portion at 2x in the all-in cost", async () => {
+    await ModelModel.create({
+      externalId: "anthropic/cache-cost-1h",
+      provider: "anthropic",
+      modelId: "cache-cost-1h",
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+      promptPricePerToken: "0.000010", // $10/M input
+      completionPricePerToken: "0.000030", // $30/M output
+      lastSyncedAt: new Date(),
+    });
+
+    // input 0.01 + output 0.015 + read 0.002 (2000*$10*0.1)
+    // of 1000 writes, 400 are 1h (2x = 0.008) and 600 are 5m (1.25x = 0.0075)
+    // total = 0.01 + 0.015 + 0.002 + 0.0075 + 0.008 = 0.0425
+    const cost = await calculateCost("cache-cost-1h", 1000, 500, "anthropic", {
+      readTokens: 2000,
+      writeTokens: 1000,
+      write1hTokens: 400,
+    });
+    expect(cost).toBeCloseTo(0.0425);
+  });
+});
+
+describe("calculateCacheCost", () => {
+  test("returns undefined when there are no cache tokens", async () => {
+    expect(await calculateCacheCost("gpt-4o", "openai", 0, 0)).toBeUndefined();
+  });
+
+  test("splits cache cost and net savings using multipliers", async () => {
+    await ModelModel.create({
+      externalId: "anthropic/cache-breakdown",
+      provider: "anthropic",
+      modelId: "cache-breakdown",
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+      promptPricePerToken: "0.000010", // $10/M input
+      completionPricePerToken: "0.000030",
+      lastSyncedAt: new Date(),
+    });
+
+    // read 2000/1M * $10 = $0.02 full → actual 0.1x = $0.002, saved $0.018
+    // write 1000/1M * $10 = $0.01 full → actual 1.25x = $0.0125, surcharge $0.0025
+    const result = await calculateCacheCost(
+      "cache-breakdown",
+      "anthropic",
+      2000,
+      1000,
+    );
+    expect(result?.cacheCost).toBeCloseTo(0.0145);
+    expect(result?.cacheSavings).toBeCloseTo(0.0155);
+  });
+
+  test("bills the 1-hour write portion at 2x, the rest at the 5m rate", async () => {
+    await ModelModel.create({
+      externalId: "anthropic/cache-1h",
+      provider: "anthropic",
+      modelId: "cache-1h",
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+      promptPricePerToken: "0.000010", // $10/M input
+      completionPricePerToken: "0.000030",
+      lastSyncedAt: new Date(),
+    });
+
+    // read 2000 → 0.002 cost / 0.018 saved.
+    // of 1000 write tokens, 400 are 1h (2x) and 600 are 5m (1.25x):
+    //   cost  = 0.002 + 600/1M*$10*1.25 (0.0075) + 400/1M*$10*2 (0.008) = 0.0175
+    //   saved = 0.018 - 600/1M*$10*0.25 (0.0015) - 400/1M*$10*1.0 (0.004) = 0.0125
+    const result = await calculateCacheCost(
+      "cache-1h",
+      "anthropic",
+      2000,
+      1000,
+      400,
+    );
+    expect(result?.cacheCost).toBeCloseTo(0.0175);
+    expect(result?.cacheSavings).toBeCloseTo(0.0125);
   });
 });
 

@@ -116,10 +116,10 @@ export function GithubAuthConfigFields({
 function GithubAppSettingsLink() {
   return (
     <Link
-      href="/settings/integrations/github-apps"
+      href="/settings/github"
       className="font-medium text-primary underline-offset-4 hover:underline"
     >
-      Settings → Integrations → GitHub Apps
+      Settings → GitHub
     </Link>
   );
 }

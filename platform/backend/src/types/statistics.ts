@@ -25,6 +25,7 @@ export const AgentStatisticsSchema = z.object({
   requests: z.number(),
   inputTokens: z.number(),
   outputTokens: z.number(),
+  cacheReadTokens: z.number(),
   cost: z.number(),
   timeSeries: z.array(StatisticsTimeSeriesPointSchema),
 });
@@ -34,6 +35,7 @@ export const ModelStatisticsSchema = z.object({
   requests: z.number(),
   inputTokens: z.number(),
   outputTokens: z.number(),
+  cacheReadTokens: z.number(),
   cost: z.number(),
   percentage: z.number(),
   timeSeries: z.array(StatisticsTimeSeriesPointSchema),
@@ -54,6 +56,7 @@ export const CostSavingsStatisticsSchema = z.object({
   totalSavings: z.number(),
   totalOptimizationSavings: z.number(),
   totalToonSavings: z.number(),
+  totalCacheSavings: z.number(),
   timeSeries: z.array(
     z.object({
       timestamp: z.string(),
@@ -61,6 +64,7 @@ export const CostSavingsStatisticsSchema = z.object({
       actualCost: z.number(),
       optimizationSavings: z.number(),
       toonSavings: z.number(),
+      cacheSavings: z.number(),
     }),
   ),
 });

@@ -936,9 +936,12 @@ class InteractionModel {
           requestCount: count(),
           totalInputTokens: sum(schema.interactionsTable.inputTokens),
           totalOutputTokens: sum(schema.interactionsTable.outputTokens),
+          totalCacheReadTokens: sum(schema.interactionsTable.cacheReadTokens),
+          totalCacheWriteTokens: sum(schema.interactionsTable.cacheWriteTokens),
           totalCost: sum(schema.interactionsTable.cost),
           totalBaselineCost: sum(schema.interactionsTable.baselineCost),
           totalToonCostSavings: sum(schema.interactionsTable.toonCostSavings),
+          totalCacheSavings: sum(schema.interactionsTable.cacheSavings),
           // Count interactions where TOON was applied (has savings)
           toonAppliedCount: sql<number>`COUNT(*) FILTER (WHERE ${schema.interactionsTable.toonCostSavings} IS NOT NULL AND CAST(${schema.interactionsTable.toonCostSavings} AS NUMERIC) > 0)`,
           // Count interactions by skip reason
@@ -1037,9 +1040,12 @@ class InteractionModel {
         requestCount: Number(s.requestCount),
         totalInputTokens: Number(s.totalInputTokens) || 0,
         totalOutputTokens: Number(s.totalOutputTokens) || 0,
+        totalCacheReadTokens: Number(s.totalCacheReadTokens) || 0,
+        totalCacheWriteTokens: Number(s.totalCacheWriteTokens) || 0,
         totalCost: s.totalCost,
         totalBaselineCost: s.totalBaselineCost,
         totalToonCostSavings: s.totalToonCostSavings,
+        totalCacheSavings: s.totalCacheSavings,
         toonSkipReasonCounts: {
           applied: Number(s.toonAppliedCount) || 0,
           notEnabled: Number(s.toonNotEnabledCount) || 0,

@@ -17,9 +17,9 @@ describe("GithubAuthConfigFields", () => {
     expect(screen.getByText(/Create one in/)).toBeInTheDocument();
     expect(
       screen.getByRole("link", {
-        name: "Settings → Integrations → GitHub Apps",
+        name: "Settings → GitHub",
       }),
-    ).toHaveAttribute("href", "/settings/integrations/github-apps");
+    ).toHaveAttribute("href", "/settings/github");
   });
 
   it("links to GitHub App settings when configurations exist", async () => {
@@ -35,9 +35,9 @@ describe("GithubAuthConfigFields", () => {
 
     expect(
       screen.getByRole("link", {
-        name: "Settings → Integrations → GitHub Apps",
+        name: "Settings → GitHub",
       }),
-    ).toHaveAttribute("href", "/settings/integrations/github-apps");
+    ).toHaveAttribute("href", "/settings/github");
   });
 
   it("renders PAT fields only for PAT auth", async () => {

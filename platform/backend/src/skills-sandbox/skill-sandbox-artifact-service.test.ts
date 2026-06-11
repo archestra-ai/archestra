@@ -96,3 +96,115 @@ describe("skillSandboxArtifactService", () => {
     });
   });
 });
+
+describe("skillSandboxArtifactService.resolveXFileSource", () => {
+  test("resolves by id, scoped to the owning user (db mode)", async ({
+    makeUser,
+    makeOrganization,
+  }) => {
+    const user = await makeUser();
+    const org = await makeOrganization();
+    const sandbox = await SkillSandboxModel.create({
+      organizationId: org.id,
+      userId: user.id,
+      conversationId: null,
+      defaultCwd: "/sandbox",
+    });
+    const artifact = await seed(user.id, sandbox.id, "data.txt");
+
+    const resolved = await skillSandboxArtifactService.resolveXFileSource({
+      organizationId: org.id,
+      userId: user.id,
+      id: artifact.id,
+    });
+    expect(resolved).toMatchObject({
+      mimeType: "text/plain",
+      originalName: "data.txt",
+    });
+    expect("data" in resolved && resolved.data.toString()).toBe("abc");
+
+    const stranger = await makeUser({ email: "xfile-stranger@test.com" });
+    const denied = await skillSandboxArtifactService.resolveXFileSource({
+      organizationId: org.id,
+      userId: stranger.id,
+      id: artifact.id,
+    });
+    expect(denied).toEqual({ error: "not_found" });
+  });
+
+  test("resolves by filename, reporting duplicates as ambiguous (db mode)", async ({
+    makeUser,
+    makeOrganization,
+  }) => {
+    const user = await makeUser();
+    const org = await makeOrganization();
+    const sandbox = await SkillSandboxModel.create({
+      organizationId: org.id,
+      userId: user.id,
+      conversationId: null,
+      defaultCwd: "/sandbox",
+    });
+    await seed(user.id, sandbox.id, "report.txt");
+
+    const byName = await skillSandboxArtifactService.resolveXFileSource({
+      organizationId: org.id,
+      userId: user.id,
+      filename: "report.txt",
+    });
+    expect("data" in byName && byName.data.toString()).toBe("abc");
+
+    await seed(user.id, sandbox.id, "report.txt");
+    const dup = await skillSandboxArtifactService.resolveXFileSource({
+      organizationId: org.id,
+      userId: user.id,
+      filename: "report.txt",
+    });
+    expect(dup).toEqual({ error: "ambiguous" });
+
+    const missing = await skillSandboxArtifactService.resolveXFileSource({
+      organizationId: org.id,
+      userId: user.id,
+      filename: "nope.txt",
+    });
+    expect(missing).toEqual({ error: "not_found" });
+  });
+
+  describe("filesystem mode", () => {
+    const original = { ...config.skillsSandbox.fileStorage };
+    let fsRoot: string;
+
+    beforeEach(async () => {
+      fsRoot = await mkdtemp(join(tmpdir(), "xfile-resolve-"));
+      config.skillsSandbox.fileStorage.provider = "filesystem";
+      config.skillsSandbox.fileStorage.path = fsRoot;
+    });
+    afterEach(async () => {
+      config.skillsSandbox.fileStorage.provider = original.provider;
+      config.skillsSandbox.fileStorage.path = original.path;
+      await rm(fsRoot, { recursive: true, force: true });
+    });
+
+    test("resolves an orphan (hand-dropped file, no row) by filename + folder", async ({
+      makeUser,
+      makeOrganization,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+      const { mkdir, writeFile } = await import("node:fs/promises");
+      await mkdir(join(fsRoot, user.id, "drop"), { recursive: true });
+      await writeFile(join(fsRoot, user.id, "drop", "manual.csv"), "x,y\n1,2\n");
+
+      const resolved = await skillSandboxArtifactService.resolveXFileSource({
+        organizationId: org.id,
+        userId: user.id,
+        filename: "manual.csv",
+        folder: "drop",
+      });
+      expect(resolved).toMatchObject({
+        mimeType: "text/csv",
+        originalName: "manual.csv",
+      });
+      expect("data" in resolved && resolved.data.toString()).toBe("x,y\n1,2\n");
+    });
+  });
+});

@@ -142,6 +142,7 @@ export const TOOL_PERMISSIONS: Record<
   run_command: { resource: "sandbox", action: "execute" },
   download_file: { resource: "sandbox", action: "execute" },
   upload_file: { resource: "sandbox", action: "execute" },
+  search_files: { resource: "sandbox", action: "execute" },
 };
 
 /**

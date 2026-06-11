@@ -1,4 +1,4 @@
-import type { SandboxId } from "@/types";
+import type { SandboxFileOrigin, SandboxId } from "@/types";
 
 /**
  * Fixed limits exposed to tool-layer schemas and per-sandbox queueing.
@@ -63,6 +63,8 @@ export interface ExportArtifactParams {
   /** Path inside the container, either absolute or relative to `defaultCwd`. */
   path: string;
   mimeType?: string;
+  /** PFS folder to export into; resolved to a row by the caller. */
+  folder?: { id: string; name: string } | null;
 }
 
 export interface ArtifactRef {
@@ -94,6 +96,8 @@ export interface UploadFileParams {
    * appends a new row (existing tool-upload behavior).
    */
   dedupeId?: string;
+  /** How the upload entered the sandbox; 'x_file' = copied from the user's PFS. */
+  origin?: SandboxFileOrigin | null;
 }
 
 export interface UploadRef {

@@ -1,6 +1,7 @@
 import {
   TOOL_DOWNLOAD_FILE_SHORT_NAME,
   TOOL_RUN_COMMAND_SHORT_NAME,
+  TOOL_SEARCH_FILES_SHORT_NAME,
   TOOL_UPLOAD_FILE_SHORT_NAME,
 } from "@archestra/shared";
 import { z } from "zod";
@@ -9,6 +10,7 @@ import logger from "@/logging";
 import {
   ConversationAttachmentModel,
   SkillSandboxConversationGoneError,
+  SkillSandboxFolderModel,
   SkillSandboxModel,
 } from "@/models";
 import { executionSandboxRegistry } from "@/skills-sandbox/execution-sandbox-registry";
@@ -16,6 +18,7 @@ import {
   SKILL_SANDBOX_ATTACHMENTS_DIR,
   SKILL_SANDBOX_HOME,
 } from "@/skills-sandbox/runtime-image";
+import { skillSandboxArtifactService } from "@/skills-sandbox/skill-sandbox-artifact-service";
 import { skillSandboxRuntimeService } from "@/skills-sandbox/skill-sandbox-runtime-service";
 import {
   SKILL_SANDBOX_LIMITS,
@@ -151,6 +154,15 @@ const DownloadFileSchema = z
         "Optional MIME type recorded with the file. Sniffed from the bytes " +
           "when omitted.",
       ),
+    folder: z
+      .string()
+      .min(1)
+      .optional()
+      .describe(
+        "Optional persistent-storage folder to save into. Must already exist " +
+          "(the user creates folders on the X-Files page). Omit to save at " +
+          "the top level.",
+      ),
     target: SandboxTargetSchema,
   })
   .describe(
@@ -208,6 +220,38 @@ const UploadSourceSchema = z.discriminatedUnion("type", [
       originalName: z.string().min(1).optional(),
     })
     .describe("Upload a UTF-8 text file provided inline."),
+  z
+    .strictObject({
+      type: z.literal("x_file"),
+      id: z
+        .string()
+        .trim()
+        .regex(UUID_REGEX, "must be a file id (UUID)")
+        .optional()
+        .describe("Id of a persistent file, as returned by search_files."),
+      filename: z
+        .string()
+        .min(1)
+        .optional()
+        .describe(
+          "Exact filename of a persistent file. Use together with `folder`; " +
+            "the only way to reference files that have no id.",
+        ),
+      folder: z
+        .string()
+        .min(1)
+        .optional()
+        .describe(
+          "Persistent-storage folder the file sits in. Omit for the top level.",
+        ),
+    })
+    .refine((v) => (v.id != null) !== (v.filename != null), {
+      message: "provide exactly one of `id` or `filename`",
+    })
+    .describe(
+      "Copy a file from the user's persistent storage (X-Files) into the " +
+        "sandbox. Find files with search_files first.",
+    ),
 ]);
 
 type UploadSource = z.infer<typeof UploadSourceSchema>;
@@ -240,6 +284,53 @@ const UploadFileOutputSchema = z.object({
   path: z.string(),
   mimeType: z.string(),
   sizeBytes: z.number(),
+});
+
+const SearchFilesSchema = z
+  .strictObject({
+    query: z
+      .string()
+      .min(1)
+      .optional()
+      .describe(
+        "Case-insensitive substring matched against filenames. Omit to list " +
+          "everything.",
+      ),
+    folder: z
+      .string()
+      .min(1)
+      .optional()
+      .describe(
+        "Restrict matches to one persistent-storage folder (exact name). " +
+          "Omit to search the top level and every folder.",
+      ),
+  })
+  .describe(
+    "Search the user's persistent file storage (X-Files): files exported " +
+      "from sandboxes across ALL conversations, plus files added by hand.",
+  );
+
+const SearchFilesOutputSchema = z.object({
+  files: z.array(
+    z.object({
+      id: z
+        .string()
+        .nullable()
+        .describe(
+          "Persistent file id — pass to upload_file's x_file source. Null " +
+            "for files added outside Archestra; reference those by filename " +
+            "+ folder instead.",
+        ),
+      filename: z.string(),
+      folder: z.string().nullable(),
+      mimeType: z.string(),
+      sizeBytes: z.number(),
+      createdAt: z.string(),
+    }),
+  ),
+  folders: z
+    .array(z.string())
+    .describe("All folder names in the user's persistent storage."),
 });
 
 const registry = defineArchestraTools([
@@ -323,12 +414,23 @@ const registry = defineArchestraTools([
       });
       if ("error" in resolved) return errorResult(resolved.error);
 
+      let folder: { id: string; name: string } | null = null;
+      if (args.folder) {
+        const found = await resolveFolderByName({
+          userCtx: guard.userCtx,
+          name: args.folder,
+        });
+        if ("error" in found) return errorResult(found.error);
+        folder = found.folder;
+      }
+
       try {
         const result = await skillSandboxRuntimeService.exportArtifact({
           sandboxId: resolved.sandboxId,
           caller: guard.userCtx,
           path: args.path,
           mimeType: args.mimeType,
+          folder,
         });
 
         logger.info(
@@ -403,6 +505,9 @@ const registry = defineArchestraTools([
           data: loaded.data,
           mimeType: loaded.mimeType,
           originalName: loaded.originalName,
+          // PFS-sourced uploads are marked so the conversation Files panel
+          // can show which persistent files the agent touched here.
+          origin: args.source.type === "x_file" ? "x_file" : null,
         });
 
         logger.info(
@@ -422,6 +527,59 @@ const registry = defineArchestraTools([
       } catch (error) {
         return handleRuntimeError(error, resolved.sandboxId, "upload_file");
       }
+    },
+  }),
+  defineArchestraTool({
+    shortName: TOOL_SEARCH_FILES_SHORT_NAME,
+    title: "Search Files",
+    description:
+      "Search the user's persistent file storage (X-Files): files exported " +
+      "with download_file across ALL conversations, organized in flat " +
+      "folders, plus files the user added by hand. Returns metadata only. " +
+      "To work on a found file, copy it into the sandbox with upload_file's " +
+      "x_file source (by `id`, or by `filename` + `folder` when id is null). " +
+      "Requires `sandbox:execute`.",
+    schema: SearchFilesSchema,
+    outputSchema: SearchFilesOutputSchema,
+    async handler({ args, context }) {
+      const guard = ensureUsable(context);
+      if ("error" in guard) return errorResult(guard.error);
+
+      const { folders, files } =
+        await skillSandboxArtifactService.listAllForUser({
+          organizationId: guard.userCtx.organizationId,
+          userId: guard.userCtx.userId,
+        });
+
+      const query = args.query?.toLowerCase() ?? null;
+      const matches = files.filter((f) => {
+        if (query && !f.filename.toLowerCase().includes(query)) return false;
+        if (args.folder && f.folder !== args.folder) return false;
+        return true;
+      });
+
+      const result = {
+        files: matches.map((f) => ({
+          id: f.id,
+          filename: f.filename,
+          folder: f.folder,
+          mimeType: f.mimeType,
+          sizeBytes: f.sizeBytes,
+          createdAt: f.createdAt.toISOString(),
+        })),
+        folders: folders.map((f) => f.name),
+      };
+
+      const summary =
+        matches.length === 0
+          ? "No persistent files matched."
+          : matches
+              .map(
+                (f) =>
+                  `${f.folder ? `${f.folder}/` : ""}${f.filename} (${f.mimeType}, ${f.sizeBytes} bytes)${f.id ? ` id=${f.id}` : " [no id — reference by filename]"}`,
+              )
+              .join("\n");
+      return structuredSuccessResult(result, summary);
     },
   }),
 ] as const);
@@ -617,6 +775,36 @@ function handleRuntimeError(
   return errorResult(`${tool} failed due to an internal error.`);
 }
 
+/**
+ * Resolve a `download_file` folder argument to its row. The folder must exist
+ * already (created on the X-Files page); the error names the user's folders so
+ * the model can correct itself without another round-trip.
+ */
+async function resolveFolderByName(params: {
+  userCtx: UserContext;
+  name: string;
+}): Promise<{ folder: { id: string; name: string } } | { error: string }> {
+  const row = await SkillSandboxFolderModel.findByName({
+    organizationId: params.userCtx.organizationId,
+    userId: params.userCtx.userId,
+    name: params.name,
+  });
+  if (row) return { folder: { id: row.id, name: row.name } };
+  const existing = await SkillSandboxFolderModel.listByUser({
+    organizationId: params.userCtx.organizationId,
+    userId: params.userCtx.userId,
+  });
+  const names = existing.map((f) => f.name);
+  return {
+    error:
+      `No persistent-storage folder named "${params.name}" exists. ` +
+      (names.length
+        ? `Existing folders: ${names.join(", ")}. `
+        : "There are no folders yet. ") +
+      "Folders are created by the user on the X-Files page; omit `folder` to save at the top level.",
+  };
+}
+
 // base64 alphabet plus padding and incidental whitespace.
 const BASE64_RE = /^[A-Za-z0-9+/\s]*={0,2}$/;
 
@@ -710,6 +898,51 @@ async function loadUploadSource(params: {
         data: attachment.fileData,
         mimeType: attachment.mimeType,
         originalName: attachment.originalName,
+      };
+    }
+    case "x_file": {
+      const resolved = await skillSandboxArtifactService.resolveXFileSource({
+        organizationId: userCtx.organizationId,
+        userId: userCtx.userId,
+        id: source.id,
+        filename: source.filename,
+        folder: source.folder,
+      });
+      if ("error" in resolved) {
+        const ref =
+          source.id ??
+          `${source.folder ? `${source.folder}/` : ""}${source.filename}`;
+        logger.warn(
+          {
+            organizationId: userCtx.organizationId,
+            userId: userCtx.userId,
+            conversationId,
+            xFileRef: ref,
+            reason: resolved.error,
+          },
+          "[Sandbox] rejected x_file upload",
+        );
+        switch (resolved.error) {
+          case "ambiguous":
+            return {
+              error:
+                `Multiple persistent files are named "${source.filename}"${source.folder ? ` in folder "${source.folder}"` : ""}. ` +
+                "Run search_files and use the `id` of the one you mean.",
+            };
+          case "missing_bytes":
+            return {
+              error: `The persistent file ${ref} exists but its bytes are no longer in storage (it may have been deleted from the storage folder).`,
+            };
+          default:
+            return {
+              error: `No persistent file ${ref} exists. Run search_files to see what is available.`,
+            };
+        }
+      }
+      return {
+        data: resolved.data,
+        mimeType: resolved.mimeType,
+        originalName: resolved.originalName,
       };
     }
   }

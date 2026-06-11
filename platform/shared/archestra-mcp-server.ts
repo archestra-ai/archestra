@@ -118,6 +118,8 @@ export const TOOL_UPDATE_SKILL_SHORT_NAME = "update_skill";
 export const TOOL_RUN_COMMAND_SHORT_NAME = "run_command";
 export const TOOL_DOWNLOAD_FILE_SHORT_NAME = "download_file";
 export const TOOL_UPLOAD_FILE_SHORT_NAME = "upload_file";
+// persistent file system (X-Files): files agents produced, across conversations
+export const TOOL_SEARCH_FILES_SHORT_NAME = "search_files";
 
 export const ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_WHOAMI_SHORT_NAME,
@@ -191,6 +193,7 @@ export const ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_RUN_COMMAND_SHORT_NAME,
   TOOL_DOWNLOAD_FILE_SHORT_NAME,
   TOOL_UPLOAD_FILE_SHORT_NAME,
+  TOOL_SEARCH_FILES_SHORT_NAME,
 ] as const;
 
 export type ArchestraToolShortName =
@@ -346,6 +349,8 @@ export const TOOL_DOWNLOAD_FILE_FULL_NAME =
   `${ARCHESTRA_TOOL_PREFIX}${TOOL_DOWNLOAD_FILE_SHORT_NAME}` as const;
 export const TOOL_UPLOAD_FILE_FULL_NAME =
   `${ARCHESTRA_TOOL_PREFIX}${TOOL_UPLOAD_FILE_SHORT_NAME}` as const;
+export const TOOL_SEARCH_FILES_FULL_NAME =
+  `${ARCHESTRA_TOOL_PREFIX}${TOOL_SEARCH_FILES_SHORT_NAME}` as const;
 
 export const DEFAULT_ARCHESTRA_TOOL_NAMES: readonly string[] = [
   TOOL_ARTIFACT_WRITE_FULL_NAME,
@@ -386,6 +391,7 @@ export const ALWAYS_EXPOSED_ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_RUN_COMMAND_SHORT_NAME,
   TOOL_DOWNLOAD_FILE_SHORT_NAME,
   TOOL_UPLOAD_FILE_SHORT_NAME,
+  TOOL_SEARCH_FILES_SHORT_NAME,
 ] as const satisfies readonly ArchestraToolShortName[];
 
 const ALWAYS_EXPOSED_ARCHESTRA_TOOL_SHORT_NAME_SET: ReadonlySet<string> =

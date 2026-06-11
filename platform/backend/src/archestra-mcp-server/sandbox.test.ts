@@ -3,6 +3,7 @@ import {
   ADMIN_ROLE_NAME,
   TOOL_DOWNLOAD_FILE_FULL_NAME,
   TOOL_RUN_COMMAND_FULL_NAME,
+  TOOL_SEARCH_FILES_FULL_NAME,
   TOOL_UPLOAD_FILE_FULL_NAME,
 } from "@archestra/shared";
 import config from "@/config";
@@ -10,6 +11,8 @@ import {
   ConversationAttachmentModel,
   ConversationModel,
   SkillModel,
+  SkillSandboxFileModel,
+  SkillSandboxFolderModel,
   SkillSandboxModel,
   SkillSandboxReplayEventModel,
   SkillVersionModel,
@@ -826,6 +829,252 @@ describe("sandbox tools (runtime enabled)", () => {
         expect(result.isError).toBe(true);
         expect(textOf(result)).toContain("no longer exists");
       });
+    });
+  });
+});
+
+describe("PFS tools (search_files, x_file source, download_file folder)", () => {
+  let agent: Agent;
+  let organizationId: string;
+  let userId: string;
+  let context: ArchestraContext;
+  const originalEnabled = config.skillsSandbox.enabled;
+
+  beforeAll(() => {
+    (config.skillsSandbox as { enabled: boolean }).enabled = true;
+  });
+  afterAll(() => {
+    (config.skillsSandbox as { enabled: boolean }).enabled = originalEnabled;
+  });
+
+  beforeEach(
+    async ({
+      makeAgent,
+      makeUser,
+      makeMember,
+      seedAndAssignArchestraTools,
+    }) => {
+      agent = await makeAgent({ name: "PFS Agent" });
+      organizationId = agent.organizationId;
+      const user = await makeUser();
+      await makeMember(user.id, organizationId, { role: ADMIN_ROLE_NAME });
+      userId = user.id;
+      await seedAndAssignArchestraTools(agent.id);
+      context = {
+        agent: { id: agent.id, name: agent.name },
+        agentId: agent.id,
+        organizationId,
+        userId,
+      };
+    },
+  );
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  async function makeConversationCtx(): Promise<ArchestraContext> {
+    const conversation = await ConversationModel.create({
+      userId,
+      organizationId,
+      agentId: agent.id,
+      title: "PFS Test",
+    });
+    return { ...context, conversationId: conversation.id };
+  }
+
+  async function seedPfsArtifact(filename: string, content = "abc") {
+    const sandbox = await SkillSandboxModel.create({
+      organizationId,
+      userId,
+      conversationId: null,
+      defaultCwd: "/home/sandbox",
+    });
+    return SkillSandboxFileModel.createArtifact({
+      sandboxId: sandbox.id,
+      userId,
+      path: `/home/sandbox/${filename}`,
+      mimeType: "text/plain",
+      originalName: null,
+      sizeBytes: content.length,
+      data: Buffer.from(content),
+    });
+  }
+
+  describe("search_files", () => {
+    test("lists and filters the user's persistent files", async () => {
+      await seedPfsArtifact("q2-report.txt");
+      await seedPfsArtifact("notes.txt");
+      await SkillSandboxFolderModel.create({
+        organizationId,
+        userId,
+        name: "reports",
+      });
+
+      const all = await executeArchestraTool(
+        TOOL_SEARCH_FILES_FULL_NAME,
+        {},
+        context,
+      );
+      expect(all.isError).toBe(false);
+      const allOut = structuredOf<{
+        files: Array<{ filename: string; id: string | null }>;
+        folders: string[];
+      }>(all);
+      expect(allOut.files.map((f) => f.filename).sort()).toEqual([
+        "notes.txt",
+        "q2-report.txt",
+      ]);
+      expect(allOut.folders).toEqual(["reports"]);
+      expect(allOut.files.every((f) => f.id)).toBe(true);
+
+      const filtered = await executeArchestraTool(
+        TOOL_SEARCH_FILES_FULL_NAME,
+        { query: "REPORT" },
+        context,
+      );
+      const filteredOut = structuredOf<{ files: Array<{ filename: string }> }>(
+        filtered,
+      );
+      expect(filteredOut.files.map((f) => f.filename)).toEqual([
+        "q2-report.txt",
+      ]);
+      expect(textOf(filtered)).toContain("q2-report.txt");
+    });
+
+    test("never returns another user's files", async ({ makeUser }) => {
+      await seedPfsArtifact("mine.txt");
+      const stranger = await makeUser({ email: "pfs-stranger@test.com" });
+      const strangerSandbox = await SkillSandboxModel.create({
+        organizationId,
+        userId: stranger.id,
+        conversationId: null,
+        defaultCwd: "/home/sandbox",
+      });
+      await SkillSandboxFileModel.createArtifact({
+        sandboxId: strangerSandbox.id,
+        userId: stranger.id,
+        path: "/home/sandbox/theirs.txt",
+        mimeType: "text/plain",
+        originalName: null,
+        sizeBytes: 1,
+        data: Buffer.from("x"),
+      });
+
+      const result = await executeArchestraTool(
+        TOOL_SEARCH_FILES_FULL_NAME,
+        {},
+        context,
+      );
+      const out = structuredOf<{ files: Array<{ filename: string }> }>(result);
+      expect(out.files.map((f) => f.filename)).toEqual(["mine.txt"]);
+    });
+  });
+
+  describe("upload_file x_file source", () => {
+    test("loads PFS bytes by id and marks the upload origin", async () => {
+      const ctx = await makeConversationCtx();
+      const artifact = await seedPfsArtifact("pull-me.txt", "pfs-bytes");
+      const spy = vi
+        .spyOn(skillSandboxRuntimeService, "uploadFile")
+        .mockResolvedValue({
+          uploadId: "up-x",
+          sandboxId: "sb" as any,
+          path: "/home/sandbox/pull-me.txt",
+          mimeType: "text/plain",
+          sizeBytes: 9,
+        });
+
+      const result = await executeArchestraTool(
+        TOOL_UPLOAD_FILE_FULL_NAME,
+        {
+          path: "pull-me.txt",
+          source: { type: "x_file", id: artifact.id },
+        },
+        ctx,
+      );
+      expect(result.isError).toBe(false);
+      expect(spy).toHaveBeenCalledOnce();
+      const call = spy.mock.calls[0][0];
+      expect(call.origin).toBe("x_file");
+      expect(call.data.toString()).toBe("pfs-bytes");
+      expect(call.originalName).toBe("pull-me.txt");
+    });
+
+    test("rejects an unknown reference with a search_files hint", async () => {
+      const ctx = await makeConversationCtx();
+      const spy = vi.spyOn(skillSandboxRuntimeService, "uploadFile");
+      const result = await executeArchestraTool(
+        TOOL_UPLOAD_FILE_FULL_NAME,
+        {
+          path: "x.txt",
+          source: { type: "x_file", filename: "does-not-exist.txt" },
+        },
+        ctx,
+      );
+      expect(result.isError).toBe(true);
+      expect(textOf(result)).toContain("search_files");
+      expect(spy).not.toHaveBeenCalled();
+    });
+
+    test("requires exactly one of id or filename", async () => {
+      const ctx = await makeConversationCtx();
+      const result = await executeArchestraTool(
+        TOOL_UPLOAD_FILE_FULL_NAME,
+        { path: "x.txt", source: { type: "x_file" } },
+        ctx,
+      );
+      expect(result.isError).toBe(true);
+    });
+  });
+
+  describe("download_file folder", () => {
+    test("threads the resolved folder into exportArtifact", async () => {
+      const ctx = await makeConversationCtx();
+      const folder = await SkillSandboxFolderModel.create({
+        organizationId,
+        userId,
+        name: "reports",
+      });
+      const spy = vi
+        .spyOn(skillSandboxRuntimeService, "exportArtifact")
+        .mockResolvedValue({
+          artifactId: "art-1",
+          sandboxId: "sb" as any,
+          path: "/home/sandbox/out.txt",
+          mimeType: "text/plain",
+          sizeBytes: 3,
+          stagingNotices: [],
+        });
+
+      const result = await executeArchestraTool(
+        TOOL_DOWNLOAD_FILE_FULL_NAME,
+        { path: "out.txt", folder: "reports" },
+        ctx,
+      );
+      expect(result.isError).toBe(false);
+      expect(spy.mock.calls[0][0].folder).toEqual({
+        id: folder.id,
+        name: "reports",
+      });
+    });
+
+    test("an unknown folder errors and names the existing ones", async () => {
+      const ctx = await makeConversationCtx();
+      await SkillSandboxFolderModel.create({
+        organizationId,
+        userId,
+        name: "existing",
+      });
+      const spy = vi.spyOn(skillSandboxRuntimeService, "exportArtifact");
+      const result = await executeArchestraTool(
+        TOOL_DOWNLOAD_FILE_FULL_NAME,
+        { path: "out.txt", folder: "nope" },
+        ctx,
+      );
+      expect(result.isError).toBe(true);
+      expect(textOf(result)).toContain("existing");
+      expect(spy).not.toHaveBeenCalled();
     });
   });
 });

@@ -234,6 +234,8 @@ class SkillSandboxRuntimeService {
           originalName: null,
           sizeBytes: data.byteLength,
           data,
+          folderId: params.folder?.id ?? null,
+          folderName: params.folder?.name ?? null,
         });
       } catch (dbError) {
         throw new SkillSandboxError(
@@ -299,6 +301,7 @@ class SkillSandboxRuntimeService {
           sizeBytes: params.data.byteLength,
           data: params.data,
           sourceAttachmentId: params.dedupeId ?? null,
+          origin: params.origin ?? null,
         });
       } catch (dbError) {
         throw new SkillSandboxError(

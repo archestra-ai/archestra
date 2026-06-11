@@ -85,6 +85,11 @@ exports[`skill and sandbox tool text > archestra__download_file 1`] = `
     "additionalProperties": false,
     "description": "Copy a file out of the sandbox into durable storage and return a download URL. Use this for any binary or generated output — run_command only returns text. (To read a skill's source files, use read_skill_file.)",
     "properties": {
+      "folder": {
+        "description": "Optional persistent-storage folder to save into. Must already exist (the user creates folders on the X-Files page). Omit to save at the top level.",
+        "minLength": 1,
+        "type": "string",
+      },
       "mimeType": {
         "description": "Optional MIME type recorded with the file. Sniffed from the bytes when omitted.",
         "minLength": 1,
@@ -249,6 +254,32 @@ exports[`skill and sandbox tool text > archestra__run_command 1`] = `
 }
 `;
 
+exports[`skill and sandbox tool text > archestra__search_files 1`] = `
+{
+  "description": "Search the user's persistent file storage (X-Files): files exported with download_file across ALL conversations, organized in flat folders, plus files the user added by hand. Returns metadata only. To work on a found file, copy it into the sandbox with upload_file's x_file source (by \`id\`, or by \`filename\` + \`folder\` when id is null). Requires \`sandbox:execute\`.",
+  "inputSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "description": "Search the user's persistent file storage (X-Files): files exported from sandboxes across ALL conversations, plus files added by hand.",
+    "properties": {
+      "folder": {
+        "description": "Restrict matches to one persistent-storage folder (exact name). Omit to search the top level and every folder.",
+        "minLength": 1,
+        "type": "string",
+      },
+      "query": {
+        "description": "Case-insensitive substring matched against filenames. Omit to list everything.",
+        "minLength": 1,
+        "type": "string",
+      },
+    },
+    "type": "object",
+  },
+  "name": "archestra__search_files",
+  "title": "Search Files",
+}
+`;
+
 exports[`skill and sandbox tool text > archestra__update_skill 1`] = `
 {
   "description": "Update an existing Agent Skill from a SKILL.md manifest. Passing \`files\` replaces the skill's entire bundled file set; omit it to edit only the SKILL.md. The manifest's \`name\` may differ from the target to rename the skill. You can only update skills you are allowed to manage; the skill keeps its current visibility scope.",
@@ -398,6 +429,35 @@ exports[`skill and sandbox tool text > archestra__upload_file 1`] = `
             "required": [
               "type",
               "text",
+            ],
+            "type": "object",
+          },
+          {
+            "additionalProperties": false,
+            "description": "Copy a file from the user's persistent storage (X-Files) into the sandbox. Find files with search_files first.",
+            "properties": {
+              "filename": {
+                "description": "Exact filename of a persistent file. Use together with \`folder\`; the only way to reference files that have no id.",
+                "minLength": 1,
+                "type": "string",
+              },
+              "folder": {
+                "description": "Persistent-storage folder the file sits in. Omit for the top level.",
+                "minLength": 1,
+                "type": "string",
+              },
+              "id": {
+                "description": "Id of a persistent file, as returned by search_files.",
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                "type": "string",
+              },
+              "type": {
+                "const": "x_file",
+                "type": "string",
+              },
+            },
+            "required": [
+              "type",
             ],
             "type": "object",
           },

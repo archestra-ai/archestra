@@ -1,10 +1,10 @@
 "use client";
 
 import {
-  ArrowUp,
   Download,
   Eye,
   Folder,
+  MessageCircle,
   Pencil,
   Trash2,
   Users,
@@ -13,6 +13,14 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
+import {
+  PromptInput,
+  PromptInputBody,
+  PromptInputFooter,
+  type PromptInputMessage,
+  PromptInputSubmit,
+  PromptInputTextarea,
+} from "@/components/ai-elements/prompt-input";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { PageLayout } from "@/components/page-layout";
 import { Badge } from "@/components/ui/badge";
@@ -51,6 +59,7 @@ import {
 } from "@/lib/skills-sandbox/sandbox-file-preview";
 import { useDeleteSandboxFile } from "@/lib/skills-sandbox/sandbox-files.query";
 import { useTeams } from "@/lib/teams/team.query";
+import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 
 export default function ProjectDetailPageClient() {
   return (
@@ -144,13 +153,16 @@ function ProjectDetail() {
 
 // === internal components ===
 
-/** Prompt box that starts a chat IN this project on the /chat page. */
+/**
+ * Prompt box that starts a chat IN this project. Built from the same
+ * prompt-input primitives as the /chat composer, so it looks identical;
+ * submitting hands off to /chat, which creates the project chat and sends.
+ */
 function ProjectChatInput({ projectId }: { projectId: string }) {
   const router = useRouter();
-  const [text, setText] = useState("");
 
-  const submit = () => {
-    const prompt = text.trim();
+  const handleSubmit = (message: PromptInputMessage) => {
+    const prompt = message.text?.trim();
     if (!prompt) return;
     router.push(
       `/chat?project=${projectId}&user_prompt=${encodeURIComponent(prompt)}`,
@@ -158,30 +170,15 @@ function ProjectChatInput({ projectId }: { projectId: string }) {
   };
 
   return (
-    <div className="relative rounded-xl border bg-background shadow-sm focus-within:ring-1 focus-within:ring-ring">
-      <Textarea
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" && !e.shiftKey) {
-            e.preventDefault();
-            submit();
-          }
-        }}
-        placeholder="Start a chat in this project…"
-        rows={3}
-        className="resize-none border-0 bg-transparent pr-12 shadow-none focus-visible:ring-0"
-      />
-      <Button
-        size="icon"
-        className="absolute bottom-2 right-2 h-8 w-8 rounded-full"
-        onClick={submit}
-        disabled={!text.trim()}
-        aria-label="Start chat"
-      >
-        <ArrowUp className="h-4 w-4" />
-      </Button>
-    </div>
+    <PromptInput onSubmit={handleSubmit}>
+      <PromptInputBody>
+        <PromptInputTextarea placeholder="Start a chat in this project…" />
+      </PromptInputBody>
+      <PromptInputFooter>
+        <div className="flex-1" />
+        <PromptInputSubmit className="!h-8" status="ready" />
+      </PromptInputFooter>
+    </PromptInput>
   );
 }
 
@@ -202,28 +199,40 @@ function ChatsList({
         Chats
       </h2>
       {conversations.length === 0 ? (
-        <p className="rounded-md border px-3 py-6 text-center text-sm text-muted-foreground">
+        <p className="rounded-xl border px-3 py-8 text-center text-sm text-muted-foreground">
           No chats yet — type above to start one.
         </p>
       ) : (
-        <div className="overflow-hidden rounded-md border">
-          {conversations.map((conv, i) => (
+        <div className="space-y-3">
+          {conversations.map((conv) => (
             <Link
               key={conv.id}
               href={`/chat/${conv.id}`}
-              className={`flex items-center gap-3 px-3 py-2 text-sm hover:bg-muted/50 ${i > 0 ? "border-t" : ""}`}
+              className="flex items-center gap-4 rounded-xl border bg-card px-4 py-4 transition-colors hover:bg-muted/50"
             >
-              <span className="min-w-0 flex-1 truncate">
-                {conv.title ?? "Untitled chat"}
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10">
+                <MessageCircle className="h-5 w-5 text-primary" aria-hidden />
               </span>
-              {conv.readOnly && (
-                <Badge variant="outline" className="gap-1">
-                  <Eye className="h-3 w-3" />
-                  {conv.authorName ?? "someone else"} · read-only
-                </Badge>
-              )}
-              <span className="hidden w-40 shrink-0 text-right text-xs text-muted-foreground sm:block">
-                {new Date(conv.lastMessageAt).toLocaleString()}
+              <span className="min-w-0 flex-1">
+                <span className="flex items-center gap-2">
+                  <span className="truncate font-medium">
+                    {conv.title ?? "Untitled chat"}
+                  </span>
+                  {conv.readOnly && (
+                    <Badge variant="outline" className="shrink-0 gap-1">
+                      <Eye className="h-3 w-3" />
+                      read-only
+                    </Badge>
+                  )}
+                </span>
+                <span className="block truncate text-sm text-muted-foreground">
+                  {conv.readOnly
+                    ? `by ${conv.authorName ?? "someone else"}`
+                    : "by you"}
+                </span>
+              </span>
+              <span className="shrink-0 text-sm text-muted-foreground">
+                {formatRelativeTimeFromNow(conv.lastMessageAt)}
               </span>
             </Link>
           ))}

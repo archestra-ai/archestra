@@ -1,6 +1,6 @@
 import type { archestraApiTypes } from "@archestra/shared";
 
-export type FileSource = "artifact" | "generated" | "attachment";
+export type FileSource = "artifact" | "generated" | "attachment" | "x-file";
 
 export type ConversationFileItem = {
   id: string;
@@ -17,14 +17,19 @@ type FilesResponse =
   | undefined;
 
 /**
- * Builds the two Files-panel sections from the API payload plus the in-memory
+ * Builds the Files-panel sections from the API payload plus the in-memory
  * markdown artifact. `artifact.md` is synthesized client-side and always sits
- * first in the Generated section.
+ * first in the Generated section. `xFiles` are persistent files the agent
+ * pulled into this conversation's sandbox.
  */
 export function assembleFileSections(params: {
   files: FilesResponse;
   artifact: string | null | undefined;
-}): { generated: ConversationFileItem[]; attachments: ConversationFileItem[] } {
+}): {
+  generated: ConversationFileItem[];
+  attachments: ConversationFileItem[];
+  xFiles: ConversationFileItem[];
+} {
   const generated: ConversationFileItem[] = [];
 
   if (params.artifact && params.artifact.trim().length > 0) {
@@ -57,5 +62,15 @@ export function assembleFileSections(params: {
     source: "attachment",
   }));
 
-  return { generated, attachments };
+  const xFiles: ConversationFileItem[] = (params.files?.xFiles ?? []).map(
+    (f) => ({
+      id: f.id,
+      name: f.name,
+      mimeType: f.mimeType,
+      contentUrl: f.contentUrl,
+      source: "x-file",
+    }),
+  );
+
+  return { generated, attachments, xFiles };
 }

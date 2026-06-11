@@ -39,14 +39,17 @@ export function ConversationFilesPanel({
   onClose,
 }: ConversationFilesPanelProps) {
   const { data: files } = useConversationFiles(conversationId);
-  const { generated, attachments } = assembleFileSections({ files, artifact });
+  const { generated, attachments, xFiles } = assembleFileSections({
+    files,
+    artifact,
+  });
   const hasArtifact = !!artifact && artifact.trim().length > 0;
   // Default to previewing the artifact when one exists as the panel opens.
   const [selectedId, setSelectedId] = useState<string | null>(() =>
     hasArtifact ? "artifact" : null,
   );
 
-  const all = [...generated, ...attachments];
+  const all = [...generated, ...attachments, ...xFiles];
   const selected = all.find((f) => f.id === selectedId) ?? null;
 
   // download_file outputs only (the artifact has its own default handling).
@@ -113,7 +116,11 @@ export function ConversationFilesPanel({
     printMarkdownElementAsPdf(artifactRef.current, "Artifact");
   const artifactSelected = selected?.source === "artifact";
 
-  if (generated.length === 0 && attachments.length === 0) {
+  if (
+    generated.length === 0 &&
+    attachments.length === 0 &&
+    xFiles.length === 0
+  ) {
     return (
       <div className="flex h-full flex-col items-center justify-center px-6 text-center text-xs text-muted-foreground">
         <FileIcon className="mb-2 h-6 w-6 opacity-50" />
@@ -148,6 +155,14 @@ export function ConversationFilesPanel({
         <FileSection
           title="Attachments"
           items={attachments}
+          selectedId={selectedId}
+          artifact={artifact}
+          onSelect={setSelectedId}
+          onDownloadArtifactPdf={handleDownloadArtifactPdf}
+        />
+        <FileSection
+          title="From X-Files"
+          items={xFiles}
           selectedId={selectedId}
           artifact={artifact}
           onSelect={setSelectedId}

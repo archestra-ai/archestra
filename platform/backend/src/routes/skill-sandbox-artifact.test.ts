@@ -281,7 +281,11 @@ describe("X-Files list routes", () => {
     expect(response.statusCode).toBe(200);
     const body = response.json<{
       folders: Array<{ id: string | null; name: string }>;
-      files: Array<{ filename: string; downloadable: boolean; id: string | null }>;
+      files: Array<{
+        filename: string;
+        downloadable: boolean;
+        id: string | null;
+      }>;
     }>();
     expect(body.folders).toEqual([]);
     expect(body.files).toHaveLength(1);
@@ -399,7 +403,9 @@ describe("POST /api/skill-sandbox/folders + GET /api/skill-sandbox/uploads/:uplo
       method: "GET",
       url: "/api/skill-sandbox/files",
     });
-    const body = files.json<{ folders: Array<{ id: string | null; name: string }> }>();
+    const body = files.json<{
+      folders: Array<{ id: string | null; name: string }>;
+    }>();
     expect(body.folders).toEqual([
       expect.objectContaining({ id: folder.id, name: "reports" }),
     ]);

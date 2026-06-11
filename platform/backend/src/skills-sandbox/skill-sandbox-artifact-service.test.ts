@@ -79,12 +79,11 @@ describe("skillSandboxArtifactService", () => {
       });
       await seed(user.id, sandbox.id, "out.txt");
 
-      const { folders, files } = await skillSandboxArtifactService.listAllForUser(
-        {
+      const { folders, files } =
+        await skillSandboxArtifactService.listAllForUser({
           organizationId: org.id,
           userId: user.id,
-        },
-      );
+        });
 
       expect(folders).toEqual([]);
       expect(files).toHaveLength(1);
@@ -192,7 +191,10 @@ describe("skillSandboxArtifactService.resolveXFileSource", () => {
       const org = await makeOrganization();
       const { mkdir, writeFile } = await import("node:fs/promises");
       await mkdir(join(fsRoot, user.id, "drop"), { recursive: true });
-      await writeFile(join(fsRoot, user.id, "drop", "manual.csv"), "x,y\n1,2\n");
+      await writeFile(
+        join(fsRoot, user.id, "drop", "manual.csv"),
+        "x,y\n1,2\n",
+      );
 
       const resolved = await skillSandboxArtifactService.resolveXFileSource({
         organizationId: org.id,

@@ -20,6 +20,15 @@ const apiFiles = {
       createdAt: "2026-06-08T00:00:00.000Z",
     },
   ],
+  xFiles: [
+    {
+      id: "x1",
+      name: "q2.csv",
+      mimeType: "text/csv",
+      contentUrl: "/api/skill-sandbox/uploads/x1",
+      createdAt: "2026-06-08T00:00:00.000Z",
+    },
+  ],
 };
 
 describe("assembleFileSections", () => {
@@ -61,11 +70,28 @@ describe("assembleFileSections", () => {
   });
 
   it("handles a null files payload (artifact only)", () => {
-    const { generated, attachments } = assembleFileSections({
+    const { generated, attachments, xFiles } = assembleFileSections({
       files: null,
       artifact: "# hello",
     });
     expect(generated.map((f) => f.id)).toEqual(["artifact"]);
     expect(attachments).toEqual([]);
+    expect(xFiles).toEqual([]);
+  });
+
+  it("maps xFiles to the x-file source with the uploads byte URL", () => {
+    const { xFiles } = assembleFileSections({
+      files: apiFiles,
+      artifact: null,
+    });
+    expect(xFiles).toEqual([
+      {
+        id: "x1",
+        name: "q2.csv",
+        mimeType: "text/csv",
+        contentUrl: "/api/skill-sandbox/uploads/x1",
+        source: "x-file",
+      },
+    ]);
   });
 });

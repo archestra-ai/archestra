@@ -20,13 +20,9 @@ export function validateSandboxFolderName(raw: string): string | null {
   return null;
 }
 
-/** Trimmed canonical form of a (valid) folder name. */
-export function normalizeSandboxFolderName(raw: string): string {
-  return raw.trim();
-}
-
 // === internal ===
 
-// C0 controls, DEL, C1 controls — built via RegExp so the source file
-// contains no raw control bytes.
+// biome-ignore-start lint/suspicious/noControlCharactersInRegex: rejecting control characters is the point
+// C0 controls, DEL, C1 controls.
 const CONTROL_CHARS_RE = /[\u0000-\u001F\u007F-\u009F]/;
+// biome-ignore-end lint/suspicious/noControlCharactersInRegex: see above

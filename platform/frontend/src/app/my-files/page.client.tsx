@@ -3,6 +3,7 @@
 import { ChevronRight, Download, FolderKanban, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
+import { FilePreviewSheet } from "@/components/chat/file-preview";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { PageLayout } from "@/components/page-layout";
 import {
@@ -38,6 +39,7 @@ function MyFilesList() {
   const [pendingDelete, setPendingDelete] = useState<SandboxFileRow | null>(
     null,
   );
+  const [previewing, setPreviewing] = useState<SandboxFileRow | null>(null);
 
   return (
     <PageLayout title="My Files" description="">
@@ -56,6 +58,18 @@ function MyFilesList() {
         confirmLabel="Delete"
         pendingLabel="Deleting..."
       />
+      <FilePreviewSheet
+        file={
+          previewing?.id
+            ? {
+                name: previewing.filename,
+                mimeType: previewing.mimeType,
+                contentUrl: sandboxArtifactUrl(previewing.id),
+              }
+            : null
+        }
+        onClose={() => setPreviewing(null)}
+      />
       {groups.length === 0 ? (
         <p className="py-12 text-center text-sm text-muted-foreground">
           {isPending ? "Loading…" : "No files yet"}
@@ -71,6 +85,8 @@ function MyFilesList() {
                     file={file}
                     withBorder={i > 0}
                     onDelete={setPendingDelete}
+                    onPreview={setPreviewing}
+                    isPreviewing={previewing === file}
                   />
                 ))}
               </div>
@@ -79,6 +95,8 @@ function MyFilesList() {
                 key={group.folder}
                 group={group}
                 onDelete={setPendingDelete}
+                onPreview={setPreviewing}
+                previewing={previewing}
               />
             ),
           )}
@@ -94,9 +112,13 @@ function MyFilesList() {
 function ProjectGroup({
   group,
   onDelete,
+  onPreview,
+  previewing,
 }: {
   group: ReturnType<typeof groupSandboxFiles>[number];
   onDelete: (file: SandboxFileRow) => void;
+  onPreview: (file: SandboxFileRow) => void;
+  previewing: SandboxFileRow | null;
 }) {
   const [open, setOpen] = useState(true);
 
@@ -129,6 +151,8 @@ function ProjectGroup({
                 file={file}
                 withBorder={i > 0}
                 onDelete={onDelete}
+                onPreview={onPreview}
+                isPreviewing={previewing === file}
               />
             ))
           )}
@@ -142,16 +166,30 @@ function FileRow({
   file,
   withBorder,
   onDelete,
+  onPreview,
+  isPreviewing,
 }: {
   file: SandboxFileRow;
   withBorder: boolean;
   onDelete: (file: SandboxFileRow) => void;
+  onPreview: (file: SandboxFileRow) => void;
+  isPreviewing: boolean;
 }) {
   return (
     <div
-      className={`flex items-center gap-3 px-3 py-2 text-sm hover:bg-muted/50 ${withBorder ? "border-t" : ""}`}
+      className={`flex items-center gap-3 px-3 py-2 text-sm hover:bg-muted/50 ${withBorder ? "border-t" : ""} ${isPreviewing ? "bg-muted" : ""}`}
     >
-      <span className="min-w-0 flex-1 truncate">{file.filename}</span>
+      {file.id ? (
+        <button
+          type="button"
+          onClick={() => onPreview(file)}
+          className="min-w-0 flex-1 truncate text-left hover:underline"
+        >
+          {file.filename}
+        </button>
+      ) : (
+        <span className="min-w-0 flex-1 truncate">{file.filename}</span>
+      )}
       <span className="w-20 shrink-0 text-right text-muted-foreground">
         {formatBytes(file.sizeBytes)}
       </span>

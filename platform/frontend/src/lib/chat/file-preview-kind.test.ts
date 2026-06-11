@@ -49,3 +49,15 @@ describe("getFilePreviewKind", () => {
     ).toBe("unsupported");
   });
 });
+
+it("falls back to text for txt/log/json extensions when the mime is opaque", () => {
+  expect(getFilePreviewKind("application/octet-stream", "result (1).txt")).toBe(
+    "text",
+  );
+  expect(getFilePreviewKind("application/octet-stream", "run.log")).toBe(
+    "text",
+  );
+  expect(getFilePreviewKind("application/octet-stream", "data.json")).toBe(
+    "text",
+  );
+});

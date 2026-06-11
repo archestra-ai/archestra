@@ -1,10 +1,19 @@
 "use client";
 
-import { Download, Eye, Folder, Pencil, Trash2, Users } from "lucide-react";
+import {
+  Download,
+  Eye,
+  Folder,
+  MessageCircle,
+  Pencil,
+  Trash2,
+  Users,
+} from "lucide-react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
+import { FilePreviewSheet } from "@/components/chat/file-preview";
 import { NewChatComposer } from "@/components/chat/new-chat-composer";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { PageLayout } from "@/components/page-layout";
@@ -121,7 +130,7 @@ function ProjectDetail() {
         pendingLabel="Deleting..."
       />
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
+      <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
         <div className="space-y-6">
           <ProjectChatInput projectId={project.id} />
           <ChatsList conversations={conversations ?? []} />
@@ -177,23 +186,35 @@ function ChatsList({
           No chats yet — type above to start one.
         </p>
       ) : (
-        <div className="space-y-1.5">
+        <div className="space-y-2">
           {conversations.map((conv) => (
             <Link
               key={conv.id}
               href={`/chat/${conv.id}`}
-              className="flex items-center gap-2 rounded-lg border bg-card px-3 py-1.5 transition-colors hover:bg-muted/50"
+              className="flex items-center gap-3 rounded-lg border bg-card px-3 py-2.5 transition-colors hover:bg-muted/50"
             >
-              <span className="truncate text-sm">
-                {conv.title ?? "Untitled chat"}
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10">
+                <MessageCircle className="h-4 w-4 text-primary" aria-hidden />
               </span>
-              {conv.readOnly && (
-                <Badge variant="outline" className="shrink-0 gap-1">
-                  <Eye className="h-3 w-3" />
-                  {conv.authorName ?? "someone else"}
-                </Badge>
-              )}
-              <span className="ml-auto shrink-0 text-xs text-muted-foreground">
+              <span className="min-w-0 flex-1">
+                <span className="flex items-center gap-2">
+                  <span className="truncate text-sm font-medium">
+                    {conv.title ?? "Untitled chat"}
+                  </span>
+                  {conv.readOnly && (
+                    <Badge variant="outline" className="shrink-0 gap-1">
+                      <Eye className="h-3 w-3" />
+                      read-only
+                    </Badge>
+                  )}
+                </span>
+                <span className="block truncate text-xs text-muted-foreground">
+                  {conv.readOnly
+                    ? `by ${conv.authorName ?? "someone else"}`
+                    : "by you"}
+                </span>
+              </span>
+              <span className="shrink-0 text-xs text-muted-foreground">
                 {formatRelativeTimeFromNow(conv.lastMessageAt)}
               </span>
             </Link>
@@ -219,6 +240,11 @@ function ProjectFilesCard({
   const [pendingDelete, setPendingDelete] = useState<{
     id: string;
     filename: string;
+  } | null>(null);
+  const [previewing, setPreviewing] = useState<{
+    id: string;
+    filename: string;
+    mimeType: string;
   } | null>(null);
 
   return (
@@ -254,9 +280,25 @@ function ProjectFilesCard({
           {files.map((file, i) => (
             <div
               key={file.id ?? file.filename}
-              className={`flex items-center gap-2 px-3 py-2 text-sm hover:bg-muted/50 ${i > 0 ? "border-t" : ""}`}
+              className={`flex items-center gap-2 px-3 py-2 text-sm hover:bg-muted/50 ${i > 0 ? "border-t" : ""} ${previewing?.id === file.id ? "bg-muted" : ""}`}
             >
-              <span className="min-w-0 flex-1 truncate">{file.filename}</span>
+              {file.id ? (
+                <button
+                  type="button"
+                  onClick={() =>
+                    setPreviewing({
+                      id: file.id as string,
+                      filename: file.filename,
+                      mimeType: file.mimeType,
+                    })
+                  }
+                  className="min-w-0 flex-1 truncate text-left hover:underline"
+                >
+                  {file.filename}
+                </button>
+              ) : (
+                <span className="min-w-0 flex-1 truncate">{file.filename}</span>
+              )}
               <span className="shrink-0 text-xs text-muted-foreground">
                 {formatBytes(file.sizeBytes)}
               </span>
@@ -291,6 +333,18 @@ function ProjectFilesCard({
           ))}
         </div>
       )}
+      <FilePreviewSheet
+        file={
+          previewing
+            ? {
+                name: previewing.filename,
+                mimeType: previewing.mimeType,
+                contentUrl: sandboxArtifactUrl(previewing.id),
+              }
+            : null
+        }
+        onClose={() => setPreviewing(null)}
+      />
     </aside>
   );
 }

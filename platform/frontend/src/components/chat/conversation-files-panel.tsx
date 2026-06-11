@@ -17,13 +17,12 @@ import {
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { ConversationArtifactPanel } from "@/components/chat/conversation-artifact";
-import { Button } from "@/components/ui/button";
+import { FilePreview } from "@/components/chat/file-preview";
 import { useConversationFiles } from "@/lib/chat/chat.query";
 import {
   assembleFileSections,
   type ConversationFileItem,
 } from "@/lib/chat/conversation-files";
-import { getFilePreviewKind } from "@/lib/chat/file-preview-kind";
 import { printMarkdownElementAsPdf } from "@/lib/chat/print-markdown";
 import { cn } from "@/lib/utils";
 
@@ -310,206 +309,6 @@ function ArtifactRowActions({
   );
 }
 
-/** Content-only preview for a non-artifact file (the open row stays highlighted). */
-function FilePreview({
-  file,
-  onClose,
-}: {
-  file: ConversationFileItem;
-  onClose: () => void;
-}) {
-  const kind = getFilePreviewKind(file.mimeType, file.name);
-
-  return (
-    <div className="min-h-0 flex-1 overflow-auto">
-      {kind === "markdown" && (
-        <RemoteMarkdownPreview contentUrl={file.contentUrl} onClose={onClose} />
-      )}
-      {kind === "html" && <HtmlPreview contentUrl={file.contentUrl} />}
-      {kind === "image" && (
-        <div className="flex h-full items-center justify-center p-4">
-          <img
-            src={file.contentUrl}
-            alt={file.name}
-            className="max-h-full max-w-full object-contain"
-          />
-        </div>
-      )}
-      {(kind === "text" || kind === "csv") && (
-        <FileTextPreview
-          contentUrl={file.contentUrl}
-          asTable={kind === "csv"}
-        />
-      )}
-      {kind === "unsupported" && <UnsupportedPreview file={file} />}
-    </div>
-  );
-}
-
-/** Fetch a file's bytes as text from its content endpoint. */
-function useFileText(contentUrl: string): {
-  text: string | null;
-  failed: boolean;
-} {
-  const [text, setText] = useState<string | null>(null);
-  const [failed, setFailed] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-    setText(null);
-    setFailed(false);
-    fetch(contentUrl)
-      .then((r) => {
-        if (!r.ok) throw new Error(`status ${r.status}`);
-        return r.text();
-      })
-      .then((t) => {
-        if (!cancelled) setText(t);
-      })
-      .catch(() => {
-        if (!cancelled) setFailed(true);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [contentUrl]);
-
-  return { text, failed };
-}
-
-/** Markdown file served from a byte endpoint (an attachment or generated .md). */
-function RemoteMarkdownPreview({
-  contentUrl,
-  onClose,
-}: {
-  contentUrl: string;
-  onClose: () => void;
-}) {
-  const { text, failed } = useFileText(contentUrl);
-  if (failed) {
-    return (
-      <p className="p-4 text-xs text-muted-foreground">
-        Failed to load preview.
-      </p>
-    );
-  }
-  if (text === null) {
-    return <p className="p-4 text-xs text-muted-foreground">Loading…</p>;
-  }
-  return (
-    <ConversationArtifactPanel
-      artifact={text}
-      isOpen
-      onToggle={onClose}
-      embedded
-      hideHeader
-    />
-  );
-}
-
-/**
- * Render an HTML file in a sandboxed iframe. `allow-scripts` WITHOUT
- * `allow-same-origin` puts the document in an opaque origin (the same isolation
- * Claude uses for artifacts): scripts run so interactive HTML works, but it
- * cannot read the app's cookies/session/localStorage, reach the parent DOM, or
- * call same-origin APIs as the user. Served bytes are octet-stream, so we fetch
- * the text and inline it via `srcDoc` rather than navigating the iframe to it.
- */
-function HtmlPreview({ contentUrl }: { contentUrl: string }) {
-  const { text, failed } = useFileText(contentUrl);
-  if (failed) {
-    return (
-      <p className="p-4 text-xs text-muted-foreground">
-        Failed to load preview.
-      </p>
-    );
-  }
-  if (text === null) {
-    return <p className="p-4 text-xs text-muted-foreground">Loading…</p>;
-  }
-  return (
-    <iframe
-      title="HTML preview"
-      srcDoc={text}
-      sandbox="allow-scripts"
-      referrerPolicy="no-referrer"
-      className="h-full w-full border-0 bg-white"
-    />
-  );
-}
-
-function FileTextPreview({
-  contentUrl,
-  asTable,
-}: {
-  contentUrl: string;
-  asTable: boolean;
-}) {
-  const { text, failed } = useFileText(contentUrl);
-
-  if (failed) {
-    return (
-      <p className="p-4 text-xs text-muted-foreground">
-        Failed to load preview.
-      </p>
-    );
-  }
-  if (text === null) {
-    return <p className="p-4 text-xs text-muted-foreground">Loading…</p>;
-  }
-  if (asTable) {
-    // Naive CSV: split on newlines/commas. Good enough for a preview; does not
-    // handle quoted commas or embedded newlines.
-    const rows = text
-      .trim()
-      .split(/\r?\n/)
-      .map((line) => line.split(","));
-    return (
-      <div className="overflow-auto p-2">
-        <table className="w-full border-collapse text-xs">
-          <tbody>
-            {rows.map((cells, r) => (
-              // biome-ignore lint/suspicious/noArrayIndexKey: static CSV preview; rows never reorder
-              <tr key={`row-${r}`} className="border-b">
-                {cells.map((c, ci) => (
-                  // biome-ignore lint/suspicious/noArrayIndexKey: static CSV preview; cells never reorder
-                  <td key={`cell-${r}-${ci}`} className="border-r px-2 py-1">
-                    {c}
-                  </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    );
-  }
-  return (
-    <pre className="whitespace-pre-wrap break-words p-4 text-xs">{text}</pre>
-  );
-}
-
-function UnsupportedPreview({ file }: { file: ConversationFileItem }) {
-  return (
-    <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
-      <span className="rounded-md border px-3 py-2 text-xs font-semibold uppercase text-muted-foreground">
-        {fileTag(file.name)}
-      </span>
-      <p className="text-xs text-muted-foreground">
-        Preview isn't available for this file type.
-      </p>
-      {file.contentUrl && (
-        <Button asChild variant="secondary" size="sm" className="gap-1">
-          <a href={file.contentUrl} download={file.name}>
-            <Download className="h-4 w-4" />
-            Download
-          </a>
-        </Button>
-      )}
-    </div>
-  );
-}
-
 /** Maps a file extension to a lucide category icon. */
 const EXTENSION_ICONS: Record<string, LucideIcon> = {
   // images
@@ -613,14 +412,4 @@ function FileRowIcon({ name, mimeType }: { name: string; mimeType: string }) {
   return (
     <Icon className="h-5 w-5 shrink-0 text-muted-foreground" aria-hidden />
   );
-}
-
-/** Short uppercase tag from a filename extension (e.g. "chart.png" → "PNG"). */
-function fileTag(name: string): string {
-  const dot = name.lastIndexOf(".");
-  if (dot <= 0 || dot === name.length - 1) return "FILE";
-  return name
-    .slice(dot + 1)
-    .toUpperCase()
-    .slice(0, 4);
 }

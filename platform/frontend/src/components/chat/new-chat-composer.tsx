@@ -224,11 +224,11 @@ export function NewChatComposer({
 
   if (!agentId) return null;
 
-  // ArchestraPromptInput's root is `size-full justify-end` (it docks to the
-  // bottom of /chat). Outside that layout the stretch turns into a large top
-  // gap, so neutralize the height here.
   return (
-    <div className="[&>div]:!h-auto">
+    // auto-height wrapper: ArchestraPromptInput's own `size-full justify-end`
+    // shell (built for the bottom-anchored /chat layout) collapses against it
+    // instead of stretching to the surrounding column.
+    <div className="w-full">
       <ArchestraPromptInput
         onSubmit={(message) => {
           const text = message.text?.trim();

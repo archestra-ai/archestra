@@ -31,14 +31,17 @@ class SkillSandboxFileModel {
   static async createArtifact(
     artifact: Omit<
       InsertSkillSandboxFile,
-      "kind" | "data" | "storageProvider" | "objectKey"
+      "kind" | "data" | "storageProvider" | "objectKey" | "folderId"
     > & {
       data: Buffer;
       /** Sandbox owner — names the per-user storage folder. Not a column. */
       userId: string;
+      /** PFS folder to export into; both halves resolved by the caller. */
+      folderId?: string | null;
+      folderName?: string | null;
     },
   ): Promise<SkillSandboxFile> {
-    const { userId, ...fileFields } = artifact;
+    const { userId, folderId, folderName, ...fileFields } = artifact;
     // id is generated app-side (not by the column default) because the
     // storage adapter needs it before the insert: the filesystem provider
     // uses it as the collision fallback for the object key.
@@ -49,19 +52,34 @@ class SkillSandboxFileModel {
       kind: "artifact",
       filename: storageFilename({ originalName: null, path: fileFields.path }),
       data: fileFields.data,
+      folder: folderName ?? null,
     });
-    const [row] = await db
-      .insert(schema.skillSandboxFilesTable)
-      .values({
-        ...fileFields,
-        id: fileId,
-        kind: "artifact",
-        data: stored.dbData,
-        storageProvider: stored.provider,
-        objectKey: stored.objectKey,
-      })
-      .returning();
+    let row: SkillSandboxFile | undefined;
+    try {
+      [row] = await db
+        .insert(schema.skillSandboxFilesTable)
+        .values({
+          ...fileFields,
+          id: fileId,
+          kind: "artifact",
+          data: stored.dbData,
+          storageProvider: stored.provider,
+          objectKey: stored.objectKey,
+          folderId: folderId ?? null,
+        })
+        .returning();
+    } catch (error) {
+      // the bytes may already sit in the user's outbox (filesystem provider);
+      // remove them so a failed insert leaves no orphan file behind.
+      await getSandboxFileStorage()
+        .delete(stored)
+        .catch(() => {});
+      throw error;
+    }
     if (!row) {
+      await getSandboxFileStorage()
+        .delete(stored)
+        .catch(() => {});
       throw new Error("failed to insert sandbox artifact");
     }
     return normalizeByteaField(row, "data");
@@ -209,6 +227,69 @@ class SkillSandboxFileModel {
       folderId: row.folderId,
       folderName: row.folderName,
     }));
+  }
+
+  /** Fetch an uploaded input (kind 'upload') by id, bytes normalized. */
+  static async findUploadById(id: string): Promise<SkillSandboxFile | null> {
+    const [row] = await db
+      .select()
+      .from(schema.skillSandboxFilesTable)
+      .where(
+        and(
+          eq(schema.skillSandboxFilesTable.id, id),
+          eq(schema.skillSandboxFilesTable.kind, "upload"),
+        ),
+      );
+    return row ? normalizeByteaField(row, "data") : null;
+  }
+
+  /**
+   * Uploads a conversation's sandboxes pulled in from the user's PFS
+   * (`origin = 'x_file'`), metadata only, oldest first — what the Files panel
+   * shows as "From X-Files". Org-scoped through the owning sandbox.
+   */
+  static async listXFileUploadsByConversationId(params: {
+    conversationId: string;
+    organizationId: string;
+  }): Promise<
+    {
+      id: string;
+      path: string;
+      originalName: string | null;
+      mimeType: string;
+      sizeBytes: number;
+      createdAt: Date;
+    }[]
+  > {
+    return db
+      .select({
+        id: schema.skillSandboxFilesTable.id,
+        path: schema.skillSandboxFilesTable.path,
+        originalName: schema.skillSandboxFilesTable.originalName,
+        mimeType: schema.skillSandboxFilesTable.mimeType,
+        sizeBytes: schema.skillSandboxFilesTable.sizeBytes,
+        createdAt: schema.skillSandboxFilesTable.createdAt,
+      })
+      .from(schema.skillSandboxFilesTable)
+      .innerJoin(
+        schema.skillSandboxesTable,
+        eq(
+          schema.skillSandboxFilesTable.sandboxId,
+          schema.skillSandboxesTable.id,
+        ),
+      )
+      .where(
+        and(
+          eq(schema.skillSandboxFilesTable.kind, "upload"),
+          eq(schema.skillSandboxFilesTable.origin, "x_file"),
+          eq(schema.skillSandboxesTable.conversationId, params.conversationId),
+          eq(schema.skillSandboxesTable.organizationId, params.organizationId),
+        ),
+      )
+      .orderBy(
+        asc(schema.skillSandboxFilesTable.createdAt),
+        asc(schema.skillSandboxFilesTable.id),
+      );
   }
 
   /**

@@ -8,6 +8,7 @@ import {
 } from "@/skills-sandbox/file-storage";
 import type {
   InsertSkillSandboxCommand,
+  SandboxFileOrigin,
   SkillSandboxCommand,
   SkillSandboxFile,
   SkillSandboxSkillMount,
@@ -31,6 +32,8 @@ interface UploadInput {
    * stage is a no-op that returns `null` instead of a duplicate replay event.
    */
   sourceAttachmentId?: string | null;
+  /** How the upload entered the sandbox; 'x_file' = copied from the user's PFS. */
+  origin?: SandboxFileOrigin | null;
 }
 
 /** Identity of the skill version a mount pins. */
@@ -127,6 +130,7 @@ class SkillSandboxReplayEventModel {
           mimeType: upload.mimeType,
           originalName: upload.originalName,
           sourceAttachmentId: upload.sourceAttachmentId ?? null,
+          origin: upload.origin ?? null,
           sizeBytes: upload.sizeBytes,
           data: stored.dbData,
           storageProvider: stored.provider,

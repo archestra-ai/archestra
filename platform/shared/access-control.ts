@@ -1256,6 +1256,7 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.SetProjectShare]: { project: ["update"] },
   [RouteId.DeleteProject]: { project: ["delete"] },
   [RouteId.GetProjectConversations]: { project: ["read"] },
+  [RouteId.GetProjectFiles]: { project: ["read"] },
   [RouteId.GetSkillSandboxUpload]: { sandbox: ["execute"] },
   [RouteId.DeleteSkillSandboxArtifact]: { sandbox: ["execute"] },
 

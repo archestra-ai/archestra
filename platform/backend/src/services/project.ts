@@ -7,12 +7,14 @@ import {
 } from "@/models";
 import { getSandboxFileStorage } from "@/skills-sandbox/file-storage";
 import { validateSandboxFolderName } from "@/skills-sandbox/folder-name";
+import { skillSandboxArtifactService } from "@/skills-sandbox/skill-sandbox-artifact-service";
 import type {
   Project,
   ProjectConversationItem,
   ProjectDetail,
   ProjectListItem,
   ProjectShareVisibility,
+  SandboxFileListItem,
 } from "@/types";
 import { ApiError } from "@/types";
 
@@ -163,6 +165,27 @@ class ProjectService {
   }): Promise<void> {
     await this.requireOwned(params);
     await ProjectModel.delete(params.id);
+  }
+
+  /**
+   * Files in the project's result folder. The listing runs in the FOLDER
+   * OWNER's namespace — project read access (not file ownership) is the
+   * authorization, mirroring the in-chat tool scope.
+   */
+  async listFiles(params: {
+    id: string;
+    organizationId: string;
+    userId: string;
+  }): Promise<SandboxFileListItem[]> {
+    const project = await this.requireReadable(params);
+    const folders = await SkillSandboxFolderModel.findByIds([project.folderId]);
+    const folderName = folders.get(project.folderId)?.name;
+    if (!folderName) return [];
+    const { files } = await skillSandboxArtifactService.listAllForUser({
+      organizationId: params.organizationId,
+      userId: project.userId,
+    });
+    return files.filter((f) => f.folder === folderName);
   }
 
   async listConversations(params: {

@@ -8,6 +8,7 @@ import {
   ProjectDetailSchema,
   ProjectListItemSchema,
   ProjectShareVisibilitySchema,
+  SandboxFileListItemSchema,
 } from "@/types";
 
 /**
@@ -160,6 +161,23 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
       await projectService.delete({ id, organizationId, userId: user.id });
       return { ok: true as const };
     },
+  );
+
+  fastify.get(
+    "/api/projects/:id/files",
+    {
+      schema: {
+        operationId: RouteId.GetProjectFiles,
+        description:
+          "Files in the project's result folder, readable by anyone with " +
+          "project access.",
+        tags: ["Projects"],
+        params: z.object({ id: z.string().uuid() }),
+        response: constructResponseSchema(z.array(SandboxFileListItemSchema)),
+      },
+    },
+    async ({ params: { id }, organizationId, user }) =>
+      projectService.listFiles({ id, organizationId, userId: user.id }),
   );
 
   fastify.get(

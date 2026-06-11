@@ -49041,6 +49041,97 @@ export type SetProjectShareResponses = {
 
 export type SetProjectShareResponse = SetProjectShareResponses[keyof SetProjectShareResponses];
 
+export type GetProjectFilesData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/projects/{id}/files';
+};
+
+export type GetProjectFilesErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetProjectFilesError = GetProjectFilesErrors[keyof GetProjectFilesErrors];
+
+export type GetProjectFilesResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string | null;
+        filename: string;
+        mimeType: string;
+        sizeBytes: number;
+        createdAt: string;
+        downloadable: boolean;
+        folder: string | null;
+    }>;
+};
+
+export type GetProjectFilesResponse = GetProjectFilesResponses[keyof GetProjectFilesResponses];
+
 export type GetProjectConversationsData = {
     body?: never;
     path: {

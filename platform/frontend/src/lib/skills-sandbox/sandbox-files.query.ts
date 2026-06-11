@@ -63,6 +63,8 @@ export function useDeleteSandboxFile() {
       toast.success("File deleted");
       queryClient.invalidateQueries({ queryKey: ["sandbox-files"] });
       queryClient.invalidateQueries({ queryKey: ["conversation-artifacts"] });
+      // project pages list the same files through their own endpoint
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
     },
   });
 }

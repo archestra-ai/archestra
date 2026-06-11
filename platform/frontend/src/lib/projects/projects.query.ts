@@ -8,6 +8,7 @@ const {
   deleteProject,
   getProject,
   getProjectConversations,
+  getProjectFiles,
   getProjects,
   setProjectShare,
   updateProject,
@@ -50,6 +51,25 @@ export function useProjectConversations(id: string | undefined) {
     enabled: !!id,
     queryFn: async () => {
       const { data, error } = await getProjectConversations({
+        path: { id: id as string },
+      });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data;
+    },
+  });
+}
+
+/** Files in the project's result folder; polled like the My Files page. */
+export function useProjectFiles(id: string | undefined) {
+  return useQuery({
+    queryKey: ["projects", id, "files"],
+    enabled: !!id,
+    refetchInterval: 5000,
+    queryFn: async () => {
+      const { data, error } = await getProjectFiles({
         path: { id: id as string },
       });
       if (error) {

@@ -99,3 +99,97 @@ describe("GET /api/projects + GET /api/projects/:id", () => {
     expect(list.json<unknown[]>()).toEqual([]);
   });
 });
+
+describe("GET /api/projects/:id/files", () => {
+  let app: FastifyInstanceWithZod;
+  let organizationId: string;
+  let owner: User;
+  let actingUser: User;
+
+  beforeEach(async ({ makeOrganization, makeUser }) => {
+    organizationId = (await makeOrganization()).id;
+    owner = await makeUser();
+    actingUser = owner;
+
+    app = createFastifyInstance();
+    app.addHook("onRequest", async (request) => {
+      (request as typeof request & { organizationId: string }).organizationId =
+        organizationId;
+      (request as typeof request & { user: User }).user = actingUser;
+    });
+    const { default: projectRoutes } = await import("./project.routes");
+    await app.register(projectRoutes);
+  });
+
+  afterEach(async () => {
+    await app.close();
+  });
+
+  test("members of a shared project see the result-folder files; outsiders 404", async ({
+    makeUser,
+    makeMember,
+  }) => {
+    const project = await projectService.create({
+      organizationId,
+      userId: owner.id,
+      name: "filed",
+      description: null,
+    });
+    await ProjectShareModel.upsert({
+      projectId: project.id,
+      organizationId,
+      createdByUserId: owner.id,
+      visibility: "organization",
+      teamIds: [],
+    });
+
+    const { SkillSandboxFileModel, SkillSandboxModel } = await import(
+      "@/models"
+    );
+    const sandbox = await SkillSandboxModel.create({
+      organizationId,
+      userId: owner.id,
+      conversationId: null,
+      defaultCwd: "/sandbox",
+    });
+    await SkillSandboxFileModel.createArtifact({
+      sandboxId: sandbox.id,
+      userId: owner.id,
+      path: "/sandbox/in-folder.txt",
+      mimeType: "text/plain",
+      originalName: null,
+      sizeBytes: 2,
+      data: Buffer.from("in"),
+      folderId: project.folderId,
+      folderName: "filed",
+    });
+    await SkillSandboxFileModel.createArtifact({
+      sandboxId: sandbox.id,
+      userId: owner.id,
+      path: "/sandbox/elsewhere.txt",
+      mimeType: "text/plain",
+      originalName: null,
+      sizeBytes: 3,
+      data: Buffer.from("out"),
+    });
+
+    const member = await makeUser({ email: "proj-files-member@test.com" });
+    await makeMember(member.id, organizationId, {});
+    actingUser = member;
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/projects/${project.id}/files`,
+    });
+    expect(response.statusCode).toBe(200);
+    const files = response.json<Array<{ filename: string }>>();
+    expect(files.map((f) => f.filename)).toEqual(["in-folder.txt"]);
+
+    await ProjectShareModel.remove(project.id);
+    const denied = await app.inject({
+      method: "GET",
+      url: `/api/projects/${project.id}/files`,
+    });
+    expect(denied.statusCode).toBe(404);
+  });
+});

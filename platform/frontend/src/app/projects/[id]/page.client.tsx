@@ -1,13 +1,34 @@
 "use client";
 
-import { Eye, Folder, MessageSquarePlus, Trash2 } from "lucide-react";
+import {
+  ArrowUp,
+  Download,
+  Eye,
+  Folder,
+  Pencil,
+  Trash2,
+  Users,
+} from "lucide-react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
+import { useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
+import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { PageLayout } from "@/components/page-layout";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import {
   Select,
   SelectContent,
@@ -15,12 +36,20 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import {
   useDeleteProject,
   useProject,
   useProjectConversations,
+  useProjectFiles,
   useSetProjectShare,
+  useUpdateProject,
 } from "@/lib/projects/projects.query";
+import {
+  formatBytes,
+  sandboxArtifactUrl,
+} from "@/lib/skills-sandbox/sandbox-file-preview";
+import { useDeleteSandboxFile } from "@/lib/skills-sandbox/sandbox-files.query";
 import { useTeams } from "@/lib/teams/team.query";
 
 export default function ProjectDetailPageClient() {
@@ -37,6 +66,7 @@ function ProjectDetail() {
   const { data: project, isPending } = useProject(id);
   const { data: conversations } = useProjectConversations(id);
   const deleteProject = useDeleteProject();
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   if (isPending) {
     return (
@@ -60,75 +90,53 @@ function ProjectDetail() {
   return (
     <PageLayout
       title={project.name}
-      description={project.description ?? "No description"}
+      description={project.description ?? ""}
       actionButton={
-        <div className="flex items-center gap-2">
-          {project.isOwner && (
+        project.isOwner ? (
+          <div className="flex items-center gap-1">
+            <EditDescriptionButton
+              projectId={project.id}
+              description={project.description}
+            />
             <Button
-              variant="outline"
-              onClick={async () => {
-                const ok = await deleteProject.mutateAsync({ id: project.id });
-                if (ok) router.push("/projects");
-              }}
-              disabled={deleteProject.isPending}
+              variant="ghost"
+              size="icon"
+              aria-label="Delete project"
+              onClick={() => setConfirmDelete(true)}
             >
-              <Trash2 className="mr-2 h-4 w-4" />
-              Delete
+              <Trash2 className="h-4 w-4" />
             </Button>
-          )}
-          <Button onClick={() => router.push(`/chat?project=${project.id}`)}>
-            <MessageSquarePlus className="mr-2 h-4 w-4" />
-            New chat
-          </Button>
-        </div>
+            <SharePopover projectId={project.id} />
+          </div>
+        ) : (
+          <Badge variant="secondary">Shared with you</Badge>
+        )
       }
     >
-      <div className="space-y-8">
-        <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
-          <span className="flex items-center gap-1">
-            <Folder className="h-4 w-4" aria-hidden />
-            Result folder: {project.folderName}
-          </span>
-          {!project.isOwner && (
-            <Badge variant="secondary">Shared with you</Badge>
-          )}
+      <DeleteConfirmDialog
+        open={confirmDelete}
+        onOpenChange={setConfirmDelete}
+        title={`Delete ${project.name}?`}
+        description="Chats and the result folder are kept — chats become ordinary conversations, the folder stays in My Files."
+        isPending={deleteProject.isPending}
+        onConfirm={async () => {
+          const ok = await deleteProject.mutateAsync({ id: project.id });
+          if (ok) router.push("/projects");
+        }}
+        confirmLabel="Delete"
+        pendingLabel="Deleting..."
+      />
+
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
+        <div className="space-y-6">
+          <ProjectChatInput projectId={project.id} />
+          <ChatsList conversations={conversations ?? []} />
         </div>
-
-        {project.isOwner && <ShareControls projectId={project.id} />}
-
-        <section>
-          <h2 className="mb-2 text-sm font-medium uppercase tracking-wide text-muted-foreground">
-            Chats
-          </h2>
-          {!conversations || conversations.length === 0 ? (
-            <p className="rounded-md border px-3 py-6 text-center text-sm text-muted-foreground">
-              No chats yet — start one with “New chat”.
-            </p>
-          ) : (
-            <div className="overflow-hidden rounded-md border">
-              {conversations.map((conv, i) => (
-                <Link
-                  key={conv.id}
-                  href={`/chat/${conv.id}`}
-                  className={`flex items-center gap-3 px-3 py-2 text-sm hover:bg-muted/50 ${i > 0 ? "border-t" : ""}`}
-                >
-                  <span className="min-w-0 flex-1 truncate">
-                    {conv.title ?? "Untitled chat"}
-                  </span>
-                  {conv.readOnly && (
-                    <Badge variant="outline" className="gap-1">
-                      <Eye className="h-3 w-3" />
-                      {conv.authorName ?? "someone else"} · read-only
-                    </Badge>
-                  )}
-                  <span className="hidden w-40 shrink-0 text-right text-xs text-muted-foreground sm:block">
-                    {new Date(conv.lastMessageAt).toLocaleString()}
-                  </span>
-                </Link>
-              ))}
-            </div>
-          )}
-        </section>
+        <ProjectFilesCard
+          projectId={project.id}
+          folderName={project.folderName}
+          canDelete={project.isOwner}
+        />
       </div>
     </PageLayout>
   );
@@ -136,7 +144,247 @@ function ProjectDetail() {
 
 // === internal components ===
 
-function ShareControls({ projectId }: { projectId: string }) {
+/** Prompt box that starts a chat IN this project on the /chat page. */
+function ProjectChatInput({ projectId }: { projectId: string }) {
+  const router = useRouter();
+  const [text, setText] = useState("");
+
+  const submit = () => {
+    const prompt = text.trim();
+    if (!prompt) return;
+    router.push(
+      `/chat?project=${projectId}&user_prompt=${encodeURIComponent(prompt)}`,
+    );
+  };
+
+  return (
+    <div className="relative rounded-xl border bg-background shadow-sm focus-within:ring-1 focus-within:ring-ring">
+      <Textarea
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && !e.shiftKey) {
+            e.preventDefault();
+            submit();
+          }
+        }}
+        placeholder="Start a chat in this project…"
+        rows={3}
+        className="resize-none border-0 bg-transparent pr-12 shadow-none focus-visible:ring-0"
+      />
+      <Button
+        size="icon"
+        className="absolute bottom-2 right-2 h-8 w-8 rounded-full"
+        onClick={submit}
+        disabled={!text.trim()}
+        aria-label="Start chat"
+      >
+        <ArrowUp className="h-4 w-4" />
+      </Button>
+    </div>
+  );
+}
+
+function ChatsList({
+  conversations,
+}: {
+  conversations: Array<{
+    id: string;
+    title: string | null;
+    authorName: string | null;
+    lastMessageAt: string;
+    readOnly: boolean;
+  }>;
+}) {
+  return (
+    <section>
+      <h2 className="mb-2 text-sm font-medium uppercase tracking-wide text-muted-foreground">
+        Chats
+      </h2>
+      {conversations.length === 0 ? (
+        <p className="rounded-md border px-3 py-6 text-center text-sm text-muted-foreground">
+          No chats yet — type above to start one.
+        </p>
+      ) : (
+        <div className="overflow-hidden rounded-md border">
+          {conversations.map((conv, i) => (
+            <Link
+              key={conv.id}
+              href={`/chat/${conv.id}`}
+              className={`flex items-center gap-3 px-3 py-2 text-sm hover:bg-muted/50 ${i > 0 ? "border-t" : ""}`}
+            >
+              <span className="min-w-0 flex-1 truncate">
+                {conv.title ?? "Untitled chat"}
+              </span>
+              {conv.readOnly && (
+                <Badge variant="outline" className="gap-1">
+                  <Eye className="h-3 w-3" />
+                  {conv.authorName ?? "someone else"} · read-only
+                </Badge>
+              )}
+              <span className="hidden w-40 shrink-0 text-right text-xs text-muted-foreground sm:block">
+                {new Date(conv.lastMessageAt).toLocaleString()}
+              </span>
+            </Link>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+/** The project's result folder, kept fresh while the page is open. */
+function ProjectFilesCard({
+  projectId,
+  folderName,
+  canDelete,
+}: {
+  projectId: string;
+  folderName: string;
+  canDelete: boolean;
+}) {
+  const { data: files } = useProjectFiles(projectId);
+  const deleteFile = useDeleteSandboxFile();
+  const [pendingDelete, setPendingDelete] = useState<{
+    id: string;
+    filename: string;
+  } | null>(null);
+
+  return (
+    <aside className="h-fit rounded-xl border">
+      <div className="flex items-center gap-2 border-b px-3 py-2">
+        <Folder className="h-4 w-4 text-muted-foreground" aria-hidden />
+        <span className="text-sm font-medium">Files</span>
+        <span className="ml-auto truncate text-xs text-muted-foreground">
+          {folderName}
+        </span>
+      </div>
+      <DeleteConfirmDialog
+        open={pendingDelete !== null}
+        onOpenChange={(open) => !open && setPendingDelete(null)}
+        title={`Delete ${pendingDelete?.filename ?? "file"}?`}
+        description="This permanently removes the file from the project's result folder."
+        isPending={deleteFile.isPending}
+        onConfirm={async () => {
+          if (pendingDelete) {
+            await deleteFile.mutateAsync({ id: pendingDelete.id });
+            setPendingDelete(null);
+          }
+        }}
+        confirmLabel="Delete"
+        pendingLabel="Deleting..."
+      />
+      {!files || files.length === 0 ? (
+        <p className="px-3 py-6 text-center text-sm text-muted-foreground">
+          Results the agent saves in this project land here.
+        </p>
+      ) : (
+        <div>
+          {files.map((file, i) => (
+            <div
+              key={file.id ?? file.filename}
+              className={`flex items-center gap-2 px-3 py-2 text-sm hover:bg-muted/50 ${i > 0 ? "border-t" : ""}`}
+            >
+              <span className="min-w-0 flex-1 truncate">{file.filename}</span>
+              <span className="shrink-0 text-xs text-muted-foreground">
+                {formatBytes(file.sizeBytes)}
+              </span>
+              {file.id && (
+                <>
+                  <a
+                    href={sandboxArtifactUrl(file.id)}
+                    download={file.filename}
+                    className="text-muted-foreground hover:text-foreground"
+                    aria-label={`Download ${file.filename}`}
+                  >
+                    <Download className="h-4 w-4" />
+                  </a>
+                  {canDelete && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setPendingDelete({
+                          id: file.id as string,
+                          filename: file.filename,
+                        })
+                      }
+                      className="text-muted-foreground hover:text-destructive"
+                      aria-label={`Delete ${file.filename}`}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  )}
+                </>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </aside>
+  );
+}
+
+function EditDescriptionButton({
+  projectId,
+  description,
+}: {
+  projectId: string;
+  description: string | null;
+}) {
+  const updateProject = useUpdateProject();
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState(description ?? "");
+
+  return (
+    <>
+      <Button
+        variant="ghost"
+        size="icon"
+        aria-label="Edit description"
+        onClick={() => {
+          setDraft(description ?? "");
+          setOpen(true);
+        }}
+      >
+        <Pencil className="h-4 w-4" />
+      </Button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit description</DialogTitle>
+          </DialogHeader>
+          <Textarea
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            rows={4}
+            maxLength={4096}
+            placeholder="What is this project about?"
+          />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              disabled={updateProject.isPending}
+              onClick={async () => {
+                const ok = await updateProject.mutateAsync({
+                  id: projectId,
+                  description: draft.trim() || null,
+                });
+                if (ok) setOpen(false);
+              }}
+            >
+              Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
+/** Compact share control: a button summarizing visibility, details in a popover. */
+function SharePopover({ projectId }: { projectId: string }) {
   const { data: project } = useProject(projectId);
   const { data: teams } = useTeams();
   const setShare = useSetProjectShare();
@@ -144,62 +392,81 @@ function ShareControls({ projectId }: { projectId: string }) {
   if (!project) return null;
   const visibility = project.visibility ?? "none";
   const shareTeamIds = project.shareTeamIds ?? [];
+  const label =
+    visibility === "organization"
+      ? "Shared · Org"
+      : visibility === "team"
+        ? `Shared · ${shareTeamIds.length} team${shareTeamIds.length === 1 ? "" : "s"}`
+        : "Share";
 
   return (
-    <section className="max-w-md space-y-3 rounded-md border p-4">
-      <Label className="text-sm font-medium">Sharing</Label>
-      <Select
-        value={visibility}
-        onValueChange={(value) =>
-          setShare.mutate({
-            id: projectId,
-            visibility: value as "organization" | "team" | "none",
-            teamIds: value === "team" ? shareTeamIds : [],
-          })
-        }
-      >
-        <SelectTrigger>
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="none">Only me</SelectItem>
-          <SelectItem value="organization">Whole organization</SelectItem>
-          <SelectItem value="team">Specific teams</SelectItem>
-        </SelectContent>
-      </Select>
-      {visibility === "team" && (
-        <div className="space-y-1">
-          {(teams ?? []).map((team) => {
-            const checked = shareTeamIds.includes(team.id);
-            return (
-              <label key={team.id} className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={checked}
-                  onChange={() =>
-                    setShare.mutate({
-                      id: projectId,
-                      visibility: "team",
-                      teamIds: checked
-                        ? shareTeamIds.filter((id) => id !== team.id)
-                        : [...shareTeamIds, team.id],
-                    })
-                  }
-                />
-                {team.name}
-              </label>
-            );
-          })}
-          {(teams ?? []).length === 0 && (
-            <p className="text-xs text-muted-foreground">No teams exist yet.</p>
-          )}
-        </div>
-      )}
-      <p className="text-xs text-muted-foreground">
-        People you share with can read every chat in the project and start their
-        own; writing in a chat stays with its author. Agent results land in the
-        shared project folder.
-      </p>
-    </section>
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button variant="outline" size="sm" className="gap-1.5">
+          <Users className="h-4 w-4" />
+          {label}
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-72 space-y-3">
+        <p className="text-sm font-medium">Who can see this project</p>
+        <Select
+          value={visibility}
+          onValueChange={(value) =>
+            setShare.mutate({
+              id: projectId,
+              visibility: value as "organization" | "team" | "none",
+              teamIds: value === "team" ? shareTeamIds : [],
+            })
+          }
+        >
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="none">Only me</SelectItem>
+            <SelectItem value="organization">Whole organization</SelectItem>
+            <SelectItem value="team">Specific teams</SelectItem>
+          </SelectContent>
+        </Select>
+        {visibility === "team" && (
+          <div className="space-y-1">
+            {(teams ?? []).map((team) => {
+              const checked = shareTeamIds.includes(team.id);
+              return (
+                <label
+                  key={team.id}
+                  className="flex items-center gap-2 text-sm"
+                >
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={() =>
+                      setShare.mutate({
+                        id: projectId,
+                        visibility: "team",
+                        teamIds: checked
+                          ? shareTeamIds.filter((t) => t !== team.id)
+                          : [...shareTeamIds, team.id],
+                      })
+                    }
+                  />
+                  {team.name}
+                </label>
+              );
+            })}
+            {(teams ?? []).length === 0 && (
+              <p className="text-xs text-muted-foreground">
+                No teams exist yet.
+              </p>
+            )}
+          </div>
+        )}
+        <p className="text-xs text-muted-foreground">
+          People you share with can read every chat, start their own, and work
+          with the result folder through chats. Writing in a chat stays with its
+          author.
+        </p>
+      </PopoverContent>
+    </Popover>
   );
 }

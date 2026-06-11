@@ -67,7 +67,10 @@ import { ngrokTunnelManager } from "@/ngrok-tunnel-manager";
 import { initializeObservabilityMetrics } from "@/observability";
 import { enrichOpenApiWithRbac } from "@/openapi/enrich-openapi-with-rbac";
 import { activeChatRunService } from "@/services/active-chat-run";
-import { APP_SDK_PATH } from "@/services/apps/app-sdk-injection";
+import {
+  APP_BASE_CSS_PATH,
+  APP_SDK_PATH,
+} from "@/services/apps/app-sdk-injection";
 import { instanceAnalyticsService } from "@/services/instance-analytics";
 import { systemKeyManager } from "@/services/system-key-manager";
 import { skillSandboxRuntimeService } from "@/skills-sandbox/skill-sandbox-runtime-service";
@@ -735,6 +738,29 @@ const loadArchestraAppSdk = (): string | null => {
 const archestraAppSdk = loadArchestraAppSdk();
 
 /**
+ * Load the platform baseline stylesheet injected into every owned app at serve
+ * time (see services/apps/app-sdk-injection.ts) so it can be served
+ * same-deployment under /_sandbox/. Returns null (non-fatal) if unreadable.
+ */
+const loadArchestraAppBaseCss = (): string | null => {
+  const cssPath = path.join(
+    path.dirname(config.mcpSandbox.filePath),
+    "archestra-app-base.css",
+  );
+  try {
+    return readFileSync(cssPath, "utf-8");
+  } catch (err) {
+    logger.warn(
+      { err, cssPath },
+      "Archestra app base stylesheet not found — /_sandbox/archestra-app-base.css will not be registered",
+    );
+    return null;
+  }
+};
+
+const archestraAppBaseCss = loadArchestraAppBaseCss();
+
+/**
  * Register the sandbox proxy route on the main Fastify instance.
  *
  * Serves the sandbox proxy HTML under /_sandbox/ with frame-ancestors header.
@@ -811,6 +837,17 @@ const registerSandboxRoute = (
       void reply.header("Cache-Control", "public, max-age=3600");
       void reply.type("text/javascript");
       return reply.send(archestraAppSdk);
+    });
+  }
+
+  // The platform baseline stylesheet, loaded by the <link> injected into every
+  // owned app at serve time. Same delivery posture as the SDK above.
+  if (archestraAppBaseCss) {
+    fastify.get(APP_BASE_CSS_PATH, async (_request, reply) => {
+      void reply.header("Access-Control-Allow-Origin", "*");
+      void reply.header("Cache-Control", "public, max-age=3600");
+      void reply.type("text/css");
+      return reply.send(archestraAppBaseCss);
     });
   }
 };

@@ -1,4 +1,8 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, test } from "vitest";
+import { getAppTemplates } from "@/app-templates";
+import { APP_HTML_MAX_BYTES } from "@/types/app";
 import {
   APP_PLATFORM_CSP,
   buildValidatedVersionPayload,
@@ -79,5 +83,59 @@ describe("buildValidatedVersionPayload", () => {
     });
     expect(warnings).toHaveLength(1);
     expect(warnings[0]).toContain("no <head> or <html>");
+  });
+
+  test("rejects html that <link>s the platform stylesheet itself", () => {
+    expect(() =>
+      buildValidatedVersionPayload({
+        html: '<html><head><link rel="stylesheet" href="/_sandbox/archestra-app-base.css"></head><body/></html>',
+      }),
+    ).toThrow(/must not load the platform stylesheet/);
+  });
+
+  test("a whitespace-spliced href cannot slip the self-link past", () => {
+    expect(() =>
+      buildValidatedVersionPayload({
+        html: '<html><head><link rel="stylesheet" href="/_sandbox/archestra-app-\n base.css"></head><body/></html>',
+      }),
+    ).toThrow(/must not load the platform stylesheet/);
+  });
+
+  test("an unrelated stylesheet link is allowed", () => {
+    const { warnings } = buildValidatedVersionPayload({
+      html: '<html><head><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/normalize.css"></head><body/></html>',
+    });
+    expect(warnings).toEqual([]);
+  });
+
+  test("rejects html over the byte cap", () => {
+    expect(() =>
+      buildValidatedVersionPayload({
+        html: `<html><head></head><body>${"z".repeat(APP_HTML_MAX_BYTES)}</body></html>`,
+      }),
+    ).toThrow(/byte limit/);
+  });
+});
+
+describe("starter templates pass the save gate", () => {
+  test.each(
+    getAppTemplates().map((t) => [t.id, t.html] as const),
+  )("%s validates with no warnings (vars resolve against the base sheet)", (_id, html) => {
+    const { warnings } = buildValidatedVersionPayload({ html });
+    expect(warnings).toEqual([]);
+  });
+
+  test("every CSS variable a template references is defined in the base sheet", () => {
+    const baseCss = readFileSync(
+      join(__dirname, "../../static/archestra-app-base.css"),
+      "utf-8",
+    );
+    const defined = new Set(baseCss.match(/--[\w-]+(?=\s*:)/g) ?? []);
+    for (const { id, html } of getAppTemplates()) {
+      for (const ref of html.match(/var\(\s*(--[\w-]+)/g) ?? []) {
+        const name = ref.replace(/var\(\s*/, "");
+        expect(defined, `${id} references undefined ${name}`).toContain(name);
+      }
+    }
   });
 });

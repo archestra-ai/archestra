@@ -13,15 +13,14 @@ const html = `<!DOCTYPE html>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Notes</title>
+  <!-- Theme variables, element defaults and .arch-* components come from the
+       platform baseline stylesheet; this app adds only its own layout. -->
   <style>
-    body { font-family: var(--font-sans, system-ui, sans-serif); margin: 0; padding: 2rem; color: var(--color-text-primary, #111); }
-    h1 { font-size: 1.25rem; margin: 0 0 1rem; }
     form { display: flex; flex-direction: column; gap: 0.75rem; max-width: 32rem; }
-    textarea { font: inherit; padding: 0.5rem; border: 1px solid var(--color-border-primary, #ccc); border-radius: var(--border-radius-md, 6px); min-height: 6rem; }
-    button { font: inherit; padding: 0.5rem 1rem; border: none; border-radius: var(--border-radius-md, 6px); background: var(--color-background-inverse, #111); color: var(--color-text-inverse, #fff); cursor: pointer; align-self: flex-start; }
-    button:disabled { opacity: 0.5; cursor: default; }
-    #status { color: var(--color-text-secondary, #666); font-size: 0.875rem; min-height: 1.25rem; }
-    #status[data-error="true"] { color: var(--color-text-danger, #c00); }
+    textarea { min-height: 6rem; }
+    button { align-self: flex-start; }
+    #status { color: var(--color-text-secondary); font-size: 0.875rem; min-height: 1.25rem; }
+    #status[data-error="true"] { color: var(--color-text-danger); }
   </style>
 </head>
 <body>

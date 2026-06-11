@@ -14,6 +14,10 @@ import { type AppSdkContext, injectAppSdk } from "./app-sdk-injection";
 // from the module (not exported — production code never needs them).
 const BOOTSTRAP_MARKER = "data-archestra-app-bootstrap";
 const SDK_MARKER = "data-archestra-app-sdk";
+const BASE_CSS_MARKER = "data-archestra-app-base-css";
+// The platform stylesheet link leads the injection (first in <head>), so it sits
+// where the bootstrap script used to, before it and the SDK script.
+const BASE_CSS_LINK = `<link rel="stylesheet" href="/_sandbox/archestra-app-base.css" ${BASE_CSS_MARKER}>`;
 
 const countOccurrences = (haystack: string, needle: string) =>
   haystack.split(needle).length - 1;
@@ -80,12 +84,19 @@ describe("the Apps SDK static file", () => {
 });
 
 describe("injectAppSdk", () => {
-  test("injects bootstrap before the SDK script tag, exactly once", () => {
+  test("injects base stylesheet, then bootstrap, then SDK — each exactly once", () => {
     const result = injectAppSdk(COMPLETE_DOC, CONTEXT);
-    expect(result).toContain(`<head><script ${BOOTSTRAP_MARKER}>`);
+    expect(result).toContain(
+      `<head>${BASE_CSS_LINK}<script ${BOOTSTRAP_MARKER}>`,
+    );
+    expect(countOccurrences(result, BASE_CSS_MARKER)).toBe(1);
     expect(countOccurrences(result, BOOTSTRAP_MARKER)).toBe(1);
     expect(countOccurrences(result, SDK_MARKER)).toBe(1);
-    // the SDK reads the context global at parse time — bootstrap must precede it
+    // base CSS leads the cascade; the SDK reads the context global at parse time
+    // so the bootstrap must precede the SDK script.
+    expect(result.indexOf(BASE_CSS_MARKER)).toBeLessThan(
+      result.indexOf(BOOTSTRAP_MARKER),
+    );
     expect(result.indexOf(BOOTSTRAP_MARKER)).toBeLessThan(
       result.indexOf(SDK_MARKER),
     );
@@ -123,7 +134,9 @@ describe("injectAppSdk", () => {
 
   test("injects after uppercase <HEAD>", () => {
     const result = injectAppSdk("<HTML><HEAD></HEAD><BODY/></HTML>", CONTEXT);
-    expect(result).toContain(`<HEAD><script ${BOOTSTRAP_MARKER}>`);
+    expect(result).toContain(
+      `<HEAD>${BASE_CSS_LINK}<script ${BOOTSTRAP_MARKER}>`,
+    );
   });
 
   test("injects after an attribute-bearing <head lang=...> (no duplicate head)", () => {
@@ -131,30 +144,36 @@ describe("injectAppSdk", () => {
       '<html lang="en"><head lang="en"></head><body/></html>',
       CONTEXT,
     );
-    expect(result).toContain(`<head lang="en"><script ${BOOTSTRAP_MARKER}>`);
+    expect(result).toContain(
+      `<head lang="en">${BASE_CSS_LINK}<script ${BOOTSTRAP_MARKER}>`,
+    );
     expect(countOccurrences(result, "<head")).toBe(1);
   });
 
   test("<header> does not count as a head anchor", () => {
     const result = injectAppSdk("<header>nav</header><p>fragment</p>", CONTEXT);
-    expect(result.startsWith(`<script ${BOOTSTRAP_MARKER}>`)).toBe(true);
+    expect(result.startsWith(BASE_CSS_LINK)).toBe(true);
   });
 
   test("creates a head when only <html> exists", () => {
     const result = injectAppSdk("<html><body>hi</body></html>", CONTEXT);
-    expect(result).toContain(`<html><head><script ${BOOTSTRAP_MARKER}>`);
+    expect(result).toContain(
+      `<html><head>${BASE_CSS_LINK}<script ${BOOTSTRAP_MARKER}>`,
+    );
     expect(result).toContain("</script></head>");
   });
 
   test("anchors on the doctype when no html/head tag exists", () => {
     const result = injectAppSdk("<!DOCTYPE html><p>bare</p>", CONTEXT);
-    expect(result).toMatch(/^<!DOCTYPE html><head><script /);
+    expect(
+      result.startsWith(`<!DOCTYPE html><head>${BASE_CSS_LINK}<script `),
+    ).toBe(true);
     expect(result.endsWith("<p>bare</p>")).toBe(true);
   });
 
   test("prepends to fragment documents", () => {
     const result = injectAppSdk("<p>fragment</p>", CONTEXT);
-    expect(result.startsWith(`<script ${BOOTSTRAP_MARKER}>`)).toBe(true);
+    expect(result.startsWith(BASE_CSS_LINK)).toBe(true);
     expect(result.endsWith("<p>fragment</p>")).toBe(true);
   });
 
@@ -164,7 +183,9 @@ describe("injectAppSdk", () => {
       CONTEXT,
     );
     expect(countOccurrences(result, BOOTSTRAP_MARKER)).toBe(2);
-    expect(result).toContain(`<head><script ${BOOTSTRAP_MARKER}>`);
+    expect(result).toContain(
+      `<head>${BASE_CSS_LINK}<script ${BOOTSTRAP_MARKER}>`,
+    );
   });
 
   test("only the first <head> is targeted", () => {

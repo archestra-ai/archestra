@@ -38,6 +38,16 @@ The SDK:
 
 All methods are async and usable immediately — the SDK connects to the host on load. Saves also validate structure softly: a document without `<head>`/`<html>` saves with a warning returned in the response.
 
+## Styling
+
+The platform injects a baseline stylesheet at serve time, leading the cascade so any app CSS that follows overrides it (it is never stored, like the SDK, and must not be `<link>`ed by the app itself — that is rejected on save). It provides:
+
+- **Theme variables** with light/dark (`prefers-color-scheme`): `--color-text-primary`, `--color-text-secondary`, `--color-text-danger`, `--color-text-inverse`, `--color-background-primary`, `--color-background-secondary`, `--color-background-inverse`, `--color-border-primary`, `--color-accent`, `--border-radius-sm/md/lg`, `--font-sans`, `--font-mono`.
+- **Themed element defaults** for `body`, headings, `p`, links, lists, `button`, and `input`/`textarea`/`select`.
+- **`.arch-*` components**: `.arch-card`, `.arch-btn` (`--primary`, `--ghost`), `.arch-input`, `.arch-tabs`/`.arch-tab`, `.arch-badge`, `.arch-spinner`.
+
+Write only app-specific CSS — never a full theme. The CDN allowlist is for client-side libraries (charts, markdown renderers), not stylesheets.
+
 ## Render diagnostics
 
 Every inline render of an owned app is observed: runtime errors (`window.onerror`, unhandled rejections, `console.error`) and CSP violations are captured from the sandbox, capped and deduplicated, and shown as an error badge on the app card. When the user sends their next chat message, the captured diagnostics are attached to it so the model can fix the app via `update_app` without the user pasting errors by hand. Diagnostics originate inside the untrusted app iframe, so the prompt frames them strictly as data, never as instructions.
@@ -62,4 +72,4 @@ A shared (team or org) app is author-written HTML executing in a viewer's browse
 
 ## Templates
 
-Curated starters seed a new app's HTML when no explicit HTML is given on create: `blank` is a styled empty document; `form` greets the viewer by name and wires a note form to the per-user data store as a working example of the SDK. Resolution is server-side — pass `templateId` to `POST /api/apps` or `create_app` and the template's HTML becomes version 1 (the id is kept as provenance). Explicit HTML always wins over a template.
+Curated starters seed a new app's HTML when no explicit HTML is given on create: `blank` is a minimal empty document (it leans on the injected baseline stylesheet, so it looks themed with no CSS of its own); `form` greets the viewer by name and wires a note form to the per-user data store as a working example of the SDK. Resolution is server-side — pass `templateId` to `POST /api/apps` or `create_app` and the template's HTML becomes version 1 (the id is kept as provenance). Explicit HTML always wins over a template.

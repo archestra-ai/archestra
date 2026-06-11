@@ -50,6 +50,11 @@ const APP_SDK_URL = location.origin + "/_sandbox/ext-apps-app.js";
 // must allowlist.
 const ARCHESTRA_APP_SDK_URL = location.origin + "/_sandbox/archestra-app-sdk.js";
 
+// The platform baseline stylesheet, loaded by the <link> the backend injects
+// into owned apps at serve time (app-sdk-injection.ts). Root-relative href
+// resolves against this proxy origin, so style-src must allowlist this URL.
+const ARCHESTRA_APP_BASE_CSS_URL = location.origin + "/_sandbox/archestra-app-base.css";
+
 function buildAllowAttribute(permissions) {
   if (!permissions) return "";
 
@@ -81,7 +86,7 @@ function buildCSP(csp) {
     return [
       "default-src 'none'",
       "script-src 'unsafe-inline' " + APP_SDK_URL + " " + ARCHESTRA_APP_SDK_URL,
-      "style-src 'unsafe-inline'",
+      "style-src 'unsafe-inline' " + ARCHESTRA_APP_BASE_CSS_URL,
       "img-src data: blob:",
       "font-src data: blob:",
       "media-src data: blob:",
@@ -107,7 +112,7 @@ function buildCSP(csp) {
   return [
     "default-src 'none'",
     "script-src 'unsafe-inline' " + APP_SDK_URL + " " + ARCHESTRA_APP_SDK_URL + " " + resourceSrc,
-    "style-src 'unsafe-inline' " + resourceSrc,
+    "style-src 'unsafe-inline' " + ARCHESTRA_APP_BASE_CSS_URL + " " + resourceSrc,
     "img-src " + resourceSrc,
     "font-src " + resourceSrc,
     "media-src " + resourceSrc,

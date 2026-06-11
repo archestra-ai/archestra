@@ -1,10 +1,14 @@
-// Marker attributes on the injected <script> elements, so served documents are
+// Marker attributes on the injected elements, so served documents are
 // recognizable in tests and debugging.
 const APP_BOOTSTRAP_MARKER = "data-archestra-app-bootstrap";
 const APP_SDK_MARKER = "data-archestra-app-sdk";
+const APP_BASE_CSS_MARKER = "data-archestra-app-base-css";
 
 /** Path the backend serves the Apps SDK on (see server.ts). */
 export const APP_SDK_PATH = "/_sandbox/archestra-app-sdk.js";
+
+/** Path the backend serves the platform baseline stylesheet on (see server.ts). */
+export const APP_BASE_CSS_PATH = "/_sandbox/archestra-app-base.css";
 
 /** One assigned-tool descriptor embedded for `archestra.tools.list()`. */
 export interface AppSdkTool {
@@ -44,11 +48,17 @@ export interface AppSdkContext {
  * same anchor and therefore always precedes the bootstrap.
  */
 export function injectAppSdk(html: string, context: AppSdkContext): string {
+  // The platform baseline stylesheet leads the cascade (first <link> in <head>),
+  // so it defines the theme variables/element defaults/.arch-* components an app
+  // can rely on while any app CSS that follows still wins. Like the SDK it is
+  // serve-time only — never stored — and its root-relative href resolves against
+  // the sandbox proxy origin, which allowlists exactly that URL in style-src.
+  const baseCss = `<link rel="stylesheet" href="${APP_BASE_CSS_PATH}" ${APP_BASE_CSS_MARKER}>`;
   const bootstrap =
     `<script ${APP_BOOTSTRAP_MARKER}>window.__ARCHESTRA_APP_CONTEXT__=` +
     `${serializeInlineScriptValue(context)};</script>`;
   const sdkTag = `<script ${APP_SDK_MARKER} src="${APP_SDK_PATH}"></script>`;
-  const injection = `${bootstrap}${sdkTag}`;
+  const injection = `${baseCss}${bootstrap}${sdkTag}`;
 
   // No injected-already guard: stored HTML never contains the SDK (it is never
   // persisted), and a content-based scan could be tripped by an app merely

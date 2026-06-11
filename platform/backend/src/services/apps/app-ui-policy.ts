@@ -102,6 +102,10 @@ const PLATFORM_SCRIPT_SRC_MARKERS = [
   "ext-apps-app",
 ] as const;
 
+// The platform baseline stylesheet is injected at serve time (a <link> in
+// <head>); stored HTML must not load it itself, mirroring the SDK rejection.
+const PLATFORM_BASE_CSS_MARKER = "archestra-app-base";
+
 function validateAppHtml(html: string): string[] {
   const $ = cheerio.load(html);
   const scriptText = $("script")
@@ -124,6 +128,19 @@ function validateAppHtml(html: string): string[] {
       throw new ApiError(
         400,
         `app html must not load the platform SDK itself (found <script src="${src}">). The platform injects window.archestra at render time — remove the script tag and use window.archestra directly.`,
+      );
+    }
+  }
+  const linkHrefs = $("link[href]")
+    .map((_, el) => $(el).attr("href") ?? "")
+    .get();
+  for (const href of linkHrefs) {
+    // Strip whitespace the browser would ignore when resolving the URL, so a
+    // tab/newline spliced into the marker can't slip the self-link past.
+    if (href.replace(/\s/g, "").includes(PLATFORM_BASE_CSS_MARKER)) {
+      throw new ApiError(
+        400,
+        `app html must not load the platform stylesheet itself (found <link href="${href}">). The platform injects archestra-app-base.css at render time — remove the link; its theme variables, element defaults, and .arch-* components are already available.`,
       );
     }
   }

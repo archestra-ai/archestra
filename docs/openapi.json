@@ -3212,6 +3212,46 @@
                           {
                             "type": "object",
                             "properties": {
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "thinking"
+                                ]
+                              },
+                              "thinking": {
+                                "type": "string"
+                              },
+                              "signature": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "type",
+                              "thinking",
+                              "signature"
+                            ]
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "redacted_thinking"
+                                ]
+                              },
+                              "data": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "type",
+                              "data"
+                            ]
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
                               "id": {
                                 "type": "string"
                               },
@@ -3546,6 +3586,41 @@
                               "tool_use_id",
                               "type"
                             ]
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "search_result",
+                                  "server_tool_use",
+                                  "web_search_tool_result",
+                                  "web_fetch_tool_result",
+                                  "code_execution_tool_result",
+                                  "bash_code_execution_tool_result",
+                                  "text_editor_code_execution_tool_result",
+                                  "tool_search_tool_result",
+                                  "container_upload"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "type"
+                            ],
+                            "additionalProperties": {}
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "type"
+                            ],
+                            "additionalProperties": {}
                           }
                         ]
                       }
@@ -3556,7 +3631,8 @@
                   "type": "string",
                   "enum": [
                     "user",
-                    "assistant"
+                    "assistant",
+                    "system"
                   ]
                 }
               },
@@ -20308,6 +20384,48 @@
                           {
                             "type": "object",
                             "properties": {
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "thinking"
+                                ]
+                              },
+                              "thinking": {
+                                "type": "string"
+                              },
+                              "signature": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "type",
+                              "thinking",
+                              "signature"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "redacted_thinking"
+                                ]
+                              },
+                              "data": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "type",
+                              "data"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
                               "id": {
                                 "type": "string"
                               },
@@ -20656,6 +20774,41 @@
                               "type"
                             ],
                             "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "search_result",
+                                  "server_tool_use",
+                                  "web_search_tool_result",
+                                  "web_fetch_tool_result",
+                                  "code_execution_tool_result",
+                                  "bash_code_execution_tool_result",
+                                  "text_editor_code_execution_tool_result",
+                                  "tool_search_tool_result",
+                                  "container_upload"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "type"
+                            ],
+                            "additionalProperties": {}
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "type"
+                            ],
+                            "additionalProperties": {}
                           }
                         ]
                       }
@@ -20666,7 +20819,8 @@
                   "type": "string",
                   "enum": [
                     "user",
-                    "assistant"
+                    "assistant",
+                    "system"
                   ]
                 }
               },

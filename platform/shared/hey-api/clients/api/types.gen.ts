@@ -1300,6 +1300,13 @@ export type AnthropicMessagesRequestInput = {
             } | null;
             cache_control?: unknown;
         } | {
+            type: 'thinking';
+            thinking: string;
+            signature: string;
+        } | {
+            type: 'redacted_thinking';
+            data: string;
+        } | {
             id: string;
             input: unknown;
             name: string;
@@ -1360,8 +1367,14 @@ export type AnthropicMessagesRequestInput = {
                 cache_control?: unknown;
             }>;
             is_error?: boolean;
+        } | {
+            type: 'search_result' | 'server_tool_use' | 'web_search_tool_result' | 'web_fetch_tool_result' | 'code_execution_tool_result' | 'bash_code_execution_tool_result' | 'text_editor_code_execution_tool_result' | 'tool_search_tool_result' | 'container_upload';
+            [key: string]: unknown;
+        } | {
+            type: string;
+            [key: string]: unknown;
         }>;
-        role: 'user' | 'assistant';
+        role: 'user' | 'assistant' | 'system';
     }>;
     max_tokens: number;
     container?: string | null;
@@ -6583,6 +6596,13 @@ export type AnthropicMessagesRequest = {
             } | null;
             cache_control?: unknown;
         } | {
+            type: 'thinking';
+            thinking: string;
+            signature: string;
+        } | {
+            type: 'redacted_thinking';
+            data: string;
+        } | {
             id: string;
             input: unknown;
             name: string;
@@ -6643,8 +6663,14 @@ export type AnthropicMessagesRequest = {
                 cache_control?: unknown;
             }>;
             is_error?: boolean;
+        } | {
+            type: 'search_result' | 'server_tool_use' | 'web_search_tool_result' | 'web_fetch_tool_result' | 'code_execution_tool_result' | 'bash_code_execution_tool_result' | 'text_editor_code_execution_tool_result' | 'tool_search_tool_result' | 'container_upload';
+            [key: string]: unknown;
+        } | {
+            type: string;
+            [key: string]: unknown;
         }>;
-        role: 'user' | 'assistant';
+        role: 'user' | 'assistant' | 'system';
     }>;
     max_tokens: number;
     container?: string | null;

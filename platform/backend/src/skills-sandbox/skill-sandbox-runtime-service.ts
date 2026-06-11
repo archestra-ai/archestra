@@ -228,7 +228,7 @@ class SkillSandboxRuntimeService {
       try {
         row = await SkillSandboxFileModel.createArtifact({
           sandboxId: params.sandboxId,
-          userId: sandbox.userId,
+          userId: params.folderOwnerUserId ?? sandbox.userId,
           path: resolvedPath,
           mimeType,
           originalName: null,

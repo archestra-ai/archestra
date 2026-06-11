@@ -65,6 +65,12 @@ export interface ExportArtifactParams {
   mimeType?: string;
   /** PFS folder to export into; resolved to a row by the caller. */
   folder?: { id: string; name: string } | null;
+  /**
+   * Storage namespace owner for the export. Set for project chats, where the
+   * result folder belongs to the project owner — possibly not the sandbox
+   * owner. Defaults to the sandbox owner.
+   */
+  folderOwnerUserId?: string;
 }
 
 export interface ArtifactRef {

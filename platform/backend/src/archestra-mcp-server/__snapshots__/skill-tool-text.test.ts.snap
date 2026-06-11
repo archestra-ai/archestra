@@ -83,13 +83,8 @@ exports[`skill and sandbox tool text > archestra__download_file 1`] = `
   "inputSchema": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "additionalProperties": false,
-    "description": "Copy a file out of the sandbox into durable storage and return a download URL. Use this for any binary or generated output — run_command only returns text. (To read a skill's source files, use read_skill_file.)",
+    "description": "Copy a file out of the sandbox into durable storage and return a download URL. Use this for any binary or generated output — run_command only returns text. In a project chat the file is saved into the project's result folder. (To read a skill's source files, use read_skill_file.)",
     "properties": {
-      "folder": {
-        "description": "Optional persistent-storage folder to save into. Must already exist (the user creates folders on the X-Files page). Omit to save at the top level.",
-        "minLength": 1,
-        "type": "string",
-      },
       "mimeType": {
         "description": "Optional MIME type recorded with the file. Sniffed from the bytes when omitted.",
         "minLength": 1,
@@ -251,6 +246,45 @@ exports[`skill and sandbox tool text > archestra__run_command 1`] = `
   },
   "name": "archestra__run_command",
   "title": "Run Command",
+}
+`;
+
+exports[`skill and sandbox tool text > archestra__save_result 1`] = `
+{
+  "description": "Save inline content directly to the user's persistent file storage (X-Files) and return a download URL — no sandbox roundtrip. Use it for results you produced in the conversation itself (text, markdown, small data files). In a project chat the file is saved into the project's result folder. For files generated INSIDE the sandbox, use download_file instead. Requires \`sandbox:execute\`.",
+  "inputSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "description": "Save content straight to the user's persistent file storage — no sandbox needed. In a project chat the file lands in the project's result folder.",
+    "properties": {
+      "content": {
+        "description": "UTF-8 text content of the file.",
+        "type": "string",
+      },
+      "contentBase64": {
+        "description": "Base64-encoded binary content.",
+        "minLength": 1,
+        "type": "string",
+      },
+      "filename": {
+        "description": "Plain filename including extension (e.g. "joke.md"). No paths.",
+        "maxLength": 256,
+        "minLength": 1,
+        "type": "string",
+      },
+      "mimeType": {
+        "description": "Optional MIME type. Sniffed from the bytes when omitted.",
+        "minLength": 1,
+        "type": "string",
+      },
+    },
+    "required": [
+      "filename",
+    ],
+    "type": "object",
+  },
+  "name": "archestra__save_result",
+  "title": "Save Result",
 }
 `;
 

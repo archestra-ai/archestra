@@ -20,7 +20,7 @@ type ResolvedXFile = {
 
 /** Why an x_file reference failed to resolve. */
 type XFileResolutionError = {
-  error: "not_found" | "ambiguous" | "missing_bytes";
+  error: "not_found" | "ambiguous" | "missing_bytes" | "outside_project_folder";
 };
 
 /**
@@ -104,16 +104,32 @@ class SkillSandboxArtifactService {
     id?: string;
     filename?: string;
     folder?: string;
+    /**
+     * Project file scope (project chats only). When set, only files inside
+     * the project folder resolve — and they resolve from the FOLDER OWNER's
+     * namespace, authorized by project membership rather than file ownership.
+     */
+    scope?: {
+      folderId: string;
+      folderName: string;
+      folderOwnerUserId: string;
+    } | null;
   }): Promise<ResolvedXFile | XFileResolutionError> {
+    const scope = params.scope ?? null;
+
     if (params.id) {
       const artifact = await SkillSandboxFileModel.findArtifactById(params.id);
       if (!artifact) return { error: "not_found" };
       const sandbox = await SkillSandboxModel.findById(artifact.sandboxId);
-      if (
-        !sandbox ||
-        sandbox.organizationId !== params.organizationId ||
-        sandbox.userId !== params.userId
-      ) {
+      if (!sandbox || sandbox.organizationId !== params.organizationId) {
+        return { error: "not_found" };
+      }
+      if (scope) {
+        // in a project chat the folder is the boundary, not file ownership.
+        if (artifact.folderId !== scope.folderId) {
+          return { error: "outside_project_folder" };
+        }
+      } else if (sandbox.userId !== params.userId) {
         return { error: "not_found" };
       }
       try {
@@ -133,9 +149,16 @@ class SkillSandboxArtifactService {
       }
     }
 
-    const folder = params.folder ?? null;
+    const folder = scope ? scope.folderName : (params.folder ?? null);
+    if (scope && params.folder && params.folder !== scope.folderName) {
+      return { error: "outside_project_folder" };
+    }
     const filename = params.filename ?? "";
-    const { files } = await this.listAllForUser(params);
+    const namespaceUserId = scope ? scope.folderOwnerUserId : params.userId;
+    const { files } = await this.listAllForUser({
+      organizationId: params.organizationId,
+      userId: namespaceUserId,
+    });
     const matches = files.filter(
       (f) => f.filename === filename && f.folder === folder,
     );
@@ -156,7 +179,7 @@ class SkillSandboxArtifactService {
       // orphan: no row — read by location from the storage tree.
       return {
         data: await getSandboxFileStorage().readUserFile({
-          userId: params.userId,
+          userId: namespaceUserId,
           folder,
           filename: match.filename,
         }),

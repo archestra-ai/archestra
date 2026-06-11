@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, asc, desc, eq, isNotNull } from "drizzle-orm";
+import { and, asc, desc, eq, isNotNull, or } from "drizzle-orm";
 import db, { schema } from "@/database";
 import {
   getSandboxFileStorage,
@@ -172,9 +172,19 @@ class SkillSandboxFileModel {
     userId: string;
     conversationId?: string;
   }): Promise<SandboxArtifactRow[]> {
+    // Ownership has two faces: files a user's sandboxes PRODUCED, and files
+    // sitting in a folder the user OWNS (project folders collect results from
+    // every project member's chats). The user-wide listing includes both; the
+    // conversation-scoped listing keeps the producer view.
+    const ownershipFilter = params.conversationId
+      ? eq(schema.skillSandboxesTable.userId, params.userId)
+      : or(
+          eq(schema.skillSandboxesTable.userId, params.userId),
+          eq(schema.skillSandboxFoldersTable.userId, params.userId),
+        );
     const filters = [
       eq(schema.skillSandboxFilesTable.kind, "artifact"),
-      eq(schema.skillSandboxesTable.userId, params.userId),
+      ownershipFilter,
       eq(schema.skillSandboxesTable.organizationId, params.organizationId),
     ];
     if (params.conversationId) {

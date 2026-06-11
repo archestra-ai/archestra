@@ -1,7 +1,11 @@
 import { RouteId } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { SkillSandboxFileModel, SkillSandboxModel } from "@/models";
+import {
+  SkillSandboxFileModel,
+  SkillSandboxFolderModel,
+  SkillSandboxModel,
+} from "@/models";
 import { getSandboxFileStorage } from "@/skills-sandbox/file-storage";
 import { SandboxFileMissingError } from "@/skills-sandbox/file-storage-filesystem";
 import { isInlineSafeImageMime } from "@/skills-sandbox/mime-sniff";
@@ -51,16 +55,28 @@ const skillSandboxArtifactRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (!artifact) {
         throw new ApiError(404, "Artifact not found");
       }
-      // collapse "wrong sandbox owner" and "missing" into the same 404 so
-      // cross-org probes can't distinguish "exists but inaccessible" from
-      // "does not exist".
+      // collapse "wrong owner" and "missing" into the same 404 so cross-org
+      // probes can't distinguish "exists but inaccessible" from "does not
+      // exist". Two legitimate access paths: the producing sandbox's owner,
+      // and the owner of the folder the artifact sits in (project folders
+      // collect results from every project member's chats).
       const sandbox = await SkillSandboxModel.findById(artifact.sandboxId);
-      if (
-        !sandbox ||
-        sandbox.organizationId !== organizationId ||
-        sandbox.userId !== user.id
-      ) {
+      if (!sandbox || sandbox.organizationId !== organizationId) {
         throw new ApiError(404, "Artifact not found");
+      }
+      if (sandbox.userId !== user.id) {
+        const folder = artifact.folderId
+          ? (await SkillSandboxFolderModel.findByIds([artifact.folderId])).get(
+              artifact.folderId,
+            )
+          : undefined;
+        if (
+          !folder ||
+          folder.userId !== user.id ||
+          folder.organizationId !== organizationId
+        ) {
+          throw new ApiError(404, "Artifact not found");
+        }
       }
 
       const inlineSafe = isInlineSafeImageMime(artifact.mimeType);

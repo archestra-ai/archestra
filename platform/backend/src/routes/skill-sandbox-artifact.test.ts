@@ -457,3 +457,132 @@ describe("POST /api/skill-sandbox/folders + GET /api/skill-sandbox/uploads/:uplo
     expect(denied.body).not.toContain("secret");
   });
 });
+
+describe("project folder cross-user access", () => {
+  let app: FastifyInstanceWithZod;
+  let user: User;
+  let organizationId: string;
+
+  beforeEach(async ({ makeOrganization, makeUser }) => {
+    user = await makeUser();
+    organizationId = (await makeOrganization()).id;
+
+    app = createFastifyInstance();
+    app.addHook("onRequest", async (request) => {
+      (request as typeof request & { user: unknown }).user = user;
+      (request as typeof request & { organizationId: string }).organizationId =
+        organizationId;
+    });
+    const { default: skillSandboxArtifactRoutes } = await import(
+      "./skill-sandbox-artifact"
+    );
+    await app.register(skillSandboxArtifactRoutes);
+    await app.ready();
+  });
+
+  afterEach(async () => {
+    await app.close();
+  });
+
+  test("the folder owner sees and downloads files produced by other members", async ({
+    makeUser,
+  }) => {
+    // `user` owns the project/folder; `member` produced a file into it.
+    const { projectService } = await import("@/services/project");
+    const { SkillSandboxFolderModel } = await import("@/models");
+    const project = await projectService.create({
+      organizationId,
+      userId: user.id,
+      name: "crossuser",
+      description: null,
+    });
+
+    const member = await makeUser({ email: "cross-member@test.com" });
+    const memberSandbox = await SkillSandboxModel.create({
+      organizationId,
+      userId: member.id,
+      conversationId: null,
+      defaultCwd: "/sandbox",
+    });
+    const folder = (
+      await SkillSandboxFolderModel.findByIds([project.folderId])
+    ).get(project.folderId);
+    const produced = await SkillSandboxFileModel.createArtifact({
+      sandboxId: memberSandbox.id,
+      userId: user.id, // folder owner's namespace
+      path: "/sandbox/member-output.txt",
+      mimeType: "text/plain",
+      originalName: null,
+      sizeBytes: 6,
+      data: Buffer.from("member"),
+      folderId: project.folderId,
+      folderName: folder?.name,
+    });
+
+    // listing: the folder owner's X-Files include it
+    const files = await app.inject({
+      method: "GET",
+      url: "/api/skill-sandbox/files",
+    });
+    const body = files.json<{
+      files: Array<{ id: string | null; filename: string; folder: string | null }>;
+    }>();
+    expect(body.files).toEqual([
+      expect.objectContaining({
+        id: produced.id,
+        filename: "member-output.txt",
+        folder: "crossuser",
+      }),
+    ]);
+
+    // bytes: downloadable by the folder owner
+    const bytes = await app.inject({
+      method: "GET",
+      url: `/api/skill-sandbox/artifacts/${produced.id}`,
+    });
+    expect(bytes.statusCode).toBe(200);
+    expect(bytes.body).toBe("member");
+  });
+
+  test("a third user still gets 404 for folder files they don't own", async ({
+    makeUser,
+  }) => {
+    const { projectService } = await import("@/services/project");
+    const owner = await makeUser({ email: "cross-owner@test.com" });
+    const project = await projectService.create({
+      organizationId,
+      userId: owner.id,
+      name: "notmine",
+      description: null,
+    });
+    const ownerSandbox = await SkillSandboxModel.create({
+      organizationId,
+      userId: owner.id,
+      conversationId: null,
+      defaultCwd: "/sandbox",
+    });
+    const artifact = await SkillSandboxFileModel.createArtifact({
+      sandboxId: ownerSandbox.id,
+      userId: owner.id,
+      path: "/sandbox/secret.txt",
+      mimeType: "text/plain",
+      originalName: null,
+      sizeBytes: 6,
+      data: Buffer.from("secret"),
+      folderId: project.folderId,
+      folderName: "notmine",
+    });
+
+    // `user` (the request principal) is neither producer nor folder owner
+    const denied = await app.inject({
+      method: "GET",
+      url: `/api/skill-sandbox/artifacts/${artifact.id}`,
+    });
+    expect(denied.statusCode).toBe(404);
+    const files = await app.inject({
+      method: "GET",
+      url: "/api/skill-sandbox/files",
+    });
+    expect(files.json<{ files: unknown[] }>().files).toEqual([]);
+  });
+});

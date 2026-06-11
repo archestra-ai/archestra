@@ -1,6 +1,7 @@
 import {
   TOOL_DOWNLOAD_FILE_SHORT_NAME,
   TOOL_RUN_COMMAND_SHORT_NAME,
+  TOOL_SAVE_RESULT_SHORT_NAME,
   TOOL_SEARCH_FILES_SHORT_NAME,
   TOOL_UPLOAD_FILE_SHORT_NAME,
 } from "@archestra/shared";
@@ -10,7 +11,7 @@ import logger from "@/logging";
 import {
   ConversationAttachmentModel,
   SkillSandboxConversationGoneError,
-  SkillSandboxFolderModel,
+  SkillSandboxFileModel,
   SkillSandboxModel,
 } from "@/models";
 import { executionSandboxRegistry } from "@/skills-sandbox/execution-sandbox-registry";
@@ -19,6 +20,11 @@ import {
   SKILL_SANDBOX_HOME,
 } from "@/skills-sandbox/runtime-image";
 import { skillSandboxArtifactService } from "@/skills-sandbox/skill-sandbox-artifact-service";
+import { resolveArtifactMime } from "@/skills-sandbox/mime-sniff";
+import {
+  type ProjectFileScope,
+  resolveProjectFileScope,
+} from "@/skills-sandbox/project-file-scope";
 import { skillSandboxRuntimeService } from "@/skills-sandbox/skill-sandbox-runtime-service";
 import {
   SKILL_SANDBOX_LIMITS,
@@ -154,21 +160,14 @@ const DownloadFileSchema = z
         "Optional MIME type recorded with the file. Sniffed from the bytes " +
           "when omitted.",
       ),
-    folder: z
-      .string()
-      .min(1)
-      .optional()
-      .describe(
-        "Optional persistent-storage folder to save into. Must already exist " +
-          "(the user creates folders on the X-Files page). Omit to save at " +
-          "the top level.",
-      ),
     target: SandboxTargetSchema,
   })
   .describe(
     "Copy a file out of the sandbox into durable storage and return a " +
       "download URL. Use this for any binary or generated output — run_command " +
-      "only returns text. (To read a skill's source files, use read_skill_file.)",
+      "only returns text. In a project chat the file is saved into the " +
+      "project's result folder. (To read a skill's source files, use " +
+      "read_skill_file.)",
   );
 
 const DownloadFileOutputSchema = z.object({
@@ -333,6 +332,52 @@ const SearchFilesOutputSchema = z.object({
     .describe("All folder names in the user's persistent storage."),
 });
 
+const SaveResultSchema = z
+  .strictObject({
+    filename: z
+      .string()
+      .min(1)
+      .max(256)
+      .describe(
+        'Plain filename including extension (e.g. "joke.md"). No paths.',
+      ),
+    content: z
+      .string()
+      .optional()
+      .describe("UTF-8 text content of the file."),
+    contentBase64: z
+      .string()
+      .min(1)
+      .optional()
+      .describe("Base64-encoded binary content."),
+    mimeType: z
+      .string()
+      .min(1)
+      .optional()
+      .describe("Optional MIME type. Sniffed from the bytes when omitted."),
+  })
+  .refine((v) => (v.content != null) !== (v.contentBase64 != null), {
+    message: "provide exactly one of `content` or `contentBase64`",
+  })
+  .describe(
+    "Save content straight to the user's persistent file storage — no " +
+      "sandbox needed. In a project chat the file lands in the project's " +
+      "result folder.",
+  );
+
+const SaveResultOutputSchema = z.object({
+  fileId: z.string(),
+  filename: z.string(),
+  folder: z
+    .string()
+    .nullable()
+    .describe("Persistent-storage folder the file was saved into."),
+  mimeType: z.string(),
+  sizeBytes: z.number(),
+  /** See DownloadFileOutputSchema.downloadUrl. */
+  downloadUrl: z.string(),
+});
+
 const registry = defineArchestraTools([
   defineArchestraTool({
     shortName: TOOL_RUN_COMMAND_SHORT_NAME,
@@ -414,14 +459,11 @@ const registry = defineArchestraTools([
       });
       if ("error" in resolved) return errorResult(resolved.error);
 
-      let folder: { id: string; name: string } | null = null;
-      if (args.folder) {
-        const found = await resolveFolderByName({
-          userCtx: guard.userCtx,
-          name: args.folder,
-        });
-        if ("error" in found) return errorResult(found.error);
-        folder = found.folder;
+      let scope: ProjectFileScope | null;
+      try {
+        scope = await resolveProjectFileScope(context.conversationId);
+      } catch (error) {
+        return handleRuntimeError(error, resolved.sandboxId, "download_file");
       }
 
       try {
@@ -430,7 +472,8 @@ const registry = defineArchestraTools([
           caller: guard.userCtx,
           path: args.path,
           mimeType: args.mimeType,
-          folder,
+          folder: scope ? { id: scope.folderId, name: scope.folderName } : null,
+          folderOwnerUserId: scope?.folderOwnerUserId,
         });
 
         logger.info(
@@ -491,10 +534,18 @@ const registry = defineArchestraTools([
       });
       if ("error" in resolved) return errorResult(resolved.error);
 
+      let uploadScope: ProjectFileScope | null;
+      try {
+        uploadScope = await resolveProjectFileScope(context.conversationId);
+      } catch (error) {
+        return handleRuntimeError(error, resolved.sandboxId, "upload_file");
+      }
+
       const loaded = await loadUploadSource({
         source: args.source,
         userCtx: guard.userCtx,
         conversationId: context.conversationId,
+        scope: uploadScope,
       });
       if ("error" in loaded) return errorResult(loaded.error);
 
@@ -545,16 +596,35 @@ const registry = defineArchestraTools([
       const guard = ensureUsable(context);
       if ("error" in guard) return errorResult(guard.error);
 
+      let scope: ProjectFileScope | null;
+      try {
+        scope = await resolveProjectFileScope(context.conversationId);
+      } catch (error) {
+        if (error instanceof SkillSandboxError) {
+          return errorResult(error.message);
+        }
+        throw error;
+      }
+      if (scope && args.folder && args.folder !== scope.folderName) {
+        return errorResult(
+          `This chat belongs to project "${scope.projectName}", whose file access is limited to its result folder "${scope.folderName}". Omit \`folder\` or pass exactly that name.`,
+        );
+      }
+
+      // in a project chat the listing comes from the FOLDER OWNER's
+      // namespace (project membership is the authorization) and is confined
+      // to the project folder.
       const { folders, files } =
         await skillSandboxArtifactService.listAllForUser({
           organizationId: guard.userCtx.organizationId,
-          userId: guard.userCtx.userId,
+          userId: scope ? scope.folderOwnerUserId : guard.userCtx.userId,
         });
 
       const query = args.query?.toLowerCase() ?? null;
       const matches = files.filter((f) => {
+        if (scope && f.folder !== scope.folderName) return false;
         if (query && !f.filename.toLowerCase().includes(query)) return false;
-        if (args.folder && f.folder !== args.folder) return false;
+        if (!scope && args.folder && f.folder !== args.folder) return false;
         return true;
       });
 
@@ -567,7 +637,9 @@ const registry = defineArchestraTools([
           sizeBytes: f.sizeBytes,
           createdAt: f.createdAt.toISOString(),
         })),
-        folders: folders.map((f) => f.name),
+        folders: scope
+          ? [scope.folderName]
+          : folders.map((f) => f.name),
       };
 
       const summary =
@@ -580,6 +652,115 @@ const registry = defineArchestraTools([
               )
               .join("\n");
       return structuredSuccessResult(result, summary);
+    },
+  }),
+  defineArchestraTool({
+    shortName: TOOL_SAVE_RESULT_SHORT_NAME,
+    title: "Save Result",
+    description:
+      "Save inline content directly to the user's persistent file storage " +
+      "(X-Files) and return a download URL — no sandbox roundtrip. Use it " +
+      "for results you produced in the conversation itself (text, markdown, " +
+      "small data files). In a project chat the file is saved into the " +
+      "project's result folder. For files generated INSIDE the sandbox, use " +
+      "download_file instead. Requires `sandbox:execute`.",
+    schema: SaveResultSchema,
+    outputSchema: SaveResultOutputSchema,
+    async handler({ args, context }) {
+      const guard = ensureUsable(context);
+      if ("error" in guard) return errorResult(guard.error);
+
+      const filename = args.filename.trim();
+      if (
+        filename.includes("/") ||
+        filename.includes("\\") ||
+        filename.startsWith(".")
+      ) {
+        return errorResult(
+          "filename must be a plain name without paths or a leading dot.",
+        );
+      }
+
+      let data: Buffer;
+      if (args.contentBase64 != null) {
+        if (!BASE64_RE.test(args.contentBase64)) {
+          return errorResult("contentBase64 is not valid base64.");
+        }
+        data = Buffer.from(args.contentBase64, "base64");
+      } else {
+        data = Buffer.from(args.content ?? "", "utf8");
+      }
+      if (data.byteLength === 0) {
+        return errorResult("the file content is empty.");
+      }
+      const limit = config.skillsSandbox.artifactBytesLimit;
+      if (data.byteLength > limit) {
+        return errorResult(
+          `the file is too large (${data.byteLength} bytes > ${limit} byte limit).`,
+        );
+      }
+
+      // the artifact row needs a sandbox: resolve/create the conversation's
+      // default — a pure DB row; nothing is ever materialized for this tool.
+      const resolved = await resolveTarget({
+        target: undefined,
+        userCtx: guard.userCtx,
+        context,
+      });
+      if ("error" in resolved) return errorResult(resolved.error);
+
+      let scope: ProjectFileScope | null;
+      try {
+        scope = await resolveProjectFileScope(context.conversationId);
+      } catch (error) {
+        return handleRuntimeError(error, resolved.sandboxId, "save_result");
+      }
+
+      const mimeType = resolveArtifactMime({
+        buffer: data,
+        claimed: args.mimeType,
+      });
+      try {
+        const row = await SkillSandboxFileModel.createArtifact({
+          sandboxId: resolved.sandboxId,
+          userId: scope?.folderOwnerUserId ?? guard.userCtx.userId,
+          path: `${SKILL_SANDBOX_HOME}/${filename}`,
+          mimeType,
+          originalName: filename,
+          sizeBytes: data.byteLength,
+          data,
+          folderId: scope?.folderId ?? null,
+          folderName: scope?.folderName ?? null,
+        });
+
+        logger.info(
+          {
+            sandboxId: resolved.sandboxId,
+            fileId: row.id,
+            sizeBytes: row.sizeBytes,
+            projectScoped: !!scope,
+          },
+          "[Sandbox] result saved to PFS",
+        );
+
+        const downloadUrl = `/api/skill-sandbox/artifacts/${row.id}`;
+        return structuredSuccessResult(
+          {
+            fileId: row.id,
+            filename,
+            folder: scope?.folderName ?? null,
+            mimeType: row.mimeType,
+            sizeBytes: row.sizeBytes,
+            downloadUrl,
+          },
+          [
+            `Saved ${scope ? `${scope.folderName}/` : ""}${filename} (${row.sizeBytes} bytes) to persistent storage.`,
+            `Download URL (use this for links): ${downloadUrl}`,
+          ].join("\n"),
+        );
+      } catch (error) {
+        return handleRuntimeError(error, resolved.sandboxId, "save_result");
+      }
     },
   }),
 ] as const);
@@ -775,36 +956,6 @@ function handleRuntimeError(
   return errorResult(`${tool} failed due to an internal error.`);
 }
 
-/**
- * Resolve a `download_file` folder argument to its row. The folder must exist
- * already (created on the X-Files page); the error names the user's folders so
- * the model can correct itself without another round-trip.
- */
-async function resolveFolderByName(params: {
-  userCtx: UserContext;
-  name: string;
-}): Promise<{ folder: { id: string; name: string } } | { error: string }> {
-  const row = await SkillSandboxFolderModel.findByName({
-    organizationId: params.userCtx.organizationId,
-    userId: params.userCtx.userId,
-    name: params.name,
-  });
-  if (row) return { folder: { id: row.id, name: row.name } };
-  const existing = await SkillSandboxFolderModel.listByUser({
-    organizationId: params.userCtx.organizationId,
-    userId: params.userCtx.userId,
-  });
-  const names = existing.map((f) => f.name);
-  return {
-    error:
-      `No persistent-storage folder named "${params.name}" exists. ` +
-      (names.length
-        ? `Existing folders: ${names.join(", ")}. `
-        : "There are no folders yet. ") +
-      "Folders are created by the user on the X-Files page; omit `folder` to save at the top level.",
-  };
-}
-
 // base64 alphabet plus padding and incidental whitespace.
 const BASE64_RE = /^[A-Za-z0-9+/\s]*={0,2}$/;
 
@@ -824,8 +975,10 @@ async function loadUploadSource(params: {
   source: UploadSource;
   userCtx: UserContext;
   conversationId: string | undefined;
+  /** Project file scope of the conversation; confines x_file resolution. */
+  scope: ProjectFileScope | null;
 }): Promise<LoadedUpload | { error: string }> {
-  const { source, userCtx, conversationId } = params;
+  const { source, userCtx, conversationId, scope } = params;
   switch (source.type) {
     case "base64": {
       if (!BASE64_RE.test(source.dataBase64)) {
@@ -907,6 +1060,7 @@ async function loadUploadSource(params: {
         id: source.id,
         filename: source.filename,
         folder: source.folder,
+        scope,
       });
       if ("error" in resolved) {
         const ref =
@@ -928,6 +1082,11 @@ async function loadUploadSource(params: {
               error:
                 `Multiple persistent files are named "${source.filename}"${source.folder ? ` in folder "${source.folder}"` : ""}. ` +
                 "Run search_files and use the `id` of the one you mean.",
+            };
+          case "outside_project_folder":
+            return {
+              error:
+                "This chat belongs to a project; only files in the project's result folder can be used here. Run search_files to see them.",
             };
           case "missing_bytes":
             return {

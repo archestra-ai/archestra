@@ -412,6 +412,7 @@ describe("extractOwnedAppRender", () => {
   it.each([
     "create_app",
     "update_app",
+    "edit_app",
     "render_app",
   ])("matches archestra__%s with a UUID structuredContent.id", (shortName) => {
     expect(
@@ -427,10 +428,13 @@ describe("extractOwnedAppRender", () => {
     });
   });
 
-  it("matches a bare create_app name (run_tool accepts bare archestra short names)", () => {
+  it.each([
+    "create_app",
+    "edit_app",
+  ])("matches a bare %s name (run_tool accepts bare archestra short names)", (shortName) => {
     expect(
       extractOwnedAppRender({
-        toolName: "create_app",
+        toolName: shortName,
         output,
         getToolShortName,
       }),
@@ -445,6 +449,7 @@ describe("extractOwnedAppRender", () => {
     ["foreign server prefix", "other__create_app", output],
     ["non-rendering app tool", "archestra__list_apps", output],
     ["non-rendering delete tool", "archestra__delete_app", output],
+    ["non-rendering read tool", "archestra__read_app", output],
     [
       "non-UUID id",
       "archestra__create_app",

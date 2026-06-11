@@ -1,7 +1,9 @@
 import {
   TOOL_CREATE_APP_SHORT_NAME,
   TOOL_DELETE_APP_SHORT_NAME,
+  TOOL_EDIT_APP_SHORT_NAME,
   TOOL_LIST_APPS_SHORT_NAME,
+  TOOL_READ_APP_SHORT_NAME,
   TOOL_RENDER_APP_SHORT_NAME,
   TOOL_UPDATE_APP_SHORT_NAME,
 } from "@archestra/shared";
@@ -95,6 +97,45 @@ const GetAppSchema = z.strictObject({
   appId: z.string().uuid().describe("The app id."),
 });
 
+const ReadAppSchema = z.strictObject({
+  appId: z.string().uuid().describe("The app id."),
+  version: z
+    .number()
+    .int()
+    .positive()
+    .optional()
+    .describe("Specific version to read; defaults to the current head."),
+});
+
+const EditAppSchema = z.strictObject({
+  appId: z.string().uuid().describe("The app id."),
+  baseVersion: z
+    .number()
+    .int()
+    .positive()
+    .describe(
+      "The version the edits are based on (from read_app). The edit is rejected if the app's head has moved past it.",
+    ),
+  edits: z
+    .array(
+      z.strictObject({
+        old_str: z
+          .string()
+          .min(1)
+          .describe(
+            "Exact text to replace; must occur exactly once in the current HTML (add surrounding context to disambiguate).",
+          ),
+        new_str: z
+          .string()
+          .describe("Replacement text (may be empty to delete)."),
+      }),
+    )
+    .min(1)
+    .describe(
+      "str_replace edits applied in order to the current HTML; the whole edit is atomic (any failure leaves the app unchanged).",
+    ),
+});
+
 const UpdateAppSchema = z.strictObject({
   appId: z.string().uuid().describe("The app id."),
   name: z.string().min(1).max(APP_NAME_MAX_LENGTH).optional(),
@@ -129,6 +170,17 @@ const AppSummaryOutputSchema = z.object({
     ),
 });
 
+const ReadAppOutputSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  scope: AppScopeSchema,
+  version: z.number(),
+  byteSize: z.number(),
+  html: z
+    .string()
+    .describe("The stored HTML, pre-injection (no SDK/base CSS)."),
+});
+
 // create/update additionally echo the assignment set when `tools` was given
 const AppMutationOutputSchema = AppSummaryOutputSchema.extend({
   tools: z
@@ -143,7 +195,7 @@ const registry = defineArchestraTools([
   defineArchestraTool({
     shortName: TOOL_CREATE_APP_SHORT_NAME,
     title: "Create App",
-    description: `Build an interactive app — a to-do list, dashboard, form, tracker, game, or any custom UI — from a single self-contained HTML document. Use this whenever the user asks to make, build, or create an app, tool, or interactive UI: author the complete HTML and pass it as html — do not paste the code into the chat reply or write it as an artifact (artifact_write is for markdown documents, not apps). Author PURE UI HTML against the Archestra Apps SDK the platform injects at render time as window.archestra: archestra.user is the authenticated viewer ({id, name} — no login flow needed); archestra.storage.user.get/set/list/delete persists state private to each viewer (favorites, drafts, settings — the right default) and archestra.storage.shared.* is one store all users of the app share (no app id is passed; the store is always the running app's own) — values are plain JSON: set(key, obj) stores the object itself and get(key) returns exactly what was stored (no JSON.stringify/JSON.parse round-trip; null means absent), and list() returns [{key, value}] entries with values included, NOT an array of keys; archestra.tools.call(name, args) calls the app's assigned tools as the viewing user, with their existing MCP credentials, and throws {code: "auth_required", url} when the tool's server still needs connecting (render that url as a link); archestra.tools.list() returns the assigned tools; archestra.ui.openLink(url), archestra.ui.requestDisplayMode(mode) and archestra.chat.sendMessage(text) reach the host; await archestra.ready before the first call. TOOLS-ONLY RULE: ALL external data must come through assigned MCP tools — find one with search_tools, assign it via the tools param, call it with archestra.tools.call. The sandbox blocks network access entirely (connect-src 'none'): fetch()/XHR/WebSocket to any external API WILL FAIL, and there is no per-app CSP override. The one external allowance is static assets: scripts, styles, fonts, and images may load from the platform CDN allowlist — cdn.jsdelivr.net, unpkg.com, cdnjs.cloudflare.com, fonts.googleapis.com, fonts.gstatic.com — use it for client-side libraries (charts, markdown renderers), never as a data channel. Do NOT import SDKs, read __ARCHESTRA_APP_SDK_URL__, or wire postMessage yourself — that glue is provided and hand-rolling it breaks the app. Alternatively omit html and pass templateId (one of: ${templateIds}) to scaffold from a curated starter; the result includes the seeded HTML so you can update_app it. When called from the chat UI the app is rendered inline in the conversation automatically; its standalone page is /apps/<id>/run. Defaults to personal scope (owned by the calling user). Returns the created app id and its first version.`,
+    description: `Build an interactive app — a to-do list, dashboard, form, tracker, game, or any custom UI — from a single self-contained HTML document. Use this whenever the user asks to make, build, or create an app, tool, or interactive UI: author the complete HTML and pass it as html — do not paste the code into the chat reply or write it as an artifact (artifact_write is for markdown documents, not apps). Author PURE UI HTML against the Archestra Apps SDK the platform injects at render time as window.archestra: archestra.user is the authenticated viewer ({id, name} — no login flow needed); archestra.storage.user.get/set/list/delete persists state private to each viewer (favorites, drafts, settings — the right default) and archestra.storage.shared.* is one store all users of the app share (no app id is passed; the store is always the running app's own) — values are plain JSON: set(key, obj) stores the object itself and get(key) returns exactly what was stored (no JSON.stringify/JSON.parse round-trip; null means absent), and list() returns [{key, value}] entries with values included, NOT an array of keys; archestra.tools.call(name, args) calls the app's assigned tools as the viewing user, with their existing MCP credentials, and throws {code: "auth_required", url} when the tool's server still needs connecting (render that url as a link); archestra.tools.list() returns the assigned tools; archestra.ui.openLink(url), archestra.ui.requestDisplayMode(mode) and archestra.chat.sendMessage(text) reach the host; await archestra.ready before the first call. TOOLS-ONLY RULE: ALL external data must come through assigned MCP tools — find one with search_tools, assign it via the tools param, call it with archestra.tools.call. The sandbox blocks network access entirely (connect-src 'none'): fetch()/XHR/WebSocket to any external API WILL FAIL, and there is no per-app CSP override. The one external allowance is static assets: scripts, styles, fonts, and images may load from the platform CDN allowlist — cdn.jsdelivr.net, unpkg.com, cdnjs.cloudflare.com, fonts.googleapis.com, fonts.gstatic.com — use it for client-side libraries (charts, markdown renderers), never as a data channel. Do NOT import SDKs, read __ARCHESTRA_APP_SDK_URL__, or wire postMessage yourself — that glue is provided and hand-rolling it breaks the app. Alternatively omit html and pass templateId (one of: ${templateIds}) to scaffold from a curated starter; the result includes the seeded HTML so you can refine it. To change an app afterwards, prefer edit_app for small targeted edits (str_replace, no need to re-send the whole document) and update_app for a full rewrite; read_app returns the current stored HTML when it is not in context. When called from the chat UI the app is rendered inline in the conversation automatically; its standalone page is /apps/<id>/run. Defaults to personal scope (owned by the calling user). Returns the created app id and its first version.`,
     schema: CreateAppSchema,
     outputSchema: AppMutationOutputSchema,
     async handler({ args, context }) {
@@ -325,10 +377,52 @@ const registry = defineArchestraTools([
     },
   }),
   defineArchestraTool({
+    shortName: TOOL_READ_APP_SHORT_NAME,
+    title: "Read App",
+    description:
+      "Return an app's stored HTML (pre-injection — exactly what was saved, without the platform SDK or base stylesheet) plus its version, byte size, name, and scope. This is the source of truth before edit_app whenever the current HTML is not already in context — read it, then make targeted edits. Defaults to the head version; pass version to read an older one.",
+    schema: ReadAppSchema,
+    outputSchema: ReadAppOutputSchema,
+    async handler({ args, context }) {
+      if (!context.userId || !context.organizationId) {
+        return errorResult("Authentication required.");
+      }
+      const app = await AppModel.findByIdForCaller({
+        id: args.appId,
+        organizationId: context.organizationId,
+        userId: context.userId,
+        isAppAdmin: await callerIsAppAdmin(
+          context.userId,
+          context.organizationId,
+        ),
+      });
+      if (!app) {
+        return errorResult(`No app found with id ${args.appId}.`);
+      }
+      const version = args.version ?? app.latestVersion;
+      const row = await AppVersionModel.findByAppAndVersion(app.id, version);
+      if (!row) {
+        return errorResult(`App ${args.appId} has no version ${version}.`);
+      }
+      const byteSize = Buffer.byteLength(row.html, "utf8");
+      return structuredSuccessResult(
+        {
+          id: app.id,
+          name: app.name,
+          scope: app.scope,
+          version: row.version,
+          byteSize,
+          html: row.html,
+        },
+        `App "${app.name}" (${app.id}) version ${row.version}, ${byteSize} bytes:\n\n${row.html}`,
+      );
+    },
+  }),
+  defineArchestraTool({
     shortName: TOOL_UPDATE_APP_SHORT_NAME,
     title: "Update App",
     description:
-      "Change an existing app's HTML, assigned tools, and/or metadata. Use this when the user asks to fix, tweak, restyle, or extend an app created earlier — pass the full revised HTML, not a diff. Author pure UI HTML against the injected Apps SDK (window.archestra: archestra.user identity, archestra.storage.user/.shared persistence — plain JSON values, get returns what set stored, list() returns [{key, value}] entries — archestra.tools.call for assigned tools as the viewing user, archestra.ui.*/archestra.chat.*) — never add SDK imports or postMessage wiring. All external data comes through assigned MCP tools (tools param + archestra.tools.call) — the sandbox blocks fetch()/XHR to external APIs (connect-src 'none'); static assets may load only from the platform CDN allowlist (cdn.jsdelivr.net, unpkg.com, cdnjs.cloudflare.com, fonts.googleapis.com, fonts.gstatic.com). Supplying new html forks a new immutable version (suppressed if identical); tools replaces the assignment list declaratively. When called from the chat UI the app's head version is rendered inline in the conversation. If a rendered app threw runtime errors, they arrive as an <app-render-diagnostics> block on the user's next message — use them to correct the HTML here.",
+      "Replace an existing app's HTML wholesale, and/or change its assigned tools or metadata. Use this for a full rewrite — pass the complete revised HTML, not a diff. For a small, targeted change to existing HTML, prefer edit_app (str_replace edits) instead of re-streaming the whole document; use read_app first if the current HTML is not in context. Author pure UI HTML against the injected Apps SDK (window.archestra: archestra.user identity, archestra.storage.user/.shared persistence — plain JSON values, get returns what set stored, list() returns [{key, value}] entries — archestra.tools.call for assigned tools as the viewing user, archestra.ui.*/archestra.chat.*) — never add SDK imports or postMessage wiring. All external data comes through assigned MCP tools (tools param + archestra.tools.call) — the sandbox blocks fetch()/XHR to external APIs (connect-src 'none'); static assets may load only from the platform CDN allowlist (cdn.jsdelivr.net, unpkg.com, cdnjs.cloudflare.com, fonts.googleapis.com, fonts.gstatic.com). Supplying new html forks a new immutable version (suppressed if identical); tools replaces the assignment list declaratively. When called from the chat UI the app's head version is rendered inline in the conversation. If a rendered app threw runtime errors, they arrive as an <app-render-diagnostics> block on the user's next message — use them to correct the HTML here.",
     schema: UpdateAppSchema,
     outputSchema: AppMutationOutputSchema,
     async handler({ args, context }) {
@@ -482,6 +576,114 @@ const registry = defineArchestraTools([
     },
   }),
   defineArchestraTool({
+    shortName: TOOL_EDIT_APP_SHORT_NAME,
+    title: "Edit App",
+    description:
+      "Apply targeted str_replace edits to an existing app's HTML — the efficient path for small changes (fix a bug, tweak a style, add a section) without re-streaming the whole document. Read the current HTML with read_app first if it is not already in context, pass that read's version as baseVersion, and supply edits as [{old_str, new_str}] pairs. Each old_str must match the current HTML exactly once (include enough surrounding context to be unique); edits apply in order and the whole call is atomic — any non-match or stale baseVersion leaves the app untouched. Supplying new HTML forks a new immutable version; assigned tools and metadata are unchanged. For a full rewrite use update_app instead.",
+    schema: EditAppSchema,
+    outputSchema: AppMutationOutputSchema,
+    async handler({ args, context }) {
+      if (!context.userId || !context.organizationId) {
+        return errorResult("Authentication required.");
+      }
+      const app = await AppModel.findByIdForCaller({
+        id: args.appId,
+        organizationId: context.organizationId,
+        userId: context.userId,
+        isAppAdmin: await callerIsAppAdmin(
+          context.userId,
+          context.organizationId,
+        ),
+      });
+      if (!app) {
+        return errorResult(`No app found with id ${args.appId}.`);
+      }
+
+      try {
+        await assertCallerMayModifyApp({
+          userId: context.userId,
+          organizationId: context.organizationId,
+          scope: app.scope,
+          authorId: app.authorId,
+          resourceTeamIds: await AppTeamModel.getTeamsForApp(app.id),
+        });
+      } catch (error) {
+        if (error instanceof ApiError) return errorResult(error.message);
+        throw error;
+      }
+
+      // Edits apply to the bytes the caller read. Versions are immutable, so
+      // this snapshot equals the locked head whenever the CAS below passes;
+      // a base that has been superseded fails the CAS and writes nothing.
+      const base = await AppVersionModel.findByAppAndVersion(
+        app.id,
+        args.baseVersion,
+      );
+      if (!base) {
+        return errorResult(
+          `App ${args.appId} has no version ${args.baseVersion}. Call read_app for the current head version.`,
+        );
+      }
+
+      let version: VersionPayload;
+      let warnings: string[];
+      try {
+        const editedHtml = applyStrReplaceEdits(base.html, args.edits);
+        // Permissions ride the version envelope; an HTML-only edit inherits the
+        // base version's permissions rather than dropping them.
+        const validated = buildValidatedVersionPayload({
+          html: editedHtml,
+          uiPermissions: base.uiPermissions,
+        });
+        version = validated.payload;
+        warnings = validated.warnings;
+      } catch (error) {
+        if (error instanceof ApiError) return errorResult(error.message);
+        throw error;
+      }
+
+      let updated: Awaited<ReturnType<typeof AppModel.update>>;
+      try {
+        updated = await AppModel.update({
+          id: args.appId,
+          version,
+          expectedLatestVersion: args.baseVersion,
+        });
+      } catch (error) {
+        if (error instanceof ApiError) return errorResult(error.message);
+        throw error;
+      }
+      if (!updated) {
+        return errorResult(`Failed to edit app ${args.appId}.`);
+      }
+
+      const editCount = args.edits.length;
+      const editLabel = `${editCount} edit${editCount === 1 ? "" : "s"}`;
+      // A fork bumps latestVersion off baseVersion (the CAS guaranteed they were
+      // equal); when they stay equal the edits netted back to the head bytes and
+      // content-hash suppression created no new version — say so plainly.
+      const forked = updated.latestVersion !== args.baseVersion;
+      const summary = forked
+        ? `Applied ${editLabel} to app "${updated.name}" (now at version ${updated.latestVersion}).`
+        : `Applied ${editLabel} to app "${updated.name}", but the result is byte-identical to version ${updated.latestVersion}; no new version was created.`;
+      const warningsNote =
+        warnings.length > 0
+          ? `\nValidation warnings (save succeeded; fix via edit_app):\n- ${warnings.join("\n- ")}`
+          : "";
+      return structuredSuccessResult(
+        {
+          id: updated.id,
+          name: updated.name,
+          description: updated.description,
+          scope: updated.scope,
+          latestVersion: updated.latestVersion,
+          ...(warnings.length > 0 ? { warnings } : {}),
+        },
+        `${summary} Rendered inline when viewed in chat; standalone run page: /apps/${updated.id}/run${warningsNote}`,
+      );
+    },
+  }),
+  defineArchestraTool({
     shortName: TOOL_DELETE_APP_SHORT_NAME,
     title: "Delete App",
     description: "Soft-delete an app the caller owns or administers.",
@@ -533,6 +735,57 @@ export const tools = registry.tools;
 // =============================================================================
 // Internal helpers
 // =============================================================================
+
+/**
+ * Apply ordered str_replace edits to a document. Each `old_str` must occur
+ * exactly once in the running text; 0 or >1 matches (or `old_str === new_str`)
+ * throws `ApiError(400)` naming the offending edit, so the whole call fails
+ * before any version is created.
+ */
+function applyStrReplaceEdits(
+  html: string,
+  edits: Array<{ old_str: string; new_str: string }>,
+): string {
+  let working = html;
+  edits.forEach((edit, index) => {
+    const label = `edit ${index + 1}`;
+    if (edit.old_str === edit.new_str) {
+      throw new ApiError(
+        400,
+        `${label}: old_str and new_str are identical (no-op).`,
+      );
+    }
+    const count = countOccurrences(working, edit.old_str);
+    if (count === 0) {
+      throw new ApiError(
+        400,
+        `${label}: old_str not found in the current HTML (0 matches). Call read_app for the current source.`,
+      );
+    }
+    if (count > 1) {
+      throw new ApiError(
+        400,
+        `${label}: old_str matched ${count} times; it must match exactly once. Add surrounding context to make it unique.`,
+      );
+    }
+    const at = working.indexOf(edit.old_str);
+    working =
+      working.slice(0, at) +
+      edit.new_str +
+      working.slice(at + edit.old_str.length);
+  });
+  return working;
+}
+
+function countOccurrences(haystack: string, needle: string): number {
+  let count = 0;
+  let pos = haystack.indexOf(needle);
+  while (pos !== -1) {
+    count++;
+    pos = haystack.indexOf(needle, pos + needle.length);
+  }
+  return count;
+}
 
 type ResolvedTools = Array<{ id: string; name: string }>;
 

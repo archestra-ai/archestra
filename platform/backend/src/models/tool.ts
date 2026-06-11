@@ -1110,6 +1110,57 @@ class ToolModel {
   }
 
   /**
+   * One-time backfill triggered on startup: when an MCP App built-in tool is
+   * created for the first time on this seed run, assign just those new tools to
+   * every existing agent in every org.
+   *
+   * New agents inherit the app toolset via {@link assignAppToolsToAgent}, but
+   * agents that predate a tool's introduction (e.g. existing agents when
+   * read_app/edit_app are added) would otherwise never receive it. Apps are a
+   * global feature (`ARCHESTRA_APPS_ENABLED`), not a per-org opt-in, so this
+   * spans all orgs. Idempotent: only the newly-created short names are assigned,
+   * via `createManyIfNotExists`.
+   *
+   * @param newlyCreatedToolNames names returned by {@link seedArchestraTools}.
+   */
+  static async backfillNewAppToolsToEnabledOrgs(
+    newlyCreatedToolNames: string[],
+  ): Promise<void> {
+    if (!config.apps.enabled) return;
+
+    const createdShortNames = new Set(
+      newlyCreatedToolNames
+        .map(extractArchestraBuiltInShortName)
+        .filter((name): name is string => name !== null),
+    );
+    const newAppShortNames = APP_ARCHESTRA_TOOL_SHORT_NAMES.filter(
+      (shortName) => createdShortNames.has(shortName),
+    );
+    if (newAppShortNames.length === 0) return;
+
+    const organizationIds = await OrganizationModel.findAllIds();
+    for (const organizationId of organizationIds) {
+      const toolIds = await ToolModel.getToolIdsForOrgByShortNames(
+        organizationId,
+        newAppShortNames,
+      );
+      if (toolIds.length === 0) continue;
+      const agentIds = await AgentModel.findIdsByOrganizationId(organizationId);
+      for (const agentId of agentIds) {
+        await AgentToolModel.createManyIfNotExists(agentId, toolIds);
+      }
+      logger.info(
+        {
+          organizationId,
+          agentCount: agentIds.length,
+          newAppShortNames,
+        },
+        "Backfilled new MCP App tools to org agents",
+      );
+    }
+  }
+
+  /**
    * Assign skill tools to a single agent if its org has opted in
    * (`organization.skillToolsEnabled`). No-op otherwise.
    *

@@ -1642,7 +1642,9 @@ Required RBAC permission: `skill:update`
 | `create_app` | Build an interactive app — a to-do list, dashboard, form, tracker, game, or any custom UI — from a single self-contained HTML document. | `app:create` |
 | `list_apps` | List apps visible to the caller, optionally filtered by name. | `app:read` |
 | `render_app` | Render an existing app by id, if the caller may view it. | `app:read` |
-| `update_app` | Change an existing app's HTML, assigned tools, and/or metadata. | `app:update` |
+| `read_app` | Return an app's stored HTML (pre-injection — exactly what was saved, without the platform SDK or base stylesheet) plus its version, byte size, name, and scope. | `app:read` |
+| `update_app` | Replace an existing app's HTML wholesale, and/or change its assigned tools or metadata. | `app:update` |
+| `edit_app` | Apply targeted str_replace edits to an existing app's HTML — the efficient path for small changes (fix a bug, tweak a style, add a section) without re-streaming the whole document. | `app:update` |
 | `delete_app` | Soft-delete an app the caller owns or administers. | `app:delete` |
 | `app_data_get` | Read a value from the calling app's data store (per-user or shared partition). | `app:read` |
 | `app_data_set` | Write a value to the calling app's data store (per-user or shared partition). | `app:update` |
@@ -1725,6 +1727,28 @@ Required RBAC permission: `app:read`
 | `latestVersion` | `number` | Yes |  |
 | `warnings` | `string[]` | No | Soft save-time validation warnings about the html (the save succeeded); fix them via update_app. |
 
+#### read_app
+
+Required RBAC permission: `app:read`
+
+##### Input
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `appId` | `string` | Yes | The app id. |
+| `version` | `integer` | No | Specific version to read; defaults to the current head. |
+
+##### Output
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `id` | `string` | Yes |  |
+| `name` | `string` | Yes |  |
+| `scope` | `"personal" \| "team" \| "org"` | Yes |  |
+| `version` | `number` | Yes |  |
+| `byteSize` | `number` | Yes |  |
+| `html` | `string` | Yes | The stored HTML, pre-injection (no SDK/base CSS). |
+
 #### update_app
 
 Required RBAC permission: `app:update`
@@ -1744,6 +1768,32 @@ Required RBAC permission: `app:update`
 | `uiPermissions.microphone` | `object` | No |  |
 | `uiPermissions.geolocation` | `object` | No |  |
 | `uiPermissions.clipboardWrite` | `object` | No |  |
+
+##### Output
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `id` | `string` | Yes |  |
+| `name` | `string` | Yes |  |
+| `description` | `string \| null` | Yes |  |
+| `scope` | `"personal" \| "team" \| "org"` | Yes |  |
+| `latestVersion` | `number` | Yes |  |
+| `warnings` | `string[]` | No | Soft save-time validation warnings about the html (the save succeeded); fix them via update_app. |
+| `tools` | `string[]` | No | The app's assigned tool names after this call (present when the tools param was given). |
+
+#### edit_app
+
+Required RBAC permission: `app:update`
+
+##### Input
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `appId` | `string` | Yes | The app id. |
+| `baseVersion` | `integer` | Yes | The version the edits are based on (from read_app). The edit is rejected if the app's head has moved past it. |
+| `edits` | `object[]` | Yes | str_replace edits applied in order to the current HTML; the whole edit is atomic (any failure leaves the app unchanged). |
+| `edits[].old_str` | `string` | Yes | Exact text to replace; must occur exactly once in the current HTML (add surrounding context to disambiguate). |
+| `edits[].new_str` | `string` | Yes | Replacement text (may be empty to delete). |
 
 ##### Output
 

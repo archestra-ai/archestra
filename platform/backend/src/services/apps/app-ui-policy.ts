@@ -2,6 +2,7 @@ import * as cheerio from "cheerio";
 import type { VersionPayload } from "@/models/app-version";
 import { ApiError } from "@/types";
 import {
+  APP_HTML_MAX_BYTES,
   type AppUiCsp,
   type AppUiPermissions,
   AppUiPermissionsSchema,
@@ -62,6 +63,16 @@ export function buildValidatedVersionPayload(params: {
   html: string;
   uiPermissions?: AppUiPermissions | null;
 }): { payload: VersionPayload; warnings: string[] } {
+  // Hard byte cap, enforced here so every save path is covered: create/update
+  // also bound it at the input-schema level, but edit_app assembles the html
+  // from str_replace edits that never touch that field.
+  const byteSize = Buffer.byteLength(params.html, "utf8");
+  if (byteSize > APP_HTML_MAX_BYTES) {
+    throw new ApiError(
+      400,
+      `app html exceeds the ${APP_HTML_MAX_BYTES}-byte limit (${byteSize} bytes).`,
+    );
+  }
   const warnings = validateAppHtml(params.html);
   return {
     payload: {

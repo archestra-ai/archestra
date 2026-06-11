@@ -122,7 +122,9 @@ export const TOOL_UPLOAD_FILE_SHORT_NAME = "upload_file";
 export const TOOL_CREATE_APP_SHORT_NAME = "create_app";
 export const TOOL_LIST_APPS_SHORT_NAME = "list_apps";
 export const TOOL_RENDER_APP_SHORT_NAME = "render_app";
+export const TOOL_READ_APP_SHORT_NAME = "read_app";
 export const TOOL_UPDATE_APP_SHORT_NAME = "update_app";
+export const TOOL_EDIT_APP_SHORT_NAME = "edit_app";
 export const TOOL_DELETE_APP_SHORT_NAME = "delete_app";
 export const TOOL_APP_DATA_GET_SHORT_NAME = "app_data_get";
 export const TOOL_APP_DATA_SET_SHORT_NAME = "app_data_set";
@@ -204,7 +206,9 @@ export const ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_CREATE_APP_SHORT_NAME,
   TOOL_LIST_APPS_SHORT_NAME,
   TOOL_RENDER_APP_SHORT_NAME,
+  TOOL_READ_APP_SHORT_NAME,
   TOOL_UPDATE_APP_SHORT_NAME,
+  TOOL_EDIT_APP_SHORT_NAME,
   TOOL_DELETE_APP_SHORT_NAME,
   TOOL_APP_DATA_GET_SHORT_NAME,
   TOOL_APP_DATA_SET_SHORT_NAME,
@@ -401,6 +405,8 @@ export const SKILL_ARCHESTRA_TOOL_SHORT_NAMES = [
 export const APP_ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_CREATE_APP_SHORT_NAME,
   TOOL_UPDATE_APP_SHORT_NAME,
+  TOOL_EDIT_APP_SHORT_NAME,
+  TOOL_READ_APP_SHORT_NAME,
   TOOL_RENDER_APP_SHORT_NAME,
   TOOL_LIST_APPS_SHORT_NAME,
   TOOL_DELETE_APP_SHORT_NAME,
@@ -426,6 +432,8 @@ export const ALWAYS_EXPOSED_ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_UPLOAD_FILE_SHORT_NAME,
   TOOL_CREATE_APP_SHORT_NAME,
   TOOL_UPDATE_APP_SHORT_NAME,
+  TOOL_EDIT_APP_SHORT_NAME,
+  TOOL_READ_APP_SHORT_NAME,
   TOOL_RENDER_APP_SHORT_NAME,
   TOOL_LIST_APPS_SHORT_NAME,
 ] as const satisfies readonly ArchestraToolShortName[];
@@ -443,12 +451,13 @@ export function isAlwaysExposedArchestraToolShortName(
  * App-management tools whose successful result identifies a single owned MCP
  * App (`structuredContent.id`). Chat mounts the app-bound runtime inline for
  * these, so their results must keep `structuredContent` through the chat
- * serialization path. `list_apps`/`delete_app` deliberately excluded — they
- * identify no single renderable app.
+ * serialization path. `list_apps`/`delete_app`/`read_app` deliberately excluded
+ * — they render nothing (`read_app` returns source, not a new head to show).
  */
 export const APP_RENDERING_ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_CREATE_APP_SHORT_NAME,
   TOOL_UPDATE_APP_SHORT_NAME,
+  TOOL_EDIT_APP_SHORT_NAME,
   TOOL_RENDER_APP_SHORT_NAME,
 ] as const satisfies readonly ArchestraToolShortName[];
 

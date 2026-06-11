@@ -48,6 +48,17 @@ describe("TOOL_PERMISSIONS map", () => {
       expect(typeof perm.action).toBe("string");
     }
   });
+
+  test("read_app reads and edit_app updates", () => {
+    expect(TOOL_PERMISSIONS.read_app).toEqual({
+      resource: "app",
+      action: "read",
+    });
+    expect(TOOL_PERMISSIONS.edit_app).toEqual({
+      resource: "app",
+      action: "update",
+    });
+  });
 });
 
 // === checkToolPermission ===

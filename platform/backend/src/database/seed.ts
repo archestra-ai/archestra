@@ -317,6 +317,7 @@ async function seedArchestraCatalogAndTools(): Promise<void> {
     ARCHESTRA_MCP_CATALOG_ID,
   );
   await ToolModel.backfillNewSkillToolsToEnabledOrgs(newlyCreatedToolNames);
+  await ToolModel.backfillNewAppToolsToEnabledOrgs(newlyCreatedToolNames);
   logger.info("Seeded Archestra catalog and tools");
 }
 

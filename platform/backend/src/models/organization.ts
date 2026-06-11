@@ -191,6 +191,18 @@ class OrganizationModel {
   }
 
   /**
+   * List every organization id. Used to backfill globally-enabled built-in
+   * tools (e.g. the MCP App tools, gated by `ARCHESTRA_APPS_ENABLED` rather
+   * than a per-org opt-in).
+   */
+  static async findAllIds(): Promise<string[]> {
+    const rows = await db
+      .select({ id: schema.organizationsTable.id })
+      .from(schema.organizationsTable);
+    return rows.map((row) => row.id);
+  }
+
+  /**
    * Get an organization by ID
    */
   static async getById(id: string): Promise<Organization | null> {

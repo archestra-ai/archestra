@@ -158,12 +158,19 @@ class AppModel {
    * immutable version iff its canonical payload differs from the head, bumping
    * `latest_version`. A version snapshot is taken as given — the caller assembles
    * the full envelope (html + csp + permissions) it wants pinned.
+   *
+   * `expectedLatestVersion` is an optimistic-concurrency guard: when supplied,
+   * the head is read under the row lock and a mismatch throws `ApiError(409)`
+   * without writing anything. Versions are immutable, so a payload the caller
+   * built from `expectedLatestVersion` is identical to the locked head whenever
+   * the guard passes — this catches a concurrent fork the caller did not see.
    */
   static async update(params: {
     id: string;
     patch?: Partial<Pick<App, "name" | "description" | "scope" | "templateId">>;
     version?: VersionPayload;
     teamIds?: string[];
+    expectedLatestVersion?: number;
   }): Promise<App | null> {
     return await withDbTransaction(async (tx) => {
       let app: App | undefined;
@@ -206,6 +213,16 @@ class AppModel {
           .for("update");
       }
       if (!app) return null;
+
+      if (
+        params.expectedLatestVersion !== undefined &&
+        app.latestVersion !== params.expectedLatestVersion
+      ) {
+        throw new ApiError(
+          409,
+          `App ${params.id} has moved to version ${app.latestVersion}; the edit was based on version ${params.expectedLatestVersion}. Call read_app and retry.`,
+        );
+      }
 
       if (params.teamIds !== undefined) {
         await tx

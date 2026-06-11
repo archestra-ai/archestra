@@ -2,7 +2,8 @@
 
 import {
   Eye,
-  Folder,
+  File as FileIcon,
+  FileText,
   MessageCircle,
   Pencil,
   Trash2,
@@ -10,7 +11,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import {
   type FileListItem,
@@ -18,6 +19,7 @@ import {
 } from "@/components/chat/file-list-section";
 import { FilePreview } from "@/components/chat/file-preview";
 import { NewChatComposer } from "@/components/chat/new-chat-composer";
+import { ResizableRightPanel } from "@/components/chat/resizable-right-panel";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { PageLayout } from "@/components/page-layout";
 import { Badge } from "@/components/ui/badge";
@@ -41,6 +43,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import {
   useDeleteProject,
@@ -52,6 +55,7 @@ import {
 } from "@/lib/projects/projects.query";
 import { sandboxArtifactUrl } from "@/lib/skills-sandbox/sandbox-file-preview";
 import { useTeams } from "@/lib/teams/team.query";
+import { cn } from "@/lib/utils";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 
 export default function ProjectDetailPageClient() {
@@ -69,6 +73,13 @@ function ProjectDetail() {
   const { data: conversations } = useProjectConversations(id);
   const deleteProject = useDeleteProject();
   const [confirmDelete, setConfirmDelete] = useState(false);
+
+  // Same as /chat: the Files sidebar owns the bottom edge, so the app shell's
+  // version footer would float in the left column — hide it.
+  useEffect(() => {
+    document.body.classList.add("hide-version");
+    return () => document.body.classList.remove("hide-version");
+  }, []);
 
   if (isPending) {
     return (
@@ -90,56 +101,64 @@ function ProjectDetail() {
   }
 
   return (
-    <PageLayout
-      title={project.name}
-      description={project.description ?? ""}
-      actionButton={
-        project.isOwner ? (
-          <div className="flex items-center gap-1">
-            <EditDescriptionButton
-              projectId={project.id}
-              description={project.description}
-            />
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label="Delete project"
-              onClick={() => setConfirmDelete(true)}
-            >
-              <Trash2 className="h-4 w-4" />
-            </Button>
-            <SharePopover projectId={project.id} />
-          </div>
-        ) : (
-          <Badge variant="secondary">Shared with you</Badge>
-        )
-      }
-    >
-      <DeleteConfirmDialog
-        open={confirmDelete}
-        onOpenChange={setConfirmDelete}
-        title={`Delete ${project.name}?`}
-        description="Chats and the result folder are kept — chats become ordinary conversations, the folder stays in My Files."
-        isPending={deleteProject.isPending}
-        onConfirm={async () => {
-          const ok = await deleteProject.mutateAsync({ id: project.id });
-          if (ok) router.push("/projects");
-        }}
-        confirmLabel="Delete"
-        pendingLabel="Deleting..."
-      />
+    // The same two-column shell as /chat: the page content scrolls in the left
+    // column while the Files panel takes the full height of the right side.
+    <div className="flex h-full w-full min-h-0">
+      <div className="min-w-0 flex-1 overflow-y-auto">
+        <PageLayout
+          title={project.name}
+          description={project.description ?? ""}
+          actionButton={
+            project.isOwner ? (
+              <div className="flex items-center gap-1">
+                <EditDescriptionButton
+                  projectId={project.id}
+                  description={project.description}
+                />
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label="Delete project"
+                  onClick={() => setConfirmDelete(true)}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+                <SharePopover projectId={project.id} />
+              </div>
+            ) : (
+              <Badge variant="secondary">Shared with you</Badge>
+            )
+          }
+        >
+          <DeleteConfirmDialog
+            open={confirmDelete}
+            onOpenChange={setConfirmDelete}
+            title={`Delete ${project.name}?`}
+            description="Chats and the result folder are kept — chats become ordinary conversations, the folder stays in My Files."
+            isPending={deleteProject.isPending}
+            onConfirm={async () => {
+              const ok = await deleteProject.mutateAsync({ id: project.id });
+              if (ok) router.push("/projects");
+            }}
+            confirmLabel="Delete"
+            pendingLabel="Deleting..."
+          />
 
-      <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
-        <div className="space-y-6">
-          <ProjectChatInput projectId={project.id} />
-          <ChatsList conversations={conversations ?? []} />
-        </div>
-        <ProjectFilesCard
+          <div className="space-y-6">
+            <ProjectChatInput projectId={project.id} />
+            <ChatsList conversations={conversations ?? []} />
+          </div>
+        </PageLayout>
+      </div>
+
+      {/* Right-side Files panel - desktop only, like the chat page */}
+      <div className="hidden md:flex h-full min-h-0">
+        <ProjectFilesSidebar
           projectId={project.id}
           folderName={project.folderName}
         />
       </div>
-    </PageLayout>
+    </div>
   );
 }
 
@@ -224,11 +243,11 @@ function ChatsList({
 }
 
 /**
- * The project's result folder, rendered with the SAME components as the chat
- * Files panel: shared FileSection rows (icons, selection, download) with the
- * preview stacked below the list.
+ * The project's result folder as a full-height right sidebar — the exact
+ * chat-page Files panel: same resizable shell, same tab header, same stacked
+ * list-over-preview body.
  */
-function ProjectFilesCard({
+function ProjectFilesSidebar({
   projectId,
   folderName,
 }: {
@@ -248,41 +267,68 @@ function ProjectFilesCard({
     }));
   const selected = items.find((i) => i.id === selectedId) ?? null;
 
+  // Open with the newest file previewed, like the chat panel does. Only once —
+  // an explicitly closed preview stays closed.
+  const defaultApplied = useRef(false);
+  const newestId = items.at(-1)?.id;
+  useEffect(() => {
+    if (defaultApplied.current || !newestId) return;
+    defaultApplied.current = true;
+    setSelectedId(newestId);
+  }, [newestId]);
+
   return (
-    <aside
-      className={`flex flex-col overflow-hidden rounded-xl border ${selected ? "h-[75vh] lg:sticky lg:top-4" : "h-fit"}`}
-    >
-      <div className="flex items-center gap-2 border-b px-3 py-2">
-        <Folder className="h-4 w-4 text-muted-foreground" aria-hidden />
-        <span className="text-sm font-medium">Files</span>
-        <span className="ml-auto truncate text-xs text-muted-foreground">
-          {folderName}
-        </span>
-      </div>
-      {items.length === 0 ? (
-        <p className="px-3 py-6 text-center text-sm text-muted-foreground">
-          Results the agent saves in this project land here.
-        </p>
-      ) : (
-        <div
-          className={
-            selected
-              ? "max-h-[45%] shrink-0 overflow-y-auto border-b px-3 py-3"
-              : "flex-1 overflow-y-auto px-3 py-3"
-          }
-        >
-          <FileSection
-            title="Results"
-            items={items}
-            selectedId={selectedId}
-            onSelect={setSelectedId}
-          />
+    <ResizableRightPanel>
+      <Tabs value="files" className="flex-1 min-h-0 flex flex-col gap-0">
+        <div className="flex items-center gap-2 border-b px-2 py-2">
+          <div className="min-w-0 flex-1 overflow-x-auto">
+            <TabsList className="h-8 w-max">
+              <TabsTrigger value="files" className="text-xs px-3">
+                <FileText className="h-3 w-3" />
+                Files
+              </TabsTrigger>
+            </TabsList>
+          </div>
+          <span className="shrink-0 truncate pr-1 text-xs text-muted-foreground">
+            {folderName}
+          </span>
         </div>
-      )}
-      {selected && (
-        <FilePreview file={selected} onClose={() => setSelectedId(null)} />
-      )}
-    </aside>
+
+        <div className="flex-1 min-h-0 overflow-hidden relative">
+          {items.length === 0 ? (
+            <div className="flex h-full flex-col items-center justify-center px-6 text-center text-xs text-muted-foreground">
+              <FileIcon className="mb-2 h-6 w-6 opacity-50" />
+              <p className="font-medium">No files yet</p>
+              <p className="mt-1">
+                Results the agent saves in this project will appear here.
+              </p>
+            </div>
+          ) : (
+            <div className="flex h-full flex-col">
+              <div
+                className={cn(
+                  "overflow-y-auto px-3 py-3",
+                  selected ? "max-h-[45%] shrink-0 border-b" : "flex-1",
+                )}
+              >
+                <FileSection
+                  title="Results"
+                  items={items}
+                  selectedId={selectedId}
+                  onSelect={setSelectedId}
+                />
+              </div>
+              {selected && (
+                <FilePreview
+                  file={selected}
+                  onClose={() => setSelectedId(null)}
+                />
+              )}
+            </div>
+          )}
+        </div>
+      </Tabs>
+    </ResizableRightPanel>
   );
 }
 

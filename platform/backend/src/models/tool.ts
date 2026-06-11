@@ -1044,7 +1044,7 @@ class ToolModel {
         .values(toolsToInsert)
         .onConflictDoUpdate({
           target: [schema.toolsTable.catalogId, schema.toolsTable.name],
-          targetWhere: sql`${schema.toolsTable.catalogId} = '00000000-0000-4000-8000-000000000001' and ${schema.toolsTable.agentId} is null and ${schema.toolsTable.delegateToAgentId} is null`,
+          targetWhere: sql`${schema.toolsTable.catalogId} = ${sql.raw(`'${ARCHESTRA_MCP_CATALOG_ID}'`)} and ${schema.toolsTable.agentId} is null and ${schema.toolsTable.delegateToAgentId} is null`,
           set: {
             description: sql`excluded.description`,
             parameters: sql`excluded.parameters`,

@@ -441,6 +441,9 @@ class McpClient {
       connectionKey = `${connectionKey}:ext:${externalIdpUserId}`;
     }
     if (options?.elicitationHandler) {
+      // Elicitation support is declared during MCP initialize. Keep these
+      // clients separate so a connection opened without the capability is not
+      // reused for a tool call that may receive elicitation/create requests.
       connectionKey = `${connectionKey}:elicitation`;
     }
 

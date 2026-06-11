@@ -5,17 +5,25 @@ import {
   ElicitResultSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import type { UIMessageChunk } from "ai";
-import type { z } from "zod";
+import { z } from "zod";
 import { CacheKey, cacheManager } from "@/cache-manager";
 import type { McpElicitationHandler } from "@/clients/mcp-elicitation";
 import logger from "@/logging";
 import { ApiError, UuidIdSchema } from "@/types";
 
-export const ChatMcpElicitationResponseSchema = ElicitResultSchema.pick({
-  action: true,
-  content: true,
-}).extend({
+const ChatMcpElicitationContentValueSchema = z.union([
+  z.string(),
+  z.number(),
+  z.boolean(),
+  z.array(z.string()),
+]);
+
+export const ChatMcpElicitationResponseSchema = z.object({
   conversationId: UuidIdSchema,
+  action: ElicitResultSchema.shape.action,
+  content: z
+    .record(z.string(), ChatMcpElicitationContentValueSchema)
+    .optional(),
 });
 
 type ChatMcpElicitationStreamData = {
@@ -133,7 +141,7 @@ async function waitForChatMcpElicitationResponse({
 
   while (Date.now() < timeoutAt) {
     if (abortSignal?.aborted) {
-      throw new Error("MCP elicitation cancelled because chat stream stopped");
+      throw createElicitationCancelledError();
     }
 
     const response =
@@ -151,7 +159,7 @@ async function waitForChatMcpElicitationResponse({
       };
     }
 
-    await sleep(250);
+    await sleep(250, abortSignal);
   }
 
   throw new Error("MCP elicitation response timed out");
@@ -161,6 +169,25 @@ function getChatMcpElicitationResponseKey(id: string) {
   return `${CacheKey.ChatMcpElicitation}-${id}` as const;
 }
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+function sleep(ms: number, abortSignal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (abortSignal?.aborted) {
+      reject(createElicitationCancelledError());
+      return;
+    }
+
+    const timer = setTimeout(resolve, ms);
+    abortSignal?.addEventListener(
+      "abort",
+      () => {
+        clearTimeout(timer);
+        reject(createElicitationCancelledError());
+      },
+      { once: true },
+    );
+  });
+}
+
+function createElicitationCancelledError() {
+  return new Error("MCP elicitation cancelled because chat stream stopped");
 }

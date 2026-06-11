@@ -37,6 +37,10 @@ const request = {
         type: "integer",
         title: "Quantity",
       },
+      insurance_value: {
+        type: "number",
+        title: "Insurance Value",
+      },
     },
     required: ["recipient_name", "delivery_window", "quantity"],
   },

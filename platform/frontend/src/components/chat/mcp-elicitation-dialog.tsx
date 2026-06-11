@@ -363,25 +363,36 @@ function normalizeValues(
     return { response: String(values.response ?? "") };
   }
 
-  return Object.fromEntries(
-    fields.map((field) => {
-      const value = values[field.name];
-      if (field.schema.type === "number" || field.schema.type === "integer") {
-        const numericValue = Number(value);
-        return [field.name, Number.isFinite(numericValue) ? numericValue : ""];
+  const entries: Array<[string, ElicitationContentValue]> = [];
+
+  for (const field of fields) {
+    const value = values[field.name];
+    if (field.schema.type === "number" || field.schema.type === "integer") {
+      if (!field.required && String(value ?? "").trim() === "") {
+        continue;
       }
-      if (Array.isArray(value)) {
-        return [
-          field.name,
-          value.filter((item): item is string => typeof item === "string"),
-        ];
-      }
-      if (typeof value === "boolean") {
-        return [field.name, value];
-      }
-      return [field.name, String(value ?? "")];
-    }),
-  );
+      const numericValue = Number(value);
+      entries.push([
+        field.name,
+        Number.isFinite(numericValue) ? numericValue : "",
+      ]);
+      continue;
+    }
+    if (Array.isArray(value)) {
+      entries.push([
+        field.name,
+        value.filter((item): item is string => typeof item === "string"),
+      ]);
+      continue;
+    }
+    if (typeof value === "boolean") {
+      entries.push([field.name, value]);
+      continue;
+    }
+    entries.push([field.name, String(value ?? "")]);
+  }
+
+  return Object.fromEntries(entries);
 }
 
 function titleize(value: string) {

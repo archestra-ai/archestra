@@ -71,6 +71,45 @@ describe("chat MCP elicitation", () => {
     });
   });
 
+  test("stops waiting immediately when the chat stream aborts during polling sleep", async () => {
+    vi.useFakeTimers();
+    const writer = { write: vi.fn() };
+    const abortController = new AbortController();
+    const bridge = createChatMcpElicitationBridge({
+      conversationId: "00000000-0000-4000-8000-000000000001",
+      abortSignal: abortController.signal,
+    });
+    bridge.setWriter(writer);
+
+    cacheManagerMocks.getAndDelete.mockResolvedValue(undefined);
+
+    const handler = bridge.createHandler({ toolName: "example__create_issue" });
+    const resultPromise = handler(
+      {
+        method: "elicitation/create",
+        params: {
+          mode: "form",
+          message: "Create an issue?",
+          requestedSchema: {
+            type: "object",
+            properties: { project: { type: "string" } },
+          },
+        },
+      } as ElicitRequest,
+      {} as never,
+    );
+
+    await vi.waitFor(() =>
+      expect(cacheManagerMocks.getAndDelete).toHaveBeenCalled(),
+    );
+
+    abortController.abort();
+
+    await expect(resultPromise).rejects.toThrow(
+      "MCP elicitation cancelled because chat stream stopped",
+    );
+  });
+
   test("stores user responses for the pending elicitation id", async () => {
     cacheManagerMocks.set.mockResolvedValue(undefined);
 

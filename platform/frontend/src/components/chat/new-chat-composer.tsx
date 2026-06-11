@@ -224,42 +224,47 @@ export function NewChatComposer({
 
   if (!agentId) return null;
 
+  // ArchestraPromptInput's root is `size-full justify-end` (it docks to the
+  // bottom of /chat). Outside that layout the stretch turns into a large top
+  // gap, so neutralize the height here.
   return (
-    <ArchestraPromptInput
-      onSubmit={(message) => {
-        const text = message.text?.trim();
-        if (!text) return;
-        if (message.files && message.files.length > 0) {
-          toast.warning(
-            "Attachments can't be carried into the new chat yet — add them once the chat opens.",
-          );
-          return;
+    <div className="[&>div]:!h-auto">
+      <ArchestraPromptInput
+        onSubmit={(message) => {
+          const text = message.text?.trim();
+          if (!text) return;
+          if (message.files && message.files.length > 0) {
+            toast.warning(
+              "Attachments can't be carried into the new chat yet — add them once the chat opens.",
+            );
+            return;
+          }
+          onSubmitPrompt(text);
+        }}
+        status="ready"
+        selectedModel={modelId}
+        onModelChange={handleModelChange}
+        agentId={agentId}
+        currentProvider={provider}
+        initialApiKeyId={apiKeyId}
+        onApiKeyChange={setApiKeyId}
+        onProviderChange={handleProviderChange}
+        allowFileUploads={organization?.allowChatFileUploads ?? false}
+        isModelsLoading={isModelsLoading}
+        inputModalities={inputModalities}
+        agentLlmApiKeyId={
+          (
+            internalAgents.find((a) => a.id === agentId) as
+              | Record<string, unknown>
+              | undefined
+          )?.llmApiKeyId as string | null
         }
-        onSubmitPrompt(text);
-      }}
-      status="ready"
-      selectedModel={modelId}
-      onModelChange={handleModelChange}
-      agentId={agentId}
-      currentProvider={provider}
-      initialApiKeyId={apiKeyId}
-      onApiKeyChange={setApiKeyId}
-      onProviderChange={handleProviderChange}
-      allowFileUploads={organization?.allowChatFileUploads ?? false}
-      isModelsLoading={isModelsLoading}
-      inputModalities={inputModalities}
-      agentLlmApiKeyId={
-        (
-          internalAgents.find((a) => a.id === agentId) as
-            | Record<string, unknown>
-            | undefined
-        )?.llmApiKeyId as string | null
-      }
-      isPlaywrightSetupVisible={false}
-      selectorAgentId={agentId}
-      onAgentChange={handleAgentChange}
-      modelSource={modelSource}
-      onResetModelOverride={handleResetModelOverride}
-    />
+        isPlaywrightSetupVisible={false}
+        selectorAgentId={agentId}
+        onAgentChange={handleAgentChange}
+        modelSource={modelSource}
+        onResetModelOverride={handleResetModelOverride}
+      />
+    </div>
   );
 }

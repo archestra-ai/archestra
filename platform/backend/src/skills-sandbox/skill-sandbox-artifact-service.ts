@@ -68,6 +68,65 @@ class SkillSandboxArtifactService {
   }
 
   /**
+   * Fetch an artifact the caller may access: the producing sandbox's owner,
+   * or the owner of the folder the artifact sits in (project folders collect
+   * results from every project member's chats). Null for "not found" AND
+   * "not yours" alike, so 404s can't probe other users' ids.
+   */
+  async getArtifactForUser(params: {
+    artifactId: string;
+    organizationId: string;
+    userId: string;
+  }): Promise<SkillSandboxFile | null> {
+    const artifact = await SkillSandboxFileModel.findArtifactById(
+      params.artifactId,
+    );
+    if (!artifact) return null;
+    const sandbox = await SkillSandboxModel.findById(artifact.sandboxId);
+    if (!sandbox || sandbox.organizationId !== params.organizationId) {
+      return null;
+    }
+    if (sandbox.userId !== params.userId) {
+      const folder = artifact.folderId
+        ? (await SkillSandboxFolderModel.findByIds([artifact.folderId])).get(
+            artifact.folderId,
+          )
+        : undefined;
+      if (
+        !folder ||
+        folder.userId !== params.userId ||
+        folder.organizationId !== params.organizationId
+      ) {
+        return null;
+      }
+    }
+    return artifact;
+  }
+
+  /**
+   * Delete an artifact: the row first (the DB is authoritative — a row whose
+   * bytes outlive it merely resurfaces as a non-downloadable orphan in
+   * filesystem mode), then the external bytes, best-effort. Same access rule
+   * as reading: sandbox owner or folder owner.
+   */
+  async deleteArtifactForUser(params: {
+    artifactId: string;
+    organizationId: string;
+    userId: string;
+  }): Promise<boolean> {
+    const artifact = await this.getArtifactForUser(params);
+    if (!artifact) return false;
+    await SkillSandboxFileModel.deleteArtifactById(artifact.id);
+    await getSandboxFileStorage()
+      .delete({
+        provider: artifact.storageProvider,
+        objectKey: artifact.objectKey,
+      })
+      .catch(() => {});
+    return true;
+  }
+
+  /**
    * Fetch an uploaded input for byte serving, scoped to the calling user.
    * Returns null for "not found" AND "not yours" so the route's 404 cannot be
    * used to probe other users' upload ids.

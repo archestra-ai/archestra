@@ -239,6 +239,18 @@ class SkillSandboxFileModel {
     }));
   }
 
+  /** Remove an artifact row. External bytes are the storage router's job. */
+  static async deleteArtifactById(id: string): Promise<void> {
+    await db
+      .delete(schema.skillSandboxFilesTable)
+      .where(
+        and(
+          eq(schema.skillSandboxFilesTable.id, id),
+          eq(schema.skillSandboxFilesTable.kind, "artifact"),
+        ),
+      );
+  }
+
   /** Fetch an uploaded input (kind 'upload') by id, bytes normalized. */
   static async findUploadById(id: string): Promise<SkillSandboxFile | null> {
     const [row] = await db

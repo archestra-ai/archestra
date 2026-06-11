@@ -1,8 +1,9 @@
 "use client";
 
-import { ChevronRight, Download, FolderKanban } from "lucide-react";
+import { ChevronRight, Download, FolderKanban, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
+import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { PageLayout } from "@/components/page-layout";
 import {
   Collapsible,
@@ -17,7 +18,10 @@ import {
   formatBytes,
   sandboxArtifactUrl,
 } from "@/lib/skills-sandbox/sandbox-file-preview";
-import { useUserSandboxFiles } from "@/lib/skills-sandbox/sandbox-files.query";
+import {
+  useDeleteSandboxFile,
+  useUserSandboxFiles,
+} from "@/lib/skills-sandbox/sandbox-files.query";
 
 export default function MyFilesPageClient() {
   return (
@@ -30,9 +34,28 @@ export default function MyFilesPageClient() {
 function MyFilesList() {
   const { data, isPending } = useUserSandboxFiles();
   const groups = groupSandboxFiles(data);
+  const deleteFile = useDeleteSandboxFile();
+  const [pendingDelete, setPendingDelete] = useState<SandboxFileRow | null>(
+    null,
+  );
 
   return (
     <PageLayout title="My Files" description="">
+      <DeleteConfirmDialog
+        open={pendingDelete !== null}
+        onOpenChange={(open) => !open && setPendingDelete(null)}
+        title={`Delete ${pendingDelete?.filename ?? "file"}?`}
+        description="This permanently removes the file from your storage. Chats that linked to it will no longer be able to download it."
+        isPending={deleteFile.isPending}
+        onConfirm={async () => {
+          if (pendingDelete?.id) {
+            await deleteFile.mutateAsync({ id: pendingDelete.id });
+            setPendingDelete(null);
+          }
+        }}
+        confirmLabel="Delete"
+        pendingLabel="Deleting..."
+      />
       {groups.length === 0 ? (
         <p className="py-12 text-center text-sm text-muted-foreground">
           {isPending ? "Loading…" : "No files yet"}
@@ -47,11 +70,16 @@ function MyFilesList() {
                     key={file.id ?? file.filename}
                     file={file}
                     withBorder={i > 0}
+                    onDelete={setPendingDelete}
                   />
                 ))}
               </div>
             ) : (
-              <ProjectGroup key={group.folder} group={group} />
+              <ProjectGroup
+                key={group.folder}
+                group={group}
+                onDelete={setPendingDelete}
+              />
             ),
           )}
         </div>
@@ -65,8 +93,10 @@ function MyFilesList() {
 /** A project's files, collapsible under the project's name. */
 function ProjectGroup({
   group,
+  onDelete,
 }: {
   group: ReturnType<typeof groupSandboxFiles>[number];
+  onDelete: (file: SandboxFileRow) => void;
 }) {
   const [open, setOpen] = useState(true);
 
@@ -98,6 +128,7 @@ function ProjectGroup({
                 key={file.id ?? `${group.folder}/${file.filename}`}
                 file={file}
                 withBorder={i > 0}
+                onDelete={onDelete}
               />
             ))
           )}
@@ -110,9 +141,11 @@ function ProjectGroup({
 function FileRow({
   file,
   withBorder,
+  onDelete,
 }: {
   file: SandboxFileRow;
   withBorder: boolean;
+  onDelete: (file: SandboxFileRow) => void;
 }) {
   return (
     <div
@@ -126,14 +159,24 @@ function FileRow({
         {new Date(file.createdAt).toLocaleString()}
       </span>
       {file.id ? (
-        <a
-          href={sandboxArtifactUrl(file.id)}
-          download={file.filename}
-          className="text-muted-foreground hover:text-foreground"
-          aria-label={`Download ${file.filename}`}
-        >
-          <Download className="h-4 w-4" />
-        </a>
+        <>
+          <a
+            href={sandboxArtifactUrl(file.id)}
+            download={file.filename}
+            className="text-muted-foreground hover:text-foreground"
+            aria-label={`Download ${file.filename}`}
+          >
+            <Download className="h-4 w-4" />
+          </a>
+          <button
+            type="button"
+            onClick={() => onDelete(file)}
+            className="text-muted-foreground hover:text-destructive"
+            aria-label={`Delete ${file.filename}`}
+          >
+            <Trash2 className="h-4 w-4" />
+          </button>
+        </>
       ) : (
         <span
           role="img"

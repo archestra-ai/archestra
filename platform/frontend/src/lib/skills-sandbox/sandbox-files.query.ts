@@ -1,9 +1,13 @@
 import { archestraApiSdk } from "@archestra/shared";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { handleApiError } from "@/lib/utils";
 
-const { getSkillSandboxConversationArtifacts, getSkillSandboxFiles } =
-  archestraApiSdk;
+const {
+  deleteSkillSandboxArtifact,
+  getSkillSandboxConversationArtifacts,
+  getSkillSandboxFiles,
+} = archestraApiSdk;
 
 /** Surface A: artifacts produced in the current conversation. */
 export function useConversationArtifacts(conversationId: string | undefined) {
@@ -35,6 +39,30 @@ export function useUserSandboxFiles() {
         return null;
       }
       return data;
+    },
+  });
+}
+
+/** Delete a persistent file; the files listing refreshes on success. */
+export function useDeleteSandboxFile() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ id }: { id: string }) => {
+      const { error } = await deleteSkillSandboxArtifact({
+        path: { artifactId: id },
+      });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return true;
+    },
+    onSuccess: (ok) => {
+      if (!ok) return;
+      toast.success("File deleted");
+      queryClient.invalidateQueries({ queryKey: ["sandbox-files"] });
+      queryClient.invalidateQueries({ queryKey: ["conversation-artifacts"] });
     },
   });
 }

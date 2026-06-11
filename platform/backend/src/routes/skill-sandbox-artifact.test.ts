@@ -590,3 +590,143 @@ describe("project folder cross-user access", () => {
     expect(files.json<{ files: unknown[] }>().files).toEqual([]);
   });
 });
+
+describe("DELETE /api/skill-sandbox/artifacts/:artifactId", () => {
+  let app: FastifyInstanceWithZod;
+  let user: User;
+  let organizationId: string;
+
+  beforeEach(async ({ makeOrganization, makeUser }) => {
+    user = await makeUser();
+    organizationId = (await makeOrganization()).id;
+
+    app = createFastifyInstance();
+    app.addHook("onRequest", async (request) => {
+      (request as typeof request & { user: unknown }).user = user;
+      (request as typeof request & { organizationId: string }).organizationId =
+        organizationId;
+    });
+    const { default: skillSandboxArtifactRoutes } = await import(
+      "./skill-sandbox-artifact"
+    );
+    await app.register(skillSandboxArtifactRoutes);
+    await app.ready();
+  });
+
+  afterEach(async () => {
+    await app.close();
+  });
+
+  test("the producer can delete their artifact; it leaves the listing", async () => {
+    const sandbox = await seedSandbox({ organizationId, userId: user.id });
+    const artifact = await seedArtifact({
+      sandboxId: sandbox.id,
+      userId: user.id,
+      organizationId,
+      mimeType: "text/plain",
+      data: Buffer.from("bye"),
+      path: "/sandbox/bye.txt",
+    });
+
+    const del = await app.inject({
+      method: "DELETE",
+      url: `/api/skill-sandbox/artifacts/${artifact.id}`,
+    });
+    expect(del.statusCode).toBe(200);
+
+    expect(
+      await SkillSandboxFileModel.findArtifactById(artifact.id),
+    ).toBeNull();
+    const bytes = await app.inject({
+      method: "GET",
+      url: `/api/skill-sandbox/artifacts/${artifact.id}`,
+    });
+    expect(bytes.statusCode).toBe(404);
+  });
+
+  test("the folder owner can delete a member-produced file; strangers cannot", async ({
+    makeUser,
+  }) => {
+    const { projectService } = await import("@/services/project");
+    const project = await projectService.create({
+      organizationId,
+      userId: user.id,
+      name: "deletable",
+      description: null,
+    });
+    const member = await makeUser({ email: "delete-member@test.com" });
+    const memberSandbox = await SkillSandboxModel.create({
+      organizationId,
+      userId: member.id,
+      conversationId: null,
+      defaultCwd: "/sandbox",
+    });
+    const produced = await SkillSandboxFileModel.createArtifact({
+      sandboxId: memberSandbox.id,
+      userId: user.id,
+      path: "/sandbox/member.txt",
+      mimeType: "text/plain",
+      originalName: null,
+      sizeBytes: 1,
+      data: Buffer.from("x"),
+      folderId: project.folderId,
+      folderName: "deletable",
+    });
+
+    // a third user (still the request principal would be `user`; simulate a
+    // stranger by checking the service directly)
+    const { skillSandboxArtifactService } = await import(
+      "@/skills-sandbox/skill-sandbox-artifact-service"
+    );
+    const stranger = await makeUser({ email: "delete-stranger@test.com" });
+    expect(
+      await skillSandboxArtifactService.deleteArtifactForUser({
+        artifactId: produced.id,
+        organizationId,
+        userId: stranger.id,
+      }),
+    ).toBe(false);
+
+    // the folder owner (the request principal) deletes via the route
+    const del = await app.inject({
+      method: "DELETE",
+      url: `/api/skill-sandbox/artifacts/${produced.id}`,
+    });
+    expect(del.statusCode).toBe(200);
+    expect(
+      await SkillSandboxFileModel.findArtifactById(produced.id),
+    ).toBeNull();
+  });
+
+  test("filesystem mode: deleting removes the file from disk", async () => {
+    const fsRoot = await mkdtemp(join(tmpdir(), "delete-fs-"));
+    const original = { ...config.skillsSandbox.fileStorage };
+    config.skillsSandbox.fileStorage.provider = "filesystem";
+    config.skillsSandbox.fileStorage.path = fsRoot;
+    try {
+      const sandbox = await seedSandbox({ organizationId, userId: user.id });
+      const artifact = await seedArtifact({
+        sandboxId: sandbox.id,
+        userId: user.id,
+        organizationId,
+        mimeType: "text/plain",
+        data: Buffer.from("on disk"),
+        path: "/sandbox/disk.txt",
+      });
+      expect(artifact.objectKey).toBe(`${user.id}/disk.txt`);
+
+      const del = await app.inject({
+        method: "DELETE",
+        url: `/api/skill-sandbox/artifacts/${artifact.id}`,
+      });
+      expect(del.statusCode).toBe(200);
+
+      const { readdir } = await import("node:fs/promises");
+      expect(await readdir(join(fsRoot, user.id))).toEqual([]);
+    } finally {
+      config.skillsSandbox.fileStorage.provider = original.provider;
+      config.skillsSandbox.fileStorage.path = original.path;
+      await rm(fsRoot, { recursive: true, force: true });
+    }
+  });
+});

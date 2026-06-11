@@ -936,9 +936,10 @@ describe("conversation list projectName", () => {
       url: "/api/chat/conversations",
     });
     expect(response.statusCode).toBe(200);
-    const body = response.json<
-      Array<{ title: string | null; projectName: string | null }>
-    >();
+    const body =
+      response.json<
+        Array<{ title: string | null; projectName: string | null }>
+      >();
     const byTitle = Object.fromEntries(body.map((c) => [c.title, c]));
     expect(byTitle["in project"].projectName).toBe("chip-source");
     expect(byTitle.plain.projectName).toBeNull();

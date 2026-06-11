@@ -302,6 +302,7 @@ export function ChatMessages({
   const session = conversationId ? getSession(conversationId) : null;
   const earlyToolUiStarts = session?.earlyToolUiStarts || {};
   const contextCompaction = session?.contextCompaction;
+  const hasPendingMcpElicitation = Boolean(session?.pendingMcpElicitation);
 
   // Debounce resize mode change when exiting edit mode to let DOM settle
   const isEditing = editingPartKey !== null;
@@ -1366,7 +1367,7 @@ export function ChatMessages({
               }
               feedback={contextCompactionFeedback}
             />
-            {isResponseInProgress && (
+            {isResponseInProgress && !hasPendingMcpElicitation && (
               <div className="absolute bottom-[-10] left-0">
                 <Message from="assistant">
                   <img

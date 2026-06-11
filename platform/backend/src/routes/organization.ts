@@ -231,7 +231,7 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
-      // Skill slash commands inject skill content that points at read_skill_file,
+      // Skill slash commands inject skill content that points at load_skill,
       // so they require the skill tools to be enabled for the organization.
       if (body.skillSlashCommandsEnabled === true) {
         const currentOrg = await OrganizationModel.getById(organizationId);
@@ -290,6 +290,26 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
         if (agent.agentType !== "llm_proxy" && agent.agentType !== "profile") {
           throw new ApiError(400, "Agent is not an LLM proxy");
+        }
+      }
+
+      if (body.connectionDefaultProviderKeys) {
+        const keyIds = Object.values(body.connectionDefaultProviderKeys);
+        const keys = await LlmProviderApiKeyModel.findByIds(keyIds);
+        const keysById = new Map(keys.map((k) => [k.id, k]));
+        for (const [provider, keyId] of Object.entries(
+          body.connectionDefaultProviderKeys,
+        )) {
+          const key = keysById.get(keyId);
+          if (!key || key.organizationId !== organizationId) {
+            throw new ApiError(404, "Provider API key not found");
+          }
+          if (key.provider !== provider) {
+            throw new ApiError(
+              400,
+              `Key "${key.name}" is for provider "${key.provider}", not "${provider}"`,
+            );
+          }
         }
       }
 

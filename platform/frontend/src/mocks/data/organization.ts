@@ -57,6 +57,7 @@ export function makeOrganization(
     connectionShownClientIds: null,
     connectionShownProviders: null,
     connectionBaseUrls: null,
+    connectionDefaultProviderKeys: null,
     defaultEnvironmentName: null,
     defaultEnvironmentNamespace: null,
     defaultEnvironmentDescription: null,

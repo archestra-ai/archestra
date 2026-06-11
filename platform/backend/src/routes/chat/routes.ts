@@ -10,7 +10,7 @@ import {
   RouteId,
   type SupportedProvider,
   TimeInMs,
-  TOOL_ACTIVATE_SKILL_SHORT_NAME,
+  TOOL_LOAD_SKILL_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
   type TokenUsage,
@@ -38,6 +38,11 @@ import {
   getChatMcpToolUiResourceUris,
   type ToolUiResourceData,
 } from "@/clients/chat-mcp-client";
+import {
+  ChatMcpElicitationResponseSchema,
+  createChatMcpElicitationBridge,
+  resolveChatMcpElicitation,
+} from "@/clients/chat-mcp-elicitation";
 import {
   createLLMModel,
   createLLMModelForAgent,
@@ -404,6 +409,10 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         });
 
         const externalAgentId = agentId;
+        const chatMcpElicitation = createChatMcpElicitationBridge({
+          conversationId,
+          abortSignal: chatAbortController.signal,
+        });
 
         // Fetch enabled tool IDs and custom selection status in parallel
         const [
@@ -434,6 +443,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
             // Pass agentId as initial delegation chain (will be extended by delegated agents)
             delegationChain: agentId,
             abortSignal: chatAbortController.signal,
+            elicitation: chatMcpElicitation,
             user: { id: user.id, email: user.email, name: user.name },
             hookRunCollector,
           }),
@@ -478,9 +488,9 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
             : "";
 
         // eagerly list the agent's skills in the prompt (like Claude Code /
-        // opencode), but only when the agent can actually activate them.
+        // opencode), but only when the agent can actually load them.
         const skillCatalogPrompt =
-          archestraMcpBranding.getToolName(TOOL_ACTIVATE_SKILL_SHORT_NAME) in
+          archestraMcpBranding.getToolName(TOOL_LOAD_SKILL_SHORT_NAME) in
           mcpTools
             ? await buildSkillCatalogPrompt({
                 organizationId,
@@ -554,7 +564,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
             // into a copy of the messages before they reach the model. The
             // original `messages` stay clean for persistence and the visible bubble.
             // Slash commands depend on skill tools (the injected block references
-            // read_skill_file), so both org flags must be on.
+            // load_skill), so both org flags must be on.
             const skillSlashCommandsActive =
               !!organization?.skillSlashCommandsEnabled &&
               !!organization?.skillToolsEnabled;
@@ -699,6 +709,8 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 }
               },
               execute: async ({ writer }) => {
+                chatMcpElicitation.setWriter(writer);
+
                 // Send heartbeat every 5s to prevent connection drops
                 // during long-running tool executions / subagent calls.
                 heartbeatInterval = setInterval(() => {
@@ -947,6 +959,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                       {
                         conversationId,
                         finishReason: probe.finishReason,
+                        rawFinishReason: probe.rawFinishReason,
                         attempt: emptyResponseAttempts,
                       },
                       "[EmptyResponse] model produced no content, retrying",
@@ -975,6 +988,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   }
                   throw new EmptyModelResponseError({
                     finishReason: probe.finishReason,
+                    rawFinishReason: probe.rawFinishReason,
                     attempts: emptyResponseAttempts,
                   });
                 }
@@ -1278,6 +1292,35 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         });
         throw error;
       }
+    },
+  );
+
+  fastify.post(
+    "/api/chat/elicitation/:id",
+    {
+      schema: {
+        operationId: RouteId.ResolveChatMcpElicitation,
+        description: "Resolve a pending MCP elicitation request from chat",
+        tags: ["Chat"],
+        params: z.object({ id: UuidIdSchema }),
+        body: ChatMcpElicitationResponseSchema,
+        response: constructResponseSchema(z.object({ success: z.boolean() })),
+      },
+    },
+    async ({ params: { id }, body, user, organizationId }, reply) => {
+      const conversation = await ConversationModel.findById({
+        id: body.conversationId,
+        userId: user.id,
+        organizationId,
+      });
+
+      if (!conversation) {
+        throw new ApiError(404, "Conversation not found");
+      }
+
+      await resolveChatMcpElicitation({ id, response: body });
+
+      return reply.send({ success: true });
     },
   );
 

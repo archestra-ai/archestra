@@ -16,6 +16,7 @@ import {
 } from "drizzle-orm/pg-core";
 import type {
   ConnectionBaseUrl,
+  ConnectionDefaultProviderKeys,
   GlobalToolPolicy,
   LimitCleanupInterval,
   NetworkPolicy,
@@ -229,6 +230,16 @@ const organizationsTable = pgTable("organization", {
   >(),
 
   /**
+   * Admin-chosen provider API key per provider for auto-provisioned
+   * connection virtual keys (provider → llm_provider_api_keys.id). When a
+   * provider has no entry, provisioning falls back to the user's
+   * personal → team → org key resolution.
+   */
+  connectionDefaultProviderKeys: jsonb(
+    "connection_default_provider_keys",
+  ).$type<ConnectionDefaultProviderKeys>(),
+
+  /**
    * Legacy preset columns (feature removed) — retained inert (non-destructive,
    * no migration) and no longer read or written. Held admin-chosen singular/
    * plural labels that the catalog UI used to override "Preset"/"presets" copy.
@@ -289,9 +300,8 @@ const organizationsTable = pgTable("organization", {
   ),
 
   /**
-   * When true, the Agent Skill tools (`list_skills`, `activate_skill`,
-   * `read_skill_file`) are assigned to every agent in the org and added to all
-   * new agents. Flipped on
+   * When true, the Agent Skill tools (`list_skills`, `load_skill`) are assigned
+   * to every agent in the org and added to all new agents. Flipped on
    * by the "Enable and create a new skill" empty-state button on /agents/skills.
    */
   skillToolsEnabled: boolean("skill_tools_enabled").notNull().default(false),
@@ -300,7 +310,7 @@ const organizationsTable = pgTable("organization", {
    * When true, the org's skills are exposed in chat as slash commands
    * (`/skill-name`). Invoking one injects the skill's content directly into the
    * conversation, independent of `skillToolsEnabled` (which only governs the
-   * model-facing `activate_skill` tool).
+   * model-facing `load_skill` tool).
    */
   skillSlashCommandsEnabled: boolean("skill_slash_commands_enabled")
     .notNull()

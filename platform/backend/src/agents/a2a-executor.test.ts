@@ -1,4 +1,4 @@
-import { TOOL_ACTIVATE_SKILL_FULL_NAME } from "@archestra/shared";
+import { TOOL_LOAD_SKILL_FULL_NAME } from "@archestra/shared";
 import { NoSuchToolError } from "ai";
 import { describe, expect, test, vi } from "vitest";
 import { MIN_IMAGE_ATTACHMENT_SIZE } from "@/agents/incoming-email/constants";
@@ -705,9 +705,9 @@ describe("executeA2AMessage skill catalog", () => {
     });
   }
 
-  test("appends the skill catalog to the system prompt when the agent can activate skills", async () => {
+  test("appends the skill catalog to the system prompt when the agent can load skills", async () => {
     primeMocks({
-      [TOOL_ACTIVATE_SKILL_FULL_NAME]: { description: "Activate" },
+      [TOOL_LOAD_SKILL_FULL_NAME]: { description: "Load" },
     });
     mockBuildSkillCatalogPrompt.mockResolvedValue(
       '<available_skills>\n<skill name="pdf">x</skill>\n</available_skills>',

@@ -133,6 +133,49 @@ describe("InlineChatError", () => {
     ).toBeInTheDocument();
   });
 
+  it("renders an empty-response turn as a neutral outcome, not a destructive error", () => {
+    const { container } = render(
+      <InlineChatError
+        error={
+          new Error(
+            JSON.stringify({
+              code: "empty_response",
+              message:
+                "The model ended its turn without a reply. Rephrasing your message may help.",
+              isRetryable: true,
+            }),
+          )
+        }
+      />,
+    );
+
+    expect(
+      screen.getByText(
+        "The model ended its turn without a reply. Rephrasing your message may help.",
+      ),
+    ).toBeInTheDocument();
+    expect(container.querySelector(".bg-destructive\\/10")).toBeNull();
+    expect(container.querySelector(".bg-muted\\/30")).not.toBeNull();
+  });
+
+  it("keeps destructive styling for genuine errors", () => {
+    const { container } = render(
+      <InlineChatError
+        error={
+          new Error(
+            JSON.stringify({
+              code: "server_error",
+              message: "The AI provider is experiencing issues.",
+              isRetryable: true,
+            }),
+          )
+        }
+      />,
+    );
+
+    expect(container.querySelector(".bg-destructive\\/10")).not.toBeNull();
+  });
+
   it("falls back to the structured error message and conversation ID as session", () => {
     render(
       <InlineChatError

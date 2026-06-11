@@ -1742,6 +1742,25 @@ describe("mapProviderError - EmptyModelResponseError", () => {
     expect(result.code).toBe(ChatErrorCode.EmptyResponse);
     expect(result.isRetryable).toBe(true);
   });
+
+  it("maps an exhausted error finish to the retryable EmptyResponse card, preserving the raw finish reason", () => {
+    const result = mapProviderError(
+      new EmptyModelResponseError({
+        finishReason: "error",
+        rawFinishReason: "MALFORMED_FUNCTION_CALL",
+        attempts: 3,
+      }),
+      "gemini",
+    );
+
+    expect(result.code).toBe(ChatErrorCode.EmptyResponse);
+    expect(result.isRetryable).toBe(true);
+    expect(result.originalError?.raw).toEqual({
+      finishReason: "error",
+      rawFinishReason: "MALFORMED_FUNCTION_CALL",
+      attempts: 3,
+    });
+  });
 });
 
 describe("getUnavailableToolErrorDetails", () => {

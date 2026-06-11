@@ -31,6 +31,7 @@ import {
 } from "@/archestra-mcp-server";
 import { isToolGrantApprovable } from "@/archestra-mcp-server/tool-auto-assign";
 import { CacheKey, LRUCacheManager } from "@/cache-manager";
+import type { ChatMcpElicitationBridge } from "@/clients/chat-mcp-elicitation";
 import mcpClient, { type TokenAuthContext } from "@/clients/mcp-client";
 import config from "@/config";
 import { hookDispatcherService } from "@/hooks/hook-dispatcher-service";
@@ -794,6 +795,7 @@ export async function getChatMcpTools({
   sessionId,
   delegationChain,
   abortSignal,
+  elicitation,
   user,
   blockOnApprovalRequired,
   scheduleTriggerRunId,
@@ -826,6 +828,8 @@ export async function getChatMcpTools({
   delegationChain?: string;
   /** Optional cancellation signal from parent stream execution */
   abortSignal?: AbortSignal;
+  /** Optional MCP elicitation bridge for interactive chat clients */
+  elicitation?: ChatMcpElicitationBridge;
   /** User identity for OTEL span attributes */
   user?: { id: string; email?: string; name?: string };
   /** Block tool execution when policy is require_approval (for A2A/autonomous contexts where no one can approve) */
@@ -1132,6 +1136,7 @@ export async function getChatMcpTools({
                       globalToolPolicy,
                       considerContextUntrusted,
                       abortSignal,
+                      elicitation,
                     });
                   }
 
@@ -1541,6 +1546,7 @@ interface ToolExecutionContext {
   globalToolPolicy: GlobalToolPolicy;
   considerContextUntrusted: boolean;
   abortSignal?: AbortSignal;
+  elicitation?: ChatMcpElicitationBridge;
 }
 
 /**
@@ -1571,6 +1577,7 @@ async function executeMcpTool(ctx: ToolExecutionContext): Promise<{
     isolationKey,
     mcpGwToken,
     abortSignal,
+    elicitation,
   } = ctx;
   throwIfAborted(abortSignal);
   const startTime = Date.now();
@@ -1625,9 +1632,14 @@ async function executeMcpTool(ctx: ToolExecutionContext): Promise<{
             userId,
           }
         : undefined,
-      // mcp-client scopes per-conversation sessions by this key; in UI chat it
-      // is the conversation id, in headless executions the execution key.
-      { conversationId: isolationKey },
+      {
+        // mcp-client scopes per-conversation sessions by this key; in UI chat it
+        // is the conversation id, in headless executions the execution key.
+        conversationId: isolationKey,
+        ...(elicitation
+          ? { elicitationHandler: elicitation.createHandler({ toolName }) }
+          : {}),
+      },
     );
     reportToolMetrics({
       toolName,

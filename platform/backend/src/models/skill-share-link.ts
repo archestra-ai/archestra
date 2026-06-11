@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 import { and, desc, eq, gt, inArray, isNull, or, sql } from "drizzle-orm";
-import db, { schema, withDbTransaction } from "@/database";
+import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import logger from "@/logging";
 import type {
   SkillShareLink,
@@ -27,6 +27,13 @@ interface CreateSkillShareLinkParams {
   marketplaceName: string;
   name?: string | null;
   expiresAt?: Date | null;
+  /**
+   * When provided, all writes run on this transaction instead of a fresh one,
+   * so the link insert commits (or rolls back) with the caller's work. Used by
+   * the connection-setup script render, which must not leak a committed link
+   * if the surrounding one-time-token claim rolls back.
+   */
+  tx?: Transaction;
 }
 
 interface CreateSkillShareLinkResult {
@@ -51,7 +58,7 @@ class SkillShareLinkModel {
     const tokenHash = hashToken(rawToken);
     const tokenStart = rawToken.slice(0, TOKEN_START_LENGTH);
 
-    const link = await withDbTransaction(async (tx) => {
+    const insertLink = async (tx: Transaction) => {
       const [created] = await tx
         .insert(schema.skillShareLinksTable)
         .values({
@@ -74,9 +81,15 @@ class SkillShareLinkModel {
       );
 
       return created;
-    });
+    };
 
-    const skills = await loadSkillsForLinks([link.id]);
+    const link = params.tx
+      ? await insertLink(params.tx)
+      : await withDbTransaction(insertLink);
+
+    // Read on the same executor: with a caller tx the junction rows are not
+    // yet visible outside the transaction.
+    const skills = await loadSkillsForLinks([link.id], params.tx);
     return {
       link: { ...link, skills: skills.get(link.id) ?? [] },
       rawToken,
@@ -230,11 +243,12 @@ function hashToken(rawToken: string): string {
 
 async function loadSkillsForLinks(
   linkIds: string[],
+  tx?: Transaction,
 ): Promise<Map<string, SkillShareLinkSkillSummary[]>> {
   const map = new Map<string, SkillShareLinkSkillSummary[]>();
   if (linkIds.length === 0) return map;
 
-  const rows = await db
+  const rows = await (tx ?? db)
     .select({
       shareLinkId: schema.skillShareLinkSkillsTable.shareLinkId,
       id: schema.skillsTable.id,

@@ -3,11 +3,10 @@ import {
   AGENT_TOOL_PREFIX,
   ARCHESTRA_MCP_CATALOG_ID,
   slugify,
-  TOOL_ACTIVATE_SKILL_FULL_NAME,
   TOOL_CREATE_SKILL_FULL_NAME,
   TOOL_DOWNLOAD_FILE_FULL_NAME,
   TOOL_LIST_SKILLS_FULL_NAME,
-  TOOL_READ_SKILL_FILE_FULL_NAME,
+  TOOL_LOAD_SKILL_FULL_NAME,
   TOOL_RUN_COMMAND_FULL_NAME,
   TOOL_RUN_TOOL_FULL_NAME,
   TOOL_SEARCH_TOOLS_FULL_NAME,
@@ -380,8 +379,7 @@ describe("search_tools", () => {
       // once assigned, the runtime path is top-level, so it stays out of search
       // (unassigned sandbox tools DO surface — see "sandbox built-in discovery")
       expect(returnedToolNames).not.toContain(TOOL_LIST_SKILLS_FULL_NAME);
-      expect(returnedToolNames).not.toContain(TOOL_ACTIVATE_SKILL_FULL_NAME);
-      expect(returnedToolNames).not.toContain(TOOL_READ_SKILL_FILE_FULL_NAME);
+      expect(returnedToolNames).not.toContain(TOOL_LOAD_SKILL_FULL_NAME);
       expect(returnedToolNames).not.toContain(TOOL_RUN_COMMAND_FULL_NAME);
       expect(returnedToolNames).not.toContain(TOOL_DOWNLOAD_FILE_FULL_NAME);
       expect(returnedToolNames).not.toContain(TOOL_UPLOAD_FILE_FULL_NAME);

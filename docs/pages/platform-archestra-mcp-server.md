@@ -68,7 +68,7 @@ Required RBAC permission: `agent:create`
 | `labels[].key` | `string` | Yes |  |
 | `labels[].value` | `string` | Yes |  |
 | `teams` | `string[]` | No | Team IDs to attach when creating a team-scoped resource. |
-| `toolExposureMode` | `"full" \| "search_and_run_only"` | No | How tools should be loaded for MCP clients and models. Use 'search_and_run_only' to keep the initial tool list small while letting search_tools find assigned tools and run_tool execute them. Assigned skill discovery/activation tools (list_skills, activate_skill, read_skill_file) and — when the code runtime is enabled and assigned — sandbox runtime tools (run_command, download_file, upload_file) stay directly available in both modes. |
+| `toolExposureMode` | `"full" \| "search_and_run_only"` | No | How tools should be loaded for MCP clients and models. Use 'search_and_run_only' to keep the initial tool list small while letting search_tools find assigned tools and run_tool execute them. Assigned skill discovery/loading tools (list_skills, load_skill) and — when the code runtime is enabled and assigned — sandbox runtime tools (run_command, download_file, upload_file) stay directly available in both modes. |
 | `description` | `string \| null` | No | Optional human-readable description of the agent. |
 | `icon` | `string \| null` | No | Optional emoji icon for the agent. |
 | `knowledgeBaseIds` | `string[]` | No | Knowledge base IDs to assign to the agent. Use get_knowledge_bases first when you need to look up IDs by name. |
@@ -214,7 +214,7 @@ Required RBAC permission: `llmProxy:create`
 | `labels[].key` | `string` | Yes |  |
 | `labels[].value` | `string` | Yes |  |
 | `teams` | `string[]` | No | Team IDs to attach when creating a team-scoped resource. |
-| `toolExposureMode` | `"full" \| "search_and_run_only"` | No | How tools should be loaded for MCP clients and models. Use 'search_and_run_only' to keep the initial tool list small while letting search_tools find assigned tools and run_tool execute them. Assigned skill discovery/activation tools (list_skills, activate_skill, read_skill_file) and — when the code runtime is enabled and assigned — sandbox runtime tools (run_command, download_file, upload_file) stay directly available in both modes. |
+| `toolExposureMode` | `"full" \| "search_and_run_only"` | No | How tools should be loaded for MCP clients and models. Use 'search_and_run_only' to keep the initial tool list small while letting search_tools find assigned tools and run_tool execute them. Assigned skill discovery/loading tools (list_skills, load_skill) and — when the code runtime is enabled and assigned — sandbox runtime tools (run_command, download_file, upload_file) stay directly available in both modes. |
 
 
 #### get_llm_proxy
@@ -1569,8 +1569,7 @@ Required RBAC permission: None (no additional RBAC permission required)
 | Tool | Description | Required RBAC Permission |
 |------|-------------|--------------------------|
 | `list_skills` | List the Agent Skills available in this organization — one line per skill (name and description). | `skill:read` |
-| `activate_skill` | Activate a specialized Agent Skill — a reusable SKILL.md instruction set. | `skill:read` |
-| `read_skill_file` | Read a bundled resource file from a skill. | `skill:read` |
+| `load_skill` | Load a specialized Agent Skill — a reusable SKILL.md instruction set. | `skill:read` |
 | `create_skill` | Create a new Agent Skill from a SKILL.md manifest. | `skill:create` |
 | `update_skill` | Update an existing Agent Skill from a SKILL.md manifest. | `skill:update` |
 
@@ -1581,7 +1580,7 @@ Required RBAC permission: `skill:read`
 This tool takes no arguments.
 
 
-#### activate_skill
+#### load_skill
 
 Required RBAC permission: `skill:read`
 
@@ -1589,19 +1588,8 @@ Required RBAC permission: `skill:read`
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `name` | `string` | Yes | The skill to activate, as named by list_skills. |
-
-
-#### read_skill_file
-
-Required RBAC permission: `skill:read`
-
-##### Input
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `skill` | `string` | Yes | The skill that owns the file |
-| `path` | `string` | Yes | Resource path from the skill, e.g. references/REFERENCE.md |
+| `name` | `string` | Yes | The skill to load, as named by list_skills. |
+| `path` | `string` | No | Optional. Omit to load the skill's instructions and bundled-file list. Pass a resource path from that list (e.g. references/REFERENCE.md) to read one bundled file instead. |
 
 
 #### create_skill
@@ -1629,7 +1617,7 @@ Required RBAC permission: `skill:update`
 |-----------|------|----------|-------------|
 | `name` | `string` | Yes | The current name of the skill to update, as named by list_skills. |
 | `content` | `string` | Yes | A complete SKILL.md manifest: a YAML frontmatter block with `name` and `description` (and optional `license`, `compatibility`, `allowed-tools`, `templated`, `metadata`), followed by the Markdown instruction body. Set `templated: true` to render the body through Handlebars (e.g. `{{user.name}}`) at activation. `allowed-tools` is a space-separated list of tools the skill is pre-approved to use. |
-| `files` | `object[]` | No | Optional. WHEN PROVIDED, REPLACES THE SKILL'S ENTIRE bundled file set. Omit it to leave the existing resource files untouched. There is no per-file patch: to change one file you must resend all of them — read the current files back first with activate_skill + read_skill_file. |
+| `files` | `object[]` | No | Optional. WHEN PROVIDED, REPLACES THE SKILL'S ENTIRE bundled file set. Omit it to leave the existing resource files untouched. There is no per-file patch: to change one file you must resend all of them — read the current files back first with load_skill (with and without a path). |
 | `files[].path` | `string` | Yes | Resource path, e.g. references/API.md or scripts/run.py |
 | `files[].content` | `string` | Yes | Text content of the file |
 | `files[].encoding` | `"utf8" \| "base64"` | No |  |

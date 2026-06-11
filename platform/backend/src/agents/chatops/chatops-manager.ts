@@ -751,20 +751,37 @@ export class ChatOpsManager {
         typeof message.metadata?.botName === "string"
           ? message.metadata.botName
           : null;
+      // People also address the bot by the platform name ("Archestra, create
+      // a task"), which matches neither the agent nor the chat display name.
+      const platformName =
+        (await OrganizationModel.getById(agent.organizationId))?.appName ||
+        "Archestra";
+      const botMentioned = message.metadata?.botMentioned === true;
       const mentionedOthers = Array.isArray(message.metadata?.mentionedOthers)
         ? (message.metadata.mentionedOthers as string[])
         : [];
-      const mentionNote =
-        message.metadata?.botMentioned === true
-          ? " It @mentions you directly."
-          : mentionedOthers.length > 0
-            ? ` It @mentions ${mentionedOthers.join(", ")} — another person, not you — so it is most likely addressed to them.`
-            : "";
+      const mentionNote = botMentioned
+        ? " It @mentions you directly."
+        : mentionedOthers.length > 0
+          ? ` It @mentions ${mentionedOthers.join(", ")} — another person, not you — so it is most likely addressed to them.`
+          : "";
+      // A direct @mention always deserves a reply — agents with narrow system
+      // prompts otherwise use the silence option to ignore greetings and
+      // small talk, which reads as the bot being broken. Only offer the
+      // sentinel when the bot was NOT directly mentioned.
+      const silenceOption = botMentioned
+        ? [
+            `The sender explicitly addressed you, so always answer — even if the message is small talk or outside your specialty.`,
+          ]
+        : [
+            `Stay silent only when the message is clearly not your business: it is addressed to another person, or people are plainly talking to each other about something that doesn't involve you. In that case respond with exactly ${CHATOPS_NO_REPLY_SENTINEL} and nothing else — nothing visible will be posted.`,
+            `Never post commentary about whether a message is addressed to you or why you are staying silent — either answer the message itself or respond with the sentinel.`,
+          ];
       systemPrefix += [
-        `\n\nYou are "${agentToUse.name}"${botName ? ` (appearing in this chat as "${botName}")` : ""} — a bot participating in a group conversation with multiple people.`,
+        `\n\nYou are "${agentToUse.name}"${botName ? ` (appearing in this chat as "${botName}")` : ""} — a bot participating in a group conversation with multiple people. People sometimes also address you as "${platformName}".`,
         `The latest message is from ${message.senderName}.${mentionNote}`,
-        `Default to replying — when in doubt, reply.`,
-        `Stay silent only when the message is clearly not your business: it is addressed to another person, or people are plainly talking to each other about something that doesn't involve you. In that case respond with exactly ${CHATOPS_NO_REPLY_SENTINEL} and nothing else — nothing visible will be posted.`,
+        `Default to replying — when in doubt, reply. Messages addressing you by any of those names (with or without an @mention) are your business.`,
+        ...silenceOption,
       ].join("\n");
     }
 
@@ -1433,19 +1450,18 @@ export class ChatOpsManager {
     let agentResponse = stripThinkingBlocks(text);
 
     // The agent's way to stay silent in group conversations — post nothing.
+    // The sentinel ANYWHERE in the response means silence: models often
+    // narrate the decision ("this is addressed to Matvey... [NO_REPLY]"),
+    // and that narration must never be posted. A genuine answer has no
+    // reason to contain the sentinel.
     let agentChoseSilence = false;
-    if (agentResponse.trim() === CHATOPS_NO_REPLY_SENTINEL) {
+    if (agentResponse.includes(CHATOPS_NO_REPLY_SENTINEL)) {
       logger.info(
         { messageId: message.messageId, agentId: agent.id },
         "[ChatOps] Agent chose not to reply",
       );
       agentChoseSilence = true;
       agentResponse = "";
-    } else if (agentResponse.includes(CHATOPS_NO_REPLY_SENTINEL)) {
-      // Defensive: the sentinel mixed into a real answer is model noise.
-      agentResponse = agentResponse
-        .replaceAll(CHATOPS_NO_REPLY_SENTINEL, "")
-        .trim();
     }
 
     if (sendReply && agentResponse) {
@@ -1477,6 +1493,13 @@ export class ChatOpsManager {
           : "_(No response)_",
         conversationReference: message.metadata?.conversationReference,
       });
+    } else if (sendReply && !agentResponse) {
+      // Nothing was (or will be) posted to the thread — clear the transient
+      // "thinking" indicator so it doesn't spin forever (Slack only
+      // auto-clears it when a message is posted).
+      await provider
+        .clearTypingStatus?.(message.channelId, message.threadId ?? "")
+        ?.catch(() => {});
     }
 
     return {

@@ -2,7 +2,11 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import config from "@/config";
-import { SkillSandboxFileModel, SkillSandboxModel } from "@/models";
+import {
+  SkillSandboxFileModel,
+  SkillSandboxFolderModel,
+  SkillSandboxModel,
+} from "@/models";
 import { skillSandboxArtifactService } from "@/skills-sandbox/skill-sandbox-artifact-service";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 
@@ -189,10 +193,18 @@ describe("skillSandboxArtifactService.resolveXFileSource", () => {
     }) => {
       const user = await makeUser();
       const org = await makeOrganization();
+      // folders exist as rows (created by projects); the dir scan is row-driven
+      await SkillSandboxFolderModel.create({
+        organizationId: org.id,
+        userId: user.id,
+        name: "drop",
+      });
       const { mkdir, writeFile } = await import("node:fs/promises");
-      await mkdir(join(fsRoot, user.id, "drop"), { recursive: true });
+      await mkdir(join(fsRoot, "projects", user.email, "drop"), {
+        recursive: true,
+      });
       await writeFile(
-        join(fsRoot, user.id, "drop", "manual.csv"),
+        join(fsRoot, "projects", user.email, "drop", "manual.csv"),
         "x,y\n1,2\n",
       );
 

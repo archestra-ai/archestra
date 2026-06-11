@@ -93,6 +93,19 @@ class UserModel {
     return user;
   }
 
+  /**
+   * Email only, with no membership requirement (unlike getById's join) —
+   * used to label per-user storage folders.
+   */
+  static async getEmailById(id: string): Promise<string | null> {
+    const [row] = await db
+      .select({ email: schema.usersTable.email })
+      .from(schema.usersTable)
+      .where(eq(schema.usersTable.id, id))
+      .limit(1);
+    return row?.email ?? null;
+  }
+
   /** Display names for several users in one query, keyed by user id. */
   static async getNamesByIds(ids: string[]): Promise<Map<string, string>> {
     if (ids.length === 0) return new Map();

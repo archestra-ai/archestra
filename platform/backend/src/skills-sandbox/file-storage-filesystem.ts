@@ -12,6 +12,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { extname, join, resolve, sep } from "node:path";
+import UserModel from "@/models/user";
 import type {
   SandboxArtifactRow,
   SandboxFileListItem,
@@ -26,20 +27,28 @@ import { mimeFromExtension } from "./mime-from-extension";
  */
 const COUNTER_LIMIT = 1000;
 
+/** Top-level directory holding every project result folder. */
+const PROJECTS_DIR = "projects";
+
 /**
- * Sandbox file bytes as plain files under a configured root, one folder per
- * user: `<root>/<userId>/<filename>`, with one optional level of user-created
- * PFS folders: `<root>/<userId>/<folder>/<filename>`. The tree is the user's
- * artifacts outbox — everything in it is theirs to browse, copy, or delete.
- * Uploads never land here: the router keeps them in Postgres because replay
- * re-reads them on every container rebuild.
+ * Sandbox file bytes as plain files under a configured root, laid out for
+ * humans browsing the storage folder:
+ *
+ *   - personal files: `<root>/<email>/<filename>` — one folder per user,
+ *     named by email (falling back to the user id when no user row exists).
+ *   - project result folders: `<root>/projects/<email>/<folder>/<filename>` —
+ *     lifted out of the personal folder, grouped under `projects/` by owner.
+ *
+ * The tree is the user's artifacts outbox — everything in it is theirs to
+ * browse, copy, or delete. Uploads never land here: the router keeps them in
+ * Postgres because replay re-reads them on every container rebuild.
  *
  * Writes are crash-safe and never overwrite: bytes land in a temp file, then
  * `link(2)` publishes them at the final name — on EEXIST the name counts up
  * Downloads-style (`report.txt`, `report (1).txt`, `report (2).txt`, ...).
  *
  * Every path this class touches is resolved and asserted to stay inside the
- * user's directory (or, for row object keys, inside the root), so a hostile
+ * owner's subtree (or, for row object keys, inside the root), so a hostile
  * filename or object key cannot escape the storage tree.
  */
 export class FilesystemSandboxFileStorage {
@@ -61,17 +70,19 @@ export class FilesystemSandboxFileStorage {
   }> {
     const name = params.filename || "file";
     const folder = params.folder ?? null;
-    const relDir = folder ? join(params.userId, folder) : params.userId;
-    const dirAbs = this.resolveUnderUserDir(params.userId, relDir);
+    const ns = await this.namespaceFor(params.userId);
+    const baseRel = folder ? join(PROJECTS_DIR, ns) : ns;
+    const relDir = folder ? join(baseRel, folder) : baseRel;
+    const dirAbs = this.resolveUnder(baseRel, relDir);
     await mkdir(dirAbs, { recursive: true });
-    await this.assertRealDirUnderUserDir(params.userId, dirAbs);
+    await this.assertRealDirUnder(baseRel, dirAbs);
 
     const tempPath = join(dirAbs, `.${randomUUID()}.tmp`);
     await writeFile(tempPath, params.data, { flag: "wx" });
     try {
       const objectKey = await this.publish({
         tempPath,
-        userId: params.userId,
+        baseRel,
         relDir,
         name,
         fileId: params.fileId,
@@ -119,12 +130,10 @@ export class FilesystemSandboxFileStorage {
     userId: string;
     name: string;
   }): Promise<void> {
-    const abs = this.resolveUnderUserDir(
-      params.userId,
-      join(params.userId, params.name),
-    );
+    const baseRel = join(PROJECTS_DIR, await this.namespaceFor(params.userId));
+    const abs = this.resolveUnder(baseRel, join(baseRel, params.name));
     await mkdir(abs, { recursive: true });
-    await this.assertRealDirUnderUserDir(params.userId, abs);
+    await this.assertRealDirUnder(baseRel, abs);
   }
 
   /**
@@ -136,10 +145,12 @@ export class FilesystemSandboxFileStorage {
     folder: string | null;
     filename: string;
   }): Promise<Buffer> {
+    const ns = await this.namespaceFor(params.userId);
+    const baseRel = params.folder ? join(PROJECTS_DIR, ns) : ns;
     const rel = params.folder
-      ? join(params.userId, params.folder, params.filename)
-      : join(params.userId, params.filename);
-    const abs = this.resolveUnderUserDir(params.userId, rel);
+      ? join(baseRel, params.folder, params.filename)
+      : join(baseRel, params.filename);
+    const abs = this.resolveUnder(baseRel, rel);
     try {
       await this.assertNotSymlink(abs);
       return await readFile(abs);
@@ -152,13 +163,13 @@ export class FilesystemSandboxFileStorage {
   }
 
   /**
-   * List the user's directory tree (one level deep) as the source of truth.
-   * Top-level subdirectories are PFS folders: matched to `folderRows` by name
-   * to borrow the row id, listed with `id: null` when hand-made. Folder rows
-   * whose directory is gone are still listed (the row is the durable half).
-   * Each disk file is matched to a row by object_key to borrow its id/mime;
-   * files with no row are listed non-downloadable. Rows with no disk file are
-   * dropped.
+   * List the user's PFS with the directory tree as the source of truth.
+   * Personal files come from `<root>/<ns>` (subdirectories there are legacy
+   * folders, still listed); project folders come from `folderRows`, each
+   * scanned at `<root>/projects/<ns>/<name>` — rows whose directory is gone
+   * are still listed (the row is the durable half). Each disk file is matched
+   * to a row by object_key to borrow its id/mime; files with no row are
+   * listed non-downloadable. Rows with no disk file are dropped.
    */
   async listUserFiles(params: {
     userId: string;
@@ -168,24 +179,7 @@ export class FilesystemSandboxFileStorage {
     folders: SandboxFolderListItem[];
     files: SandboxFileListItem[];
   }> {
-    const dir = this.resolveUnderUserDir(params.userId, params.userId);
-    let entries: Awaited<ReturnType<typeof readDirEntries>>;
-    try {
-      entries = await readDirEntries(dir);
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-        return {
-          folders: params.folderRows.map((f) => ({
-            id: f.id,
-            name: f.name,
-            createdAt: f.createdAt,
-          })),
-          files: [],
-        };
-      }
-      throw error;
-    }
-
+    const ns = await this.namespaceFor(params.userId);
     const rowByKey = new Map(
       params.rows
         .filter((r) => r.objectKey)
@@ -196,6 +190,14 @@ export class FilesystemSandboxFileStorage {
     const folders: SandboxFolderListItem[] = [];
     const files: SandboxFileListItem[] = [];
     const seenFolderNames = new Set<string>();
+
+    const dir = this.resolveUnder(ns, ns);
+    let entries: Awaited<ReturnType<typeof readDirEntries>> = [];
+    try {
+      entries = await readDirEntries(dir);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
 
     for (const entry of entries) {
       // `entry.isFile()`/`isDirectory()` reflect the directory entry's OWN
@@ -215,7 +217,7 @@ export class FilesystemSandboxFileStorage {
         });
         files.push(
           ...(await this.listFolderFiles({
-            userId: params.userId,
+            keyPrefix: ns,
             folderName: entry.name,
             dirAbs: join(dir, entry.name),
             rowByKey,
@@ -232,16 +234,26 @@ export class FilesystemSandboxFileStorage {
           filename: entry.name,
           folder: null,
           stats,
-          match: rowByKey.get(`${params.userId}/${entry.name}`),
+          match: rowByKey.get(`${ns}/${entry.name}`),
         }),
       );
     }
 
-    // folder rows whose directory was hand-deleted still represent a folder.
+    // project folders live under projects/<ns>/<name>; the row is what makes
+    // a directory there a folder, and it lists even when the dir is gone.
+    const projectsBase = join(PROJECTS_DIR, ns);
     for (const f of params.folderRows) {
       if (!seenFolderNames.has(f.name)) {
         folders.push({ id: f.id, name: f.name, createdAt: f.createdAt });
       }
+      files.push(
+        ...(await this.listFolderFiles({
+          keyPrefix: projectsBase,
+          folderName: f.name,
+          dirAbs: this.resolveUnder(projectsBase, join(projectsBase, f.name)),
+          rowByKey,
+        })),
+      );
     }
 
     folders.sort((a, b) => a.name.localeCompare(b.name));
@@ -253,7 +265,8 @@ export class FilesystemSandboxFileStorage {
 
   /** Files directly inside one PFS folder directory (no deeper recursion). */
   private async listFolderFiles(params: {
-    userId: string;
+    /** Root-relative dir the folder sits in — the object-key prefix. */
+    keyPrefix: string;
     folderName: string;
     dirAbs: string;
     rowByKey: Map<string, SandboxArtifactRow>;
@@ -278,7 +291,7 @@ export class FilesystemSandboxFileStorage {
           folder: params.folderName,
           stats,
           match: params.rowByKey.get(
-            `${params.userId}/${params.folderName}/${entry.name}`,
+            `${params.keyPrefix}/${params.folderName}/${entry.name}`,
           ),
         }),
       );
@@ -324,7 +337,7 @@ export class FilesystemSandboxFileStorage {
    */
   private async publish(params: {
     tempPath: string;
-    userId: string;
+    baseRel: string;
     relDir: string;
     name: string;
     fileId: string;
@@ -336,10 +349,7 @@ export class FilesystemSandboxFileStorage {
         counter === 0 ? params.name : `${base} (${counter})${ext}`;
       const key = join(params.relDir, candidate);
       try {
-        await link(
-          params.tempPath,
-          this.resolveUnderUserDir(params.userId, key),
-        );
+        await link(params.tempPath, this.resolveUnder(params.baseRel, key));
         return key;
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
@@ -352,39 +362,43 @@ export class FilesystemSandboxFileStorage {
       `${base}-${params.fileId.slice(0, 8)}${ext}`,
     );
     try {
-      await link(
-        params.tempPath,
-        this.resolveUnderUserDir(params.userId, fallback),
-      );
+      await link(params.tempPath, this.resolveUnder(params.baseRel, fallback));
       return fallback;
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
     }
     const random = join(params.relDir, `${base}-${randomUUID()}${ext}`);
-    await link(
-      params.tempPath,
-      this.resolveUnderUserDir(params.userId, random),
-    );
+    await link(params.tempPath, this.resolveUnder(params.baseRel, random));
     return random;
   }
 
   /**
+   * Directory name for a user's files: their email when the user row exists
+   * (humans browse this tree), the raw id otherwise. Emails cannot contain
+   * path separators, and `projects` is not a valid email, so namespaces can
+   * collide neither with each other nor with the projects tree.
+   */
+  private async namespaceFor(userId: string): Promise<string> {
+    return (await UserModel.getEmailById(userId)) || userId;
+  }
+
+  /**
    * The lexical checks below don't see symlinks: a link planted inside the
-   * tree resolves under the user dir lexically while its target sits outside.
+   * tree resolves under the base dir lexically while its target sits outside.
    * Before writing into a directory, resolve it with realpath(3) and require
-   * the REAL location to still be inside the user's real directory. (The root
+   * the REAL location to still be inside the owner's real subtree. (The root
    * itself may legitimately be a symlink — e.g. /var -> /private/var — so the
    * comparison base is the resolved root.)
    */
-  private async assertRealDirUnderUserDir(
-    userId: string,
+  private async assertRealDirUnder(
+    baseRel: string,
     dirAbs: string,
   ): Promise<void> {
-    const realUserDir = join(await realpath(resolve(this.root)), userId);
+    const realBase = join(await realpath(resolve(this.root)), baseRel);
     const realDir = await realpath(dirAbs);
-    if (realDir !== realUserDir && !realDir.startsWith(realUserDir + sep)) {
+    if (realDir !== realBase && !realDir.startsWith(realBase + sep)) {
       throw new Error(
-        `sandbox storage directory resolves outside the user folder: ${dirAbs}`,
+        `sandbox storage directory resolves outside the owner folder: ${dirAbs}`,
       );
     }
   }
@@ -405,15 +419,16 @@ export class FilesystemSandboxFileStorage {
 
   /**
    * Resolve a root-relative path and assert it stays strictly inside the
-   * user's directory — the last line of defense should a hostile filename or
-   * folder name get past upstream validation.
+   * owner's base directory (`<ns>` or `projects/<ns>`) — the last line of
+   * defense should a hostile filename or folder name get past upstream
+   * validation.
    */
-  private resolveUnderUserDir(userId: string, relPath: string): string {
-    const userDir = resolve(this.root, userId);
+  private resolveUnder(baseRel: string, relPath: string): string {
+    const baseDir = resolve(this.root, baseRel);
     const abs = resolve(this.root, relPath);
-    if (abs !== userDir && !abs.startsWith(userDir + sep)) {
+    if (abs !== baseDir && !abs.startsWith(baseDir + sep)) {
       throw new Error(
-        `sandbox storage path escapes the user folder: ${relPath}`,
+        `sandbox storage path escapes the owner folder: ${relPath}`,
       );
     }
     return abs;

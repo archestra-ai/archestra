@@ -27,7 +27,7 @@ describe("sandbox file storage: filesystem mode end-to-end (models + PGlite)", (
   });
 
   async function makeOwner(fixtures: {
-    makeUser: (overrides?: object) => Promise<{ id: string }>;
+    makeUser: (overrides?: object) => Promise<{ id: string; email: string }>;
     makeOrganization: () => Promise<{ id: string }>;
   }) {
     const user = await fixtures.makeUser();
@@ -96,9 +96,9 @@ describe("sandbox file storage: filesystem mode end-to-end (models + PGlite)", (
       data: Buffer.from("phase3 ok"),
     });
     expect(artifact.storageProvider).toBe("filesystem");
-    expect(artifact.objectKey).toBe(`${owner.user.id}/out.txt`);
+    expect(artifact.objectKey).toBe(`${owner.user.email}/out.txt`);
     expect(artifact.data).toBeNull();
-    const onDisk = await readFile(join(root, owner.user.id, "out.txt"));
+    const onDisk = await readFile(join(root, owner.user.email, "out.txt"));
     expect(onDisk.toString()).toBe("phase3 ok");
     const fetched = await SkillSandboxFileModel.findArtifactById(artifact.id);
     expect(fetched).not.toBeNull();
@@ -131,9 +131,9 @@ describe("sandbox file storage: filesystem mode end-to-end (models + PGlite)", (
     const third = await SkillSandboxFileModel.createArtifact(
       params(sandboxA.id, "from A again"),
     );
-    expect(first.objectKey).toBe(`${owner.user.id}/report.txt`);
-    expect(second.objectKey).toBe(`${owner.user.id}/report (1).txt`);
-    expect(third.objectKey).toBe(`${owner.user.id}/report (2).txt`);
+    expect(first.objectKey).toBe(`${owner.user.email}/report.txt`);
+    expect(second.objectKey).toBe(`${owner.user.email}/report (1).txt`);
+    expect(third.objectKey).toBe(`${owner.user.email}/report (2).txt`);
     // each row reads back its own bytes
     const storage = getSandboxFileStorage();
     expect((await storage.get(first)).toString()).toBe("from A");

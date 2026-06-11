@@ -616,7 +616,7 @@ describe("DELETE /api/skill-sandbox/artifacts/:artifactId", () => {
         data: Buffer.from("on disk"),
         path: "/sandbox/disk.txt",
       });
-      expect(artifact.objectKey).toBe(`${user.id}/disk.txt`);
+      expect(artifact.objectKey).toBe(`${user.email}/disk.txt`);
 
       const del = await app.inject({
         method: "DELETE",
@@ -625,7 +625,7 @@ describe("DELETE /api/skill-sandbox/artifacts/:artifactId", () => {
       expect(del.statusCode).toBe(200);
 
       const { readdir } = await import("node:fs/promises");
-      expect(await readdir(join(fsRoot, user.id))).toEqual([]);
+      expect(await readdir(join(fsRoot, user.email))).toEqual([]);
     } finally {
       config.skillsSandbox.fileStorage.provider = original.provider;
       config.skillsSandbox.fileStorage.path = original.path;

@@ -142,6 +142,34 @@ describe("FilesystemSandboxFileStorage", () => {
     ).rejects.toThrow(/object key/);
   });
 
+  test("a real user's files are namespaced by email, projects lifted to projects/", async ({
+    makeUser,
+  }) => {
+    const user = await makeUser({ email: "fs-owner@test.com" });
+    const personal = await storage.put({
+      userId: user.id,
+      fileId: FILE_ID,
+      kind: "artifact",
+      filename: "hi.txt",
+      data: Buffer.from("hi"),
+    });
+    expect(personal.objectKey).toBe("fs-owner@test.com/hi.txt");
+
+    const project = await storage.put({
+      userId: user.id,
+      fileId: "ffffffff-0000-1111-2222-333333333333",
+      kind: "artifact",
+      filename: "out.txt",
+      data: Buffer.from("out"),
+      folder: "proj",
+    });
+    expect(project.objectKey).toBe("projects/fs-owner@test.com/proj/out.txt");
+    const onDisk = await readFile(
+      join(root, "projects", "fs-owner@test.com", "proj", "out.txt"),
+    );
+    expect(onDisk.toString()).toBe("out");
+  });
+
   test("delete removes the file and tolerates a missing one", async () => {
     const stored = await storage.put(
       putParams({ filename: "tmp.txt", data: Buffer.from("x") }),
@@ -343,7 +371,7 @@ describe("FilesystemSandboxFileStorage.listUserFiles", () => {
       data: Buffer.from("png"),
       folder: "reports",
     });
-    expect(stored.objectKey).toBe(`${userId}/reports/chart.png`);
+    expect(stored.objectKey).toBe(`projects/${userId}/reports/chart.png`);
 
     const { files } = await storage.listUserFiles({
       userId,
@@ -355,7 +383,13 @@ describe("FilesystemSandboxFileStorage.listUserFiles", () => {
           objectKey: stored.objectKey,
         }),
       ],
-      folderRows: [],
+      folderRows: [
+        {
+          id: "77777777-7777-7777-7777-777777777777",
+          name: "reports",
+          createdAt: new Date("2026-03-01T00:00:00Z"),
+        },
+      ],
     });
 
     expect(files).toEqual([
@@ -408,8 +442,8 @@ describe("FilesystemSandboxFileStorage folders + readUserFile", () => {
       data: Buffer.from("3"),
     });
 
-    expect(first.objectKey).toBe(`${userId}/f1/a.txt`);
-    expect(second.objectKey).toBe(`${userId}/f1/a (1).txt`);
+    expect(first.objectKey).toBe(`projects/${userId}/f1/a.txt`);
+    expect(second.objectKey).toBe(`projects/${userId}/f1/a (1).txt`);
     // the root has its own counter sequence
     expect(rootCopy.objectKey).toBe(`${userId}/a.txt`);
   });
@@ -417,14 +451,18 @@ describe("FilesystemSandboxFileStorage folders + readUserFile", () => {
   test("ensureFolderDir creates the dir and adopts an existing one", async () => {
     await storage.ensureFolderDir({ userId, name: "fresh" });
     await storage.ensureFolderDir({ userId, name: "fresh" });
-    const entries = await readdir(join(root, userId));
+    const entries = await readdir(join(root, "projects", userId));
     expect(entries).toEqual(["fresh"]);
   });
 
   test("readUserFile reads root and folder files, including orphans", async () => {
-    await mkdir(join(root, userId, "docs"), { recursive: true });
+    await mkdir(join(root, userId), { recursive: true });
+    await mkdir(join(root, "projects", userId, "docs"), { recursive: true });
     await writeFile(join(root, userId, "root.txt"), "root-bytes");
-    await writeFile(join(root, userId, "docs", "inner.txt"), "inner-bytes");
+    await writeFile(
+      join(root, "projects", userId, "docs", "inner.txt"),
+      "inner-bytes",
+    );
 
     expect(
       (
@@ -495,7 +533,8 @@ describe("FilesystemSandboxFileStorage symlink hardening", () => {
 
   test("put refuses to write through a symlinked folder directory", async () => {
     const { symlink } = await import("node:fs/promises");
-    await symlink(outside, join(root, userId, "evil"));
+    await mkdir(join(root, "projects", userId), { recursive: true });
+    await symlink(outside, join(root, "projects", userId, "evil"));
 
     await expect(
       storage.put({
@@ -512,7 +551,8 @@ describe("FilesystemSandboxFileStorage symlink hardening", () => {
 
   test("ensureFolderDir refuses an existing symlinked directory", async () => {
     const { symlink } = await import("node:fs/promises");
-    await symlink(outside, join(root, userId, "evil"));
+    await mkdir(join(root, "projects", userId), { recursive: true });
+    await symlink(outside, join(root, "projects", userId, "evil"));
     await expect(
       storage.ensureFolderDir({ userId, name: "evil" }),
     ).rejects.toThrow(/resolves outside/);

@@ -1317,20 +1317,40 @@ export function McpCatalogForm({
                     )}
                   />
 
+import { parseSmartPaste } from "./smart-paste-utils";
+
+// ... existing code ...
+
                   <FormField
                     control={form.control}
                     name="localConfig.arguments"
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>
-                          Arguments (one per line)
+                          Arguments (one per line or JSON)
                           <ReinstallHint show={isArgumentsDirty} />
                         </FormLabel>
                         <FormControl>
                           <Textarea
-                            placeholder={`/path/to/server.js\n--verbose`}
+                            placeholder={`["--port", "8080"]\nOR\n/path/to/server.js\n--verbose`}
                             className="font-mono min-h-20"
                             {...field}
+                            onPaste={(e) => {
+                              const pastedText = e.clipboardData.getData("text");
+                              const parsed = parseSmartPaste(pastedText);
+                              if (parsed) {
+                                e.preventDefault();
+                                if (parsed.localConfig?.command) {
+                                  form.setValue("localConfig.command", parsed.localConfig.command, { shouldDirty: true });
+                                }
+                                if (parsed.localConfig?.arguments) {
+                                  form.setValue("localConfig.arguments", parsed.localConfig.arguments, { shouldDirty: true });
+                                }
+                                if (parsed.localConfig?.environment) {
+                                  form.setValue("localConfig.environment", parsed.localConfig.environment, { shouldDirty: true });
+                                }
+                              }
+                            }}
                           />
                         </FormControl>
                         <FormMessage />

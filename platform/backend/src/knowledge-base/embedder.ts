@@ -236,10 +236,11 @@ class EmbeddingService {
     }
 
     for (const { documentId, chunkIds, chunkCount } of docChunkMap) {
-      const anyFailed = chunkIds.some((id) => failedChunkIds.has(id));
-      if (anyFailed) {
+      const firstFailedChunkId = chunkIds.find((id) => failedChunkIds.has(id));
+      if (firstFailedChunkId) {
         await KbDocumentModel.update(documentId, {
           embeddingStatus: "failed",
+          embeddingError: "API_FAILURE", // Map specific errors if needed
         });
         logger.error(
           { documentId, runId: connectorRunId },
@@ -248,6 +249,7 @@ class EmbeddingService {
       } else {
         await KbDocumentModel.update(documentId, {
           embeddingStatus: "completed",
+          embeddingError: null,
           chunkCount,
         });
         logger.info(

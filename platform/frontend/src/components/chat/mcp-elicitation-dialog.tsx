@@ -372,10 +372,10 @@ function normalizeValues(
         continue;
       }
       const numericValue = Number(value);
-      entries.push([
-        field.name,
-        Number.isFinite(numericValue) ? numericValue : "",
-      ]);
+      if (!Number.isFinite(numericValue)) {
+        continue;
+      }
+      entries.push([field.name, numericValue]);
       continue;
     }
     if (Array.isArray(value)) {

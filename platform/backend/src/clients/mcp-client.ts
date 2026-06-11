@@ -444,6 +444,9 @@ class McpClient {
       // Elicitation support is declared during MCP initialize. Keep these
       // clients separate so a connection opened without the capability is not
       // reused for a tool call that may receive elicitation/create requests.
+      // This intentionally keeps a second cached client per server/session
+      // when both interactive and non-interactive callers use the same MCP
+      // server.
       connectionKey = `${connectionKey}:elicitation`;
     }
 
@@ -871,7 +874,12 @@ class McpClient {
       catalogItem,
       targetMcpServerId,
     );
-    const concurrencyLimit = this.getConcurrencyLimit(transportKind);
+    // The MCP SDK stores request handlers on the client by method. Serialize
+    // elicitation-capable calls so a cached client's elicitation handler is
+    // not replaced while another tool call on the same connection is active.
+    const concurrencyLimit = options?.elicitationHandler
+      ? 1
+      : this.getConcurrencyLimit(transportKind);
 
     return this.connectionLimiter.runWithLimit(
       connectionKey,

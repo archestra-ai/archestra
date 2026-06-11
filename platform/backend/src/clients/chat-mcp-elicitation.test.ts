@@ -71,6 +71,61 @@ describe("chat MCP elicitation", () => {
     });
   });
 
+  test("backs off polling while waiting for a user response", async () => {
+    vi.useFakeTimers();
+    const writer = { write: vi.fn() };
+    const bridge = createChatMcpElicitationBridge({
+      conversationId: "00000000-0000-4000-8000-000000000001",
+    });
+    bridge.setWriter(writer);
+
+    cacheManagerMocks.getAndDelete
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce({
+        conversationId: "00000000-0000-4000-8000-000000000001",
+        action: "accept",
+        content: { project: "alpha" },
+      });
+
+    const handler = bridge.createHandler({ toolName: "example__create_issue" });
+    const resultPromise = handler(
+      {
+        method: "elicitation/create",
+        params: {
+          mode: "form",
+          message: "Create an issue?",
+          requestedSchema: {
+            type: "object",
+            properties: { project: { type: "string" } },
+          },
+        },
+      } as ElicitRequest,
+      {} as never,
+    );
+
+    expect(cacheManagerMocks.getAndDelete).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(249);
+    expect(cacheManagerMocks.getAndDelete).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(cacheManagerMocks.getAndDelete).toHaveBeenCalledTimes(2);
+
+    await vi.advanceTimersByTimeAsync(499);
+    expect(cacheManagerMocks.getAndDelete).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(cacheManagerMocks.getAndDelete).toHaveBeenCalledTimes(3);
+
+    await vi.advanceTimersByTimeAsync(999);
+    expect(cacheManagerMocks.getAndDelete).toHaveBeenCalledTimes(3);
+    await vi.advanceTimersByTimeAsync(1);
+
+    await expect(resultPromise).resolves.toEqual({
+      action: "accept",
+      content: { project: "alpha" },
+    });
+  });
+
   test("stops waiting immediately when the chat stream aborts during polling sleep", async () => {
     vi.useFakeTimers();
     const writer = { write: vi.fn() };

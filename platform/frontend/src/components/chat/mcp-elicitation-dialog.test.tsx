@@ -95,5 +95,8 @@ describe("McpElicitationDialog", () => {
         quantity: 3,
       },
     });
+    expect(onRespond.mock.calls[0]?.[0].content).not.toHaveProperty(
+      "insurance_value",
+    );
   });
 });

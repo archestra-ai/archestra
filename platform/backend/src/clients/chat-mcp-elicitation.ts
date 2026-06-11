@@ -11,6 +11,9 @@ import type { McpElicitationHandler } from "@/clients/mcp-elicitation";
 import logger from "@/logging";
 import { ApiError, UuidIdSchema } from "@/types";
 
+const INITIAL_ELICITATION_POLL_INTERVAL_MS = 250;
+const MAX_ELICITATION_POLL_INTERVAL_MS = 5_000;
+
 const ChatMcpElicitationContentValueSchema = z.union([
   z.string(),
   z.number(),
@@ -138,6 +141,7 @@ async function waitForChatMcpElicitationResponse({
 }): Promise<ElicitResult> {
   const key = getChatMcpElicitationResponseKey(id);
   const timeoutAt = Date.now() + 10 * TimeInMs.Minute;
+  let pollIntervalMs = INITIAL_ELICITATION_POLL_INTERVAL_MS;
 
   while (Date.now() < timeoutAt) {
     if (abortSignal?.aborted) {
@@ -159,7 +163,11 @@ async function waitForChatMcpElicitationResponse({
       };
     }
 
-    await sleep(250, abortSignal);
+    await sleep(pollIntervalMs, abortSignal);
+    pollIntervalMs = Math.min(
+      pollIntervalMs * 2,
+      MAX_ELICITATION_POLL_INTERVAL_MS,
+    );
   }
 
   throw new Error("MCP elicitation response timed out");

@@ -321,6 +321,23 @@ describe("WithAuthCheck", () => {
       expect(screen.getByTestId("protected-content")).toBeInTheDocument();
     });
 
+    it("should allow access to /auth/recover-account when not authenticated (backup-code sign-in)", () => {
+      vi.mocked(useSession).mockReturnValue({
+        data: null,
+        isPending: false,
+      } as unknown as ReturnType<typeof useSession>);
+      vi.mocked(usePathname).mockReturnValue("/auth/recover-account");
+
+      render(
+        <WithAuthCheck>
+          <MockChild />
+        </WithAuthCheck>,
+      );
+
+      expect(mockRouterPush).not.toHaveBeenCalled();
+      expect(screen.getByTestId("protected-content")).toBeInTheDocument();
+    });
+
     it("should allow access to /auth/two-factor sub-paths", () => {
       vi.mocked(useSession).mockReturnValue({
         data: null,

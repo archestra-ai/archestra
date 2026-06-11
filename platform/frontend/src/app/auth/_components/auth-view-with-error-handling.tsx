@@ -491,9 +491,14 @@ function SignInView({ callbackURL }: { callbackURL?: string }) {
     if (!result) return;
 
     if (result.twoFactorRedirect) {
-      // Preserve the current query string (redirectTo etc.) so the
-      // two-factor view can complete the original navigation.
-      redirectAfterSignIn(`/auth/two-factor${window.location.search}`);
+      // Forward only the computed callback target (not the raw query string,
+      // which could carry an attacker-supplied totpURI) so the two-factor
+      // view can complete the original navigation after verification.
+      redirectAfterSignIn(
+        callbackURL
+          ? `/auth/two-factor?redirectTo=${encodeURIComponent(callbackURL)}`
+          : "/auth/two-factor",
+      );
       return;
     }
 

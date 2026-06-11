@@ -71,9 +71,10 @@ export function SessionsCard() {
                     revokeSession.mutate({ token: accountSession.token });
                   }}
                 >
-                  {revokeSession.isPending && (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  )}
+                  {revokeSession.isPending &&
+                    revokeSession.variables?.token === accountSession.token && (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    )}
                   {isCurrentSession ? "Sign Out" : "Revoke"}
                 </Button>
               </div>

@@ -1,6 +1,5 @@
 import {
   ARCHESTRA_TOOL_SHORT_NAMES,
-  type ArchestraToolShortName,
   getArchestraToolFullName,
   isAgentTool,
   TOOL_RUN_TOOL_SHORT_NAME,
@@ -18,7 +17,7 @@ import {
   defineArchestraTools,
   errorResult,
 } from "./helpers";
-import { autoAssignToolToAgent } from "./tool-auto-assign";
+import { resolveRunToolTargetName, resolveToolGrant } from "./tool-auto-assign";
 import {
   toolNotAssignedAskAdminMessage,
   toolNotEnabledForConversationMessage,
@@ -63,10 +62,9 @@ const registry = defineArchestraTools([
           ? "archestra"
           : "third-party";
 
-      const resolvedName =
-        route === "archestra" && isArchestraShortName && !isArchestraPrefixed
-          ? getArchestraToolFullName(requestedName as ArchestraToolShortName)
-          : requestedName;
+      // Shared with the grant check (isToolGrantApprovable) so dispatch and the
+      // chat grant approval resolve a target name the same way.
+      const resolvedName = resolveRunToolTargetName(requestedName);
 
       logger.info(
         {
@@ -135,66 +133,46 @@ const registry = defineArchestraTools([
         );
       }
 
-      // Gate dispatch on the assigned-tool set, but treat a miss as a
-      // first-use auto-assignment opportunity rather than a hard reject:
-      // skills reference tools nobody assigned to the agent, so a tool from a
-      // catalog the user can access is assigned on the fly when the user may
-      // modify the agent. Hallucinated names and tools the user cannot see
-      // keep the search_tools recovery message; tools the user can see but
-      // cannot assign get an "ask an admin" message instead. The set is reused
-      // by the policy gate below so it is fetched only once.
+      // Gate dispatch on the assigned-tool set. An unassigned tool is never run
+      // silently: discovery widens the search space to tools the user can access,
+      // but actually putting one on the agent goes through the grant flow (chat
+      // proposes it, the user confirms, the assign endpoint writes it, then this
+      // call resumes with the tool assigned). So a miss here means the tool was
+      // not granted (or there is no UI to propose it): steer the user. The set is
+      // reused by the policy gate below so it is fetched only once.
       const assignedToolNames = await ToolModel.getAssignedToolNames(
         context.agentId,
       );
-      let conversationGateCleared = false;
       if (!assignedToolNames.has(resolvedName)) {
         // A custom per-conversation tool selection is an allowlist over the
-        // agent's assigned tools, so an unassigned tool can never be enabled
-        // in it — bail out before auto-assignment so a conversation that
-        // blocks the tool cannot leave a persistent agent mutation behind.
-        // The unavailable message (not "not enabled") is consistent with
-        // search_tools, which hides the tool in this conversation as well;
-        // the gate helper already logs the hit.
+        // agent's assigned tools, so an unassigned tool can never be enabled in
+        // it — return the same unavailable recovery search_tools shows.
         if (await checkConversationGate(resolvedName)) {
           return errorResult(unavailableThirdPartyToolMessage(resolvedName));
         }
-        conversationGateCleared = true;
-        const autoAssign = await autoAssignToolToAgent({
+        const grant = await resolveToolGrant({
           toolName: resolvedName,
           agentId: context.agentId,
           userId: context.userId,
           organizationId: context.organizationId,
         });
-        switch (autoAssign) {
-          case "assigned":
-            // Intentional: the assignment persists even when the policy gate
-            // below refuses this particular call — call-time policies are
-            // argument-dependent and the manual assignment flow does not
-            // consult them either.
-            assignedToolNames.add(resolvedName);
-            break;
-          case "forbidden":
-            logger.info(
-              { agentId: context.agentId, requestedName, resolvedName },
-              `${TOOL_RUN_TOOL_SHORT_NAME} dispatched to a tool the user cannot assign`,
-            );
-            return errorResult(toolNotAssignedAskAdminMessage(resolvedName));
-          case "unavailable":
-            logger.info(
-              { agentId: context.agentId, requestedName, resolvedName },
-              `${TOOL_RUN_TOOL_SHORT_NAME} dispatched to an unavailable tool`,
-            );
-            return errorResult(unavailableThirdPartyToolMessage(resolvedName));
-        }
+        logger.info(
+          { agentId: context.agentId, requestedName, resolvedName, grant },
+          `${TOOL_RUN_TOOL_SHORT_NAME} dispatched to an unassigned tool`,
+        );
+        // "ask an admin" when the user cannot assign it; otherwise the generic
+        // recovery (the grant approval already handles the can-assign case
+        // before execution, so reaching here means it was not granted).
+        return errorResult(
+          grant === "forbidden"
+            ? toolNotAssignedAskAdminMessage(resolvedName)
+            : unavailableThirdPartyToolMessage(resolvedName),
+        );
       }
 
-      // The tool exists and is assigned — only now enforce the per-conversation
-      // selection, so an unassigned name above still gets the recovery message.
-      // Skipped when the auto-assign branch already cleared the same gate.
-      if (!conversationGateCleared) {
-        const gateError = await checkConversationGate(resolvedName);
-        if (gateError) return gateError;
-      }
+      // The tool exists and is assigned — enforce the per-conversation selection.
+      const gateError = await checkConversationGate(resolvedName);
+      if (gateError) return gateError;
 
       const toolInput = args.tool_args ?? {};
       // Reuse the set computed above so the policy gate does not re-query it.

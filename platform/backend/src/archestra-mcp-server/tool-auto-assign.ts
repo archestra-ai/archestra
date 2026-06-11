@@ -1,5 +1,8 @@
 import {
   ARCHESTRA_MCP_CATALOG_ID,
+  ARCHESTRA_TOOL_SHORT_NAMES,
+  type ArchestraToolShortName,
+  getArchestraToolFullName,
   isSandboxArchestraToolShortName,
 } from "@archestra/shared";
 import {
@@ -8,41 +11,41 @@ import {
 } from "@/auth/agent-type-permissions";
 import { userHasPermission } from "@/auth/utils";
 import config from "@/config";
-import logger from "@/logging";
 import { AgentModel, OrganizationModel, TeamModel, ToolModel } from "@/models";
-import { assignToolToAgent } from "@/services/agent-tool-assignment";
 import { ApiError, type Tool } from "@/types";
 import { archestraMcpBranding } from "./branding";
 
 // Skills routinely reference tools that nobody assigned to the agent, so the
 // dispatch surface (search_tools / run_tool) is relaxed from "tools assigned to
 // the agent" to "tools the user could assign": discovery spans every catalog
-// the user can access, and run_tool assigns such a tool to the agent on first
-// use when the user is allowed to modify the agent. Users who cannot modify
-// the agent get a recovery message telling them to ask an admin instead.
+// the user can access. Running such a tool is NOT silent — the chat proposes
+// granting it (an approval card) and the user confirms, which assigns it via the
+// normal assign endpoint before the call resumes. Users who cannot modify the
+// agent get a recovery message telling them to ask an admin instead.
 // The org-level "allow tool auto-assignment" security setting restores the
 // strict behavior for organizations where catalog tool names must not be
 // exposed beyond the agents' assigned toolsets.
 
-type AutoAssignOutcome =
-  /** Tool assigned to the agent (or already was) — proceed with dispatch. */
-  | "assigned"
+type ToolGrantOutcome =
+  /** Tool is visible to the user AND they may modify the agent — propose granting. */
+  | "grantable"
   /** Tool exists and is visible to the user, but they cannot modify the agent. */
   | "forbidden"
   /** Tool unknown, not catalog-backed, or its catalog is not visible to the user. */
   | "unavailable";
 
 /**
- * Assign a catalog-backed tool to the agent on first use, applying the same
- * authorization as a manual assignment: the user must have access to the
- * tool's catalog and permission to modify the agent.
+ * Decide whether an accessible-but-unassigned tool can be granted to the agent,
+ * applying the same authorization as a manual assignment (catalog access +
+ * permission to modify the agent) WITHOUT writing the assignment. The write
+ * happens later through the assign endpoint when the user confirms the grant.
  */
-export async function autoAssignToolToAgent(params: {
+export async function resolveToolGrant(params: {
   toolName: string;
   agentId: string;
   userId?: string;
   organizationId?: string;
-}): Promise<AutoAssignOutcome> {
+}): Promise<ToolGrantOutcome> {
   const { agentId, toolName } = params;
   if (isExcludedFromDiscovery(toolName)) {
     return "unavailable";
@@ -55,12 +58,10 @@ export async function autoAssignToolToAgent(params: {
 
   // Resolve the name within the user-accessible tool set (tool names are only
   // unique per catalog, so a global name lookup could land on a row in a
-  // catalog the user cannot access). This keeps the assigned row consistent
-  // with what search_tools surfaced.
+  // catalog the user cannot access). A sandbox built-in must resolve to its real
+  // Archestra-catalog row: a third-party catalog row reusing the reserved
+  // `archestra__run_command` name must not be treated as the built-in.
   const accessible = await getAccessibleTools(userId, organizationId, toolName);
-  // A sandbox built-in must resolve to its real Archestra-catalog row: a
-  // third-party catalog row reusing the reserved `archestra__run_command` name
-  // must not back the assignment (execution always uses the built-in handler).
   const tool = archestraMcpBranding.isToolName(toolName)
     ? accessible.find((row) => row.catalogId === ARCHESTRA_MCP_CATALOG_ID)
     : accessible[0];
@@ -97,26 +98,48 @@ export async function autoAssignToolToAgent(params: {
     throw error;
   }
 
-  // Late-bound resolution: credentials and execution target resolve at call
-  // time, so no MCP server pinning is needed at assignment time.
-  const result = await assignToolToAgent({
-    agentId,
-    toolId: tool.id,
-    resolveAtCallTime: true,
-  });
-  if (result !== null && result !== "duplicate" && result !== "updated") {
-    logger.warn(
-      { agentId, toolName, toolId: tool.id, userId, error: result.error },
-      "auto-assigning tool to agent failed validation",
-    );
-    return "unavailable";
-  }
+  return "grantable";
+}
 
-  logger.info(
-    { agentId, toolName, toolId: tool.id, userId, organizationId },
-    "auto-assigned tool to agent on first use",
-  );
-  return "assigned";
+const ARCHESTRA_SHORT_NAME_SET = new Set<string>(ARCHESTRA_TOOL_SHORT_NAMES);
+
+/**
+ * Resolve a run_tool target name to its canonical form (Archestra short names
+ * like `run_command` → `archestra__run_command`; everything else unchanged),
+ * mirroring run_tool's own resolution so assignment/grant checks line up.
+ */
+export function resolveRunToolTargetName(requestedName: string): string {
+  const isArchestraPrefixed = archestraMcpBranding.isToolName(requestedName);
+  if (!isArchestraPrefixed && ARCHESTRA_SHORT_NAME_SET.has(requestedName)) {
+    return getArchestraToolFullName(requestedName as ArchestraToolShortName);
+  }
+  return requestedName;
+}
+
+/**
+ * Whether a run_tool target should trigger a "grant this tool to the agent"
+ * approval in chat: it must be unassigned (an assigned tool only ever needs a
+ * policy approval) and grantable by the current user. Used by the chat
+ * approval gate; non-chat callers never reach it.
+ */
+export async function isToolGrantApprovable(params: {
+  toolName: string;
+  agentId: string;
+  userId?: string;
+  organizationId?: string;
+}): Promise<boolean> {
+  const resolvedName = resolveRunToolTargetName(params.toolName);
+  const assigned = await ToolModel.getAssignedToolNames(params.agentId);
+  if (assigned.has(resolvedName)) {
+    return false;
+  }
+  const outcome = await resolveToolGrant({
+    toolName: resolvedName,
+    agentId: params.agentId,
+    userId: params.userId,
+    organizationId: params.organizationId,
+  });
+  return outcome === "grantable";
 }
 
 /**

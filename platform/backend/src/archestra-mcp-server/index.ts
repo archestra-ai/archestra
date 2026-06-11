@@ -68,7 +68,7 @@ import {
   toolEntries as toolAssignmentToolEntries,
   tools as toolAssignmentTools,
 } from "./tool-assignment";
-import { autoAssignToolToAgent } from "./tool-auto-assign";
+import { resolveToolGrant } from "./tool-auto-assign";
 import {
   toolDiscoverySteer,
   toolNotAssignedAskAdminMessage,
@@ -245,13 +245,12 @@ async function checkToolAssignedToAgent(
   });
 }
 
-// Assignment gate with first-use auto-assignment for the sandbox built-ins: when
-// an unassigned sandbox tool reaches here, RBAC (sandbox:execute) has already
-// passed, so mirror the third-party run_tool relaxation and assign it on the fly
-// — further gated by permission to modify the agent and the org
-// allow-tool-auto-assignment kill-switch (both inside autoAssignToolToAgent).
-// CONCERN: run-side of the same built-in-surface widening; see
-// `tool-auto-assign.ts`.
+// Assignment gate. Sandbox built-ins are never auto-assigned: when an unassigned
+// sandbox tool reaches here (RBAC sandbox:execute already passed), the grant flow
+// — chat proposes it, the user confirms, the assign endpoint writes it, then the
+// call resumes assigned — is what puts it on the agent. So reaching here means it
+// was not granted; only upgrade the message to "ask an admin" when the user could
+// not have granted it anyway.
 async function resolveToolAssignment(
   toolName: string,
   context: ArchestraContext,
@@ -269,24 +268,15 @@ async function resolveToolAssignment(
     return notAssigned;
   }
 
-  const outcome = await autoAssignToolToAgent({
+  const grant = await resolveToolGrant({
     toolName,
     agentId: context.agentId,
     userId: context.userId,
     organizationId: context.organizationId,
   });
-  switch (outcome) {
-    case "assigned":
-      return null;
-    case "forbidden":
-      return errorResult(toolNotAssignedAskAdminMessage(toolName));
-    case "unavailable":
-      return notAssigned;
-    default:
-      // a new AutoAssignOutcome must be handled explicitly — failing open here
-      // would auto-assign a sandbox tool the relaxation meant to reject.
-      return outcome satisfies never;
-  }
+  return grant === "forbidden"
+    ? errorResult(toolNotAssignedAskAdminMessage(toolName))
+    : notAssigned;
 }
 
 function resolveArchestraToolName(toolName: string): string | null {

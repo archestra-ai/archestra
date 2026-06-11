@@ -323,8 +323,8 @@ describe("run_tool", () => {
     ]);
   });
 
-  describe("first-use auto-assignment", () => {
-    test("auto-assigns an accessible catalog tool to the agent and dispatches it", async ({
+  describe("unassigned tool dispatch (grant flow)", () => {
+    test("does not assign or run an accessible-but-unassigned tool (grant happens via approval)", async ({
       makeInternalMcpCatalog,
       makeTool,
     }) => {
@@ -336,11 +336,6 @@ describe("run_tool", () => {
         catalogId: catalog.id,
       });
 
-      vi.mocked(mcpClient.executeToolCall).mockResolvedValueOnce({
-        content: [{ type: "text", text: "ok" }],
-        isError: false,
-      } as any);
-
       const result = await executeArchestraTool(
         TOOL_RUN_TOOL_FULL_NAME,
         {
@@ -350,15 +345,15 @@ describe("run_tool", () => {
         mockContext,
       );
 
-      expect(result.isError).toBe(false);
-      expect(mcpClient.executeToolCall).toHaveBeenCalledWith(
-        expect.objectContaining({ name: "github__search_repositories" }),
-        testAgent.id,
-        mockContext.tokenAuth,
-        { conversationId: testConversationId },
+      // First use never runs silently; the grant approval + assign endpoint put
+      // the tool on the agent. Reaching execute unassigned yields a recovery.
+      expect(result.isError).toBe(true);
+      expect((result.content[0] as any).text).toContain(
+        'No tool named "github__search_repositories"',
       );
+      expect(mcpClient.executeToolCall).not.toHaveBeenCalled();
       const assignedNames = await ToolModel.getAssignedToolNames(testAgent.id);
-      expect(assignedNames.has("github__search_repositories")).toBe(true);
+      expect(assignedNames.has("github__search_repositories")).toBe(false);
     });
 
     test("tells the model to involve an admin when the user cannot modify the agent", async ({
@@ -615,7 +610,7 @@ describe("run_tool", () => {
         });
     }
 
-    test("auto-assigns an unassigned sandbox tool for a user with sandbox:execute and dispatches it", async () => {
+    test("does not assign or run an unassigned sandbox tool (grant happens via approval)", async () => {
       const runSpy = stubRunCommand();
 
       const result = await executeArchestraTool(
@@ -624,13 +619,16 @@ describe("run_tool", () => {
         mockContext,
       );
 
-      expect(result.isError).toBe(false);
-      expect(runSpy).toHaveBeenCalled();
+      expect(result.isError).toBe(true);
+      expect((result.content[0] as any).text).toContain(
+        "not assigned to this agent",
+      );
+      expect(runSpy).not.toHaveBeenCalled();
       const assignedNames = await ToolModel.getAssignedToolNames(testAgent.id);
-      expect(assignedNames.has(TOOL_RUN_COMMAND_FULL_NAME)).toBe(true);
+      expect(assignedNames.has(TOOL_RUN_COMMAND_FULL_NAME)).toBe(false);
     });
 
-    test("auto-assigns on a direct sandbox tool call, not only via run_tool", async () => {
+    test("does not assign or run on a direct unassigned sandbox tool call", async () => {
       const runSpy = stubRunCommand();
 
       const result = await executeArchestraTool(
@@ -639,39 +637,13 @@ describe("run_tool", () => {
         mockContext,
       );
 
-      expect(result.isError).toBe(false);
-      expect(runSpy).toHaveBeenCalled();
+      expect(result.isError).toBe(true);
+      expect((result.content[0] as any).text).toContain(
+        "not assigned to this agent",
+      );
+      expect(runSpy).not.toHaveBeenCalled();
       const assignedNames = await ToolModel.getAssignedToolNames(testAgent.id);
-      expect(assignedNames.has(TOOL_RUN_COMMAND_FULL_NAME)).toBe(true);
-    });
-
-    test("assigns the Archestra-catalog row, not a third-party row reusing the reserved name", async ({
-      makeInternalMcpCatalog,
-      makeTool,
-    }) => {
-      // a colliding third-party row reuses the reserved built-in name; it must
-      // not back the assignment even though it is accessible to the user
-      const catalog = await makeInternalMcpCatalog({
-        organizationId: mockContext.organizationId,
-      });
-      await makeTool({
-        name: TOOL_RUN_COMMAND_FULL_NAME,
-        catalogId: catalog.id,
-      });
-      stubRunCommand();
-
-      const result = await executeArchestraTool(
-        TOOL_RUN_TOOL_FULL_NAME,
-        { tool_name: "run_command", tool_args: { command: "echo hi" } },
-        mockContext,
-      );
-
-      expect(result.isError).toBe(false);
-      const assigned = await ToolModel.getMcpToolsByAgent(testAgent.id);
-      const runCommandRow = assigned.find(
-        (tool) => tool.name === TOOL_RUN_COMMAND_FULL_NAME,
-      );
-      expect(runCommandRow?.catalogId).toBe(ARCHESTRA_MCP_CATALOG_ID);
+      expect(assignedNames.has(TOOL_RUN_COMMAND_FULL_NAME)).toBe(false);
     });
 
     test("denies before assignment when the user lacks sandbox:execute", async ({

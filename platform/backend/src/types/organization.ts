@@ -380,6 +380,7 @@ export const UpdateAppearanceSettingsSchema = z.object({
 export const UpdateSecuritySettingsSchema = z.object({
   globalToolPolicy: GlobalToolPolicySchema.optional(),
   allowChatFileUploads: z.boolean().optional(),
+  allowToolAutoAssignment: z.boolean().optional(),
 });
 
 export const UpdateLlmSettingsSchema = z.object({

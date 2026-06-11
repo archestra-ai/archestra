@@ -309,7 +309,7 @@ export async function syncBuiltInSkills(): Promise<void> {
 
 /**
  * Seeds Archestra MCP catalog and tools.
- * ToolModel.seedArchestraTools handles catalog creation with onConflictDoNothing().
+ * ToolModel.seedArchestraTools upserts the catalog and built-in tools idempotently.
  * Tools are NOT automatically assigned to agents - users must assign them manually.
  */
 async function seedArchestraCatalogAndTools(): Promise<void> {

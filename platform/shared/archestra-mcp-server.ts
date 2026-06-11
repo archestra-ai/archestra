@@ -368,6 +368,27 @@ export const SKILL_ARCHESTRA_TOOL_SHORT_NAMES = [
 ] as const satisfies readonly ArchestraToolShortName[];
 
 /**
+ * Code-execution sandbox tools. Gated by `sandbox:execute` and only seeded when
+ * the sandbox feature is on; unlike other built-ins they participate in the
+ * `search_tools`/`run_tool` first-use auto-assignment relaxation (see
+ * `tool-auto-assign.ts`) so a user with `sandbox:execute` can reach them without
+ * a manual assignment.
+ */
+const SANDBOX_ARCHESTRA_TOOL_SHORT_NAMES = [
+  TOOL_RUN_COMMAND_SHORT_NAME,
+  TOOL_DOWNLOAD_FILE_SHORT_NAME,
+  TOOL_UPLOAD_FILE_SHORT_NAME,
+] as const satisfies readonly ArchestraToolShortName[];
+
+const SANDBOX_ARCHESTRA_TOOL_SHORT_NAME_SET: ReadonlySet<string> = new Set(
+  SANDBOX_ARCHESTRA_TOOL_SHORT_NAMES,
+);
+
+export function isSandboxArchestraToolShortName(shortName: string): boolean {
+  return SANDBOX_ARCHESTRA_TOOL_SHORT_NAME_SET.has(shortName);
+}
+
+/**
  * tools that stay top-level in `tools/list` regardless of an agent's
  * exposure mode. skills and sandbox runtime interaction are
  * progressive-disclosure mechanisms, so hiding their discover/activate/read/run
@@ -377,9 +398,7 @@ export const SKILL_ARCHESTRA_TOOL_SHORT_NAMES = [
 export const ALWAYS_EXPOSED_ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_LIST_SKILLS_SHORT_NAME,
   TOOL_LOAD_SKILL_SHORT_NAME,
-  TOOL_RUN_COMMAND_SHORT_NAME,
-  TOOL_DOWNLOAD_FILE_SHORT_NAME,
-  TOOL_UPLOAD_FILE_SHORT_NAME,
+  ...SANDBOX_ARCHESTRA_TOOL_SHORT_NAMES,
 ] as const satisfies readonly ArchestraToolShortName[];
 
 const ALWAYS_EXPOSED_ARCHESTRA_TOOL_SHORT_NAME_SET: ReadonlySet<string> =

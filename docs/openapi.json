@@ -3212,6 +3212,46 @@
                           {
                             "type": "object",
                             "properties": {
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "thinking"
+                                ]
+                              },
+                              "thinking": {
+                                "type": "string"
+                              },
+                              "signature": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "type",
+                              "thinking",
+                              "signature"
+                            ]
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "redacted_thinking"
+                                ]
+                              },
+                              "data": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "type",
+                              "data"
+                            ]
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
                               "id": {
                                 "type": "string"
                               },
@@ -3546,6 +3586,41 @@
                               "tool_use_id",
                               "type"
                             ]
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "search_result",
+                                  "server_tool_use",
+                                  "web_search_tool_result",
+                                  "web_fetch_tool_result",
+                                  "code_execution_tool_result",
+                                  "bash_code_execution_tool_result",
+                                  "text_editor_code_execution_tool_result",
+                                  "tool_search_tool_result",
+                                  "container_upload"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "type"
+                            ],
+                            "additionalProperties": {}
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "type"
+                            ],
+                            "additionalProperties": {}
                           }
                         ]
                       }
@@ -3556,7 +3631,8 @@
                   "type": "string",
                   "enum": [
                     "user",
-                    "assistant"
+                    "assistant",
+                    "system"
                   ]
                 }
               },
@@ -20308,6 +20384,48 @@
                           {
                             "type": "object",
                             "properties": {
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "thinking"
+                                ]
+                              },
+                              "thinking": {
+                                "type": "string"
+                              },
+                              "signature": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "type",
+                              "thinking",
+                              "signature"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "redacted_thinking"
+                                ]
+                              },
+                              "data": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "type",
+                              "data"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
                               "id": {
                                 "type": "string"
                               },
@@ -20656,6 +20774,41 @@
                               "type"
                             ],
                             "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "search_result",
+                                  "server_tool_use",
+                                  "web_search_tool_result",
+                                  "web_fetch_tool_result",
+                                  "code_execution_tool_result",
+                                  "bash_code_execution_tool_result",
+                                  "text_editor_code_execution_tool_result",
+                                  "tool_search_tool_result",
+                                  "container_upload"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "type"
+                            ],
+                            "additionalProperties": {}
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "type"
+                            ],
+                            "additionalProperties": {}
                           }
                         ]
                       }
@@ -20666,7 +20819,8 @@
                   "type": "string",
                   "enum": [
                     "user",
-                    "assistant"
+                    "assistant",
+                    "system"
                   ]
                 }
               },
@@ -46949,6 +47103,300 @@
             },
             "in": "path",
             "name": "toolId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "success"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
+        }
+      }
+    },
+    "/api/agents/{agentId}/tools/grant": {
+      "post": {
+        "operationId": "grantToolToAgent",
+        "tags": [
+          "Agent Tools"
+        ],
+        "description": "Grant a user-accessible tool to an agent by name (chat grant flow). Resolves the tool and enforces the same authorization as a manual assignment server-side.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "toolName": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": [
+                  "toolName"
+                ]
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$"
+            },
+            "in": "path",
+            "name": "agentId",
             "required": true
           }
         ],
@@ -174451,6 +174899,9 @@
                     "allowChatFileUploads": {
                       "type": "boolean"
                     },
+                    "allowToolAutoAssignment": {
+                      "type": "boolean"
+                    },
                     "embeddingModel": {
                       "nullable": true,
                       "type": "string"
@@ -174817,6 +175268,7 @@
                     "compressionScope",
                     "globalToolPolicy",
                     "allowChatFileUploads",
+                    "allowToolAutoAssignment",
                     "embeddingModel",
                     "embeddingDimensions",
                     "embeddingChatApiKeyId",
@@ -175374,6 +175826,9 @@
                     "allowChatFileUploads": {
                       "type": "boolean"
                     },
+                    "allowToolAutoAssignment": {
+                      "type": "boolean"
+                    },
                     "embeddingModel": {
                       "nullable": true,
                       "type": "string"
@@ -175740,6 +176195,7 @@
                     "compressionScope",
                     "globalToolPolicy",
                     "allowChatFileUploads",
+                    "allowToolAutoAssignment",
                     "embeddingModel",
                     "embeddingDimensions",
                     "embeddingChatApiKeyId",
@@ -176445,7 +176901,7 @@
         "tags": [
           "Organization"
         ],
-        "description": "Update security settings (global tool policy, chat file uploads)\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agentSettings:update`: Modify agent settings (default model, default agent, security engine, file uploads)",
+        "description": "Update security settings (global tool policy, chat file uploads, tool auto-assignment)\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agentSettings:update`: Modify agent settings (default model, default agent, security engine, file uploads)",
         "requestBody": {
           "required": true,
           "content": {
@@ -176461,6 +176917,9 @@
                     ]
                   },
                   "allowChatFileUploads": {
+                    "type": "boolean"
+                  },
+                  "allowToolAutoAssignment": {
                     "type": "boolean"
                   }
                 }
@@ -176567,6 +177026,9 @@
                       ]
                     },
                     "allowChatFileUploads": {
+                      "type": "boolean"
+                    },
+                    "allowToolAutoAssignment": {
                       "type": "boolean"
                     },
                     "embeddingModel": {
@@ -176935,6 +177397,7 @@
                     "compressionScope",
                     "globalToolPolicy",
                     "allowChatFileUploads",
+                    "allowToolAutoAssignment",
                     "embeddingModel",
                     "embeddingDimensions",
                     "embeddingChatApiKeyId",
@@ -177378,6 +177841,9 @@
                     "allowChatFileUploads": {
                       "type": "boolean"
                     },
+                    "allowToolAutoAssignment": {
+                      "type": "boolean"
+                    },
                     "embeddingModel": {
                       "nullable": true,
                       "type": "string"
@@ -177744,6 +178210,7 @@
                     "compressionScope",
                     "globalToolPolicy",
                     "allowChatFileUploads",
+                    "allowToolAutoAssignment",
                     "embeddingModel",
                     "embeddingDimensions",
                     "embeddingChatApiKeyId",
@@ -178170,6 +178637,9 @@
                     "allowChatFileUploads": {
                       "type": "boolean"
                     },
+                    "allowToolAutoAssignment": {
+                      "type": "boolean"
+                    },
                     "embeddingModel": {
                       "nullable": true,
                       "type": "string"
@@ -178536,6 +179006,7 @@
                     "compressionScope",
                     "globalToolPolicy",
                     "allowChatFileUploads",
+                    "allowToolAutoAssignment",
                     "embeddingModel",
                     "embeddingDimensions",
                     "embeddingChatApiKeyId",
@@ -179033,6 +179504,9 @@
                     "allowChatFileUploads": {
                       "type": "boolean"
                     },
+                    "allowToolAutoAssignment": {
+                      "type": "boolean"
+                    },
                     "embeddingModel": {
                       "nullable": true,
                       "type": "string"
@@ -179399,6 +179873,7 @@
                     "compressionScope",
                     "globalToolPolicy",
                     "allowChatFileUploads",
+                    "allowToolAutoAssignment",
                     "embeddingModel",
                     "embeddingDimensions",
                     "embeddingChatApiKeyId",
@@ -179867,6 +180342,9 @@
                     "allowChatFileUploads": {
                       "type": "boolean"
                     },
+                    "allowToolAutoAssignment": {
+                      "type": "boolean"
+                    },
                     "embeddingModel": {
                       "nullable": true,
                       "type": "string"
@@ -180233,6 +180711,7 @@
                     "compressionScope",
                     "globalToolPolicy",
                     "allowChatFileUploads",
+                    "allowToolAutoAssignment",
                     "embeddingModel",
                     "embeddingDimensions",
                     "embeddingChatApiKeyId",
@@ -180646,6 +181125,9 @@
                     "allowChatFileUploads": {
                       "type": "boolean"
                     },
+                    "allowToolAutoAssignment": {
+                      "type": "boolean"
+                    },
                     "embeddingModel": {
                       "nullable": true,
                       "type": "string"
@@ -181012,6 +181494,7 @@
                     "compressionScope",
                     "globalToolPolicy",
                     "allowChatFileUploads",
+                    "allowToolAutoAssignment",
                     "embeddingModel",
                     "embeddingDimensions",
                     "embeddingChatApiKeyId",
@@ -181438,6 +181921,9 @@
                     "allowChatFileUploads": {
                       "type": "boolean"
                     },
+                    "allowToolAutoAssignment": {
+                      "type": "boolean"
+                    },
                     "embeddingModel": {
                       "nullable": true,
                       "type": "string"
@@ -181804,6 +182290,7 @@
                     "compressionScope",
                     "globalToolPolicy",
                     "allowChatFileUploads",
+                    "allowToolAutoAssignment",
                     "embeddingModel",
                     "embeddingDimensions",
                     "embeddingChatApiKeyId",
@@ -182197,6 +182684,9 @@
                     "allowChatFileUploads": {
                       "type": "boolean"
                     },
+                    "allowToolAutoAssignment": {
+                      "type": "boolean"
+                    },
                     "embeddingModel": {
                       "nullable": true,
                       "type": "string"
@@ -182563,6 +183053,7 @@
                     "compressionScope",
                     "globalToolPolicy",
                     "allowChatFileUploads",
+                    "allowToolAutoAssignment",
                     "embeddingModel",
                     "embeddingDimensions",
                     "embeddingChatApiKeyId",
@@ -183269,6 +183760,9 @@
                     "allowChatFileUploads": {
                       "type": "boolean"
                     },
+                    "allowToolAutoAssignment": {
+                      "type": "boolean"
+                    },
                     "embeddingModel": {
                       "nullable": true,
                       "type": "string"
@@ -183635,6 +184129,7 @@
                     "compressionScope",
                     "globalToolPolicy",
                     "allowChatFileUploads",
+                    "allowToolAutoAssignment",
                     "embeddingModel",
                     "embeddingDimensions",
                     "embeddingChatApiKeyId",

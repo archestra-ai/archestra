@@ -1,5 +1,5 @@
 import {
-  ALWAYS_EXPOSED_ARCHESTRA_TOOL_SHORT_NAMES,
+  isAlwaysExposedArchestraToolShortName,
   parseFullToolName,
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
@@ -23,6 +23,7 @@ import {
   structuredSuccessResult,
 } from "./helpers";
 import { filterToolNamesByPermission } from "./rbac";
+import { getUnassignedDiscoverableTools } from "./tool-auto-assign";
 
 const SearchToolsArgsSchema = z
   .object({
@@ -154,22 +155,11 @@ type SearchCandidate = {
   };
 };
 
-// search_tools only runs in search_and_run_only mode. The meta tools and the
-// always-exposed runtime tools (skills + sandbox) are already top-level there,
-// so returning them as search results would be redundant noise. This set spans
-// both categories — not just meta tools — so it gates search-result membership,
-// not "is this a meta tool".
-const EXCLUDED_FROM_SEARCH_SHORT_NAMES = new Set<string>([
-  TOOL_SEARCH_TOOLS_SHORT_NAME,
-  TOOL_RUN_TOOL_SHORT_NAME,
-  ...ALWAYS_EXPOSED_ARCHESTRA_TOOL_SHORT_NAMES,
-]);
-
 const registry = defineArchestraTools([
   defineArchestraTool({
     shortName: TOOL_SEARCH_TOOLS_SHORT_NAME,
     title: "Search Tools",
-    description: `Search the agent's available tools on demand. Returns exact tool names plus compact input summaries. To execute a returned tool, call ${TOOL_RUN_TOOL_SHORT_NAME} with tool_name set to the returned toolName and put target tool input parameters inside tool_args.`,
+    description: `Search the tools available to this agent and to you on demand. Returns exact tool names plus compact input summaries. To execute a returned tool, call ${TOOL_RUN_TOOL_SHORT_NAME} with tool_name set to the returned toolName and put target tool input parameters inside tool_args.`,
     schema: SearchToolsArgsSchema,
     outputSchema: SearchToolsOutputSchema,
     async handler({ args, context }) {
@@ -285,15 +275,27 @@ async function getSearchableTools(params: {
 }): Promise<SearchCandidate[]> {
   const { agentId, conversationId, organizationId, userId } = params;
   const assignedTools = await ToolModel.getMcpToolsByAgent(agentId);
+  const assignedNames = new Set(assignedTools.map((tool) => tool.name));
+  // Widened search space: skills reference tools nobody assigned to the agent,
+  // so discovery also spans third-party tools from every catalog the user can
+  // access, plus the sandbox built-ins when the feature is on. Running such a
+  // tool is not silent — run_tool proposes granting it to the agent (or steers
+  // the user to an admin), which keeps these results actionable.
+  const discoverableTools = await getUnassignedDiscoverableTools({
+    assignedToolNames: assignedNames,
+    userId,
+    organizationId,
+  });
+  const searchSpace = [...assignedTools, ...discoverableTools];
   const permittedNames = await filterToolNamesByPermission(
-    assignedTools.map((tool) => tool.name),
+    searchSpace.map((tool) => tool.name),
     userId,
     organizationId,
   );
-  const filteredAssignedTools = assignedTools.filter(
+  const filteredTools = searchSpace.filter(
     (tool) =>
       permittedNames.has(tool.name) &&
-      !isExcludedFromSearchResults(tool.name) &&
+      !isExcludedFromSearchResults(tool.name, assignedNames) &&
       !tool.name.startsWith("agent__"),
   );
 
@@ -307,9 +309,16 @@ async function getSearchableTools(params: {
         })
       : [];
 
-  const catalogNamesById = await getCatalogNamesById(filteredAssignedTools);
+  const catalogNamesById = await getCatalogNamesById(filteredTools);
   const candidates = new Map<string, SearchCandidate>();
-  for (const tool of filteredAssignedTools) {
+  // First occurrence wins on duplicate names: assigned tools come before the
+  // discoverable ones, and the discoverable set is ordered newest-first — the
+  // same row the grant flow resolves, so the description shown by search
+  // matches the row a later run_tool grant assigns.
+  for (const tool of filteredTools) {
+    if (candidates.has(tool.name)) {
+      continue;
+    }
     candidates.set(
       tool.name,
       toAssignedToolCandidate({
@@ -943,9 +952,30 @@ function visitSchema(
   }
 }
 
-function isExcludedFromSearchResults(toolName: string): boolean {
+// search_tools only runs in search_and_run_only mode, where the meta tools and
+// the always-exposed runtime tools (skills + sandbox) are already top-level —
+// returning them as results would be redundant noise. But "always-exposed" only
+// holds once a tool is assigned: an unassigned sandbox tool the user can reach
+// via sandbox:execute is NOT top-level, so surface it here so the model can
+// discover it and propose granting it. Meta tools are never useful as results.
+function isExcludedFromSearchResults(
+  toolName: string,
+  assignedNames: Set<string>,
+): boolean {
   const shortName = archestraMcpBranding.getToolShortName(toolName);
-  return shortName != null && EXCLUDED_FROM_SEARCH_SHORT_NAMES.has(shortName);
+  if (shortName == null) {
+    return false;
+  }
+  if (
+    shortName === TOOL_SEARCH_TOOLS_SHORT_NAME ||
+    shortName === TOOL_RUN_TOOL_SHORT_NAME
+  ) {
+    return true;
+  }
+  if (isAlwaysExposedArchestraToolShortName(shortName)) {
+    return assignedNames.has(toolName);
+  }
+  return false;
 }
 
 function formatArchestraToolTitle(toolName: string): string | null {

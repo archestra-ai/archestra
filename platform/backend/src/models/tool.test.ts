@@ -13,7 +13,7 @@ import {
   TOOL_TODO_WRITE_FULL_NAME,
   TOOL_TODO_WRITE_SHORT_NAME,
 } from "@archestra/shared";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { vi } from "vitest";
 import { archestraMcpBranding } from "@/archestra-mcp-server";
 import { getArchestraMcpCatalogMetadata } from "@/archestra-mcp-server/metadata";
@@ -2884,6 +2884,123 @@ describe("ToolModel", () => {
       expect(catalog?.icon).toBe("https://cdn.example.com/logo.png");
       expect(catalog?.description).not.toContain("Archestra");
       expect(artifactTool).toBeDefined();
+    });
+
+    test("does not duplicate built-in tool rows across repeated seeds", async () => {
+      archestraMcpBranding.syncFromOrganization(null);
+
+      await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+      await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+
+      const rows = await db
+        .select()
+        .from(schema.toolsTable)
+        .where(
+          and(
+            eq(schema.toolsTable.catalogId, ARCHESTRA_MCP_CATALOG_ID),
+            eq(schema.toolsTable.name, "archestra__whoami"),
+          ),
+        );
+
+      expect(rows).toHaveLength(1);
+    });
+
+    test("reports only freshly inserted tools as newly created", async () => {
+      archestraMcpBranding.syncFromOrganization(null);
+
+      const firstRun = await ToolModel.seedArchestraTools(
+        ARCHESTRA_MCP_CATALOG_ID,
+      );
+      expect(firstRun).toContain("archestra__whoami");
+
+      const secondRun = await ToolModel.seedArchestraTools(
+        ARCHESTRA_MCP_CATALOG_ID,
+      );
+      expect(secondRun).toEqual([]);
+    });
+
+    test("rejects a duplicate built-in tool row at the database level", async () => {
+      archestraMcpBranding.syncFromOrganization(null);
+      await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+
+      await expect(
+        db.insert(schema.toolsTable).values({
+          name: "archestra__whoami",
+          parameters: {},
+          catalogId: ARCHESTRA_MCP_CATALOG_ID,
+          agentId: null,
+        }),
+      ).rejects.toThrow();
+    });
+
+    test("upsert reports a conflicting row as not freshly inserted", async () => {
+      archestraMcpBranding.syncFromOrganization(null);
+      await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+
+      // Mimics a concurrent seed's bulk insert landing on a row another process
+      // already inserted: the conflict path must report inserted=false (xmax != 0) so
+      // seedArchestraTools does not re-announce it as newly created.
+      const conflictResult = await db
+        .insert(schema.toolsTable)
+        .values({
+          name: "archestra__whoami",
+          parameters: {},
+          catalogId: ARCHESTRA_MCP_CATALOG_ID,
+          agentId: null,
+        })
+        .onConflictDoUpdate({
+          target: [schema.toolsTable.catalogId, schema.toolsTable.name],
+          targetWhere: sql`${schema.toolsTable.catalogId} = ${sql.raw(`'${ARCHESTRA_MCP_CATALOG_ID}'`)} and ${schema.toolsTable.agentId} is null and ${schema.toolsTable.delegateToAgentId} is null`,
+          set: { description: sql`excluded.description` },
+        })
+        .returning({ inserted: sql<boolean>`(xmax = 0)` });
+
+      expect(conflictResult).toHaveLength(1);
+      expect(conflictResult[0].inserted).toBe(false);
+
+      const rows = await db
+        .select()
+        .from(schema.toolsTable)
+        .where(
+          and(
+            eq(schema.toolsTable.catalogId, ARCHESTRA_MCP_CATALOG_ID),
+            eq(schema.toolsTable.name, "archestra__whoami"),
+          ),
+        );
+      expect(rows).toHaveLength(1);
+    });
+
+    test("promotes only one discovered row per name without violating the unique index", async () => {
+      archestraMcpBranding.syncFromOrganization(null);
+
+      // Two legacy "discovered" rows (catalog_id NULL) for the same built-in name.
+      await db.insert(schema.toolsTable).values([
+        {
+          name: "archestra__whoami",
+          parameters: {},
+          catalogId: null,
+          agentId: null,
+        },
+        {
+          name: "archestra__whoami",
+          parameters: {},
+          catalogId: null,
+          agentId: null,
+        },
+      ]);
+
+      await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+
+      const catalogRows = await db
+        .select()
+        .from(schema.toolsTable)
+        .where(
+          and(
+            eq(schema.toolsTable.catalogId, ARCHESTRA_MCP_CATALOG_ID),
+            eq(schema.toolsTable.name, "archestra__whoami"),
+          ),
+        );
+      expect(catalogRows).toHaveLength(1);
     });
   });
 

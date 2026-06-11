@@ -135,6 +135,7 @@ import {
 } from "./swap-agent-boundary";
 import { TodoWriteTool } from "./todo-write-tool";
 import { ToolErrorLogsButton } from "./tool-error-logs-button";
+import { ToolGrantApprovalCard } from "./tool-grant-approval-card";
 import { ToolStatusRow } from "./tool-status-row";
 
 interface ChatMessagesProps {
@@ -1975,7 +1976,17 @@ const MessageTool = memo(
           {isApprovalRequested &&
             onToolApprovalResponse &&
             "approval" in part &&
-            part.approval?.id && (
+            part.approval?.id &&
+            (runToolInput?.tool_name && agentId ? (
+              // run_tool targeting a tool the agent may not have yet — propose
+              // granting it (assign + run) rather than a bare approve/deny.
+              <ToolGrantApprovalCard
+                targetToolName={runToolInput.tool_name}
+                agentId={agentId}
+                approvalId={part.approval.id}
+                onRespond={onToolApprovalResponse}
+              />
+            ) : (
               <ToolStatusRow
                 icon={
                   <ClockIcon className="mt-0.5 size-4 flex-none text-amber-600" />
@@ -2007,7 +2018,7 @@ const MessageTool = memo(
                   },
                 ]}
               />
-            )}
+            ))}
           {errorText && !authToolBody ? (
             <ToolErrorDetails errorText={errorText} />
           ) : null}

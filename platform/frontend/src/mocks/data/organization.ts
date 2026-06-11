@@ -23,6 +23,7 @@ export function makeOrganization(
     compressionScope: "organization",
     globalToolPolicy: "permissive",
     allowChatFileUploads: false,
+    allowToolAutoAssignment: true,
     embeddingModel: null,
     embeddingDimensions: null,
     embeddingChatApiKeyId: null,

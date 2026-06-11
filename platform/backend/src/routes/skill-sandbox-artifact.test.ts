@@ -525,7 +525,11 @@ describe("project folder cross-user access", () => {
       url: "/api/skill-sandbox/files",
     });
     const body = files.json<{
-      files: Array<{ id: string | null; filename: string; folder: string | null }>;
+      files: Array<{
+        id: string | null;
+        filename: string;
+        folder: string | null;
+      }>;
     }>();
     expect(body.files).toEqual([
       expect.objectContaining({

@@ -1108,7 +1108,12 @@ describe("project file scope (save_result, scoped search/x_file)", () => {
   });
 
   beforeEach(
-    async ({ makeAgent, makeUser, makeMember, seedAndAssignArchestraTools }) => {
+    async ({
+      makeAgent,
+      makeUser,
+      makeMember,
+      seedAndAssignArchestraTools,
+    }) => {
       agent = await makeAgent({ name: "Scope Agent" });
       organizationId = agent.organizationId;
       const user = await makeUser();
@@ -1172,9 +1177,7 @@ describe("project file scope (save_result, scoped search/x_file)", () => {
       downloadUrl: string;
     }>(result);
     expect(out.folder).toBeNull();
-    expect(out.downloadUrl).toBe(
-      `/api/skill-sandbox/artifacts/${out.fileId}`,
-    );
+    expect(out.downloadUrl).toBe(`/api/skill-sandbox/artifacts/${out.fileId}`);
 
     const { SkillSandboxFileModel } = await import("@/models");
     const row = await SkillSandboxFileModel.findArtifactById(out.fileId);

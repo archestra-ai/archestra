@@ -15,16 +15,16 @@ import {
   SkillSandboxModel,
 } from "@/models";
 import { executionSandboxRegistry } from "@/skills-sandbox/execution-sandbox-registry";
-import {
-  SKILL_SANDBOX_ATTACHMENTS_DIR,
-  SKILL_SANDBOX_HOME,
-} from "@/skills-sandbox/runtime-image";
-import { skillSandboxArtifactService } from "@/skills-sandbox/skill-sandbox-artifact-service";
 import { resolveArtifactMime } from "@/skills-sandbox/mime-sniff";
 import {
   type ProjectFileScope,
   resolveProjectFileScope,
 } from "@/skills-sandbox/project-file-scope";
+import {
+  SKILL_SANDBOX_ATTACHMENTS_DIR,
+  SKILL_SANDBOX_HOME,
+} from "@/skills-sandbox/runtime-image";
+import { skillSandboxArtifactService } from "@/skills-sandbox/skill-sandbox-artifact-service";
 import { skillSandboxRuntimeService } from "@/skills-sandbox/skill-sandbox-runtime-service";
 import {
   SKILL_SANDBOX_LIMITS,
@@ -341,10 +341,7 @@ const SaveResultSchema = z
       .describe(
         'Plain filename including extension (e.g. "joke.md"). No paths.',
       ),
-    content: z
-      .string()
-      .optional()
-      .describe("UTF-8 text content of the file."),
+    content: z.string().optional().describe("UTF-8 text content of the file."),
     contentBase64: z
       .string()
       .min(1)
@@ -637,9 +634,7 @@ const registry = defineArchestraTools([
           sizeBytes: f.sizeBytes,
           createdAt: f.createdAt.toISOString(),
         })),
-        folders: scope
-          ? [scope.folderName]
-          : folders.map((f) => f.name),
+        folders: scope ? [scope.folderName] : folders.map((f) => f.name),
       };
 
       const summary =

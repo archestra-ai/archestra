@@ -61,6 +61,7 @@ export * from "./secrets-manager";
 export * from "./service-account";
 export * from "./session";
 export * from "./skill";
+export * from "./project";
 export * from "./skill-sandbox";
 export * from "./skill-share-link";
 export * from "./skill-share-link-revision";

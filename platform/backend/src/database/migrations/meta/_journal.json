@@ -1989,6 +1989,13 @@
       "when": 1781138375012,
       "tag": "0283_hesitant_red_wolf",
       "breakpoints": true
+    },
+    {
+      "idx": 284,
+      "version": "7",
+      "when": 1781167379210,
+      "tag": "0284_sudden_kinsey_walden",
+      "breakpoints": true
     }
   ]
 }

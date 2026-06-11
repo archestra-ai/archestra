@@ -169,6 +169,18 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "chat share metadata; surfaced via /llm/logs",
   },
+  projectsTable: {
+    audited: false,
+    reason: "user's chat-project grouping; same family as conversations",
+  },
+  projectSharesTable: {
+    audited: false,
+    reason: "project share metadata; same family as conversation shares",
+  },
+  projectShareTeamsTable: {
+    audited: false,
+    reason: "join: project share × team",
+  },
   conversationShareTeamsTable: {
     audited: false,
     reason: "join: conversation share × team",

@@ -12,6 +12,7 @@ import {
   getAgentTypePermissionChecker,
   hasAnyAgentTypeReadPermission,
   requireAgentModifyPermission,
+  userHasPermission,
 } from "@/auth";
 import type { AgentTypePermissionChecker } from "@/auth/agent-type-permissions";
 import { knowledgeSourceAccessControlService } from "@/knowledge-base";
@@ -26,6 +27,7 @@ import {
 import { initializeObservabilityMetrics } from "@/observability";
 import { serializeAgentForExport } from "@/services/agent-export";
 import { importAgentFromPayload } from "@/services/agent-import";
+import { assertCanAssignEnvironment } from "@/services/environments/environment";
 import {
   AgentExportPayloadSchema,
   type AgentScope,
@@ -505,6 +507,14 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
 
+      // Always assert on create: a null/omitted environment still lands on the
+      // org default, which may itself be restricted (mirrors the MCP-catalog path).
+      await assertEnvironmentAssignable({
+        userId: user.id,
+        organizationId,
+        environmentId: body.environmentId ?? null,
+      });
+
       // Omit teams if scope is not 'team' — scope takes precedence
       const createData = {
         ...body,
@@ -958,6 +968,14 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
+      if (body.environmentId !== undefined) {
+        await assertEnvironmentAssignable({
+          userId: user.id,
+          organizationId,
+          environmentId: body.environmentId,
+        });
+      }
+
       const agent = await AgentModel.update(id, updateData);
 
       if (!agent) {
@@ -1323,4 +1341,33 @@ function getPermittedAgentTypesForList(params: {
   }
 
   return permittedTypes;
+}
+
+/**
+ * Binding an agent to a restricted environment routes its code sandbox to that
+ * environment's isolated runtime, so it is gated by the same
+ * environment:deploy-to-restricted permission the MCP-catalog assignment path
+ * uses (environment:admin implies it). Throws 403/404 if the caller may not
+ * assign the environment.
+ */
+async function assertEnvironmentAssignable(params: {
+  userId: string;
+  organizationId: string;
+  environmentId: string | null;
+}): Promise<void> {
+  const { userId, organizationId, environmentId } = params;
+  const [hasEnvAdmin, hasEnvDeploy] = await Promise.all([
+    userHasPermission(userId, organizationId, "environment", "admin"),
+    userHasPermission(
+      userId,
+      organizationId,
+      "environment",
+      "deploy-to-restricted",
+    ),
+  ]);
+  await assertCanAssignEnvironment({
+    environmentId,
+    organizationId,
+    canDeployToRestricted: hasEnvAdmin || hasEnvDeploy,
+  });
 }

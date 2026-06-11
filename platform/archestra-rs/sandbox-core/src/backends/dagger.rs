@@ -245,10 +245,48 @@ impl SandboxBackend for DaggerBackend {
     }
 }
 
+/// The runner host a spawn pins into the process-global env: the explicitly
+/// requested host, else the snapshotted process default — so a `None` spawn (the
+/// default session re-spawning after a teardown) restores the real default rather
+/// than a host a prior `Some` spawn left pinned. `None` means unset the env.
+fn resolve_runner_target<'a>(
+    requested: Option<&'a str>,
+    default: Option<&'a str>,
+) -> Option<&'a str> {
+    requested.or(default)
+}
+
 /// connect to the Dagger engine and drive the generic actor loop for the
 /// connection's lifetime. this is the one place the Dagger backend is selected.
-pub(crate) async fn spawn() -> Result<Arc<SessionHandle>> {
-    tracing::info!("spawning dagger session");
+///
+/// `runner_host`, when set, targets a specific engine (e.g. a per-environment
+/// `kube-pod://…`). dagger-sdk 0.21 only reads the runner host from the
+/// process-global `_EXPERIMENTAL_DAGGER_RUNNER_HOST` env at CLI-spawn time, so we
+/// serialize spawns and pin that env until the session reports ready (by which
+/// point the CLI subprocess has captured it). `None` uses the process default.
+pub(crate) async fn spawn(runner_host: Option<String>) -> Result<Arc<SessionHandle>> {
+    tracing::info!(runner_host = ?runner_host, "spawning dagger session");
+    static SPAWN_ENV_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+    // The process default runner host, snapshotted once before any spawn mutates
+    // the env, so a `None` spawn (e.g. the default session re-spawning after a
+    // teardown) restores the real default rather than inheriting whatever host a
+    // prior `Some` spawn pinned.
+    static DEFAULT_RUNNER_HOST: std::sync::OnceLock<Option<String>> = std::sync::OnceLock::new();
+
+    // Hold the lock until the session reports ready, so the dagger CLI subprocess
+    // has captured the pinned host before a concurrent spawn can re-pin it.
+    let _env_guard = SPAWN_ENV_LOCK.lock().await;
+    let default_host =
+        DEFAULT_RUNNER_HOST.get_or_init(|| std::env::var("_EXPERIMENTAL_DAGGER_RUNNER_HOST").ok());
+    let target = resolve_runner_target(runner_host.as_deref(), default_host.as_deref());
+    // SAFETY: serialized by SPAWN_ENV_LOCK; read only by the connect below (the
+    // dagger CLI subprocess) before this spawn reports ready.
+    unsafe {
+        match target {
+            Some(host) => std::env::set_var("_EXPERIMENTAL_DAGGER_RUNNER_HOST", host),
+            None => std::env::remove_var("_EXPERIMENTAL_DAGGER_RUNNER_HOST"),
+        }
+    }
     let (msg_tx, msg_rx) = mpsc::channel::<SessionMsg>(CHANNEL_CAPACITY);
     let (ready_tx, ready_rx) = oneshot::channel::<()>();
     let (fail_tx, fail_rx) = oneshot::channel::<SandboxError>();
@@ -711,6 +749,27 @@ fn parse_sdk_exit_code(message: &str) -> Option<i32> {
 mod tests {
     use super::*;
     use dagger_sdk::core::gql_client::GraphQLErrorMessage;
+
+    #[test]
+    fn runner_target_prefers_requested_over_default() {
+        assert_eq!(
+            resolve_runner_target(Some("kube-pod://env-a"), Some("tcp://127.0.0.1:1234")),
+            Some("kube-pod://env-a"),
+        );
+    }
+
+    #[test]
+    fn runner_target_falls_back_to_snapshotted_default_for_none() {
+        assert_eq!(
+            resolve_runner_target(None, Some("tcp://127.0.0.1:1234")),
+            Some("tcp://127.0.0.1:1234"),
+        );
+    }
+
+    #[test]
+    fn runner_target_is_none_when_neither_set() {
+        assert_eq!(resolve_runner_target(None, None), None);
+    }
 
     /// a GraphQL domain error carrying `message` and an optional typed extension.
     fn domain_error(message: &str, extension: Option<GraphQlExtension>) -> DaggerError {

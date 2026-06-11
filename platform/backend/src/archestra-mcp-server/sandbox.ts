@@ -5,9 +5,12 @@ import {
 } from "@archestra/shared";
 import { z } from "zod";
 import config from "@/config";
+import { daggerEnvironmentRuntimeManager } from "@/k8s/dagger-environment-runtime/manager";
 import logger from "@/logging";
 import {
+  AgentModel,
   ConversationAttachmentModel,
+  EnvironmentModel,
   SkillSandboxConversationGoneError,
   SkillSandboxModel,
 } from "@/models";
@@ -277,6 +280,7 @@ const registry = defineArchestraTools([
           command: args.command,
           cwd: args.cwd,
           timeoutSeconds: args.timeoutSeconds,
+          runnerHost: await resolveEnvironmentRunnerHost(context),
         });
 
         logger.info(
@@ -329,6 +333,7 @@ const registry = defineArchestraTools([
           caller: guard.userCtx,
           path: args.path,
           mimeType: args.mimeType,
+          runnerHost: await resolveEnvironmentRunnerHost(context),
         });
 
         logger.info(
@@ -434,6 +439,49 @@ export const tools = registry.tools;
 interface UserContext {
   organizationId: string;
   userId: string;
+}
+
+/**
+ * Resolve the Dagger runner host for the calling agent's Environment, so its
+ * sandbox runs on that environment's per-env engine (with the environment's
+ * egress NetworkPolicy). Returns undefined when the agent has no environment,
+ * the environment is missing, or k8s isn't configured — the run then uses the
+ * process-default engine.
+ */
+async function resolveEnvironmentRunnerHost(
+  context: ArchestraContext,
+): Promise<string | undefined> {
+  const { organizationId } = context;
+  const agentId = context.agent?.id;
+  if (!agentId || !organizationId) return undefined;
+
+  const agent = await AgentModel.findById(agentId);
+  // Unbound agent → no environment isolation requested; the default engine is
+  // the correct runtime.
+  if (!agent?.environmentId) return undefined;
+
+  // The agent IS bound to an environment, so its sandbox MUST run on that
+  // environment's isolated engine (carrying the environment's egress policy).
+  // Fail closed if that engine can't be resolved — never fall back to the shared
+  // default engine, which would run the agent's code with unrestricted egress
+  // and silently defeat the environment's network isolation.
+  const environment = await EnvironmentModel.findByIdForOrganization(
+    agent.environmentId,
+    organizationId,
+  );
+  if (!environment) {
+    throw new Error(
+      `Agent is bound to environment ${agent.environmentId}, which was not found — refusing to run on the shared runtime.`,
+    );
+  }
+  const runnerHost =
+    daggerEnvironmentRuntimeManager.runnerHostForEnvironment(environment);
+  if (!runnerHost) {
+    throw new Error(
+      `Could not resolve the isolated runtime for environment "${environment.name}" — refusing to run on the shared runtime. Is the orchestrator (Kubernetes) configured?`,
+    );
+  }
+  return runnerHost;
 }
 
 /**

@@ -228,6 +228,11 @@ pub struct Limits {
 #[serde(rename_all = "camelCase")]
 pub struct CheckSessionInput {
     pub traceparent: Option<String>,
+    /// Optional Dagger runner host to target (e.g. a per-environment engine,
+    /// `kube-pod://…`). When set, the session pool connects to / reuses a
+    /// session for that host; when omitted, the process-default engine is used.
+    #[cfg_attr(feature = "napi", napi(js_name = "runnerHost"))]
+    pub runner_host: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -242,6 +247,10 @@ pub struct RunSandboxInput {
     pub cwd: String,
     #[cfg_attr(feature = "napi", napi(js_name = "timeoutSeconds"))]
     pub timeout_seconds: u32,
+    /// Optional Dagger runner host to target this run at a specific engine
+    /// (e.g. a per-environment engine, `kube-pod://…`). Omitted = process default.
+    #[cfg_attr(feature = "napi", napi(js_name = "runnerHost"))]
+    pub runner_host: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -258,6 +267,10 @@ pub struct ReadArtifactInput {
     /// the same directory as the original commands.
     #[cfg_attr(feature = "napi", napi(js_name = "defaultCwd"))]
     pub default_cwd: String,
+    /// Optional Dagger runner host (the artifact must be read from the same
+    /// per-environment engine the sandbox ran on). Omitted = process default.
+    #[cfg_attr(feature = "napi", napi(js_name = "runnerHost"))]
+    pub runner_host: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -290,9 +303,11 @@ pub async fn check_session(input: CheckSessionInput) -> Result<()> {
     let span = tracing::Span::current();
     tracing_ctx::attach_parent(&span, input.traceparent.as_deref());
     let traceparent = tracing_ctx::current_traceparent(&span).or(input.traceparent);
-    session::submit(move |reply| session::SessionMsg::CheckSession {
-        traceparent: traceparent.clone(),
-        reply,
+    session::submit(input.runner_host, move |reply| {
+        session::SessionMsg::CheckSession {
+            traceparent: traceparent.clone(),
+            reply,
+        }
     })
     .await
 }
@@ -318,7 +333,7 @@ pub async fn run_sandbox(input: RunSandboxInput) -> Result<CommandExecution> {
         timeout_seconds: input.timeout_seconds,
         traceparent,
     };
-    session::submit(move |reply| session::SessionMsg::Run {
+    session::submit(input.runner_host, move |reply| session::SessionMsg::Run {
         req: req.clone(),
         reply,
     })
@@ -340,9 +355,11 @@ pub async fn read_artifact(input: ReadArtifactInput) -> Result<ArtifactBytes> {
         default_cwd: input.default_cwd,
         traceparent,
     };
-    session::submit(move |reply| session::SessionMsg::ReadArtifact {
-        req: req.clone(),
-        reply,
+    session::submit(input.runner_host, move |reply| {
+        session::SessionMsg::ReadArtifact {
+            req: req.clone(),
+            reply,
+        }
     })
     .await
 }

@@ -132,6 +132,7 @@ import { useIdentityProviders } from "@/lib/auth/identity-provider-read.query";
 import { useChatProfileMcpTools } from "@/lib/chat/chat.query";
 import { useFeature } from "@/lib/config/config.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
+import { useEnvironments } from "@/lib/environment.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useConnectors } from "@/lib/knowledge/connector.query";
 import { useKnowledgeBases } from "@/lib/knowledge/knowledge-base.query";
@@ -593,6 +594,25 @@ export function AgentDialog({
   const { data: identityProviders = [] } = useIdentityProviders({
     enabled: shouldLoadIdentityProviders && !!canReadIdentityProviders,
   });
+  // Sandbox environment binding (internal agents only): the agent's code sandbox
+  // runs on this environment's per-env Dagger engine + egress NetworkPolicy.
+  const { data: environmentsData } = useEnvironments(
+    open && agentType === "agent",
+  );
+  const environments = environmentsData?.environments ?? [];
+  // Assigning a restricted environment needs environment:deploy-to-restricted
+  // (environment:admin implies it); the backend enforces it, so hide the
+  // restricted environments the caller can't deploy to rather than letting them
+  // pick one and fail on save — same gate the MCP-catalog form uses.
+  const { data: hasEnvAdmin } = useHasPermissions({ environment: ["admin"] });
+  const { data: hasDeployToRestricted } = useHasPermissions({
+    environment: ["deploy-to-restricted"],
+  });
+  const canDeployRestricted =
+    (hasEnvAdmin ?? false) || (hasDeployToRestricted ?? false);
+  const accessibleEnvironments = environments.filter(
+    (env) => !env.restricted || canDeployRestricted,
+  );
   const { data: knowledgeBasesData } = useKnowledgeBases({
     enabled: shouldLoadKnowledgeSources && !!canReadKnowledgeBase,
   });
@@ -650,6 +670,9 @@ export function AgentDialog({
   const [identityProviderId, setIdentityProviderId] = useState<
     string | null | undefined
   >(undefined);
+  const [environmentId, setEnvironmentId] = useState<string | null | undefined>(
+    undefined,
+  );
   const [scope, setScope] = useState<AgentScope>("personal");
   const [knowledgeBaseIds, setKnowledgeBaseIds] = useState<string[]>([]);
   const [connectorIds, setConnectorIds] = useState<string[]>([]);
@@ -719,6 +742,7 @@ export function AgentDialog({
         setLabels(agentData.labels);
         setConsiderContextUntrusted(agentData.considerContextUntrusted);
         setIdentityProviderId(agentData.identityProviderId ?? undefined);
+        setEnvironmentId(agentData.environmentId ?? undefined);
         setKnowledgeBaseIds(agentData.knowledgeBaseIds);
         setConnectorIds(agentData.connectorIds);
         setPassthroughHeaders(agentData.passthroughHeaders ?? []);
@@ -751,6 +775,7 @@ export function AgentDialog({
         setLabels([]);
         setConsiderContextUntrusted(false);
         setIdentityProviderId(undefined);
+        setEnvironmentId(undefined);
         setKnowledgeBaseIds([]);
         setConnectorIds([]);
         setScope("personal");
@@ -956,6 +981,7 @@ export function AgentDialog({
               systemPrompt: trimmedSystemPrompt || null,
               llmApiKeyId: llmApiKeyId || null,
               modelId: llmModel || null,
+              environmentId: environmentId || null,
               suggestedPrompts: validSuggestedPrompts,
             }),
             ...(supportsIdentityProvider && {
@@ -993,6 +1019,7 @@ export function AgentDialog({
             systemPrompt: trimmedSystemPrompt || null,
             llmApiKeyId: llmApiKeyId || null,
             modelId: llmModel || null,
+            environmentId: environmentId || null,
             suggestedPrompts: validSuggestedPrompts,
           }),
           ...(supportsIdentityProvider && {
@@ -1079,6 +1106,7 @@ export function AgentDialog({
     llmApiKeyId,
     llmModel,
     identityProviderId,
+    environmentId,
     knowledgeBaseIds,
     connectorIds,
     scope,
@@ -1289,6 +1317,34 @@ export function AgentDialog({
                       ) : undefined
                     }
                   />
+                </div>
+              )}
+
+              {/* Sandbox Environment (Agent only): binds the agent's code
+                  sandbox to a per-environment Dagger engine + egress policy */}
+              {isInternalAgent && accessibleEnvironments.length > 0 && (
+                <div className="rounded-lg border bg-card p-4 space-y-2">
+                  <Label>Environment</Label>
+                  <Select
+                    value={environmentId ?? "none"}
+                    onValueChange={(value) =>
+                      setEnvironmentId(value === "none" ? null : value)
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Default runtime" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">
+                        Default runtime (no environment)
+                      </SelectItem>
+                      {accessibleEnvironments.map((env) => (
+                        <SelectItem key={env.id} value={env.id}>
+                          {env.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               )}
 

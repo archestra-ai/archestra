@@ -55,6 +55,7 @@ import { cacheManager } from "@/cache-manager";
 import config, { shouldRunWebServer, shouldRunWorker } from "@/config";
 import { initializeDatabase, isDatabaseHealthy } from "@/database";
 import { seedRequiredStartingData } from "@/database/seed";
+import { daggerEnvironmentRuntimeManager } from "@/k8s/dagger-environment-runtime/manager";
 import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
 import logger from "@/logging";
 import { enterpriseLicenseMiddleware } from "@/middleware";
@@ -994,6 +995,10 @@ const startWebServer = async () => {
       );
     });
 
+    // Eagerly provision a per-environment Dagger engine + egress policy for every
+    // environment, so environment-bound agents don't route to a non-existent pod.
+    void daggerEnvironmentRuntimeManager.reconcileAll();
+
     // Initialize incoming email provider (if configured)
     // This handles auto-setup of webhook subscription if ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_WEBHOOK_URL is set
     await initializeEmailProvider();
@@ -1285,6 +1290,9 @@ const startWorker = async () => {
         "Failed to initialize skill sandbox runtime",
       );
     });
+
+    // Eagerly provision per-environment Dagger engines + egress policies.
+    void daggerEnvironmentRuntimeManager.reconcileAll();
 
     // Worker server for Kubernetes probes, Prometheus scraping,
     // and LLM Proxy / MCP Gateway routes for A2A and scheduled task execution.

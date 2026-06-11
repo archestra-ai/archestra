@@ -7,6 +7,12 @@ export interface ArtifactBytes {
 
 export interface CheckSessionInput {
   traceparent?: string
+  /**
+   * Optional Dagger runner host to target (e.g. a per-environment engine,
+   * `kube-pod://…`). When set, the session pool connects to / reuses a
+   * session for that host; when omitted, the process-default engine is used.
+   */
+  runnerHost?: string
 }
 
 export interface CommandExecution {
@@ -36,6 +42,11 @@ export interface ReadArtifactInput {
    * the same directory as the original commands.
    */
   defaultCwd: string
+  /**
+   * Optional Dagger runner host (the artifact must be read from the same
+   * per-environment engine the sandbox ran on). Omitted = process default.
+   */
+  runnerHost?: string
 }
 
 export interface ReplayCommand {
@@ -88,6 +99,11 @@ export interface RunSandboxInput {
   command: string
   cwd: string
   timeoutSeconds: number
+  /**
+   * Optional Dagger runner host to target this run at a specific engine
+   * (e.g. a per-environment engine, `kube-pod://…`). Omitted = process default.
+   */
+  runnerHost?: string
 }
 
 export interface SnapshotFile {

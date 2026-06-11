@@ -1,9 +1,11 @@
-//! the backend-agnostic actor. owns the process-singleton session handle, the
+//! the backend-agnostic actor. owns a pool of session handles keyed by Dagger
+//! runner host (so per-environment engines each get their own warm session), the
 //! request channel, concurrency back-pressure, and panic recovery. it dispatches
 //! every message to a `Backend` without knowing which runtime backs it; the
 //! Dagger-specific connect/warm/materialise logic lives in `crate::backends`.
 
 use std::any::Any;
+use std::collections::HashMap;
 use std::panic::AssertUnwindSafe;
 use std::sync::Arc;
 
@@ -125,50 +127,56 @@ struct Slot {
     generation: u64,
 }
 
-static HANDLE_SLOT: OnceCell<Mutex<Slot>> = OnceCell::const_new();
+/// pool of session slots keyed by Dagger runner host (`None` = process default).
+/// each host gets its own warm session so a per-environment engine doesn't
+/// thrash the default engine's session.
+static HANDLE_SLOTS: OnceCell<Mutex<HashMap<Option<String>, Slot>>> = OnceCell::const_new();
 
-/// returns a live handle, spawning the actor on first call or after a previous
-/// session torn down (engine restart, panic in the connect closure).
-async fn current() -> Result<Arc<SessionHandle>> {
-    let slot = HANDLE_SLOT
-        .get_or_init(|| async {
-            Mutex::new(Slot {
-                handle: None,
-                spawning: None,
-                generation: 0,
-            })
-        })
+/// returns a live handle for `runner_host`, spawning the actor on first call or
+/// after a previous session for that host tore down (engine restart, panic in
+/// the connect closure).
+async fn current(runner_host: &Option<String>) -> Result<Arc<SessionHandle>> {
+    let map = HANDLE_SLOTS
+        .get_or_init(|| async { Mutex::new(HashMap::new()) })
         .await;
 
-    // pick up either the live handle or a shared in-flight spawn; release the
-    // lock before awaiting so concurrent callers don't block on each other.
-    // capture the generation so the post-await install can detect a concurrent
-    // invalidation that retired this spawn's lineage.
+    // pick up either the live handle or a shared in-flight spawn for this host;
+    // release the lock before awaiting so concurrent callers don't block on each
+    // other. capture the generation so the post-await install can detect a
+    // concurrent invalidation that retired this spawn's lineage.
     let (spawn_fut, generation) = {
-        let mut guard = slot.lock().await;
-        if let Some(handle) = guard.handle.as_ref() {
+        let mut guard = map.lock().await;
+        let slot = guard.entry(runner_host.clone()).or_insert_with(|| Slot {
+            handle: None,
+            spawning: None,
+            generation: 0,
+        });
+        if let Some(handle) = slot.handle.as_ref() {
             if handle.is_open() {
                 return Ok(handle.clone());
             }
-            guard.handle = None;
+            slot.handle = None;
         }
-        let fut = if let Some(s) = guard.spawning.clone() {
+        let fut = if let Some(s) = slot.spawning.clone() {
             s
         } else {
             // the one hardcoded backend-selection point.
+            let host = runner_host.clone();
             let fut: BoxFuture<'static, Result<Arc<SessionHandle>>> =
-                crate::backends::dagger::spawn().boxed();
+                crate::backends::dagger::spawn(host).boxed();
             let shared = fut.shared();
-            guard.spawning = Some(shared.clone());
+            slot.spawning = Some(shared.clone());
             shared
         };
-        (fut, guard.generation)
+        (fut, slot.generation)
     };
 
     let result = spawn_fut.await;
 
-    let mut guard = slot.lock().await;
-    finish_spawn(&mut guard, generation, result.as_ref().ok());
+    let mut guard = map.lock().await;
+    if let Some(slot) = guard.get_mut(runner_host) {
+        finish_spawn(slot, generation, result.as_ref().ok());
+    }
     result
 }
 
@@ -186,19 +194,23 @@ fn finish_spawn(slot: &mut Slot, started_generation: u64, handle: Option<&Arc<Se
 }
 
 /// submit a request and await the reply.
-pub(crate) async fn submit<T, F>(build: F) -> Result<T>
+pub(crate) async fn submit<T, F>(runner_host: Option<String>, build: F) -> Result<T>
 where
     F: FnMut(oneshot::Sender<Result<T>>) -> SessionMsg,
 {
-    submit_with_attempts(build, MAX_SUBMIT_ATTEMPTS).await
+    submit_with_attempts(&runner_host, build, MAX_SUBMIT_ATTEMPTS).await
 }
 
-async fn submit_with_attempts<T, F>(mut build: F, max_attempts: usize) -> Result<T>
+async fn submit_with_attempts<T, F>(
+    runner_host: &Option<String>,
+    mut build: F,
+    max_attempts: usize,
+) -> Result<T>
 where
     F: FnMut(oneshot::Sender<Result<T>>) -> SessionMsg,
 {
     for attempt in 1..=max_attempts {
-        match attempt_once(&mut build).await {
+        match attempt_once(runner_host, &mut build).await {
             Attempt::Done(result) => {
                 if attempt > 1 && result.is_ok() {
                     tracing::info!(attempt, "sandbox request recovered on a fresh session");
@@ -246,12 +258,12 @@ enum Attempt<T> {
 
 /// run one acquire -> send -> await-reply cycle. each failure stage classifies
 /// itself as retryable or terminal; the caller owns the attempt bound and logging.
-async fn attempt_once<T, F>(build: &mut F) -> Attempt<T>
+async fn attempt_once<T, F>(runner_host: &Option<String>, build: &mut F) -> Attempt<T>
 where
     F: FnMut(oneshot::Sender<Result<T>>) -> SessionMsg,
 {
     let (reply_tx, reply_rx) = oneshot::channel();
-    let handle = match current().await {
+    let handle = match current(runner_host).await {
         Ok(handle) => handle,
         // the request never left, so a fresh acquire is always side-effect-free.
         Err(err) if is_engine_unreachable(&err) => {
@@ -268,7 +280,7 @@ where
     let operation = msg.operation();
     if let Err(err) = handle.send(msg).await {
         // the actor closed before accepting the message: drop it and retry fresh.
-        invalidate_current(&handle, &err).await;
+        invalidate_current(runner_host, &handle, &err).await;
         return Attempt::Retry {
             reason: RetryReason::ClosedSession,
             err,
@@ -287,7 +299,7 @@ where
     match result {
         Ok(value) => Attempt::Done(Ok(value)),
         Err(err) => {
-            invalidate_current_on_engine_error(&handle, &err).await;
+            invalidate_current_on_engine_error(runner_host, &handle, &err).await;
             match retry_reason(operation, &err) {
                 Some(reason) => Attempt::Retry {
                     reason,
@@ -336,18 +348,28 @@ fn log_retry(
     );
 }
 
-async fn invalidate_current_on_engine_error(handle: &Arc<SessionHandle>, err: &SandboxError) {
+async fn invalidate_current_on_engine_error(
+    runner_host: &Option<String>,
+    handle: &Arc<SessionHandle>,
+    err: &SandboxError,
+) {
     if let SandboxError::EngineUnreachable { .. } = err {
-        invalidate_current(handle, err).await;
+        invalidate_current(runner_host, handle, err).await;
     }
 }
 
-async fn invalidate_current(handle: &Arc<SessionHandle>, err: &SandboxError) {
-    let Some(slot) = HANDLE_SLOT.get() else {
+async fn invalidate_current(
+    runner_host: &Option<String>,
+    handle: &Arc<SessionHandle>,
+    err: &SandboxError,
+) {
+    let Some(map) = HANDLE_SLOTS.get() else {
         return;
     };
-    let mut guard = slot.lock().await;
-    if clear_if_current(&mut guard, handle) {
+    let mut guard = map.lock().await;
+    if let Some(slot) = guard.get_mut(runner_host)
+        && clear_if_current(slot, handle)
+    {
         tracing::warn!(error_code = err.code(), error = %err, "dropping stale sandbox session");
     }
 }

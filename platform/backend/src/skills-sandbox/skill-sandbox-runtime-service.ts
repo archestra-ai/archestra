@@ -112,6 +112,7 @@ class SkillSandboxRuntimeService {
           cwd,
           timeoutSeconds,
           replayEntries,
+          runnerHost: params.runnerHost,
           outputBytesLimit: config.skillsSandbox.outputBytesLimit,
           fileSizeLimitBytes: config.skillsSandbox.artifactBytesLimit,
           cpuSeconds: config.skillsSandbox.cpuLimit,
@@ -203,6 +204,7 @@ class SkillSandboxRuntimeService {
           replayEntries,
           path: resolvedPath,
           defaultCwd: sandbox.defaultCwd,
+          runnerHost: params.runnerHost,
           // must match runCommand's limit: the command supervisor takes
           // `--out-cap <outputBytesLimit>` in each replayed exec, so a mismatch
           // here invalidates Dagger's per-replay layer cache.

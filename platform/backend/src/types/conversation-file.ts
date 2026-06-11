@@ -13,11 +13,13 @@ const ConversationFileSchema = z.object({
 /**
  * Files for a conversation, grouped by source. The markdown artifact is
  * intentionally absent — it already ships in the conversation object and the
- * frontend synthesizes its `artifact.md` row.
+ * frontend synthesizes its `artifact.md` row. `xFiles` are persistent files
+ * (PFS) the agent pulled into this conversation's sandbox.
  */
 export const ConversationFilesResponseSchema = z.object({
   generated: z.array(ConversationFileSchema),
   attachments: z.array(ConversationFileSchema),
+  xFiles: z.array(ConversationFileSchema),
 });
 export type ConversationFilesResponse = z.infer<
   typeof ConversationFilesResponseSchema

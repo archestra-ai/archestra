@@ -1,6 +1,7 @@
 import ConversationAttachmentModel from "@/models/conversation-attachment";
 import SkillSandboxModel from "@/models/skill-sandbox";
 import SkillSandboxFileModel from "@/models/skill-sandbox-file";
+import SkillSandboxReplayEventModel from "@/models/skill-sandbox-replay-event";
 import { conversationFilesService } from "@/services/conversation-files";
 import { expect, test } from "@/test";
 
@@ -102,4 +103,62 @@ test("conversationFilesService.list drops attachments from a different org", asy
     organizationId: org.id,
   });
   expect(result.attachments).toEqual([]);
+});
+
+test("conversationFilesService.list surfaces x_file uploads with the uploads byte URL", async ({
+  makeUser,
+  makeOrganization,
+  makeAgent,
+  makeConversation,
+}) => {
+  const org = await makeOrganization();
+  const user = await makeUser({});
+  const agent = await makeAgent({ organizationId: org.id });
+  const conv = await makeConversation(agent.id, {
+    userId: user.id,
+    organizationId: org.id,
+  });
+  const sandbox = await SkillSandboxModel.create({
+    organizationId: org.id,
+    userId: user.id,
+    conversationId: conv.id,
+    defaultCwd: "/home/sandbox",
+    isDefault: true,
+  });
+
+  const pulled = await SkillSandboxReplayEventModel.appendUpload({
+    sandboxId: sandbox.id,
+    userId: user.id,
+    path: "/home/sandbox/from-pfs.csv",
+    mimeType: "text/csv",
+    originalName: "q2.csv",
+    sizeBytes: 4,
+    data: Buffer.from("a,b\n"),
+    origin: "x_file",
+  });
+  // an ordinary upload must NOT appear in xFiles
+  await SkillSandboxReplayEventModel.appendUpload({
+    sandboxId: sandbox.id,
+    userId: user.id,
+    path: "/home/sandbox/plain.txt",
+    mimeType: "text/plain",
+    originalName: null,
+    sizeBytes: 1,
+    data: Buffer.from("x"),
+  });
+
+  const result = await conversationFilesService.list({
+    conversationId: conv.id,
+    organizationId: org.id,
+  });
+
+  expect(result.xFiles).toEqual([
+    {
+      id: pulled?.id,
+      name: "q2.csv",
+      mimeType: "text/csv",
+      contentUrl: `/api/skill-sandbox/uploads/${pulled?.id}`,
+      createdAt: expect.any(String),
+    },
+  ]);
 });

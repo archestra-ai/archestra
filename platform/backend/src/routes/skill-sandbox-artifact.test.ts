@@ -356,3 +356,143 @@ describe("X-Files list routes", () => {
     expect(body.files.map((f) => f.filename)).toEqual(["mine.txt"]);
   });
 });
+
+describe("POST /api/skill-sandbox/folders + GET /api/skill-sandbox/uploads/:uploadId", () => {
+  let app: FastifyInstanceWithZod;
+  let user: User;
+  let organizationId: string;
+
+  beforeEach(async ({ makeOrganization, makeUser }) => {
+    user = await makeUser();
+    organizationId = (await makeOrganization()).id;
+
+    app = createFastifyInstance();
+    app.addHook("onRequest", async (request) => {
+      (request as typeof request & { user: unknown }).user = user;
+      (request as typeof request & { organizationId: string }).organizationId =
+        organizationId;
+    });
+
+    const { default: skillSandboxArtifactRoutes } = await import(
+      "./skill-sandbox-artifact"
+    );
+    await app.register(skillSandboxArtifactRoutes);
+    await app.ready();
+  });
+
+  afterEach(async () => {
+    await app.close();
+  });
+
+  test("folder create round-trips and shows up in the files listing", async () => {
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/skill-sandbox/folders",
+      payload: { name: "reports" },
+    });
+    expect(created.statusCode).toBe(200);
+    const folder = created.json<{ id: string; name: string }>();
+    expect(folder.name).toBe("reports");
+    expect(folder.id).toBeTruthy();
+
+    const files = await app.inject({
+      method: "GET",
+      url: "/api/skill-sandbox/files",
+    });
+    const body = files.json<{ folders: Array<{ id: string | null; name: string }> }>();
+    expect(body.folders).toEqual([
+      expect.objectContaining({ id: folder.id, name: "reports" }),
+    ]);
+  });
+
+  test("folder create rejects invalid names with 400 and duplicates with 409", async () => {
+    const bad = await app.inject({
+      method: "POST",
+      url: "/api/skill-sandbox/folders",
+      payload: { name: "a/b" },
+    });
+    expect(bad.statusCode).toBe(400);
+
+    const first = await app.inject({
+      method: "POST",
+      url: "/api/skill-sandbox/folders",
+      payload: { name: "dup" },
+    });
+    expect(first.statusCode).toBe(200);
+    const second = await app.inject({
+      method: "POST",
+      url: "/api/skill-sandbox/folders",
+      payload: { name: "dup" },
+    });
+    expect(second.statusCode).toBe(409);
+  });
+
+  test("uploads route serves own bytes, 404s other users' and artifact ids", async ({
+    makeUser,
+    makeOrganization,
+  }) => {
+    const sandbox = await seedSandbox({ organizationId, userId: user.id });
+    const { SkillSandboxReplayEventModel } = await import("@/models");
+    const upload = await SkillSandboxReplayEventModel.appendUpload({
+      sandboxId: sandbox.id,
+      userId: user.id,
+      path: "/sandbox/skills/example/in.txt",
+      mimeType: "text/plain",
+      originalName: "in.txt",
+      sizeBytes: 5,
+      data: Buffer.from("hello"),
+      origin: "x_file",
+    });
+
+    const ok = await app.inject({
+      method: "GET",
+      url: `/api/skill-sandbox/uploads/${upload?.id}`,
+    });
+    expect(ok.statusCode).toBe(200);
+    expect(ok.body).toBe("hello");
+    expect(ok.headers["content-type"]).toBe("application/octet-stream");
+    expect(ok.headers["x-content-type-options"]).toBe("nosniff");
+    expect(ok.headers["content-security-policy"]).toContain("sandbox");
+    expect(ok.headers["content-disposition"]).toContain("attachment");
+
+    // an artifact id is not reachable through the uploads route
+    const artifact = await seedArtifact({
+      sandboxId: sandbox.id,
+      userId: user.id,
+      organizationId,
+      mimeType: "text/plain",
+      data: Buffer.from("artifact"),
+      path: "/sandbox/skills/example/a.txt",
+    });
+    const wrongKind = await app.inject({
+      method: "GET",
+      url: `/api/skill-sandbox/uploads/${artifact.id}`,
+    });
+    expect(wrongKind.statusCode).toBe(404);
+
+    // another user's upload id 404s identically
+    const stranger = await makeUser({ email: "uploads-stranger@test.com" });
+    const strangerOrg = await makeOrganization();
+    const strangerSandbox = await SkillSandboxModel.create({
+      organizationId: strangerOrg.id,
+      userId: stranger.id,
+      conversationId: null,
+      defaultCwd: "/sandbox",
+    });
+    const strangerUpload = await SkillSandboxReplayEventModel.appendUpload({
+      sandboxId: strangerSandbox.id,
+      userId: stranger.id,
+      path: "/sandbox/secret.txt",
+      mimeType: "text/plain",
+      originalName: null,
+      sizeBytes: 6,
+      data: Buffer.from("secret"),
+    });
+    const denied = await app.inject({
+      method: "GET",
+      url: `/api/skill-sandbox/uploads/${strangerUpload?.id}`,
+    });
+    expect(denied.statusCode).toBe(404);
+    expect(denied.body).not.toContain("secret");
+  });
+});

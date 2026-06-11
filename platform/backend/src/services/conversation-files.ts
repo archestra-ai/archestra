@@ -13,11 +13,12 @@ class ConversationFilesService {
     conversationId: string;
     organizationId: string;
   }): Promise<ConversationFilesResponse> {
-    const [artifacts, attachments] = await Promise.all([
+    const [artifacts, attachments, xFileUploads] = await Promise.all([
       SkillSandboxFileModel.listArtifactMetadataByConversationId(params),
       ConversationAttachmentModel.findByConversationIdWithoutData(
         params.conversationId,
       ),
+      SkillSandboxFileModel.listXFileUploadsByConversationId(params),
     ]);
 
     return {
@@ -27,6 +28,13 @@ class ConversationFilesService {
         mimeType: a.mimeType,
         contentUrl: `/api/skill-sandbox/artifacts/${a.id}`,
         createdAt: a.createdAt.toISOString(),
+      })),
+      xFiles: xFileUploads.map((u) => ({
+        id: u.id,
+        name: u.originalName ?? basename(u.path),
+        mimeType: u.mimeType,
+        contentUrl: `/api/skill-sandbox/uploads/${u.id}`,
+        createdAt: u.createdAt.toISOString(),
       })),
       attachments: attachments
         // Defense in depth: the attachment finder is keyed only by

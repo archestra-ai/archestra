@@ -140,6 +140,91 @@ const skillSandboxArtifactRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
       }),
   );
+
+  fastify.post(
+    "/api/skill-sandbox/folders",
+    {
+      schema: {
+        operationId: RouteId.CreateSkillSandboxFolder,
+        description:
+          "Create a folder in the calling user's persistent file storage " +
+          "(X-Files). Flat — folders cannot nest.",
+        tags: ["Skills"],
+        body: z.object({ name: z.string().min(1).max(256) }),
+        response: constructResponseSchema(SandboxFolderListItemSchema),
+      },
+    },
+    async ({ body, organizationId, user }) => {
+      const folder = await skillSandboxArtifactService.createFolder({
+        organizationId,
+        userId: user.id,
+        name: body.name,
+      });
+      return {
+        id: folder.id,
+        name: folder.name,
+        createdAt: folder.createdAt,
+      };
+    },
+  );
+
+  fastify.get(
+    "/api/skill-sandbox/uploads/:uploadId",
+    {
+      schema: {
+        operationId: RouteId.GetSkillSandboxUpload,
+        description:
+          "Stream the raw bytes of a sandbox upload (e.g. a persistent file " +
+          "the agent pulled into the sandbox). Inline for known-safe raster " +
+          "images; download for everything else.",
+        tags: ["Skills"],
+        params: z.object({ uploadId: z.string().uuid() }),
+        // no `response` schema: raw bytes, same contract as the artifact route.
+      },
+    },
+    async ({ params: { uploadId }, organizationId, user }, reply) => {
+      // "not yours" and "missing" collapse into the same 404, mirroring the
+      // artifact byte route, so probes can't distinguish the two.
+      const upload = await skillSandboxArtifactService.getUploadForUser({
+        uploadId,
+        organizationId,
+        userId: user.id,
+      });
+      if (!upload) {
+        throw new ApiError(404, "Upload not found");
+      }
+
+      const inlineSafe = isInlineSafeImageMime(upload.mimeType);
+      const filename = safeFilenameFromPath(upload.originalName ?? upload.path);
+      const disposition = inlineSafe
+        ? `inline; filename="${filename}"`
+        : `attachment; filename="${filename}"`;
+      const contentType = inlineSafe
+        ? upload.mimeType
+        : "application/octet-stream";
+
+      // uploads always live in Postgres, but read through the storage router
+      // anyway so this route stays correct if upload routing ever changes.
+      let data: Buffer;
+      try {
+        data = await getSandboxFileStorage().get(upload);
+      } catch (error) {
+        if (error instanceof SandboxFileMissingError) {
+          throw new ApiError(404, "Upload data is no longer available");
+        }
+        throw error;
+      }
+
+      reply
+        .header("Content-Type", contentType)
+        .header("Content-Length", String(data.byteLength))
+        .header("Content-Disposition", disposition)
+        .header("X-Content-Type-Options", "nosniff")
+        .header("Content-Security-Policy", "default-src 'none'; sandbox")
+        .header("Cache-Control", "private, max-age=300");
+      return reply.send(data);
+    },
+  );
 };
 
 export default skillSandboxArtifactRoutes;

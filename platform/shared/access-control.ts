@@ -1242,6 +1242,8 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetSkillSandboxArtifact]: { sandbox: ["execute"] },
   [RouteId.GetSkillSandboxConversationArtifacts]: { sandbox: ["execute"] },
   [RouteId.GetSkillSandboxFiles]: { sandbox: ["execute"] },
+  [RouteId.CreateSkillSandboxFolder]: { sandbox: ["execute"] },
+  [RouteId.GetSkillSandboxUpload]: { sandbox: ["execute"] },
 
   // Audit Log Routes
   [RouteId.GetAuditLogs]: {

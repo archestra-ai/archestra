@@ -1,5 +1,5 @@
 {
-  "id": "282cbcc6-2fd3-4d18-b1b4-bc80fbd20e5f",
+  "id": "fe329ecb-3af9-4375-80e5-364781586676",
   "prevId": "2813db77-d3d9-4acf-afb5-6a666eee1ded",
   "version": "7",
   "dialect": "postgresql",
@@ -2777,6 +2777,13 @@
           "type": "text",
           "primaryKey": false,
           "notNull": false
+        },
+        "proxy_auth": {
+          "name": "proxy_auth",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'provider-key'"
         },
         "virtual_api_key_id": {
           "name": "virtual_api_key_id",
@@ -9161,6 +9168,12 @@
         },
         "connection_base_urls": {
           "name": "connection_base_urls",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "connection_default_provider_keys": {
+          "name": "connection_default_provider_keys",
           "type": "jsonb",
           "primaryKey": false,
           "notNull": false

@@ -1,5 +1,5 @@
 -- drizzle-migration-linter: allow-breaking
--- drizzle-migration-linter: reason=brand-new tables (connection_setups, connection_setup_skills); no existing rows, so FK constraints and the unique index cannot fail on any data, and CREATE INDEX on empty tables does not block writes. CASCADE deletes are intentional: setup rows are ephemeral render tickets scoped to their org/user/agents.
+-- drizzle-migration-linter: reason=brand-new tables (connection_setups, connection_setup_skills); no existing rows, so FK constraints and the unique index cannot fail on any data, and CREATE INDEX on empty tables does not block writes. CASCADE deletes are intentional: setup rows are ephemeral render tickets scoped to their org/user/agents. The organization column is plain nullable jsonb.
 CREATE TABLE "connection_setup_skills" (
 	"connection_setup_id" uuid NOT NULL,
 	"skill_id" uuid NOT NULL,
@@ -15,6 +15,7 @@ CREATE TABLE "connection_setups" (
 	"mcp_gateway_id" uuid,
 	"llm_proxy_id" uuid,
 	"provider" text,
+	"proxy_auth" text DEFAULT 'provider-key' NOT NULL,
 	"virtual_api_key_id" uuid,
 	"include_skills" boolean DEFAULT false NOT NULL,
 	"skill_link_ttl_days" integer,
@@ -26,6 +27,7 @@ CREATE TABLE "connection_setups" (
 	"created_at" timestamp DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
+ALTER TABLE "organization" ADD COLUMN "connection_default_provider_keys" jsonb;--> statement-breakpoint
 ALTER TABLE "connection_setup_skills" ADD CONSTRAINT "connection_setup_skills_connection_setup_id_connection_setups_id_fk" FOREIGN KEY ("connection_setup_id") REFERENCES "public"."connection_setups"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "connection_setup_skills" ADD CONSTRAINT "connection_setup_skills_skill_id_skills_id_fk" FOREIGN KEY ("skill_id") REFERENCES "public"."skills"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "connection_setups" ADD CONSTRAINT "connection_setups_organization_id_organization_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organization"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint

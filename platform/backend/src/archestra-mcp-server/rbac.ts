@@ -153,6 +153,8 @@ export const TOOL_PERMISSIONS: Record<
   update_app: { resource: "app", action: "update" },
   edit_app: { resource: "app", action: "update" },
   delete_app: { resource: "app", action: "delete" },
+  // Authoring intent: the preview is exercised while building/fixing an app.
+  preview_app_tool: { resource: "app", action: "update" },
   app_data_get: { resource: "app", action: "read" },
   app_data_set: { resource: "app", action: "update" },
   app_data_list: { resource: "app", action: "read" },

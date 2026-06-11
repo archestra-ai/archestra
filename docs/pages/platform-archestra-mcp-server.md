@@ -1645,6 +1645,7 @@ Required RBAC permission: `skill:update`
 | `read_app` | Return an app's stored HTML (pre-injection — exactly what was saved, without the platform SDK or base stylesheet) plus its version, byte size, name, and scope. | `app:read` |
 | `update_app` | Replace an existing app's HTML wholesale, and/or change its assigned tools or metadata. | `app:update` |
 | `edit_app` | Apply targeted str_replace edits to an existing app's HTML — the efficient path for small changes (fix a bug, tweak a style, add a section) without re-streaming the whole document. | `app:update` |
+| `preview_app_tool` | Run one of an app's assigned MCP tools server-side, exactly as the rendered app would (as you, the viewing user, with your MCP credentials), and return its real output. | `app:update` |
 | `delete_app` | Soft-delete an app the caller owns or administers. | `app:delete` |
 | `app_data_get` | Read a value from the calling app's data store (per-user or shared partition). | `app:read` |
 | `app_data_set` | Write a value to the calling app's data store (per-user or shared partition). | `app:update` |
@@ -1806,6 +1807,27 @@ Required RBAC permission: `app:update`
 | `latestVersion` | `number` | Yes |  |
 | `warnings` | `string[]` | No | Soft save-time validation warnings about the html (the save succeeded); fix them via update_app. |
 | `tools` | `string[]` | No | The app's assigned tool names after this call (present when the tools param was given). |
+
+#### preview_app_tool
+
+Required RBAC permission: `app:update`
+
+##### Input
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `appId` | `string` | Yes | The app id whose assigned tool to run. |
+| `toolName` | `string` | Yes | Name of an MCP tool assigned to the app (exactly as archestra.tools.call would receive it). |
+| `args` | `object` | No | Arguments to pass to the tool (defaults to {}). |
+
+##### Output
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `toolName` | `string` | Yes |  |
+| `isError` | `boolean` | Yes |  |
+| `truncated` | `boolean` | Yes |  |
+| `output` | `string` | Yes | The tool's output, framed as untrusted data. |
 
 #### delete_app
 

@@ -1,17 +1,16 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { MCP_SERVER_TOOL_NAME_SEPARATOR, RouteId } from "@archestra/shared";
-import type { McpUiToolMeta } from "@modelcontextprotocol/ext-apps";
+import { RouteId } from "@archestra/shared";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import QuickLRU from "quick-lru";
 import { z } from "zod";
-import { archestraMcpBranding } from "@/archestra-mcp-server";
 import { userHasPermission } from "@/auth/utils";
 import type { TokenAuthContext } from "@/clients/mcp-client";
 import config from "@/config";
-import { AppModel, ToolModel } from "@/models";
+import { AppModel } from "@/models";
+import { gateAppToolCall } from "@/services/apps/app-tool-runtime-gate";
 import { ApiError, type App, UuidIdSchema } from "@/types";
-import { APP_DATA_SHORT_NAMES, createAppServer } from "./mcp-app-gateway.utils";
+import { createAppServer } from "./mcp-app-gateway.utils";
 import {
   createStatelessTransport,
   ensureRequestSocketDestroySoon,
@@ -92,6 +91,7 @@ const mcpAppProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (body.method === "tools/call") {
         const denied = await rejectDisallowedToolCall({
           appId,
+          organizationId,
           body,
           reply,
         });
@@ -172,22 +172,24 @@ function jsonRpcError(
 }
 
 /**
- * Fail-closed gate for an app's upstream tools/call. Returns a JSON-RPC error
- * body to short-circuit the request, or null to allow it through.
+ * Fail-closed gate for an app's tools/call. Delegates to the shared runtime gate
+ * (assignment allowlist + visibility + invocation policy) so the proxy and
+ * preview_app_tool can never diverge. Returns a JSON-RPC error body to
+ * short-circuit the request, or null to allow it through.
  */
 async function rejectDisallowedToolCall(params: {
   appId: string;
+  organizationId: string;
   body: Record<string, unknown>;
   reply: StatusReply;
 }): Promise<object | null> {
-  const { appId, body, reply } = params;
-  const toolName =
-    body.params &&
-    typeof body.params === "object" &&
-    "name" in body.params &&
-    typeof (body.params as { name: unknown }).name === "string"
-      ? (body.params as { name: string }).name
+  const { appId, organizationId, body, reply } = params;
+  const callParams =
+    body.params && typeof body.params === "object"
+      ? (body.params as { name?: unknown; arguments?: unknown })
       : undefined;
+  const toolName =
+    typeof callParams?.name === "string" ? callParams.name : undefined;
   if (!toolName) {
     return jsonRpcError(
       reply,
@@ -196,48 +198,31 @@ async function rejectDisallowedToolCall(params: {
       "Invalid params: tools/call requires a string 'name' parameter",
     );
   }
+  const toolInput =
+    callParams?.arguments && typeof callParams.arguments === "object"
+      ? (callParams.arguments as Record<string, unknown>)
+      : {};
 
-  // Archestra tools: only the App Data Store tools are dispatchable from an app
-  // (authorized by RBAC inside executeArchestraTool). Every other Archestra tool
-  // — the management/chat surface — is rejected here, mirroring the server gate.
-  if (archestraMcpBranding.isToolName(toolName)) {
-    const shortName = archestraMcpBranding.getToolShortName(toolName);
-    if (shortName && APP_DATA_SHORT_NAMES.has(shortName)) {
-      return null;
-    }
-    return jsonRpcError(
-      reply,
-      body.id,
-      -32601,
-      `Tool "${toolName}" is not available to apps.`,
-    );
+  // The app runtime is treated as trusted for policy purposes: only an explicit
+  // block_always/require_approval gates it, so a no-policy assigned tool keeps
+  // working as before. No approval UI exists inside the sandbox, so a
+  // require_approval policy blocks at runtime (an authoring agent can still
+  // exercise it through preview_app_tool, which carries its own approval gate).
+  const decision = await gateAppToolCall({
+    appId,
+    organizationId,
+    toolName,
+    toolInput,
+    isContextTrusted: true,
+    treatRequireApprovalAsBlock: true,
+  });
+  if (!decision.allowed) {
+    return jsonRpcError(reply, body.id, decision.code, decision.reason);
   }
-
-  // Resolve exactly like dispatch does (clients/mcp-client.ts
-  // validateAndGetTool): exact name first, then — for unprefixed names only —
-  // the "__<name>" suffix fallback, so a tool reachable at dispatch is never
-  // rejected here.
-  let [tool] = await ToolModel.getMcpToolsAssignedToApp([toolName], appId);
-  if (!tool && !toolName.includes(MCP_SERVER_TOOL_NAME_SEPARATOR)) {
-    [tool] = await ToolModel.getMcpToolsAssignedToAppBySuffix(toolName, appId);
-  }
-  if (!tool) {
-    return jsonRpcError(
-      reply,
-      body.id,
-      -32601,
-      `Tool "${toolName}" is not assigned to this app.`,
-    );
-  }
-  const visibility = (tool.meta as { _meta?: { ui?: McpUiToolMeta } } | null)
-    ?._meta?.ui?.visibility;
-  if (visibility && !visibility.includes("app")) {
-    return jsonRpcError(
-      reply,
-      body.id,
-      -32601,
-      `Tool "${toolName}" is not accessible from MCP Apps (visibility: [${visibility.join(", ")}])`,
-    );
+  // Dispatch the exact tool the gate resolved (and evaluated policy on), so a
+  // suffix-addressed name can't re-resolve to a different row at execution.
+  if (decision.kind === "upstream" && callParams) {
+    callParams.name = decision.resolvedToolName;
   }
   return null;
 }

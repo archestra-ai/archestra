@@ -356,7 +356,10 @@ async function makeScheduleTriggerRun(
  */
 async function makeTool(
   overrides: Partial<
-    Pick<Tool, "name" | "description" | "parameters" | "catalogId" | "agentId">
+    Pick<
+      Tool,
+      "name" | "description" | "parameters" | "catalogId" | "agentId" | "meta"
+    >
   > = {},
 ): Promise<Tool> {
   const toolData = {

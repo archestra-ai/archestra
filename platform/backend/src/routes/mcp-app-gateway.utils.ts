@@ -1,10 +1,4 @@
-import {
-  MCP_APPS_SERVER_EXTENSION_CAPABILITIES,
-  TOOL_APP_DATA_DELETE_SHORT_NAME,
-  TOOL_APP_DATA_GET_SHORT_NAME,
-  TOOL_APP_DATA_LIST_SHORT_NAME,
-  TOOL_APP_DATA_SET_SHORT_NAME,
-} from "@archestra/shared";
+import { MCP_APPS_SERVER_EXTENSION_CAPABILITIES } from "@archestra/shared";
 import { RESOURCE_MIME_TYPE } from "@modelcontextprotocol/ext-apps";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import {
@@ -33,6 +27,7 @@ import {
   type AppSdkTool,
   injectAppSdk,
 } from "@/services/apps/app-sdk-injection";
+import { APP_DATA_SHORT_NAMES } from "@/services/apps/app-tool-runtime-gate";
 import { APP_PLATFORM_CSP } from "@/services/apps/app-ui-policy";
 import type { CommonToolCall } from "@/types";
 import { appOwner } from "@/types";
@@ -44,19 +39,6 @@ import {
 } from "./mcp-gateway.utils";
 
 type McpListTool = ListToolsResult["tools"][number];
-
-// The App Data Store tools are exposed to a running app alongside its assigned
-// upstream tools; the management tools (create_app, …) are a chat surface and
-// are the ONLY Archestra tools an app runtime may dispatch. This set is the
-// authoritative allowlist for the Archestra branch of tools/call — without it,
-// an app (whose context has no agentId, so the agent-assignment check is
-// skipped) could call any Archestra tool the session user has RBAC for.
-export const APP_DATA_SHORT_NAMES = new Set<string>([
-  TOOL_APP_DATA_GET_SHORT_NAME,
-  TOOL_APP_DATA_SET_SHORT_NAME,
-  TOOL_APP_DATA_LIST_SHORT_NAME,
-  TOOL_APP_DATA_DELETE_SHORT_NAME,
-]);
 
 /**
  * Build the app-bound MCP server: a single endpoint carrying an app's whole

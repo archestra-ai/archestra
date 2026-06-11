@@ -7,6 +7,7 @@ import {
   parseFullToolName,
   TimeInMs,
   TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON,
+  TOOL_PREVIEW_APP_TOOL_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
 } from "@archestra/shared";
 import {
@@ -954,6 +955,12 @@ export async function getChatMcpTools({
                     mcpTool.name,
                     args,
                   );
+                  // preview_app_tool exercises a tool the viewer granted to the
+                  // app, not to the agent — always a click. Built-in Archestra
+                  // tools otherwise bypass policy, so this carve-out is explicit.
+                  if (isPreviewAppToolTarget(approvalTarget.toolName)) {
+                    return true;
+                  }
                   return ToolInvocationPolicyModel.checkApprovalRequired(
                     approvalTarget.toolName,
                     approvalTarget.toolInput,
@@ -2103,12 +2110,30 @@ function isAbortLikeError(error: unknown): boolean {
   return error.message.toLowerCase().includes("abort");
 }
 
+/**
+ * preview_app_tool requires human approval by default — the viewer granted the
+ * underlying tool to the *app*, never to the *agent*, so an agent exercising it
+ * is a click. Handles both the prefixed name and the bare run_tool target.
+ */
+function isPreviewAppToolTarget(toolName: string): boolean {
+  return (
+    archestraMcpBranding.getToolShortName(toolName) ===
+      TOOL_PREVIEW_APP_TOOL_SHORT_NAME ||
+    toolName === TOOL_PREVIEW_APP_TOOL_SHORT_NAME
+  );
+}
+
 async function throwIfApprovalRequired(
   toolName: string,
   args: unknown,
   globalToolPolicy: GlobalToolPolicy,
 ): Promise<void> {
   const approvalTarget = resolveApprovalPolicyTarget(toolName, args);
+  // In autonomous contexts (A2A/Slack/Teams/subagents) there is no click, so a
+  // preview is blocked with the standard approval-required reason.
+  if (isPreviewAppToolTarget(approvalTarget.toolName)) {
+    throw new Error(TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON);
+  }
   const requiresApproval =
     await ToolInvocationPolicyModel.checkApprovalRequired(
       approvalTarget.toolName,

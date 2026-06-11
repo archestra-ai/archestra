@@ -27,6 +27,7 @@ test("conversationFilesService.list groups generated + attachments with basename
   });
   const artifact = await SkillSandboxFileModel.createArtifact({
     sandboxId: sandbox.id,
+    userId: user.id,
     path: "/home/sandbox/sub/chart.png",
     mimeType: "image/png",
     sizeBytes: 3,

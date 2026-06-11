@@ -810,7 +810,6 @@ describe("project chats: read-only access for project members", () => {
     const conversation = await ConversationModel.create({
       userId: author.id,
       organizationId,
-      agentId: null,
       projectId: project.id,
     });
     return { project, conversation };

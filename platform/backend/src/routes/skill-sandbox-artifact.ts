@@ -141,33 +141,6 @@ const skillSandboxArtifactRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }),
   );
 
-  fastify.post(
-    "/api/skill-sandbox/folders",
-    {
-      schema: {
-        operationId: RouteId.CreateSkillSandboxFolder,
-        description:
-          "Create a folder in the calling user's persistent file storage " +
-          "(X-Files). Flat — folders cannot nest.",
-        tags: ["Skills"],
-        body: z.object({ name: z.string().min(1).max(256) }),
-        response: constructResponseSchema(SandboxFolderListItemSchema),
-      },
-    },
-    async ({ body, organizationId, user }) => {
-      const folder = await skillSandboxArtifactService.createFolder({
-        organizationId,
-        userId: user.id,
-        name: body.name,
-      });
-      return {
-        id: folder.id,
-        name: folder.name,
-        createdAt: folder.createdAt,
-      };
-    },
-  );
-
   fastify.get(
     "/api/skill-sandbox/uploads/:uploadId",
     {

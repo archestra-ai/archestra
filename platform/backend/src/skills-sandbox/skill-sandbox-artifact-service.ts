@@ -72,40 +72,6 @@ class SkillSandboxArtifactService {
   }
 
   /**
-   * Create a PFS folder: a `skill_sandbox_folders` row, plus a real directory
-   * when the filesystem provider is configured. The directory is made first —
-   * a directory without a row is a benign orphan folder, a row whose mkdir
-   * failed would claim a folder that doesn't exist.
-   */
-  async createFolder(params: {
-    organizationId: string;
-    userId: string;
-    name: string;
-  }): Promise<SkillSandboxFolder> {
-    const name = params.name.trim();
-    const invalid = validateSandboxFolderName(name);
-    if (invalid) {
-      throw new ApiError(400, invalid);
-    }
-    await getSandboxFileStorage().ensureFolderDir({
-      userId: params.userId,
-      name,
-    });
-    try {
-      return await SkillSandboxFolderModel.create({
-        organizationId: params.organizationId,
-        userId: params.userId,
-        name,
-      });
-    } catch (error) {
-      if (error instanceof SandboxFolderExistsError) {
-        throw new ApiError(409, error.message);
-      }
-      throw error;
-    }
-  }
-
-  /**
    * Fetch an uploaded input for byte serving, scoped to the calling user.
    * Returns null for "not found" AND "not yours" so the route's 404 cannot be
    * used to probe other users' upload ids.

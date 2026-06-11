@@ -1,13 +1,9 @@
 import { archestraApiSdk } from "@archestra/shared";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { toast } from "sonner";
+import { useQuery } from "@tanstack/react-query";
 import { handleApiError } from "@/lib/utils";
 
-const {
-  createSkillSandboxFolder,
-  getSkillSandboxConversationArtifacts,
-  getSkillSandboxFiles,
-} = archestraApiSdk;
+const { getSkillSandboxConversationArtifacts, getSkillSandboxFiles } =
+  archestraApiSdk;
 
 /** Surface A: artifacts produced in the current conversation. */
 export function useConversationArtifacts(conversationId: string | undefined) {
@@ -39,29 +35,6 @@ export function useUserSandboxFiles() {
         return null;
       }
       return data;
-    },
-  });
-}
-
-/** Create a PFS folder; the files listing refreshes on success. */
-export function useCreateSandboxFolder() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: async ({ name }: { name: string }) => {
-      const { data, error } = await createSkillSandboxFolder({
-        body: { name },
-      });
-      if (error) {
-        handleApiError(error);
-        return null;
-      }
-      return data;
-    },
-    onSuccess: (folder) => {
-      if (!folder) return;
-      toast.success(`Folder "${folder.name}" created`);
-      queryClient.invalidateQueries({ queryKey: ["sandbox-files"] });
     },
   });
 }

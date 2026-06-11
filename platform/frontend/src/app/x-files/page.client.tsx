@@ -1,20 +1,8 @@
 "use client";
 
-import { Download, Folder, FolderPlus } from "lucide-react";
-import { useState } from "react";
-import { useForm } from "react-hook-form";
+import { Download, Folder } from "lucide-react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { PageLayout } from "@/components/page-layout";
-import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import {
   groupSandboxFiles,
   type SandboxFileRow,
@@ -23,10 +11,7 @@ import {
   formatBytes,
   sandboxArtifactUrl,
 } from "@/lib/skills-sandbox/sandbox-file-preview";
-import {
-  useCreateSandboxFolder,
-  useUserSandboxFiles,
-} from "@/lib/skills-sandbox/sandbox-files.query";
+import { useUserSandboxFiles } from "@/lib/skills-sandbox/sandbox-files.query";
 
 export default function XFilesPageClient() {
   return (
@@ -39,23 +24,12 @@ export default function XFilesPageClient() {
 function XFilesList() {
   const { data, isPending } = useUserSandboxFiles();
   const groups = groupSandboxFiles(data);
-  const [folderDialogOpen, setFolderDialogOpen] = useState(false);
 
   return (
     <PageLayout
       title="X-Files"
-      description="Files your agents produced in the sandbox across all conversations."
-      actionButton={
-        <Button variant="outline" onClick={() => setFolderDialogOpen(true)}>
-          <FolderPlus className="mr-2 h-4 w-4" />
-          New folder
-        </Button>
-      }
+      description="Files your agents produced in the sandbox across all conversations. Folders belong to projects."
     >
-      <NewFolderDialog
-        open={folderDialogOpen}
-        onOpenChange={setFolderDialogOpen}
-      />
       {groups.length === 0 ? (
         <p className="py-12 text-center text-sm text-muted-foreground">
           {isPending ? "Loading…" : "No files yet"}
@@ -141,64 +115,5 @@ function FileRow({
         </span>
       )}
     </div>
-  );
-}
-
-function NewFolderDialog({
-  open,
-  onOpenChange,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-}) {
-  const form = useForm<{ name: string }>({ defaultValues: { name: "" } });
-  const createFolder = useCreateSandboxFolder();
-
-  const onSubmit = form.handleSubmit(async ({ name }) => {
-    const folder = await createFolder.mutateAsync({ name: name.trim() });
-    if (folder) {
-      form.reset();
-      onOpenChange(false);
-    }
-  });
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <form onSubmit={onSubmit}>
-          <DialogHeader>
-            <DialogTitle>New folder</DialogTitle>
-            <DialogDescription>
-              Folders organize your persistent files. Agents can save into a
-              folder with the download_file tool.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="py-4">
-            <Input
-              autoFocus
-              placeholder="Folder name"
-              {...form.register("name", { required: true, maxLength: 128 })}
-            />
-          </div>
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => onOpenChange(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              disabled={
-                createFolder.isPending || !form.watch("name").trim().length
-              }
-            >
-              Create
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
   );
 }

@@ -388,51 +388,6 @@ describe("POST /api/skill-sandbox/folders + GET /api/skill-sandbox/uploads/:uplo
     await app.close();
   });
 
-  test("folder create round-trips and shows up in the files listing", async () => {
-    const created = await app.inject({
-      method: "POST",
-      url: "/api/skill-sandbox/folders",
-      payload: { name: "reports" },
-    });
-    expect(created.statusCode).toBe(200);
-    const folder = created.json<{ id: string; name: string }>();
-    expect(folder.name).toBe("reports");
-    expect(folder.id).toBeTruthy();
-
-    const files = await app.inject({
-      method: "GET",
-      url: "/api/skill-sandbox/files",
-    });
-    const body = files.json<{
-      folders: Array<{ id: string | null; name: string }>;
-    }>();
-    expect(body.folders).toEqual([
-      expect.objectContaining({ id: folder.id, name: "reports" }),
-    ]);
-  });
-
-  test("folder create rejects invalid names with 400 and duplicates with 409", async () => {
-    const bad = await app.inject({
-      method: "POST",
-      url: "/api/skill-sandbox/folders",
-      payload: { name: "a/b" },
-    });
-    expect(bad.statusCode).toBe(400);
-
-    const first = await app.inject({
-      method: "POST",
-      url: "/api/skill-sandbox/folders",
-      payload: { name: "dup" },
-    });
-    expect(first.statusCode).toBe(200);
-    const second = await app.inject({
-      method: "POST",
-      url: "/api/skill-sandbox/folders",
-      payload: { name: "dup" },
-    });
-    expect(second.statusCode).toBe(409);
-  });
-
   test("uploads route serves own bytes, 404s other users' and artifact ids", async ({
     makeUser,
     makeOrganization,

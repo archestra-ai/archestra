@@ -543,7 +543,6 @@ export const RouteId = {
   SetProjectShare: "setProjectShare",
   DeleteProject: "deleteProject",
   GetProjectConversations: "getProjectConversations",
-  CreateSkillSandboxFolder: "createSkillSandboxFolder",
   GetSkillSandboxUpload: "getSkillSandboxUpload",
 
   // Audit Log Routes

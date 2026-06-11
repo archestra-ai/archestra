@@ -16,6 +16,7 @@ import {
 } from "drizzle-orm/pg-core";
 import type {
   ConnectionBaseUrl,
+  ConnectionDefaultProviderKeys,
   GlobalToolPolicy,
   LimitCleanupInterval,
   NetworkPolicy,
@@ -216,6 +217,16 @@ const organizationsTable = pgTable("organization", {
   connectionBaseUrls: jsonb("connection_base_urls").$type<
     ConnectionBaseUrl[]
   >(),
+
+  /**
+   * Admin-chosen provider API key per provider for auto-provisioned
+   * connection virtual keys (provider → llm_provider_api_keys.id). When a
+   * provider has no entry, provisioning falls back to the user's
+   * personal → team → org key resolution.
+   */
+  connectionDefaultProviderKeys: jsonb(
+    "connection_default_provider_keys",
+  ).$type<ConnectionDefaultProviderKeys>(),
 
   /**
    * Legacy preset columns (feature removed) — retained inert (non-destructive,

@@ -75,6 +75,11 @@ interface ProxyClientInstructionsProps {
   shownProviders?: readonly SupportedProvider[] | null;
   /** Connection base URL chosen at the page level (see ConnectionUrlStep). */
   baseUrl: string;
+  /**
+   * Script-capable clients only need the provider picked — the generated
+   * setup command does the wiring, so the manual instructions are hidden.
+   */
+  selectionOnly?: boolean;
 }
 
 const ALL_PROVIDERS = Object.keys(providerDisplayNames) as SupportedProvider[];
@@ -97,6 +102,7 @@ export function ProxyClientInstructions({
   profileName,
   shownProviders,
   baseUrl,
+  selectionOnly = false,
 }: ProxyClientInstructionsProps) {
   const shownSet = useMemo(
     () => (shownProviders ? new Set(shownProviders) : null),
@@ -201,7 +207,8 @@ export function ProxyClientInstructions({
         onSelect={handleProviderSelect}
       />
 
-      {!selectedProvider ? null : client.proxy.kind === "generic" &&
+      {selectionOnly || !selectedProvider ? null : client.proxy.kind ===
+          "generic" &&
         url &&
         providerLabel &&
         originalUrl ? (

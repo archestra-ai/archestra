@@ -549,6 +549,10 @@ export const RouteId = {
   GetSkillShareLinks: "getSkillShareLinks",
   CreateSkillShareLink: "createSkillShareLink",
   RevokeSkillShareLink: "revokeSkillShareLink",
+
+  // Connection Setup Routes
+  CreateConnectionSetup: "createConnectionSetup",
+  GetConnectionSetupScript: "getConnectionSetupScript",
 } as const;
 
 export type RouteId = (typeof RouteId)[keyof typeof RouteId];

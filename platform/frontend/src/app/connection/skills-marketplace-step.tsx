@@ -509,7 +509,8 @@ function firstActiveLink(links: SkillShareLink[]): SkillShareLink | null {
   return links.find((l) => l.status === "active") ?? null;
 }
 
-async function fetchAllSkillIds(): Promise<string[]> {
+/** Shared with the connect-command step, which snapshots the same full skill set. */
+export async function fetchAllSkillIds(): Promise<string[]> {
   const ids: string[] = [];
   const limit = 100;
   let offset = 0;
@@ -529,7 +530,8 @@ async function fetchAllSkillIds(): Promise<string[]> {
   return ids;
 }
 
-function useTotalSkillCount() {
+/** @public — also used by the connect-command step */
+export function useTotalSkillCount() {
   return useQuery({
     queryKey: ["skills", "total-count"],
     queryFn: async () => {

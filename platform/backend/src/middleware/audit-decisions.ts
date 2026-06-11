@@ -340,6 +340,16 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "child of skill; parent (skill) audited",
   },
+  connectionSetupsTable: {
+    audited: false,
+    reason:
+      "ephemeral 15-minute render tickets for /connection setup scripts; durable artifacts (virtual key, skill share link) carry the audit signal",
+  },
+  connectionSetupSkillsTable: {
+    audited: false,
+    reason:
+      "join: connection setup × skill; parent (connectionSetups) ephemeral",
+  },
   skillShareLinksTable: {
     audited: false,
     reason:

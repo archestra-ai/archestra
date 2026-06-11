@@ -30,6 +30,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { useProfiles } from "@/lib/agent.query";
 import config from "@/lib/config/config";
+import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import {
   useOrganization,
   useUpdateConnectionSettings,
@@ -73,6 +74,11 @@ export function ConnectSettingsSection() {
       { description: string; isDefault: boolean; visible: boolean }
     >
   >({});
+  // provider → provider API key id used by auto-provisioned setup virtual keys
+  const [defaultProviderKeys, setDefaultProviderKeys] = useState<
+    Record<string, string>
+  >({});
+  const { data: providerApiKeys } = useLlmProviderApiKeys();
 
   // Env-configured candidate URLs the admin can curate. Keep order stable so
   // the UI mirrors what end users see in the dropdowns elsewhere.
@@ -86,6 +92,12 @@ export function ConnectSettingsSection() {
     setShownClientIds(organization.connectionShownClientIds ?? ALL_CLIENT_IDS);
     setShownProviders(getShownProviders(organization) ?? ALL_PROVIDER_IDS);
     setBaseUrlMeta(buildBaseUrlMeta(organization.connectionBaseUrls ?? null));
+    setDefaultProviderKeys(
+      (organization.connectionDefaultProviderKeys ?? {}) as Record<
+        string,
+        string
+      >,
+    );
   }, [organization]);
 
   const updateMutation = useUpdateConnectionSettings(
@@ -125,7 +137,15 @@ export function ConnectSettingsSection() {
     [baseUrlMeta, serverBaseUrlMeta, envBaseUrls],
   );
 
+  const serverDefaultProviderKeys =
+    (organization?.connectionDefaultProviderKeys ?? {}) as Record<
+      string,
+      string
+    >;
+
   const hasChanges =
+    JSON.stringify(defaultProviderKeys) !==
+      JSON.stringify(serverDefaultProviderKeys) ||
     gatewayId !== serverGatewayId ||
     proxyId !== serverProxyId ||
     defaultClientId !== serverDefaultClientId ||
@@ -150,6 +170,10 @@ export function ConnectSettingsSection() {
       connectionShownClientIds: collapseIfAll(shownClientIds, ALL_CLIENT_IDS),
       connectionShownProviders: collapseIfAll(shownProviders, ALL_PROVIDER_IDS),
       connectionBaseUrls: collapseBaseUrlMeta(envBaseUrls, baseUrlMeta),
+      connectionDefaultProviderKeys:
+        Object.keys(defaultProviderKeys).length > 0
+          ? defaultProviderKeys
+          : null,
     });
   };
 
@@ -160,6 +184,7 @@ export function ConnectSettingsSection() {
     setShownClientIds(serverShownClients);
     setShownProviders(serverShownProviders);
     setBaseUrlMeta(serverBaseUrlMeta);
+    setDefaultProviderKeys(serverDefaultProviderKeys);
   };
 
   const setBaseUrlDescription = (url: string, description: string) =>
@@ -181,6 +206,16 @@ export function ConnectSettingsSection() {
 
   const gatewayItems = mcpGateways ?? [];
   const proxyItems = llmProxies ?? [];
+
+  const providerKeysByProvider = useMemo(() => {
+    const grouped = new Map<string, { id: string; name: string }[]>();
+    for (const key of providerApiKeys ?? []) {
+      const list = grouped.get(key.provider) ?? [];
+      list.push({ id: key.id, name: key.name });
+      grouped.set(key.provider, list);
+    }
+    return grouped;
+  }, [providerApiKeys]);
 
   return (
     <SettingsSectionStack>
@@ -254,6 +289,69 @@ export function ConnectSettingsSection() {
                     ))}
                 </SelectContent>
               </Select>
+            )}
+          </WithPermissions>
+        }
+      />
+      <SettingsBlock
+        title="Default provider keys for setup commands"
+        description={
+          "Which provider API key auto-provisioned virtual keys map to when users generate a one-command setup on the Connect page. Providers left on Automatic fall back to the user's own key resolution (personal, then team, then organization)."
+        }
+        control={
+          <WithPermissions
+            permissions={{ organizationSettings: ["update"] }}
+            noPermissionHandle="tooltip"
+          >
+            {({ hasPermission }) => (
+              <div className="flex w-64 flex-col gap-2">
+                {providerKeysByProvider.size === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    No provider API keys configured yet.
+                  </p>
+                ) : (
+                  [...providerKeysByProvider.entries()].map(
+                    ([provider, keys]) => (
+                      <div key={provider} className="flex items-center gap-2">
+                        <span className="w-24 shrink-0 truncate text-sm">
+                          {providerDisplayNames[
+                            provider as SupportedProvider
+                          ] ?? provider}
+                        </span>
+                        <Select
+                          value={defaultProviderKeys[provider] ?? DEFAULT_VALUE}
+                          onValueChange={(value) =>
+                            setDefaultProviderKeys((prev) => {
+                              const next = { ...prev };
+                              if (value === DEFAULT_VALUE) {
+                                delete next[provider];
+                              } else {
+                                next[provider] = value;
+                              }
+                              return next;
+                            })
+                          }
+                          disabled={updateMutation.isPending || !hasPermission}
+                        >
+                          <SelectTrigger className="flex-1">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value={DEFAULT_VALUE}>
+                              Automatic
+                            </SelectItem>
+                            {keys.map((key) => (
+                              <SelectItem key={key.id} value={key.id}>
+                                {key.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    ),
+                  )
+                )}
+              </div>
             )}
           </WithPermissions>
         }

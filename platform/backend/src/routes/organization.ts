@@ -293,6 +293,26 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
+      if (body.connectionDefaultProviderKeys) {
+        const keyIds = Object.values(body.connectionDefaultProviderKeys);
+        const keys = await LlmProviderApiKeyModel.findByIds(keyIds);
+        const keysById = new Map(keys.map((k) => [k.id, k]));
+        for (const [provider, keyId] of Object.entries(
+          body.connectionDefaultProviderKeys,
+        )) {
+          const key = keysById.get(keyId);
+          if (!key || key.organizationId !== organizationId) {
+            throw new ApiError(404, "Provider API key not found");
+          }
+          if (key.provider !== provider) {
+            throw new ApiError(
+              400,
+              `Key "${key.name}" is for provider "${key.provider}", not "${provider}"`,
+            );
+          }
+        }
+      }
+
       const organization = await OrganizationModel.patch(organizationId, body);
 
       if (!organization) {

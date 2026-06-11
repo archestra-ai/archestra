@@ -1,6 +1,7 @@
 "use client";
 
 import { Settings2 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -33,13 +34,17 @@ export function ConnectSettingsDialog() {
         >
           <Settings2 className="mr-2 h-4 w-4" />
           Page settings
+          <Badge variant="secondary" className="ml-2">
+            Admin
+          </Badge>
         </Button>
       </DialogTrigger>
       <DialogContent className="max-w-3xl">
         <DialogHeader>
           <DialogTitle>Connect page settings</DialogTitle>
           <DialogDescription>
-            Defaults and visibility for everyone's connect page.
+            Admin only — these defaults and visibility settings configure the
+            connect page for everyone in your organization.
           </DialogDescription>
         </DialogHeader>
         <ConnectSettingsSection />

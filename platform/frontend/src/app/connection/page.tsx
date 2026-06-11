@@ -51,9 +51,7 @@ export default function ConnectionPage() {
               >
                 <Sparkles className="size-3.5" />
                 Try the new connection page
-                <Badge variant="secondary" className="uppercase tracking-wide">
-                  Beta
-                </Badge>
+                <Badge variant="secondary">Beta</Badge>
               </Link>
               <ConnectSettingsDialog />
             </div>

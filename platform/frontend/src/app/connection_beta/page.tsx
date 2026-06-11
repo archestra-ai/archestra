@@ -25,10 +25,7 @@ export default function ConnectionPage() {
         <div className="mb-7 flex flex-wrap items-start justify-between gap-4">
           <div className="flex items-center gap-3">
             <ConnectionHero />
-            <Badge
-              variant="secondary"
-              className="mt-1 self-start uppercase tracking-wide"
-            >
+            <Badge variant="secondary" className="mt-1 self-start">
               Beta
             </Badge>
           </div>

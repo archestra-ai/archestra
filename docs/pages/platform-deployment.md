@@ -843,11 +843,13 @@ By default, sandbox file bytes (`upload_file` inputs and `download_file` artifac
 
 - **`ARCHESTRA_SKILLS_SANDBOX_FILE_STORAGE_PATH`** - Root directory for artifact files.
   - Required when `ARCHESTRA_SKILLS_SANDBOX_FILE_STORAGE_PROVIDER=filesystem`
-  - Artifacts land flat at `<path>/<userId>/<filename>` (the `users.id` UUID). Same-name collisions count up Downloads-style: `report.txt`, `report (1).txt`, `report (2).txt`.
+  - Artifacts land at `<path>/<userId>/<filename>` (the `users.id` UUID), or `<path>/<userId>/<folder>/<filename>` when exported into one of the user's X-Files folders (flat — folders cannot nest). Same-name collisions count up Downloads-style per directory: `report.txt`, `report (1).txt`, `report (2).txt`.
 
 **Operational notes:**
 
 - Everything in a user folder is an exported artifact — safe to copy, move, or delete at any time. Deleting one only breaks re-downloading that artifact through the UI (the API returns 404 with a clear error); sandboxes and replay are unaffected.
+- Files and directories added to a user folder by hand show up on the X-Files page (and in the agent's `search_files` results) as non-downloadable entries; agents can still pull them into a sandbox by filename via `upload_file`. Only the top level and one folder level are scanned — anything nested deeper is ignored.
+- Creating a folder on the X-Files page creates a real directory; an existing hand-made directory of the same name is adopted.
 - Uploads never appear on disk. An uploaded file lives inside the sandbox container (and in Postgres for replay); it lands in the user folder only when the agent exports it via `download_file`.
 - No automatic GC runs; deleted users/sandboxes leave files behind. Operators own cleanup.
 - Switching the provider only affects new artifacts. Existing rows continue reading from wherever they were originally written (per-row dispatch).

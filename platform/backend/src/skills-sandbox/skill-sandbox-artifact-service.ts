@@ -1,4 +1,6 @@
 import {
+  ProjectModel,
+  ProjectShareModel,
   SkillSandboxFileModel,
   SkillSandboxFolderModel,
   SkillSandboxModel,
@@ -70,13 +72,17 @@ class SkillSandboxArtifactService {
   /**
    * Fetch an artifact the caller may access: the producing sandbox's owner,
    * or the owner of the folder the artifact sits in (project folders collect
-   * results from every project member's chats). Null for "not found" AND
-   * "not yours" alike, so 404s can't probe other users' ids.
+   * results from every project member's chats). With
+   * `allowSharedProjectRead`, members of a project shared with the caller may
+   * also fetch files in its result folder — byte reads only; deletion keeps
+   * the stricter rule. Null for "not found" AND "not yours" alike, so 404s
+   * can't probe other users' ids.
    */
   async getArtifactForUser(params: {
     artifactId: string;
     organizationId: string;
     userId: string;
+    allowSharedProjectRead?: boolean;
   }): Promise<SkillSandboxFile | null> {
     const artifact = await SkillSandboxFileModel.findArtifactById(
       params.artifactId,
@@ -92,12 +98,19 @@ class SkillSandboxArtifactService {
             artifact.folderId,
           )
         : undefined;
-      if (
-        !folder ||
-        folder.userId !== params.userId ||
-        folder.organizationId !== params.organizationId
-      ) {
+      if (!folder || folder.organizationId !== params.organizationId) {
         return null;
+      }
+      if (folder.userId !== params.userId) {
+        if (!params.allowSharedProjectRead) return null;
+        const project = await ProjectModel.findByFolderId(folder.id);
+        if (!project) return null;
+        const canAccess = await ProjectShareModel.userCanAccessProject({
+          project,
+          userId: params.userId,
+          organizationId: params.organizationId,
+        });
+        if (!canAccess) return null;
       }
     }
     return artifact;

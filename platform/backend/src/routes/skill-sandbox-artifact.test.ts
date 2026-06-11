@@ -492,6 +492,88 @@ describe("project folder cross-user access", () => {
     });
     expect(files.json<{ files: unknown[] }>().files).toEqual([]);
   });
+
+  test("a shared project's folder shows in members' My Files with readable bytes", async ({
+    makeUser,
+    makeMember,
+  }) => {
+    const { projectService } = await import("@/services/project");
+    const { ProjectShareModel } = await import("@/models");
+    await makeMember(user.id, organizationId, {});
+    const owner = await makeUser({ email: "share-owner@test.com" });
+    const project = await projectService.create({
+      organizationId,
+      userId: owner.id,
+      name: "teamshared",
+      description: null,
+    });
+    await ProjectShareModel.upsert({
+      projectId: project.id,
+      organizationId,
+      createdByUserId: owner.id,
+      visibility: "organization",
+      teamIds: [],
+    });
+    const ownerSandbox = await SkillSandboxModel.create({
+      organizationId,
+      userId: owner.id,
+      conversationId: null,
+      defaultCwd: "/sandbox",
+    });
+    const artifact = await SkillSandboxFileModel.createArtifact({
+      sandboxId: ownerSandbox.id,
+      userId: owner.id,
+      path: "/sandbox/shared.txt",
+      mimeType: "text/plain",
+      originalName: null,
+      sizeBytes: 6,
+      data: Buffer.from("shared"),
+      folderId: project.folderId,
+      folderName: "teamshared",
+    });
+
+    // the member's My Files include the shared folder and its files
+    const files = await app.inject({
+      method: "GET",
+      url: "/api/skill-sandbox/files",
+    });
+    const body = files.json<{
+      folders: Array<{ name: string }>;
+      files: Array<{ id: string | null; filename: string }>;
+    }>();
+    expect(body.folders.map((f) => f.name)).toContain("teamshared");
+    expect(body.files).toEqual([
+      expect.objectContaining({ id: artifact.id, filename: "shared.txt" }),
+    ]);
+
+    // bytes are readable through the share...
+    const bytes = await app.inject({
+      method: "GET",
+      url: `/api/skill-sandbox/artifacts/${artifact.id}`,
+    });
+    expect(bytes.statusCode).toBe(200);
+    expect(bytes.body).toBe("shared");
+
+    // ...but the share does not grant deletion
+    const del = await app.inject({
+      method: "DELETE",
+      url: `/api/skill-sandbox/artifacts/${artifact.id}`,
+    });
+    expect(del.statusCode).toBe(404);
+
+    // unsharing revokes both the listing and the bytes
+    await ProjectShareModel.remove(project.id);
+    const denied = await app.inject({
+      method: "GET",
+      url: `/api/skill-sandbox/artifacts/${artifact.id}`,
+    });
+    expect(denied.statusCode).toBe(404);
+    const after = await app.inject({
+      method: "GET",
+      url: "/api/skill-sandbox/files",
+    });
+    expect(after.json<{ files: unknown[] }>().files).toEqual([]);
+  });
 });
 
 describe("DELETE /api/skill-sandbox/artifacts/:artifactId", () => {

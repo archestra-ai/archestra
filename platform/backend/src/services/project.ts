@@ -15,6 +15,7 @@ import type {
   ProjectListItem,
   ProjectShareVisibility,
   SandboxFileListItem,
+  SandboxFolderListItem,
 } from "@/types";
 import { ApiError } from "@/types";
 
@@ -186,6 +187,53 @@ class ProjectService {
       userId: project.userId,
     });
     return files.filter((f) => f.folder === folderName);
+  }
+
+  /**
+   * Result folders of projects shared TO the user (not owned), with their
+   * files — merged into the My Files page next to the user's own PFS. Each
+   * owner's namespace is listed once and filtered per project folder.
+   */
+  async listSharedFolders(params: {
+    organizationId: string;
+    userId: string;
+  }): Promise<{
+    folders: SandboxFolderListItem[];
+    files: SandboxFileListItem[];
+  }> {
+    const shared = (
+      await ProjectShareModel.listAccessibleProjects(params)
+    ).filter((p) => p.userId !== params.userId);
+    if (shared.length === 0) return { folders: [], files: [] };
+    const folderRows = await SkillSandboxFolderModel.findByIds(
+      shared.map((p) => p.folderId),
+    );
+
+    const byOwner = new Map<string, typeof shared>();
+    for (const p of shared) {
+      byOwner.set(p.userId, [...(byOwner.get(p.userId) ?? []), p]);
+    }
+
+    const folders: SandboxFolderListItem[] = [];
+    const files: SandboxFileListItem[] = [];
+    for (const [ownerUserId, ownerProjects] of byOwner) {
+      const { files: ownerFiles } =
+        await skillSandboxArtifactService.listAllForUser({
+          organizationId: params.organizationId,
+          userId: ownerUserId,
+        });
+      for (const p of ownerProjects) {
+        const folder = folderRows.get(p.folderId);
+        if (!folder) continue;
+        folders.push({
+          id: folder.id,
+          name: folder.name,
+          createdAt: folder.createdAt,
+        });
+        files.push(...ownerFiles.filter((f) => f.folder === folder.name));
+      }
+    }
+    return { folders, files };
   }
 
   async listConversations(params: {

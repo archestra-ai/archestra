@@ -1,6 +1,7 @@
 import { RouteId } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { projectService } from "@/services/project";
 import { getSandboxFileStorage } from "@/skills-sandbox/file-storage";
 import { SandboxFileMissingError } from "@/skills-sandbox/file-storage-filesystem";
 import { isInlineSafeImageMime } from "@/skills-sandbox/mime-sniff";
@@ -48,11 +49,13 @@ const skillSandboxArtifactRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async ({ params: { artifactId }, organizationId, user }, reply) => {
       // "wrong owner" and "missing" collapse into the same 404 inside the
       // service so cross-org probes can't tell them apart. Access: the
-      // producing sandbox's owner or the owner of the artifact's folder.
+      // producing sandbox's owner, the owner of the artifact's folder, or
+      // (read-only, this route) a member of the project sharing that folder.
       const artifact = await skillSandboxArtifactService.getArtifactForUser({
         artifactId,
         organizationId,
         userId: user.id,
+        allowSharedProjectRead: true,
       });
       if (!artifact) {
         throw new ApiError(404, "Artifact not found");
@@ -146,7 +149,8 @@ const skillSandboxArtifactRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.GetSkillSandboxFiles,
         description:
           "List the calling user's persistent files (X-Files): folders and " +
-          "artifact files across all conversations.",
+          "artifact files across all conversations, plus the result folders " +
+          "of projects shared with them.",
         tags: ["Skills"],
         response: constructResponseSchema(
           z.object({
@@ -156,11 +160,19 @@ const skillSandboxArtifactRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ),
       },
     },
-    async ({ organizationId, user }) =>
-      skillSandboxArtifactService.listAllForUser({
-        organizationId,
-        userId: user.id,
-      }),
+    async ({ organizationId, user }) => {
+      const [own, shared] = await Promise.all([
+        skillSandboxArtifactService.listAllForUser({
+          organizationId,
+          userId: user.id,
+        }),
+        projectService.listSharedFolders({ organizationId, userId: user.id }),
+      ]);
+      return {
+        folders: [...own.folders, ...shared.folders],
+        files: [...own.files, ...shared.files],
+      };
+    },
   );
 };
 

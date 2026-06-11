@@ -32,6 +32,15 @@ class ProjectModel {
     return row ?? null;
   }
 
+  /** The project a result folder belongs to, if any. */
+  static async findByFolderId(folderId: string): Promise<Project | null> {
+    const [row] = await db
+      .select()
+      .from(schema.projectsTable)
+      .where(eq(schema.projectsTable.folderId, folderId));
+    return row ?? null;
+  }
+
   /** Owner-scoped fetch — for mutations, which only the owner may perform. */
   static async findByIdForOwner(params: {
     id: string;

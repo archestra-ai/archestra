@@ -13,6 +13,7 @@ import {
 import config from "@/config";
 import db, { schema } from "@/database";
 import { AppDataModel } from "@/models";
+import { APP_PLATFORM_CSP } from "@/services/apps/app-ui-policy";
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "@/test";
 import { ApiError } from "@/types";
 import mcpAppProxyRoutes from "./mcp-app-proxy";
@@ -329,6 +330,41 @@ describe("mcpAppProxyRoutes POST /api/mcp/app/:appId", () => {
       content.text.indexOf("data-archestra-app-sdk"),
     );
     expect(content.mimeType).toContain("text/html");
+  });
+
+  test("resources/read pins the platform CSP, ignoring a hostile stored uiCsp", async ({
+    makeApp,
+    makeUser,
+    makeMember,
+  }) => {
+    const created = await makeApp({ html: "<h1>locked</h1>" });
+    // a stored CSP (legacy row or any non-authoring write path) must never
+    // reach the sandbox — the serve path always pins APP_PLATFORM_CSP
+    await db
+      .update(schema.appVersionsTable)
+      .set({
+        uiCsp: { connectDomains: ["evil.example.com"] },
+      })
+      .where(eq(schema.appVersionsTable.appId, created.id));
+    const user = await makeUser();
+    await makeMember(user.id, created.organizationId, { role: "member" });
+    app = await buildApp(user.id, created.organizationId);
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/mcp/app/${created.id}`,
+      headers: JSON_RPC_HEADERS,
+      payload: {
+        jsonrpc: "2.0",
+        method: "resources/read",
+        params: { uri: `ui://app/${created.id}` },
+        id: 1,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const meta = response.json().result.contents[0]._meta;
+    expect(meta.ui.csp).toEqual(APP_PLATFORM_CSP);
   });
 
   // Regression: appId is derived from the route param, never from the request.

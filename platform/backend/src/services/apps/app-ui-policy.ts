@@ -3,37 +3,41 @@ import type { VersionPayload } from "@/models/app-version";
 import { ApiError } from "@/types";
 import {
   type AppUiCsp,
-  AppUiCspSchema,
   type AppUiPermissions,
   AppUiPermissionsSchema,
 } from "@/types/app";
-import { isCspHostname } from "@/utils/csp-domain";
 
 /**
- * Save-time security policy for an app's UI envelope (CSP + iframe permissions).
+ * Save-time security policy for an app's UI envelope (iframe permissions) and
+ * the platform CSP every owned app is served with.
  *
- * This is the strict, reject-on-save gate — distinct from the serve-time
- * `sanitizeCspDomains` filter in `server.ts`, which silently drops invalid
- * entries as a defence-in-depth net. Here an author who writes a malformed
- * domain gets a clear error and the stored CSP is exactly what they intended
- * (no silent drops). It is deliberately a single self-contained module so the
- * same rules can move to the Rust/NAPI layer later if needed.
- *
- * A null envelope is the restrictive default: `buildCspHeader(undefined)`
- * resolves to `default-src 'none'`, `connect-src 'self'`, `frame-src 'none'`,
- * etc., so an app that declares nothing can talk only to its own origin.
- *
- * Domains are validated with the shared `isCspHostname` (a bare host, no scheme
- * or port) so anything accepted here survives the serve-time `sanitizeCspDomains`
- * filter (same host grammar) instead of being silently dropped.
+ * Owned apps are MCP wrappers on a security-first platform: their CSP is not
+ * author-controlled. The platform pins one CSP at serve time — assigned MCP
+ * tools (plus archestra.storage) are the only data egress, and static assets
+ * may load only from the hardcoded CDN allowlist below. External MCP-UI apps
+ * (third-party servers) keep declaring their own `_meta.ui.csp` per the spec;
+ * that path is untouched.
  */
 
-const CSP_DOMAIN_FIELDS = [
-  "connectDomains",
-  "resourceDomains",
-  "frameDomains",
-  "baseUriDomains",
-] as const satisfies readonly (keyof AppUiCsp)[];
+/**
+ * The CSP envelope served for every owned app, regardless of what any stored
+ * version says. `resourceDomains` feeds script/style/img/font/media in the
+ * sandbox CSP builders — that is the deliberate allowance for client-side
+ * libraries and fonts. No `connectDomains` ⇒ connect-src 'none' (fetch/XHR/WS
+ * to anything external fails); no frame/baseUri domains ⇒ 'none'. Bare
+ * hostnames only: both the save-path grammar and the serve-time
+ * `sanitizeCspDomains` filter accept exactly this form. A future feature may
+ * make this list org-configurable.
+ */
+export const APP_PLATFORM_CSP: AppUiCsp = {
+  resourceDomains: [
+    "cdn.jsdelivr.net",
+    "unpkg.com",
+    "cdnjs.cloudflare.com",
+    "fonts.googleapis.com",
+    "fonts.gstatic.com",
+  ],
+};
 
 // The only iframe permissions an app may request. Mirrors AppUiPermissionsSchema
 // (whose .strict() already rejects unknown keys at parse time); kept here as the
@@ -46,24 +50,23 @@ const ALLOWED_PERMISSION_KEYS = [
 ] as const satisfies readonly (keyof AppUiPermissions)[];
 
 /**
- * Validate an app's CSP + permissions and assemble the version payload to
- * persist. Throws `ApiError(400)` on any malformed domain, unknown permission
- * key, or html that bootstraps the MCP App SDK itself (the platform injects
- * `window.archestra` — see app-sdk-injection.ts). Absent CSP/permissions
- * normalize to `null` (the restrictive default). Soft structural issues come
- * back as `warnings` (the save succeeds); they ride the create/update
- * responses so authors — human or model — see them.
+ * Validate an app's permissions and assemble the version payload to persist.
+ * Throws `ApiError(400)` on an unknown permission key or html that bootstraps
+ * the MCP App SDK itself (the platform injects `window.archestra` — see
+ * app-sdk-injection.ts). Soft structural issues come back as `warnings` (the
+ * save succeeds); they ride the create/update responses so authors — human or
+ * model — see them. `uiCsp` is always persisted as null: the serve path pins
+ * {@link APP_PLATFORM_CSP} and ignores the column.
  */
 export function buildValidatedVersionPayload(params: {
   html: string;
-  uiCsp?: AppUiCsp | null;
   uiPermissions?: AppUiPermissions | null;
 }): { payload: VersionPayload; warnings: string[] } {
   const warnings = validateAppHtml(params.html);
   return {
     payload: {
       html: params.html,
-      uiCsp: validateAppUiCsp(params.uiCsp ?? null),
+      uiCsp: null,
       uiPermissions: validateAppUiPermissions(params.uiPermissions ?? null),
     },
     warnings,
@@ -124,28 +127,6 @@ function validateAppHtml(html: string): string[] {
     );
   }
   return warnings;
-}
-
-function validateAppUiCsp(csp: AppUiCsp | null): AppUiCsp | null {
-  if (csp === null) return null;
-  // Re-parse so an unknown top-level key is rejected even if the caller bypassed
-  // the route/tool schema (defence in depth at the single save chokepoint).
-  const parsed = AppUiCspSchema.safeParse(csp);
-  if (!parsed.success) {
-    throw new ApiError(400, "invalid app CSP shape");
-  }
-
-  for (const field of CSP_DOMAIN_FIELDS) {
-    for (const domain of parsed.data[field] ?? []) {
-      if (!isCspHostname(domain)) {
-        throw new ApiError(
-          400,
-          `invalid CSP domain in ${field}: "${domain}" (expected a bare hostname like example.com or *.example.com, no scheme or port)`,
-        );
-      }
-    }
-  }
-  return parsed.data;
 }
 
 function validateAppUiPermissions(

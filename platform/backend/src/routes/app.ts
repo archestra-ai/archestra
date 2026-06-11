@@ -154,7 +154,6 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
       });
       const { payload, warnings } = buildValidatedVersionPayload({
         html,
-        uiCsp: body.uiCsp,
         uiPermissions: body.uiPermissions,
       });
       const app = await AppModel.create({
@@ -214,15 +213,12 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { appId }, body, user, organizationId }, reply) => {
-      // CSP/permissions live in the version envelope, so they can only change
+      // Permissions live in the version envelope, so they can only change
       // alongside new html (mirrors the update_app MCP tool — no silent no-op).
-      if (
-        body.html === undefined &&
-        (body.uiCsp !== undefined || body.uiPermissions !== undefined)
-      ) {
+      if (body.html === undefined && body.uiPermissions !== undefined) {
         throw new ApiError(
           400,
-          "Changing uiCsp or uiPermissions requires supplying html (they are part of the app version).",
+          "Changing uiPermissions requires supplying html (they are part of the app version).",
         );
       }
 
@@ -271,8 +267,8 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (body.description !== undefined) patch.description = body.description;
       if (body.scope !== undefined) patch.scope = body.scope;
 
-      // CSP/permissions ride the version envelope; an html-bearing edit inherits
-      // the current head's values for any field the caller omits.
+      // Permissions ride the version envelope; an html-bearing edit inherits
+      // the current head's value when the caller omits it.
       let version: VersionPayload | undefined;
       let warnings: string[] = [];
       if (body.html !== undefined) {
@@ -282,7 +278,6 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
         const validated = buildValidatedVersionPayload({
           html: body.html,
-          uiCsp: body.uiCsp !== undefined ? body.uiCsp : (head?.uiCsp ?? null),
           uiPermissions:
             body.uiPermissions !== undefined
               ? body.uiPermissions

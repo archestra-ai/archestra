@@ -15353,12 +15353,6 @@ export type CreateAppData = {
         templateId?: string;
         scope?: 'personal' | 'team' | 'org';
         html?: string;
-        uiCsp?: {
-            connectDomains?: Array<string>;
-            resourceDomains?: Array<string>;
-            frameDomains?: Array<string>;
-            baseUriDomains?: Array<string>;
-        };
         uiPermissions?: {
             camera?: {
                 [key: string]: unknown;
@@ -15739,12 +15733,6 @@ export type UpdateAppData = {
         description?: string | null;
         scope?: 'personal' | 'team' | 'org';
         html?: string;
-        uiCsp?: {
-            connectDomains?: Array<string>;
-            resourceDomains?: Array<string>;
-            frameDomains?: Array<string>;
-            baseUriDomains?: Array<string>;
-        };
         uiPermissions?: {
             camera?: {
                 [key: string]: unknown;

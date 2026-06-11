@@ -33,6 +33,7 @@ import {
   type AppSdkTool,
   injectAppSdk,
 } from "@/services/apps/app-sdk-injection";
+import { APP_PLATFORM_CSP } from "@/services/apps/app-ui-policy";
 import type { CommonToolCall } from "@/types";
 import { appOwner } from "@/types";
 import type { App } from "@/types/app";
@@ -146,7 +147,10 @@ export async function createAppServer(
             }),
             _meta: {
               ui: {
-                ...(head.uiCsp ? { csp: head.uiCsp } : {}),
+                // Owned apps always render under the platform CSP — never a
+                // stored, author-influenced one. MCP tools are the only data
+                // egress; static assets come from the hardcoded CDN allowlist.
+                csp: APP_PLATFORM_CSP,
                 ...(head.uiPermissions
                   ? { permissions: head.uiPermissions }
                   : {}),

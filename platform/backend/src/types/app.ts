@@ -114,7 +114,6 @@ export const CreateAppSchema = z.object({
   // One of html/templateId is required (resolveCreateAppHtml enforces it):
   // explicit html wins, otherwise the template seeds the first version.
   html: htmlField.optional(),
-  uiCsp: AppUiCspSchema.optional(),
   uiPermissions: AppUiPermissionsSchema.optional(),
 });
 
@@ -133,7 +132,6 @@ export const UpdateAppSchema = z.object({
   scope: AppScopeSchema.optional(),
   // Supplying html forks a new immutable version (no-op forks are suppressed).
   html: htmlField.optional(),
-  uiCsp: AppUiCspSchema.optional(),
   uiPermissions: AppUiPermissionsSchema.optional(),
 });
 

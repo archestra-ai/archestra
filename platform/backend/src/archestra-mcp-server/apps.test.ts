@@ -144,7 +144,7 @@ describe("app tool execution", () => {
     expect(await AppModel.findById(orgAppId)).not.toBeNull();
   });
 
-  test("create rejects an invalid CSP domain", async () => {
+  test("create rejects the removed uiCsp param (apps carry no author CSP)", async () => {
     const result = await executeArchestraTool(
       getArchestraToolFullName(TOOL_CREATE_APP_SHORT_NAME),
       {
@@ -155,16 +155,15 @@ describe("app tool execution", () => {
       context,
     );
     expect(result.isError).toBe(true);
-    expect((result.content[0] as any).text).toContain("invalid CSP domain");
   });
 
-  test("an html-only update preserves the existing CSP", async () => {
+  test("an html-only update preserves the existing permissions and keeps uiCsp null", async () => {
     const created = await executeArchestraTool(
       getArchestraToolFullName(TOOL_CREATE_APP_SHORT_NAME),
       {
-        name: "Keeps CSP",
+        name: "Keeps Permissions",
         html: "<h1>v1</h1>",
-        uiCsp: { connectDomains: ["api.example.com"] },
+        uiPermissions: { camera: {} },
       },
       context,
     );
@@ -181,7 +180,8 @@ describe("app tool execution", () => {
       appId,
       structured(updated).latestVersion as number,
     );
-    expect(head?.uiCsp).toEqual({ connectDomains: ["api.example.com"] });
+    expect(head?.uiPermissions).toEqual({ camera: {} });
+    expect(head?.uiCsp).toBeNull();
   });
 
   test("create seeds from a template when html is omitted", async () => {

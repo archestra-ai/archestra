@@ -52816,36 +52816,6 @@
                     "type": "string",
                     "minLength": 1
                   },
-                  "uiCsp": {
-                    "type": "object",
-                    "properties": {
-                      "connectDomains": {
-                        "type": "array",
-                        "items": {
-                          "type": "string"
-                        }
-                      },
-                      "resourceDomains": {
-                        "type": "array",
-                        "items": {
-                          "type": "string"
-                        }
-                      },
-                      "frameDomains": {
-                        "type": "array",
-                        "items": {
-                          "type": "string"
-                        }
-                      },
-                      "baseUriDomains": {
-                        "type": "array",
-                        "items": {
-                          "type": "string"
-                        }
-                      }
-                    },
-                    "additionalProperties": false
-                  },
                   "uiPermissions": {
                     "type": "object",
                     "properties": {
@@ -53847,36 +53817,6 @@
                   "html": {
                     "type": "string",
                     "minLength": 1
-                  },
-                  "uiCsp": {
-                    "type": "object",
-                    "properties": {
-                      "connectDomains": {
-                        "type": "array",
-                        "items": {
-                          "type": "string"
-                        }
-                      },
-                      "resourceDomains": {
-                        "type": "array",
-                        "items": {
-                          "type": "string"
-                        }
-                      },
-                      "frameDomains": {
-                        "type": "array",
-                        "items": {
-                          "type": "string"
-                        }
-                      },
-                      "baseUriDomains": {
-                        "type": "array",
-                        "items": {
-                          "type": "string"
-                        }
-                      }
-                    },
-                    "additionalProperties": false
                   },
                   "uiPermissions": {
                     "type": "object",

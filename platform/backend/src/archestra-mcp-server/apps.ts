@@ -26,7 +26,6 @@ import {
   APP_NAME_MAX_LENGTH,
   APP_TEMPLATE_ID_MAX_LENGTH,
   AppScopeSchema,
-  AppUiCspSchema,
   AppUiPermissionsSchema,
 } from "@/types/app";
 import {
@@ -81,9 +80,6 @@ const CreateAppSchema = z.strictObject({
     .describe(
       `Template to scaffold from when html is omitted (one of: ${templateIds}); the result returns the seeded HTML for editing. With html present it is recorded as provenance only.`,
     ),
-  uiCsp: AppUiCspSchema.optional().describe(
-    "Optional CSP allowlist (bare hostnames). Omitted = restrictive default (own origin only).",
-  ),
   uiPermissions: AppUiPermissionsSchema.optional().describe(
     "Optional iframe permissions (camera/microphone/geolocation/clipboardWrite).",
   ),
@@ -110,9 +106,6 @@ const UpdateAppSchema = z.strictObject({
       "New HTML; supplying it forks a new immutable version (no-op if unchanged).",
     ),
   tools: toolsField,
-  uiCsp: AppUiCspSchema.optional().describe(
-    "New CSP allowlist; part of the version envelope, so it requires html too.",
-  ),
   uiPermissions: AppUiPermissionsSchema.optional().describe(
     "New iframe permissions; part of the version envelope, so it requires html too.",
   ),
@@ -150,7 +143,7 @@ const registry = defineArchestraTools([
   defineArchestraTool({
     shortName: TOOL_CREATE_APP_SHORT_NAME,
     title: "Create App",
-    description: `Build an interactive app — a to-do list, dashboard, form, tracker, game, or any custom UI — from a single self-contained HTML document. Use this whenever the user asks to make, build, or create an app, tool, or interactive UI: author the complete HTML and pass it as html — do not paste the code into the chat reply or write it as an artifact (artifact_write is for markdown documents, not apps). Author PURE UI HTML against the Archestra Apps SDK the platform injects at render time as window.archestra: archestra.user is the authenticated viewer ({id, name} — no login flow needed); archestra.storage.user.get/set/list/delete persists state private to each viewer (favorites, drafts, settings — the right default) and archestra.storage.shared.* is one store all users of the app share (no app id is passed; the store is always the running app's own) — values are plain JSON: set(key, obj) stores the object itself and get(key) returns exactly what was stored (no JSON.stringify/JSON.parse round-trip; null means absent), and list() returns [{key, value}] entries with values included, NOT an array of keys; archestra.tools.call(name, args) calls the app's assigned tools as the viewing user, with their existing MCP credentials, and throws {code: "auth_required", url} when the tool's server still needs connecting (render that url as a link); archestra.tools.list() returns the assigned tools; archestra.ui.openLink(url), archestra.ui.requestDisplayMode(mode) and archestra.chat.sendMessage(text) reach the host; await archestra.ready before the first call. TOOL-FIRST RULE: when the app needs data from an external service (search, APIs, SaaS), first look for an installed MCP tool (search_tools), assign it via the tools param, and call it with archestra.tools.call — do NOT hand-roll fetch() calls to external APIs (they run unauthenticated and need CSP domains); raw fetch + uiCsp connectDomains is the fallback only when no tool exists. Do NOT import SDKs, read __ARCHESTRA_APP_SDK_URL__, or wire postMessage yourself — that glue is provided and hand-rolling it breaks the app. Alternatively omit html and pass templateId (one of: ${templateIds}) to scaffold from a curated starter; the result includes the seeded HTML so you can update_app it. When called from the chat UI the app is rendered inline in the conversation automatically; its standalone page is /apps/<id>/run. Defaults to personal scope (owned by the calling user). Returns the created app id and its first version.`,
+    description: `Build an interactive app — a to-do list, dashboard, form, tracker, game, or any custom UI — from a single self-contained HTML document. Use this whenever the user asks to make, build, or create an app, tool, or interactive UI: author the complete HTML and pass it as html — do not paste the code into the chat reply or write it as an artifact (artifact_write is for markdown documents, not apps). Author PURE UI HTML against the Archestra Apps SDK the platform injects at render time as window.archestra: archestra.user is the authenticated viewer ({id, name} — no login flow needed); archestra.storage.user.get/set/list/delete persists state private to each viewer (favorites, drafts, settings — the right default) and archestra.storage.shared.* is one store all users of the app share (no app id is passed; the store is always the running app's own) — values are plain JSON: set(key, obj) stores the object itself and get(key) returns exactly what was stored (no JSON.stringify/JSON.parse round-trip; null means absent), and list() returns [{key, value}] entries with values included, NOT an array of keys; archestra.tools.call(name, args) calls the app's assigned tools as the viewing user, with their existing MCP credentials, and throws {code: "auth_required", url} when the tool's server still needs connecting (render that url as a link); archestra.tools.list() returns the assigned tools; archestra.ui.openLink(url), archestra.ui.requestDisplayMode(mode) and archestra.chat.sendMessage(text) reach the host; await archestra.ready before the first call. TOOLS-ONLY RULE: ALL external data must come through assigned MCP tools — find one with search_tools, assign it via the tools param, call it with archestra.tools.call. The sandbox blocks network access entirely (connect-src 'none'): fetch()/XHR/WebSocket to any external API WILL FAIL, and there is no per-app CSP override. The one external allowance is static assets: scripts, styles, fonts, and images may load from the platform CDN allowlist — cdn.jsdelivr.net, unpkg.com, cdnjs.cloudflare.com, fonts.googleapis.com, fonts.gstatic.com — use it for client-side libraries (charts, markdown renderers), never as a data channel. Do NOT import SDKs, read __ARCHESTRA_APP_SDK_URL__, or wire postMessage yourself — that glue is provided and hand-rolling it breaks the app. Alternatively omit html and pass templateId (one of: ${templateIds}) to scaffold from a curated starter; the result includes the seeded HTML so you can update_app it. When called from the chat UI the app is rendered inline in the conversation automatically; its standalone page is /apps/<id>/run. Defaults to personal scope (owned by the calling user). Returns the created app id and its first version.`,
     schema: CreateAppSchema,
     outputSchema: AppMutationOutputSchema,
     async handler({ args, context }) {
@@ -187,7 +180,6 @@ const registry = defineArchestraTools([
         seededFromTemplate = resolved.seededFromTemplate;
         const validated = buildValidatedVersionPayload({
           html: resolved.html,
-          uiCsp: args.uiCsp,
           uiPermissions: args.uiPermissions,
         });
         payload = validated.payload;
@@ -336,7 +328,7 @@ const registry = defineArchestraTools([
     shortName: TOOL_UPDATE_APP_SHORT_NAME,
     title: "Update App",
     description:
-      "Change an existing app's HTML, assigned tools, and/or metadata. Use this when the user asks to fix, tweak, restyle, or extend an app created earlier — pass the full revised HTML, not a diff. Author pure UI HTML against the injected Apps SDK (window.archestra: archestra.user identity, archestra.storage.user/.shared persistence — plain JSON values, get returns what set stored, list() returns [{key, value}] entries — archestra.tools.call for assigned tools as the viewing user, archestra.ui.*/archestra.chat.*) — never add SDK imports or postMessage wiring. Prefer assigned MCP tools (tools param + archestra.tools.call) over hand-rolled fetch() to external APIs. Supplying new html forks a new immutable version (suppressed if identical); tools replaces the assignment list declaratively. When called from the chat UI the app's head version is rendered inline in the conversation. If a rendered app threw runtime errors, they arrive as an <app-render-diagnostics> block on the user's next message — use them to correct the HTML here.",
+      "Change an existing app's HTML, assigned tools, and/or metadata. Use this when the user asks to fix, tweak, restyle, or extend an app created earlier — pass the full revised HTML, not a diff. Author pure UI HTML against the injected Apps SDK (window.archestra: archestra.user identity, archestra.storage.user/.shared persistence — plain JSON values, get returns what set stored, list() returns [{key, value}] entries — archestra.tools.call for assigned tools as the viewing user, archestra.ui.*/archestra.chat.*) — never add SDK imports or postMessage wiring. All external data comes through assigned MCP tools (tools param + archestra.tools.call) — the sandbox blocks fetch()/XHR to external APIs (connect-src 'none'); static assets may load only from the platform CDN allowlist (cdn.jsdelivr.net, unpkg.com, cdnjs.cloudflare.com, fonts.googleapis.com, fonts.gstatic.com). Supplying new html forks a new immutable version (suppressed if identical); tools replaces the assignment list declaratively. When called from the chat UI the app's head version is rendered inline in the conversation. If a rendered app threw runtime errors, they arrive as an <app-render-diagnostics> block on the user's next message — use them to correct the HTML here.",
     schema: UpdateAppSchema,
     outputSchema: AppMutationOutputSchema,
     async handler({ args, context }) {
@@ -406,22 +398,19 @@ const registry = defineArchestraTools([
       if (args.description !== undefined) patch.description = args.description;
       if (args.scope !== undefined) patch.scope = args.scope;
 
-      // CSP/permissions are part of the immutable version envelope, so they can
+      // Permissions are part of the immutable version envelope, so they can
       // only change together with new html (no silent partial-version merge).
-      if (
-        args.html === undefined &&
-        (args.uiCsp !== undefined || args.uiPermissions !== undefined)
-      ) {
+      if (args.html === undefined && args.uiPermissions !== undefined) {
         return errorResult(
-          "Changing uiCsp or uiPermissions requires supplying html (they are part of the app version).",
+          "Changing uiPermissions requires supplying html (they are part of the app version).",
         );
       }
       let version: VersionPayload | undefined;
       let warnings: string[] = [];
       if (args.html !== undefined) {
-        // CSP/permissions are versioned with the html. An omitted field inherits
-        // the current head's value (an html-only edit must not silently drop an
-        // existing CSP); a supplied field replaces it.
+        // Permissions are versioned with the html. When omitted, an html-only
+        // edit inherits the current head's value rather than silently dropping
+        // it; a supplied field replaces it.
         const head = await AppVersionModel.findByAppAndVersion(
           app.id,
           app.latestVersion,
@@ -429,8 +418,6 @@ const registry = defineArchestraTools([
         try {
           const validated = buildValidatedVersionPayload({
             html: args.html,
-            uiCsp:
-              args.uiCsp !== undefined ? args.uiCsp : (head?.uiCsp ?? null),
             uiPermissions:
               args.uiPermissions !== undefined
                 ? args.uiPermissions

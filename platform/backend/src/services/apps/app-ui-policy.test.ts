@@ -1,9 +1,24 @@
 import { describe, expect, test } from "vitest";
-import { ApiError } from "@/types";
-import { buildValidatedVersionPayload } from "./app-ui-policy";
+import {
+  APP_PLATFORM_CSP,
+  buildValidatedVersionPayload,
+} from "./app-ui-policy";
+
+describe("APP_PLATFORM_CSP", () => {
+  test("allows only static-asset CDNs — no connect/frame/base-uri egress", () => {
+    expect(APP_PLATFORM_CSP.connectDomains).toBeUndefined();
+    expect(APP_PLATFORM_CSP.frameDomains).toBeUndefined();
+    expect(APP_PLATFORM_CSP.baseUriDomains).toBeUndefined();
+    // bare hostnames only: both the inner sandbox CSP builder and the
+    // serve-time sanitizeCspDomains filter accept exactly this form
+    for (const domain of APP_PLATFORM_CSP.resourceDomains ?? []) {
+      expect(domain).toMatch(/^[a-z0-9.-]+$/);
+    }
+  });
+});
 
 describe("buildValidatedVersionPayload", () => {
-  test("absent CSP and permissions normalize to the restrictive null default", () => {
+  test("uiCsp persists as null — the serve path pins the platform CSP", () => {
     const { payload, warnings } = buildValidatedVersionPayload({
       html: "<html><head></head><body><h1/></body></html>",
     });
@@ -13,37 +28,6 @@ describe("buildValidatedVersionPayload", () => {
       uiPermissions: null,
     });
     expect(warnings).toEqual([]);
-  });
-
-  test("accepts bare hostnames and single-label wildcards", () => {
-    const { payload } = buildValidatedVersionPayload({
-      html: "<h1/>",
-      uiCsp: {
-        connectDomains: ["api.example.com", "*.cdn.example.org"],
-        resourceDomains: ["esm.sh"],
-      },
-    });
-    expect(payload.uiCsp?.connectDomains).toEqual([
-      "api.example.com",
-      "*.cdn.example.org",
-    ]);
-  });
-
-  test.each([
-    ["https://example.com", "scheme prefix"],
-    ["wss://example.com", "ws scheme prefix"],
-    ["example.com:8443", "port"],
-    ["*.*.example.com", "double wildcard"],
-    ["not a domain", "spaces"],
-    ["localhost", "no TLD"],
-    ["*", "bare wildcard"],
-  ])("rejects %s (%s)", (domain) => {
-    expect(() =>
-      buildValidatedVersionPayload({
-        html: "<h1/>",
-        uiCsp: { connectDomains: [domain] },
-      }),
-    ).toThrow(ApiError);
   });
 
   test("rejects an unknown permission key", () => {

@@ -1,32 +1,6 @@
 import { describe, expect, test } from "vitest";
-import { isCspHostname, isCspSource } from "./csp-domain";
-
-describe("isCspHostname (save-time, bare host only)", () => {
-  test.each([
-    "example.com",
-    "api.example.com",
-    "api.v2.example.com",
-    "cdn.s3.example.com",
-    "*.example.com",
-    "a-b.example.co.uk",
-  ])("accepts %s", (host) => {
-    expect(isCspHostname(host)).toBe(true);
-  });
-
-  test.each([
-    "https://example.com",
-    "wss://example.com",
-    "example.com:8443",
-    "*.*.example.com",
-    "localhost",
-    "*",
-    "ex ample.com",
-    "example.com/path",
-    "evil.com;script-src",
-  ])("rejects %s", (host) => {
-    expect(isCspHostname(host)).toBe(false);
-  });
-});
+import { APP_PLATFORM_CSP } from "@/services/apps/app-ui-policy";
+import { isCspSource } from "./csp-domain";
 
 describe("isCspSource (serve-time, scheme/port allowed)", () => {
   test.each([
@@ -36,21 +10,9 @@ describe("isCspSource (serve-time, scheme/port allowed)", () => {
     "example.com:8443",
     "*.example.com",
     "api.v2.example.com",
+    "cdn.s3.example.com",
   ])("accepts %s", (src) => {
     expect(isCspSource(src)).toBe(true);
-  });
-
-  // Save-time acceptance must imply serve-time acceptance (no silent drops).
-  test("every host accepted on save is accepted at serve time", () => {
-    for (const host of [
-      "example.com",
-      "api.v2.example.com",
-      "cdn.s3.example.com",
-      "*.example.com",
-    ]) {
-      expect(isCspHostname(host)).toBe(true);
-      expect(isCspSource(host)).toBe(true);
-    }
   });
 
   test.each([
@@ -59,7 +21,20 @@ describe("isCspSource (serve-time, scheme/port allowed)", () => {
     "blob:",
     "https:",
     "javascript:alert(1)",
+    "*.*.example.com",
+    "localhost",
+    "ex ample.com",
+    "example.com/path",
+    "evil.com;script-src",
   ])("rejects dangerous source %s", (src) => {
     expect(isCspSource(src)).toBe(false);
+  });
+
+  // The platform CSP for owned apps must survive the serve-time filter intact
+  // (a dropped CDN host would silently break library/font loading).
+  test("every platform CDN allowlist entry is a valid CSP source", () => {
+    for (const domain of APP_PLATFORM_CSP.resourceDomains ?? []) {
+      expect(isCspSource(domain)).toBe(true);
+    }
   });
 });

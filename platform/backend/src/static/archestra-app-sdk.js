@@ -94,6 +94,20 @@
       );
     }
     const { App, PostMessageTransport } = await import(sdkUrl);
+    // the guest bundle observes document.body for size reporting at connect
+    // time; a blocking <head> script (e.g. a CDN library) can let the
+    // handshake win the race against <body> parsing, so wait for the DOM.
+    // The readyState check keeps this hang-proof: once parsing is past
+    // "loading" the event will never fire again.
+    if (
+      typeof document !== "undefined" &&
+      !document.body &&
+      document.readyState === "loading"
+    ) {
+      await new Promise((resolve) =>
+        document.addEventListener("DOMContentLoaded", resolve, { once: true }),
+      );
+    }
     const app = new App({ name: "archestra-app-sdk", version: "1.0.0" }, {});
     await app.connect(new PostMessageTransport(window.parent, window.parent));
     return app;

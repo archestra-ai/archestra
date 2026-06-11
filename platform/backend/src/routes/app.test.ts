@@ -6,6 +6,7 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import config from "@/config";
+import { AppVersionModel } from "@/models";
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "@/test";
 import { ApiError } from "@/types";
 import appRoutes from "./app";
@@ -271,7 +272,7 @@ describe("appRoutes /api/apps", () => {
     expect(conflict.statusCode).toBe(409);
   });
 
-  test("create rejects an invalid CSP domain with 400", async ({
+  test("create ignores a supplied uiCsp — versions persist null", async ({
     makeUser,
     makeOrganization,
     makeMember,
@@ -281,6 +282,8 @@ describe("appRoutes /api/apps", () => {
     await makeMember(user.id, org.id, { role: ADMIN_ROLE_NAME });
     app = await buildApp(user.id, org.id);
 
+    // uiCsp is no longer an authoring field: the body schema strips it and the
+    // version persists null (the serve path pins the platform CSP).
     const response = await app.inject({
       method: "POST",
       url: "/api/apps",
@@ -291,8 +294,13 @@ describe("appRoutes /api/apps", () => {
         uiCsp: { connectDomains: ["https://evil.example.com"] },
       },
     });
-    expect(response.statusCode).toBe(400);
-    expect(response.json().error.message).toContain("invalid CSP domain");
+    expect(response.statusCode).toBe(200);
+    const created = response.json() as { id: string; latestVersion: number };
+    const head = await AppVersionModel.findByAppAndVersion(
+      created.id,
+      created.latestVersion,
+    );
+    expect(head?.uiCsp).toBeNull();
   });
 
   test("a user cannot GET an app belonging to another organization", async ({
@@ -392,7 +400,7 @@ describe("appRoutes /api/apps", () => {
     expect(response.json().error.message).toContain("Unknown team");
   });
 
-  test("rejects changing uiCsp without supplying html (400)", async ({
+  test("rejects changing uiPermissions without supplying html (400)", async ({
     makeUser,
     makeOrganization,
     makeMember,
@@ -408,7 +416,7 @@ describe("appRoutes /api/apps", () => {
       method: "PATCH",
       url: `/api/apps/${created.id}`,
       headers: JSON_HEADERS,
-      payload: { uiCsp: { connectDomains: ["api.example.com"] } },
+      payload: { uiPermissions: { camera: {} } },
     });
     expect(response.statusCode).toBe(400);
     expect(response.json().error.message).toContain("requires supplying html");

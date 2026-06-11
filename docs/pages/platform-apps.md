@@ -52,9 +52,13 @@ Beyond the data store, an app can be assigned upstream MCP-server tools — from
 
 Tool calls run **as the viewing user**: the platform resolves the MCP server and credentials per viewer at call time (personal install first, then team, then org), so an app reuses whatever MCP servers the viewer has already connected — no tokens in app code, no per-app auth setup. If the viewer hasn't connected the required server yet, `archestra.tools.call` rejects with `{ code: "auth_required", url }`; the user completes authentication in the MCP registry (apps cannot run OAuth flows themselves) and the next call succeeds.
 
+## Network lockdown
+
+Apps are MCP wrappers, and their CSP is not author-controlled: every owned app renders under one platform-pinned policy. Direct network access is blocked entirely (`connect-src 'none'`) — `fetch`, XHR, and WebSockets to external APIs fail, so assigned MCP tools (governed, authed, audited) are the only data egress. The single external allowance is static assets: scripts, styles, fonts, and images may load from a hardcoded CDN allowlist (`cdn.jsdelivr.net`, `unpkg.com`, `cdnjs.cloudflare.com`, `fonts.googleapis.com`, `fonts.gstatic.com`) so apps can use client-side libraries. Note the trust implication: a CDN-loaded script runs inside the app and can call its assigned tools as the viewer — prefer pinned versions of well-known packages. A future release may make the allowlist configurable per organization.
+
 ## Shared-app trust boundary
 
-A shared (team or org) app is author-written HTML executing in a viewer's browser. The viewer is protected by three layers: the HTML runs in an isolated sandbox iframe; its network access is restricted to a validated `connect-src` allowlist; and every tool and data-store call is gated by the **viewing** user's RBAC, not the author's. Note the converse too: the app's code sees the viewer's id and display name (`archestra.user`), and tool calls it makes run with the viewer's credentials. Share apps only with people you would grant the app's tool and data access.
+A shared (team or org) app is author-written HTML executing in a viewer's browser. The viewer is protected by three layers: the HTML runs in an isolated sandbox iframe; its network access is blocked by the platform CSP (MCP tools are the only data path); and every tool and data-store call is gated by the **viewing** user's RBAC, not the author's. Note the converse too: the app's code sees the viewer's id and display name (`archestra.user`), and tool calls it makes run with the viewer's credentials. Share apps only with people you would grant the app's tool and data access.
 
 ## Templates
 

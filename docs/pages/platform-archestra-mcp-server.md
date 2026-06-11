@@ -1662,11 +1662,6 @@ Required RBAC permission: `app:create`
 | `html` | `string` | No | The app's complete, self-contained HTML document — inline all CSS/JS (rendered in a sandboxed iframe). Omit it to scaffold from templateId instead. |
 | `scope` | `"personal" \| "team" \| "org"` | No | Visibility scope. Defaults to personal (owned by the calling user). |
 | `templateId` | `string` | No | Template to scaffold from when html is omitted (one of: blank, form); the result returns the seeded HTML for editing. With html present it is recorded as provenance only. |
-| `uiCsp` | `object` | No | Optional CSP allowlist (bare hostnames). Omitted = restrictive default (own origin only). |
-| `uiCsp.connectDomains` | `string[]` | No |  |
-| `uiCsp.resourceDomains` | `string[]` | No |  |
-| `uiCsp.frameDomains` | `string[]` | No |  |
-| `uiCsp.baseUriDomains` | `string[]` | No |  |
 | `uiPermissions` | `object` | No | Optional iframe permissions (camera/microphone/geolocation/clipboardWrite). |
 | `uiPermissions.camera` | `object` | No |  |
 | `uiPermissions.microphone` | `object` | No |  |
@@ -1744,11 +1739,6 @@ Required RBAC permission: `app:update`
 | `scope` | `"personal" \| "team" \| "org"` | No |  |
 | `html` | `string` | No | New HTML; supplying it forks a new immutable version (no-op if unchanged). |
 | `tools` | `string[]` | No | Upstream MCP tool names to assign to the app (e.g. from search_tools), callable from its HTML via archestra.tools.call with the viewing user's credentials. Declarative: the given list replaces the app's current assignments ([] clears them); omitted leaves them unchanged. |
-| `uiCsp` | `object` | No | New CSP allowlist; part of the version envelope, so it requires html too. |
-| `uiCsp.connectDomains` | `string[]` | No |  |
-| `uiCsp.resourceDomains` | `string[]` | No |  |
-| `uiCsp.frameDomains` | `string[]` | No |  |
-| `uiCsp.baseUriDomains` | `string[]` | No |  |
 | `uiPermissions` | `object` | No | New iframe permissions; part of the version envelope, so it requires html too. |
 | `uiPermissions.camera` | `object` | No |  |
 | `uiPermissions.microphone` | `object` | No |  |

@@ -420,12 +420,12 @@ describe("search_tools", () => {
   // discover then auto-assign them), and only for callers who can actually run
   // them. Seeded but not assigned here to exercise that path.
   describe("sandbox built-in discovery", () => {
-    async function searchRunCommand(
+    async function searchSandboxTools(
       context: ArchestraContext,
     ): Promise<string[]> {
       const result = await executeArchestraTool(
         TOOL_SEARCH_TOOLS_FULL_NAME,
-        { query: "run command shell execute", limit: 20 },
+        { query: "run command upload download file shell execute", limit: 20 },
         context,
       );
       expect(result.isError).toBe(false);
@@ -455,7 +455,7 @@ describe("search_tools", () => {
         // do NOT assign it
         await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
 
-        const names = await searchRunCommand({
+        const names = await searchSandboxTools({
           agent: { id: agent.id, name: agent.name },
           agentId: agent.id,
           organizationId: org.id,
@@ -463,6 +463,8 @@ describe("search_tools", () => {
         });
 
         expect(names).toContain(TOOL_RUN_COMMAND_FULL_NAME);
+        expect(names).toContain(TOOL_UPLOAD_FILE_FULL_NAME);
+        expect(names).toContain(TOOL_DOWNLOAD_FILE_FULL_NAME);
       } finally {
         (config.skillsSandbox as { enabled: boolean }).enabled =
           originalSandboxEnabled;
@@ -492,7 +494,7 @@ describe("search_tools", () => {
         });
         await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
 
-        const names = await searchRunCommand({
+        const names = await searchSandboxTools({
           agent: { id: agent.id, name: agent.name },
           agentId: agent.id,
           organizationId: org.id,
@@ -528,7 +530,7 @@ describe("search_tools", () => {
           allowToolAutoAssignment: false,
         });
 
-        const names = await searchRunCommand({
+        const names = await searchSandboxTools({
           agent: { id: agent.id, name: agent.name },
           agentId: agent.id,
           organizationId: org.id,

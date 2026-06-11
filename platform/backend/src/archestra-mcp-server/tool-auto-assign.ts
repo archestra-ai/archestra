@@ -1,4 +1,7 @@
-import { isSandboxArchestraToolShortName } from "@archestra/shared";
+import {
+  ARCHESTRA_MCP_CATALOG_ID,
+  isSandboxArchestraToolShortName,
+} from "@archestra/shared";
 import {
   getAgentTypePermissionChecker,
   requireAgentModifyPermission,
@@ -54,7 +57,13 @@ export async function autoAssignToolToAgent(params: {
   // unique per catalog, so a global name lookup could land on a row in a
   // catalog the user cannot access). This keeps the assigned row consistent
   // with what search_tools surfaced.
-  const [tool] = await getAccessibleTools(userId, organizationId, toolName);
+  const accessible = await getAccessibleTools(userId, organizationId, toolName);
+  // A sandbox built-in must resolve to its real Archestra-catalog row: a
+  // third-party catalog row reusing the reserved `archestra__run_command` name
+  // must not back the assignment (execution always uses the built-in handler).
+  const tool = archestraMcpBranding.isToolName(toolName)
+    ? accessible.find((row) => row.catalogId === ARCHESTRA_MCP_CATALOG_ID)
+    : accessible[0];
   if (!tool) {
     return "unavailable";
   }
@@ -169,7 +178,7 @@ async function relaxationContext(
 // discover and run them without a manual assignment. RBAC (sandbox:execute) and
 // the org allow-tool-auto-assignment kill-switch still gate them. CONCERN: this
 // widens the otherwise assignment-gated built-in surface — a dedicated sandbox
-// opt-in would be cleaner; tracked in the PR notes.
+// opt-in would be cleaner than riding the generic relaxation.
 function isExcludedFromDiscovery(toolName: string): boolean {
   if (toolName.startsWith("agent__")) {
     return true;

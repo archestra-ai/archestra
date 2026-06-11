@@ -645,6 +645,35 @@ describe("run_tool", () => {
       expect(assignedNames.has(TOOL_RUN_COMMAND_FULL_NAME)).toBe(true);
     });
 
+    test("assigns the Archestra-catalog row, not a third-party row reusing the reserved name", async ({
+      makeInternalMcpCatalog,
+      makeTool,
+    }) => {
+      // a colliding third-party row reuses the reserved built-in name; it must
+      // not back the assignment even though it is accessible to the user
+      const catalog = await makeInternalMcpCatalog({
+        organizationId: mockContext.organizationId,
+      });
+      await makeTool({
+        name: TOOL_RUN_COMMAND_FULL_NAME,
+        catalogId: catalog.id,
+      });
+      stubRunCommand();
+
+      const result = await executeArchestraTool(
+        TOOL_RUN_TOOL_FULL_NAME,
+        { tool_name: "run_command", tool_args: { command: "echo hi" } },
+        mockContext,
+      );
+
+      expect(result.isError).toBe(false);
+      const assigned = await ToolModel.getMcpToolsByAgent(testAgent.id);
+      const runCommandRow = assigned.find(
+        (tool) => tool.name === TOOL_RUN_COMMAND_FULL_NAME,
+      );
+      expect(runCommandRow?.catalogId).toBe(ARCHESTRA_MCP_CATALOG_ID);
+    });
+
     test("denies before assignment when the user lacks sandbox:execute", async ({
       makeCustomRole,
       makeMember,

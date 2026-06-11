@@ -250,8 +250,8 @@ async function checkToolAssignedToAgent(
 // passed, so mirror the third-party run_tool relaxation and assign it on the fly
 // — further gated by permission to modify the agent and the org
 // allow-tool-auto-assignment kill-switch (both inside autoAssignToolToAgent).
-// CONCERN: this is the run-side of widening the otherwise assignment-gated
-// built-in surface; see `tool-auto-assign.ts` and the PR notes.
+// CONCERN: run-side of the same built-in-surface widening; see
+// `tool-auto-assign.ts`.
 async function resolveToolAssignment(
   toolName: string,
   context: ArchestraContext,
@@ -282,6 +282,10 @@ async function resolveToolAssignment(
       return errorResult(toolNotAssignedAskAdminMessage(toolName));
     case "unavailable":
       return notAssigned;
+    default:
+      // a new AutoAssignOutcome must be handled explicitly — failing open here
+      // would auto-assign a sandbox tool the relaxation meant to reject.
+      return outcome satisfies never;
   }
 }
 

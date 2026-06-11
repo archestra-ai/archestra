@@ -56,6 +56,7 @@ export const allAvailableActions: Record<Resource, Action[]> = {
 
   // Other
   chat: ["read", "create", "update", "delete"],
+  project: ["read", "create", "update", "delete"],
   log: ["read"],
 
   // Administration (overrides better-auth defaults to add "read" where needed)
@@ -119,6 +120,7 @@ export const editorPermissions: Record<Resource, Action[]> = {
 
   // Other
   chat: ["read", "create", "update", "delete"],
+  project: ["read", "create", "update", "delete"],
   log: ["read"],
 
   // Administration (overrides better-auth defaults to add "read" where needed)
@@ -184,6 +186,7 @@ export const memberPermissions: Record<Resource, Action[]> = {
 
   // Other
   chat: ["read", "create", "update", "delete"],
+  project: ["read", "create", "update", "delete"],
   log: [],
 
   // Administration (overrides better-auth defaults to add "read" where needed)
@@ -353,6 +356,10 @@ export const permissionDescriptions: Record<string, string> = {
   "chat:create": "Start new chat conversations",
   "chat:update": "Edit chat messages and conversation settings",
   "chat:delete": "Delete chat conversations",
+  "project:read": "View projects and the chats inside them",
+  "project:create": "Create projects",
+  "project:update": "Edit project descriptions and sharing",
+  "project:delete": "Delete projects",
   "log:read": "View LLM proxy and MCP tool call logs",
 
   // Administration
@@ -1242,6 +1249,13 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetSkillSandboxArtifact]: { sandbox: ["execute"] },
   [RouteId.GetSkillSandboxConversationArtifacts]: { sandbox: ["execute"] },
   [RouteId.GetSkillSandboxFiles]: { sandbox: ["execute"] },
+  [RouteId.CreateProject]: { project: ["create"] },
+  [RouteId.GetProjects]: { project: ["read"] },
+  [RouteId.GetProject]: { project: ["read"] },
+  [RouteId.UpdateProject]: { project: ["update"] },
+  [RouteId.SetProjectShare]: { project: ["update"] },
+  [RouteId.DeleteProject]: { project: ["delete"] },
+  [RouteId.GetProjectConversations]: { project: ["read"] },
   [RouteId.CreateSkillSandboxFolder]: { sandbox: ["execute"] },
   [RouteId.GetSkillSandboxUpload]: { sandbox: ["execute"] },
 

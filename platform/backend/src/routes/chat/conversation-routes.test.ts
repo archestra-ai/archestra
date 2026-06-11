@@ -676,3 +676,89 @@ describe("chat conversation and message routes", () => {
     });
   });
 });
+
+describe("chat conversation creation in projects", () => {
+  let app: FastifyInstanceWithZod;
+  let currentUser: User;
+  let organizationId: string;
+
+  beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
+    currentUser = await makeUser();
+    organizationId = (await makeOrganization()).id;
+    await makeMember(currentUser.id, organizationId, { role: "admin" });
+
+    app = createFastifyInstance();
+    app.addHook("onRequest", async (request) => {
+      (request as typeof request & { user: User }).user = currentUser;
+      (request as typeof request & { organizationId: string }).organizationId =
+        organizationId;
+    });
+    const { default: chatRoutes } = await import("./routes");
+    await app.register(chatRoutes);
+  });
+
+  afterEach(async () => {
+    await app.close();
+  });
+
+  test("a chat created with projectId belongs to the project", async ({
+    makeAgent,
+  }) => {
+    const { projectService } = await import("@/services/project");
+    const project = await projectService.create({
+      organizationId,
+      userId: currentUser.id,
+      name: "chat-home",
+      description: null,
+    });
+    const agent = await makeAgent({
+      organizationId,
+      authorId: currentUser.id,
+      scope: "personal",
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/chat/conversations",
+      payload: { agentId: agent.id, projectId: project.id },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ projectId: project.id });
+  });
+
+  test("an inaccessible or unknown project 404s", async ({
+    makeAgent,
+    makeUser,
+  }) => {
+    const stranger = await makeUser({ email: "proj-chat-stranger@test.com" });
+    const { projectService } = await import("@/services/project");
+    const theirProject = await projectService.create({
+      organizationId,
+      userId: stranger.id,
+      name: "not-yours",
+      description: null,
+    });
+    const agent = await makeAgent({
+      organizationId,
+      authorId: currentUser.id,
+      scope: "personal",
+    });
+
+    const denied = await app.inject({
+      method: "POST",
+      url: "/api/chat/conversations",
+      payload: { agentId: agent.id, projectId: theirProject.id },
+    });
+    expect(denied.statusCode).toBe(404);
+
+    const unknown = await app.inject({
+      method: "POST",
+      url: "/api/chat/conversations",
+      payload: {
+        agentId: agent.id,
+        projectId: "00000000-0000-0000-0000-000000000000",
+      },
+    });
+    expect(unknown.statusCode).toBe(404);
+  });
+});

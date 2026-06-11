@@ -61,6 +61,7 @@ export { default as serviceAccountRoutes } from "./service-account";
 export { default as siteNotificationRoutes } from "./site-notification";
 export { default as skillRoutes } from "./skill";
 export { default as skillMarketplacePublicRoutes } from "./skill-marketplace-public";
+export { default as projectRoutes } from "./project/project.routes";
 export { default as skillSandboxArtifactRoutes } from "./skill-sandbox-artifact";
 export { default as skillShareRoutes } from "./skill-share";
 export { default as statisticsRoutes } from "./statistics";

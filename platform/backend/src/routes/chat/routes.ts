@@ -64,6 +64,8 @@ import {
   ConversationEnabledToolModel,
   ConversationModel,
   ConversationShareModel,
+  ProjectModel,
+  ProjectShareModel,
   LlmProviderApiKeyModel,
   MemberModel,
   MessageModel,
@@ -1753,20 +1755,42 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           title: true,
           modelId: true,
           chatApiKeyId: true,
+          projectId: true,
         })
           .required({ agentId: true })
           .partial({
             title: true,
             modelId: true,
             chatApiKeyId: true,
+            projectId: true,
           }),
         response: constructResponseSchema(SelectConversationSchema),
       },
     },
     async (
-      { body: { agentId, title, modelId, chatApiKeyId }, user, organizationId },
+      {
+        body: { agentId, title, modelId, chatApiKeyId, projectId },
+        user,
+        organizationId,
+      },
       reply,
     ) => {
+      // A chat born in a project belongs to it; the caller must be able to
+      // read the project. "No access" reads as 404, like the project routes.
+      if (projectId) {
+        const project = await ProjectModel.findById(projectId);
+        if (
+          !project ||
+          !(await ProjectShareModel.userCanAccessProject({
+            project,
+            userId: user.id,
+            organizationId,
+          }))
+        ) {
+          throw new ApiError(404, "Project not found");
+        }
+      }
+
       // Check if user is an agent admin
       const isAgentAdmin = await hasAnyAgentTypeAdminPermission({
         userId: user.id,
@@ -1819,6 +1843,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           title,
           modelId: llmSelection.modelId,
           chatApiKeyId: llmSelection.chatApiKeyId,
+          projectId: projectId ?? null,
         }),
       );
     },

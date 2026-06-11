@@ -1,4 +1,4 @@
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type { SkillSandboxFolder } from "@/types";
 
@@ -65,6 +65,28 @@ class SkillSandboxFolderModel {
         ),
       );
     return row ?? null;
+  }
+
+  /** Batch fetch by id (for resolving project folder names in one query). */
+  static async findByIds(
+    ids: string[],
+  ): Promise<Map<string, SkillSandboxFolder>> {
+    if (ids.length === 0) return new Map();
+    const rows = await db
+      .select()
+      .from(schema.skillSandboxFoldersTable)
+      .where(inArray(schema.skillSandboxFoldersTable.id, ids));
+    return new Map(rows.map((row) => [row.id, row]));
+  }
+
+  /**
+   * Remove a folder row — only used to roll back a folder created for a
+   * project whose own insert then failed. There is no user-facing delete.
+   */
+  static async deleteById(id: string): Promise<void> {
+    await db
+      .delete(schema.skillSandboxFoldersTable)
+      .where(eq(schema.skillSandboxFoldersTable.id, id));
   }
 }
 

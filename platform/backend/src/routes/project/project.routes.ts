@@ -1,0 +1,187 @@
+import { RouteId } from "@archestra/shared";
+import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
+import { z } from "zod";
+import { projectService } from "@/services/project";
+import {
+  constructResponseSchema,
+  ProjectConversationItemSchema,
+  ProjectDetailSchema,
+  ProjectListItemSchema,
+  ProjectShareVisibilitySchema,
+} from "@/types";
+
+/**
+ * Projects: named collections of chats with a dedicated PFS result folder.
+ * Read access follows the project share (org / teams / owner-only);
+ * mutations are owner-only and "not yours" is indistinguishable from 404.
+ */
+const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
+  fastify.post(
+    "/api/projects",
+    {
+      schema: {
+        operationId: RouteId.CreateProject,
+        description:
+          "Create a project. Its result folder is created with it, named " +
+          "after the project, in the caller's persistent file storage.",
+        tags: ["Projects"],
+        body: z.object({
+          name: z.string().min(1).max(256),
+          description: z.string().max(4096).nullable().optional(),
+        }),
+        response: constructResponseSchema(ProjectListItemSchema),
+      },
+    },
+    async ({ body, organizationId, user }) => {
+      const project = await projectService.create({
+        organizationId,
+        userId: user.id,
+        name: body.name,
+        description: body.description ?? null,
+      });
+      return {
+        id: project.id,
+        name: project.name,
+        description: project.description,
+        isOwner: true,
+        folderName: project.name,
+        conversationCount: 0,
+        visibility: null,
+        createdAt: project.createdAt,
+      };
+    },
+  );
+
+  fastify.get(
+    "/api/projects",
+    {
+      schema: {
+        operationId: RouteId.GetProjects,
+        description:
+          "List projects the caller can see: their own plus ones shared " +
+          "with their teams or the whole organization.",
+        tags: ["Projects"],
+        response: constructResponseSchema(z.array(ProjectListItemSchema)),
+      },
+    },
+    async ({ organizationId, user }) =>
+      projectService.list({ organizationId, userId: user.id }),
+  );
+
+  fastify.get(
+    "/api/projects/:id",
+    {
+      schema: {
+        operationId: RouteId.GetProject,
+        description:
+          "Project detail. Share team ids are included for the owner only.",
+        tags: ["Projects"],
+        params: z.object({ id: z.string().uuid() }),
+        response: constructResponseSchema(ProjectDetailSchema),
+      },
+    },
+    async ({ params: { id }, organizationId, user }) =>
+      projectService.get({ id, organizationId, userId: user.id }),
+  );
+
+  fastify.patch(
+    "/api/projects/:id",
+    {
+      schema: {
+        operationId: RouteId.UpdateProject,
+        description:
+          "Update a project's description (owner only). The name is " +
+          "immutable — it names the result folder.",
+        tags: ["Projects"],
+        params: z.object({ id: z.string().uuid() }),
+        body: z.object({
+          description: z.string().max(4096).nullable(),
+        }),
+        response: constructResponseSchema(z.object({ ok: z.literal(true) })),
+      },
+    },
+    async ({ params: { id }, body, organizationId, user }) => {
+      await projectService.updateDescription({
+        id,
+        organizationId,
+        userId: user.id,
+        description: body.description,
+      });
+      return { ok: true as const };
+    },
+  );
+
+  fastify.put(
+    "/api/projects/:id/share",
+    {
+      schema: {
+        operationId: RouteId.SetProjectShare,
+        description:
+          "Set who can see the project (owner only): the whole organization, " +
+          "specific teams, or nobody (visibility null unshares).",
+        tags: ["Projects"],
+        params: z.object({ id: z.string().uuid() }),
+        body: z.object({
+          visibility: ProjectShareVisibilitySchema.nullable(),
+          teamIds: z.array(z.string()).default([]),
+        }),
+        response: constructResponseSchema(z.object({ ok: z.literal(true) })),
+      },
+    },
+    async ({ params: { id }, body, organizationId, user }) => {
+      await projectService.setShare({
+        id,
+        organizationId,
+        userId: user.id,
+        visibility: body.visibility,
+        teamIds: body.teamIds,
+      });
+      return { ok: true as const };
+    },
+  );
+
+  fastify.delete(
+    "/api/projects/:id",
+    {
+      schema: {
+        operationId: RouteId.DeleteProject,
+        description:
+          "Delete a project (owner only). Its chats and result folder " +
+          "survive — chats become ordinary conversations, the folder stays " +
+          "browsable in X-Files.",
+        tags: ["Projects"],
+        params: z.object({ id: z.string().uuid() }),
+        response: constructResponseSchema(z.object({ ok: z.literal(true) })),
+      },
+    },
+    async ({ params: { id }, organizationId, user }) => {
+      await projectService.delete({ id, organizationId, userId: user.id });
+      return { ok: true as const };
+    },
+  );
+
+  fastify.get(
+    "/api/projects/:id/conversations",
+    {
+      schema: {
+        operationId: RouteId.GetProjectConversations,
+        description:
+          "All chats in a project the caller can read. `readOnly` marks " +
+          "chats authored by someone else (viewable, never writable).",
+        tags: ["Projects"],
+        params: z.object({ id: z.string().uuid() }),
+        response: constructResponseSchema(
+          z.array(ProjectConversationItemSchema),
+        ),
+      },
+    },
+    async ({ params: { id }, organizationId, user }) =>
+      projectService.listConversations({
+        id,
+        organizationId,
+        userId: user.id,
+      }),
+  );
+};
+
+export default projectRoutes;

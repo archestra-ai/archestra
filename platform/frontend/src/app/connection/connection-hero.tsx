@@ -8,7 +8,7 @@ export function ConnectionHero() {
         <span className="inline-block bg-gradient-to-r from-purple-600 to-indigo-600 bg-clip-text py-1 align-baseline text-transparent">
           secure
         </span>{" "}
-        access to MCP
+        access to tools
       </h1>
     </div>
   );

@@ -464,21 +464,40 @@ const P4_PORT_PATTERN =
 // biome-ignore lint/suspicious/noControlCharactersInRegex: rejecting control characters in depot paths is the point
 const DEPOT_PATH_PATTERN = /^\/\/[^\x00-\x20@#%*/]+(?:\/[^\x00-\x20@#%*/]+)*$/;
 
+// The .pipe() keeps the output type a plain string in the generated OpenAPI
+// schema (a bare .transform() degrades response types to unknown).
 const depotPathSchema = z
   .string()
   .max(1024)
   .transform(stripDepotPathSuffix)
-  .refine((path) => DEPOT_PATH_PATTERN.test(path) && !path.includes("..."), {
-    message:
-      'Depot path must look like "//depot/path" and may not contain whitespace, control characters, or the Perforce metacharacters @ # % * ...',
-  });
+  .pipe(
+    z
+      .string()
+      .refine(
+        (path) => DEPOT_PATH_PATTERN.test(path) && !path.includes("..."),
+        {
+          message:
+            'Depot path must look like "//depot/path" and may not contain whitespace, control characters, or the Perforce metacharacters @ # % * ...',
+        },
+      ),
+  );
 
 export const PerforceConfigSchema = z.object({
   type: PERFORCE,
-  p4Port: z.string().max(256).regex(P4_PORT_PATTERN, {
-    message:
-      'Server address must look like "host:1666" or "ssl:host:1666" (P4PORT format)',
-  }),
+  p4Port: z
+    .string()
+    .max(256)
+    .regex(P4_PORT_PATTERN, {
+      message:
+        'Server address must look like "host:1666" or "ssl:host:1666" (P4PORT format)',
+    })
+    .refine(
+      (value) => {
+        const port = Number(value.slice(value.lastIndexOf(":") + 1));
+        return port >= 1 && port <= 65535;
+      },
+      { message: "Port must be between 1 and 65535" },
+    ),
   depotPaths: z.array(depotPathSchema).min(1),
   /** File extensions to index (defaults applied in the connector: .md, .yaml, .yml). */
   fileTypes: z

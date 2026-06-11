@@ -105,13 +105,22 @@ export class P4CliClient {
     ]);
     return records
       .filter((record) => record.code === "stat")
-      .map((record) => ({
-        depotFile: String(record.depotFile),
-        rev: Number.parseInt(String(record.rev), 10),
-        change: Number.parseInt(String(record.change), 10),
-        action: String(record.action),
-        type: String(record.type),
-      }));
+      .map((record) => {
+        const rev = Number.parseInt(String(record.rev), 10);
+        const change = Number.parseInt(String(record.change), 10);
+        if (Number.isNaN(rev) || Number.isNaN(change)) {
+          throw new P4CommandError(
+            `p4 files returned a non-numeric rev/change for ${String(record.depotFile)}`,
+          );
+        }
+        return {
+          depotFile: String(record.depotFile),
+          rev,
+          change,
+          action: String(record.action),
+          type: String(record.type),
+        };
+      });
   }
 
   /**
@@ -330,8 +339,11 @@ const MAX_PRINT_BYTES = 2 * 1024 * 1024;
 const P4_SEVERITY_FAILED = 3;
 const NO_MATCHING_FILES_PATTERN =
   /no such file\(s\)|no file\(s\) matching|file\(s\) not in client view/i;
+// Deliberately excludes command timeouts: a single oversized/slow `p4 print`
+// timing out is a per-file failure, not a broken server connection. Timeouts
+// on listing/metadata commands still abort because those are called directly.
 const CONNECTION_ERROR_PATTERN =
-  /connect to server failed|tcp connect|connection refused|timed out|password \(p4passwd\) invalid|password invalid|not logged in|ticket expired|please login|binary not found/i;
+  /connect to server failed|tcp connect|connection refused|password \(p4passwd\) invalid|password invalid|not logged in|ticket expired|please login|binary not found/i;
 
 function assertNoControlCharacters(label: string, value: string): void {
   // biome-ignore lint/suspicious/noControlCharactersInRegex: rejecting control characters is the point

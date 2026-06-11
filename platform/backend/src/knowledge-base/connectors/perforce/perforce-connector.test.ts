@@ -264,11 +264,13 @@ describe("PerforceConnector", () => {
         connector.sync({ config: validConfig, credentials, checkpoint: null }),
       );
 
-      // Extension filtering happens server-side via filespec suffixes.
-      const filesArgs = p4CallsFor("files")[0];
-      expect(filesArgs).toContain("//depot/docs/....md@120");
-      expect(filesArgs).toContain("//depot/docs/....yaml@120");
-      expect(filesArgs).toContain("//depot/docs/....yml@120");
+      // Extension filtering happens server-side via filespec suffixes; each
+      // filespec is listed in its own p4 invocation to bound output size.
+      const filesSpecs = p4CallsFor("files").flat();
+      expect(filesSpecs).toContain("//depot/docs/....md@120");
+      expect(filesSpecs).toContain("//depot/docs/....yaml@120");
+      expect(filesSpecs).toContain("//depot/docs/....yml@120");
+      expect(p4CallsFor("files")).toHaveLength(3);
 
       expect(batches).toHaveLength(1);
       const batch = batches[0];
@@ -334,8 +336,9 @@ describe("PerforceConnector", () => {
         }),
       );
 
-      const filesArgs = p4CallsFor("files")[0];
-      expect(filesArgs).toContain("//depot/docs/....md@101,@120");
+      expect(p4CallsFor("files").flat()).toContain(
+        "//depot/docs/....md@101,@120",
+      );
 
       expect(batches).toHaveLength(1);
       expect(batches[0].documents.map((doc) => doc.id)).toEqual([
@@ -395,7 +398,7 @@ describe("PerforceConnector", () => {
 
       // The pinned target comes from the checkpoint, not a new `p4 changes`.
       expect(p4CallsFor("changes")).toHaveLength(0);
-      expect(p4CallsFor("files")[0]).toContain("//depot/docs/....md@120");
+      expect(p4CallsFor("files").flat()).toContain("//depot/docs/....md@120");
 
       expect(batches).toHaveLength(1);
       expect(batches[0].documents).toHaveLength(10);
@@ -537,12 +540,60 @@ describe("PerforceConnector", () => {
       );
 
       expect(p4CallsFor("changes")).toHaveLength(2);
-      const filesArgs = p4CallsFor("files")[0];
-      expect(filesArgs).toContain("//depot/docs/....md@120");
-      expect(filesArgs).toContain("//depot/docs/....txt@120");
-      expect(filesArgs).toContain("//stream/main/specs/....md@120");
-      expect(filesArgs).toContain("//stream/main/specs/....txt@120");
-      expect(filesArgs).not.toContain("//depot/docs/....yaml@120");
+      const filesSpecs = p4CallsFor("files").flat();
+      expect(filesSpecs).toContain("//depot/docs/....md@120");
+      expect(filesSpecs).toContain("//depot/docs/....txt@120");
+      expect(filesSpecs).toContain("//stream/main/specs/....md@120");
+      expect(filesSpecs).toContain("//stream/main/specs/....txt@120");
+      expect(filesSpecs).not.toContain("//depot/docs/....yaml@120");
+    });
+
+    test("commits the cursor and reports skips when every candidate is non-text", async () => {
+      fakeP4({
+        latestChange: 120,
+        files: [
+          statFile("//depot/docs/model.md", { type: "binary" }),
+          statFile("//depot/docs/asset.yaml", { type: "ubinary" }),
+        ],
+      });
+
+      const batches = await collectBatches(
+        connector.sync({ config: validConfig, credentials, checkpoint: null }),
+      );
+
+      expect(batches).toHaveLength(1);
+      expect(batches[0].documents).toEqual([]);
+      expect(batches[0].skipped).toHaveLength(2);
+      expect(batches[0].hasMore).toBe(false);
+      // The sweep still commits so the next run doesn't rescan these files.
+      expect(batches[0].checkpoint).toMatchObject({ lastChangelist: 120 });
+    });
+
+    test("records a per-file print timeout as a failure instead of aborting", async () => {
+      fakeP4({
+        latestChange: 120,
+        files: [
+          statFile("//depot/docs/good.md"),
+          statFile("//depot/docs/slow.md"),
+        ],
+        printError: (filespec) =>
+          filespec.startsWith("//depot/docs/slow.md")
+            ? { error: { killed: true, message: "killed" } }
+            : undefined,
+      });
+
+      const batches = await collectBatches(
+        connector.sync({ config: validConfig, credentials, checkpoint: null }),
+      );
+
+      expect(batches).toHaveLength(1);
+      expect(batches[0].documents.map((doc) => doc.id)).toEqual([
+        "//depot/docs/good.md",
+      ]);
+      expect(batches[0].failures?.[0]).toMatchObject({
+        itemId: "//depot/docs/slow.md",
+      });
+      expect(batches[0].failures?.[0].error).toContain("timed out");
     });
 
     test("throws when no username is configured", async () => {

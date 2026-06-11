@@ -29,10 +29,11 @@ import { LinearConfigFields } from "./linear-config-fields";
 import { NotionConfigFields } from "./notion-config-fields";
 import { OneDriveConfigFields } from "./onedrive-config-fields";
 import { OutlineConfigFields } from "./outline-config-fields";
-import { joinIfArray, PerforceConfigFields } from "./perforce-config-fields";
+import { PerforceConfigFields } from "./perforce-config-fields";
 import { SalesforceConfigFields } from "./salesforce-config-fields";
 import { ServiceNowConfigFields } from "./servicenow-config-fields";
 import { SharePointConfigFields } from "./sharepoint-config-fields";
+import { joinIfArray } from "./transform-config-array-fields";
 import { WebCrawlerConfigFields } from "./web-crawler-config-fields";
 
 export type ConnectorType =

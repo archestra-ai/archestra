@@ -864,6 +864,43 @@ describe("knowledge base routes", () => {
   });
 
   describe("PUT /api/connectors/:id", () => {
+    test("preserves the stored username when rotating only the token", async () => {
+      const connector = await KnowledgeBaseConnectorModel.create({
+        organizationId,
+        name: "Rotate Connector",
+        connectorType: "perforce",
+        config: {
+          type: "perforce",
+          p4Port: "perforce.example.com:1666",
+          depotPaths: ["//depot/docs"],
+        },
+      });
+      const secret = await secretManager().createSecret(
+        { email: "svc-knowledge", apiToken: "old-ticket" },
+        "connector-rotate",
+      );
+      await KnowledgeBaseConnectorModel.update(connector.id, {
+        secretId: secret.id,
+      });
+
+      // The edit dialog omits the email field when left blank.
+      const response = await app.inject({
+        method: "PUT",
+        url: `/api/connectors/${connector.id}`,
+        payload: {
+          name: "Rotate Connector",
+          credentials: { apiToken: "new-ticket" },
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const updatedSecret = await secretManager().getSecret(secret.id);
+      expect(updatedSecret?.secret).toMatchObject({
+        email: "svc-knowledge",
+        apiToken: "new-ticket",
+      });
+    });
+
     test("updates a connector name and schedule", async () => {
       const connector = await KnowledgeBaseConnectorModel.create({
         organizationId,

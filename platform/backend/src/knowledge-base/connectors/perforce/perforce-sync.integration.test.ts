@@ -2,9 +2,10 @@ import { vi } from "vitest";
 
 // End-to-end pipeline test for the Perforce connector: the REAL
 // PerforceConnector, sync service, chunker, embedding service, task records,
-// and database run together. Only true process boundaries are mocked — the
-// spawned `p4` binary (node:child_process) and the embedding provider
-// (openai + the org-level provider config lookup).
+// and database run together. Mocked: the spawned `p4` binary
+// (node:child_process) and the embedding provider (the openai client plus the
+// org-level embedding-config lookup — the latter is internal but resolves
+// external provider credentials; mocking it follows embedder.test.ts).
 
 const { execState } = vi.hoisted(() => ({
   execState: {

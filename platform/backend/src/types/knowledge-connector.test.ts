@@ -397,6 +397,8 @@ describe("knowledge-connector schemas", () => {
         "ssl:",
         "host:1666 extra",
         "host:notaport",
+        "host:0",
+        "host:99999",
       ]) {
         const result = PerforceConfigSchema.safeParse({
           type: "perforce",

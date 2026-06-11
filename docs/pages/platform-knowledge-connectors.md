@@ -333,6 +333,8 @@ The connector shells out to the [`p4` command-line client](https://www.perforce.
 
 Incremental syncs are driven by submitted changelist numbers: after the initial sync, only files changed since the last synced changelist are re-indexed. File deletions are not propagated on incremental syncs; use **Force re-sync** to rebuild the index after large depot restructurings.
 
+Each depot path and extension combination is listed in its own `p4 files` command. On very large depots, server `maxresults` limits or per-command output bounds can reject a listing; configure narrower depot paths if the initial sync fails while listing files.
+
 | Field                   | Description                                                                                       |
 | ----------------------- | -------------------------------------------------------------------------------------------------- |
 | Server Address (P4PORT) | Helix Core server address as `host:port`, optionally prefixed with `ssl:` (e.g., `ssl:perforce.example.com:1666`) |

@@ -34502,7 +34502,7 @@ export type GetConnectorsResponses = {
             } | {
                 type: 'perforce';
                 p4Port: string;
-                depotPaths: Array<unknown>;
+                depotPaths: Array<string>;
                 fileTypes?: Array<string>;
             };
             secretId: string | null;
@@ -34904,7 +34904,7 @@ export type CreateConnectorResponses = {
         } | {
             type: 'perforce';
             p4Port: string;
-            depotPaths: Array<unknown>;
+            depotPaths: Array<string>;
             fileTypes?: Array<string>;
         };
         secretId: string | null;
@@ -35226,7 +35226,7 @@ export type GetConnectorResponses = {
         } | {
             type: 'perforce';
             p4Port: string;
-            depotPaths: Array<unknown>;
+            depotPaths: Array<string>;
             fileTypes?: Array<string>;
         };
         secretId: string | null;
@@ -35615,7 +35615,7 @@ export type UpdateConnectorResponses = {
         } | {
             type: 'perforce';
             p4Port: string;
-            depotPaths: Array<unknown>;
+            depotPaths: Array<string>;
             fileTypes?: Array<string>;
         };
         secretId: string | null;

@@ -10,12 +10,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-
-export function joinIfArray(value: unknown): string {
-  return Array.isArray(value)
-    ? (value as string[]).join(", ")
-    : ((value as string) ?? "");
-}
+import { joinIfArray } from "./transform-config-array-fields";
 
 export function PerforceConfigFields({
   form,

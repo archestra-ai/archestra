@@ -130250,7 +130250,9 @@
                                   "depotPaths": {
                                     "minItems": 1,
                                     "type": "array",
-                                    "items": {}
+                                    "items": {
+                                      "type": "string"
+                                    }
                                   },
                                   "fileTypes": {
                                     "type": "array",
@@ -132385,7 +132387,9 @@
                             "depotPaths": {
                               "minItems": 1,
                               "type": "array",
-                              "items": {}
+                              "items": {
+                                "type": "string"
+                              }
                             },
                             "fileTypes": {
                               "type": "array",
@@ -133577,7 +133581,9 @@
                             "depotPaths": {
                               "minItems": 1,
                               "type": "array",
-                              "items": {}
+                              "items": {
+                                "type": "string"
+                              }
                             },
                             "fileTypes": {
                               "type": "array",
@@ -135539,7 +135545,9 @@
                             "depotPaths": {
                               "minItems": 1,
                               "type": "array",
-                              "items": {}
+                              "items": {
+                                "type": "string"
+                              }
                             },
                             "fileTypes": {
                               "type": "array",

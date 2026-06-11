@@ -34,6 +34,11 @@ import {
  *
  * File deletions are not propagated on incremental syncs (the sync pipeline
  * has no delete channel); a force re-sync rebuilds the corpus from scratch.
+ *
+ * `estimateTotalItems` deliberately stays at the inherited null: producing a
+ * count would require the same `p4 files` listing the sweep itself performs.
+ * The client also deliberately has no retry layer — transient per-file print
+ * failures are recorded on the run, and listing/auth failures surface loudly.
  */
 export class PerforceConnector extends BaseConnector {
   type = "perforce" as const;
@@ -98,7 +103,13 @@ export class PerforceConnector extends BaseConnector {
         documents: [],
         failures: this.flushFailures(),
         skipped: this.flushSkipped(),
-        checkpoint,
+        // Re-persist only the committed cursor fields so malformed in-flight
+        // state (e.g. an orphaned filesOffset) is normalized away.
+        checkpoint: {
+          type: "perforce",
+          lastSyncedAt: checkpoint.lastSyncedAt,
+          lastChangelist: checkpoint.lastChangelist,
+        },
         hasMore: false,
       };
       return;
@@ -284,27 +295,41 @@ export class PerforceConnector extends BaseConnector {
       }
     }
 
-    const candidates = await client.files(filespecs);
+    // One `p4 files` invocation per filespec so each process stays within the
+    // per-command output/timeout caps — a combined listing of a large depot's
+    // initial sweep could exceed them and fail the run on every retry.
     const byDepotFile = new Map<string, P4DepotFile>();
-    for (const file of candidates) {
-      if (!isTextFileType(file.type)) {
-        // Resumed continuations rebuild the same candidate list; only the
-        // fresh sweep reports the skips so they are not double-counted.
-        if (!isResume) {
-          this.trackSkipped({
-            itemId: file.depotFile,
-            name: file.depotFile,
-            reason: `unsupported Perforce filetype "${file.type}"`,
-          });
+    const skippedNonText = new Map<string, string>();
+    for (const filespec of filespecs) {
+      for (const file of await client.files([filespec])) {
+        if (!isTextFileType(file.type)) {
+          skippedNonText.set(file.depotFile, file.type);
+          continue;
         }
-        continue;
-      }
-      const existing = byDepotFile.get(file.depotFile);
-      if (!existing || file.rev > existing.rev) {
-        byDepotFile.set(file.depotFile, file);
+        const existing = byDepotFile.get(file.depotFile);
+        if (!existing || file.rev > existing.rev) {
+          byDepotFile.set(file.depotFile, file);
+        }
       }
     }
 
+    // Resumed continuations rebuild the same candidate list; only the fresh
+    // sweep reports the skips so they are not double-counted. Deduped by
+    // depot file so overlapping depot paths report each skip once.
+    if (!isResume) {
+      for (const [depotFile, fileType] of skippedNonText) {
+        this.trackSkipped({
+          itemId: depotFile,
+          name: depotFile,
+          reason: `unsupported Perforce filetype "${fileType}"`,
+        });
+      }
+    }
+
+    // Sorted by depot path so `filesOffset` resumes are stable. The offset
+    // assumes the pinned listing is immutable; an admin `p4 obliterate` or
+    // rename mid-sweep can shift it, which heals on the next sweep when the
+    // cursor advances.
     return [...byDepotFile.values()].sort((a, b) =>
       a.depotFile < b.depotFile ? -1 : a.depotFile > b.depotFile ? 1 : 0,
     );

@@ -126,9 +126,7 @@ describe("SkillsMarketplaceStep", () => {
       data: { links: [] },
       isPending: false,
     });
-    const { container } = render(
-      <SkillsMarketplaceStep client={anyClient} expanded onToggle={() => {}} />,
-    );
+    const { container } = render(<SkillsMarketplaceStep client={anyClient} />);
     expect(container.textContent).toBe("");
   });
 
@@ -137,9 +135,7 @@ describe("SkillsMarketplaceStep", () => {
       data: { links: [] },
       isPending: false,
     });
-    renderWithClient(
-      <SkillsMarketplaceStep client={anyClient} expanded onToggle={() => {}} />,
-    );
+    renderWithClient(<SkillsMarketplaceStep client={anyClient} />);
     await waitFor(() =>
       expect(screen.getByTestId("skills-marketplace-create")).toBeVisible(),
     );
@@ -153,9 +149,7 @@ describe("SkillsMarketplaceStep", () => {
     });
     createLinkMock.mockResolvedValue(CREATE_RESPONSE);
 
-    renderWithClient(
-      <SkillsMarketplaceStep client={anyClient} expanded onToggle={() => {}} />,
-    );
+    renderWithClient(<SkillsMarketplaceStep client={anyClient} />);
 
     await waitFor(() =>
       expect(screen.getByTestId("skills-marketplace-create")).toBeVisible(),
@@ -176,9 +170,7 @@ describe("SkillsMarketplaceStep", () => {
     });
     createLinkMock.mockResolvedValue(CREATE_RESPONSE);
 
-    renderWithClient(
-      <SkillsMarketplaceStep client={anyClient} expanded onToggle={() => {}} />,
-    );
+    renderWithClient(<SkillsMarketplaceStep client={anyClient} />);
 
     await userEvent.click(
       await screen.findByTestId("skills-marketplace-create"),
@@ -214,11 +206,7 @@ describe("SkillsMarketplaceStep", () => {
     });
     const unsupportedClient = findClient("n8n");
     const { container } = render(
-      <SkillsMarketplaceStep
-        client={unsupportedClient}
-        expanded
-        onToggle={() => {}}
-      />,
+      <SkillsMarketplaceStep client={unsupportedClient} />,
     );
     expect(container.textContent).toBe("");
   });
@@ -230,13 +218,7 @@ describe("SkillsMarketplaceStep", () => {
     });
     createLinkMock.mockResolvedValue(CREATE_RESPONSE);
 
-    renderWithClient(
-      <SkillsMarketplaceStep
-        client={claudeClient}
-        expanded
-        onToggle={() => {}}
-      />,
-    );
+    renderWithClient(<SkillsMarketplaceStep client={claudeClient} />);
 
     await userEvent.click(
       await screen.findByTestId("skills-marketplace-create"),
@@ -259,13 +241,7 @@ describe("SkillsMarketplaceStep", () => {
     });
     createLinkMock.mockResolvedValue(CREATE_RESPONSE);
 
-    renderWithClient(
-      <SkillsMarketplaceStep
-        client={copilotClient}
-        expanded
-        onToggle={() => {}}
-      />,
-    );
+    renderWithClient(<SkillsMarketplaceStep client={copilotClient} />);
 
     await userEvent.click(
       await screen.findByTestId("skills-marketplace-create"),
@@ -302,9 +278,7 @@ describe("SkillsMarketplaceStep", () => {
       revokeError: undefined,
     });
 
-    renderWithClient(
-      <SkillsMarketplaceStep client={anyClient} expanded onToggle={() => {}} />,
-    );
+    renderWithClient(<SkillsMarketplaceStep client={anyClient} />);
 
     // panel mounts in hidden-URL state — no install snippets and no implicit rotation
     expect(
@@ -327,9 +301,7 @@ describe("SkillsMarketplaceStep", () => {
       revokeError: undefined,
     });
 
-    renderWithClient(
-      <SkillsMarketplaceStep client={anyClient} expanded onToggle={() => {}} />,
-    );
+    renderWithClient(<SkillsMarketplaceStep client={anyClient} />);
 
     await userEvent.click(
       await screen.findByRole("button", { name: /Refresh to reveal URL/i }),
@@ -357,9 +329,7 @@ describe("SkillsMarketplaceStep", () => {
     });
     revokeLinkMock.mockResolvedValue({ success: true });
 
-    renderWithClient(
-      <SkillsMarketplaceStep client={anyClient} expanded onToggle={() => {}} />,
-    );
+    renderWithClient(<SkillsMarketplaceStep client={anyClient} />);
 
     await userEvent.click(
       await screen.findByRole("button", { name: /^Revoke$/i }),

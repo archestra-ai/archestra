@@ -3,30 +3,19 @@ import { API_BASE_URL } from "../consts";
 import { test } from "../fixtures";
 
 /**
- * /connection one-command setup flow for script-capable clients
+ * /connection one-command wizard for script-capable clients
  * (Claude Code / Codex / Copilot CLI / Cursor) and the unchanged manual
- * flow for n8n.
+ * flow for n8n. The command auto-generates — there is no generate button.
  */
 test.describe("connection one-command setup", () => {
-  test("claude-code wizard generates a one-time curl|bash command", async ({
+  test("the wizard auto-generates a one-time curl|bash command", async ({
     page,
     goToPage,
   }) => {
-    await goToPage(page, "/connection?clientId=claude-code");
+    // no clientId: the wizard preselects the first visible client and the
+    // command appears without any clicks
+    await goToPage(page, "/connection");
 
-    // selection-only steps: no static-token tab, no command dumps
-    await expect(
-      page.getByText("Run one command to connect everything"),
-    ).toBeVisible();
-    await expect(page.getByRole("tab", { name: /Static token/i })).toHaveCount(
-      0,
-    );
-
-    const generate = page.getByTestId("connect-generate-command");
-    await expect(generate).toBeEnabled();
-    await generate.click();
-
-    // the one-liner appears, pointing at the script endpoint
     const command = page.getByText(/curl -fsSL '.*\/api\/connection-setups\//);
     await expect(command).toBeVisible();
     const commandText = (await command.textContent()) ?? "";
@@ -51,42 +40,60 @@ test.describe("connection one-command setup", () => {
     const second = await page.request.get(scriptUrl);
     expect(second.status()).toBe(410);
 
-    // regenerating produces a fresh working command
+    // regenerating produces a fresh command with a new token
     await page.getByTestId("connect-regenerate-command").click();
     await expect(
       page.getByText(/curl -fsSL '.*\/api\/connection-setups\//),
-    ).toBeVisible();
+    ).not.toHaveText(commandText);
   });
 
-  test("proxy auth tabs switch between passthrough and virtual key", async ({
+  test("provider and auth choices live behind tabs and Options", async ({
     page,
     goToPage,
   }) => {
     await goToPage(page, "/connection?clientId=claude-code");
 
+    // claude-code supports two providers — rendered as flat tabs on the block
+    await expect(page.getByRole("button", { name: "Anthropic" })).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "AWS Bedrock" }),
+    ).toBeVisible();
+
+    // auth mode is changed inline from the proxy line, passthrough by default
+    await page.getByTestId("connect-change-proxy").click();
     await expect(
       page.getByRole("tab", { name: /Your provider key/i }),
     ).toBeVisible();
     await expect(
-      page.getByText(/you keep using your own API key or login/i),
+      page.getByText(/Passthrough.*reuse your own API key/i),
     ).toBeVisible();
 
+    // switching to a virtual key updates the proxy summary line
     await page.getByRole("tab", { name: /Virtual key/i }).click();
+    await expect(page.getByText("a virtual key").first()).toBeVisible();
+  });
+
+  test("admins configure the page from a dialog on the page itself", async ({
+    page,
+    goToPage,
+  }) => {
+    await goToPage(page, "/connection");
+
+    // the fixture user is an admin, so the settings entry point is visible
+    await page.getByTestId("connect-page-settings").click();
     await expect(
-      page.getByText(/virtual key created for you/i).first(),
+      page.getByRole("dialog", { name: /Connect page settings/i }),
     ).toBeVisible();
+    await expect(page.getByText("Default MCP Gateway")).toBeVisible();
   });
 
   test("n8n keeps the manual step-by-step flow", async ({ page, goToPage }) => {
     await goToPage(page, "/connection?clientId=n8n");
 
-    // manual flow: auth method tabs and step-by-step instructions remain
+    // manual flow: step-by-step instructions remain, no auto-generated command
     await expect(
       page.getByText('Add the "MCP Client Tool" node'),
     ).toBeVisible();
-    // no one-command step for non-script clients
-    await expect(
-      page.getByText("Run one command to connect everything"),
-    ).toHaveCount(0);
+    await expect(page.getByText(/curl -fsSL/)).toHaveCount(0);
   });
 });

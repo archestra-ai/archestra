@@ -77,9 +77,10 @@ export function getShownProviders(
 /**
  * Decide which client to pre-select on the `/connection` page.
  *
- * Priority: URL param (`?clientId=`) → admin default. If neither is set, no
- * client is pre-selected. Candidates that aren't in the visible set are
- * skipped so we never select a tile the user can't see.
+ * Priority: URL param (`?clientId=`) → admin default → first visible client,
+ * so the wizard always opens with a working selection. Candidates that aren't
+ * in the visible set are skipped so we never select a client the user can't
+ * see.
  */
 export function resolveInitialClientId(params: {
   urlClientId: string | null;
@@ -90,7 +91,12 @@ export function resolveInitialClientId(params: {
   const visible = new Set(visibleClientIds);
   const pick = (id: string | null | undefined): string | null =>
     id && visible.has(id) ? id : null;
-  return pick(urlClientId) ?? pick(adminDefaultClientId);
+  return (
+    pick(urlClientId) ??
+    pick(adminDefaultClientId) ??
+    visibleClientIds[0] ??
+    null
+  );
 }
 
 export function resolveEffectiveId(params: {

@@ -6,21 +6,13 @@ import {
   SupportedProviders,
 } from "@archestra/shared";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
-import { ClientIcon } from "@/app/connection/client-icon";
-import { CONNECT_CLIENTS } from "@/app/connection/clients";
-import { getShownProviders } from "@/app/connection/connection-flow.utils";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { AgentIcon } from "@/components/agent-icon";
 import { CodeText } from "@/components/code-text";
 import { ProviderIcon } from "@/components/provider-icon";
 import { WithPermissions } from "@/components/roles/with-permissions";
-import {
-  SettingsBlock,
-  SettingsCardHeader,
-  SettingsSaveBar,
-  SettingsSectionStack,
-} from "@/components/settings/settings-block";
-import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { DialogBody, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { MultiSelectCombobox } from "@/components/ui/multi-select-combobox";
@@ -34,6 +26,8 @@ import {
   useOrganization,
   useUpdateConnectionSettings,
 } from "@/lib/organization.query";
+import { ClientIcon } from "./client-icon";
+import { CONNECT_CLIENTS } from "./clients";
 import {
   applyDefaultBaseUrl,
   applyVisibility,
@@ -41,6 +35,7 @@ import {
   collapseBaseUrlMeta,
   resolveDefaultBaseUrl,
 } from "./connection-base-urls.utils";
+import { getShownProviders } from "./connection-flow.utils";
 
 const DEFAULT_VALUE = "__default__";
 // "Any client" is always visible on the connection page; admins cannot hide it.
@@ -216,228 +211,179 @@ export function ConnectSettingsSection() {
   }, [providerApiKeys]);
 
   return (
-    <SettingsSectionStack>
-      <SettingsBlock
-        title="Default MCP Gateway"
-        description={
-          'Control which MCP Gateway is pre-selected on the "Connect" page.'
-        }
-        control={
-          <WithPermissions
-            permissions={{ organizationSettings: ["update"] }}
-            noPermissionHandle="tooltip"
-          >
-            {({ hasPermission }) => (
-              <SingleSelectCombobox
-                className="w-64"
-                value={gatewayId ?? DEFAULT_VALUE}
-                onChange={(value) =>
-                  setGatewayId(value === DEFAULT_VALUE ? null : value)
-                }
-                options={[
-                  { value: DEFAULT_VALUE, label: "Each user personal" },
-                  ...gatewayItems.map((g) => ({
-                    value: g.id,
-                    label: g.name,
-                    icon: (
-                      <AgentIcon
-                        icon={g.icon}
-                        fallbackType="mcp_gateway"
-                        size={16}
-                      />
-                    ),
-                  })),
-                ]}
-                searchPlaceholder="Search gateways…"
-                disabled={updateMutation.isPending || !hasPermission}
-              />
-            )}
-          </WithPermissions>
-        }
-      />
-      <SettingsBlock
-        title="Default LLM Proxy"
-        description={
-          'Control which LLM Proxy is pre-selected on the "Connect" page.'
-        }
-        control={
-          <WithPermissions
-            permissions={{ organizationSettings: ["update"] }}
-            noPermissionHandle="tooltip"
-          >
-            {({ hasPermission }) => (
-              <SingleSelectCombobox
-                className="w-64"
-                value={proxyId ?? DEFAULT_VALUE}
-                onChange={(value) =>
-                  setProxyId(value === DEFAULT_VALUE ? null : value)
-                }
-                options={[
-                  { value: DEFAULT_VALUE, label: "Each user personal" },
-                  ...proxyItems
-                    .filter((p) => !p.isDefault)
-                    .map((p) => ({
-                      value: p.id,
-                      label: p.name,
+    <WithPermissions
+      permissions={{ organizationSettings: ["update"] }}
+      noPermissionHandle="tooltip"
+    >
+      {({ hasPermission }) => {
+        const locked = updateMutation.isPending || !hasPermission;
+        return (
+          <>
+            <DialogBody className="flex flex-col gap-6 py-5">
+              <SettingRow
+                title="Default MCP Gateway"
+                description="Pre-selected for everyone; users can still switch."
+              >
+                <SingleSelectCombobox
+                  className="w-60"
+                  value={gatewayId ?? DEFAULT_VALUE}
+                  onChange={(value) =>
+                    setGatewayId(value === DEFAULT_VALUE ? null : value)
+                  }
+                  options={[
+                    { value: DEFAULT_VALUE, label: "Each user personal" },
+                    ...gatewayItems.map((g) => ({
+                      value: g.id,
+                      label: g.name,
                       icon: (
                         <AgentIcon
-                          icon={p.icon}
-                          fallbackType="llm_proxy"
+                          icon={g.icon}
+                          fallbackType="mcp_gateway"
                           size={16}
                         />
                       ),
                     })),
-                ]}
-                searchPlaceholder="Search proxies…"
-                disabled={updateMutation.isPending || !hasPermission}
-              />
-            )}
-          </WithPermissions>
-        }
-      />
-      <Card>
-        <SettingsCardHeader
-          title="Default provider keys for setup commands"
-          description="When a user generates a one-command setup on the Connect page and chooses a virtual key, this controls which provider API key it maps to. Providers left on Automatic fall back to the user's own key resolution (personal, then team, then organization)."
-        />
-        <CardContent>
-          {providerKeysByProvider.size === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              No provider API keys configured yet. Add one under{" "}
-              <Link href="/settings/llm" className="underline">
-                LLM provider keys
-              </Link>{" "}
-              to set a default.
-            </p>
-          ) : (
-            <WithPermissions
-              permissions={{ organizationSettings: ["update"] }}
-              noPermissionHandle="tooltip"
-            >
-              {({ hasPermission }) => (
-                <div className="grid gap-2.5">
-                  {[...providerKeysByProvider.entries()].map(
-                    ([provider, keys]) => (
-                      <div
-                        key={provider}
-                        className="grid grid-cols-[minmax(0,1fr)_240px] items-center gap-3 rounded-lg border bg-card/40 p-3"
-                      >
-                        <div className="flex min-w-0 items-center gap-2">
-                          <ProviderIcon
-                            provider={provider as SupportedProvider}
+                  ]}
+                  searchPlaceholder="Search gateways…"
+                  disabled={locked}
+                />
+              </SettingRow>
+
+              <SettingRow
+                title="Default LLM Proxy"
+                description="Pre-selected for everyone; users can still switch."
+              >
+                <SingleSelectCombobox
+                  className="w-60"
+                  value={proxyId ?? DEFAULT_VALUE}
+                  onChange={(value) =>
+                    setProxyId(value === DEFAULT_VALUE ? null : value)
+                  }
+                  options={[
+                    { value: DEFAULT_VALUE, label: "Each user personal" },
+                    ...proxyItems
+                      .filter((p) => !p.isDefault)
+                      .map((p) => ({
+                        value: p.id,
+                        label: p.name,
+                        icon: (
+                          <AgentIcon
+                            icon={p.icon}
+                            fallbackType="llm_proxy"
+                            size={16}
                           />
-                          <span className="truncate text-sm font-medium">
-                            {providerDisplayNames[
-                              provider as SupportedProvider
-                            ] ?? provider}
-                          </span>
+                        ),
+                      })),
+                  ]}
+                  searchPlaceholder="Search proxies…"
+                  disabled={locked}
+                />
+              </SettingRow>
+
+              <SettingRow
+                title="Default client"
+                description="Pre-selected client tile."
+              >
+                <SingleSelectCombobox
+                  className="w-60"
+                  value={defaultClientId ?? "none"}
+                  onChange={(value) =>
+                    setDefaultClientId(value === "none" ? null : value)
+                  }
+                  options={[
+                    { value: "none", label: "Not selected" },
+                    ...CONNECT_CLIENTS.map((c) => ({
+                      value: c.id,
+                      label: c.label,
+                      icon: <ClientIcon client={c} size={18} />,
+                    })),
+                  ]}
+                  searchPlaceholder="Search clients…"
+                  disabled={locked}
+                />
+              </SettingRow>
+
+              <SettingSection
+                title="Default provider keys for setup commands"
+                description="Which provider API key a setup command's virtual key maps to. Automatic falls back to the user's own key resolution (personal, then team, then organization)."
+              >
+                {providerKeysByProvider.size === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    No provider API keys configured yet. Add one under{" "}
+                    <Link href="/settings/llm" className="underline">
+                      LLM provider keys
+                    </Link>{" "}
+                    to set a default.
+                  </p>
+                ) : (
+                  <div className="grid gap-2">
+                    {[...providerKeysByProvider.entries()].map(
+                      ([provider, keys]) => (
+                        <div
+                          key={provider}
+                          className="grid grid-cols-[minmax(0,1fr)_240px] items-center gap-3"
+                        >
+                          <div className="flex min-w-0 items-center gap-2">
+                            <ProviderIcon
+                              provider={provider as SupportedProvider}
+                            />
+                            <span className="truncate text-sm">
+                              {providerDisplayNames[
+                                provider as SupportedProvider
+                              ] ?? provider}
+                            </span>
+                          </div>
+                          <SingleSelectCombobox
+                            className="w-full"
+                            value={
+                              defaultProviderKeys[provider] ?? DEFAULT_VALUE
+                            }
+                            onChange={(value) =>
+                              setDefaultProviderKeys((prev) => {
+                                const next = { ...prev };
+                                if (value === DEFAULT_VALUE) {
+                                  delete next[provider];
+                                } else {
+                                  next[provider] = value;
+                                }
+                                return next;
+                              })
+                            }
+                            options={[
+                              { value: DEFAULT_VALUE, label: "Automatic" },
+                              ...keys.map((key) => ({
+                                value: key.id,
+                                label: key.name,
+                              })),
+                            ]}
+                            searchPlaceholder="Search keys…"
+                            disabled={locked}
+                          />
                         </div>
-                        <SingleSelectCombobox
-                          className="w-full"
-                          value={defaultProviderKeys[provider] ?? DEFAULT_VALUE}
-                          onChange={(value) =>
-                            setDefaultProviderKeys((prev) => {
-                              const next = { ...prev };
-                              if (value === DEFAULT_VALUE) {
-                                delete next[provider];
-                              } else {
-                                next[provider] = value;
-                              }
-                              return next;
-                            })
-                          }
-                          options={[
-                            { value: DEFAULT_VALUE, label: "Automatic" },
-                            ...keys.map((key) => ({
-                              value: key.id,
-                              label: key.name,
-                            })),
-                          ]}
-                          searchPlaceholder="Search keys…"
-                          disabled={updateMutation.isPending || !hasPermission}
-                        />
-                      </div>
-                    ),
-                  )}
-                </div>
-              )}
-            </WithPermissions>
-          )}
-        </CardContent>
-      </Card>
-      <SettingsBlock
-        title="Default client"
-        description={
-          'Control which client is pre-selected on the "Connect" page.'
-        }
-        control={
-          <WithPermissions
-            permissions={{ organizationSettings: ["update"] }}
-            noPermissionHandle="tooltip"
-          >
-            {({ hasPermission }) => (
-              <SingleSelectCombobox
-                className="w-64"
-                value={defaultClientId ?? "none"}
-                onChange={(value) =>
-                  setDefaultClientId(value === "none" ? null : value)
-                }
-                options={[
-                  { value: "none", label: "Not selected" },
-                  ...CONNECT_CLIENTS.map((c) => ({
-                    value: c.id,
-                    label: c.label,
-                    icon: <ClientIcon client={c} size={18} />,
-                  })),
-                ]}
-                searchPlaceholder="Search clients…"
-                disabled={updateMutation.isPending || !hasPermission}
-              />
-            )}
-          </WithPermissions>
-        }
-      />
-      <WithPermissions
-        permissions={{ organizationSettings: ["update"] }}
-        noPermissionHandle="tooltip"
-      >
-        {({ hasPermission }) => (
-          <>
-            {envBaseUrls.length > 1 && (
-              <Card>
-                <SettingsCardHeader
+                      ),
+                    )}
+                  </div>
+                )}
+              </SettingSection>
+
+              {envBaseUrls.length > 1 && (
+                <SettingSection
                   title="Connection base URLs"
                   description={
                     <>
-                      These URLs come from{" "}
+                      Every URL from{" "}
                       <code className="rounded bg-muted px-1 py-0.5 font-mono text-[11.5px]">
                         NEXT_PUBLIC_ARCHESTRA_API_BASE_URL
                       </code>{" "}
-                      — every one of them can be used to reach Archestra. For
-                      each endpoint you can:
-                      <ul className="mt-2 list-disc space-y-1 pl-5">
-                        <li>
-                          Add a description so members understand when to use it
-                          (e.g. office network only, public internet, EU
-                          region).
-                        </li>
-                        <li>
-                          Hide it from the Connect page if it shouldn't be
-                          surfaced to end users.
-                        </li>
-                        <li>
-                          Mark one as default — that one is pre-selected on the
-                          Connect page.
-                        </li>
-                      </ul>
+                      can reach this deployment. Describe each one, hide it, or
+                      mark it as the pre-selected default.
                     </>
                   }
-                />
-                <CardContent>
+                >
                   <RadioGroup
                     value={currentDefaultUrl ?? NO_DEFAULT_URL}
                     onValueChange={setDefaultBaseUrl}
-                    disabled={updateMutation.isPending || !hasPermission}
+                    disabled={locked}
                     className="gap-2.5"
                   >
                     {envBaseUrls.map((url) => {
@@ -459,11 +405,7 @@ export function ConnectSettingsSection() {
                             value={url}
                             id={`base-url-default-${url}`}
                             aria-label={`Make ${url} the default`}
-                            disabled={
-                              !meta.visible ||
-                              updateMutation.isPending ||
-                              !hasPermission
-                            }
+                            disabled={!meta.visible || locked}
                             className="mt-1"
                           />
                           <div className="min-w-0 space-y-2">
@@ -481,9 +423,7 @@ export function ConnectSettingsSection() {
                                   onCheckedChange={(checked) =>
                                     setBaseUrlVisible(url, checked)
                                   }
-                                  disabled={
-                                    updateMutation.isPending || !hasPermission
-                                  }
+                                  disabled={locked}
                                 />
                                 Show on Connect page
                               </Label>
@@ -496,9 +436,7 @@ export function ConnectSettingsSection() {
                               }
                               placeholder="Describe when to use this URL (e.g. internal VPN only)"
                               maxLength={500}
-                              disabled={
-                                updateMutation.isPending || !hasPermission
-                              }
+                              disabled={locked}
                               className="text-sm"
                             />
                           </div>
@@ -506,17 +444,13 @@ export function ConnectSettingsSection() {
                       );
                     })}
                   </RadioGroup>
-                </CardContent>
-              </Card>
-            )}
-            <Card>
-              <SettingsCardHeader
+                </SettingSection>
+              )}
+
+              <SettingSection
                 title="Visible clients"
-                description={
-                  'Control which clients are available on the "Connect" page.'
-                }
-              />
-              <CardContent>
+                description="Which clients are offered. “Any client” is always shown."
+              >
                 <MultiSelectCombobox
                   options={FILTERABLE_CLIENTS.map((c) => ({
                     value: c.id,
@@ -527,18 +461,14 @@ export function ConnectSettingsSection() {
                   onChange={setShownClientIds}
                   placeholder="Select clients…"
                   emptyMessage="No clients found."
-                  disabled={updateMutation.isPending || !hasPermission}
+                  disabled={locked}
                 />
-              </CardContent>
-            </Card>
-            <Card>
-              <SettingsCardHeader
+              </SettingSection>
+
+              <SettingSection
                 title="Visible providers"
-                description={
-                  'Control which providers are available on the "Connect" page.'
-                }
-              />
-              <CardContent>
+                description="Which LLM providers are offered."
+              >
                 <MultiSelectCombobox
                   options={ALL_PROVIDER_IDS.map((p) => ({
                     value: p,
@@ -551,20 +481,77 @@ export function ConnectSettingsSection() {
                   }
                   placeholder="Select providers…"
                   emptyMessage="No providers found."
-                  disabled={updateMutation.isPending || !hasPermission}
+                  disabled={locked}
                 />
-              </CardContent>
-            </Card>
+              </SettingSection>
+            </DialogBody>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={handleCancel}
+                disabled={!hasChanges || updateMutation.isPending}
+              >
+                Reset
+              </Button>
+              <Button
+                onClick={handleSave}
+                disabled={!hasChanges || locked}
+                data-testid="connect-settings-save"
+              >
+                {updateMutation.isPending ? "Saving…" : "Save"}
+              </Button>
+            </DialogFooter>
           </>
-        )}
-      </WithPermissions>
-      <SettingsSaveBar
-        hasChanges={hasChanges}
-        isSaving={updateMutation.isPending}
-        permissions={{ organizationSettings: ["update"] }}
-        onSave={handleSave}
-        onCancel={handleCancel}
-      />
-    </SettingsSectionStack>
+        );
+      }}
+    </WithPermissions>
+  );
+}
+
+// ===================================================================
+// Internal pieces
+// ===================================================================
+
+/** Compact dialog row: label + description left, a single control right. */
+function SettingRow({
+  title,
+  description,
+  children,
+}: {
+  title: string;
+  description: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2">
+      <div className="min-w-0">
+        <div className="text-sm font-medium text-foreground">{title}</div>
+        <div className="mt-0.5 text-[13px] text-muted-foreground">
+          {description}
+        </div>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+/** Full-width dialog section: header on top, content below. */
+function SettingSection({
+  title,
+  description,
+  children,
+}: {
+  title: string;
+  description: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <div>
+      <div className="text-sm font-medium text-foreground">{title}</div>
+      <div className="mb-3 mt-0.5 text-[13px] text-muted-foreground">
+        {description}
+      </div>
+      {children}
+    </div>
   );
 }

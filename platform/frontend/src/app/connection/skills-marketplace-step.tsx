@@ -36,13 +36,28 @@ import {
   SKILL_MARKETPLACE_TTL_PRESETS,
   type SkillMarketplaceClient,
 } from "./skills-marketplace-clients";
-import { StepCard, type StepState } from "./step-card";
 import { TerminalBlock } from "./terminal-block";
 
 interface SkillsMarketplaceStepProps {
-  client: ConnectClient | null;
-  expanded: boolean;
-  onToggle: (() => void) | undefined;
+  client: ConnectClient;
+}
+
+/**
+ * Whether the skills marketplace step applies: feature on, caller is a skill
+ * admin, and the picked client supports installable marketplaces. The flow
+ * uses this for wizard-step numbering; the component returns null without it.
+ */
+export function useSkillsMarketplaceVisible(
+  client: ConnectClient | null,
+): boolean {
+  const skillsEnabled = useFeature("agentSkillsEnabled") === true;
+  const { data: canAdmin } = useHasPermissions({ skill: ["admin"] });
+  return (
+    skillsEnabled &&
+    canAdmin === true &&
+    client !== null &&
+    isClientSupported(client)
+  );
 }
 
 /**
@@ -55,34 +70,13 @@ interface RevealedClone {
   marketplaceName: string;
 }
 
-export function SkillsMarketplaceStep({
-  client,
-  expanded,
-  onToggle,
-}: SkillsMarketplaceStepProps) {
-  const skillsEnabled = useFeature("agentSkillsEnabled") === true;
-  const { data: canAdmin } = useHasPermissions({ skill: ["admin"] });
+export function SkillsMarketplaceStep({ client }: SkillsMarketplaceStepProps) {
+  // hide the step entirely when skills don't apply to this user/client — the
+  // wizard rail numbering in connection-flow uses the same hook.
+  const visible = useSkillsMarketplaceVisible(client);
+  if (!visible) return null;
 
-  if (!skillsEnabled || !canAdmin) return null;
-
-  // hide the step entirely when the picked client doesn't support installable
-  // skill marketplaces — the user already knows their tool doesn't support it,
-  // we don't need to apologize in the UI.
-  if (client && !isClientSupported(client)) return null;
-
-  const state: StepState = !client ? "todo" : expanded ? "active" : "todo";
-
-  return (
-    <StepCard
-      hideStatus
-      title="Install shared skills"
-      state={state}
-      expanded={expanded && !!client}
-      onToggle={client ? onToggle : undefined}
-    >
-      {client && <SkillsMarketplaceBody client={client} />}
-    </StepCard>
-  );
+  return <SkillsMarketplaceBody client={client} />;
 }
 
 function SkillsMarketplaceBody({ client }: { client: ConnectClient }) {

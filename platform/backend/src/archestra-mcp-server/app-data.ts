@@ -76,7 +76,11 @@ const scopeField = z
 const GetSchema = z.strictObject({ key: keyField, scope: scopeField });
 const SetSchema = z.strictObject({
   key: keyField,
-  value: z.unknown().describe("Any JSON-serializable value."),
+  value: z
+    .unknown()
+    .describe(
+      "Any JSON-serializable value except null (use app_data_delete to clear a key). Pass objects/arrays directly — get returns exactly what was stored, no JSON.stringify needed.",
+    ),
   scope: scopeField,
 });
 const ListSchema = z.strictObject({ scope: scopeField });

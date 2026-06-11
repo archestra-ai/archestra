@@ -178,6 +178,36 @@ describe("AppDataModel", () => {
     expect(await AppDataModel.get({ ...shared, key: "k1" })).toBeNull();
   });
 
+  test("round-trips values by identity, including JSON-looking strings", async ({
+    makeApp,
+  }) => {
+    const app = await makeApp();
+    const shared = { appId: app.id, userId: null };
+    // a string that parses as JSON must come back as the same string — apps
+    // commonly store JSON.stringify(...) output (localStorage habit), and a
+    // double parse on read silently changes its type
+    const cases: [string, unknown][] = [
+      ["json-object-string", '{"x":1}'],
+      ["json-number-string", "42"],
+      ["json-bool-string", "true"],
+      ["plain-string", "hello"],
+      ["number", 42],
+      ["nested", { a: [1, "2", { b: null }] }],
+    ];
+    for (const [key, value] of cases) {
+      await AppDataModel.set({ ...shared, key, value });
+      expect(await AppDataModel.get({ ...shared, key })).toStrictEqual(value);
+    }
+
+    // top-level JSON null is reserved for "absent" and rejected cleanly,
+    // including values that merely serialize to it
+    for (const value of [null, Number.NaN, Number.POSITIVE_INFINITY]) {
+      await expect(
+        AppDataModel.set({ ...shared, key: "null-value", value }),
+      ).rejects.toBeInstanceOf(ApiError);
+    }
+  });
+
   test("rejects an oversized value cleanly", async ({ makeApp }) => {
     const app = await makeApp();
     const big = "x".repeat(APP_DATA_MAX_VALUE_BYTES + 1);

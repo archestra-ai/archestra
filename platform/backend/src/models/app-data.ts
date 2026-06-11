@@ -65,12 +65,25 @@ class AppDataModel {
     if (serialized === undefined) {
       throw new ApiError(400, "value must be JSON-serializable");
     }
+    // JSON null is reserved: get() returns null for an absent key, and the
+    // driver layer cannot bind it anyway. Checked on the serialized form so
+    // NaN/Infinity (which stringify to "null") cannot smuggle it in.
+    if (serialized === "null") {
+      throw new ApiError(
+        400,
+        "value must not be JSON null (null, NaN, and Infinity all serialize to it); delete the key to clear it",
+      );
+    }
     if (Buffer.byteLength(serialized, "utf8") > APP_DATA_MAX_VALUE_BYTES) {
       throw new ApiError(
         413,
         `value exceeds the ${APP_DATA_MAX_VALUE_BYTES}-byte limit`,
       );
     }
+    // persist the validated snapshot: the column's toDriver would otherwise
+    // re-stringify the live value, and a stateful toJSON() could store
+    // something other than what the guards above saw
+    const normalizedValue: unknown = JSON.parse(serialized);
 
     return await withDbTransaction(async (tx) => {
       // Serialize concurrent writes for this app so the entry-count cap holds
@@ -97,7 +110,7 @@ class AppDataModel {
       if (existing) {
         const [row] = await tx
           .update(schema.appDataTable)
-          .set({ value, updatedAt: new Date() })
+          .set({ value: normalizedValue, updatedAt: new Date() })
           .where(eq(schema.appDataTable.id, existing.id))
           .returning({
             key: schema.appDataTable.key,
@@ -120,7 +133,7 @@ class AppDataModel {
 
       const [row] = await tx
         .insert(schema.appDataTable)
-        .values({ appId, userId, key, value })
+        .values({ appId, userId, key, value: normalizedValue })
         .returning({
           key: schema.appDataTable.key,
           value: schema.appDataTable.value,

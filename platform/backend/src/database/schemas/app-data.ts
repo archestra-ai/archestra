@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import {
+  customType,
   index,
-  jsonb,
   pgTable,
   text,
   timestamp,
@@ -10,6 +10,23 @@ import {
 } from "drizzle-orm/pg-core";
 import appsTable from "./app";
 import usersTable from "./user";
+
+// drizzle's built-in jsonb() re-parses any string the driver returns, but pg
+// and PGlite already hand jsonb back parsed — so a stored JSON-string value
+// ('"42"', '"{\"x\":1}"') would be parsed a second time and come back as a
+// number/object. The store's contract is identity round-trip for any JSON
+// value, so map the driver value through untouched.
+const faithfulJsonb = customType<{ data: unknown; driverParam: string }>({
+  dataType() {
+    return "jsonb";
+  },
+  toDriver(value) {
+    return JSON.stringify(value);
+  },
+  fromDriver(value) {
+    return value;
+  },
+});
 
 /**
  * The App Data Store: per-app persistent storage exposed to app HTML through
@@ -38,7 +55,7 @@ const appDataTable = pgTable(
     // DB access makes the model the single writer, and the caps are
     // configurable constants (see types/app.ts) that a hardcoded CHECK would
     // contradict.
-    value: jsonb("value").$type<unknown>().notNull(),
+    value: faithfulJsonb("value").notNull(),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .notNull()

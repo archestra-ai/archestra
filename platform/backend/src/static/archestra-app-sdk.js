@@ -7,6 +7,9 @@
  *   archestra.user                  — { id, name } of the authenticated viewer (auto-auth)
  *   archestra.storage.user.*        — get/set/list/delete, private to the viewer
  *   archestra.storage.shared.*      — get/set/list/delete, shared by all users of the app
+ *     (values are plain JSON: get returns exactly what set stored, or null when
+ *     absent — set rejects top-level null, delete clears a key; list() returns
+ *     [{key, value}] entries, not keys)
  *   archestra.tools.call(name,args) — call an assigned tool with the viewer's credentials;
  *                                     throws { code: "auth_required", url } when the
  *                                     upstream MCP server needs (re)authentication

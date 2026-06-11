@@ -48,9 +48,6 @@ const REQUIREMENTS_FILE = "requirements.txt";
 // reserved at the skill root: the mount synthesizes this from the pinned
 // version body, so a resource file may not occupy it or any subpath of it.
 const SKILL_MANIFEST_FILE = "SKILL.md";
-// re-exported alias kept for the {@link} references below; the staging dir is
-// defined alongside the other container paths in runtime-image.
-const ATTACHMENTS_DIR = SKILL_SANDBOX_ATTACHMENTS_DIR;
 // covers the cold first install for a typical skill (pillow + a few siblings);
 // subsequent calls hit Dagger's layer cache and finish in ms.
 const REQUIREMENTS_INSTALL_TIMEOUT_SECONDS = 180;
@@ -847,7 +844,7 @@ function requirementsInstallCommands(
 
 /**
  * Stage the conversation's chat attachments into the default sandbox as upload
- * replay events under {@link ATTACHMENTS_DIR}, so the model can use files the
+ * replay events under {@link SKILL_SANDBOX_ATTACHMENTS_DIR}, so the model can use files the
  * user attached without knowing any attachment id. Idempotent and multi-turn
  * safe: only attachments not already staged (tracked via `source_attachment_id`)
  * are appended, and the DB-level partial unique index makes a concurrent repeat
@@ -961,7 +958,7 @@ function planAttachmentStaging(params: {
 
 /**
  * Map each conversation attachment to a deterministic, shell-safe absolute path
- * under {@link ATTACHMENTS_DIR}. Duplicate sanitized names get a short
+ * under {@link SKILL_SANDBOX_ATTACHMENTS_DIR}. Duplicate sanitized names get a short
  * attachment-id suffix; the input order (created_at, id) is stable, so a given
  * attachment always resolves to the same path across turns.
  */
@@ -982,7 +979,7 @@ function assignAttachmentPaths(
           : `${safe}-${short}`;
     }
     used.add(name);
-    paths.set(attachment.id, `${ATTACHMENTS_DIR}/${name}`);
+    paths.set(attachment.id, `${SKILL_SANDBOX_ATTACHMENTS_DIR}/${name}`);
   }
   return paths;
 }
@@ -1014,5 +1011,4 @@ export const __internals = {
   planAttachmentStaging,
   assignAttachmentPaths,
   sanitizeAttachmentName,
-  asSandboxId,
 };

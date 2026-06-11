@@ -325,6 +325,7 @@ function FilePreview({
       {kind === "markdown" && (
         <RemoteMarkdownPreview contentUrl={file.contentUrl} onClose={onClose} />
       )}
+      {kind === "html" && <HtmlPreview contentUrl={file.contentUrl} />}
       {kind === "image" && (
         <div className="flex h-full items-center justify-center p-4">
           <img
@@ -402,6 +403,37 @@ function RemoteMarkdownPreview({
       onToggle={onClose}
       embedded
       hideHeader
+    />
+  );
+}
+
+/**
+ * Render an HTML file in a sandboxed iframe. `allow-scripts` WITHOUT
+ * `allow-same-origin` puts the document in an opaque origin (the same isolation
+ * Claude uses for artifacts): scripts run so interactive HTML works, but it
+ * cannot read the app's cookies/session/localStorage, reach the parent DOM, or
+ * call same-origin APIs as the user. Served bytes are octet-stream, so we fetch
+ * the text and inline it via `srcDoc` rather than navigating the iframe to it.
+ */
+function HtmlPreview({ contentUrl }: { contentUrl: string }) {
+  const { text, failed } = useFileText(contentUrl);
+  if (failed) {
+    return (
+      <p className="p-4 text-xs text-muted-foreground">
+        Failed to load preview.
+      </p>
+    );
+  }
+  if (text === null) {
+    return <p className="p-4 text-xs text-muted-foreground">Loading…</p>;
+  }
+  return (
+    <iframe
+      title="HTML preview"
+      srcDoc={text}
+      sandbox="allow-scripts"
+      referrerPolicy="no-referrer"
+      className="h-full w-full border-0 bg-white"
     />
   );
 }

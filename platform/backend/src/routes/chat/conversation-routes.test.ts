@@ -877,3 +877,70 @@ describe("project chats: read-only access for project members", () => {
     expect(read.statusCode).toBe(404);
   });
 });
+
+describe("conversation list projectName", () => {
+  let app: FastifyInstanceWithZod;
+  let currentUser: User;
+  let organizationId: string;
+
+  beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
+    currentUser = await makeUser();
+    organizationId = (await makeOrganization()).id;
+    await makeMember(currentUser.id, organizationId, { role: "admin" });
+
+    app = createFastifyInstance();
+    app.addHook("onRequest", async (request) => {
+      (request as typeof request & { user: User }).user = currentUser;
+      (request as typeof request & { organizationId: string }).organizationId =
+        organizationId;
+    });
+    const { default: chatRoutes } = await import("./routes");
+    await app.register(chatRoutes);
+  });
+
+  afterEach(async () => {
+    await app.close();
+  });
+
+  test("project chats carry projectName; plain chats carry null", async ({
+    makeAgent,
+  }) => {
+    const { projectService } = await import("@/services/project");
+    const project = await projectService.create({
+      organizationId,
+      userId: currentUser.id,
+      name: "chip-source",
+      description: null,
+    });
+    const agent = await makeAgent({
+      organizationId,
+      authorId: currentUser.id,
+      scope: "personal",
+    });
+    await ConversationModel.create({
+      userId: currentUser.id,
+      organizationId,
+      agentId: agent.id,
+      projectId: project.id,
+      title: "in project",
+    });
+    await ConversationModel.create({
+      userId: currentUser.id,
+      organizationId,
+      agentId: agent.id,
+      title: "plain",
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/chat/conversations",
+    });
+    expect(response.statusCode).toBe(200);
+    const body = response.json<
+      Array<{ title: string | null; projectName: string | null }>
+    >();
+    const byTitle = Object.fromEntries(body.map((c) => [c.title, c]));
+    expect(byTitle["in project"].projectName).toBe("chip-source");
+    expect(byTitle.plain.projectName).toBeNull();
+  });
+});

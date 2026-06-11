@@ -26,6 +26,7 @@ import {
   Settings,
   Slack,
   Star,
+  Wrench,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -39,6 +40,7 @@ import {
   SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
+  SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
@@ -80,15 +82,121 @@ interface NavGroup {
   items: NavItem[];
 }
 
-// Primary nav items shown in the header (flat list, like sidebar-10 NavMain)
-const headerNavItems: NavItem[] = [
+type SidebarMode = "chats" | "harness";
+
+const SIDEBAR_MODE_STORAGE_KEY = "archestra-sidebar-mode";
+
+// Items of the Chats tab (flat list above Recents)
+const chatsNavItems: NavItem[] = [
   {
     title: "New Chat",
     url: "/chat",
     icon: MessageCircle,
     customIsActive: (pathname: string) => pathname === "/chat",
   },
+  {
+    title: "Projects",
+    url: "/projects",
+    icon: FolderKanban,
+    customIsActive: (pathname: string) => pathname.startsWith("/projects"),
+  },
+  {
+    title: "My Files",
+    url: "/my-files",
+    icon: FolderOpen,
+    customIsActive: (pathname: string) => pathname.startsWith("/my-files"),
+  },
 ];
+
+/** Which tab a route belongs to; null = no opinion (keep the current tab). */
+function routeSidebarMode(pathname: string): SidebarMode | null {
+  const chatPrefixes = ["/chat", "/projects", "/my-files"];
+  if (
+    chatPrefixes.some((p) => pathname === p || pathname.startsWith(`${p}/`))
+  ) {
+    return "chats";
+  }
+  const harnessPrefixes = [
+    "/agents",
+    "/scheduled-tasks",
+    "/mcp",
+    "/llm",
+    "/knowledge",
+    "/audit",
+    "/connection",
+  ];
+  if (
+    harnessPrefixes.some((p) => pathname === p || pathname.startsWith(`${p}/`))
+  ) {
+    return "harness";
+  }
+  return null;
+}
+
+/**
+ * Chats/Harness tab state: explicit picks persist, and navigation that
+ * clearly belongs to one tab (deep links included) switches to it.
+ */
+function useSidebarMode(pathname: string) {
+  const [mode, setMode] = React.useState<SidebarMode>(
+    () => routeSidebarMode(pathname) ?? "chats",
+  );
+
+  React.useEffect(() => {
+    const stored = window.localStorage.getItem(SIDEBAR_MODE_STORAGE_KEY);
+    if (
+      (stored === "chats" || stored === "harness") &&
+      routeSidebarMode(window.location.pathname) === null
+    ) {
+      setMode(stored);
+    }
+  }, []);
+
+  React.useEffect(() => {
+    const routeMode = routeSidebarMode(pathname);
+    if (routeMode) setMode(routeMode);
+  }, [pathname]);
+
+  const pick = React.useCallback((next: SidebarMode) => {
+    setMode(next);
+    window.localStorage.setItem(SIDEBAR_MODE_STORAGE_KEY, next);
+  }, []);
+
+  return [mode, pick] as const;
+}
+
+/** Segmented Chats/Harness control (hidden when the sidebar is collapsed). */
+function SidebarModeToggle({
+  mode,
+  onPick,
+}: {
+  mode: SidebarMode;
+  onPick: (mode: SidebarMode) => void;
+}) {
+  const segment = (value: SidebarMode, label: string, Icon: LucideIcon) => (
+    <button
+      type="button"
+      key={value}
+      onClick={() => onPick(value)}
+      className={cn(
+        "flex flex-1 items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-sm transition-colors",
+        mode === value
+          ? "bg-background font-medium text-foreground shadow-sm"
+          : "text-muted-foreground hover:text-foreground",
+      )}
+    >
+      <Icon className="h-4 w-4" />
+      {label}
+    </button>
+  );
+
+  return (
+    <div className="mx-2 mt-1 flex rounded-lg border bg-muted p-0.5 group-data-[collapsible=icon]:hidden">
+      {segment("chats", "Chats", MessageCircle)}
+      {segment("harness", "Harness", Wrench)}
+    </div>
+  );
+}
 
 // Labeled groups shown in the scrollable content (like sidebar-10 Favorites/Workspaces)
 const contentNavGroups: NavGroup[] = [
@@ -224,18 +332,6 @@ const contentNavGroups: NavGroup[] = [
         customIsActive: (pathname: string) =>
           pathname.startsWith("/connection"),
       },
-      {
-        title: "Projects",
-        url: "/projects",
-        icon: FolderKanban,
-        customIsActive: (pathname: string) => pathname.startsWith("/projects"),
-      },
-      {
-        title: "My Files",
-        url: "/my-files",
-        icon: FolderOpen,
-        customIsActive: (pathname: string) => pathname.startsWith("/my-files"),
-      },
     ],
   },
 ];
@@ -247,14 +343,12 @@ const NavPrimary = ({
   pathname,
   searchParams,
   permissionMap,
-  chatSection,
 }: {
   items: NavItem[];
   groups: NavGroup[];
   pathname: string;
   searchParams: URLSearchParams;
   permissionMap: Record<string, boolean>;
-  chatSection?: React.ReactNode;
 }) => {
   const { isMobile, setOpenMobile } = useSidebar();
 
@@ -279,7 +373,6 @@ const NavPrimary = ({
           <span>{item.title}</span>
         </SidebarPrefetchLink>
       </SidebarMenuButton>
-      {item.title === "New Chat" && chatSection}
       {item.subItems && item.subItems.length > 0 && (
         <SidebarMenuSub className="mx-0 ml-3.5 px-0 pl-2.5">
           {item.subItems
@@ -485,6 +578,16 @@ export function AppSidebar() {
   const skillsEnabled = useFeature("agentSkillsEnabled") === true;
   // My Files (sandbox artifacts) are gated behind the sandbox feature flag.
   const sandboxEnabled = useFeature("sandbox") === true;
+  const [sidebarMode, pickSidebarMode] = useSidebarMode(pathname);
+
+  // Projects and My Files exist only when the sandbox runtime is on.
+  const filteredChatsNavItems = React.useMemo(
+    () =>
+      chatsNavItems.filter(
+        (item) => item.title === "New Chat" || sandboxEnabled,
+      ),
+    [sandboxEnabled],
+  );
 
   // Filter nav groups based on connect permissions and feature flags
   const filteredNavGroups = React.useMemo(() => {
@@ -493,8 +596,6 @@ export function AppSidebar() {
       items: group.items
         .filter((item) => {
           if (item.title === "Connect" && !showConnect) return false;
-          if (item.title === "My Files" && !sandboxEnabled) return false;
-          if (item.title === "Projects" && !sandboxEnabled) return false;
           return true;
         })
         .map((item) =>
@@ -508,7 +609,7 @@ export function AppSidebar() {
             : item,
         ),
     }));
-  }, [showConnect, skillsEnabled, sandboxEnabled]);
+  }, [showConnect, skillsEnabled]);
 
   // Build additional links for UserButton popout menu
   const userMenuLinks = React.useMemo(() => {
@@ -547,14 +648,36 @@ export function AppSidebar() {
       <SidebarContent>
         {isAuthenticated && permissionMap && (
           <>
-            <NavPrimary
-              items={headerNavItems}
-              groups={filteredNavGroups}
-              pathname={pathname}
-              searchParams={searchParams}
-              permissionMap={permissionMap}
-              chatSection={<ChatSidebarSection />}
-            />
+            <SidebarModeToggle mode={sidebarMode} onPick={pickSidebarMode} />
+            {sidebarMode === "chats" ? (
+              <>
+                <NavPrimary
+                  items={filteredChatsNavItems}
+                  groups={[]}
+                  pathname={pathname}
+                  searchParams={searchParams}
+                  permissionMap={permissionMap}
+                />
+                <SidebarGroup className="pt-0">
+                  <SidebarGroupLabel>Recents</SidebarGroupLabel>
+                  <SidebarGroupContent>
+                    <SidebarMenu>
+                      <SidebarMenuItem>
+                        <ChatSidebarSection slots={15} flat />
+                      </SidebarMenuItem>
+                    </SidebarMenu>
+                  </SidebarGroupContent>
+                </SidebarGroup>
+              </>
+            ) : (
+              <NavPrimary
+                items={[]}
+                groups={filteredNavGroups}
+                pathname={pathname}
+                searchParams={searchParams}
+                permissionMap={permissionMap}
+              />
+            )}
             <NavSecondary
               items={[]}
               pathname={pathname}

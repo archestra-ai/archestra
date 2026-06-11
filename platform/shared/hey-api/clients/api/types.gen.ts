@@ -19859,6 +19859,7 @@ export type GetChatConversationsResponses = {
             id: string;
             visibility: 'organization' | 'team' | 'user';
         } | null;
+        projectName?: string | null;
         messages: Array<unknown>;
         chatErrors: Array<{
             id: string;
@@ -20014,6 +20015,7 @@ export type CreateChatConversationResponses = {
             id: string;
             visibility: 'organization' | 'team' | 'user';
         } | null;
+        projectName?: string | null;
         messages: Array<unknown>;
         chatErrors: Array<{
             id: string;
@@ -20250,6 +20252,7 @@ export type GetChatConversationResponses = {
             id: string;
             visibility: 'organization' | 'team' | 'user';
         } | null;
+        projectName?: string | null;
         messages: Array<unknown>;
         chatErrors: Array<{
             id: string;
@@ -20408,6 +20411,7 @@ export type UpdateChatConversationResponses = {
             id: string;
             visibility: 'organization' | 'team' | 'user';
         } | null;
+        projectName?: string | null;
         messages: Array<unknown>;
         chatErrors: Array<{
             id: string;
@@ -20918,6 +20922,7 @@ export type ForkChatConversationResponses = {
             id: string;
             visibility: 'organization' | 'team' | 'user';
         } | null;
+        projectName?: string | null;
         messages: Array<unknown>;
         chatErrors: Array<{
             id: string;
@@ -21173,6 +21178,7 @@ export type CompactChatConversationResponses = {
                 id: string;
                 visibility: 'organization' | 'team' | 'user';
             } | null;
+            projectName?: string | null;
             messages: Array<unknown>;
             chatErrors: Array<{
                 id: string;
@@ -21598,6 +21604,7 @@ export type GetSharedConversationResponses = {
             id: string;
             visibility: 'organization' | 'team' | 'user';
         } | null;
+        projectName?: string | null;
         messages: Array<unknown>;
         chatErrors: Array<{
             id: string;
@@ -21752,6 +21759,7 @@ export type ForkSharedConversationResponses = {
             id: string;
             visibility: 'organization' | 'team' | 'user';
         } | null;
+        projectName?: string | null;
         messages: Array<unknown>;
         chatErrors: Array<{
             id: string;
@@ -21908,6 +21916,7 @@ export type GenerateChatConversationTitleResponses = {
             id: string;
             visibility: 'organization' | 'team' | 'user';
         } | null;
+        projectName?: string | null;
         messages: Array<unknown>;
         chatErrors: Array<{
             id: string;
@@ -22063,6 +22072,7 @@ export type UpdateChatMessageResponses = {
             id: string;
             visibility: 'organization' | 'team' | 'user';
         } | null;
+        projectName?: string | null;
         messages: Array<unknown>;
         chatErrors: Array<{
             id: string;
@@ -50280,6 +50290,7 @@ export type CreateScheduleTriggerRunConversationResponses = {
             id: string;
             visibility: 'organization' | 'team' | 'user';
         } | null;
+        projectName?: string | null;
         messages: Array<unknown>;
         chatErrors: Array<{
             id: string;

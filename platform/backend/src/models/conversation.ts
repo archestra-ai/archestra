@@ -124,6 +124,7 @@ class ConversationModel {
             id: schema.conversationSharesTable.id,
             visibility: schema.conversationSharesTable.visibility,
           },
+          projectName: schema.projectsTable.name,
           agent: {
             id: schema.agentsTable.id,
             name: schema.agentsTable.name,
@@ -166,6 +167,10 @@ class ConversationModel {
             schema.conversationSharesTable.conversationId,
           ),
         )
+        .leftJoin(
+          schema.projectsTable,
+          eq(schema.conversationsTable.projectId, schema.projectsTable.id),
+        )
         .where(and(...conditions))
         .orderBy(
           desc(schema.conversationsTable.lastMessageAt),
@@ -190,6 +195,7 @@ class ConversationModel {
           conversationMap.set(conversationId, {
             ...withVisibleAgent(row.conversation, row.agent),
             share: row.share?.id ? row.share : null,
+            projectName: row.projectName ?? null,
             messages: [],
             chatErrors: [],
             compactions: [],
@@ -226,6 +232,7 @@ class ConversationModel {
             id: schema.conversationSharesTable.id,
             visibility: schema.conversationSharesTable.visibility,
           },
+          projectName: schema.projectsTable.name,
           agent: {
             id: schema.agentsTable.id,
             name: schema.agentsTable.name,
@@ -248,12 +255,17 @@ class ConversationModel {
             schema.conversationSharesTable.conversationId,
           ),
         )
+        .leftJoin(
+          schema.projectsTable,
+          eq(schema.conversationsTable.projectId, schema.projectsTable.id),
+        )
         .where(and(...conditions))
         .orderBy(desc(schema.conversationsTable.lastMessageAt));
 
       return rows.map((row) => ({
         ...withVisibleAgent(row.conversation, row.agent),
         share: row.share?.id ? row.share : null,
+        projectName: row.projectName ?? null,
         messages: [], // Messages fetched separately via findById
         chatErrors: [],
         compactions: [],

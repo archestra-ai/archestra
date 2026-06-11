@@ -245,6 +245,15 @@ export const ConnectionBaseUrlSchema = z.object({
   visible: z.boolean().default(true),
 });
 
+/** provider → llm_provider_api_keys.id for auto-provisioned connection virtual keys. */
+export const ConnectionDefaultProviderKeysSchema = z.partialRecord(
+  SupportedProvidersSchema,
+  z.string().uuid(),
+);
+export type ConnectionDefaultProviderKeys = z.infer<
+  typeof ConnectionDefaultProviderKeysSchema
+>;
+
 export const OnboardingWizardPageSchema = z.object({
   image: Base64ImageSchema.optional(),
   content: z.string(),
@@ -320,6 +329,7 @@ const extendedFields = {
   showTwoFactor: z.boolean(),
   oauthAccessTokenLifetimeSeconds: OAuthAccessTokenLifetimeSecondsSchema,
   connectionBaseUrls: z.array(ConnectionBaseUrlSchema).nullable(),
+  connectionDefaultProviderKeys: ConnectionDefaultProviderKeysSchema.nullable(),
   defaultNetworkPolicy: NetworkPolicySchema.nullable(),
 };
 
@@ -403,6 +413,8 @@ export const UpdateAuthSettingsSchema = z.object({
 
 export const UpdateConnectionSettingsSchema = z.object({
   connectionDefaultMcpGatewayId: z.string().uuid().nullable().optional(),
+  connectionDefaultProviderKeys:
+    ConnectionDefaultProviderKeysSchema.nullable().optional(),
   connectionDefaultLlmProxyId: z.string().uuid().nullable().optional(),
   connectionDefaultClientId: z.string().max(64).nullable().optional(),
   connectionShownClientIds: z

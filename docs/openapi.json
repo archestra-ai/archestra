@@ -35659,6 +35659,9 @@
                           "isPersonalGateway": {
                             "type": "boolean"
                           },
+                          "isPersonalProxy": {
+                            "type": "boolean"
+                          },
                           "considerContextUntrusted": {
                             "type": "boolean"
                           },
@@ -36070,6 +36073,7 @@
                           "slug",
                           "isDefault",
                           "isPersonalGateway",
+                          "isPersonalProxy",
                           "considerContextUntrusted",
                           "agentType",
                           "systemPrompt",
@@ -36414,6 +36418,9 @@
                   "isDefault": {
                     "type": "boolean"
                   },
+                  "isPersonalProxy": {
+                    "type": "boolean"
+                  },
                   "considerContextUntrusted": {
                     "type": "boolean"
                   },
@@ -36701,6 +36708,9 @@
                       "type": "boolean"
                     },
                     "isPersonalGateway": {
+                      "type": "boolean"
+                    },
+                    "isPersonalProxy": {
                       "type": "boolean"
                     },
                     "considerContextUntrusted": {
@@ -37114,6 +37124,7 @@
                     "slug",
                     "isDefault",
                     "isPersonalGateway",
+                    "isPersonalProxy",
                     "considerContextUntrusted",
                     "agentType",
                     "systemPrompt",
@@ -37510,6 +37521,9 @@
                         "type": "boolean"
                       },
                       "isPersonalGateway": {
+                        "type": "boolean"
+                      },
+                      "isPersonalProxy": {
                         "type": "boolean"
                       },
                       "considerContextUntrusted": {
@@ -37923,6 +37937,7 @@
                       "slug",
                       "isDefault",
                       "isPersonalGateway",
+                      "isPersonalProxy",
                       "considerContextUntrusted",
                       "agentType",
                       "systemPrompt",
@@ -38239,6 +38254,9 @@
                     "isPersonalGateway": {
                       "type": "boolean"
                     },
+                    "isPersonalProxy": {
+                      "type": "boolean"
+                    },
                     "considerContextUntrusted": {
                       "type": "boolean"
                     },
@@ -38650,6 +38668,7 @@
                     "slug",
                     "isDefault",
                     "isPersonalGateway",
+                    "isPersonalProxy",
                     "considerContextUntrusted",
                     "agentType",
                     "systemPrompt",
@@ -38966,6 +38985,9 @@
                     "isPersonalGateway": {
                       "type": "boolean"
                     },
+                    "isPersonalProxy": {
+                      "type": "boolean"
+                    },
                     "considerContextUntrusted": {
                       "type": "boolean"
                     },
@@ -39377,6 +39399,7 @@
                     "slug",
                     "isDefault",
                     "isPersonalGateway",
+                    "isPersonalProxy",
                     "considerContextUntrusted",
                     "agentType",
                     "systemPrompt",
@@ -40033,6 +40056,9 @@
                         "isPersonalGateway": {
                           "type": "boolean"
                         },
+                        "isPersonalProxy": {
+                          "type": "boolean"
+                        },
                         "considerContextUntrusted": {
                           "type": "boolean"
                         },
@@ -40444,6 +40470,7 @@
                         "slug",
                         "isDefault",
                         "isPersonalGateway",
+                        "isPersonalProxy",
                         "considerContextUntrusted",
                         "agentType",
                         "systemPrompt",
@@ -40807,6 +40834,9 @@
                     "isPersonalGateway": {
                       "type": "boolean"
                     },
+                    "isPersonalProxy": {
+                      "type": "boolean"
+                    },
                     "considerContextUntrusted": {
                       "type": "boolean"
                     },
@@ -41218,6 +41248,7 @@
                     "slug",
                     "isDefault",
                     "isPersonalGateway",
+                    "isPersonalProxy",
                     "considerContextUntrusted",
                     "agentType",
                     "systemPrompt",
@@ -41514,6 +41545,9 @@
                   "isDefault": {
                     "type": "boolean"
                   },
+                  "isPersonalProxy": {
+                    "type": "boolean"
+                  },
                   "considerContextUntrusted": {
                     "type": "boolean"
                   },
@@ -41806,6 +41840,9 @@
                       "type": "boolean"
                     },
                     "isPersonalGateway": {
+                      "type": "boolean"
+                    },
+                    "isPersonalProxy": {
                       "type": "boolean"
                     },
                     "considerContextUntrusted": {
@@ -42219,6 +42256,7 @@
                     "slug",
                     "isDefault",
                     "isPersonalGateway",
+                    "isPersonalProxy",
                     "considerContextUntrusted",
                     "agentType",
                     "systemPrompt",
@@ -42819,6 +42857,9 @@
                     "isPersonalGateway": {
                       "type": "boolean"
                     },
+                    "isPersonalProxy": {
+                      "type": "boolean"
+                    },
                     "considerContextUntrusted": {
                       "type": "boolean"
                     },
@@ -43230,6 +43271,7 @@
                     "slug",
                     "isDefault",
                     "isPersonalGateway",
+                    "isPersonalProxy",
                     "considerContextUntrusted",
                     "agentType",
                     "systemPrompt",
@@ -44153,6 +44195,9 @@
                     "isPersonalGateway": {
                       "type": "boolean"
                     },
+                    "isPersonalProxy": {
+                      "type": "boolean"
+                    },
                     "considerContextUntrusted": {
                       "type": "boolean"
                     },
@@ -44564,6 +44609,7 @@
                     "slug",
                     "isDefault",
                     "isPersonalGateway",
+                    "isPersonalProxy",
                     "considerContextUntrusted",
                     "agentType",
                     "systemPrompt",
@@ -84795,6 +84841,410 @@
                 }
               }
             }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
+        }
+      }
+    },
+    "/api/connection-setups": {
+      "post": {
+        "operationId": "createConnectionSetup",
+        "tags": [
+          "Connection Setups"
+        ],
+        "description": "Persist /connection wizard selections and return a one-time `curl | bash` command. The command's setup token is shown exactly once and expires after 15 minutes.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "clientId": {
+                    "type": "string",
+                    "enum": [
+                      "claude-code",
+                      "codex",
+                      "copilot-cli",
+                      "cursor"
+                    ]
+                  },
+                  "baseUrl": {
+                    "type": "string",
+                    "maxLength": 2048,
+                    "format": "uri"
+                  },
+                  "mcpGatewayId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "llmProxyId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "provider": {
+                    "type": "string",
+                    "enum": [
+                      "openai",
+                      "gemini",
+                      "anthropic",
+                      "bedrock",
+                      "cohere",
+                      "cerebras",
+                      "mistral",
+                      "perplexity",
+                      "groq",
+                      "xai",
+                      "openrouter",
+                      "vllm",
+                      "ollama",
+                      "zhipuai",
+                      "deepseek",
+                      "minimax",
+                      "azure"
+                    ]
+                  },
+                  "proxyAuth": {
+                    "default": "provider-key",
+                    "type": "string",
+                    "enum": [
+                      "provider-key",
+                      "virtual-key"
+                    ]
+                  },
+                  "skills": {
+                    "type": "object",
+                    "properties": {
+                      "skillIds": {
+                        "minItems": 1,
+                        "maxItems": 200,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        }
+                      },
+                      "ttlDays": {
+                        "nullable": true,
+                        "type": "integer",
+                        "exclusiveMinimum": true,
+                        "maximum": 3650
+                      }
+                    },
+                    "required": [
+                      "skillIds",
+                      "ttlDays"
+                    ]
+                  }
+                },
+                "required": [
+                  "clientId",
+                  "baseUrl"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "command": {
+                      "type": "string"
+                    },
+                    "expiresAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "tokenStart": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "command",
+                    "expiresAt",
+                    "tokenStart"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
+        }
+      }
+    },
+    "/api/connection-setups/script/{token}": {
+      "get": {
+        "operationId": "getConnectionSetupScript",
+        "tags": [
+          "Connection Setups"
+        ],
+        "description": "Serve the rendered one-time setup script for a connection setup. Authenticates via the one-time token in the path; the token is consumed atomically on the first successful render.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 20,
+              "maxLength": 256
+            },
+            "in": "path",
+            "name": "token",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
           }
         },
         "x-required-permissions": {
@@ -174147,6 +174597,15 @@
                         "additionalProperties": false
                       }
                     },
+                    "connectionDefaultProviderKeys": {
+                      "nullable": true,
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      }
+                    },
                     "defaultEnvironmentName": {
                       "nullable": true,
                       "type": "string"
@@ -174263,6 +174722,7 @@
                     "connectionShownClientIds",
                     "connectionShownProviders",
                     "connectionBaseUrls",
+                    "connectionDefaultProviderKeys",
                     "defaultEnvironmentName",
                     "defaultEnvironmentNamespace",
                     "defaultEnvironmentDescription",
@@ -175060,6 +175520,15 @@
                         "additionalProperties": false
                       }
                     },
+                    "connectionDefaultProviderKeys": {
+                      "nullable": true,
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      }
+                    },
                     "defaultEnvironmentName": {
                       "nullable": true,
                       "type": "string"
@@ -175176,6 +175645,7 @@
                     "connectionShownClientIds",
                     "connectionShownProviders",
                     "connectionBaseUrls",
+                    "connectionDefaultProviderKeys",
                     "defaultEnvironmentName",
                     "defaultEnvironmentNamespace",
                     "defaultEnvironmentDescription",
@@ -176245,6 +176715,15 @@
                         "additionalProperties": false
                       }
                     },
+                    "connectionDefaultProviderKeys": {
+                      "nullable": true,
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      }
+                    },
                     "defaultEnvironmentName": {
                       "nullable": true,
                       "type": "string"
@@ -176361,6 +176840,7 @@
                     "connectionShownClientIds",
                     "connectionShownProviders",
                     "connectionBaseUrls",
+                    "connectionDefaultProviderKeys",
                     "defaultEnvironmentName",
                     "defaultEnvironmentNamespace",
                     "defaultEnvironmentDescription",
@@ -177044,6 +177524,15 @@
                         "additionalProperties": false
                       }
                     },
+                    "connectionDefaultProviderKeys": {
+                      "nullable": true,
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      }
+                    },
                     "defaultEnvironmentName": {
                       "nullable": true,
                       "type": "string"
@@ -177160,6 +177649,7 @@
                     "connectionShownClientIds",
                     "connectionShownProviders",
                     "connectionBaseUrls",
+                    "connectionDefaultProviderKeys",
                     "defaultEnvironmentName",
                     "defaultEnvironmentNamespace",
                     "defaultEnvironmentDescription",
@@ -177826,6 +178316,15 @@
                         "additionalProperties": false
                       }
                     },
+                    "connectionDefaultProviderKeys": {
+                      "nullable": true,
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      }
+                    },
                     "defaultEnvironmentName": {
                       "nullable": true,
                       "type": "string"
@@ -177942,6 +178441,7 @@
                     "connectionShownClientIds",
                     "connectionShownProviders",
                     "connectionBaseUrls",
+                    "connectionDefaultProviderKeys",
                     "defaultEnvironmentName",
                     "defaultEnvironmentNamespace",
                     "defaultEnvironmentDescription",
@@ -178212,6 +178712,15 @@
                     "type": "string",
                     "format": "uuid",
                     "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "connectionDefaultProviderKeys": {
+                    "nullable": true,
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    }
                   },
                   "connectionDefaultLlmProxyId": {
                     "nullable": true,
@@ -178670,6 +179179,15 @@
                         "additionalProperties": false
                       }
                     },
+                    "connectionDefaultProviderKeys": {
+                      "nullable": true,
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      }
+                    },
                     "defaultEnvironmentName": {
                       "nullable": true,
                       "type": "string"
@@ -178786,6 +179304,7 @@
                     "connectionShownClientIds",
                     "connectionShownProviders",
                     "connectionBaseUrls",
+                    "connectionDefaultProviderKeys",
                     "defaultEnvironmentName",
                     "defaultEnvironmentNamespace",
                     "defaultEnvironmentDescription",
@@ -179494,6 +180013,15 @@
                         "additionalProperties": false
                       }
                     },
+                    "connectionDefaultProviderKeys": {
+                      "nullable": true,
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      }
+                    },
                     "defaultEnvironmentName": {
                       "nullable": true,
                       "type": "string"
@@ -179610,6 +180138,7 @@
                     "connectionShownClientIds",
                     "connectionShownProviders",
                     "connectionBaseUrls",
+                    "connectionDefaultProviderKeys",
                     "defaultEnvironmentName",
                     "defaultEnvironmentNamespace",
                     "defaultEnvironmentDescription",
@@ -180263,6 +180792,15 @@
                         "additionalProperties": false
                       }
                     },
+                    "connectionDefaultProviderKeys": {
+                      "nullable": true,
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      }
+                    },
                     "defaultEnvironmentName": {
                       "nullable": true,
                       "type": "string"
@@ -180379,6 +180917,7 @@
                     "connectionShownClientIds",
                     "connectionShownProviders",
                     "connectionBaseUrls",
+                    "connectionDefaultProviderKeys",
                     "defaultEnvironmentName",
                     "defaultEnvironmentNamespace",
                     "defaultEnvironmentDescription",
@@ -181045,6 +181584,15 @@
                         "additionalProperties": false
                       }
                     },
+                    "connectionDefaultProviderKeys": {
+                      "nullable": true,
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      }
+                    },
                     "defaultEnvironmentName": {
                       "nullable": true,
                       "type": "string"
@@ -181161,6 +181709,7 @@
                     "connectionShownClientIds",
                     "connectionShownProviders",
                     "connectionBaseUrls",
+                    "connectionDefaultProviderKeys",
                     "defaultEnvironmentName",
                     "defaultEnvironmentNamespace",
                     "defaultEnvironmentDescription",
@@ -181794,6 +182343,15 @@
                         "additionalProperties": false
                       }
                     },
+                    "connectionDefaultProviderKeys": {
+                      "nullable": true,
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      }
+                    },
                     "defaultEnvironmentName": {
                       "nullable": true,
                       "type": "string"
@@ -181910,6 +182468,7 @@
                     "connectionShownClientIds",
                     "connectionShownProviders",
                     "connectionBaseUrls",
+                    "connectionDefaultProviderKeys",
                     "defaultEnvironmentName",
                     "defaultEnvironmentNamespace",
                     "defaultEnvironmentDescription",
@@ -182856,6 +183415,15 @@
                         "additionalProperties": false
                       }
                     },
+                    "connectionDefaultProviderKeys": {
+                      "nullable": true,
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      }
+                    },
                     "defaultEnvironmentName": {
                       "nullable": true,
                       "type": "string"
@@ -182972,6 +183540,7 @@
                     "connectionShownClientIds",
                     "connectionShownProviders",
                     "connectionBaseUrls",
+                    "connectionDefaultProviderKeys",
                     "defaultEnvironmentName",
                     "defaultEnvironmentNamespace",
                     "defaultEnvironmentDescription",

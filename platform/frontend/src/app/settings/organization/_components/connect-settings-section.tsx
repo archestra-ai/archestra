@@ -5,10 +5,14 @@ import {
   type SupportedProvider,
   SupportedProviders,
 } from "@archestra/shared";
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { ClientIcon } from "@/app/connection/client-icon";
 import { CONNECT_CLIENTS } from "@/app/connection/clients";
 import { getShownProviders } from "@/app/connection/connection-flow.utils";
+import { AgentIcon } from "@/components/agent-icon";
 import { CodeText } from "@/components/code-text";
+import { ProviderIcon } from "@/components/provider-icon";
 import { WithPermissions } from "@/components/roles/with-permissions";
 import {
   SettingsBlock,
@@ -19,22 +23,17 @@ import {
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { MultiSelectCombobox } from "@/components/ui/multi-select-combobox";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { SingleSelectCombobox } from "@/components/ui/single-select-combobox";
 import { Switch } from "@/components/ui/switch";
 import { useProfiles } from "@/lib/agent.query";
 import config from "@/lib/config/config";
+import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import {
   useOrganization,
   useUpdateConnectionSettings,
 } from "@/lib/organization.query";
-import { ComboboxPicker } from "./connect-combobox-picker";
 import {
   applyDefaultBaseUrl,
   applyVisibility,
@@ -73,6 +72,11 @@ export function ConnectSettingsSection() {
       { description: string; isDefault: boolean; visible: boolean }
     >
   >({});
+  // provider → provider API key id used by auto-provisioned setup virtual keys
+  const [defaultProviderKeys, setDefaultProviderKeys] = useState<
+    Record<string, string>
+  >({});
+  const { data: providerApiKeys } = useLlmProviderApiKeys();
 
   // Env-configured candidate URLs the admin can curate. Keep order stable so
   // the UI mirrors what end users see in the dropdowns elsewhere.
@@ -86,6 +90,12 @@ export function ConnectSettingsSection() {
     setShownClientIds(organization.connectionShownClientIds ?? ALL_CLIENT_IDS);
     setShownProviders(getShownProviders(organization) ?? ALL_PROVIDER_IDS);
     setBaseUrlMeta(buildBaseUrlMeta(organization.connectionBaseUrls ?? null));
+    setDefaultProviderKeys(
+      (organization.connectionDefaultProviderKeys ?? {}) as Record<
+        string,
+        string
+      >,
+    );
   }, [organization]);
 
   const updateMutation = useUpdateConnectionSettings(
@@ -125,7 +135,15 @@ export function ConnectSettingsSection() {
     [baseUrlMeta, serverBaseUrlMeta, envBaseUrls],
   );
 
+  const serverDefaultProviderKeys =
+    (organization?.connectionDefaultProviderKeys ?? {}) as Record<
+      string,
+      string
+    >;
+
   const hasChanges =
+    JSON.stringify(defaultProviderKeys) !==
+      JSON.stringify(serverDefaultProviderKeys) ||
     gatewayId !== serverGatewayId ||
     proxyId !== serverProxyId ||
     defaultClientId !== serverDefaultClientId ||
@@ -150,6 +168,10 @@ export function ConnectSettingsSection() {
       connectionShownClientIds: collapseIfAll(shownClientIds, ALL_CLIENT_IDS),
       connectionShownProviders: collapseIfAll(shownProviders, ALL_PROVIDER_IDS),
       connectionBaseUrls: collapseBaseUrlMeta(envBaseUrls, baseUrlMeta),
+      connectionDefaultProviderKeys:
+        Object.keys(defaultProviderKeys).length > 0
+          ? defaultProviderKeys
+          : null,
     });
   };
 
@@ -160,6 +182,7 @@ export function ConnectSettingsSection() {
     setShownClientIds(serverShownClients);
     setShownProviders(serverShownProviders);
     setBaseUrlMeta(serverBaseUrlMeta);
+    setDefaultProviderKeys(serverDefaultProviderKeys);
   };
 
   const setBaseUrlDescription = (url: string, description: string) =>
@@ -182,6 +205,16 @@ export function ConnectSettingsSection() {
   const gatewayItems = mcpGateways ?? [];
   const proxyItems = llmProxies ?? [];
 
+  const providerKeysByProvider = useMemo(() => {
+    const grouped = new Map<string, { id: string; name: string }[]>();
+    for (const key of providerApiKeys ?? []) {
+      const list = grouped.get(key.provider) ?? [];
+      list.push({ id: key.id, name: key.name });
+      grouped.set(key.provider, list);
+    }
+    return grouped;
+  }, [providerApiKeys]);
+
   return (
     <SettingsSectionStack>
       <SettingsBlock
@@ -195,27 +228,29 @@ export function ConnectSettingsSection() {
             noPermissionHandle="tooltip"
           >
             {({ hasPermission }) => (
-              <Select
+              <SingleSelectCombobox
+                className="w-64"
                 value={gatewayId ?? DEFAULT_VALUE}
-                onValueChange={(value) =>
+                onChange={(value) =>
                   setGatewayId(value === DEFAULT_VALUE ? null : value)
                 }
+                options={[
+                  { value: DEFAULT_VALUE, label: "Each user personal" },
+                  ...gatewayItems.map((g) => ({
+                    value: g.id,
+                    label: g.name,
+                    icon: (
+                      <AgentIcon
+                        icon={g.icon}
+                        fallbackType="mcp_gateway"
+                        size={16}
+                      />
+                    ),
+                  })),
+                ]}
+                searchPlaceholder="Search gateways…"
                 disabled={updateMutation.isPending || !hasPermission}
-              >
-                <SelectTrigger className="w-64">
-                  <SelectValue placeholder="Each user personal" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={DEFAULT_VALUE}>
-                    Each user personal
-                  </SelectItem>
-                  {gatewayItems.map((g) => (
-                    <SelectItem key={g.id} value={g.id}>
-                      {g.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              />
             )}
           </WithPermissions>
         }
@@ -231,33 +266,105 @@ export function ConnectSettingsSection() {
             noPermissionHandle="tooltip"
           >
             {({ hasPermission }) => (
-              <Select
+              <SingleSelectCombobox
+                className="w-64"
                 value={proxyId ?? DEFAULT_VALUE}
-                onValueChange={(value) =>
+                onChange={(value) =>
                   setProxyId(value === DEFAULT_VALUE ? null : value)
                 }
-                disabled={updateMutation.isPending || !hasPermission}
-              >
-                <SelectTrigger className="w-64">
-                  <SelectValue placeholder="Default LLM Proxy" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={DEFAULT_VALUE}>
-                    Default LLM Proxy
-                  </SelectItem>
-                  {proxyItems
+                options={[
+                  { value: DEFAULT_VALUE, label: "Each user personal" },
+                  ...proxyItems
                     .filter((p) => !p.isDefault)
-                    .map((p) => (
-                      <SelectItem key={p.id} value={p.id}>
-                        {p.name}
-                      </SelectItem>
-                    ))}
-                </SelectContent>
-              </Select>
+                    .map((p) => ({
+                      value: p.id,
+                      label: p.name,
+                      icon: (
+                        <AgentIcon
+                          icon={p.icon}
+                          fallbackType="llm_proxy"
+                          size={16}
+                        />
+                      ),
+                    })),
+                ]}
+                searchPlaceholder="Search proxies…"
+                disabled={updateMutation.isPending || !hasPermission}
+              />
             )}
           </WithPermissions>
         }
       />
+      <Card>
+        <SettingsCardHeader
+          title="Default provider keys for setup commands"
+          description="When a user generates a one-command setup on the Connect page and chooses a virtual key, this controls which provider API key it maps to. Providers left on Automatic fall back to the user's own key resolution (personal, then team, then organization)."
+        />
+        <CardContent>
+          {providerKeysByProvider.size === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              No provider API keys configured yet. Add one under{" "}
+              <Link href="/settings/llm" className="underline">
+                LLM provider keys
+              </Link>{" "}
+              to set a default.
+            </p>
+          ) : (
+            <WithPermissions
+              permissions={{ organizationSettings: ["update"] }}
+              noPermissionHandle="tooltip"
+            >
+              {({ hasPermission }) => (
+                <div className="grid gap-2.5">
+                  {[...providerKeysByProvider.entries()].map(
+                    ([provider, keys]) => (
+                      <div
+                        key={provider}
+                        className="grid grid-cols-[minmax(0,1fr)_240px] items-center gap-3 rounded-lg border bg-card/40 p-3"
+                      >
+                        <div className="flex min-w-0 items-center gap-2">
+                          <ProviderIcon
+                            provider={provider as SupportedProvider}
+                          />
+                          <span className="truncate text-sm font-medium">
+                            {providerDisplayNames[
+                              provider as SupportedProvider
+                            ] ?? provider}
+                          </span>
+                        </div>
+                        <SingleSelectCombobox
+                          className="w-full"
+                          value={defaultProviderKeys[provider] ?? DEFAULT_VALUE}
+                          onChange={(value) =>
+                            setDefaultProviderKeys((prev) => {
+                              const next = { ...prev };
+                              if (value === DEFAULT_VALUE) {
+                                delete next[provider];
+                              } else {
+                                next[provider] = value;
+                              }
+                              return next;
+                            })
+                          }
+                          options={[
+                            { value: DEFAULT_VALUE, label: "Automatic" },
+                            ...keys.map((key) => ({
+                              value: key.id,
+                              label: key.name,
+                            })),
+                          ]}
+                          searchPlaceholder="Search keys…"
+                          disabled={updateMutation.isPending || !hasPermission}
+                        />
+                      </div>
+                    ),
+                  )}
+                </div>
+              )}
+            </WithPermissions>
+          )}
+        </CardContent>
+      </Card>
       <SettingsBlock
         title="Default client"
         description={
@@ -269,25 +376,23 @@ export function ConnectSettingsSection() {
             noPermissionHandle="tooltip"
           >
             {({ hasPermission }) => (
-              <Select
+              <SingleSelectCombobox
+                className="w-64"
                 value={defaultClientId ?? "none"}
-                onValueChange={(value) =>
+                onChange={(value) =>
                   setDefaultClientId(value === "none" ? null : value)
                 }
+                options={[
+                  { value: "none", label: "Not selected" },
+                  ...CONNECT_CLIENTS.map((c) => ({
+                    value: c.id,
+                    label: c.label,
+                    icon: <ClientIcon client={c} size={18} />,
+                  })),
+                ]}
+                searchPlaceholder="Search clients…"
                 disabled={updateMutation.isPending || !hasPermission}
-              >
-                <SelectTrigger className="w-64">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Not selected</SelectItem>
-                  {CONNECT_CLIENTS.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>
-                      {c.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              />
             )}
           </WithPermissions>
         }
@@ -412,15 +517,16 @@ export function ConnectSettingsSection() {
                 }
               />
               <CardContent>
-                <ComboboxPicker
-                  items={FILTERABLE_CLIENTS.map((c) => ({
+                <MultiSelectCombobox
+                  options={FILTERABLE_CLIENTS.map((c) => ({
                     value: c.id,
                     label: c.label,
+                    icon: <ClientIcon client={c} size={18} />,
                   }))}
                   value={shownClientIds}
-                  onValueChange={setShownClientIds}
+                  onChange={setShownClientIds}
                   placeholder="Select clients…"
-                  kind="client"
+                  emptyMessage="No clients found."
                   disabled={updateMutation.isPending || !hasPermission}
                 />
               </CardContent>
@@ -433,17 +539,18 @@ export function ConnectSettingsSection() {
                 }
               />
               <CardContent>
-                <ComboboxPicker
-                  items={ALL_PROVIDER_IDS.map((p) => ({
+                <MultiSelectCombobox
+                  options={ALL_PROVIDER_IDS.map((p) => ({
                     value: p,
                     label: providerDisplayNames[p],
+                    icon: <ProviderIcon provider={p} size={18} />,
                   }))}
                   value={shownProviders}
-                  onValueChange={(values) =>
+                  onChange={(values) =>
                     setShownProviders(values as SupportedProvider[])
                   }
                   placeholder="Select providers…"
-                  kind="provider"
+                  emptyMessage="No providers found."
                   disabled={updateMutation.isPending || !hasPermission}
                 />
               </CardContent>

@@ -70,6 +70,10 @@ export {
   SkillSandboxConversationGoneError,
 } from "./skill-sandbox";
 export { default as SkillSandboxFileModel } from "./skill-sandbox-file";
+export {
+  default as SkillSandboxFolderModel,
+  SandboxFolderExistsError,
+} from "./skill-sandbox-folder";
 export { default as SkillSandboxReplayEventModel } from "./skill-sandbox-replay-event";
 export { default as SkillShareLinkModel } from "./skill-share-link";
 export { default as SkillShareLinkRevisionModel } from "./skill-share-link-revision";

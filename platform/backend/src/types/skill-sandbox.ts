@@ -75,6 +75,11 @@ export const InsertSkillSandboxFileSchema = createInsertSchema(
   createdAt: true,
 });
 
+export const SelectSkillSandboxFolderSchema = createSelectSchema(
+  schema.skillSandboxFoldersTable,
+);
+export type SkillSandboxFolder = z.infer<typeof SelectSkillSandboxFolderSchema>;
+
 export const SelectSkillSandboxReplayEventSchema = createSelectSchema(
   schema.skillSandboxReplayEventsTable,
   { kind: SkillSandboxReplayEventKindSchema },

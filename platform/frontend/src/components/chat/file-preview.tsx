@@ -127,9 +127,11 @@ function RemoteMarkdownPreview({
 }
 
 /**
- * HTML rendered in a fully sandboxed iframe (no scripts, no same-origin, no
- * navigation) — the bytes endpoint deliberately refuses to serve HTML inline,
- * so the markup is fetched as text and injected via srcDoc.
+ * HTML rendered in a sandboxed iframe. `allow-scripts` WITHOUT
+ * `allow-same-origin` runs the document in an opaque origin: scripts execute
+ * (so generated pages actually work) but cannot reach our origin's cookies,
+ * storage, or DOM. The bytes endpoint deliberately refuses to serve HTML
+ * inline, so the markup is fetched as text and injected via srcDoc.
  */
 function HtmlPreview({ contentUrl }: { contentUrl: string }) {
   const { text, failed } = useFileText(contentUrl);
@@ -146,7 +148,7 @@ function HtmlPreview({ contentUrl }: { contentUrl: string }) {
   return (
     <iframe
       title="HTML preview"
-      sandbox=""
+      sandbox="allow-scripts"
       srcDoc={text}
       className="h-full min-h-72 w-full border-0 bg-white"
     />

@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  Download,
   Eye,
   Folder,
   MessageCircle,
@@ -13,7 +12,11 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
-import { FilePreviewSheet } from "@/components/chat/file-preview";
+import {
+  type FileListItem,
+  FileSection,
+} from "@/components/chat/file-list-section";
+import { FilePreview } from "@/components/chat/file-preview";
 import { NewChatComposer } from "@/components/chat/new-chat-composer";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { PageLayout } from "@/components/page-layout";
@@ -47,11 +50,7 @@ import {
   useSetProjectShare,
   useUpdateProject,
 } from "@/lib/projects/projects.query";
-import {
-  formatBytes,
-  sandboxArtifactUrl,
-} from "@/lib/skills-sandbox/sandbox-file-preview";
-import { useDeleteSandboxFile } from "@/lib/skills-sandbox/sandbox-files.query";
+import { sandboxArtifactUrl } from "@/lib/skills-sandbox/sandbox-file-preview";
 import { useTeams } from "@/lib/teams/team.query";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 
@@ -138,7 +137,6 @@ function ProjectDetail() {
         <ProjectFilesCard
           projectId={project.id}
           folderName={project.folderName}
-          canDelete={project.isOwner}
         />
       </div>
     </PageLayout>
@@ -225,30 +223,35 @@ function ChatsList({
   );
 }
 
-/** The project's result folder, kept fresh while the page is open. */
+/**
+ * The project's result folder, rendered with the SAME components as the chat
+ * Files panel: shared FileSection rows (icons, selection, download) with the
+ * preview stacked below the list.
+ */
 function ProjectFilesCard({
   projectId,
   folderName,
-  canDelete,
 }: {
   projectId: string;
   folderName: string;
-  canDelete: boolean;
 }) {
   const { data: files } = useProjectFiles(projectId);
-  const deleteFile = useDeleteSandboxFile();
-  const [pendingDelete, setPendingDelete] = useState<{
-    id: string;
-    filename: string;
-  } | null>(null);
-  const [previewing, setPreviewing] = useState<{
-    id: string;
-    filename: string;
-    mimeType: string;
-  } | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  const items: FileListItem[] = (files ?? [])
+    .filter((f) => f.id !== null)
+    .map((f) => ({
+      id: f.id as string,
+      name: f.filename,
+      mimeType: f.mimeType,
+      contentUrl: sandboxArtifactUrl(f.id as string),
+    }));
+  const selected = items.find((i) => i.id === selectedId) ?? null;
 
   return (
-    <aside className="h-fit rounded-xl border">
+    <aside
+      className={`flex flex-col overflow-hidden rounded-xl border ${selected ? "h-[75vh] lg:sticky lg:top-4" : "h-fit"}`}
+    >
       <div className="flex items-center gap-2 border-b px-3 py-2">
         <Folder className="h-4 w-4 text-muted-foreground" aria-hidden />
         <span className="text-sm font-medium">Files</span>
@@ -256,95 +259,29 @@ function ProjectFilesCard({
           {folderName}
         </span>
       </div>
-      <DeleteConfirmDialog
-        open={pendingDelete !== null}
-        onOpenChange={(open) => !open && setPendingDelete(null)}
-        title={`Delete ${pendingDelete?.filename ?? "file"}?`}
-        description="This permanently removes the file from the project's result folder."
-        isPending={deleteFile.isPending}
-        onConfirm={async () => {
-          if (pendingDelete) {
-            await deleteFile.mutateAsync({ id: pendingDelete.id });
-            setPendingDelete(null);
-          }
-        }}
-        confirmLabel="Delete"
-        pendingLabel="Deleting..."
-      />
-      {!files || files.length === 0 ? (
+      {items.length === 0 ? (
         <p className="px-3 py-6 text-center text-sm text-muted-foreground">
           Results the agent saves in this project land here.
         </p>
       ) : (
-        <div>
-          {files.map((file, i) => (
-            <div
-              key={file.id ?? file.filename}
-              className={`flex items-center gap-2 px-3 py-2 text-sm hover:bg-muted/50 ${i > 0 ? "border-t" : ""} ${previewing?.id === file.id ? "bg-muted" : ""}`}
-            >
-              {file.id ? (
-                <button
-                  type="button"
-                  onClick={() =>
-                    setPreviewing({
-                      id: file.id as string,
-                      filename: file.filename,
-                      mimeType: file.mimeType,
-                    })
-                  }
-                  className="min-w-0 flex-1 truncate text-left hover:underline"
-                >
-                  {file.filename}
-                </button>
-              ) : (
-                <span className="min-w-0 flex-1 truncate">{file.filename}</span>
-              )}
-              <span className="shrink-0 text-xs text-muted-foreground">
-                {formatBytes(file.sizeBytes)}
-              </span>
-              {file.id && (
-                <>
-                  <a
-                    href={sandboxArtifactUrl(file.id)}
-                    download={file.filename}
-                    className="text-muted-foreground hover:text-foreground"
-                    aria-label={`Download ${file.filename}`}
-                  >
-                    <Download className="h-4 w-4" />
-                  </a>
-                  {canDelete && (
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setPendingDelete({
-                          id: file.id as string,
-                          filename: file.filename,
-                        })
-                      }
-                      className="text-muted-foreground hover:text-destructive"
-                      aria-label={`Delete ${file.filename}`}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  )}
-                </>
-              )}
-            </div>
-          ))}
+        <div
+          className={
+            selected
+              ? "max-h-[45%] shrink-0 overflow-y-auto border-b px-3 py-3"
+              : "flex-1 overflow-y-auto px-3 py-3"
+          }
+        >
+          <FileSection
+            title="Results"
+            items={items}
+            selectedId={selectedId}
+            onSelect={setSelectedId}
+          />
         </div>
       )}
-      <FilePreviewSheet
-        file={
-          previewing
-            ? {
-                name: previewing.filename,
-                mimeType: previewing.mimeType,
-                contentUrl: sandboxArtifactUrl(previewing.id),
-              }
-            : null
-        }
-        onClose={() => setPreviewing(null)}
-      />
+      {selected && (
+        <FilePreview file={selected} onClose={() => setSelectedId(null)} />
+      )}
     </aside>
   );
 }

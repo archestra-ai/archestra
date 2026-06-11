@@ -1,28 +1,12 @@
 "use client";
 
-import {
-  Check,
-  Copy,
-  Download,
-  FileArchive,
-  FileAudio,
-  FileCode,
-  File as FileIcon,
-  FileImage,
-  FileJson,
-  FileSpreadsheet,
-  FileText,
-  FileVideo,
-  type LucideIcon,
-} from "lucide-react";
+import { Check, Copy, Download, File as FileIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { ConversationArtifactPanel } from "@/components/chat/conversation-artifact";
+import { FileSection } from "@/components/chat/file-list-section";
 import { FilePreview } from "@/components/chat/file-preview";
 import { useConversationFiles } from "@/lib/chat/chat.query";
-import {
-  assembleFileSections,
-  type ConversationFileItem,
-} from "@/lib/chat/conversation-files";
+import { assembleFileSections } from "@/lib/chat/conversation-files";
 import { printMarkdownElementAsPdf } from "@/lib/chat/print-markdown";
 import { cn } from "@/lib/utils";
 
@@ -147,25 +131,27 @@ export function ConversationFilesPanel({
           title="Results"
           items={generated}
           selectedId={selectedId}
-          artifact={artifact}
           onSelect={setSelectedId}
-          onDownloadArtifactPdf={handleDownloadArtifactPdf}
+          renderActions={(item) =>
+            item.source === "artifact" ? (
+              <ArtifactRowActions
+                content={artifact ?? ""}
+                onDownloadPdf={handleDownloadArtifactPdf}
+              />
+            ) : null
+          }
         />
         <FileSection
           title="Attachments"
           items={attachments}
           selectedId={selectedId}
-          artifact={artifact}
           onSelect={setSelectedId}
-          onDownloadArtifactPdf={handleDownloadArtifactPdf}
         />
         <FileSection
           title="From My Files"
           items={xFiles}
           selectedId={selectedId}
-          artifact={artifact}
           onSelect={setSelectedId}
-          onDownloadArtifactPdf={handleDownloadArtifactPdf}
         />
       </div>
 
@@ -194,72 +180,6 @@ export function ConversationFilesPanel({
 }
 
 // === internal components ===
-
-function FileSection({
-  title,
-  items,
-  selectedId,
-  artifact,
-  onSelect,
-  onDownloadArtifactPdf,
-}: {
-  title: string;
-  items: ConversationFileItem[];
-  selectedId: string | null;
-  artifact: string | null | undefined;
-  onSelect: (id: string) => void;
-  onDownloadArtifactPdf: () => void;
-}) {
-  if (items.length === 0) return null;
-  return (
-    <div className="mb-4">
-      <p className="mb-1 px-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-        {title}
-      </p>
-      <div className="overflow-hidden rounded-md border">
-        {items.map((item, i) => (
-          <div
-            key={item.id}
-            className={cn(
-              "flex items-center text-sm hover:bg-muted/50",
-              i > 0 && "border-t",
-              item.id === selectedId && "bg-muted",
-            )}
-          >
-            {/* Clicking the row body opens the preview; the trailing actions are
-                siblings, so we never nest interactive elements. */}
-            <button
-              type="button"
-              onClick={() => onSelect(item.id)}
-              className="flex min-w-0 flex-1 items-center gap-2 px-3 py-2 text-left"
-            >
-              <FileRowIcon name={item.name} mimeType={item.mimeType} />
-              <span className="min-w-0 flex-1 truncate">{item.name}</span>
-            </button>
-            {item.source === "artifact" ? (
-              <ArtifactRowActions
-                content={artifact ?? ""}
-                onDownloadPdf={onDownloadArtifactPdf}
-              />
-            ) : (
-              item.contentUrl && (
-                <a
-                  href={item.contentUrl}
-                  download={item.name}
-                  title={`Download ${item.name}`}
-                  className="mr-1 flex h-8 w-8 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
-                >
-                  <Download className="h-4 w-4" />
-                  <span className="sr-only">Download {item.name}</span>
-                </a>
-              )
-            )}
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
 
 /**
  * Row actions for the artifact: copy the in-memory markdown and download it as a
@@ -306,110 +226,5 @@ function ArtifactRowActions({
         <span className="sr-only">Download artifact as PDF</span>
       </button>
     </div>
-  );
-}
-
-/** Maps a file extension to a lucide category icon. */
-const EXTENSION_ICONS: Record<string, LucideIcon> = {
-  // images
-  png: FileImage,
-  jpg: FileImage,
-  jpeg: FileImage,
-  gif: FileImage,
-  webp: FileImage,
-  svg: FileImage,
-  bmp: FileImage,
-  ico: FileImage,
-  tiff: FileImage,
-  heic: FileImage,
-  avif: FileImage,
-  // video
-  mp4: FileVideo,
-  mov: FileVideo,
-  webm: FileVideo,
-  avi: FileVideo,
-  mkv: FileVideo,
-  m4v: FileVideo,
-  // audio
-  mp3: FileAudio,
-  wav: FileAudio,
-  flac: FileAudio,
-  ogg: FileAudio,
-  m4a: FileAudio,
-  aac: FileAudio,
-  // archives
-  zip: FileArchive,
-  tar: FileArchive,
-  gz: FileArchive,
-  tgz: FileArchive,
-  rar: FileArchive,
-  "7z": FileArchive,
-  bz2: FileArchive,
-  // spreadsheets / tabular
-  csv: FileSpreadsheet,
-  tsv: FileSpreadsheet,
-  xls: FileSpreadsheet,
-  xlsx: FileSpreadsheet,
-  // json
-  json: FileJson,
-  // code
-  js: FileCode,
-  jsx: FileCode,
-  ts: FileCode,
-  tsx: FileCode,
-  py: FileCode,
-  rb: FileCode,
-  go: FileCode,
-  rs: FileCode,
-  java: FileCode,
-  c: FileCode,
-  h: FileCode,
-  cpp: FileCode,
-  cc: FileCode,
-  cs: FileCode,
-  php: FileCode,
-  sh: FileCode,
-  bash: FileCode,
-  html: FileCode,
-  css: FileCode,
-  scss: FileCode,
-  sql: FileCode,
-  xml: FileCode,
-  yml: FileCode,
-  yaml: FileCode,
-  toml: FileCode,
-  // documents
-  md: FileText,
-  markdown: FileText,
-  txt: FileText,
-  rtf: FileText,
-  pdf: FileText,
-  doc: FileText,
-  docx: FileText,
-};
-
-/** Pick a lucide icon for a file, by extension first then mime category. */
-function getFileIcon(name: string, mimeType: string): LucideIcon {
-  const ext = name.includes(".")
-    ? (name.split(".").pop() ?? "").toLowerCase()
-    : "";
-  const byExt = EXTENSION_ICONS[ext];
-  if (byExt) return byExt;
-
-  const mime = mimeType.toLowerCase();
-  if (mime.startsWith("image/")) return FileImage;
-  if (mime.startsWith("video/")) return FileVideo;
-  if (mime.startsWith("audio/")) return FileAudio;
-  if (mime === "application/json") return FileJson;
-  if (mime === "text/csv") return FileSpreadsheet;
-  if (mime === "application/zip" || mime.includes("tar")) return FileArchive;
-  if (mime.startsWith("text/")) return FileText;
-  return FileIcon;
-}
-
-function FileRowIcon({ name, mimeType }: { name: string; mimeType: string }) {
-  const Icon = getFileIcon(name, mimeType);
-  return (
-    <Icon className="h-5 w-5 shrink-0 text-muted-foreground" aria-hidden />
   );
 }

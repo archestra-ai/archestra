@@ -22,7 +22,7 @@ import {
   MessagesSquare,
   MoreHorizontal,
   Network,
-  PanelsTopLeft,
+  PencilRuler,
   Route,
   Settings,
   Slack,
@@ -193,7 +193,7 @@ function SidebarModeToggle({
   return (
     <div className="mx-2 mt-1 flex rounded-lg border bg-muted p-0.5 group-data-[collapsible=icon]:hidden">
       {segment("chats", "Chats", MessageCircle)}
-      {segment("studio", "Studio", PanelsTopLeft)}
+      {segment("studio", "Studio", PencilRuler)}
     </div>
   );
 }

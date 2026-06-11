@@ -160,8 +160,8 @@ export async function executeArchestraTool(
   // Centralized assignment check — an agent may only execute Archestra tools
   // that are actually assigned to it (the same set advertised by tools/list and
   // search_tools). Without this, run_tool or a raw tools/call could invoke any
-  // Archestra tool the user has RBAC for, regardless of assignment. Sandbox
-  // built-ins are auto-assigned on first use instead of rejected (see below).
+  // Archestra tool the user has RBAC for, regardless of assignment. Unassigned
+  // sandbox built-ins go through the grant flow rather than running (see below).
   const assignmentDenied = await resolveToolAssignment(toolName, context);
   if (assignmentDenied) return assignmentDenied;
 

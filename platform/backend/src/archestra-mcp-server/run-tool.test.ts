@@ -570,7 +570,7 @@ describe("run_tool", () => {
   // built-ins but ride the same first-use auto-assignment relaxation as
   // third-party tools, gated on sandbox:execute. Distinct from the third-party
   // path above because they route through executeArchestraTool, not the gateway.
-  describe("sandbox built-in first-use auto-assignment", () => {
+  describe("sandbox built-in grant flow", () => {
     const originalSandboxEnabled = config.skillsSandbox.enabled;
 
     beforeAll(() => {
@@ -717,7 +717,7 @@ describe("run_tool", () => {
 
   // With the sandbox feature off, a stale catalog row must not be discoverable
   // or auto-assignable even though run_command stays in the static name list.
-  describe("sandbox built-in first-use auto-assignment (runtime disabled)", () => {
+  describe("sandbox built-in grant flow (runtime disabled)", () => {
     test("does not auto-assign sandbox tools when the feature is off", async ({
       makeInternalMcpCatalog,
       makeTool,

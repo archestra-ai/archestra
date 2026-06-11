@@ -1,10 +1,10 @@
 import { CheckCircleIcon, ClockIcon, PlusCircleIcon } from "lucide-react";
 import { toast } from "sonner";
-import { useAllProfileTools, useAssignTool } from "@/lib/agent-tools.query";
+import { useAllProfileTools, useGrantTool } from "@/lib/agent-tools.query";
 import { ToolStatusRow } from "./tool-status-row";
 
 interface ToolGrantApprovalCardProps {
-  /** The run_tool target the model wants to call (its full tool name). */
+  /** The run_tool target the model wants to call (its tool name). */
   targetToolName: string;
   agentId: string;
   approvalId: string;
@@ -17,10 +17,11 @@ interface ToolGrantApprovalCardProps {
 
 /**
  * Approval card for a run_tool call whose target the user can access but the
- * agent does not yet have. Confirming adds the tool to the agent (the normal
- * assign endpoint) and then approves, so the AI SDK resumes the same call with
- * the tool now assigned. If the target is in fact already assigned (an ordinary
- * policy approval routed through run_tool), it falls back to plain approve/deny.
+ * agent does not yet have. Confirming grants the tool to the agent (the backend
+ * resolves it by name and enforces authorization) and then approves, so the AI
+ * SDK resumes the same call with the tool now assigned. If the target is in fact
+ * already assigned (an ordinary policy approval routed through run_tool), it
+ * falls back to plain approve/deny.
  */
 export function ToolGrantApprovalCard({
   targetToolName,
@@ -28,27 +29,18 @@ export function ToolGrantApprovalCard({
   approvalId,
   onRespond,
 }: ToolGrantApprovalCardProps) {
-  const assignTool = useAssignTool();
-  const { data: matches } = useAllProfileTools({
-    filters: { search: targetToolName },
-    skipPagination: true,
-  });
+  const grantTool = useGrantTool();
+  // Discriminate a grant from an ordinary policy approval routed through
+  // run_tool: only an unassigned target needs granting. (Archestra built-ins are
+  // omitted from this list, so they read as unassigned and take the grant path —
+  // which is correct; the backend grant is idempotent if already assigned.)
   const { data: assignedMatches } = useAllProfileTools({
     filters: { search: targetToolName, agentId },
     skipPagination: true,
   });
-
-  // The model may pass a short name (e.g. `run_command`) while the catalog row
-  // is `archestra__run_command`; match exactly, else fall back to the sole
-  // search hit so a short name still resolves.
-  const resolveRow = (
-    rows: { tool: { id: string; name: string } }[] | undefined,
-  ) =>
-    rows?.find((row) => row.tool.name === targetToolName) ??
-    (rows?.length === 1 ? rows[0] : undefined);
-
-  const toolId = resolveRow(matches?.data)?.tool.id;
-  const isAssigned = Boolean(resolveRow(assignedMatches?.data));
+  const isAssigned = Boolean(
+    assignedMatches?.data.some((row) => row.tool.name === targetToolName),
+  );
 
   const respond = (approved: boolean) =>
     onRespond({
@@ -81,9 +73,9 @@ export function ToolGrantApprovalCard({
   }
 
   const grant = () => {
-    if (!toolId || assignTool.isPending) return;
-    assignTool.mutate(
-      { agentId, toolId, resolveAtCallTime: true },
+    if (grantTool.isPending) return;
+    grantTool.mutate(
+      { agentId, toolName: targetToolName },
       {
         onSuccess: () => respond(true),
         onError: () =>
@@ -101,10 +93,11 @@ export function ToolGrantApprovalCard({
       description={`"${targetToolName}" isn't on this agent yet. Add it and run this call?`}
       actions={[
         {
-          label: assignTool.isPending ? "Adding…" : "Add to agent & run",
+          label: grantTool.isPending ? "Adding…" : "Add to agent & run",
           variant: "secondary",
           icon: <PlusCircleIcon className="size-4" />,
           onClick: grant,
+          disabled: grantTool.isPending,
         },
         { label: "Cancel", variant: "outline", onClick: () => respond(false) },
       ]}

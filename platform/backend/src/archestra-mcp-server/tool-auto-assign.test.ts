@@ -14,7 +14,11 @@ import {
   test,
 } from "@/test";
 import type { Agent } from "@/types";
-import { isToolGrantApprovable, resolveToolGrant } from "./tool-auto-assign";
+import {
+  grantToolToAgent,
+  isToolGrantApprovable,
+  resolveToolGrant,
+} from "./tool-auto-assign";
 
 // resolveToolGrant decides whether an accessible-but-unassigned tool may be
 // granted to the agent WITHOUT writing the assignment (the grant write happens
@@ -262,5 +266,96 @@ describe("isToolGrantApprovable", () => {
     });
 
     expect(approvable).toBe(false);
+  });
+});
+
+describe("grantToolToAgent", () => {
+  let agent: Agent;
+  let organizationId: string;
+  let userId: string;
+
+  beforeEach(async ({ makeAgent, makeMember, makeOrganization, makeUser }) => {
+    const org = await makeOrganization();
+    organizationId = org.id;
+    const user = await makeUser();
+    userId = user.id;
+    await makeMember(user.id, org.id, { role: "admin" });
+    agent = await makeAgent({ name: "Grant Agent", organizationId: org.id });
+  });
+
+  test("assigns a grantable tool to the agent", async ({
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({ organizationId });
+    await makeTool({
+      name: "github__search_repositories",
+      catalogId: catalog.id,
+    });
+
+    const outcome = await grantToolToAgent({
+      toolName: "github__search_repositories",
+      agentId: agent.id,
+      userId,
+      organizationId,
+    });
+
+    expect(outcome).toBe("grantable");
+    const assigned = await ToolModel.getAssignedToolNames(agent.id);
+    expect(assigned.has("github__search_repositories")).toBe(true);
+  });
+
+  test("does not assign when the user cannot modify the agent", async ({
+    makeCustomRole,
+    makeInternalMcpCatalog,
+    makeMember,
+    makeTool,
+    makeUser,
+  }) => {
+    const memberUser = await makeUser();
+    const role = await makeCustomRole(organizationId, {
+      permission: { agent: ["read"] },
+    });
+    await makeMember(memberUser.id, organizationId, { role: role.role });
+    const catalog = await makeInternalMcpCatalog({ organizationId });
+    await makeTool({
+      name: "github__search_repositories",
+      catalogId: catalog.id,
+    });
+
+    const outcome = await grantToolToAgent({
+      toolName: "github__search_repositories",
+      agentId: agent.id,
+      userId: memberUser.id,
+      organizationId,
+    });
+
+    expect(outcome).toBe("forbidden");
+    const assigned = await ToolModel.getAssignedToolNames(agent.id);
+    expect(assigned.has("github__search_repositories")).toBe(false);
+  });
+
+  test("is idempotent when the tool is already assigned", async ({
+    makeAgentTool,
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({ organizationId });
+    const tool = await makeTool({
+      name: "github__search_repositories",
+      catalogId: catalog.id,
+    });
+    await makeAgentTool(agent.id, tool.id);
+
+    const outcome = await grantToolToAgent({
+      toolName: "github__search_repositories",
+      agentId: agent.id,
+      userId,
+      organizationId,
+    });
+
+    expect(outcome).toBe("grantable");
+    const assigned = await ToolModel.getAssignedToolNames(agent.id);
+    expect(assigned.has("github__search_repositories")).toBe(true);
   });
 });

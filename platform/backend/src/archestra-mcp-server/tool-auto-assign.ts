@@ -11,7 +11,9 @@ import {
 } from "@/auth/agent-type-permissions";
 import { userHasPermission } from "@/auth/utils";
 import config from "@/config";
+import logger from "@/logging";
 import { AgentModel, OrganizationModel, TeamModel, ToolModel } from "@/models";
+import { assignToolToAgent } from "@/services/agent-tool-assignment";
 import { ApiError, type Tool } from "@/types";
 import { archestraMcpBranding } from "./branding";
 
@@ -37,8 +39,7 @@ type ToolGrantOutcome =
 /**
  * Decide whether an accessible-but-unassigned tool can be granted to the agent,
  * applying the same authorization as a manual assignment (catalog access +
- * permission to modify the agent) WITHOUT writing the assignment. The write
- * happens later through the assign endpoint when the user confirms the grant.
+ * permission to modify the agent) WITHOUT writing the assignment.
  */
 export async function resolveToolGrant(params: {
   toolName: string;
@@ -46,13 +47,56 @@ export async function resolveToolGrant(params: {
   userId?: string;
   organizationId?: string;
 }): Promise<ToolGrantOutcome> {
+  return (await evaluateToolGrant(params)).outcome;
+}
+
+/**
+ * Resolve a tool by name and, if the user may grant it, assign it to the agent.
+ * The user-facing counterpart of the old silent first-use assignment: invoked
+ * from the grant endpoint after the user confirms the proposal in chat. Resolves
+ * the same row resolveToolGrant judged, so the assignment matches what was
+ * proposed (and a reserved built-in name can only resolve to the Archestra row).
+ */
+export async function grantToolToAgent(params: {
+  toolName: string;
+  agentId: string;
+  userId?: string;
+  organizationId?: string;
+}): Promise<ToolGrantOutcome> {
+  const { outcome, toolId } = await evaluateToolGrant(params);
+  if (outcome !== "grantable" || toolId == null) {
+    return outcome;
+  }
+  // Late-bound resolution: credentials and execution target resolve at call
+  // time, so no MCP server pinning is needed at assignment time.
+  const result = await assignToolToAgent({
+    agentId: params.agentId,
+    toolId,
+    resolveAtCallTime: true,
+  });
+  if (result !== null && result !== "duplicate" && result !== "updated") {
+    logger.warn(
+      { agentId: params.agentId, toolName: params.toolName, toolId },
+      "granting tool to agent failed validation",
+    );
+    return "unavailable";
+  }
+  return "grantable";
+}
+
+async function evaluateToolGrant(params: {
+  toolName: string;
+  agentId: string;
+  userId?: string;
+  organizationId?: string;
+}): Promise<{ outcome: ToolGrantOutcome; toolId?: string }> {
   const { agentId, toolName } = params;
   if (isExcludedFromDiscovery(toolName)) {
-    return "unavailable";
+    return { outcome: "unavailable" };
   }
   const ctx = await relaxationContext(params.userId, params.organizationId);
   if (!ctx) {
-    return "unavailable";
+    return { outcome: "unavailable" };
   }
   const { organizationId, userId } = ctx;
 
@@ -66,14 +110,14 @@ export async function resolveToolGrant(params: {
     ? accessible.find((row) => row.catalogId === ARCHESTRA_MCP_CATALOG_ID)
     : accessible[0];
   if (!tool) {
-    return "unavailable";
+    return { outcome: "unavailable" };
   }
 
   const target = (await AgentModel.findByIdsForPermissionCheck([agentId])).get(
     agentId,
   );
   if (!target) {
-    return "unavailable";
+    return { outcome: "unavailable" };
   }
 
   const [checker, userTeamIds] = await Promise.all([
@@ -93,12 +137,12 @@ export async function resolveToolGrant(params: {
     });
   } catch (error) {
     if (error instanceof ApiError && error.statusCode === 403) {
-      return "forbidden";
+      return { outcome: "forbidden" };
     }
     throw error;
   }
 
-  return "grantable";
+  return { outcome: "grantable", toolId: tool.id };
 }
 
 const ARCHESTRA_SHORT_NAME_SET = new Set<string>(ARCHESTRA_TOOL_SHORT_NAMES);

@@ -1,12 +1,11 @@
 import {
   MCP_APPS_EXTENSION_ID,
   MCP_ENTERPRISE_AUTH_EXTENSION_ID,
-  TOOL_ACTIVATE_SKILL_FULL_NAME,
   TOOL_ARTIFACT_WRITE_FULL_NAME,
   TOOL_DOWNLOAD_FILE_FULL_NAME,
   TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON,
   TOOL_LIST_SKILLS_FULL_NAME,
-  TOOL_READ_SKILL_FILE_FULL_NAME,
+  TOOL_LOAD_SKILL_FULL_NAME,
   TOOL_RUN_COMMAND_FULL_NAME,
   TOOL_RUN_TOOL_FULL_NAME,
   TOOL_SEARCH_TOOLS_FULL_NAME,
@@ -937,9 +936,8 @@ describe("MCP Gateway (stateless mode)", () => {
       .result.tools.map((tool: { name: string }) => tool.name);
     expect(toolNames.sort()).toEqual(
       [
-        TOOL_ACTIVATE_SKILL_FULL_NAME,
         TOOL_LIST_SKILLS_FULL_NAME,
-        TOOL_READ_SKILL_FILE_FULL_NAME,
+        TOOL_LOAD_SKILL_FULL_NAME,
         TOOL_RUN_TOOL_FULL_NAME,
         TOOL_SEARCH_TOOLS_FULL_NAME,
       ].sort(),
@@ -1008,10 +1006,9 @@ describe("MCP Gateway (stateless mode)", () => {
         .result.tools.map((tool: { name: string }) => tool.name);
       expect(toolNames.sort()).toEqual(
         [
-          TOOL_ACTIVATE_SKILL_FULL_NAME,
           TOOL_DOWNLOAD_FILE_FULL_NAME,
           TOOL_LIST_SKILLS_FULL_NAME,
-          TOOL_READ_SKILL_FILE_FULL_NAME,
+          TOOL_LOAD_SKILL_FULL_NAME,
           TOOL_RUN_COMMAND_FULL_NAME,
           TOOL_RUN_TOOL_FULL_NAME,
           TOOL_SEARCH_TOOLS_FULL_NAME,

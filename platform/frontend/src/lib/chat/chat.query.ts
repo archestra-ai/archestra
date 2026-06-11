@@ -40,6 +40,7 @@ const {
   bulkAssignTools,
   stopChatStream,
   getMemberDefaultModel,
+  resolveChatMcpElicitation,
   updateMemberDefaultModel,
 } = archestraApiSdk;
 
@@ -443,6 +444,36 @@ export function useStopChatStream() {
     mutationFn: async (conversationId: string) => {
       const { data, error } = await stopChatStream({
         path: { id: conversationId },
+      });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data;
+    },
+  });
+}
+
+export function useResolveChatMcpElicitation() {
+  type ResolveChatMcpElicitationBody = NonNullable<
+    archestraApiTypes.ResolveChatMcpElicitationData["body"]
+  >;
+
+  return useMutation({
+    mutationFn: async ({
+      id,
+      conversationId,
+      action,
+      content,
+    }: {
+      id: string;
+      conversationId: string;
+      action: ResolveChatMcpElicitationBody["action"];
+      content?: ResolveChatMcpElicitationBody["content"];
+    }) => {
+      const { data, error } = await resolveChatMcpElicitation({
+        path: { id },
+        body: { conversationId, action, content },
       });
       if (error) {
         handleApiError(error);

@@ -232,7 +232,13 @@ async function assertSkillsBelongToOrg(params: {
  * Format: `<app-slug>-<org-slug>-skills`, e.g. `archestra-acme-corp-skills`.
  * Falls back to a hex slice of the org id if both slug and name are unusable.
  */
-async function deriveMarketplaceName(organizationId: string): Promise<string> {
+/**
+ * Deterministic marketplace name for an organization. Also used by the
+ * connection-setup script endpoint, which creates share links at render time.
+ */
+export async function deriveMarketplaceName(
+  organizationId: string,
+): Promise<string> {
   const org = await OrganizationModel.getById(organizationId);
   const appSlug = slugify(org?.appName ?? DEFAULT_APP_NAME) || "archestra";
   const orgSlug =

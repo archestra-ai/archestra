@@ -41,7 +41,7 @@ import type { ArchestraContext } from "./types";
  *
  * RBAC: every tool is gated by `sandbox:execute` (see `rbac.ts`, enforced in
  * the dispatch path before the handler runs). Skills become runnable here by
- * activating them (`activate_skill`), which mounts them into the default
+ * loading them (`load_skill`), which mounts them into the default
  * sandbox; that path is `skill:read`-gated.
  *
  * Model-facing text in this file follows the skill terminology glossary in
@@ -156,7 +156,7 @@ const DownloadFileSchema = z
   .describe(
     "Copy a file out of the sandbox into durable storage and return a " +
       "download URL. Use this for any binary or generated output — run_command " +
-      "only returns text. (To read a skill's source files, use read_skill_file.)",
+      "only returns text. (To read a skill's source files, use load_skill with a path.)",
   );
 
 const DownloadFileOutputSchema = z.object({
@@ -309,7 +309,7 @@ const registry = defineArchestraTools([
       "Copy a file out of the conversation's sandbox into durable storage and " +
       "return a download URL. Use this for any binary or generated output — " +
       "run_command only returns text. To read a skill's own source files, use " +
-      "read_skill_file instead. Requires `sandbox:execute`.",
+      "load_skill with a path instead. Requires `sandbox:execute`.",
     schema: DownloadFileSchema,
     outputSchema: DownloadFileOutputSchema,
     async handler({ args, context }) {

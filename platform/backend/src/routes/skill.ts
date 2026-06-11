@@ -881,7 +881,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.EnableSkillToolDefaults,
         description:
-          "Enable the Agent Skill tools (`list_skills`, `activate_skill`, `read_skill_file`) for this organization. Sets the org-level flag and backfills the tools onto every existing agent. Idempotent.",
+          "Enable the Agent Skill tools (`list_skills`, `load_skill`) for this organization. Sets the org-level flag and backfills the tools onto every existing agent. Idempotent.",
         tags: ["Skills"],
         response: constructResponseSchema(
           z.object({ enabled: z.literal(true), agentsBackfilled: z.number() }),

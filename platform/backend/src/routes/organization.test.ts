@@ -415,13 +415,14 @@ describe("organization routes", () => {
   });
 
   describe("PATCH /api/organization/security-settings", () => {
-    test("updates global tool policy and chat file upload settings", async () => {
+    test("updates global tool policy, chat file upload, and tool auto-assignment settings", async () => {
       const response = await app.inject({
         method: "PATCH",
         url: "/api/organization/security-settings",
         payload: {
           globalToolPolicy: "restrictive",
           allowChatFileUploads: false,
+          allowToolAutoAssignment: false,
         },
       });
 
@@ -429,6 +430,7 @@ describe("organization routes", () => {
       expect(response.json()).toMatchObject({
         globalToolPolicy: "restrictive",
         allowChatFileUploads: false,
+        allowToolAutoAssignment: false,
       });
     });
 
@@ -439,6 +441,7 @@ describe("organization routes", () => {
         payload: {
           globalToolPolicy: "permissive",
           allowChatFileUploads: true,
+          allowToolAutoAssignment: true,
         },
       });
 
@@ -451,6 +454,7 @@ describe("organization routes", () => {
       expect(response.json()).toMatchObject({
         globalToolPolicy: "permissive",
         allowChatFileUploads: true,
+        allowToolAutoAssignment: true,
       });
     });
   });

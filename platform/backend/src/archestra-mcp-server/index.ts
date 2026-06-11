@@ -5,6 +5,7 @@ import {
   getArchestraToolFullName,
   getArchestraToolShortName,
   isAgentTool,
+  isSandboxArchestraToolShortName,
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
 } from "@archestra/shared";
@@ -67,7 +68,11 @@ import {
   toolEntries as toolAssignmentToolEntries,
   tools as toolAssignmentTools,
 } from "./tool-assignment";
-import { toolDiscoverySteer } from "./tool-recovery-messages";
+import { resolveToolGrant } from "./tool-auto-assign";
+import {
+  toolDiscoverySteer,
+  toolNotAssignedAskAdminMessage,
+} from "./tool-recovery-messages";
 import type { ArchestraContext } from "./types";
 
 export { archestraMcpBranding } from "./branding";
@@ -155,8 +160,9 @@ export async function executeArchestraTool(
   // Centralized assignment check — an agent may only execute Archestra tools
   // that are actually assigned to it (the same set advertised by tools/list and
   // search_tools). Without this, run_tool or a raw tools/call could invoke any
-  // Archestra tool the user has RBAC for, regardless of assignment.
-  const assignmentDenied = await checkToolAssignedToAgent(toolName, context);
+  // Archestra tool the user has RBAC for, regardless of assignment. Unassigned
+  // sandbox built-ins go through the grant flow rather than running (see below).
+  const assignmentDenied = await resolveToolAssignment(toolName, context);
   if (assignmentDenied) return assignmentDenied;
 
   const resolvedToolName =
@@ -237,6 +243,40 @@ async function checkToolAssignedToAgent(
       toolName,
     },
   });
+}
+
+// Assignment gate. Sandbox built-ins are never auto-assigned: when an unassigned
+// sandbox tool reaches here (RBAC sandbox:execute already passed), the grant flow
+// — chat proposes it, the user confirms, the assign endpoint writes it, then the
+// call resumes assigned — is what puts it on the agent. So reaching here means it
+// was not granted; only upgrade the message to "ask an admin" when the user could
+// not have granted it anyway.
+async function resolveToolAssignment(
+  toolName: string,
+  context: ArchestraContext,
+): Promise<CallToolResult | null> {
+  const notAssigned = await checkToolAssignedToAgent(toolName, context);
+  if (!notAssigned) return null;
+
+  const shortName = archestraMcpBranding.getToolShortName(toolName);
+  if (
+    !context.agentId ||
+    shortName == null ||
+    !config.skillsSandbox.enabled ||
+    !isSandboxArchestraToolShortName(shortName)
+  ) {
+    return notAssigned;
+  }
+
+  const grant = await resolveToolGrant({
+    toolName,
+    agentId: context.agentId,
+    userId: context.userId,
+    organizationId: context.organizationId,
+  });
+  return grant === "forbidden"
+    ? errorResult(toolNotAssignedAskAdminMessage(toolName))
+    : notAssigned;
 }
 
 function resolveArchestraToolName(toolName: string): string | null {

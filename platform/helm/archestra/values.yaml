@@ -865,6 +865,73 @@ dagger:
         emptyDir:
           medium: Memory
 
+    # SSRF / internal-network backstop for untrusted sandbox code: drop exec
+    # egress to RFC1918 private (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16),
+    # cloud-metadata / link-local (169.254.0.0/16), Azure WireServer
+    # (168.63.129.16), CGNAT (100.64.0.0/10), and loopback (127.0.0.0/8) ranges,
+    # so sandbox code keeps public egress (npm/uv) but can't reach the cluster's
+    # internal services or any cloud's node-metadata credentials.
+    # The DROP lives in the mangle table's FORWARD chain: buildkit's exec traffic
+    # hits mangle before the filter table, where the CNI firewall plugin accepts
+    # it by source IP (and which the CNI re-owns on every exec). mangle is left
+    # alone by the CNI, so this holds even on clusters whose datapath does not
+    # enforce NetworkPolicy. The image must track the engine image above so the
+    # iptables backend matches buildkit's.
+    sidecars:
+      - name: dagger-egress-firewall
+        image: registry.dagger.io/engine:v0.21.0
+        securityContext:
+          capabilities:
+            add:
+              - NET_ADMIN
+              - NET_RAW
+        command:
+          - /bin/sh
+          - -c
+          - |
+            set -eu
+            CHAIN=ARCHESTRA_SANDBOX_EGRESS
+            DENY4="10.0.0.0/8 172.16.0.0/12 192.168.0.0/16 169.254.0.0/16 168.63.129.16/32 100.64.0.0/10 127.0.0.0/8"
+            DENY6="fc00::/7 fe80::/10 ::1/128"
+            IPT="iptables -w 5 -t mangle"
+            IP6T="ip6tables -w 5 -t mangle"
+            # RETURN established/related replies and DNS (port 53) above the DROPs:
+            # the exec's own bridge subnet and kube-dns live inside the denied
+            # ranges, so a stateless drop would also kill the exec's replies and
+            # name resolution. NEW connections to the denied ranges still reach the
+            # DROPs below. DNS is allowed to any destination (not pinned to the
+            # kube-dns ClusterIP, which isn't known here) — same trade-off the
+            # chart's NetworkPolicy makes.
+            carveouts() {
+              $1 -C "$CHAIN" -m conntrack --ctstate RELATED,ESTABLISHED -j RETURN 2>/dev/null || $1 -I "$CHAIN" 1 -m conntrack --ctstate RELATED,ESTABLISHED -j RETURN
+              $1 -C "$CHAIN" -p udp --dport 53 -j RETURN 2>/dev/null || $1 -I "$CHAIN" 1 -p udp --dport 53 -j RETURN
+              $1 -C "$CHAIN" -p tcp --dport 53 -j RETURN 2>/dev/null || $1 -I "$CHAIN" 1 -p tcp --dport 53 -j RETURN
+            }
+            apply4() {
+              $IPT -N "$CHAIN" 2>/dev/null || true
+              carveouts "$IPT"
+              for c in $DENY4; do
+                $IPT -C "$CHAIN" -d "$c" -j DROP 2>/dev/null || $IPT -A "$CHAIN" -d "$c" -j DROP
+              done
+              $IPT -C FORWARD -j "$CHAIN" 2>/dev/null || $IPT -I FORWARD 1 -j "$CHAIN"
+            }
+            apply6() {
+              $IP6T -S FORWARD >/dev/null 2>&1 || return 0
+              $IP6T -N "$CHAIN" 2>/dev/null || true
+              carveouts "$IP6T"
+              for c in $DENY6; do
+                $IP6T -C "$CHAIN" -d "$c" -j DROP 2>/dev/null || $IP6T -A "$CHAIN" -d "$c" -j DROP
+              done
+              $IP6T -C FORWARD -j "$CHAIN" 2>/dev/null || $IP6T -I FORWARD 1 -j "$CHAIN"
+            }
+            while true; do apply4; apply6 || true; sleep 10; done
+        resources:
+          requests:
+            cpu: 10m
+            memory: 16Mi
+          limits:
+            memory: 32Mi
+
 # PostgreSQL configuration
 postgresql:
   # External database URL to use instead of deploying a PostgreSQL instance

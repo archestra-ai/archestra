@@ -30,6 +30,7 @@ export const RouteId = {
 
   // Agent Tool Routes
   AssignToolToAgent: "assignToolToAgent",
+  GrantToolToAgent: "grantToolToAgent",
   BulkAssignTools: "bulkAssignTools",
   BulkUpdateAgentTools: "bulkUpdateAgentTools",
   AutoConfigureAgentToolPolicies: "autoConfigureAgentToolPolicies",
@@ -275,6 +276,7 @@ export const RouteId = {
 
   // Chat Routes
   StreamChat: "streamChat",
+  ResolveChatMcpElicitation: "resolveChatMcpElicitation",
   StopChatStream: "stopChatStream",
   GetActiveChatRun: "getActiveChatRun",
   GetChatConversations: "getChatConversations",
@@ -548,6 +550,10 @@ export const RouteId = {
   GetSkillShareLinks: "getSkillShareLinks",
   CreateSkillShareLink: "createSkillShareLink",
   RevokeSkillShareLink: "revokeSkillShareLink",
+
+  // Connection Setup Routes
+  CreateConnectionSetup: "createConnectionSetup",
+  GetConnectionSetupScript: "getConnectionSetupScript",
 } as const;
 
 export type RouteId = (typeof RouteId)[keyof typeof RouteId];

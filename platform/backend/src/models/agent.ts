@@ -2083,6 +2083,166 @@ class AgentModel {
   }
 
   /**
+   * Returns the user's personal LLM proxy for the given organization, or null
+   * if none exists.
+   */
+  static async getPersonalLlmProxy(
+    userId: string,
+    organizationId: string,
+  ): Promise<Agent | null> {
+    const [row] = await db
+      .select()
+      .from(schema.agentsTable)
+      .where(
+        and(
+          eq(schema.agentsTable.organizationId, organizationId),
+          eq(schema.agentsTable.authorId, userId),
+          eq(schema.agentsTable.agentType, "llm_proxy"),
+          eq(schema.agentsTable.isPersonalProxy, true),
+          notDeleted(schema.agentsTable),
+        ),
+      )
+      .limit(1);
+
+    if (!row) return null;
+    return (await AgentModel.findById(row.id, userId, true)) ?? null;
+  }
+
+  /**
+   * Ensures the user has a personal LLM proxy for the given organization.
+   * Idempotent: returns the existing one if present, otherwise creates one.
+   * Mirrors {@link AgentModel.ensurePersonalMcpGateway}.
+   */
+  static async ensurePersonalLlmProxy(params: {
+    userId: string;
+    organizationId: string;
+  }): Promise<Agent> {
+    const { userId, organizationId } = params;
+
+    const existing = await AgentModel.getPersonalLlmProxy(
+      userId,
+      organizationId,
+    );
+    if (existing) return existing;
+
+    try {
+      const proxy = await AgentModel.create(
+        {
+          organizationId,
+          name: PERSONAL_LLM_PROXY_NAME,
+          agentType: "llm_proxy",
+          scope: "personal",
+          description: PERSONAL_LLM_PROXY_DESCRIPTION,
+          isPersonalProxy: true,
+        },
+        userId,
+      );
+
+      logger.info(
+        { userId, organizationId, agentId: proxy.id },
+        "Created personal LLM proxy",
+      );
+
+      return proxy;
+    } catch (error) {
+      // Lost a race against a concurrent caller — re-fetch the row that won.
+      if (
+        !isUniqueConstraintError(error) ||
+        !errorMentions(error, "agents_personal_proxy_per_member_idx")
+      ) {
+        throw error;
+      }
+
+      const winner = await AgentModel.getPersonalLlmProxy(
+        userId,
+        organizationId,
+      );
+      if (!winner) throw error;
+      return winner;
+    }
+  }
+
+  /**
+   * Bulk-creates personal LLM proxies for every member that lacks one. Mirrors
+   * {@link AgentModel.bulkBackfillPersonalMcpGateways}. Returns the number of
+   * rows actually inserted.
+   */
+  static async bulkBackfillPersonalLlmProxies(): Promise<number> {
+    const missing = await db
+      .select({
+        userId: schema.membersTable.userId,
+        organizationId: schema.membersTable.organizationId,
+      })
+      .from(schema.membersTable)
+      .leftJoin(
+        schema.agentsTable,
+        and(
+          eq(schema.agentsTable.authorId, schema.membersTable.userId),
+          eq(
+            schema.agentsTable.organizationId,
+            schema.membersTable.organizationId,
+          ),
+          eq(schema.agentsTable.agentType, "llm_proxy"),
+          eq(schema.agentsTable.isPersonalProxy, true),
+        ),
+      )
+      .where(isNull(schema.agentsTable.id));
+
+    if (missing.length === 0) return 0;
+
+    const rows = missing.map((m) => ({
+      organizationId: m.organizationId,
+      authorId: m.userId,
+      name: PERSONAL_LLM_PROXY_NAME,
+      description: PERSONAL_LLM_PROXY_DESCRIPTION,
+      agentType: "llm_proxy" as const,
+      scope: "personal" as const,
+      isPersonalProxy: true,
+    }));
+
+    const inserted = await db
+      .insert(schema.agentsTable)
+      .values(rows)
+      .onConflictDoNothing({
+        target: [
+          schema.agentsTable.organizationId,
+          schema.agentsTable.authorId,
+        ],
+        where: sql`${schema.agentsTable.agentType} = 'llm_proxy' AND ${schema.agentsTable.isPersonalProxy} = true AND ${schema.agentsTable.deletedAt} IS NULL`,
+      })
+      .returning({ id: schema.agentsTable.id });
+
+    if (inserted.length < missing.length) {
+      logger.warn(
+        { missing: missing.length, inserted: inserted.length },
+        "bulkBackfillPersonalLlmProxies inserted fewer rows than expected",
+      );
+    }
+
+    return inserted.length;
+  }
+
+  /**
+   * Deletes every personal LLM proxy authored by the given user across all
+   * organizations. Called from the better-auth user.delete hook, mirroring
+   * {@link AgentModel.deletePersonalMcpGatewaysForUser}.
+   */
+  static async deletePersonalLlmProxiesForUser(
+    userId: string,
+    tx?: Transaction,
+  ): Promise<void> {
+    await softDelete(
+      tx ?? db,
+      schema.agentsTable,
+      and(
+        eq(schema.agentsTable.authorId, userId),
+        eq(schema.agentsTable.agentType, "llm_proxy"),
+        eq(schema.agentsTable.isPersonalProxy, true),
+      ),
+    );
+  }
+
+  /**
    * Resolve a UUID or slug to an agent ID.
    * Checks both the id and slug columns in a single query.
    */
@@ -2279,6 +2439,10 @@ class AgentModel {
 const PERSONAL_MCP_GATEWAY_NAME = "My Gateway";
 const PERSONAL_MCP_GATEWAY_DESCRIPTION =
   "All MCP servers you install are automatically connected to this gateway.";
+
+const PERSONAL_LLM_PROXY_NAME = "My Proxy";
+const PERSONAL_LLM_PROXY_DESCRIPTION =
+  "Your personal LLM proxy — route a client's model traffic through it for security policies and observability.";
 
 type AgentRecordStatus = "active" | "deleted";
 

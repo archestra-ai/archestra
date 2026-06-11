@@ -13,27 +13,15 @@ import {
 } from "lucide-react";
 import { useCallback, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { useHasPermissions } from "@/lib/auth/auth.query";
-import { useFeature } from "@/lib/config/config.query";
 import {
   type CreateConnectionSetupBody,
   type CreateConnectionSetupResult,
   useCreateConnectionSetup,
 } from "@/lib/connection-setup.query";
 import type { ConnectClient } from "./clients";
+import { useConnectSkills } from "./connect-skills-step";
 import { SKILL_MARKETPLACE_TTL_PRESETS } from "./skills-marketplace-clients";
-import {
-  fetchAllSkillIds,
-  useTotalSkillCount,
-} from "./skills-marketplace-step";
+import { fetchAllSkillIds } from "./skills-marketplace-step";
 import { StepCard } from "./step-card";
 import { TerminalBlock } from "./terminal-block";
 
@@ -69,6 +57,9 @@ interface ConnectCommandStepProps {
    * would be silently omitted from the command — prompt the user to pick one.
    */
   proxyNeedsProvider: boolean;
+  /** Skills opt-in is chosen in the dedicated skills step above. */
+  includeSkills: boolean;
+  skillTtlId: string;
   expanded: boolean;
   onToggle: (() => void) | undefined;
 }
@@ -80,35 +71,30 @@ export function ConnectCommandStep({
   llmProxy,
   proxyAuth,
   proxyNeedsProvider,
+  includeSkills,
+  skillTtlId,
   expanded,
   onToggle,
 }: ConnectCommandStepProps) {
-  const skillsEnabled = useFeature("agentSkillsEnabled") === true;
-  const { data: canAdminSkills } = useHasPermissions({ skill: ["admin"] });
-  const { data: totalSkills } = useTotalSkillCount();
-  const skillsEligible =
-    skillsEnabled && canAdminSkills === true && (totalSkills ?? 0) > 0;
+  const { eligible: skillsEligible, totalSkills } = useConnectSkills();
+  const includeSkillsEffective = includeSkills && skillsEligible;
 
-  const [includeSkills, setIncludeSkills] = useState(false);
-  const [ttlId, setTtlId] = useState<string>(
-    SKILL_MARKETPLACE_TTL_PRESETS[0].id,
-  );
   const [result, setResult] = useState<CreateConnectionSetupResult | null>(
     null,
   );
   const createSetup = useCreateConnectionSetup();
 
-  const hasAnything = Boolean(mcpGateway || llmProxy || includeSkills);
+  const hasAnything = Boolean(mcpGateway || llmProxy || includeSkillsEffective);
 
   const handleGenerate = useCallback(async () => {
     if (!isScriptClient(client.id)) return;
 
     let skills: CreateConnectionSetupBody["skills"];
-    if (includeSkills && skillsEligible) {
+    if (includeSkillsEffective) {
       const skillIds = await fetchAllSkillIds();
       if (skillIds.length === 0) return;
       const preset =
-        SKILL_MARKETPLACE_TTL_PRESETS.find((p) => p.id === ttlId) ??
+        SKILL_MARKETPLACE_TTL_PRESETS.find((p) => p.id === skillTtlId) ??
         SKILL_MARKETPLACE_TTL_PRESETS[0];
       skills = { skillIds, ttlDays: preset.days };
     }
@@ -129,9 +115,8 @@ export function ConnectCommandStep({
     mcpGateway,
     llmProxy,
     proxyAuth,
-    includeSkills,
-    skillsEligible,
-    ttlId,
+    includeSkillsEffective,
+    skillTtlId,
     createSetup,
   ]);
 
@@ -150,42 +135,9 @@ export function ConnectCommandStep({
           llmProxy={llmProxy}
           proxyAuth={proxyAuth}
           proxyNeedsProvider={proxyNeedsProvider}
-          includeSkills={includeSkills && skillsEligible}
-          totalSkills={totalSkills ?? 0}
+          includeSkills={includeSkillsEffective}
+          totalSkills={totalSkills}
         />
-
-        {skillsEligible && (
-          <div className="flex flex-wrap items-center gap-3">
-            <label
-              className="flex items-center gap-2 text-sm"
-              htmlFor="connect-include-skills"
-            >
-              <Checkbox
-                id="connect-include-skills"
-                checked={includeSkills}
-                onCheckedChange={(checked) =>
-                  setIncludeSkills(checked === true)
-                }
-              />
-              Install all {totalSkills} shared skill
-              {totalSkills === 1 ? "" : "s"}
-            </label>
-            {includeSkills && (
-              <Select value={ttlId} onValueChange={setTtlId}>
-                <SelectTrigger className="w-[180px]" aria-label="Expiration">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {SKILL_MARKETPLACE_TTL_PRESETS.map((preset) => (
-                    <SelectItem key={preset.id} value={preset.id}>
-                      {preset.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
-          </div>
-        )}
 
         {result ? (
           <div className="flex flex-col gap-3">

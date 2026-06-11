@@ -15,6 +15,7 @@ import {
   type ConnectProxyAuth,
   isScriptClient,
 } from "./connect-command-step";
+import { ConnectSkillsStep } from "./connect-skills-step";
 import {
   type ConnectionBaseUrl,
   resolveAdminDefaultBaseUrl,
@@ -26,6 +27,7 @@ import { ConnectionUrlStep } from "./connection-url-step";
 import { McpClientInstructions } from "./mcp-client-instructions";
 import { ProxyClientInstructions } from "./proxy-client-instructions";
 import { SearchableSelect } from "./searchable-select";
+import { SKILL_MARKETPLACE_TTL_PRESETS } from "./skills-marketplace-clients";
 import { SkillsMarketplaceStep } from "./skills-marketplace-step";
 import { StepCard, type StepState } from "./step-card";
 import { useUpdateUrlParams } from "./use-update-url-params";
@@ -212,6 +214,10 @@ export function ConnectionFlow({
   // Passthrough by default: the script rewires the base URL and the user
   // keeps their own provider credentials. "virtual-key" auto-provisions one.
   const [proxyAuth, setProxyAuth] = useState<ConnectProxyAuth>("provider-key");
+  const [includeSkills, setIncludeSkills] = useState(false);
+  const [skillTtlId, setSkillTtlId] = useState<string>(
+    SKILL_MARKETPLACE_TTL_PRESETS[0].id,
+  );
   const urlProviderId = searchParams.get("providerId");
   const selectedProvider: SupportedProvider | null =
     urlProviderId && isSupportedProvider(urlProviderId) ? urlProviderId : null;
@@ -378,13 +384,23 @@ export function ConnectionFlow({
         </StepCard>
       )}
 
-      {/* Step 4 — Skills marketplace (no-ops when feature off or non-admin).
-          Script clients opt into skills inside the connect step instead. */}
+      {/* Step 4 — Skills. Non-script clients get the marketplace link UI;
+          script clients get a checkbox that folds skills into the command. */}
       {!scriptClient && (
         <SkillsMarketplaceStep
           client={client}
           expanded={isOpen("skills")}
           onToggle={client ? () => toggleOne("skills") : undefined}
+        />
+      )}
+      {scriptClient && client && (
+        <ConnectSkillsStep
+          includeSkills={includeSkills}
+          onIncludeChange={setIncludeSkills}
+          ttlId={skillTtlId}
+          onTtlChange={setSkillTtlId}
+          expanded={isOpen("skills")}
+          onToggle={() => toggleOne("skills")}
         />
       )}
 
@@ -419,6 +435,8 @@ export function ConnectionFlow({
               !selectedProvider
             )
           }
+          includeSkills={includeSkills}
+          skillTtlId={skillTtlId}
           expanded={isOpen("connect")}
           onToggle={() => toggleOne("connect")}
         />

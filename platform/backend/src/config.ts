@@ -1267,8 +1267,6 @@ const config = {
     connectorSyncMaxDurationSeconds: parseConnectorSyncMaxDuration(
       process.env.ARCHESTRA_KNOWLEDGE_BASE_CONNECTOR_SYNC_MAX_DURATION_SECONDS,
     ),
-    /** Path to the Perforce `p4` CLI binary used by the Perforce knowledge connector. */
-    p4BinaryPath: process.env.ARCHESTRA_KNOWLEDGE_BASE_P4_BINARY_PATH || "p4",
     taskWorkerPollIntervalSeconds: Number.parseInt(
       process.env.ARCHESTRA_KNOWLEDGE_BASE_TASK_WORKER_POLL_INTERVAL_SECONDS ||
         "5",

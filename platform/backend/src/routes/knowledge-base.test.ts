@@ -728,7 +728,7 @@ describe("knowledge base routes", () => {
           connectorType: "perforce",
           config: {
             type: "perforce",
-            p4Port: "ssl:perforce.example.com:1666",
+            serverUrl: "https://perforce.example.com:8080",
             depotPaths: ["//depot/docs/...", "//stream/main/specs/"],
             fileTypes: [".md", ".yaml"],
           },
@@ -744,7 +744,7 @@ describe("knowledge base routes", () => {
       expect(connector.connectorType).toBe("perforce");
       expect(connector.config).toMatchObject({
         type: "perforce",
-        p4Port: "ssl:perforce.example.com:1666",
+        serverUrl: "https://perforce.example.com:8080",
         depotPaths: ["//depot/docs", "//stream/main/specs"],
       });
 
@@ -763,7 +763,7 @@ describe("knowledge base routes", () => {
           connectorType: "perforce",
           config: {
             type: "perforce",
-            p4Port: "perforce.example.com:1666",
+            serverUrl: "https://perforce.example.com:8080",
             depotPaths: ["//depot/docs@123"],
           },
           credentials: {
@@ -871,7 +871,7 @@ describe("knowledge base routes", () => {
         connectorType: "perforce",
         config: {
           type: "perforce",
-          p4Port: "perforce.example.com:1666",
+          serverUrl: "https://perforce.example.com:8080",
           depotPaths: ["//depot/docs"],
         },
       });

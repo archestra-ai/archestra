@@ -248,11 +248,11 @@ const CONNECTOR_URL_CONFIGS: Record<ConnectorType, ConnectorUrlConfig | null> =
     },
     file_upload: null,
     perforce: {
-      fieldName: "config.p4Port",
-      label: "Server Address (P4PORT)",
-      placeholder: "ssl:perforce.example.com:1666",
+      fieldName: "config.serverUrl",
+      label: "Server URL",
+      placeholder: "https://perforce.example.com:8080",
       description:
-        "Helix Core server address in P4PORT format: host:port. For TLS-enabled servers, use the ssl: prefix (e.g. ssl:host:1666) — the server certificate must be CA-verifiable or pre-trusted via a P4TRUST file on the backend.",
+        "Base URL of the P4 REST API, served by the built-in P4 web server (p4 webserver). Use https when the server has an SSL certificate configured.",
     },
   };
 
@@ -401,7 +401,7 @@ export function getConnectorCredentialConfig(params: {
     salesforce: "Password + Security Token",
     web_crawler: undefined,
     file_upload: undefined,
-    perforce: "Password or Ticket",
+    perforce: "Login Ticket",
   };
 
   const createApiTokenPlaceholders: Record<ConnectorType, string | undefined> =
@@ -424,7 +424,7 @@ export function getConnectorCredentialConfig(params: {
       salesforce: "Your Salesforce password followed by your security token",
       web_crawler: undefined,
       file_upload: undefined,
-      perforce: "Your Perforce password or login ticket",
+      perforce: "Ticket from p4 login -a -p",
     };
 
   const editApiTokenPlaceholders: Record<ConnectorType, string | undefined> = {
@@ -468,7 +468,7 @@ export function getConnectorCredentialConfig(params: {
     salesforce: "Password and security token are required",
     web_crawler: undefined,
     file_upload: undefined,
-    perforce: "Password or ticket is required",
+    perforce: "Login ticket is required",
   };
 
   const apiTokenHelpText = getApiTokenHelpText({
@@ -524,9 +524,9 @@ function getApiTokenHelpText(params: {
   if (params.type === "perforce") {
     return (
       <p className="text-[0.8rem] text-muted-foreground">
-        A password or a login ticket. For long-lived access, generate a ticket
-        with <code>p4 login -p</code> using a service account whose group has an
-        unlimited ticket timeout.
+        A login ticket valid for all hosts, generated with{" "}
+        <code>p4 login -a -p</code>. For long-lived access, use a service
+        account whose group has an unlimited ticket timeout.
       </p>
     );
   }

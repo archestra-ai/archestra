@@ -9,18 +9,19 @@ import { PerforceConfigSchema } from "@/types";
 import { BaseConnector } from "../base-connector";
 import {
   isConnectionLevelError,
-  P4CliClient,
-  P4CommandError,
+  P4ApiError,
   type P4DepotFile,
   P4FileTooLargeError,
-} from "./p4-cli-client";
+  P4RestClient,
+} from "./p4-rest-client";
 
 /**
  * Knowledge connector for Perforce Helix Core depots.
  *
  * Syncs text files (default: .md/.yaml/.yml, customizable via `fileTypes`)
- * from one or more depot paths by shelling out to the `p4` CLI — see
- * {@link P4CliClient} for the transport details.
+ * from one or more depot paths through the P4 REST API — see
+ * {@link P4RestClient} for the transport details. No `p4` CLI binary and no
+ * client workspace are involved.
  *
  * Incremental sync is driven by a changelist-number cursor:
  * - `lastChangelist` is the committed cursor — every submitted change up to
@@ -36,9 +37,10 @@ import {
  * has no delete channel); a force re-sync rebuilds the corpus from scratch.
  *
  * `estimateTotalItems` deliberately stays at the inherited null: producing a
- * count would require the same `p4 files` listing the sweep itself performs.
- * The client also deliberately has no retry layer — transient per-file print
- * failures are recorded on the run, and listing/auth failures surface loudly.
+ * count would require the same `/v0/file/revisions` listing the sweep itself
+ * performs. The client also deliberately has no retry layer — transient
+ * per-file download failures are recorded on the run, and listing/auth
+ * failures surface loudly.
  */
 export class PerforceConnector extends BaseConnector {
   type = "perforce" as const;
@@ -51,7 +53,7 @@ export class PerforceConnector extends BaseConnector {
       parser: parsePerforceConfig,
       label: "Perforce",
       invalidConfigError:
-        'Invalid Perforce configuration: p4Port ("host:1666" or "ssl:host:1666") and at least one depot path ("//depot/path") are required',
+        'Invalid Perforce configuration: serverUrl (the P4 REST API base URL, e.g. "https://perforce.example.com:8080") and at least one depot path ("//depot/path") are required',
     });
   }
 
@@ -68,9 +70,10 @@ export class PerforceConnector extends BaseConnector {
       label: "Perforce",
       probe: async () => {
         const client = this.createClient(parsed, params.credentials);
+        // Authenticated server probe: surfaces unreachable-URL and
+        // login/ticket problems.
         await client.info();
-        // An authenticated command: surfaces login/permission problems that
-        // `p4 info` (which needs no auth) would not.
+        // Listing probe: surfaces per-path permission problems.
         await client.files([`${parsed.depotPaths[0]}/...`], { max: 1 });
       },
     });
@@ -203,20 +206,20 @@ export class PerforceConnector extends BaseConnector {
   private createClient(
     config: PerforceConfig,
     credentials: ConnectorCredentials,
-  ): P4CliClient {
+  ): P4RestClient {
     const username = credentials.email?.trim() ?? "";
     if (!username) {
       // Enforced at runtime (not only in the UI) because connectors can also
       // be created through the API and MCP tools.
-      throw new P4CommandError(
+      throw new P4ApiError(
         "Perforce connector requires a username (stored in the credential email field)",
+        { connectionLevel: true },
       );
     }
-    return new P4CliClient({
-      p4Port: config.p4Port,
+    return new P4RestClient({
+      serverUrl: config.serverUrl,
       username,
-      password: credentials.apiToken,
-      charset: config.charset,
+      ticket: credentials.apiToken,
       log: this.log,
     });
   }
@@ -228,7 +231,7 @@ export class PerforceConnector extends BaseConnector {
    * there is nothing new to sync.
    */
   private async resolveSweep(
-    client: P4CliClient,
+    client: P4RestClient,
     config: PerforceConfig,
     checkpoint: PerforceCheckpoint,
   ): Promise<{
@@ -273,11 +276,11 @@ export class PerforceConnector extends BaseConnector {
    * Deterministic candidate list for the sweep, pinned to `@target`:
    * extension-filtered server-side via `//path/....<ext>` filespecs, restricted
    * to the `@lastChangelist+1,@target` window on incremental runs, reduced to
-   * printable text filetypes, filtered against `excludePaths`, deduped, and
+   * downloadable text filetypes, filtered against `excludePaths`, deduped, and
    * sorted by depot path so `filesOffset` resumes are stable.
    */
   private async listCandidateFiles(params: {
-    client: P4CliClient;
+    client: P4RestClient;
     config: PerforceConfig;
     checkpoint: PerforceCheckpoint;
     target: number;
@@ -296,8 +299,8 @@ export class PerforceConnector extends BaseConnector {
       }
     }
 
-    // One `p4 files` invocation per filespec so each process stays within the
-    // per-command output/timeout caps — a combined listing of a large depot's
+    // One listing request per filespec so each response stays within the
+    // per-request size/timeout caps — a combined listing of a large depot's
     // initial sweep could exceed them and fail the run on every retry.
     const byDepotFile = new Map<string, P4DepotFile>();
     const skippedNonText = new Map<string, string>();
@@ -338,17 +341,17 @@ export class PerforceConnector extends BaseConnector {
   }
 
   /**
-   * Print one file at the sweep target. Oversized files are skipped,
+   * Download one file at the sweep target. Oversized files are skipped,
    * connection/auth breakage aborts the run, anything else (e.g. per-file
    * permission errors) is recorded as an item failure and the sweep continues.
    */
   private async fetchFileContent(
-    client: P4CliClient,
+    client: P4RestClient,
     file: P4DepotFile,
     target: number,
   ): Promise<string | null> {
     try {
-      return await client.print(`${file.depotFile}@${target}`);
+      return await client.readFile(`${file.depotFile}@${target}`);
     } catch (error) {
       if (error instanceof P4FileTooLargeError) {
         this.trackSkipped({

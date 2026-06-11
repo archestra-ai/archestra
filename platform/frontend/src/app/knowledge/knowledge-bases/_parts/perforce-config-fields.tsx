@@ -63,30 +63,6 @@ export function PerforceConfigFields({
           </FormItem>
         )}
       />
-      <FormField
-        control={form.control}
-        name="config.charset"
-        render={({ field }) => (
-          <FormItem>
-            <FormLabel>Charset (optional)</FormLabel>
-            <FormControl>
-              <Input
-                placeholder="utf8"
-                {...field}
-                value={(field.value as string | undefined) ?? ""}
-                onChange={(event) =>
-                  field.onChange(event.target.value || undefined)
-                }
-              />
-            </FormControl>
-            <FormDescription>
-              P4CHARSET for unicode-mode servers (commonly <code>utf8</code>).
-              Leave empty for non-unicode servers.
-            </FormDescription>
-            <FormMessage />
-          </FormItem>
-        )}
-      />
     </div>
   );
 }

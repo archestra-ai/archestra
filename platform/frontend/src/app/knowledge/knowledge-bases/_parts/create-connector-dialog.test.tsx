@@ -640,12 +640,10 @@ describe("CreateConnectorDialog", () => {
     it("shows server address, depot paths, username, and token fields", async () => {
       await renderPerforceConfigureStep();
 
-      expect(
-        screen.getByLabelText(/^Server Address \(P4PORT\)$/),
-      ).toBeInTheDocument();
+      expect(screen.getByLabelText(/^Server URL$/)).toBeInTheDocument();
       expect(screen.getByLabelText(/^Depot Paths$/)).toBeInTheDocument();
       expect(screen.getByLabelText(/^Username$/)).toBeInTheDocument();
-      expect(screen.getByLabelText(/^Password or Ticket$/)).toBeInTheDocument();
+      expect(screen.getByLabelText(/^Login Ticket$/)).toBeInTheDocument();
     });
 
     it("submits perforce payload with transformed depot paths and file types", async () => {
@@ -655,8 +653,8 @@ describe("CreateConnectorDialog", () => {
       fireEvent.change(screen.getByLabelText(/^Name$/), {
         target: { value: "Docs Depot" },
       });
-      fireEvent.change(screen.getByLabelText(/^Server Address \(P4PORT\)$/), {
-        target: { value: "ssl:perforce.example.com:1666" },
+      fireEvent.change(screen.getByLabelText(/^Server URL$/), {
+        target: { value: "https://perforce.example.com:8080" },
       });
       fireEvent.change(screen.getByLabelText(/^Depot Paths$/), {
         target: { value: "//depot/docs, //stream/main/specs" },
@@ -664,7 +662,7 @@ describe("CreateConnectorDialog", () => {
       fireEvent.change(screen.getByLabelText(/^Username$/), {
         target: { value: "svc-knowledge" },
       });
-      fireEvent.change(screen.getByLabelText(/^Password or Ticket$/), {
+      fireEvent.change(screen.getByLabelText(/^Login Ticket$/), {
         target: { value: "perforce-ticket" },
       });
 
@@ -677,9 +675,6 @@ describe("CreateConnectorDialog", () => {
       });
       fireEvent.change(screen.getByLabelText(/Exclude Paths/), {
         target: { value: "//depot/docs/generated, //depot/docs/vendor" },
-      });
-      fireEvent.change(screen.getByLabelText(/Charset/), {
-        target: { value: "utf8" },
       });
 
       await user.click(
@@ -701,11 +696,10 @@ describe("CreateConnectorDialog", () => {
       });
       expect(call[0].config).toMatchObject({
         type: "perforce",
-        p4Port: "ssl:perforce.example.com:1666",
+        serverUrl: "https://perforce.example.com:8080",
         depotPaths: ["//depot/docs", "//stream/main/specs"],
         excludePaths: ["//depot/docs/generated", "//depot/docs/vendor"],
         fileTypes: [".md", ".yaml"],
-        charset: "utf8",
       });
     });
   });

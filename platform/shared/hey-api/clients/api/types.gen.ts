@@ -34614,11 +34614,10 @@ export type GetConnectorsResponses = {
                 userAgent?: string;
             } | {
                 type: 'perforce';
-                p4Port: string;
+                serverUrl: unknown;
                 depotPaths: Array<string>;
                 excludePaths?: Array<string>;
                 fileTypes?: Array<string>;
-                charset?: string;
             };
             secretId: string | null;
             schedule: string;
@@ -34788,11 +34787,10 @@ export type CreateConnectorData = {
             userAgent?: string;
         } | {
             type: 'perforce';
-            p4Port: string;
+            serverUrl: string;
             depotPaths: Array<string>;
             excludePaths?: Array<string>;
             fileTypes?: Array<string>;
-            charset?: string;
         };
         credentials?: {
             email?: string;
@@ -35020,11 +35018,10 @@ export type CreateConnectorResponses = {
             userAgent?: string;
         } | {
             type: 'perforce';
-            p4Port: string;
+            serverUrl: unknown;
             depotPaths: Array<string>;
             excludePaths?: Array<string>;
             fileTypes?: Array<string>;
-            charset?: string;
         };
         secretId: string | null;
         schedule: string;
@@ -35344,11 +35341,10 @@ export type GetConnectorResponses = {
             userAgent?: string;
         } | {
             type: 'perforce';
-            p4Port: string;
+            serverUrl: unknown;
             depotPaths: Array<string>;
             excludePaths?: Array<string>;
             fileTypes?: Array<string>;
-            charset?: string;
         };
         secretId: string | null;
         schedule: string;
@@ -35504,11 +35500,10 @@ export type UpdateConnectorData = {
             userAgent?: string;
         } | {
             type: 'perforce';
-            p4Port: string;
+            serverUrl: string;
             depotPaths: Array<string>;
             excludePaths?: Array<string>;
             fileTypes?: Array<string>;
-            charset?: string;
         };
         credentials?: {
             email?: string;
@@ -35737,11 +35732,10 @@ export type UpdateConnectorResponses = {
             userAgent?: string;
         } | {
             type: 'perforce';
-            p4Port: string;
+            serverUrl: unknown;
             depotPaths: Array<string>;
             excludePaths?: Array<string>;
             fileTypes?: Array<string>;
-            charset?: string;
         };
         secretId: string | null;
         schedule: string;

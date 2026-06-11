@@ -375,44 +375,20 @@ describe("knowledge-connector schemas", () => {
   });
 
   describe("Perforce connector schema", () => {
-    test("accepts a plain host:port and ssl-prefixed p4Port", () => {
-      for (const p4Port of [
-        "perforce.example.com:1666",
-        "ssl:perforce.example.com:1666",
-        "tcp64:10.0.0.5:1666",
-      ]) {
-        const result = PerforceConfigSchema.parse({
-          type: "perforce",
-          p4Port,
-          depotPaths: ["//depot/docs"],
-        });
-        expect(result.p4Port).toBe(p4Port);
-      }
-    });
-
-    test("rejects malformed p4Port values", () => {
-      for (const p4Port of [
-        "https://perforce.example.com:1666",
-        "perforce.example.com",
-        "ssl:",
-        "host:1666 extra",
-        "host:notaport",
-        "host:0",
-        "host:99999",
-      ]) {
-        const result = PerforceConfigSchema.safeParse({
-          type: "perforce",
-          p4Port,
-          depotPaths: ["//depot/docs"],
-        });
-        expect(result.success).toBe(false);
-      }
+    test("normalizes the REST API server URL like other connector URLs", () => {
+      const result = PerforceConfigSchema.parse({
+        type: "perforce",
+        serverUrl: "perforce.example.com:8080/",
+        depotPaths: ["//depot/docs"],
+      });
+      // ensureProtocol + stripTrailingSlashes, matching connectorUrlSchema.
+      expect(result.serverUrl).toBe("https://perforce.example.com:8080");
     });
 
     test("normalizes trailing /... and slashes on depot paths", () => {
       const result = PerforceConfigSchema.parse({
         type: "perforce",
-        p4Port: "perforce.example.com:1666",
+        serverUrl: "https://perforce.example.com:8080",
         depotPaths: ["//depot/docs/...", "//depot/specs/", "//stream/main"],
       });
       expect(result.depotPaths).toEqual([
@@ -435,7 +411,7 @@ describe("knowledge-connector schemas", () => {
       ]) {
         const result = PerforceConfigSchema.safeParse({
           type: "perforce",
-          p4Port: "perforce.example.com:1666",
+          serverUrl: "https://perforce.example.com:8080",
           depotPaths: [depotPath],
         });
         expect(result.success).toBe(false);
@@ -445,7 +421,7 @@ describe("knowledge-connector schemas", () => {
     test("requires at least one depot path", () => {
       const result = PerforceConfigSchema.safeParse({
         type: "perforce",
-        p4Port: "perforce.example.com:1666",
+        serverUrl: "https://perforce.example.com:8080",
         depotPaths: [],
       });
       expect(result.success).toBe(false);
@@ -454,7 +430,7 @@ describe("knowledge-connector schemas", () => {
     test("accepts extension filters and rejects filespec-unsafe ones", () => {
       const ok = PerforceConfigSchema.parse({
         type: "perforce",
-        p4Port: "perforce.example.com:1666",
+        serverUrl: "https://perforce.example.com:8080",
         depotPaths: ["//depot/docs"],
         fileTypes: [".md", "yaml"],
       });
@@ -462,7 +438,7 @@ describe("knowledge-connector schemas", () => {
 
       const bad = PerforceConfigSchema.safeParse({
         type: "perforce",
-        p4Port: "perforce.example.com:1666",
+        serverUrl: "https://perforce.example.com:8080",
         depotPaths: ["//depot/docs"],
         fileTypes: ["*.md"],
       });
@@ -472,7 +448,7 @@ describe("knowledge-connector schemas", () => {
     test("accepts exclude paths with the same normalization and rejection rules as depot paths", () => {
       const ok = PerforceConfigSchema.parse({
         type: "perforce",
-        p4Port: "perforce.example.com:1666",
+        serverUrl: "https://perforce.example.com:8080",
         depotPaths: ["//depot/docs"],
         excludePaths: ["//depot/docs/generated/...", "//depot/docs/vendor/"],
       });
@@ -483,31 +459,11 @@ describe("knowledge-connector schemas", () => {
 
       const bad = PerforceConfigSchema.safeParse({
         type: "perforce",
-        p4Port: "perforce.example.com:1666",
+        serverUrl: "https://perforce.example.com:8080",
         depotPaths: ["//depot/docs"],
         excludePaths: ["//depot/docs@123"],
       });
       expect(bad.success).toBe(false);
-    });
-
-    test("accepts a P4CHARSET name and rejects unsafe values", () => {
-      const ok = PerforceConfigSchema.parse({
-        type: "perforce",
-        p4Port: "perforce.example.com:1666",
-        depotPaths: ["//depot/docs"],
-        charset: "utf8",
-      });
-      expect(ok.charset).toBe("utf8");
-
-      for (const charset of ["utf 8", "utf8;rm -rf /", ""]) {
-        const result = PerforceConfigSchema.safeParse({
-          type: "perforce",
-          p4Port: "perforce.example.com:1666",
-          depotPaths: ["//depot/docs"],
-          charset,
-        });
-        expect(result.success).toBe(false);
-      }
     });
 
     test("parses sweep cursor fields in checkpoint schema", () => {

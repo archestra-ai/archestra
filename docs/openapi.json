@@ -130690,11 +130690,7 @@
                                       "perforce"
                                     ]
                                   },
-                                  "p4Port": {
-                                    "type": "string",
-                                    "maxLength": 256,
-                                    "pattern": "^(?:(?:tcp|tcp4|tcp6|tcp46|tcp64|ssl|ssl4|ssl6|ssl46|ssl64):)?[A-Za-z0-9.-]+:\\d{1,5}$"
-                                  },
+                                  "serverUrl": {},
                                   "depotPaths": {
                                     "minItems": 1,
                                     "type": "array",
@@ -130714,15 +130710,11 @@
                                       "type": "string",
                                       "pattern": "^\\.?[A-Za-z0-9_-]+$"
                                     }
-                                  },
-                                  "charset": {
-                                    "type": "string",
-                                    "pattern": "^[A-Za-z0-9_-]{1,32}$"
                                   }
                                 },
                                 "required": [
                                   "type",
-                                  "p4Port",
+                                  "serverUrl",
                                   "depotPaths"
                                 ],
                                 "additionalProperties": false
@@ -131942,10 +131934,8 @@
                               "perforce"
                             ]
                           },
-                          "p4Port": {
-                            "type": "string",
-                            "maxLength": 256,
-                            "pattern": "^(?:(?:tcp|tcp4|tcp6|tcp46|tcp64|ssl|ssl4|ssl6|ssl46|ssl64):)?[A-Za-z0-9.-]+:\\d{1,5}$"
+                          "serverUrl": {
+                            "type": "string"
                           },
                           "depotPaths": {
                             "minItems": 1,
@@ -131968,15 +131958,11 @@
                               "type": "string",
                               "pattern": "^\\.?[A-Za-z0-9_-]+$"
                             }
-                          },
-                          "charset": {
-                            "type": "string",
-                            "pattern": "^[A-Za-z0-9_-]{1,32}$"
                           }
                         },
                         "required": [
                           "type",
-                          "p4Port",
+                          "serverUrl",
                           "depotPaths"
                         ]
                       }
@@ -132848,11 +132834,7 @@
                                 "perforce"
                               ]
                             },
-                            "p4Port": {
-                              "type": "string",
-                              "maxLength": 256,
-                              "pattern": "^(?:(?:tcp|tcp4|tcp6|tcp46|tcp64|ssl|ssl4|ssl6|ssl46|ssl64):)?[A-Za-z0-9.-]+:\\d{1,5}$"
-                            },
+                            "serverUrl": {},
                             "depotPaths": {
                               "minItems": 1,
                               "type": "array",
@@ -132872,15 +132854,11 @@
                                 "type": "string",
                                 "pattern": "^\\.?[A-Za-z0-9_-]+$"
                               }
-                            },
-                            "charset": {
-                              "type": "string",
-                              "pattern": "^[A-Za-z0-9_-]{1,32}$"
                             }
                           },
                           "required": [
                             "type",
-                            "p4Port",
+                            "serverUrl",
                             "depotPaths"
                           ],
                           "additionalProperties": false
@@ -134052,11 +134030,7 @@
                                 "perforce"
                               ]
                             },
-                            "p4Port": {
-                              "type": "string",
-                              "maxLength": 256,
-                              "pattern": "^(?:(?:tcp|tcp4|tcp6|tcp46|tcp64|ssl|ssl4|ssl6|ssl46|ssl64):)?[A-Za-z0-9.-]+:\\d{1,5}$"
-                            },
+                            "serverUrl": {},
                             "depotPaths": {
                               "minItems": 1,
                               "type": "array",
@@ -134076,15 +134050,11 @@
                                 "type": "string",
                                 "pattern": "^\\.?[A-Za-z0-9_-]+$"
                               }
-                            },
-                            "charset": {
-                              "type": "string",
-                              "pattern": "^[A-Za-z0-9_-]{1,32}$"
                             }
                           },
                           "required": [
                             "type",
-                            "p4Port",
+                            "serverUrl",
                             "depotPaths"
                           ],
                           "additionalProperties": false
@@ -135130,10 +135100,8 @@
                               "perforce"
                             ]
                           },
-                          "p4Port": {
-                            "type": "string",
-                            "maxLength": 256,
-                            "pattern": "^(?:(?:tcp|tcp4|tcp6|tcp46|tcp64|ssl|ssl4|ssl6|ssl46|ssl64):)?[A-Za-z0-9.-]+:\\d{1,5}$"
+                          "serverUrl": {
+                            "type": "string"
                           },
                           "depotPaths": {
                             "minItems": 1,
@@ -135156,15 +135124,11 @@
                               "type": "string",
                               "pattern": "^\\.?[A-Za-z0-9_-]+$"
                             }
-                          },
-                          "charset": {
-                            "type": "string",
-                            "pattern": "^[A-Za-z0-9_-]{1,32}$"
                           }
                         },
                         "required": [
                           "type",
-                          "p4Port",
+                          "serverUrl",
                           "depotPaths"
                         ]
                       }
@@ -136037,11 +136001,7 @@
                                 "perforce"
                               ]
                             },
-                            "p4Port": {
-                              "type": "string",
-                              "maxLength": 256,
-                              "pattern": "^(?:(?:tcp|tcp4|tcp6|tcp46|tcp64|ssl|ssl4|ssl6|ssl46|ssl64):)?[A-Za-z0-9.-]+:\\d{1,5}$"
-                            },
+                            "serverUrl": {},
                             "depotPaths": {
                               "minItems": 1,
                               "type": "array",
@@ -136061,15 +136021,11 @@
                                 "type": "string",
                                 "pattern": "^\\.?[A-Za-z0-9_-]+$"
                               }
-                            },
-                            "charset": {
-                              "type": "string",
-                              "pattern": "^[A-Za-z0-9_-]{1,32}$"
                             }
                           },
                           "required": [
                             "type",
-                            "p4Port",
+                            "serverUrl",
                             "depotPaths"
                           ],
                           "additionalProperties": false

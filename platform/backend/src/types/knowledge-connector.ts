@@ -448,14 +448,6 @@ export type OutlineCheckpoint = z.infer<typeof OutlineCheckpointSchema>;
 // ===== Perforce (Helix Core) Config & Checkpoint =====
 
 /**
- * `P4PORT` connection string: optional tcp/ssl-family protocol prefix, then
- * host:port. Not an HTTP URL — validated with a dedicated pattern instead of
- * `connectorUrlSchema`.
- */
-const P4_PORT_PATTERN =
-  /^(?:(?:tcp|tcp4|tcp6|tcp46|tcp64|ssl|ssl4|ssl6|ssl46|ssl64):)?[A-Za-z0-9.-]+:\d{1,5}$/;
-
-/**
  * Depot path in depot syntax (e.g. `//depot/docs`). Perforce wildcard and
  * revision metacharacters (`@ # % * ...`) are rejected so user input can never
  * widen the filespecs the connector builds; `/...` and `@rev` suffixes are
@@ -484,20 +476,8 @@ const depotPathSchema = z
 
 export const PerforceConfigSchema = z.object({
   type: PERFORCE,
-  p4Port: z
-    .string()
-    .max(256)
-    .regex(P4_PORT_PATTERN, {
-      message:
-        'Server address must look like "host:1666" or "ssl:host:1666" (P4PORT format)',
-    })
-    .refine(
-      (value) => {
-        const port = Number(value.slice(value.lastIndexOf(":") + 1));
-        return port >= 1 && port <= 65535;
-      },
-      { message: "Port must be between 1 and 65535" },
-    ),
+  /** Base URL of the P4 web server hosting the REST API (e.g. `https://perforce.example.com:8080`). */
+  serverUrl: connectorUrlSchema,
   depotPaths: z.array(depotPathSchema).min(1),
   /**
    * Depot paths excluded from the sweep (prefix match under the included
@@ -513,16 +493,6 @@ export const PerforceConfigSchema = z.object({
           'File types must be plain extensions like ".md" (letters, digits, "-", "_")',
       }),
     )
-    .optional(),
-  /**
-   * `P4CHARSET` for unicode-mode servers (e.g. `utf8`). Unicode-enabled Helix
-   * Core servers reject clients that do not declare a charset.
-   */
-  charset: z
-    .string()
-    .regex(/^[A-Za-z0-9_-]{1,32}$/, {
-      message: 'Charset must be a P4CHARSET name like "utf8"',
-    })
     .optional(),
 });
 export type PerforceConfig = z.infer<typeof PerforceConfigSchema>;

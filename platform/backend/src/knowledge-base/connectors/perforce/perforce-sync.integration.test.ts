@@ -2,32 +2,25 @@ import { vi } from "vitest";
 
 // End-to-end pipeline test for the Perforce connector: the REAL
 // PerforceConnector, sync service, chunker, embedding service, task records,
-// and database run together. Mocked: the spawned `p4` binary
-// (node:child_process) and the embedding provider (the openai client plus the
+// and database run together. Mocked: the HTTP boundary to the P4 REST API
+// (global fetch) and the embedding provider (the openai client plus the
 // org-level embedding-config lookup — the latter is internal but resolves
 // external provider credentials; mocking it follows embedder.test.ts).
 
-const { execState } = vi.hoisted(() => ({
-  execState: {
-    handler: undefined as undefined | ((args: string[]) => { stdout: string }),
-  },
-}));
+const fetchState: {
+  handler: undefined | ((url: URL) => Response);
+} = { handler: undefined };
 
-vi.mock("node:child_process", () => ({
-  execFile: vi.fn(
-    (
-      _file: string,
-      args: string[],
-      _options: Record<string, unknown>,
-      callback: (error: Error | null, stdout: string, stderr: string) => void,
-    ) => {
-      if (!execState.handler) {
-        throw new Error("execState.handler not configured in test");
-      }
-      callback(null, execState.handler(args).stdout, "");
-    },
-  ),
-}));
+vi.stubGlobal(
+  "fetch",
+  vi.fn(async (input: string | URL) => {
+    const url = input instanceof URL ? input : new URL(String(input));
+    if (!fetchState.handler) {
+      throw new Error("fetchState.handler not configured in test");
+    }
+    return fetchState.handler(url);
+  }),
+);
 
 const mockEmbeddingsCreate = vi.hoisted(() => vi.fn());
 vi.mock("openai", () => {
@@ -61,7 +54,7 @@ import {
 import { handleBatchEmbedding } from "@/task-queue/handlers/batch-embedding-handler";
 import { beforeEach, describe, expect, test } from "@/test";
 
-function taggedOutput(records: Array<Record<string, unknown>>): string {
+function jsonl(records: Array<Record<string, unknown>>): string {
   return `${records.map((record) => JSON.stringify(record)).join("\n")}\n`;
 }
 
@@ -73,26 +66,30 @@ interface FakeDepotFile {
 }
 
 /**
- * Simulate a Perforce server: `changes` reports the depot head, `files`
- * lists files matching the extension filespecs (honoring `@from,@to`
- * changelist windows), and `print` serves content.
+ * Simulate the P4 REST API: the newest-revision probe (sort=date) reports the
+ * depot head, `/v0/file/revisions` lists files matching the extension
+ * filespecs (honoring `@from,@to` changelist windows), and
+ * `/v0/file/contents` serves content.
  */
 function fakeDepot(state: { headChange: number; files: FakeDepotFile[] }) {
-  execState.handler = (args) => {
-    if (args.includes("changes")) {
-      return {
-        stdout: taggedOutput([
-          {
-            code: "stat",
-            change: String(state.headChange),
-            time: "1700000000",
-            status: "submitted",
-          },
-        ]),
-      };
-    }
-    if (args.includes("files")) {
-      const specs = args.slice(args.indexOf("files") + 2);
+  fetchState.handler = (url) => {
+    if (url.pathname === "/api/v0/file/revisions") {
+      if (url.searchParams.get("sort") === "date") {
+        return new Response(
+          jsonl([
+            {
+              depotFile: "//depot/docs/newest.md",
+              headRev: "1",
+              headChange: String(state.headChange),
+              headAction: "edit",
+              headType: "text",
+              headTime: "2023-11-14T22:13:20.000Z",
+            },
+          ]),
+          { status: 200 },
+        );
+      }
+      const specs = url.searchParams.getAll("fileSpec");
       const matched = state.files.filter((file) =>
         specs.some((spec) => {
           const atIndex = spec.indexOf("@");
@@ -109,27 +106,35 @@ function fakeDepot(state: { headChange: number; files: FakeDepotFile[] }) {
           return true;
         }),
       );
-      return {
-        stdout: taggedOutput(
+      if (matched.length === 0) {
+        return new Response(
+          JSON.stringify({
+            errors: [{ message: "... - no such file(s).", statusCode: 404 }],
+          }),
+          { status: 404 },
+        );
+      }
+      return new Response(
+        jsonl(
           matched.map((file) => ({
-            code: "stat",
             depotFile: file.depotFile,
-            rev: "1",
-            change: String(file.change),
-            action: "edit",
-            type: file.type ?? "text",
+            headRev: "1",
+            headChange: String(file.change),
+            headAction: "edit",
+            headType: file.type ?? "text",
           })),
         ),
-      };
+        { status: 200 },
+      );
     }
-    if (args.includes("print")) {
-      const filespec = args[args.length - 1];
+    if (url.pathname === "/api/v0/file/contents") {
+      const filespec = url.searchParams.get("fileSpec") ?? "";
       const depotFile = filespec.split("@")[0];
       const file = state.files.find((f) => f.depotFile === depotFile);
       if (!file) throw new Error(`fake depot has no file ${depotFile}`);
-      return { stdout: file.content };
+      return new Response(file.content, { status: 200 });
     }
-    throw new Error(`Unexpected p4 invocation: ${args.join(" ")}`);
+    throw new Error(`Unexpected P4 REST API request: ${url.pathname}`);
   };
 }
 
@@ -148,7 +153,7 @@ async function createPerforceConnector(params: {
     connectorType: "perforce",
     config: {
       type: "perforce",
-      p4Port: "perforce.example.com:1666",
+      serverUrl: "https://perforce.example.com:8080",
       depotPaths: ["//depot/docs"],
     },
   });
@@ -207,7 +212,7 @@ async function drainEmbeddingTasks(): Promise<number> {
 
 describe("Perforce connector end-to-end sync", () => {
   beforeEach(() => {
-    execState.handler = undefined;
+    fetchState.handler = undefined;
     vi.clearAllMocks();
 
     mockGetDefaultOrgEmbeddingConfig.mockResolvedValue({

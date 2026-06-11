@@ -1,8 +1,10 @@
+import { isSandboxArchestraToolShortName } from "@archestra/shared";
 import {
   getAgentTypePermissionChecker,
   requireAgentModifyPermission,
 } from "@/auth/agent-type-permissions";
 import { userHasPermission } from "@/auth/utils";
+import config from "@/config";
 import logger from "@/logging";
 import { AgentModel, OrganizationModel, TeamModel, ToolModel } from "@/models";
 import { assignToolToAgent } from "@/services/agent-tool-assignment";
@@ -109,9 +111,11 @@ export async function autoAssignToolToAgent(params: {
 }
 
 /**
- * Third-party MCP tools from catalogs the user can access that are not yet
- * assigned to the agent. The widened portion of the search_tools search space;
- * Archestra built-ins stay assignment-gated and are excluded.
+ * Tools the user can access that are not yet assigned to the agent — the widened
+ * portion of the search_tools search space. Third-party MCP tools from every
+ * catalog the user can access, plus the sandbox built-ins when the feature is on
+ * (see `isExcludedFromDiscovery`). Every other Archestra built-in stays
+ * assignment-gated and is excluded.
  */
 export async function getUnassignedDiscoverableTools(params: {
   assignedToolNames: Set<string>;
@@ -159,9 +163,23 @@ async function relaxationContext(
 // assignment-gated, and `agent__`-named rows (proxy-discovered delegation
 // artifacts) are hidden from search, so they must not be auto-assignable
 // either.
+//
+// EXCEPTION: the sandbox tools (run_command/upload_file/download_file) ride this
+// relaxation when the sandbox feature is on, so a user with sandbox:execute can
+// discover and run them without a manual assignment. RBAC (sandbox:execute) and
+// the org allow-tool-auto-assignment kill-switch still gate them. CONCERN: this
+// widens the otherwise assignment-gated built-in surface — a dedicated sandbox
+// opt-in would be cleaner; tracked in the PR notes.
 function isExcludedFromDiscovery(toolName: string): boolean {
-  return (
-    archestraMcpBranding.isToolName(toolName) || toolName.startsWith("agent__")
+  if (toolName.startsWith("agent__")) {
+    return true;
+  }
+  const shortName = archestraMcpBranding.getToolShortName(toolName);
+  if (shortName == null) {
+    return false; // third-party MCP tool — discoverable
+  }
+  return !(
+    config.skillsSandbox.enabled && isSandboxArchestraToolShortName(shortName)
   );
 }
 

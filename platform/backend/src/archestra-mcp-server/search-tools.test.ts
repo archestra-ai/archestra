@@ -1,6 +1,7 @@
 // biome-ignore-all lint/suspicious/noExplicitAny: test assertions inspect tool payloads dynamically
 import {
   AGENT_TOOL_PREFIX,
+  ARCHESTRA_MCP_CATALOG_ID,
   slugify,
   TOOL_ACTIVATE_SKILL_FULL_NAME,
   TOOL_CREATE_SKILL_FULL_NAME,
@@ -376,7 +377,8 @@ describe("search_tools", () => {
         (tool) => tool.toolName,
       );
 
-      // the runtime path is always top-level, so never searchable
+      // once assigned, the runtime path is top-level, so it stays out of search
+      // (unassigned sandbox tools DO surface — see "sandbox built-in discovery")
       expect(returnedToolNames).not.toContain(TOOL_LIST_SKILLS_FULL_NAME);
       expect(returnedToolNames).not.toContain(TOOL_ACTIVATE_SKILL_FULL_NAME);
       expect(returnedToolNames).not.toContain(TOOL_READ_SKILL_FILE_FULL_NAME);
@@ -412,6 +414,133 @@ describe("search_tools", () => {
       (config.skillsSandbox as { enabled: boolean }).enabled =
         originalSandboxEnabled;
     }
+  });
+
+  // Sandbox built-ins surface in search only while UNassigned (so the model can
+  // discover then auto-assign them), and only for callers who can actually run
+  // them. Seeded but not assigned here to exercise that path.
+  describe("sandbox built-in discovery", () => {
+    async function searchRunCommand(
+      context: ArchestraContext,
+    ): Promise<string[]> {
+      const result = await executeArchestraTool(
+        TOOL_SEARCH_TOOLS_FULL_NAME,
+        { query: "run command shell execute", limit: 20 },
+        context,
+      );
+      expect(result.isError).toBe(false);
+      return (
+        result.structuredContent as SearchToolsStructuredContent
+      ).tools.map((tool) => tool.toolName);
+    }
+
+    test("surfaces an unassigned sandbox tool to a user with sandbox:execute", async ({
+      makeAgent,
+      makeMember,
+      makeOrganization,
+      makeUser,
+    }) => {
+      const config = (await import("@/config")).default;
+      const originalSandboxEnabled = config.skillsSandbox.enabled;
+      (config.skillsSandbox as { enabled: boolean }).enabled = true;
+      try {
+        const org = await makeOrganization();
+        const user = await makeUser();
+        await makeMember(user.id, org.id, { role: "admin" });
+        const agent = await makeAgent({
+          name: "Sandbox Discovery Agent",
+          organizationId: org.id,
+        });
+        // seed (run_command exists in the org-accessible Archestra catalog) but
+        // do NOT assign it
+        await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+
+        const names = await searchRunCommand({
+          agent: { id: agent.id, name: agent.name },
+          agentId: agent.id,
+          organizationId: org.id,
+          userId: user.id,
+        });
+
+        expect(names).toContain(TOOL_RUN_COMMAND_FULL_NAME);
+      } finally {
+        (config.skillsSandbox as { enabled: boolean }).enabled =
+          originalSandboxEnabled;
+      }
+    });
+
+    test("hides sandbox tools from a user without sandbox:execute", async ({
+      makeAgent,
+      makeCustomRole,
+      makeMember,
+      makeOrganization,
+      makeUser,
+    }) => {
+      const config = (await import("@/config")).default;
+      const originalSandboxEnabled = config.skillsSandbox.enabled;
+      (config.skillsSandbox as { enabled: boolean }).enabled = true;
+      try {
+        const org = await makeOrganization();
+        const user = await makeUser();
+        const role = await makeCustomRole(org.id, {
+          permission: { agent: ["read"] },
+        });
+        await makeMember(user.id, org.id, { role: role.role });
+        const agent = await makeAgent({
+          name: "Sandbox Discovery Agent",
+          organizationId: org.id,
+        });
+        await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+
+        const names = await searchRunCommand({
+          agent: { id: agent.id, name: agent.name },
+          agentId: agent.id,
+          organizationId: org.id,
+          userId: user.id,
+        });
+
+        expect(names).not.toContain(TOOL_RUN_COMMAND_FULL_NAME);
+      } finally {
+        (config.skillsSandbox as { enabled: boolean }).enabled =
+          originalSandboxEnabled;
+      }
+    });
+
+    test("hides sandbox tools when the org disables tool auto-assignment", async ({
+      makeAgent,
+      makeMember,
+      makeOrganization,
+      makeUser,
+    }) => {
+      const config = (await import("@/config")).default;
+      const originalSandboxEnabled = config.skillsSandbox.enabled;
+      (config.skillsSandbox as { enabled: boolean }).enabled = true;
+      try {
+        const org = await makeOrganization();
+        const user = await makeUser();
+        await makeMember(user.id, org.id, { role: "admin" });
+        const agent = await makeAgent({
+          name: "Sandbox Discovery Agent",
+          organizationId: org.id,
+        });
+        await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+        await OrganizationModel.patch(org.id, {
+          allowToolAutoAssignment: false,
+        });
+
+        const names = await searchRunCommand({
+          agent: { id: agent.id, name: agent.name },
+          agentId: agent.id,
+          organizationId: org.id,
+          userId: user.id,
+        });
+
+        expect(names).not.toContain(TOOL_RUN_COMMAND_FULL_NAME);
+      } finally {
+        (config.skillsSandbox as { enabled: boolean }).enabled =
+          originalSandboxEnabled;
+      }
+    });
   });
 
   describe("BM25F ranking (golden cases)", () => {

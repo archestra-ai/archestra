@@ -5,6 +5,7 @@ import {
   getArchestraToolFullName,
   getArchestraToolShortName,
   isAgentTool,
+  isSandboxArchestraToolShortName,
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
 } from "@archestra/shared";
@@ -67,7 +68,11 @@ import {
   toolEntries as toolAssignmentToolEntries,
   tools as toolAssignmentTools,
 } from "./tool-assignment";
-import { toolDiscoverySteer } from "./tool-recovery-messages";
+import { autoAssignToolToAgent } from "./tool-auto-assign";
+import {
+  toolDiscoverySteer,
+  toolNotAssignedAskAdminMessage,
+} from "./tool-recovery-messages";
 import type { ArchestraContext } from "./types";
 
 export { archestraMcpBranding } from "./branding";
@@ -155,8 +160,9 @@ export async function executeArchestraTool(
   // Centralized assignment check — an agent may only execute Archestra tools
   // that are actually assigned to it (the same set advertised by tools/list and
   // search_tools). Without this, run_tool or a raw tools/call could invoke any
-  // Archestra tool the user has RBAC for, regardless of assignment.
-  const assignmentDenied = await checkToolAssignedToAgent(toolName, context);
+  // Archestra tool the user has RBAC for, regardless of assignment. Sandbox
+  // built-ins are auto-assigned on first use instead of rejected (see below).
+  const assignmentDenied = await resolveToolAssignment(toolName, context);
   if (assignmentDenied) return assignmentDenied;
 
   const resolvedToolName =
@@ -237,6 +243,46 @@ async function checkToolAssignedToAgent(
       toolName,
     },
   });
+}
+
+// Assignment gate with first-use auto-assignment for the sandbox built-ins: when
+// an unassigned sandbox tool reaches here, RBAC (sandbox:execute) has already
+// passed, so mirror the third-party run_tool relaxation and assign it on the fly
+// — further gated by permission to modify the agent and the org
+// allow-tool-auto-assignment kill-switch (both inside autoAssignToolToAgent).
+// CONCERN: this is the run-side of widening the otherwise assignment-gated
+// built-in surface; see `tool-auto-assign.ts` and the PR notes.
+async function resolveToolAssignment(
+  toolName: string,
+  context: ArchestraContext,
+): Promise<CallToolResult | null> {
+  const notAssigned = await checkToolAssignedToAgent(toolName, context);
+  if (!notAssigned) return null;
+
+  const shortName = archestraMcpBranding.getToolShortName(toolName);
+  if (
+    !context.agentId ||
+    shortName == null ||
+    !config.skillsSandbox.enabled ||
+    !isSandboxArchestraToolShortName(shortName)
+  ) {
+    return notAssigned;
+  }
+
+  const outcome = await autoAssignToolToAgent({
+    toolName,
+    agentId: context.agentId,
+    userId: context.userId,
+    organizationId: context.organizationId,
+  });
+  switch (outcome) {
+    case "assigned":
+      return null;
+    case "forbidden":
+      return errorResult(toolNotAssignedAskAdminMessage(toolName));
+    case "unavailable":
+      return notAssigned;
+  }
 }
 
 function resolveArchestraToolName(toolName: string): string | null {

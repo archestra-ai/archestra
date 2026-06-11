@@ -1,20 +1,32 @@
 // biome-ignore-all lint/suspicious/noExplicitAny: tests inspect MCP tool payloads dynamically
 import {
   AGENT_TOOL_PREFIX,
+  ARCHESTRA_MCP_CATALOG_ID,
   slugify,
   TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON,
+  TOOL_RUN_COMMAND_FULL_NAME,
   TOOL_RUN_TOOL_FULL_NAME,
   TOOL_TODO_WRITE_FULL_NAME,
   TOOL_WHOAMI_FULL_NAME,
 } from "@archestra/shared";
 import { vi } from "vitest";
 import mcpClient from "@/clients/mcp-client";
+import config from "@/config";
 import {
   ConversationEnabledToolModel,
   OrganizationModel,
   ToolModel,
 } from "@/models";
-import { beforeEach, describe, expect, test } from "@/test";
+import { skillSandboxRuntimeService } from "@/skills-sandbox/skill-sandbox-runtime-service";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  test,
+} from "@/test";
 import type { Agent } from "@/types";
 import { type ArchestraContext, executeArchestraTool } from ".";
 
@@ -556,6 +568,179 @@ describe("run_tool", () => {
       expect(mcpClient.executeToolCall).not.toHaveBeenCalled();
       const assignedNames = await ToolModel.getAssignedToolNames(testAgent.id);
       expect(assignedNames.has("giphy__image_search")).toBe(false);
+    });
+  });
+
+  // Sandbox built-ins (run_command/upload_file/download_file) are Archestra
+  // built-ins but ride the same first-use auto-assignment relaxation as
+  // third-party tools, gated on sandbox:execute. Distinct from the third-party
+  // path above because they route through executeArchestraTool, not the gateway.
+  describe("sandbox built-in first-use auto-assignment", () => {
+    const originalSandboxEnabled = config.skillsSandbox.enabled;
+
+    beforeAll(() => {
+      (config.skillsSandbox as { enabled: boolean }).enabled = true;
+    });
+
+    afterAll(() => {
+      (config.skillsSandbox as { enabled: boolean }).enabled =
+        originalSandboxEnabled;
+    });
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    // run_command is seeded into the (org-accessible) Archestra catalog but left
+    // unassigned, so every test below exercises the first-use path.
+    beforeEach(async () => {
+      await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+    });
+
+    function stubRunCommand() {
+      return vi
+        .spyOn(skillSandboxRuntimeService, "runCommand")
+        .mockResolvedValue({
+          commandId: "cmd-1",
+          sandboxId: "sb-1" as any,
+          command: "echo hi",
+          cwd: null,
+          stdout: "hi\n",
+          stderr: "",
+          exitCode: 0,
+          durationMs: 1,
+          timedOut: false,
+          truncated: false,
+          stagingNotices: [],
+        });
+    }
+
+    test("auto-assigns an unassigned sandbox tool for a user with sandbox:execute and dispatches it", async () => {
+      const runSpy = stubRunCommand();
+
+      const result = await executeArchestraTool(
+        TOOL_RUN_TOOL_FULL_NAME,
+        { tool_name: "run_command", tool_args: { command: "echo hi" } },
+        mockContext,
+      );
+
+      expect(result.isError).toBe(false);
+      expect(runSpy).toHaveBeenCalled();
+      const assignedNames = await ToolModel.getAssignedToolNames(testAgent.id);
+      expect(assignedNames.has(TOOL_RUN_COMMAND_FULL_NAME)).toBe(true);
+    });
+
+    test("auto-assigns on a direct sandbox tool call, not only via run_tool", async () => {
+      const runSpy = stubRunCommand();
+
+      const result = await executeArchestraTool(
+        TOOL_RUN_COMMAND_FULL_NAME,
+        { command: "echo hi" },
+        mockContext,
+      );
+
+      expect(result.isError).toBe(false);
+      expect(runSpy).toHaveBeenCalled();
+      const assignedNames = await ToolModel.getAssignedToolNames(testAgent.id);
+      expect(assignedNames.has(TOOL_RUN_COMMAND_FULL_NAME)).toBe(true);
+    });
+
+    test("denies before assignment when the user lacks sandbox:execute", async ({
+      makeCustomRole,
+      makeMember,
+      makeUser,
+    }) => {
+      const organizationId = mockContext.organizationId as string;
+      const user = await makeUser();
+      // catalog access + agent rights, but no sandbox:execute
+      const role = await makeCustomRole(organizationId, {
+        permission: { agent: ["read", "update"] },
+      });
+      await makeMember(user.id, organizationId, { role: role.role });
+
+      const result = await executeArchestraTool(
+        TOOL_RUN_TOOL_FULL_NAME,
+        { tool_name: "run_command", tool_args: { command: "echo hi" } },
+        { ...mockContext, userId: user.id },
+      );
+
+      expect(result.isError).toBe(true);
+      expect((result.content[0] as any).text).toContain("sandbox:execute");
+      const assignedNames = await ToolModel.getAssignedToolNames(testAgent.id);
+      expect(assignedNames.has(TOOL_RUN_COMMAND_FULL_NAME)).toBe(false);
+    });
+
+    test("tells the model to involve an admin when the user has sandbox:execute but cannot modify the agent", async ({
+      makeCustomRole,
+      makeMember,
+      makeUser,
+    }) => {
+      const organizationId = mockContext.organizationId as string;
+      const user = await makeUser();
+      const role = await makeCustomRole(organizationId, {
+        permission: { sandbox: ["execute"], agent: ["read"] },
+      });
+      await makeMember(user.id, organizationId, { role: role.role });
+
+      const result = await executeArchestraTool(
+        TOOL_RUN_TOOL_FULL_NAME,
+        { tool_name: "run_command", tool_args: { command: "echo hi" } },
+        { ...mockContext, userId: user.id },
+      );
+
+      expect(result.isError).toBe(true);
+      expect((result.content[0] as any).text).toContain("ask an admin");
+      const assignedNames = await ToolModel.getAssignedToolNames(testAgent.id);
+      expect(assignedNames.has(TOOL_RUN_COMMAND_FULL_NAME)).toBe(false);
+    });
+
+    test("keeps the strict not-assigned error when the org disables tool auto-assignment", async () => {
+      await OrganizationModel.patch(mockContext.organizationId as string, {
+        allowToolAutoAssignment: false,
+      });
+
+      const result = await executeArchestraTool(
+        TOOL_RUN_TOOL_FULL_NAME,
+        { tool_name: "run_command", tool_args: { command: "echo hi" } },
+        mockContext,
+      );
+
+      expect(result.isError).toBe(true);
+      expect((result.content[0] as any).text).toContain(
+        "not assigned to this agent",
+      );
+      const assignedNames = await ToolModel.getAssignedToolNames(testAgent.id);
+      expect(assignedNames.has(TOOL_RUN_COMMAND_FULL_NAME)).toBe(false);
+    });
+  });
+
+  // With the sandbox feature off, a stale catalog row must not be discoverable
+  // or auto-assignable even though run_command stays in the static name list.
+  describe("sandbox built-in first-use auto-assignment (runtime disabled)", () => {
+    test("does not auto-assign sandbox tools when the feature is off", async ({
+      makeInternalMcpCatalog,
+      makeTool,
+    }) => {
+      const catalog = await makeInternalMcpCatalog({
+        organizationId: mockContext.organizationId,
+      });
+      await makeTool({
+        name: TOOL_RUN_COMMAND_FULL_NAME,
+        catalogId: catalog.id,
+      });
+
+      const result = await executeArchestraTool(
+        TOOL_RUN_TOOL_FULL_NAME,
+        { tool_name: "run_command", tool_args: { command: "echo hi" } },
+        mockContext,
+      );
+
+      expect(result.isError).toBe(true);
+      expect((result.content[0] as any).text).toContain(
+        "not assigned to this agent",
+      );
+      const assignedNames = await ToolModel.getAssignedToolNames(testAgent.id);
+      expect(assignedNames.has(TOOL_RUN_COMMAND_FULL_NAME)).toBe(false);
     });
   });
 

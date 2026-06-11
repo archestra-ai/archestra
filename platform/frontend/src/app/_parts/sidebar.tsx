@@ -9,7 +9,6 @@ import {
 import { requiredPagePermissionsMap } from "@archestra/shared/access-control";
 import { SignedIn, UserButton } from "@daveyplate/better-auth-ui";
 import {
-  Anvil,
   BookOpen,
   Bot,
   Bug,
@@ -23,6 +22,7 @@ import {
   MessagesSquare,
   MoreHorizontal,
   Network,
+  PencilRuler,
   Route,
   Settings,
   Slack,
@@ -193,7 +193,7 @@ function SidebarModeToggle({
   return (
     <div className="mx-2 mt-1 flex rounded-lg border bg-muted p-0.5 group-data-[collapsible=icon]:hidden">
       {segment("chats", "Chats", MessageCircle)}
-      {segment("studio", "Studio", Anvil)}
+      {segment("studio", "Studio", PencilRuler)}
     </div>
   );
 }

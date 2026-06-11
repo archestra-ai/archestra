@@ -582,10 +582,7 @@ describe("SkillSandboxFileModel (PFS extensions)", () => {
     });
   });
 
-  test("appendUpload stores origin; findUploadById fetches it back", async ({
-    makeUser,
-    makeOrganization,
-  }) => {
+  test("appendUpload stores origin", async ({ makeUser, makeOrganization }) => {
     const org = await makeOrganization();
     const user = await makeUser();
     const sandbox = await SkillSandboxModel.create({
@@ -606,92 +603,6 @@ describe("SkillSandboxFileModel (PFS extensions)", () => {
       origin: "x_file",
     });
     expect(row?.origin).toBe("x_file");
-
-    const fetched = await SkillSandboxFileModel.findUploadById(row?.id ?? "");
-    expect(fetched?.origin).toBe("x_file");
-    expect(fetched?.kind).toBe("upload");
-    // artifacts are not reachable through the upload finder
-    const artifact = await SkillSandboxFileModel.createArtifact({
-      sandboxId: sandbox.id,
-      userId: user.id,
-      path: "/home/sandbox/a.txt",
-      mimeType: "text/plain",
-      sizeBytes: 1,
-      data: Buffer.from("a"),
-    });
-    expect(await SkillSandboxFileModel.findUploadById(artifact.id)).toBeNull();
-  });
-
-  test("listXFileUploadsByConversationId scopes by conversation, org, and origin", async ({
-    makeUser,
-    makeOrganization,
-    makeAgent,
-    makeConversation,
-  }) => {
-    const org = await makeOrganization();
-    const user = await makeUser();
-    const agent = await makeAgent({ organizationId: org.id });
-    const conv = await makeConversation(agent.id, {
-      userId: user.id,
-      organizationId: org.id,
-    });
-    const otherConv = await makeConversation(agent.id, {
-      userId: user.id,
-      organizationId: org.id,
-    });
-    const sandbox = await SkillSandboxModel.create({
-      organizationId: org.id,
-      userId: user.id,
-      conversationId: conv.id,
-      defaultCwd: "/home/sandbox",
-      isDefault: true,
-    });
-    const otherSandbox = await SkillSandboxModel.create({
-      organizationId: org.id,
-      userId: user.id,
-      conversationId: otherConv.id,
-      defaultCwd: "/home/sandbox",
-      isDefault: true,
-    });
-
-    const upload = (params: {
-      sandboxId: string;
-      path: string;
-      origin?: "x_file" | null;
-    }) =>
-      SkillSandboxReplayEventModel.appendUpload({
-        sandboxId: params.sandboxId,
-        userId: user.id,
-        path: params.path,
-        mimeType: "text/plain",
-        originalName: null,
-        sizeBytes: 1,
-        data: Buffer.from("x"),
-        origin: params.origin ?? null,
-      });
-
-    await upload({
-      sandboxId: sandbox.id,
-      path: "/home/sandbox/from-pfs.txt",
-      origin: "x_file",
-    });
-    await upload({ sandboxId: sandbox.id, path: "/home/sandbox/plain.txt" });
-    await upload({
-      sandboxId: otherSandbox.id,
-      path: "/home/sandbox/other-conv.txt",
-      origin: "x_file",
-    });
-
-    const listed = await SkillSandboxFileModel.listXFileUploadsByConversationId(
-      { conversationId: conv.id, organizationId: org.id },
-    );
-    expect(listed.map((u) => u.path)).toEqual(["/home/sandbox/from-pfs.txt"]);
-
-    const wrongOrg =
-      await SkillSandboxFileModel.listXFileUploadsByConversationId({
-        conversationId: conv.id,
-        organizationId: "other-org",
-      });
-    expect(wrongOrg).toEqual([]);
+    expect(row?.kind).toBe("upload");
   });
 });

@@ -1,8 +1,10 @@
+import ConversationModel from "@/models/conversation";
 import ConversationAttachmentModel from "@/models/conversation-attachment";
 import SkillSandboxModel from "@/models/skill-sandbox";
 import SkillSandboxFileModel from "@/models/skill-sandbox-file";
 import SkillSandboxReplayEventModel from "@/models/skill-sandbox-replay-event";
 import { conversationFilesService } from "@/services/conversation-files";
+import { projectService } from "@/services/project";
 import { expect, test } from "@/test";
 
 test("conversationFilesService.list groups generated + attachments with basenamed names and content URLs", async ({
@@ -50,6 +52,8 @@ test("conversationFilesService.list groups generated + attachments with basename
   const result = await conversationFilesService.list({
     conversationId: conv.id,
     organizationId: org.id,
+    conversationOwnerUserId: user.id,
+    requestingUserId: user.id,
   });
 
   expect(result.generated).toEqual([
@@ -70,6 +74,9 @@ test("conversationFilesService.list groups generated + attachments with basename
       createdAt: attachment.createdAt.toISOString(),
     },
   ]);
+  // the conversation's own output is a PFS row too — deduped out of myFiles
+  expect(result.myFiles).toEqual([]);
+  expect(result.projectName).toBeNull();
 });
 
 test("conversationFilesService.list drops attachments from a different org", async ({
@@ -101,11 +108,13 @@ test("conversationFilesService.list drops attachments from a different org", asy
   const result = await conversationFilesService.list({
     conversationId: conv.id,
     organizationId: org.id,
+    conversationOwnerUserId: user.id,
+    requestingUserId: user.id,
   });
   expect(result.attachments).toEqual([]);
 });
 
-test("conversationFilesService.list surfaces x_file uploads with the uploads byte URL", async ({
+test("personal chat: myFiles is the owner's whole PFS minus this chat's outputs, owner-only", async ({
   makeUser,
   makeOrganization,
   makeAgent,
@@ -118,16 +127,24 @@ test("conversationFilesService.list surfaces x_file uploads with the uploads byt
     userId: user.id,
     organizationId: org.id,
   });
-  const sandbox = await SkillSandboxModel.create({
+  const convSandbox = await SkillSandboxModel.create({
     organizationId: org.id,
     userId: user.id,
     conversationId: conv.id,
     defaultCwd: "/home/sandbox",
     isDefault: true,
   });
-
-  const pulled = await SkillSandboxReplayEventModel.appendUpload({
-    sandboxId: sandbox.id,
+  const ownOutput = await SkillSandboxFileModel.createArtifact({
+    sandboxId: convSandbox.id,
+    userId: user.id,
+    path: "/home/sandbox/here.txt",
+    mimeType: "text/plain",
+    sizeBytes: 1,
+    data: Buffer.from("a"),
+  });
+  // sandbox uploads (x_file pulls included) are not PFS rows — never listed
+  await SkillSandboxReplayEventModel.appendUpload({
+    sandboxId: convSandbox.id,
     userId: user.id,
     path: "/home/sandbox/from-pfs.csv",
     mimeType: "text/csv",
@@ -136,29 +153,114 @@ test("conversationFilesService.list surfaces x_file uploads with the uploads byt
     data: Buffer.from("a,b\n"),
     origin: "x_file",
   });
-  // an ordinary upload must NOT appear in xFiles
-  await SkillSandboxReplayEventModel.appendUpload({
-    sandboxId: sandbox.id,
+
+  // a PFS file produced in some OTHER conversation
+  const otherSandbox = await SkillSandboxModel.create({
+    organizationId: org.id,
     userId: user.id,
-    path: "/home/sandbox/plain.txt",
+    conversationId: null,
+    defaultCwd: "/home/sandbox",
+  });
+  const elsewhere = await SkillSandboxFileModel.createArtifact({
+    sandboxId: otherSandbox.id,
+    userId: user.id,
+    path: "/home/sandbox/elsewhere.txt",
     mimeType: "text/plain",
-    originalName: null,
     sizeBytes: 1,
-    data: Buffer.from("x"),
+    data: Buffer.from("b"),
   });
 
   const result = await conversationFilesService.list({
     conversationId: conv.id,
     organizationId: org.id,
+    conversationOwnerUserId: user.id,
+    requestingUserId: user.id,
   });
-
-  expect(result.xFiles).toEqual([
+  expect(result.generated.map((f) => f.id)).toEqual([ownOutput.id]);
+  expect(result.myFiles).toEqual([
     {
-      id: pulled?.id,
-      name: "q2.csv",
-      mimeType: "text/csv",
-      contentUrl: `/api/skill-sandbox/uploads/${pulled?.id}`,
-      createdAt: expect.any(String),
+      id: elsewhere.id,
+      name: "elsewhere.txt",
+      mimeType: "text/plain",
+      contentUrl: `/api/skill-sandbox/artifacts/${elsewhere.id}`,
+      createdAt: elsewhere.createdAt.toISOString(),
     },
   ]);
+
+  // a non-owner reading the shared chat must not see the owner's personal PFS
+  const viewer = await makeUser({ email: "files-viewer@test.com" });
+  const viewerResult = await conversationFilesService.list({
+    conversationId: conv.id,
+    organizationId: org.id,
+    conversationOwnerUserId: user.id,
+    requestingUserId: viewer.id,
+  });
+  expect(viewerResult.myFiles).toEqual([]);
+});
+
+test("project chat: myFiles is the project's result folder in the owner's namespace, for any reader", async ({
+  makeUser,
+  makeOrganization,
+  makeAgent,
+}) => {
+  const org = await makeOrganization();
+  const owner = await makeUser({});
+  const member = await makeUser({ email: "files-member@test.com" });
+  const agent = await makeAgent({ organizationId: org.id });
+
+  const project = await projectService.create({
+    organizationId: org.id,
+    userId: owner.id,
+    name: "filespanel",
+    description: null,
+  });
+  const conv = await ConversationModel.create({
+    userId: member.id,
+    organizationId: org.id,
+    agentId: agent.id,
+    projectId: project.id,
+  });
+
+  const ownerSandbox = await SkillSandboxModel.create({
+    organizationId: org.id,
+    userId: owner.id,
+    conversationId: null,
+    defaultCwd: "/home/sandbox",
+  });
+  const inFolder = await SkillSandboxFileModel.createArtifact({
+    sandboxId: ownerSandbox.id,
+    userId: owner.id,
+    path: "/home/sandbox/result.txt",
+    mimeType: "text/plain",
+    sizeBytes: 2,
+    data: Buffer.from("in"),
+    folderId: project.folderId,
+    folderName: "filespanel",
+  });
+  // the owner's personal root file must stay invisible in a project chat
+  await SkillSandboxFileModel.createArtifact({
+    sandboxId: ownerSandbox.id,
+    userId: owner.id,
+    path: "/home/sandbox/personal.txt",
+    mimeType: "text/plain",
+    sizeBytes: 3,
+    data: Buffer.from("out"),
+  });
+
+  const result = await conversationFilesService.list({
+    conversationId: conv.id,
+    organizationId: org.id,
+    conversationOwnerUserId: member.id,
+    requestingUserId: member.id,
+  });
+  expect(result.myFiles).toEqual([
+    {
+      id: inFolder.id,
+      name: "result.txt",
+      mimeType: "text/plain",
+      contentUrl: `/api/skill-sandbox/artifacts/${inFolder.id}`,
+      createdAt: inFolder.createdAt.toISOString(),
+    },
+  ]);
+  expect(result.projectName).toBe("filespanel");
 });

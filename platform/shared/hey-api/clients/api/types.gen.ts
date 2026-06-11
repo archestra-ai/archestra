@@ -20632,13 +20632,14 @@ export type GetChatConversationFilesResponses = {
             contentUrl: string;
             createdAt: string;
         }>;
-        xFiles: Array<{
+        myFiles: Array<{
             id: string;
             name: string;
             mimeType: string;
             contentUrl: string;
             createdAt: string;
         }>;
+        projectName: string | null;
     };
 };
 
@@ -53688,22 +53689,6 @@ export type GetSkillSandboxFilesResponses = {
 };
 
 export type GetSkillSandboxFilesResponse = GetSkillSandboxFilesResponses[keyof GetSkillSandboxFilesResponses];
-
-export type GetSkillSandboxUploadData = {
-    body?: never;
-    path: {
-        uploadId: string;
-    };
-    query?: never;
-    url: '/api/skill-sandbox/uploads/{uploadId}';
-};
-
-export type GetSkillSandboxUploadResponses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
 
 export type GetSkillShareLinksData = {
     body?: never;

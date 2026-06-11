@@ -1257,7 +1257,6 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.DeleteProject]: { project: ["delete"] },
   [RouteId.GetProjectConversations]: { project: ["read"] },
   [RouteId.GetProjectFiles]: { project: ["read"] },
-  [RouteId.GetSkillSandboxUpload]: { sandbox: ["execute"] },
   [RouteId.DeleteSkillSandboxArtifact]: { sandbox: ["execute"] },
 
   // Audit Log Routes

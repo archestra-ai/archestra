@@ -22,17 +22,18 @@ export function ConversationFilesPanel({
   onClose,
 }: ConversationFilesPanelProps) {
   const { data: files } = useConversationFiles(conversationId);
-  const { generated, attachments, xFiles } = assembleFileSections({
-    files,
-    artifact,
-  });
+  const { generated, attachments, myFiles, myFilesTitle } =
+    assembleFileSections({
+      files,
+      artifact,
+    });
   const hasArtifact = !!artifact && artifact.trim().length > 0;
   // Default to previewing the artifact when one exists as the panel opens.
   const [selectedId, setSelectedId] = useState<string | null>(() =>
     hasArtifact ? "artifact" : null,
   );
 
-  const all = [...generated, ...attachments, ...xFiles];
+  const all = [...generated, ...attachments, ...myFiles];
   const selected = all.find((f) => f.id === selectedId) ?? null;
 
   // download_file outputs only (the artifact has its own default handling).
@@ -102,7 +103,7 @@ export function ConversationFilesPanel({
   if (
     generated.length === 0 &&
     attachments.length === 0 &&
-    xFiles.length === 0
+    myFiles.length === 0
   ) {
     return (
       <div className="flex h-full flex-col items-center justify-center px-6 text-center text-xs text-muted-foreground">
@@ -148,8 +149,8 @@ export function ConversationFilesPanel({
           onSelect={setSelectedId}
         />
         <FileSection
-          title="From My Files"
-          items={xFiles}
+          title={myFilesTitle}
+          items={myFiles}
           selectedId={selectedId}
           onSelect={setSelectedId}
         />

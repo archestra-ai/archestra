@@ -127,29 +127,6 @@ class SkillSandboxArtifactService {
   }
 
   /**
-   * Fetch an uploaded input for byte serving, scoped to the calling user.
-   * Returns null for "not found" AND "not yours" so the route's 404 cannot be
-   * used to probe other users' upload ids.
-   */
-  async getUploadForUser(params: {
-    uploadId: string;
-    organizationId: string;
-    userId: string;
-  }): Promise<SkillSandboxFile | null> {
-    const upload = await SkillSandboxFileModel.findUploadById(params.uploadId);
-    if (!upload) return null;
-    const sandbox = await SkillSandboxModel.findById(upload.sandboxId);
-    if (
-      !sandbox ||
-      sandbox.organizationId !== params.organizationId ||
-      sandbox.userId !== params.userId
-    ) {
-      return null;
-    }
-    return upload;
-  }
-
-  /**
    * Resolve an `x_file` upload source — a reference to a PFS file by row id or
    * by location (`filename` + optional `folder`) — to its bytes. Location
    * resolution goes through the same listing the user sees, so it reaches

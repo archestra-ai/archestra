@@ -1508,7 +1508,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.GetChatConversationFiles,
         description:
-          "List files for a conversation: download_file outputs and user attachments (metadata only).",
+          "List files for a conversation: download_file outputs, user attachments, and the persistent files the agent can reach from this chat (metadata only).",
         tags: ["Chat"],
         params: z.object({ id: UuidIdSchema }),
         response: constructResponseSchema(ConversationFilesResponseSchema),
@@ -1528,6 +1528,8 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         await conversationFilesService.list({
           conversationId: id,
           organizationId,
+          conversationOwnerUserId: conversation.userId,
+          requestingUserId: user.id,
         }),
       );
     },

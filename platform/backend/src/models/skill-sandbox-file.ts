@@ -251,69 +251,6 @@ class SkillSandboxFileModel {
       );
   }
 
-  /** Fetch an uploaded input (kind 'upload') by id, bytes normalized. */
-  static async findUploadById(id: string): Promise<SkillSandboxFile | null> {
-    const [row] = await db
-      .select()
-      .from(schema.skillSandboxFilesTable)
-      .where(
-        and(
-          eq(schema.skillSandboxFilesTable.id, id),
-          eq(schema.skillSandboxFilesTable.kind, "upload"),
-        ),
-      );
-    return row ? normalizeByteaField(row, "data") : null;
-  }
-
-  /**
-   * Uploads a conversation's sandboxes pulled in from the user's PFS
-   * (`origin = 'x_file'`), metadata only, oldest first — what the Files panel
-   * shows as "From X-Files". Org-scoped through the owning sandbox.
-   */
-  static async listXFileUploadsByConversationId(params: {
-    conversationId: string;
-    organizationId: string;
-  }): Promise<
-    {
-      id: string;
-      path: string;
-      originalName: string | null;
-      mimeType: string;
-      sizeBytes: number;
-      createdAt: Date;
-    }[]
-  > {
-    return db
-      .select({
-        id: schema.skillSandboxFilesTable.id,
-        path: schema.skillSandboxFilesTable.path,
-        originalName: schema.skillSandboxFilesTable.originalName,
-        mimeType: schema.skillSandboxFilesTable.mimeType,
-        sizeBytes: schema.skillSandboxFilesTable.sizeBytes,
-        createdAt: schema.skillSandboxFilesTable.createdAt,
-      })
-      .from(schema.skillSandboxFilesTable)
-      .innerJoin(
-        schema.skillSandboxesTable,
-        eq(
-          schema.skillSandboxFilesTable.sandboxId,
-          schema.skillSandboxesTable.id,
-        ),
-      )
-      .where(
-        and(
-          eq(schema.skillSandboxFilesTable.kind, "upload"),
-          eq(schema.skillSandboxFilesTable.origin, "x_file"),
-          eq(schema.skillSandboxesTable.conversationId, params.conversationId),
-          eq(schema.skillSandboxesTable.organizationId, params.organizationId),
-        ),
-      )
-      .orderBy(
-        asc(schema.skillSandboxFilesTable.createdAt),
-        asc(schema.skillSandboxFilesTable.id),
-      );
-  }
-
   /**
    * Chat-attachment ids already staged into a sandbox, so auto-staging only
    * appends the not-yet-present delta.

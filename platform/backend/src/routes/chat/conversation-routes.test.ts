@@ -768,12 +768,20 @@ describe("project chats: read-only access for project members", () => {
   let author: User;
   let actingUser: User;
   let organizationId: string;
+  let agentId: string;
 
-  beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
+  beforeEach(async ({ makeOrganization, makeUser, makeMember, makeAgent }) => {
     author = await makeUser();
     organizationId = (await makeOrganization()).id;
     await makeMember(author.id, organizationId, { role: "admin" });
     actingUser = author;
+    agentId = (
+      await makeAgent({
+        organizationId,
+        authorId: author.id,
+        scope: "personal",
+      })
+    ).id;
 
     app = createFastifyInstance();
     app.addHook("onRequest", async (request) => {
@@ -810,6 +818,7 @@ describe("project chats: read-only access for project members", () => {
     const conversation = await ConversationModel.create({
       userId: author.id,
       organizationId,
+      agentId,
       projectId: project.id,
     });
     return { project, conversation };

@@ -19,7 +19,6 @@ import {
 import { executionSandboxRegistry } from "@/skills-sandbox/execution-sandbox-registry";
 import {
   afterAll,
-  afterEach,
   beforeAll,
   beforeEach,
   describe,
@@ -128,6 +127,11 @@ describe("sandbox tools (runtime enabled)", () => {
   });
 
   beforeEach(() => {
+    // full reset (not just call history) so a test's mockRejectedValue /
+    // readArtifact stub cannot leak into the next test.
+    for (const mock of Object.values(nativeMock)) {
+      mock.mockReset();
+    }
     nativeMock.checkSession.mockResolvedValue(undefined);
     nativeMock.runSandbox.mockResolvedValue({
       stdout: "hi\n",
@@ -162,10 +166,6 @@ describe("sandbox tools (runtime enabled)", () => {
       };
     },
   );
-
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
 
   async function makeConversationCtx(): Promise<ArchestraContext> {
     const conversation = await ConversationModel.create({
@@ -763,57 +763,57 @@ describe("sandbox tools (runtime enabled)", () => {
         expect(log.filter((e) => e.kind === "upload")).toHaveLength(0);
       }
     });
+  });
 
-    describe("revocation gate", () => {
-      test("run_command fails before materialize when a mounted skill was deleted", async () => {
-        const ctx = await makeConversationCtx();
-        const skill = await SkillModel.createWithFiles({
-          skill: {
-            organizationId,
-            authorId: null,
-            name: "doomed",
-            description: "desc",
-            content: "# doomed",
-            metadata: {},
-            sourceType: "manual",
-            scope: "org",
-          },
-          files: [],
-        });
-        if (!skill) throw new Error("skill seed failed");
-        const v1 = await SkillVersionModel.findBySkillAndVersion(skill.id, 1);
-        if (!v1) throw new Error("missing v1");
-
-        const sandbox = await SkillSandboxModel.findOrCreateDefault({
+  describe("revocation gate", () => {
+    test("run_command fails before materialize when a mounted skill was deleted", async () => {
+      const ctx = await makeConversationCtx();
+      const skill = await SkillModel.createWithFiles({
+        skill: {
           organizationId,
-          userId,
-          conversationId: ctx.conversationId as string,
-          defaultCwd: "/home/sandbox",
-        });
-        await SkillSandboxReplayEventModel.appendSkillMount({
-          sandboxId: sandbox.id,
-          organizationId,
-          mount: {
-            skillId: skill.id,
-            skillName: skill.name,
-            skillVersionId: v1.id,
-          },
-        });
-
-        // revoke by deleting the source skill; the mount's durable skillId
-        // no longer resolves, so the gate fails closed.
-        await SkillModel.delete(skill.id);
-
-        const result = await executeArchestraTool(
-          TOOL_RUN_COMMAND_FULL_NAME,
-          { command: "echo hi" },
-          ctx,
-        );
-        expect(result.isError).toBe(true);
-        expect(textOf(result)).toContain("no longer exists");
-        // fail-closed means no engine call was made for this sandbox.
-        expect(nativeMock.runSandbox).not.toHaveBeenCalled();
+          authorId: null,
+          name: "doomed",
+          description: "desc",
+          content: "# doomed",
+          metadata: {},
+          sourceType: "manual",
+          scope: "org",
+        },
+        files: [],
       });
+      if (!skill) throw new Error("skill seed failed");
+      const v1 = await SkillVersionModel.findBySkillAndVersion(skill.id, 1);
+      if (!v1) throw new Error("missing v1");
+
+      const sandbox = await SkillSandboxModel.findOrCreateDefault({
+        organizationId,
+        userId,
+        conversationId: ctx.conversationId as string,
+        defaultCwd: "/home/sandbox",
+      });
+      await SkillSandboxReplayEventModel.appendSkillMount({
+        sandboxId: sandbox.id,
+        organizationId,
+        mount: {
+          skillId: skill.id,
+          skillName: skill.name,
+          skillVersionId: v1.id,
+        },
+      });
+
+      // revoke by deleting the source skill; the mount's durable skillId
+      // no longer resolves, so the gate fails closed.
+      await SkillModel.delete(skill.id);
+
+      const result = await executeArchestraTool(
+        TOOL_RUN_COMMAND_FULL_NAME,
+        { command: "echo hi" },
+        ctx,
+      );
+      expect(result.isError).toBe(true);
+      expect(textOf(result)).toContain("no longer exists");
+      // fail-closed means no engine call was made for this sandbox.
+      expect(nativeMock.runSandbox).not.toHaveBeenCalled();
     });
   });
 });

@@ -29,6 +29,7 @@ import { LinearConfigFields } from "./linear-config-fields";
 import { NotionConfigFields } from "./notion-config-fields";
 import { OneDriveConfigFields } from "./onedrive-config-fields";
 import { OutlineConfigFields } from "./outline-config-fields";
+import { joinIfArray, PerforceConfigFields } from "./perforce-config-fields";
 import { SalesforceConfigFields } from "./salesforce-config-fields";
 import { ServiceNowConfigFields } from "./servicenow-config-fields";
 import { SharePointConfigFields } from "./sharepoint-config-fields";
@@ -82,11 +83,13 @@ const CONNECTOR_DISPLAY_LABELS: Record<ConnectorType, string> = {
   salesforce: CONNECTOR_TYPE_LABELS.salesforce ?? "Salesforce",
   web_crawler: CONNECTOR_TYPE_LABELS.web_crawler,
   file_upload: CONNECTOR_TYPE_LABELS.file_upload,
+  perforce: CONNECTOR_TYPE_LABELS.perforce,
 };
 
 const CONNECTOR_DOC_ANCHORS: Partial<Record<ConnectorType, string>> = {
   gdrive: "google-drive",
   web_crawler: "web-crawler",
+  perforce: "perforce-helix-core",
 };
 
 export const CONNECTOR_OPTIONS: ConnectorOption[] = [
@@ -165,6 +168,11 @@ export const CONNECTOR_OPTIONS: ConnectorOption[] = [
     label: CONNECTOR_DISPLAY_LABELS.web_crawler,
     description: "Crawl and sync static HTML pages",
   },
+  {
+    type: "perforce",
+    label: CONNECTOR_DISPLAY_LABELS.perforce,
+    description: "Sync text files from Perforce Helix Core depots",
+  },
 ];
 
 const CONNECTOR_URL_CONFIGS: Record<ConnectorType, ConnectorUrlConfig | null> =
@@ -238,6 +246,13 @@ const CONNECTOR_URL_CONFIGS: Record<ConnectorType, ConnectorUrlConfig | null> =
       description: "First page to crawl. Crawling stays on the same host.",
     },
     file_upload: null,
+    perforce: {
+      fieldName: "config.p4Port",
+      label: "Server Address (P4PORT)",
+      placeholder: "ssl:perforce.example.com:1666",
+      description:
+        "Helix Core server address in P4PORT format: host:port, optionally prefixed with ssl:.",
+    },
   };
 
 const CREATE_ADVANCED_CONFIG_FIELDS: Record<
@@ -264,6 +279,7 @@ const CREATE_ADVANCED_CONFIG_FIELDS: Record<
   salesforce: ({ form }) => <SalesforceConfigFields form={form} />,
   web_crawler: ({ form }) => <WebCrawlerConfigFields form={form} />,
   file_upload: () => null,
+  perforce: ({ form }) => <PerforceConfigFields form={form} />,
 };
 
 const EDIT_ADVANCED_CONFIG_FIELDS: Record<
@@ -337,6 +353,7 @@ export function getDefaultConnectorConfig(
     salesforce: { type, loginUrl: "https://login.salesforce.com" },
     web_crawler: { type, maxPages: 250, maxDepth: 3, batchSize: 25 },
     file_upload: { type },
+    perforce: { type },
   };
 
   return { ...defaultConfigs[type] };
@@ -383,6 +400,7 @@ export function getConnectorCredentialConfig(params: {
     salesforce: "Password + Security Token",
     web_crawler: undefined,
     file_upload: undefined,
+    perforce: "Password or Ticket",
   };
 
   const createApiTokenPlaceholders: Record<ConnectorType, string | undefined> =
@@ -405,6 +423,7 @@ export function getConnectorCredentialConfig(params: {
       salesforce: "Your Salesforce password followed by your security token",
       web_crawler: undefined,
       file_upload: undefined,
+      perforce: "Your Perforce password or login ticket",
     };
 
   const editApiTokenPlaceholders: Record<ConnectorType, string | undefined> = {
@@ -426,6 +445,7 @@ export function getConnectorCredentialConfig(params: {
     file_upload: undefined,
     onedrive: "Leave empty to keep existing token",
     web_crawler: undefined,
+    perforce: "Leave empty to keep existing credentials",
   };
 
   const apiTokenRequiredMessages: Record<ConnectorType, string | undefined> = {
@@ -447,6 +467,7 @@ export function getConnectorCredentialConfig(params: {
     salesforce: "Password and security token are required",
     web_crawler: undefined,
     file_upload: undefined,
+    perforce: "Password or ticket is required",
   };
 
   const apiTokenHelpText = getApiTokenHelpText({
@@ -498,6 +519,16 @@ function getApiTokenHelpText(params: {
   }
 
   if (params.mode === "edit") return undefined;
+
+  if (params.type === "perforce") {
+    return (
+      <p className="text-[0.8rem] text-muted-foreground">
+        A password or a login ticket. For long-lived access, generate a ticket
+        with <code>p4 login -p</code> using a service account whose group has an
+        unlimited ticket timeout.
+      </p>
+    );
+  }
 
   if (params.type === "notion") {
     return (
@@ -924,6 +955,68 @@ const INLINE_CONFIG_FIELDS: Record<
     />
   ),
   file_upload: () => <></>,
+  perforce: ({ form, mode }) => (
+    <>
+      <FormField
+        control={form.control}
+        name={"config.depotPaths"}
+        rules={{ required: "At least one depot path is required" }}
+        render={({ field }) => (
+          <FormItem>
+            <FormLabel>Depot Paths</FormLabel>
+            <FormControl>
+              <Input
+                placeholder="//depot/docs, //stream/main/specs"
+                {...field}
+                value={joinIfArray(field.value)}
+              />
+            </FormControl>
+            <FormDescription>
+              Comma-separated depot paths in depot syntax, e.g.{" "}
+              <code>{"//depot/docs"}</code>. Each path is synced recursively.
+            </FormDescription>
+            <FormMessage />
+          </FormItem>
+        )}
+      />
+      <FormField
+        control={form.control}
+        name="email"
+        rules={
+          mode === "create" ? { required: "Username is required" } : undefined
+        }
+        render={({ field }) => (
+          <FormItem>
+            <FormLabel>Username</FormLabel>
+            <FormControl>
+              <Input
+                placeholder={
+                  mode === "create"
+                    ? "svc-knowledge"
+                    : "Leave empty to keep existing credentials"
+                }
+                autoComplete="off"
+                data-1p-ignore
+                data-lpignore="true"
+                {...field}
+              />
+            </FormControl>
+            {mode === "create" && (
+              <FormDescription>
+                The Perforce user (P4USER) the connector authenticates as.
+              </FormDescription>
+            )}
+            {mode === "edit" && (
+              <FormDescription>
+                Leave empty to keep existing credentials unchanged.
+              </FormDescription>
+            )}
+            <FormMessage />
+          </FormItem>
+        )}
+      />
+    </>
+  ),
 };
 
 export function ConnectorInlineConfigFields({

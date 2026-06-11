@@ -3,7 +3,7 @@ title: Connectors
 category: Knowledge
 order: 2
 description: Supported connector types, configuration, and management
-lastUpdated: 2026-06-05
+lastUpdated: 2026-06-11
 ---
 
 <!--
@@ -320,6 +320,26 @@ If the start URL is the site root, such as `https://example.com/`, and no includ
 | Batch Size            | Documents yielded per sync batch (default: `25`).                                                        |
 | Request Delay         | Optional delay between requests, in milliseconds.                                                        |
 | User Agent            | Optional custom User-Agent header for crawl requests.                                                    |
+
+## Perforce (Helix Core)
+
+Sync text files from Perforce Helix Core depot paths.
+
+**Indexed:** files matching the configured extensions (defaults to `.md`, `.yaml`, `.yml`) under the configured depot paths, at their latest submitted revision. Files with non-text Perforce filetypes (binary, symlink, etc.) and files larger than 2 MB are skipped.
+
+**Authentication:** a Perforce username with a password or login ticket. For long-lived access, use a service account whose group has an unlimited ticket timeout and generate a ticket with `p4 login -p`. The account needs read access to the configured depot paths.
+
+The connector shells out to the [`p4` command-line client](https://www.perforce.com/downloads/helix-command-line-client-p4), which must be installed in the backend deployment image (see the `ARCHESTRA_KNOWLEDGE_BASE_P4_BINARY_PATH` environment variable in [Deployment](/docs/platform-deployment)). No client workspace is required. For `ssl:` servers, the server certificate must either be CA-verifiable or pre-trusted via a `P4TRUST` file provided to the backend.
+
+Incremental syncs are driven by submitted changelist numbers: after the initial sync, only files changed since the last synced changelist are re-indexed. File deletions are not propagated on incremental syncs; use **Force re-sync** to rebuild the index after large depot restructurings.
+
+| Field                   | Description                                                                                       |
+| ----------------------- | -------------------------------------------------------------------------------------------------- |
+| Server Address (P4PORT) | Helix Core server address as `host:port`, optionally prefixed with `ssl:` (e.g., `ssl:perforce.example.com:1666`) |
+| Depot Paths             | Comma-separated depot paths to sync recursively, in depot syntax (e.g., `//depot/docs`)           |
+| Username                | The Perforce user (P4USER) the connector authenticates as                                          |
+| Password or Ticket      | The account password, or a ticket from `p4 login -p`                                               |
+| File Types              | Comma-separated file extensions to index (defaults to `.md`, `.yaml`, `.yml`)                      |
 
 ## Managing Connectors
 

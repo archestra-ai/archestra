@@ -39831,6 +39831,12 @@
                               "enum": [
                                 "web_crawler"
                               ]
+                            },
+                            {
+                              "type": "string",
+                              "enum": [
+                                "perforce"
+                              ]
                             }
                           ],
                           "description": "Connector type (e.g. confluence, github)"
@@ -43715,6 +43721,12 @@
                                 "type": "string",
                                 "enum": [
                                   "web_crawler"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "perforce"
                                 ]
                               }
                             ],
@@ -127411,6 +127423,12 @@
                                       "enum": [
                                         "web_crawler"
                                       ]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": [
+                                        "perforce"
+                                      ]
                                     }
                                   ]
                                 }
@@ -129394,6 +129412,12 @@
                   "enum": [
                     "web_crawler"
                   ]
+                },
+                {
+                  "type": "string",
+                  "enum": [
+                    "perforce"
+                  ]
                 }
               ]
             },
@@ -129539,6 +129563,12 @@
                                 "type": "string",
                                 "enum": [
                                   "web_crawler"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "perforce"
                                 ]
                               }
                             ]
@@ -130202,6 +130232,40 @@
                                   "startUrl"
                                 ],
                                 "additionalProperties": false
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "type": {
+                                    "type": "string",
+                                    "enum": [
+                                      "perforce"
+                                    ]
+                                  },
+                                  "p4Port": {
+                                    "type": "string",
+                                    "maxLength": 256,
+                                    "pattern": "^(?:(?:tcp|tcp4|tcp6|tcp46|tcp64|ssl|ssl4|ssl6|ssl46|ssl64):)?[A-Za-z0-9.-]+:\\d{1,5}$"
+                                  },
+                                  "depotPaths": {
+                                    "minItems": 1,
+                                    "type": "array",
+                                    "items": {}
+                                  },
+                                  "fileTypes": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string",
+                                      "pattern": "^\\.?[A-Za-z0-9_-]+$"
+                                    }
+                                  }
+                                },
+                                "required": [
+                                  "type",
+                                  "p4Port",
+                                  "depotPaths"
+                                ],
+                                "additionalProperties": false
                               }
                             ]
                           },
@@ -130741,6 +130805,12 @@
                         "type": "string",
                         "enum": [
                           "web_crawler"
+                        ]
+                      },
+                      {
+                        "type": "string",
+                        "enum": [
+                          "perforce"
                         ]
                       }
                     ]
@@ -131402,6 +131472,42 @@
                           "type",
                           "startUrl"
                         ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "perforce"
+                            ]
+                          },
+                          "p4Port": {
+                            "type": "string",
+                            "maxLength": 256,
+                            "pattern": "^(?:(?:tcp|tcp4|tcp6|tcp46|tcp64|ssl|ssl4|ssl6|ssl46|ssl64):)?[A-Za-z0-9.-]+:\\d{1,5}$"
+                          },
+                          "depotPaths": {
+                            "minItems": 1,
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "maxLength": 1024
+                            }
+                          },
+                          "fileTypes": {
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "pattern": "^\\.?[A-Za-z0-9_-]+$"
+                            }
+                          }
+                        },
+                        "required": [
+                          "type",
+                          "p4Port",
+                          "depotPaths"
+                        ]
                       }
                     ]
                   },
@@ -131592,6 +131698,12 @@
                           "type": "string",
                           "enum": [
                             "web_crawler"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "perforce"
                           ]
                         }
                       ]
@@ -132253,6 +132365,40 @@
                           "required": [
                             "type",
                             "startUrl"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "perforce"
+                              ]
+                            },
+                            "p4Port": {
+                              "type": "string",
+                              "maxLength": 256,
+                              "pattern": "^(?:(?:tcp|tcp4|tcp6|tcp46|tcp64|ssl|ssl4|ssl6|ssl46|ssl64):)?[A-Za-z0-9.-]+:\\d{1,5}$"
+                            },
+                            "depotPaths": {
+                              "minItems": 1,
+                              "type": "array",
+                              "items": {}
+                            },
+                            "fileTypes": {
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "pattern": "^\\.?[A-Za-z0-9_-]+$"
+                              }
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "p4Port",
+                            "depotPaths"
                           ],
                           "additionalProperties": false
                         }
@@ -132745,6 +132891,12 @@
                           "enum": [
                             "web_crawler"
                           ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "perforce"
+                          ]
                         }
                       ]
                     },
@@ -133405,6 +133557,40 @@
                           "required": [
                             "type",
                             "startUrl"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "perforce"
+                              ]
+                            },
+                            "p4Port": {
+                              "type": "string",
+                              "maxLength": 256,
+                              "pattern": "^(?:(?:tcp|tcp4|tcp6|tcp46|tcp64|ssl|ssl4|ssl6|ssl46|ssl64):)?[A-Za-z0-9.-]+:\\d{1,5}$"
+                            },
+                            "depotPaths": {
+                              "minItems": 1,
+                              "type": "array",
+                              "items": {}
+                            },
+                            "fileTypes": {
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "pattern": "^\\.?[A-Za-z0-9_-]+$"
+                              }
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "p4Port",
+                            "depotPaths"
                           ],
                           "additionalProperties": false
                         }
@@ -134439,6 +134625,42 @@
                           "type",
                           "startUrl"
                         ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "perforce"
+                            ]
+                          },
+                          "p4Port": {
+                            "type": "string",
+                            "maxLength": 256,
+                            "pattern": "^(?:(?:tcp|tcp4|tcp6|tcp46|tcp64|ssl|ssl4|ssl6|ssl46|ssl64):)?[A-Za-z0-9.-]+:\\d{1,5}$"
+                          },
+                          "depotPaths": {
+                            "minItems": 1,
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "maxLength": 1024
+                            }
+                          },
+                          "fileTypes": {
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "pattern": "^\\.?[A-Za-z0-9_-]+$"
+                            }
+                          }
+                        },
+                        "required": [
+                          "type",
+                          "p4Port",
+                          "depotPaths"
+                        ]
                       }
                     ]
                   },
@@ -134630,6 +134852,12 @@
                           "type": "string",
                           "enum": [
                             "web_crawler"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "perforce"
                           ]
                         }
                       ]
@@ -135291,6 +135519,40 @@
                           "required": [
                             "type",
                             "startUrl"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "perforce"
+                              ]
+                            },
+                            "p4Port": {
+                              "type": "string",
+                              "maxLength": 256,
+                              "pattern": "^(?:(?:tcp|tcp4|tcp6|tcp46|tcp64|ssl|ssl4|ssl6|ssl46|ssl64):)?[A-Za-z0-9.-]+:\\d{1,5}$"
+                            },
+                            "depotPaths": {
+                              "minItems": 1,
+                              "type": "array",
+                              "items": {}
+                            },
+                            "fileTypes": {
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "pattern": "^\\.?[A-Za-z0-9_-]+$"
+                              }
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "p4Port",
+                            "depotPaths"
                           ],
                           "additionalProperties": false
                         }
@@ -136125,6 +136387,12 @@
                                 "enum": [
                                   "web_crawler"
                                 ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "perforce"
+                                ]
                               }
                             ]
                           }
@@ -136632,6 +136900,12 @@
                           "type": "string",
                           "enum": [
                             "web_crawler"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "perforce"
                           ]
                         }
                       ]

@@ -5,6 +5,8 @@ import {
   GithubConfigSchema,
   GitlabConfigSchema,
   JiraConfigSchema,
+  PerforceCheckpointSchema,
+  PerforceConfigSchema,
   SalesforceCheckpointSchema,
   SalesforceConfigSchema,
   WebCrawlerConfigSchema,
@@ -369,6 +371,113 @@ describe("knowledge-connector schemas", () => {
       });
       expect(result.objectCursorMap?.Account).toBe("2026-01-01T00:00:00.000Z");
       expect(result.objectCursorMap?.Contact).toBe("2026-01-01T01:00:00.000Z");
+    });
+  });
+
+  describe("Perforce connector schema", () => {
+    test("accepts a plain host:port and ssl-prefixed p4Port", () => {
+      for (const p4Port of [
+        "perforce.example.com:1666",
+        "ssl:perforce.example.com:1666",
+        "tcp64:10.0.0.5:1666",
+      ]) {
+        const result = PerforceConfigSchema.parse({
+          type: "perforce",
+          p4Port,
+          depotPaths: ["//depot/docs"],
+        });
+        expect(result.p4Port).toBe(p4Port);
+      }
+    });
+
+    test("rejects malformed p4Port values", () => {
+      for (const p4Port of [
+        "https://perforce.example.com:1666",
+        "perforce.example.com",
+        "ssl:",
+        "host:1666 extra",
+        "host:notaport",
+      ]) {
+        const result = PerforceConfigSchema.safeParse({
+          type: "perforce",
+          p4Port,
+          depotPaths: ["//depot/docs"],
+        });
+        expect(result.success).toBe(false);
+      }
+    });
+
+    test("normalizes trailing /... and slashes on depot paths", () => {
+      const result = PerforceConfigSchema.parse({
+        type: "perforce",
+        p4Port: "perforce.example.com:1666",
+        depotPaths: ["//depot/docs/...", "//depot/specs/", "//stream/main"],
+      });
+      expect(result.depotPaths).toEqual([
+        "//depot/docs",
+        "//depot/specs",
+        "//stream/main",
+      ]);
+    });
+
+    test("rejects depot paths with Perforce metacharacters or bad shape", () => {
+      for (const depotPath of [
+        "depot/docs",
+        "//depot/docs@123",
+        "//depot/docs#3",
+        "//depot/*/docs",
+        "//depot/%%1/docs",
+        "//depot/.../docs",
+        "//depot/has space",
+        "//",
+      ]) {
+        const result = PerforceConfigSchema.safeParse({
+          type: "perforce",
+          p4Port: "perforce.example.com:1666",
+          depotPaths: [depotPath],
+        });
+        expect(result.success).toBe(false);
+      }
+    });
+
+    test("requires at least one depot path", () => {
+      const result = PerforceConfigSchema.safeParse({
+        type: "perforce",
+        p4Port: "perforce.example.com:1666",
+        depotPaths: [],
+      });
+      expect(result.success).toBe(false);
+    });
+
+    test("accepts extension filters and rejects filespec-unsafe ones", () => {
+      const ok = PerforceConfigSchema.parse({
+        type: "perforce",
+        p4Port: "perforce.example.com:1666",
+        depotPaths: ["//depot/docs"],
+        fileTypes: [".md", "yaml"],
+      });
+      expect(ok.fileTypes).toEqual([".md", "yaml"]);
+
+      const bad = PerforceConfigSchema.safeParse({
+        type: "perforce",
+        p4Port: "perforce.example.com:1666",
+        depotPaths: ["//depot/docs"],
+        fileTypes: ["*.md"],
+      });
+      expect(bad.success).toBe(false);
+    });
+
+    test("parses sweep cursor fields in checkpoint schema", () => {
+      const result = PerforceCheckpointSchema.parse({
+        type: "perforce",
+        lastSyncedAt: "2026-01-01T00:00:00.000Z",
+        lastChangelist: 100,
+        targetChangelist: 120,
+        filesOffset: 50,
+      });
+      expect(result.lastChangelist).toBe(100);
+      expect(result.targetChangelist).toBe(120);
+      expect(result.filesOffset).toBe(50);
     });
   });
 });

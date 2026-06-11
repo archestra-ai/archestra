@@ -625,4 +625,80 @@ describe("CreateConnectorDialog", () => {
       });
     });
   });
+
+  describe("Perforce-specific flow", () => {
+    async function renderPerforceConfigureStep() {
+      const user = userEvent.setup();
+      const result = renderDialog();
+      await user.click(screen.getByText("Perforce (Helix Core)"));
+      await waitFor(() => {
+        expect(screen.getByLabelText(/^Name$/)).toBeInTheDocument();
+      });
+      return { ...result, user };
+    }
+
+    it("shows server address, depot paths, username, and token fields", async () => {
+      await renderPerforceConfigureStep();
+
+      expect(
+        screen.getByLabelText(/^Server Address \(P4PORT\)$/),
+      ).toBeInTheDocument();
+      expect(screen.getByLabelText(/^Depot Paths$/)).toBeInTheDocument();
+      expect(screen.getByLabelText(/^Username$/)).toBeInTheDocument();
+      expect(screen.getByLabelText(/^Password or Ticket$/)).toBeInTheDocument();
+    });
+
+    it("submits perforce payload with transformed depot paths and file types", async () => {
+      mockMutateAsync.mockResolvedValue({ id: "connector-1" });
+      const { user } = await renderPerforceConfigureStep();
+
+      fireEvent.change(screen.getByLabelText(/^Name$/), {
+        target: { value: "Docs Depot" },
+      });
+      fireEvent.change(screen.getByLabelText(/^Server Address \(P4PORT\)$/), {
+        target: { value: "ssl:perforce.example.com:1666" },
+      });
+      fireEvent.change(screen.getByLabelText(/^Depot Paths$/), {
+        target: { value: "//depot/docs, //stream/main/specs" },
+      });
+      fireEvent.change(screen.getByLabelText(/^Username$/), {
+        target: { value: "svc-knowledge" },
+      });
+      fireEvent.change(screen.getByLabelText(/^Password or Ticket$/), {
+        target: { value: "perforce-ticket" },
+      });
+
+      await user.click(screen.getByRole("button", { name: /Advanced/ }));
+      await waitFor(() => {
+        expect(screen.getByLabelText(/File Types/)).toBeInTheDocument();
+      });
+      fireEvent.change(screen.getByLabelText(/File Types/), {
+        target: { value: ".md, .yaml" },
+      });
+
+      await user.click(
+        screen.getByRole("button", { name: "Create Connector" }),
+      );
+
+      await waitFor(() => {
+        expect(mockMutateAsync).toHaveBeenCalledTimes(1);
+      });
+
+      const [call] = mockMutateAsync.mock.calls;
+      expect(call[0]).toMatchObject({
+        name: "Docs Depot",
+        connectorType: "perforce",
+        credentials: {
+          email: "svc-knowledge",
+          apiToken: "perforce-ticket",
+        },
+      });
+      expect(call[0].config).toMatchObject({
+        type: "perforce",
+        p4Port: "ssl:perforce.example.com:1666",
+        depotPaths: ["//depot/docs", "//stream/main/specs"],
+        fileTypes: [".md", ".yaml"],
+      });
+    });
+  });
 });

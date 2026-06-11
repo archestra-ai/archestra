@@ -718,6 +718,63 @@ describe("knowledge base routes", () => {
         });
       }
     });
+
+    test("creates a perforce connector and normalizes depot paths", async () => {
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/connectors",
+        payload: {
+          name: "Docs Depot",
+          connectorType: "perforce",
+          config: {
+            type: "perforce",
+            p4Port: "ssl:perforce.example.com:1666",
+            depotPaths: ["//depot/docs/...", "//stream/main/specs/"],
+            fileTypes: [".md", ".yaml"],
+          },
+          credentials: {
+            email: "svc-knowledge",
+            apiToken: "perforce-ticket",
+          },
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const connector = response.json();
+      expect(connector.connectorType).toBe("perforce");
+      expect(connector.config).toMatchObject({
+        type: "perforce",
+        p4Port: "ssl:perforce.example.com:1666",
+        depotPaths: ["//depot/docs", "//stream/main/specs"],
+      });
+
+      const stored = await KnowledgeBaseConnectorModel.findById(connector.id);
+      expect(stored?.config).toMatchObject({
+        depotPaths: ["//depot/docs", "//stream/main/specs"],
+      });
+    });
+
+    test("rejects perforce depot paths containing revision metacharacters", async () => {
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/connectors",
+        payload: {
+          name: "Bad Depot",
+          connectorType: "perforce",
+          config: {
+            type: "perforce",
+            p4Port: "perforce.example.com:1666",
+            depotPaths: ["//depot/docs@123"],
+          },
+          credentials: {
+            email: "svc-knowledge",
+            apiToken: "perforce-ticket",
+          },
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
   });
 
   describe("GET /api/connectors", () => {

@@ -19,6 +19,7 @@ const OUTLINE = z.literal("outline");
 const LINEAR = z.literal("linear");
 const SALESFORCE = z.literal("salesforce");
 const WEB_CRAWLER = z.literal("web_crawler");
+const PERFORCE = z.literal("perforce");
 
 export const ConnectorTypeSchema = z.union([
   JIRA,
@@ -37,6 +38,7 @@ export const ConnectorTypeSchema = z.union([
   OUTLINE,
   SALESFORCE,
   WEB_CRAWLER,
+  PERFORCE,
 ]);
 export type ConnectorType = z.infer<typeof ConnectorTypeSchema>;
 
@@ -443,6 +445,71 @@ export const OutlineCheckpointSchema = z.object({
 });
 export type OutlineCheckpoint = z.infer<typeof OutlineCheckpointSchema>;
 
+// ===== Perforce (Helix Core) Config & Checkpoint =====
+
+/**
+ * `P4PORT` connection string: optional tcp/ssl-family protocol prefix, then
+ * host:port. Not an HTTP URL — validated with a dedicated pattern instead of
+ * `connectorUrlSchema`.
+ */
+const P4_PORT_PATTERN =
+  /^(?:(?:tcp|tcp4|tcp6|tcp46|tcp64|ssl|ssl4|ssl6|ssl46|ssl64):)?[A-Za-z0-9.-]+:\d{1,5}$/;
+
+/**
+ * Depot path in depot syntax (e.g. `//depot/docs`). Perforce wildcard and
+ * revision metacharacters (`@ # % * ...`) are rejected so user input can never
+ * widen the filespecs the connector builds; `/...` and `@rev` suffixes are
+ * appended internally only. A trailing `/...` or `/` is stripped at parse time.
+ */
+// biome-ignore lint/suspicious/noControlCharactersInRegex: rejecting control characters in depot paths is the point
+const DEPOT_PATH_PATTERN = /^\/\/[^\x00-\x20@#%*/]+(?:\/[^\x00-\x20@#%*/]+)*$/;
+
+const depotPathSchema = z
+  .string()
+  .max(1024)
+  .transform(stripDepotPathSuffix)
+  .refine((path) => DEPOT_PATH_PATTERN.test(path) && !path.includes("..."), {
+    message:
+      'Depot path must look like "//depot/path" and may not contain whitespace, control characters, or the Perforce metacharacters @ # % * ...',
+  });
+
+export const PerforceConfigSchema = z.object({
+  type: PERFORCE,
+  p4Port: z.string().max(256).regex(P4_PORT_PATTERN, {
+    message:
+      'Server address must look like "host:1666" or "ssl:host:1666" (P4PORT format)',
+  }),
+  depotPaths: z.array(depotPathSchema).min(1),
+  /** File extensions to index (defaults applied in the connector: .md, .yaml, .yml). */
+  fileTypes: z
+    .array(
+      z.string().regex(/^\.?[A-Za-z0-9_-]+$/, {
+        message:
+          'File types must be plain extensions like ".md" (letters, digits, "-", "_")',
+      }),
+    )
+    .optional(),
+});
+export type PerforceConfig = z.infer<typeof PerforceConfigSchema>;
+
+export const PerforceCheckpointSchema = z.object({
+  type: PERFORCE,
+  lastSyncedAt: z.string().optional(),
+  /** Committed cursor: every submitted changelist up to here is fully ingested. */
+  lastChangelist: z.number().int().nonnegative().optional(),
+  /**
+   * High-water changelist of the in-flight sweep. Present (with `filesOffset`)
+   * only while a sweep is mid-run so partial/time-boxed runs resume instead of
+   * restarting; cleared when the sweep commits into `lastChangelist`.
+   */
+  targetChangelist: z.number().int().nonnegative().optional(),
+  /** Submit time of `targetChangelist` (ISO), carried so a resumed sweep commits the right `lastSyncedAt`. */
+  targetChangeTime: z.string().optional(),
+  /** Number of files (in deterministic depot-path order) already ingested in the in-flight sweep. */
+  filesOffset: z.number().int().nonnegative().optional(),
+});
+export type PerforceCheckpoint = z.infer<typeof PerforceCheckpointSchema>;
+
 export const ConnectorConfigSchema = z.discriminatedUnion("type", [
   JiraConfigSchema,
   ConfluenceConfigSchema,
@@ -460,6 +527,7 @@ export const ConnectorConfigSchema = z.discriminatedUnion("type", [
   OutlineConfigSchema,
   SalesforceConfigSchema,
   WebCrawlerConfigSchema,
+  PerforceConfigSchema,
 ]);
 export type ConnectorConfig = z.infer<typeof ConnectorConfigSchema>;
 
@@ -480,6 +548,7 @@ export const ConnectorCheckpointSchema = z.discriminatedUnion("type", [
   OutlineCheckpointSchema,
   SalesforceCheckpointSchema,
   WebCrawlerCheckpointSchema,
+  PerforceCheckpointSchema,
 ]);
 export type ConnectorCheckpoint = z.infer<typeof ConnectorCheckpointSchema>;
 
@@ -567,6 +636,14 @@ function isHttpUrl(url: string): boolean {
 
 function stripTrailingSlashes(url: string): string {
   return url.replace(/\/+$/, "");
+}
+
+function stripDepotPathSuffix(path: string): string {
+  let normalized = path.trim();
+  if (normalized.endsWith("/...")) {
+    normalized = normalized.slice(0, -"/...".length);
+  }
+  return normalized.replace(/\/+$/, "");
 }
 
 export interface Connector {

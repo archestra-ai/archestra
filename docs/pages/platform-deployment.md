@@ -1322,6 +1322,10 @@ These environment variables configure the [Knowledge Base](/docs/platform-knowle
   - Default: `true`
   - Set to `false` to use vector similarity search only.
 
+- **`ARCHESTRA_KNOWLEDGE_BASE_P4_BINARY_PATH`** - Path to the Perforce `p4` CLI binary used by the [Perforce knowledge connector](/docs/platform-knowledge-connectors#perforce-helix-core).
+  - Default: `p4` (resolved on the backend `PATH`)
+  - The binary is not bundled; install the [Helix command-line client](https://www.perforce.com/downloads/helix-command-line-client-p4) in the backend image to use the connector. `P4TRUST`, `P4TICKETS`, and `P4CHARSET` are passed through from the backend environment when set, so SSL trust and charset for unicode-mode servers can be provisioned at deployment level.
+
 #### Knowledge Files External Blob Storage
 
 Uploaded [Knowledge Files](/docs/platform-knowledge-bases#files) store file bytes in the database by default. Set the provider to `s3` to store file bytes externally while keeping metadata and indexing state in PostgreSQL.

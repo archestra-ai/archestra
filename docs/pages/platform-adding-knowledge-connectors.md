@@ -259,6 +259,7 @@ Key points:
 - Include `failures: this.flushFailures()` when using `safeItemFetch(...)`
 - Include `skipped: this.flushSkipped()` when the connector intentionally skips source items
 - The checkpoint is opaque to the runtime; only your connector reads it
+- Because the checkpoint is persisted after every batch and time-boxed runs resume from it, a connector that derives its work list once per sync (rather than per item) should keep in-flight sweep state in the checkpoint — a pinned cursor plus an offset into a deterministically ordered work list — and only advance its committed cursor on the final batch. See the Perforce connector (`targetChangelist` + `filesOffset`) for an example; without this, a sync that repeatedly hits the time budget restarts from scratch and may never finish
 
 ## Connector Registry
 

@@ -16,6 +16,7 @@ import {
 } from "drizzle-orm/pg-core";
 import type {
   ConnectionBaseUrl,
+  ConnectionDefaultProviderKeys,
   GlobalToolPolicy,
   LimitCleanupInterval,
   NetworkPolicy,
@@ -61,6 +62,17 @@ const organizationsTable = pgTable("organization", {
    * so admins may want to disable this until file-based policy support is added.
    */
   allowChatFileUploads: boolean("allow_chat_file_uploads")
+    .notNull()
+    .default(true),
+
+  /**
+   * Whether search_tools may surface catalog tools beyond the agent's
+   * assigned set and run_tool may auto-assign them on first use (gated by the
+   * user's catalog access and permission to modify the agent). Defaults to
+   * true. Admins disable it when catalog tool names must not be exposed to
+   * users beyond their agents' assigned toolsets.
+   */
+  allowToolAutoAssignment: boolean("allow_tool_auto_assignment")
     .notNull()
     .default(true),
 
@@ -216,6 +228,16 @@ const organizationsTable = pgTable("organization", {
   connectionBaseUrls: jsonb("connection_base_urls").$type<
     ConnectionBaseUrl[]
   >(),
+
+  /**
+   * Admin-chosen provider API key per provider for auto-provisioned
+   * connection virtual keys (provider → llm_provider_api_keys.id). When a
+   * provider has no entry, provisioning falls back to the user's
+   * personal → team → org key resolution.
+   */
+  connectionDefaultProviderKeys: jsonb(
+    "connection_default_provider_keys",
+  ).$type<ConnectionDefaultProviderKeys>(),
 
   /**
    * Legacy preset columns (feature removed) — retained inert (non-destructive,

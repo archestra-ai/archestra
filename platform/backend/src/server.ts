@@ -92,6 +92,7 @@ import websocketService from "@/websocket";
 import * as routes from "./routes";
 import { publicConfigRoutes } from "./routes/config";
 import {
+  CONNECTION_SETUP_SCRIPT_PREFIX,
   HEALTH_PATH,
   MCP_GATEWAY_PREFIX,
   READY_PATH,
@@ -795,6 +796,8 @@ const startWebServer = async () => {
       return true;
     // token is embedded in the URL path; never log it
     if (url.startsWith(`${SKILL_MARKETPLACE_PREFIX}/`)) return true;
+    // one-time setup token is embedded in the URL path; never log it
+    if (url.startsWith(`${CONNECTION_SETUP_SCRIPT_PREFIX}/`)) return true;
     return false;
   };
 

@@ -513,6 +513,25 @@ export function parseActiveChatRunPollIntervalMs(params: {
  * stripped — i.e. matching what `new URL(...).host` produces).
  * @public — exported for testability
  */
+/**
+ * Raw URL sources a /connection setup baseUrl may come from: the frontend
+ * origin plus every URL in `ARCHESTRA_API_BASE_URL` (the same list the
+ * frontend's connection page derives its endpoint candidates from). Returned
+ * unparsed; callers normalize and compare full URLs, not just hosts.
+ * @public — exported for testability
+ */
+export const getConnectionBaseUrlSources = (): string[] => {
+  const sources = [frontendBaseUrl];
+  const externalUrls = process.env.ARCHESTRA_API_BASE_URL?.trim();
+  if (externalUrls) {
+    for (const url of externalUrls.split(",")) {
+      const trimmed = url.trim();
+      if (trimmed) sources.push(trimmed);
+    }
+  }
+  return sources;
+};
+
 export const getMCPGatewayOauthAllowedPublicHosts = (): Set<string> => {
   const hosts = new Set<string>();
 

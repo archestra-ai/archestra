@@ -349,7 +349,10 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       return reply.send(
-        await AgentModel.getLLMProxyOrCreateDefault(request.organizationId),
+        await AgentModel.ensurePersonalLlmProxy({
+          userId: request.user.id,
+          organizationId: request.organizationId,
+        }),
       );
     },
   );

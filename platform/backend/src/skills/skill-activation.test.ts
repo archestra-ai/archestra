@@ -274,6 +274,45 @@ describe("formatSkillActivation", () => {
     expect(performance.now() - start).toBeLessThan(200);
     expect(out).toBe(hostile);
   });
+
+  // The assertions above pin the conditional structure (which blocks appear
+  // when). These snapshots pin the exact model-facing wording, so a drift away
+  // from the skill terminology glossary fails CI the way a tool-description edit
+  // already does.
+  test("pins the full activation text with the sandbox hint", () => {
+    expect(
+      formatSkillActivation({
+        skill: {
+          name: "Research",
+          content: "Do research.",
+          compatibility: "Python 3.11",
+          allowedTools: "slack__send jira__create",
+          templated: false,
+        },
+        files: [
+          { path: "references/REF.md", kind: "reference" },
+          { path: "scripts/run.py", kind: "script" },
+        ],
+        canRunSandbox: true,
+      }),
+    ).toMatchSnapshot();
+  });
+
+  test("pins the full activation text without the sandbox hint", () => {
+    expect(
+      formatSkillActivation({
+        skill: {
+          name: "Research",
+          content: "Do research.",
+          compatibility: null,
+          allowedTools: null,
+          templated: false,
+        },
+        files: [{ path: "scripts/run.py", kind: "script" }],
+        canRunSandbox: false,
+      }),
+    ).toMatchSnapshot();
+  });
 });
 
 describe("buildSkillActivationPromptContext", () => {

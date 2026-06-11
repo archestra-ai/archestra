@@ -39,6 +39,11 @@ import {
   type ToolUiResourceData,
 } from "@/clients/chat-mcp-client";
 import {
+  ChatMcpElicitationResponseSchema,
+  createChatMcpElicitationBridge,
+  resolveChatMcpElicitation,
+} from "@/clients/chat-mcp-elicitation";
+import {
   createLLMModel,
   createLLMModelForAgent,
   isApiKeyRequired,
@@ -404,6 +409,10 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         });
 
         const externalAgentId = agentId;
+        const chatMcpElicitation = createChatMcpElicitationBridge({
+          conversationId,
+          abortSignal: chatAbortController.signal,
+        });
 
         // Fetch enabled tool IDs and custom selection status in parallel
         const [
@@ -434,6 +443,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
             // Pass agentId as initial delegation chain (will be extended by delegated agents)
             delegationChain: agentId,
             abortSignal: chatAbortController.signal,
+            elicitation: chatMcpElicitation,
             user: { id: user.id, email: user.email, name: user.name },
             hookRunCollector,
           }),
@@ -699,6 +709,8 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 }
               },
               execute: async ({ writer }) => {
+                chatMcpElicitation.setWriter(writer);
+
                 // Send heartbeat every 5s to prevent connection drops
                 // during long-running tool executions / subagent calls.
                 heartbeatInterval = setInterval(() => {
@@ -1278,6 +1290,35 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         });
         throw error;
       }
+    },
+  );
+
+  fastify.post(
+    "/api/chat/elicitation/:id",
+    {
+      schema: {
+        operationId: RouteId.ResolveChatMcpElicitation,
+        description: "Resolve a pending MCP elicitation request from chat",
+        tags: ["Chat"],
+        params: z.object({ id: UuidIdSchema }),
+        body: ChatMcpElicitationResponseSchema,
+        response: constructResponseSchema(z.object({ success: z.boolean() })),
+      },
+    },
+    async ({ params: { id }, body, user, organizationId }, reply) => {
+      const conversation = await ConversationModel.findById({
+        id: body.conversationId,
+        userId: user.id,
+        organizationId,
+      });
+
+      if (!conversation) {
+        throw new ApiError(404, "Conversation not found");
+      }
+
+      await resolveChatMcpElicitation({ id, response: body });
+
+      return reply.send({ success: true });
     },
   );
 

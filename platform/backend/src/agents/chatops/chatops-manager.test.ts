@@ -17,6 +17,7 @@ import {
   findTolerantMatchLength,
   matchesAgentName,
 } from "./chatops-manager";
+import { CHATOPS_NO_REPLY_SENTINEL } from "./constants";
 
 describe("findTolerantMatchLength", () => {
   describe("exact matches", () => {
@@ -164,6 +165,10 @@ describe("ChatOpsManager security validation", () => {
       sendReply?: (options: ChatReplyOptions) => Promise<string>;
       hasMissingScopes?: () => boolean;
       notifyMissingScopes?: (message: IncomingChatMessage) => Promise<void>;
+      clearTypingStatus?: (
+        channelId: string,
+        threadTs: string,
+      ) => Promise<void>;
     } = {},
   ): ChatOpsProvider {
     return {
@@ -189,6 +194,9 @@ describe("ChatOpsManager security validation", () => {
       discoverChannels: async () => null,
       addApprovalRequestForm: async () => {},
       updateApprovalRequest: async () => {},
+      ...(overrides.clearTypingStatus && {
+        clearTypingStatus: overrides.clearTypingStatus,
+      }),
     };
   }
 
@@ -284,6 +292,185 @@ describe("ChatOpsManager security validation", () => {
         text: expect.stringContaining("Access Denied"),
       }),
     );
+  });
+
+  test("suppresses the reply when the agent answers with the no-reply sentinel", async ({
+    makeUser,
+    makeOrganization,
+    makeTeam,
+    makeTeamMember,
+    makeInternalAgent,
+  }) => {
+    vi.spyOn(a2aExecutor, "executeA2AMessage").mockResolvedValue({
+      text: CHATOPS_NO_REPLY_SENTINEL,
+      messageId: "test-message-id",
+      finishReason: "stop",
+      responseUiMessage: {
+        id: "test-message-id",
+        role: "assistant",
+        parts: [{ type: "text", text: CHATOPS_NO_REPLY_SENTINEL }],
+      },
+    });
+
+    const user = await makeUser({ email: "silent@example.com" });
+    const org = await makeOrganization();
+    const team = await makeTeam(org.id, user.id);
+    await makeTeamMember(team.id, user.id);
+    const agent = await makeInternalAgent({
+      organizationId: org.id,
+      teams: [team.id],
+    });
+    await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
+    await ChatOpsChannelBindingModel.create({
+      organizationId: org.id,
+      provider: "ms-teams",
+      channelId: "test-channel-id",
+      workspaceId: "test-workspace-id",
+      agentId: agent.id,
+    });
+
+    const sendReplySpy = vi.fn().mockResolvedValue("reply-id");
+    const clearTypingStatusSpy = vi.fn().mockResolvedValue(undefined);
+    const mockProvider = createMockProvider({
+      getUserEmail: async () => "silent@example.com",
+      sendReply: sendReplySpy,
+      clearTypingStatus: clearTypingStatusSpy,
+    });
+    const manager = new ChatOpsManager();
+    (
+      manager as unknown as { msTeamsProvider: ChatOpsProvider }
+    ).msTeamsProvider = mockProvider;
+
+    const result = await manager.processMessage({
+      message: createMockMessage(),
+      provider: mockProvider,
+    });
+
+    expect(result.success).toBe(true);
+    expect(sendReplySpy).not.toHaveBeenCalled();
+    // Without posting anything, the transient "thinking" indicator must be
+    // cleared explicitly or it spins forever (Slack assistant status).
+    expect(clearTypingStatusSpy).toHaveBeenCalled();
+
+    // Models often narrate the decision around the sentinel — the narration
+    // must be swallowed too, not posted as a visible reply.
+    const narrated = `This message is addressed to Matvey, not me, so I'll stay out of it.\n\n${CHATOPS_NO_REPLY_SENTINEL}`;
+    vi.spyOn(a2aExecutor, "executeA2AMessage").mockResolvedValue({
+      text: narrated,
+      messageId: "narrated-message-id",
+      finishReason: "stop",
+      responseUiMessage: {
+        id: "narrated-message-id",
+        role: "assistant",
+        parts: [{ type: "text", text: narrated }],
+      },
+    });
+
+    const narratedResult = await manager.processMessage({
+      message: createMockMessage({ messageId: "narrated-incoming-id" }),
+      provider: mockProvider,
+    });
+
+    expect(narratedResult.success).toBe(true);
+    expect(sendReplySpy).not.toHaveBeenCalled();
+  });
+
+  test("frames group conversations with speaker, mention state, and the no-reply sentinel", async ({
+    makeUser,
+    makeOrganization,
+    makeTeam,
+    makeTeamMember,
+    makeInternalAgent,
+  }) => {
+    const executeSpy = mockA2AExecutor();
+
+    const user = await makeUser({ email: "group@example.com" });
+    const org = await makeOrganization();
+    const team = await makeTeam(org.id, user.id);
+    await makeTeamMember(team.id, user.id);
+    const agent = await makeInternalAgent({
+      organizationId: org.id,
+      teams: [team.id],
+    });
+    await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
+    await ChatOpsChannelBindingModel.create({
+      organizationId: org.id,
+      provider: "ms-teams",
+      channelId: "test-channel-id",
+      workspaceId: "test-workspace-id",
+      agentId: agent.id,
+    });
+
+    const mockProvider = createMockProvider({
+      getUserEmail: async () => "group@example.com",
+    });
+    const manager = new ChatOpsManager();
+    (
+      manager as unknown as { msTeamsProvider: ChatOpsProvider }
+    ).msTeamsProvider = mockProvider;
+
+    await manager.processMessage({
+      message: createMockMessage({
+        metadata: { conversationType: "groupChat", botMentioned: false },
+      }),
+      provider: mockProvider,
+    });
+
+    const groupCall = JSON.stringify(executeSpy.mock.calls[0]);
+    expect(groupCall).toContain("group conversation with multiple people");
+    expect(groupCall).toContain("Test User");
+    // The platform name is a known alias — people address the bot by it
+    expect(groupCall).toContain(`address you as \\"Archestra\\"`);
+    // A missing mention is never asserted negatively — users often address
+    // the bot by name without a real @mention.
+    expect(groupCall).not.toContain("@mentions you directly");
+    expect(groupCall).toContain(CHATOPS_NO_REPLY_SENTINEL);
+
+    // A message @mentioning someone else is flagged as addressed to them
+    await manager.processMessage({
+      message: createMockMessage({
+        messageId: "other-mention-message-id",
+        metadata: {
+          conversationType: "groupChat",
+          botMentioned: false,
+          mentionedOthers: ["Innokentii Konstantinov"],
+        },
+      }),
+      provider: mockProvider,
+    });
+
+    const otherMentionCall = JSON.stringify(executeSpy.mock.calls[1]);
+    expect(otherMentionCall).toContain(
+      "It @mentions Innokentii Konstantinov — another person, not you",
+    );
+
+    // A direct @mention never gets the silence option — always answer,
+    // even when the message is small talk outside the agent's specialty.
+    await manager.processMessage({
+      message: createMockMessage({
+        messageId: "direct-mention-message-id",
+        metadata: { conversationType: "channel", botMentioned: true },
+      }),
+      provider: mockProvider,
+    });
+
+    const directMentionCall = JSON.stringify(executeSpy.mock.calls[2]);
+    expect(directMentionCall).toContain("It @mentions you directly");
+    expect(directMentionCall).toContain("always answer");
+    expect(directMentionCall).not.toContain(CHATOPS_NO_REPLY_SENTINEL);
+
+    // DMs get no group framing
+    await manager.processMessage({
+      message: createMockMessage({
+        messageId: "dm-message-id",
+        metadata: { conversationType: "personal" },
+      }),
+      provider: mockProvider,
+    });
+
+    const dmCall = JSON.stringify(executeSpy.mock.calls[3]);
+    expect(dmCall).not.toContain("group conversation with multiple people");
+    expect(dmCall).not.toContain(CHATOPS_NO_REPLY_SENTINEL);
   });
 
   test("resolves user via senderEmail without calling getUserEmail", async ({

@@ -66,6 +66,13 @@ export const CHATOPS_CHANNEL_AUTO_REPLY = {
 };
 
 /**
+ * In group conversations the agent hears every message but should not answer
+ * every one. When it decides no reply is needed it answers with exactly this
+ * token, and the chatops layer posts nothing instead of a message.
+ */
+export const CHATOPS_NO_REPLY_SENTINEL = "[NO_REPLY]";
+
+/**
  * Bot commands recognized by the chatops system
  */
 export const CHATOPS_COMMANDS = {

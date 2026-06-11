@@ -280,12 +280,14 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
             // Runs before sender resolution so we don't do Graph lookups for
             // the many un-mentioned channel messages the bot now receives.
             if (context.activity.conversation?.conversationType === "channel") {
-              const threadId = message.threadId ?? message.channelId;
+              const activation = {
+                provider: "ms-teams" as const,
+                channelId: message.channelId,
+                threadId: message.threadId ?? message.channelId,
+              };
               if (provider.wasBotMentioned(context.activity)) {
-                await markChannelThreadActive(message.channelId, threadId);
-              } else if (
-                !(await isChannelThreadActive(message.channelId, threadId))
-              ) {
+                await markChannelThreadActive(activation);
+              } else if (!(await isChannelThreadActive(activation))) {
                 return;
               }
             }

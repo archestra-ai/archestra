@@ -361,6 +361,13 @@ class ArchestraClient:
         return require_dict(self._request("POST", "/api/hooks", json_body=to_payload(payload)),
                             ctx="POST /api/hooks")
 
+    def agent_hooks_enabled(self) -> bool:
+        """whether the instance's agent-hooks feature is on (env flag AND the sandbox runtime).
+        When off, POST /api/hooks still persists hooks but they never fire and are hidden in the UI."""
+        config = require_dict(self._request("GET", "/api/config"), ctx="GET /api/config")
+        features = config.get("features")
+        return bool(features.get("agentHooksEnabled")) if isinstance(features, dict) else False
+
 
 # --- response decoding & shape helpers -----------------------------------------------------
 

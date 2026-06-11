@@ -19576,6 +19576,97 @@ export type StreamChatErrors = {
 
 export type StreamChatError = StreamChatErrors[keyof StreamChatErrors];
 
+export type ResolveChatMcpElicitationData = {
+    body: {
+        conversationId: string;
+        action: 'accept' | 'decline' | 'cancel';
+        content?: {
+            [key: string]: string | number | boolean | Array<string>;
+        };
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/chat/elicitation/{id}';
+};
+
+export type ResolveChatMcpElicitationErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ResolveChatMcpElicitationError = ResolveChatMcpElicitationErrors[keyof ResolveChatMcpElicitationErrors];
+
+export type ResolveChatMcpElicitationResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type ResolveChatMcpElicitationResponse = ResolveChatMcpElicitationResponses[keyof ResolveChatMcpElicitationResponses];
+
 export type StopChatStreamData = {
     body?: never;
     path: {
@@ -51263,9 +51354,18 @@ export type GetSkillsResponse = GetSkillsResponses[keyof GetSkillsResponses];
 
 export type CreateSkillData = {
     body: {
+        /**
+         * A complete SKILL.md manifest: a YAML frontmatter block with `name` and `description` (and optional `license`, `compatibility`, `allowed-tools`, `templated`, `metadata`), followed by the Markdown instruction body. Set `templated: true` to render the body through Handlebars (e.g. `{{user.name}}`) at activation. `allowed-tools` is a space-separated list of tools the skill is pre-approved to use.
+         */
         content: string;
         files?: Array<{
+            /**
+             * Resource path, e.g. references/API.md or scripts/run.py
+             */
             path: string;
+            /**
+             * Text content of the file
+             */
             content: string;
             encoding?: 'utf8' | 'base64';
         }>;
@@ -51811,9 +51911,18 @@ export type GetSkillResponse = GetSkillResponses[keyof GetSkillResponses];
 
 export type UpdateSkillData = {
     body: {
+        /**
+         * A complete SKILL.md manifest: a YAML frontmatter block with `name` and `description` (and optional `license`, `compatibility`, `allowed-tools`, `templated`, `metadata`), followed by the Markdown instruction body. Set `templated: true` to render the body through Handlebars (e.g. `{{user.name}}`) at activation. `allowed-tools` is a space-separated list of tools the skill is pre-approved to use.
+         */
         content: string;
         files?: Array<{
+            /**
+             * Resource path, e.g. references/API.md or scripts/run.py
+             */
             path: string;
+            /**
+             * Text content of the file
+             */
             content: string;
             encoding?: 'utf8' | 'base64';
         }>;

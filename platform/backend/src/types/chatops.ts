@@ -348,6 +348,13 @@ export interface ChatOpsProvider {
   ): Promise<void>;
 
   /**
+   * Clear a transient "thinking" indicator without posting a message.
+   * Needed when the agent deliberately stays silent: providers like Slack
+   * only auto-clear the status once a message is posted to the thread.
+   */
+  clearTypingStatus?(channelId: string, threadTs: string): Promise<void>;
+
+  /**
    * Get thread/conversation history for context
    * @param params - Parameters including channel, thread ID, and limit
    * @returns Array of previous messages, oldest first

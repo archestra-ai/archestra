@@ -275,6 +275,7 @@ export const RouteId = {
 
   // Chat Routes
   StreamChat: "streamChat",
+  ResolveChatMcpElicitation: "resolveChatMcpElicitation",
   StopChatStream: "stopChatStream",
   GetActiveChatRun: "getActiveChatRun",
   GetChatConversations: "getChatConversations",

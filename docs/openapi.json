@@ -86936,7 +86936,7 @@
         "tags": [
           "Organization"
         ],
-        "description": "Update an environment's name, description, namespace, and restricted flag. When the namespace changes and the runtime is enabled, all MCP servers assigned to this environment are restarted in the new namespace.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`environment:admin`: Create, edit, and delete deployment environments (everyone can view them)",
+        "description": "Update an environment's name, description, namespace, network policy, and restricted flag. When the namespace or network policy changes and the runtime is enabled, all MCP servers assigned to this environment are reconciled.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`environment:admin`: Create, edit, and delete deployment environments (everyone can view them)",
         "requestBody": {
           "required": true,
           "content": {

@@ -385,19 +385,23 @@ class McpClient {
         authInfo,
       );
     }
-    const enterpriseTransportCredential =
-      tool.credentialResolutionMode === "enterprise_managed"
-        ? await this.resolveCachedEnterpriseTransportCredential({
-            agentId,
-            tokenAuth,
-            enterpriseManagedConfig: effectiveEnterpriseManagedConfig,
-          })
-        : null;
+    // A catalog-level enterprise-managed config is authoritative: assignments
+    // created before enterprise mode existed (or via paths that didn't infer
+    // it) still carry the default "static"/"dynamic" mode, and connecting
+    // with static secrets would hit the protected server without any
+    // credential. Fail closed through the exchange instead.
+    const usesEnterpriseManagedCredential =
+      tool.credentialResolutionMode === "enterprise_managed" ||
+      effectiveEnterpriseManagedConfig !== null;
+    const enterpriseTransportCredential = usesEnterpriseManagedCredential
+      ? await this.resolveCachedEnterpriseTransportCredential({
+          agentId,
+          tokenAuth,
+          enterpriseManagedConfig: effectiveEnterpriseManagedConfig,
+        })
+      : null;
 
-    if (
-      tool.credentialResolutionMode === "enterprise_managed" &&
-      !enterpriseTransportCredential
-    ) {
+    if (usesEnterpriseManagedCredential && !enterpriseTransportCredential) {
       const authError =
         await this.buildEnterpriseManagedIdentityProviderAuthMessage(
           catalogItem.name,
@@ -3033,19 +3037,20 @@ class McpClient {
         if ("error" in targetResult) continue;
 
         const { targetMcpServerId } = targetResult;
-        const enterpriseTransportCredential =
-          tool.credentialResolutionMode === "enterprise_managed"
-            ? await this.resolveCachedEnterpriseTransportCredential({
-                agentId,
-                tokenAuth,
-                enterpriseManagedConfig:
-                  catalogItem.enterpriseManagedConfig ?? null,
-              })
-            : null;
-        if (
-          tool.credentialResolutionMode === "enterprise_managed" &&
-          !enterpriseTransportCredential
-        ) {
+        // Catalog-level enterprise-managed config is authoritative — see
+        // executeToolCall for why stale assignment modes are overridden.
+        const usesEnterpriseManagedCredential =
+          tool.credentialResolutionMode === "enterprise_managed" ||
+          catalogItem.enterpriseManagedConfig != null;
+        const enterpriseTransportCredential = usesEnterpriseManagedCredential
+          ? await this.resolveCachedEnterpriseTransportCredential({
+              agentId,
+              tokenAuth,
+              enterpriseManagedConfig:
+                catalogItem.enterpriseManagedConfig ?? null,
+            })
+          : null;
+        if (usesEnterpriseManagedCredential && !enterpriseTransportCredential) {
           continue;
         }
 
@@ -3660,10 +3665,15 @@ function buildDefaultAuthorizationHeaders(
     (headerName) => headerName.toLowerCase() === "authorization",
   );
 
-  if (typeof secrets.access_token === "string" && !hasAuthorizationHeader) {
+  if (
+    typeof secrets.access_token === "string" &&
+    secrets.access_token.length > 0 &&
+    !hasAuthorizationHeader
+  ) {
     headers.Authorization = `Bearer ${secrets.access_token}`;
   } else if (
     typeof secrets.raw_access_token === "string" &&
+    secrets.raw_access_token.length > 0 &&
     !hasAuthorizationHeader
   ) {
     headers.Authorization = String(secrets.raw_access_token);

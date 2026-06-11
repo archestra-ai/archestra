@@ -1223,6 +1223,197 @@ describe("mcp server inspect route", () => {
     });
   });
 
+  // Regression: enterprise-managed catalogs with install-time userConfig used
+  // to run the static-secret `validateConnection` probe before discovery,
+  // which hit the MCP server without any Authorization header and failed the
+  // install on servers that require auth for tools/list.
+  test("enterprise-managed install with install-time config skips the unauthenticated connection probe", async ({
+    makeAccount,
+    makeIdentityProvider,
+    makeInternalMcpCatalog,
+  }) => {
+    const identityProvider = await makeIdentityProvider(user.id, {
+      providerId: "keycloak",
+      issuer: "http://localhost:30081/realms/archestra",
+      oidcConfig: {
+        clientId: "archestra-oidc",
+        clientSecret: "archestra-oidc-secret",
+        tokenEndpoint:
+          "http://localhost:30081/realms/archestra/protocol/openid-connect/token",
+        tokenEndpointAuthentication: "client_secret_post",
+        enterpriseManagedCredentials: {
+          exchangeStrategy: "rfc8693",
+          subjectTokenType: OAUTH_TOKEN_TYPE.AccessToken,
+        },
+      },
+    });
+
+    const catalog = await makeInternalMcpCatalog({
+      name: "Protected Remote With Config",
+      serverType: "remote",
+      serverUrl: "https://mcp.example.com/mcp",
+      enterpriseManagedConfig: {
+        identityProviderId: identityProvider.id,
+        requestedCredentialType: "bearer_token",
+        tokenInjectionMode: "authorization_bearer",
+      },
+      userConfig: {
+        header_x_tenant: {
+          type: "string",
+          title: "x-tenant",
+          description: "Tenant header",
+          promptOnInstallation: true,
+          required: true,
+          sensitive: false,
+          headerName: "x-tenant",
+        },
+      },
+    });
+
+    await makeAccount(user.id, {
+      providerId: "keycloak",
+      accessToken: "session-access-token",
+    });
+
+    exchangeEnterpriseManagedCredentialMock.mockResolvedValueOnce({
+      credentialType: "bearer_token",
+      expiresInSeconds: null,
+      issuedTokenType: OAUTH_TOKEN_TYPE.AccessToken,
+      value: "exchanged-downstream-token",
+    });
+
+    connectAndGetToolsMock.mockResolvedValueOnce([
+      {
+        name: "get-server-info",
+        description: "Returns server details",
+        inputSchema: { type: "object", properties: {} },
+      },
+    ]);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/mcp_server",
+      payload: {
+        name: "Protected Remote With Config",
+        catalogId: catalog.id,
+        userConfigValues: {
+          header_x_tenant: "tenant-a",
+        },
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    // Exactly one connect for this catalog: the discovery call carrying the
+    // exchanged credential — no prior unauthenticated validateConnection
+    // probe. Filter by catalog id so deferred background discovery leaked
+    // from sibling tests can't pollute the count.
+    const callsForCatalog = connectAndGetToolsMock.mock.calls.filter(
+      ([params]) =>
+        (params as { catalogItem?: { id?: string } }).catalogItem?.id ===
+        catalog.id,
+    );
+    expect(callsForCatalog).toHaveLength(1);
+    expect(callsForCatalog[0][0]).toMatchObject({
+      secrets: {
+        header_x_tenant: "tenant-a",
+        access_token: "exchanged-downstream-token",
+      },
+    });
+  });
+
+  test("enterprise-managed local server install discovery sends the exchanged credential", async ({
+    makeAccount,
+    makeIdentityProvider,
+    makeInternalMcpCatalog,
+  }) => {
+    const identityProvider = await makeIdentityProvider(user.id, {
+      providerId: "keycloak",
+      issuer: "http://localhost:30081/realms/archestra",
+      oidcConfig: {
+        clientId: "archestra-oidc",
+        clientSecret: "archestra-oidc-secret",
+        tokenEndpoint:
+          "http://localhost:30081/realms/archestra/protocol/openid-connect/token",
+        tokenEndpointAuthentication: "client_secret_post",
+        enterpriseManagedCredentials: {
+          exchangeStrategy: "rfc8693",
+          subjectTokenType: OAUTH_TOKEN_TYPE.AccessToken,
+        },
+      },
+    });
+
+    const catalog = await makeInternalMcpCatalog({
+      name: "Protected Local Http",
+      serverType: "local",
+      enterpriseManagedConfig: {
+        identityProviderId: identityProvider.id,
+        requestedCredentialType: "bearer_token",
+        tokenInjectionMode: "authorization_bearer",
+      },
+      localConfig: {
+        transportType: "streamable-http",
+        dockerImage: "example/protected-mcp:latest",
+      },
+    });
+
+    await makeAccount(user.id, {
+      providerId: "keycloak",
+      accessToken: "session-access-token",
+    });
+
+    exchangeEnterpriseManagedCredentialMock.mockResolvedValueOnce({
+      credentialType: "bearer_token",
+      expiresInSeconds: null,
+      issuedTokenType: OAUTH_TOKEN_TYPE.AccessToken,
+      value: "exchanged-local-token",
+    });
+
+    connectAndGetToolsMock.mockResolvedValueOnce([
+      {
+        name: "get-server-info",
+        description: "Returns server details",
+        inputSchema: { type: "object", properties: {} },
+      },
+    ]);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/mcp_server",
+      payload: {
+        name: "Protected Local Http",
+        catalogId: catalog.id,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const serverId = response.json().id as string;
+
+    // Local discovery runs in a deferred background task; wait for it.
+    let finalStatus: string | null | undefined;
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+      const [serverRow] = await db
+        .select()
+        .from(schema.mcpServersTable)
+        .where(eq(schema.mcpServersTable.id, serverId));
+      finalStatus = serverRow?.localInstallationStatus;
+      if (finalStatus && finalStatus !== "pending") {
+        break;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+
+    expect(finalStatus).toBe("success");
+    const callsForCatalog = connectAndGetToolsMock.mock.calls.filter(
+      ([params]) =>
+        (params as { catalogItem?: { id?: string } }).catalogItem?.id ===
+        catalog.id,
+    );
+    expect(callsForCatalog).toHaveLength(1);
+    expect(callsForCatalog[0][0]).toMatchObject({
+      secrets: { access_token: "exchanged-local-token" },
+    });
+  });
+
   test("sends enterprise-managed credentials on first discovery without depending on auth-error retry matching", async ({
     makeAccount,
     makeIdentityProvider,

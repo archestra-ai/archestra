@@ -80,6 +80,8 @@ For this pattern to work, each user needs a downstream IdP session at least once
 
 The same linked-IdP check also runs during MCP installation when Archestra needs an exchanged user token to discover tools from a protected MCP server. The installer is redirected to the configured downstream IdP first, then returned to continue the install.
 
+Once a catalog item has enterprise-managed credential settings, those settings are authoritative for every tool call against that server: tool assignments created before the settings were added (or assigned through paths that did not record an explicit credential mode) are still resolved through the per-user credential exchange at call time, rather than falling back to static install credentials.
+
 The downstream IdP email does not have to match the primary SSO email. The link is scoped to a short-lived request created from the active Archestra session, not to email matching. Normal SSO sign-in still follows the deployment's account-linking rules.
 
 The linked IdP should request the scopes needed to identify and refresh the linked IdP session. For Entra OBO, it must also request a delegated scope exposed by the Archestra/middle-tier app registration so the linked access token is issued to Archestra and can be used as the OBO assertion.

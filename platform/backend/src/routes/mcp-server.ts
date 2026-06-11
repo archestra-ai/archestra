@@ -393,8 +393,12 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           createdSecretId = secret.id;
         }
 
-        // Validate connection for remote servers
-        if (secretId) {
+        // Validate connection for remote servers. Enterprise-managed catalogs
+        // skip this static-secret probe: their MCP servers typically require
+        // the per-user exchanged credential, which is only attached during the
+        // install discovery below, so probing here would hit the server
+        // without an Authorization header and fail the install.
+        if (secretId && !catalogItem.enterpriseManagedConfig) {
           const { isValid, errorMessage } =
             await McpServerModel.validateConnection(
               serverData.name,
@@ -661,6 +665,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
             // Capture catalogId before async callback to ensure it's available
             const capturedCatalogId = catalogItem.id;
             const capturedCatalogName = catalogItem.name;
+            const capturedCatalogItem = catalogItem;
             const capturedEnterpriseManagedConfig =
               catalogItem.enterpriseManagedConfig;
 
@@ -722,15 +727,25 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 fastify.log.info(
                   `Attempting to fetch tools from local server: ${mcpServer.name}`,
                 );
-                const tools =
-                  await McpServerModel.getToolsFromServer(mcpServer);
+                // Enterprise-managed local servers (streamable-http) may
+                // require the per-user exchanged credential for tools/list,
+                // so route discovery through the install-time exchange.
+                const tools = capturedEnterpriseManagedConfig
+                  ? await connectAndGetToolsForInstallation({
+                      catalogItem: capturedCatalogItem,
+                      mcpServerId: mcpServer.id,
+                      secretId: mcpServer.secretId ?? undefined,
+                      userId: user.id,
+                      allowCurrentUserTokenFallback: true,
+                    })
+                  : await McpServerModel.getToolsFromServer(mcpServer);
 
                 // Persist tools in the database
                 // Use catalog item name (without userId) for tool naming to avoid duplicates across users
                 const toolNamePrefix = capturedCatalogName || mcpServer.name;
                 const toolsToCreate = tools.map((tool) => ({
                   name: ToolModel.slugifyName(toolNamePrefix, tool.name),
-                  description: tool.description,
+                  description: tool.description ?? null,
                   parameters: tool.inputSchema,
                   meta: { _meta: tool._meta, annotations: tool.annotations },
                   catalogId: capturedCatalogId,

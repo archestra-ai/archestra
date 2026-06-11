@@ -2099,6 +2099,121 @@ describe("McpClient", () => {
         fetchMock.mockRestore();
       });
 
+      // Regression: assignments created before enterprise mode existed still
+      // carry the default "static" mode. The catalog-level config must win,
+      // otherwise runtime calls hit the protected server with no credential.
+      test("brokers the managed credential even when the assignment row still says static", async ({
+        makeIdentityProvider,
+        makeOrganization,
+        makeUser,
+      }) => {
+        const organization = await makeOrganization();
+        const user = await makeUser({ email: "stale-static-mcp@example.com" });
+        const managedConfig = {
+          requestedCredentialType: "secret" as const,
+          resourceIdentifier: "orn:okta:pam:github-secret",
+          tokenInjectionMode: "authorization_bearer" as const,
+          responseFieldPath: "token",
+        };
+        const identityProvider = await makeIdentityProvider(organization.id, {
+          providerId: "okta-managed-stale-static",
+          issuer: "https://example.okta.com",
+          oidcConfig: {
+            clientId: "web-client-id",
+            tokenEndpoint: "https://example.okta.com/oauth2/v1/token",
+            enterpriseManagedCredentials: {
+              exchangeStrategy: "okta_managed",
+              clientId: "ai-agent-client-id",
+              tokenEndpoint: "https://example.okta.com/oauth2/v1/token",
+              tokenEndpointAuthentication: "client_secret_post",
+              clientSecret: "ai-agent-client-secret",
+            },
+          },
+        });
+
+        await AgentModel.update(agentId, {
+          organizationId: organization.id,
+          identityProviderId: identityProvider.id,
+        });
+
+        await McpServerModel.update(mcpServerId, { secretId: null });
+        await InternalMcpCatalogModel.update(catalogId, {
+          enterpriseManagedConfig: managedConfig,
+        });
+
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "github-mcp-server__stale_static_tool",
+          description: "Tool assigned before enterprise mode existed",
+          parameters: {},
+          catalogId,
+        });
+
+        await AgentToolModel.create(agentId, tool.id, {
+          mcpServerId,
+          credentialResolutionMode: "static",
+        });
+
+        await db.insert(schema.accountsTable).values({
+          id: randomUUID(),
+          accountId: "acct-stale-static",
+          providerId: identityProvider.providerId,
+          userId: user.id,
+          idToken: createJwt({ exp: futureExpSeconds() }),
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        });
+
+        const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+          new Response(
+            JSON.stringify({
+              issued_token_type: "urn:okta:params:oauth:token-type:secret",
+              secret: { token: "ghu_managed_token" },
+              expires_in: 300,
+            }),
+            {
+              status: 200,
+              headers: { "Content-Type": "application/json" },
+            },
+          ),
+        );
+
+        mockCallTool.mockResolvedValue({
+          content: [{ type: "text", text: "Managed result" }],
+          isError: false,
+        });
+
+        const result = await mcpClient.executeToolCall(
+          {
+            id: "call_stale_static",
+            name: "github-mcp-server__stale_static_tool",
+            arguments: {},
+          },
+          agentId,
+          {
+            tokenId: "session-token",
+            teamId: null,
+            isOrganizationToken: false,
+            userId: user.id,
+          },
+          { conversationId: "stale-static-conv" },
+        );
+
+        expect(result.isError).toBe(false);
+
+        const { StreamableHTTPClientTransport } = await import(
+          "@modelcontextprotocol/sdk/client/streamableHttp.js"
+        );
+        const [, options] =
+          vi.mocked(StreamableHTTPClientTransport).mock.calls.at(-1) ?? [];
+        const headers =
+          options?.requestInit?.headers instanceof Headers
+            ? options.requestInit.headers
+            : new Headers(options?.requestInit?.headers);
+        expect(headers.get("Authorization")).toBe("Bearer ghu_managed_token");
+
+        fetchMock.mockRestore();
+      });
+
       test("caches the brokered enterprise-managed credential for repeated tool calls", async ({
         makeIdentityProvider,
         makeOrganization,

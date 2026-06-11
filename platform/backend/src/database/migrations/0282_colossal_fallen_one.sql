@@ -1,5 +1,5 @@
 -- drizzle-migration-linter: allow-breaking
--- drizzle-migration-linter: reason=brand-new tables (connection_setups, connection_setup_skills); no existing rows, so FK constraints and the unique index cannot fail on any data, and CREATE INDEX on empty tables does not block writes. CASCADE deletes are intentional: setup rows are ephemeral render tickets scoped to their org/user/agents. The organization column is plain nullable jsonb.
+-- drizzle-migration-linter: reason=brand-new tables (connection_setups, connection_setup_skills) have no existing rows, so their FK/unique constraints and indexes cannot fail; CASCADE deletes are intentional for these ephemeral render tickets. Added columns are nullable or have safe defaults (agents.is_personal_proxy default false, organization.connection_default_provider_keys nullable). The partial unique index on agents has no existing personal-proxy rows to conflict.
 CREATE TABLE "connection_setup_skills" (
 	"connection_setup_id" uuid NOT NULL,
 	"skill_id" uuid NOT NULL,
@@ -27,6 +27,7 @@ CREATE TABLE "connection_setups" (
 	"created_at" timestamp DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
+ALTER TABLE "agents" ADD COLUMN "is_personal_proxy" boolean DEFAULT false NOT NULL;--> statement-breakpoint
 ALTER TABLE "organization" ADD COLUMN "connection_default_provider_keys" jsonb;--> statement-breakpoint
 ALTER TABLE "connection_setup_skills" ADD CONSTRAINT "connection_setup_skills_connection_setup_id_connection_setups_id_fk" FOREIGN KEY ("connection_setup_id") REFERENCES "public"."connection_setups"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "connection_setup_skills" ADD CONSTRAINT "connection_setup_skills_skill_id_skills_id_fk" FOREIGN KEY ("skill_id") REFERENCES "public"."skills"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
@@ -39,4 +40,5 @@ ALTER TABLE "connection_setups" ADD CONSTRAINT "connection_setups_skill_share_li
 CREATE INDEX "connection_setup_skills_skill_id_idx" ON "connection_setup_skills" USING btree ("skill_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "connection_setups_token_hash_idx" ON "connection_setups" USING btree ("token_hash");--> statement-breakpoint
 CREATE INDEX "connection_setups_org_id_idx" ON "connection_setups" USING btree ("organization_id");--> statement-breakpoint
-CREATE INDEX "connection_setups_token_start_idx" ON "connection_setups" USING btree ("token_start");
+CREATE INDEX "connection_setups_token_start_idx" ON "connection_setups" USING btree ("token_start");--> statement-breakpoint
+CREATE UNIQUE INDEX "agents_personal_proxy_per_member_idx" ON "agents" USING btree ("organization_id","author_id") WHERE "agents"."agent_type" = 'llm_proxy' AND "agents"."is_personal_proxy" = true AND "agents"."deleted_at" IS NULL;

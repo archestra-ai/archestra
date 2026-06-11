@@ -53,6 +53,7 @@ const agentsTable = softDeletablePgTable(
     slug: text("slug"),
     isDefault: boolean("is_default").notNull().default(false),
     isPersonalGateway: boolean("is_personal_gateway").notNull().default(false),
+    isPersonalProxy: boolean("is_personal_proxy").notNull().default(false),
     considerContextUntrusted: boolean("consider_context_untrusted")
       .notNull()
       .default(false),
@@ -141,6 +142,11 @@ const agentsTable = softDeletablePgTable(
       .on(table.organizationId, table.authorId)
       .where(
         sql`${table.agentType} = 'mcp_gateway' AND ${table.isPersonalGateway} = true AND ${table.deletedAt} IS NULL`,
+      ),
+    uniqueIndex("agents_personal_proxy_per_member_idx")
+      .on(table.organizationId, table.authorId)
+      .where(
+        sql`${table.agentType} = 'llm_proxy' AND ${table.isPersonalProxy} = true AND ${table.deletedAt} IS NULL`,
       ),
   ],
 );

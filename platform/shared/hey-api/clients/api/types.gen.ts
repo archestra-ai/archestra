@@ -10864,6 +10864,7 @@ export type GetAgentsResponses = {
             slug: string | null;
             isDefault: boolean;
             isPersonalGateway: boolean;
+            isPersonalProxy: boolean;
             considerContextUntrusted: boolean;
             agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
             systemPrompt: string | null;
@@ -10966,6 +10967,7 @@ export type CreateAgentData = {
         scope: 'personal' | 'team' | 'org';
         name: string;
         isDefault?: boolean;
+        isPersonalProxy?: boolean;
         considerContextUntrusted?: boolean;
         agentType?: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
         systemPrompt?: string | null;
@@ -11091,6 +11093,7 @@ export type CreateAgentResponses = {
         slug: string | null;
         isDefault: boolean;
         isPersonalGateway: boolean;
+        isPersonalProxy: boolean;
         considerContextUntrusted: boolean;
         agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
         systemPrompt: string | null;
@@ -11288,6 +11291,7 @@ export type GetAllAgentsResponses = {
         slug: string | null;
         isDefault: boolean;
         isPersonalGateway: boolean;
+        isPersonalProxy: boolean;
         considerContextUntrusted: boolean;
         agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
         systemPrompt: string | null;
@@ -11460,6 +11464,7 @@ export type GetDefaultMcpGatewayResponses = {
         slug: string | null;
         isDefault: boolean;
         isPersonalGateway: boolean;
+        isPersonalProxy: boolean;
         considerContextUntrusted: boolean;
         agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
         systemPrompt: string | null;
@@ -11632,6 +11637,7 @@ export type GetDefaultLlmProxyResponses = {
         slug: string | null;
         isDefault: boolean;
         isPersonalGateway: boolean;
+        isPersonalProxy: boolean;
         considerContextUntrusted: boolean;
         agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
         systemPrompt: string | null;
@@ -11882,6 +11888,7 @@ export type ImportAgentResponses = {
             slug: string | null;
             isDefault: boolean;
             isPersonalGateway: boolean;
+            isPersonalProxy: boolean;
             considerContextUntrusted: boolean;
             agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
             systemPrompt: string | null;
@@ -12147,6 +12154,7 @@ export type GetAgentResponses = {
         slug: string | null;
         isDefault: boolean;
         isPersonalGateway: boolean;
+        isPersonalProxy: boolean;
         considerContextUntrusted: boolean;
         agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
         systemPrompt: string | null;
@@ -12240,6 +12248,7 @@ export type UpdateAgentData = {
         scope?: 'personal' | 'team' | 'org';
         name?: string;
         isDefault?: boolean;
+        isPersonalProxy?: boolean;
         considerContextUntrusted?: boolean;
         agentType?: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
         systemPrompt?: string | null;
@@ -12367,6 +12376,7 @@ export type UpdateAgentResponses = {
         slug: string | null;
         isDefault: boolean;
         isPersonalGateway: boolean;
+        isPersonalProxy: boolean;
         considerContextUntrusted: boolean;
         agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
         systemPrompt: string | null;
@@ -12541,6 +12551,7 @@ export type CloneAgentResponses = {
         slug: string | null;
         isDefault: boolean;
         isPersonalGateway: boolean;
+        isPersonalProxy: boolean;
         considerContextUntrusted: boolean;
         agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
         systemPrompt: string | null;
@@ -12875,6 +12886,7 @@ export type RestoreAgentResponses = {
         slug: string | null;
         isDefault: boolean;
         isPersonalGateway: boolean;
+        isPersonalProxy: boolean;
         considerContextUntrusted: boolean;
         agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
         systemPrompt: string | null;

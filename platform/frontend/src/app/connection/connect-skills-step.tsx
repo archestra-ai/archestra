@@ -79,20 +79,33 @@ export function ConnectSkillsStep({
               : `${totalSkills} shared skills available — install them with the setup command`}
           </label>
           {includeSkills && (
-            <Select value={ttlId} onValueChange={onTtlChange}>
-              <SelectTrigger className="w-[180px]" aria-label="Expiration">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {SKILL_MARKETPLACE_TTL_PRESETS.map((preset) => (
-                  <SelectItem key={preset.id} value={preset.id}>
-                    {preset.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <span className="flex items-center gap-2 text-sm text-muted-foreground">
+              Marketplace link expires after
+              <Select value={ttlId} onValueChange={onTtlChange}>
+                <SelectTrigger
+                  className="w-[150px]"
+                  aria-label="Marketplace link expiration"
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {SKILL_MARKETPLACE_TTL_PRESETS.map((preset) => (
+                    <SelectItem key={preset.id} value={preset.id}>
+                      {preset.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </span>
           )}
         </div>
+        {includeSkills && (
+          <p className="text-xs text-muted-foreground">
+            The setup command registers a private marketplace link your client
+            clones from. After it expires the client can't re-fetch the skills
+            until you generate a new command.
+          </p>
+        )}
       </div>
     </StepCard>
   );

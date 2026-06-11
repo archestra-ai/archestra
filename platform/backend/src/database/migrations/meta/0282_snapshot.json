@@ -1,5 +1,5 @@
 {
-  "id": "fe329ecb-3af9-4375-80e5-364781586676",
+  "id": "97025ace-1ee5-4ee9-87da-c51d974709b8",
   "prevId": "2813db77-d3d9-4acf-afb5-6a666eee1ded",
   "version": "7",
   "dialect": "postgresql",
@@ -1143,6 +1143,13 @@
           "notNull": true,
           "default": false
         },
+        "is_personal_proxy": {
+          "name": "is_personal_proxy",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
         "consider_context_untrusted": {
           "name": "consider_context_untrusted",
           "type": "boolean",
@@ -1379,6 +1386,28 @@
           ],
           "isUnique": true,
           "where": "\"agents\".\"agent_type\" = 'mcp_gateway' AND \"agents\".\"is_personal_gateway\" = true AND \"agents\".\"deleted_at\" IS NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "agents_personal_proxy_per_member_idx": {
+          "name": "agents_personal_proxy_per_member_idx",
+          "columns": [
+            {
+              "expression": "organization_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "author_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"agents\".\"agent_type\" = 'llm_proxy' AND \"agents\".\"is_personal_proxy\" = true AND \"agents\".\"deleted_at\" IS NULL",
           "concurrently": false,
           "method": "btree",
           "with": {}

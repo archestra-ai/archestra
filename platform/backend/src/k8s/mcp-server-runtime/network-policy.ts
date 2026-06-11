@@ -288,7 +288,6 @@ function buildAwsApplicationEgressRules(
   }
 
   return [
-    buildAwsDnsEgressRule(),
     ...policy.allowedCidrs.map((cidr) => ({
       to: [{ ipBlock: { cidr } }],
     })),
@@ -315,29 +314,6 @@ function buildCiliumDnsEgressRule(): Record<string, unknown> {
           dns: [{ matchPattern: "*" }],
         },
       },
-    ],
-  };
-}
-
-function buildAwsDnsEgressRule(): Record<string, unknown> {
-  return {
-    to: [
-      {
-        namespaceSelector: {
-          matchLabels: {
-            "kubernetes.io/metadata.name": "kube-system",
-          },
-        },
-        podSelector: {
-          matchLabels: {
-            "k8s-app": "kube-dns",
-          },
-        },
-      },
-    ],
-    ports: [
-      { protocol: "UDP", port: 53 },
-      { protocol: "TCP", port: 53 },
     ],
   };
 }

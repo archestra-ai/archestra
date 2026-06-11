@@ -29,6 +29,7 @@ import {
   executeArchestraTool,
   getAgentTools,
 } from "@/archestra-mcp-server";
+import { isToolGrantApprovable } from "@/archestra-mcp-server/tool-auto-assign";
 import { CacheKey, LRUCacheManager } from "@/cache-manager";
 import type { ChatMcpElicitationBridge } from "@/clients/chat-mcp-elicitation";
 import mcpClient, { type TokenAuthContext } from "@/clients/mcp-client";
@@ -957,15 +958,36 @@ export async function getChatMcpTools({
                     mcpTool.name,
                     args,
                   );
-                  return ToolInvocationPolicyModel.checkApprovalRequired(
-                    approvalTarget.toolName,
-                    approvalTarget.toolInput,
-                    {
-                      teamIds: [],
-                      externalAgentId: getChatExternalAgentId(),
-                    },
-                    globalToolPolicy,
-                  );
+                  if (
+                    await ToolInvocationPolicyModel.checkApprovalRequired(
+                      approvalTarget.toolName,
+                      approvalTarget.toolInput,
+                      {
+                        teamIds: [],
+                        externalAgentId: getChatExternalAgentId(),
+                      },
+                      globalToolPolicy,
+                    )
+                  ) {
+                    return true;
+                  }
+                  // Grant approval: only run_tool can target a tool the agent
+                  // does not yet have. Propose granting an accessible-but-
+                  // unassigned target so the user confirms (and the tool is added
+                  // to the agent) before it runs. The frontend assigns the tool,
+                  // then resumes this same call — by which point it is assigned.
+                  if (
+                    archestraMcpBranding.getToolShortName(mcpTool.name) !==
+                    TOOL_RUN_TOOL_SHORT_NAME
+                  ) {
+                    return false;
+                  }
+                  return isToolGrantApprovable({
+                    toolName: approvalTarget.toolName,
+                    agentId,
+                    userId,
+                    organizationId,
+                  });
                 },
               }
             : {}),

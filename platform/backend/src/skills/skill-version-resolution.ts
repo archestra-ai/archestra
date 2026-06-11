@@ -28,10 +28,13 @@ interface ActivationVersion {
  * Resolve the skill version a model-facing path should expose: the version
  * already mounted in the conversation's default sandbox if the skill is mounted
  * there, otherwise the skill's latest version. This is the single source of
- * truth shared by `activate_skill`, `read_skill_file`, and slash-command
- * activation, so the activation response, the mounted bytes, and `read_skill_file`
- * never diverge. Returns `null` only if the skill has no version row at all
- * (should not happen — every skill has version 1).
+ * truth behind `resolveActivationVersion`, shared by `load_skill` and
+ * slash-command activation, so the activation response, the mounted bytes, and a
+ * `load_skill` file read never diverge. Returns `null` only if the skill has no
+ * version row at all (should not happen — every skill has version 1).
+ *
+ * @public — the core of `resolveActivationVersion`; exported for its own direct
+ * unit tests (which knip --production cannot see).
  */
 export async function resolveEffectiveSkillVersion(params: {
   skill: Pick<Skill, "id" | "latestVersion">;

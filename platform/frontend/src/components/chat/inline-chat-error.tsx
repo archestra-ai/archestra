@@ -1,11 +1,13 @@
 "use client";
 
+import { ChatErrorCode } from "@archestra/shared";
 import {
   AlertCircle,
   ChevronDown,
   ChevronRight,
   Copy,
   Gauge,
+  MessageSquareDashed,
   RefreshCw,
 } from "lucide-react";
 import { useState } from "react";
@@ -50,11 +52,20 @@ export function InlineChatError({
   });
   const chatError = parseErrorResponse(error) ?? mapClientError(error);
   const isUsageLimitExceeded = chatError.usageLimitExceeded === true;
-  const StatusIcon = isUsageLimitExceeded ? Gauge : AlertCircle;
-  const containerClassName = isUsageLimitExceeded
+  // An empty turn that survived the backend's auto-retries is the model's
+  // answer for this conversation, not a system failure — render it as a
+  // neutral outcome rather than a destructive error.
+  const isEmptyModelTurn = chatError.code === ChatErrorCode.EmptyResponse;
+  const isNeutralOutcome = isUsageLimitExceeded || isEmptyModelTurn;
+  const StatusIcon = isUsageLimitExceeded
+    ? Gauge
+    : isEmptyModelTurn
+      ? MessageSquareDashed
+      : AlertCircle;
+  const containerClassName = isNeutralOutcome
     ? "bg-muted/30 border border-border rounded-lg"
     : "bg-destructive/10 border border-destructive/20 rounded-lg";
-  const iconClassName = isUsageLimitExceeded
+  const iconClassName = isNeutralOutcome
     ? "text-muted-foreground"
     : "text-destructive";
   const usageLimitMessage =

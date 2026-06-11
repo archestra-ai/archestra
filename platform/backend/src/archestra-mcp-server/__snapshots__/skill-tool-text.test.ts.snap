@@ -1,27 +1,5 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`skill and sandbox tool text > archestra__activate_skill 1`] = `
-{
-  "description": "Activate a specialized Agent Skill — a reusable SKILL.md instruction set. Call list_skills first to discover what is available, then call this with a skill name to load its full instructions. Activate a skill before attempting the task it covers. To inspect bundled resources use read_skill_file. Where a sandbox is available, activation also mounts the skill under /skills.",
-  "inputSchema": {
-    "$schema": "https://json-schema.org/draft/2020-12/schema",
-    "properties": {
-      "name": {
-        "description": "The skill to activate, as named by list_skills.",
-        "minLength": 1,
-        "type": "string",
-      },
-    },
-    "required": [
-      "name",
-    ],
-    "type": "object",
-  },
-  "name": "archestra__activate_skill",
-  "title": "Activate Skill",
-}
-`;
-
 exports[`skill and sandbox tool text > archestra__create_skill 1`] = `
 {
   "description": "Create a new Agent Skill from a SKILL.md manifest. The skill is created as a personal skill owned by you, available via list_skills and as a chat slash-command. Draft the SKILL.md (and any bundled resource files) with the user, then call this to persist it. To share a skill with a team or the whole organization, change its scope in the Skills UI.",
@@ -79,11 +57,11 @@ exports[`skill and sandbox tool text > archestra__create_skill 1`] = `
 
 exports[`skill and sandbox tool text > archestra__download_file 1`] = `
 {
-  "description": "Copy a file out of the conversation's sandbox into durable storage and return a download URL. Use this for any binary or generated output — run_command only returns text. To read a skill's own source files, use read_skill_file instead. Requires \`sandbox:execute\`.",
+  "description": "Copy a file out of the conversation's sandbox into durable storage and return a download URL. Use this for any binary or generated output — run_command only returns text. To read a skill's own source files, use load_skill with a path instead. Requires \`sandbox:execute\`.",
   "inputSchema": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "additionalProperties": false,
-    "description": "Copy a file out of the sandbox into durable storage and return a download URL. Use this for any binary or generated output — run_command only returns text. (To read a skill's source files, use read_skill_file.)",
+    "description": "Copy a file out of the sandbox into durable storage and return a download URL. Use this for any binary or generated output — run_command only returns text. (To read a skill's source files, use load_skill with a path.)",
     "properties": {
       "mimeType": {
         "description": "Optional MIME type recorded with the file. Sniffed from the bytes when omitted.",
@@ -142,7 +120,7 @@ exports[`skill and sandbox tool text > archestra__download_file 1`] = `
 
 exports[`skill and sandbox tool text > archestra__list_skills 1`] = `
 {
-  "description": "List the Agent Skills available in this organization — one line per skill (name and description). Call activate_skill with a skill name to load its full instructions.",
+  "description": "List the Agent Skills available in this organization — one line per skill (name and description). Call load_skill with a skill name to load its full instructions.",
   "inputSchema": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "properties": {},
@@ -153,29 +131,30 @@ exports[`skill and sandbox tool text > archestra__list_skills 1`] = `
 }
 `;
 
-exports[`skill and sandbox tool text > archestra__read_skill_file 1`] = `
+exports[`skill and sandbox tool text > archestra__load_skill 1`] = `
 {
-  "description": "Read a bundled resource file from a skill. Paths come from the <skill_resources> list returned by activate_skill. This returns file text for inspection only — to execute a script or run shell commands, use run_command (activated skills are mounted under /skills). Prefer running a skill's own scripts and modules over re-implementing them.",
+  "description": "Load a specialized Agent Skill — a reusable SKILL.md instruction set. Call list_skills first to discover what is available. Call load_skill with just a name to load the skill's instructions and its bundled-file list; load it before attempting the task it covers. Call it with a name and a path from that list to read one bundled file. To run a bundled script, use run_command (loaded skills are available under /skills).",
   "inputSchema": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "properties": {
-      "path": {
-        "description": "Resource path from the skill, e.g. references/REFERENCE.md",
+      "name": {
+        "description": "The skill to load, as named by list_skills.",
+        "minLength": 1,
         "type": "string",
       },
-      "skill": {
-        "description": "The skill that owns the file",
+      "path": {
+        "description": "Optional. Omit to load the skill's instructions and bundled-file list. Pass a resource path from that list (e.g. references/REFERENCE.md) to read one bundled file instead.",
+        "minLength": 1,
         "type": "string",
       },
     },
     "required": [
-      "skill",
-      "path",
+      "name",
     ],
     "type": "object",
   },
-  "name": "archestra__read_skill_file",
-  "title": "Read Skill File",
+  "name": "archestra__load_skill",
+  "title": "Load Skill",
 }
 `;
 
@@ -263,7 +242,7 @@ exports[`skill and sandbox tool text > archestra__update_skill 1`] = `
         "type": "string",
       },
       "files": {
-        "description": "Optional. WHEN PROVIDED, REPLACES THE SKILL'S ENTIRE bundled file set. Omit it to leave the existing resource files untouched. There is no per-file patch: to change one file you must resend all of them — read the current files back first with activate_skill + read_skill_file.",
+        "description": "Optional. WHEN PROVIDED, REPLACES THE SKILL'S ENTIRE bundled file set. Omit it to leave the existing resource files untouched. There is no per-file patch: to change one file you must resend all of them — read the current files back first with load_skill (with and without a path).",
         "items": {
           "properties": {
             "content": {

@@ -1,6 +1,5 @@
 import {
   ARCHESTRA_TOOL_SHORT_NAMES,
-  type ArchestraToolShortName,
   getArchestraToolFullName,
   isAgentTool,
   TOOL_RUN_TOOL_SHORT_NAME,
@@ -18,7 +17,9 @@ import {
   defineArchestraTools,
   errorResult,
 } from "./helpers";
+import { resolveRunToolTargetName, resolveToolGrant } from "./tool-auto-assign";
 import {
+  toolNotAssignedAskAdminMessage,
   toolNotEnabledForConversationMessage,
   unavailableThirdPartyToolMessage,
 } from "./tool-recovery-messages";
@@ -46,7 +47,7 @@ const registry = defineArchestraTools([
   defineArchestraTool({
     shortName: TOOL_RUN_TOOL_SHORT_NAME,
     title: "Run Tool",
-    description: `Dispatch to any tool available to this agent, including built-in platform tools, agent delegation tools ('agent-<id>'), or third-party MCP tools exposed through the MCP Gateway (e.g. 'context7__resolve-library-id'). Pass the tool name exactly as it appears in the tools list or use a built-in platform tool short name like 'whoami' or 'get_agent'. Prefer using ${TOOL_SEARCH_TOOLS_SHORT_NAME} first when you need to discover the right exact name. The target tool must be assigned to this agent; target-tool RBAC, argument validation, and output validation all still apply.`,
+    description: `Dispatch to any tool available to this agent, including built-in platform tools, agent delegation tools ('agent-<id>'), or third-party MCP tools exposed through the MCP Gateway (e.g. 'context7__resolve-library-id'). Pass the tool name exactly as it appears in the tools list or use a built-in platform tool short name like 'whoami' or 'get_agent'. Prefer using ${TOOL_SEARCH_TOOLS_SHORT_NAME} first when you need to discover the right exact name. If you call a tool the user can access but the agent does not have yet, the user is asked to confirm adding it (or told to ask an admin) before it runs — it is not assigned silently; target-tool RBAC, argument validation, and output validation all still apply.`,
     schema: RunToolArgsSchema,
     async handler({ args, context }) {
       const requestedName = args.tool_name;
@@ -61,10 +62,9 @@ const registry = defineArchestraTools([
           ? "archestra"
           : "third-party";
 
-      const resolvedName =
-        route === "archestra" && isArchestraShortName && !isArchestraPrefixed
-          ? getArchestraToolFullName(requestedName as ArchestraToolShortName)
-          : requestedName;
+      // Shared with the grant check (isToolGrantApprovable) so dispatch and the
+      // chat grant approval resolve a target name the same way.
+      const resolvedName = resolveRunToolTargetName(requestedName);
 
       logger.info(
         {
@@ -133,27 +133,44 @@ const registry = defineArchestraTools([
         );
       }
 
-      // Reject hallucinated or unassigned tool names before policy evaluation.
-      // The policy gate below already requires exact membership in this same
-      // assigned-tool set (see evaluatePolicies), so checking it here is
-      // regression-safe; it lets us return an actionable recovery message
-      // instead of the misleading "not enabled for this conversation" refusal
-      // (which implies the tool exists). In search_and_run_only mode the
-      // intended recovery is search_tools, so we point the model there. The set
-      // is reused by the policy gate below so it is fetched only once.
+      // Gate dispatch on the assigned-tool set. An unassigned tool is never run
+      // silently: discovery widens the search space to tools the user can access,
+      // but actually putting one on the agent goes through the grant flow (chat
+      // proposes it, the user confirms, the assign endpoint writes it, then this
+      // call resumes with the tool assigned). So a miss here means the tool was
+      // not granted (or there is no UI to propose it): steer the user. The set is
+      // reused by the policy gate below so it is fetched only once.
       const assignedToolNames = await ToolModel.getAssignedToolNames(
         context.agentId,
       );
       if (!assignedToolNames.has(resolvedName)) {
+        // A custom per-conversation tool selection is an allowlist over the
+        // agent's assigned tools, so an unassigned tool can never be enabled in
+        // it — return the same unavailable recovery search_tools shows.
+        if (await checkConversationGate(resolvedName)) {
+          return errorResult(unavailableThirdPartyToolMessage(resolvedName));
+        }
+        const grant = await resolveToolGrant({
+          toolName: resolvedName,
+          agentId: context.agentId,
+          userId: context.userId,
+          organizationId: context.organizationId,
+        });
         logger.info(
-          { agentId: context.agentId, requestedName, resolvedName },
-          `${TOOL_RUN_TOOL_SHORT_NAME} dispatched to an unavailable tool`,
+          { agentId: context.agentId, requestedName, resolvedName, grant },
+          `${TOOL_RUN_TOOL_SHORT_NAME} dispatched to an unassigned tool`,
         );
-        return errorResult(unavailableThirdPartyToolMessage(resolvedName));
+        // "ask an admin" when the user cannot assign it; otherwise the generic
+        // recovery (the grant approval already handles the can-assign case
+        // before execution, so reaching here means it was not granted).
+        return errorResult(
+          grant === "forbidden"
+            ? toolNotAssignedAskAdminMessage(resolvedName)
+            : unavailableThirdPartyToolMessage(resolvedName),
+        );
       }
 
-      // The tool exists and is assigned — only now enforce the per-conversation
-      // selection, so an unassigned name above still gets the recovery message.
+      // The tool exists and is assigned — enforce the per-conversation selection.
       const gateError = await checkConversationGate(resolvedName);
       if (gateError) return gateError;
 

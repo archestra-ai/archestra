@@ -18,6 +18,7 @@ export * from "./chat-active-run";
 export * from "./chatops";
 // chatops-channel-binding uses @/database (drizzle-zod) — import directly to avoid circular deps
 export * from "./common-llm-format";
+export * from "./connection-setup";
 export * from "./conversation";
 export * from "./conversation-chat-error";
 export * from "./conversation-compaction";

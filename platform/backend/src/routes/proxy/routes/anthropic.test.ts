@@ -332,6 +332,149 @@ describe("Anthropic virtual key auth", () => {
   });
 });
 
+describe("Anthropic Claude Code requests", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  // Captures what the proxy forwards upstream so tests can assert messages
+  // survive validation unchanged.
+  function captureUpstreamParams() {
+    const stub = createAnthropicTestClient();
+    const captured: { params?: { messages?: unknown[] } } = {};
+    vi.spyOn(anthropicAdapterFactory, "createClient").mockImplementation(
+      () =>
+        ({
+          messages: {
+            create: async (params: never) => {
+              captured.params = params;
+              return stub.messages.create(params);
+            },
+          },
+        }) as never,
+    );
+    return captured;
+  }
+
+  async function buildApp() {
+    const app = Fastify().withTypeProvider<ZodTypeProvider>();
+    app.setValidatorCompiler(validatorCompiler);
+    app.setSerializerCompiler(serializerCompiler);
+    await app.register(anthropicProxyRoutes);
+    return app;
+  }
+
+  function injectMessages(
+    app: FastifyInstance,
+    agentId: string,
+    messages: unknown[],
+  ) {
+    return app.inject({
+      method: "POST",
+      url: `/v1/anthropic/${agentId}/v1/messages`,
+      headers: {
+        "content-type": "application/json",
+        "user-agent": "claude-cli/2.1.173 (external, sdk-cli)",
+        "anthropic-version": "2023-06-01",
+        "anthropic-beta":
+          "claude-code-20250219,mid-conversation-system-2026-04-07,interleaved-thinking-2025-05-14",
+        "x-api-key": "test-anthropic-key",
+      },
+      payload: {
+        model: "claude-opus-4-20250514",
+        max_tokens: 1024,
+        messages,
+      },
+    });
+  }
+
+  // Claude Code (anthropic-beta: mid-conversation-system-2026-04-07) injects
+  // `role: "system"` messages into `messages` for hook output. The proxy must
+  // accept them and forward them upstream unchanged.
+  test("accepts and forwards mid-conversation system messages", async ({
+    makeAgent,
+  }) => {
+    const captured = captureUpstreamParams();
+    const app = await buildApp();
+
+    try {
+      const agent = await makeAgent({ name: "System Role Agent" });
+      const systemMessage = {
+        role: "system",
+        content: "SessionStart:startup hook success: OK",
+      };
+
+      const response = await injectMessages(app, agent.id, [
+        {
+          role: "user",
+          content: [
+            { type: "text", text: "hi" },
+            {
+              type: "text",
+              text: "<system-reminder>context</system-reminder>",
+              cache_control: { type: "ephemeral" },
+            },
+          ],
+        },
+        systemMessage,
+      ]);
+
+      expect(response.statusCode).toBe(200);
+      expect(captured.params?.messages?.[1]).toEqual(systemMessage);
+    } finally {
+      await app.close();
+    }
+  });
+
+  // Interleaved thinking puts thinking/redacted_thinking blocks in assistant
+  // history; server tools and future betas add more block types. All must
+  // pass validation and reach the upstream with every field intact (the
+  // thinking signature in particular is required on replay).
+  test("accepts and forwards thinking, server-tool and unknown content blocks", async ({
+    makeAgent,
+  }) => {
+    const captured = captureUpstreamParams();
+    const app = await buildApp();
+
+    try {
+      const agent = await makeAgent({ name: "Thinking Blocks Agent" });
+      const assistantMessage = {
+        role: "assistant",
+        content: [
+          {
+            type: "thinking",
+            thinking: "Let me think...",
+            signature: "sig-abc",
+          },
+          { type: "redacted_thinking", data: "opaque-bytes" },
+          {
+            type: "server_tool_use",
+            id: "srvtoolu_1",
+            name: "web_search",
+            input: { query: "archestra" },
+            caller: { type: "direct" },
+          },
+          {
+            type: "block_type_from_a_future_beta",
+            payload: { anything: true },
+          },
+          { type: "text", text: "Done." },
+        ],
+      };
+
+      const response = await injectMessages(app, agent.id, [
+        { role: "user", content: "hi" },
+        assistantMessage,
+      ]);
+
+      expect(response.statusCode).toBe(200);
+      expect(captured.params?.messages?.[1]).toEqual(assistantMessage);
+    } finally {
+      await app.close();
+    }
+  });
+});
+
 describe("Anthropic tool call accumulation", () => {
   let anthropicStubOptions: {
     includeToolUse?: boolean;

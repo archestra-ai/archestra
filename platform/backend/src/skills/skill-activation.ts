@@ -11,20 +11,20 @@ import type { Skill, SkillFile } from "@/types";
  * Render a skill's SKILL.md body, compatibility note, and resource listing into
  * the XML-framed activation block.
  *
- * This is the payload the `activate_skill` MCP tool returns when a skill is
- * named, and the same block the chat route prepends when a user invokes a skill
+ * This is the payload the `load_skill` MCP tool returns when called with just a
+ * name, and the same block the chat route prepends when a user invokes a skill
  * explicitly via slash command. Keeping it in one place ensures both entry
  * points present skills to the model identically.
  *
  * A `templated` skill has its body rendered through Handlebars with the
  * activating user's context (`{{user.name}}`, `{{currentDate}}`, …), mirroring
- * an agent system prompt. Bundled files (`read_skill_file`) stay literal.
+ * an agent system prompt. Bundled files (`load_skill` with a path) stay literal.
  *
  * Terminology for every model-facing skill text (tool descriptions, catalog
- * and activation blocks): a skill is *activated* (the `activate_skill` call),
- * which *loads* its instructions into context and *mounts* its files under
- * `/skills` in the sandbox. The sandbox is "the conversation's sandbox" in
- * tool descriptions and "your sandbox" in second-person prompt text.
+ * and activation blocks): a skill is *loaded* (the `load_skill` call), which
+ * brings its instructions into context and *mounts* its files under `/skills`
+ * in the sandbox. The sandbox is "the conversation's sandbox" in tool
+ * descriptions and "your sandbox" in second-person prompt text.
  *
  * @see https://agentskills.io/specification
  */
@@ -75,9 +75,9 @@ export function formatSkillActivation({
       ? `\n<skill_resources>\n${files
           .map((file) => `${neutralizeFrameTags(file.path)} (${file.kind})`)
           .join("\n")}\n</skill_resources>\n` +
-        "Inspect any resource with read_skill_file before re-implementing — " +
-        "prefer importing and running the skill's own modules over rewriting " +
-        "them." +
+        "Inspect any resource with load_skill (passing its path) before " +
+        "re-implementing — prefer importing and running the skill's own modules " +
+        "over rewriting them." +
         sandboxHint
       : "";
 
@@ -158,7 +158,7 @@ export function neutralizeFrameTags(value: string): string {
 /**
  * Every XML-ish frame tag this pipeline emits around model-facing skill text:
  * the activation block (`skill_content`, `skill_resources`,
- * `skill_compatibility`, `skill_allowed_tools`), `read_skill_file` framing
+ * `skill_compatibility`, `skill_allowed_tools`), the `load_skill` file framing
  * (`skill_file`), and the catalog (`available_skills`, `skill`). Adding a new
  * frame anywhere in skill prompts requires registering its tag here.
  *

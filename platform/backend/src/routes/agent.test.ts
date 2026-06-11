@@ -781,12 +781,10 @@ describe("agent routes", () => {
         await AgentModel.getLLMProxyOrCreateDefault(organizationId);
       await AgentModel.delete(original.id);
 
-      const replacementResponse = await app.inject({
-        method: "GET",
-        url: "/api/llm-proxy/default",
-      });
-      expect(replacementResponse.statusCode).toBe(200);
-      expect(replacementResponse.json().id).not.toBe(original.id);
+      // Recreate the org default proxy so a restore would collide with it.
+      const replacement =
+        await AgentModel.getLLMProxyOrCreateDefault(organizationId);
+      expect(replacement.id).not.toBe(original.id);
 
       const restoreResponse = await app.inject({
         method: "POST",
@@ -1149,11 +1147,8 @@ describe("agent routes", () => {
   });
 
   describe("GET /api/llm-proxy/default", () => {
-    test("creates a new default LLM proxy when the previous default is soft-deleted", async () => {
+    test("returns the caller's personal LLM proxy, creating it on first call", async () => {
       const { default: AgentModel } = await import("@/models/agent");
-      const original =
-        await AgentModel.getLLMProxyOrCreateDefault(organizationId);
-      await AgentModel.delete(original.id);
 
       const response = await app.inject({
         method: "GET",
@@ -1161,10 +1156,24 @@ describe("agent routes", () => {
       });
 
       expect(response.statusCode).toBe(200);
-      const replacement = response.json();
-      expect(replacement.agentType).toBe("llm_proxy");
-      expect(replacement.isDefault).toBe(true);
-      expect(replacement.id).not.toBe(original.id);
+      const proxy = response.json();
+      expect(proxy.agentType).toBe("llm_proxy");
+      expect(proxy.isPersonalProxy).toBe(true);
+      expect(proxy.scope).toBe("personal");
+      expect(proxy.authorId).toBe(user.id);
+
+      // idempotent: a second call returns the same personal proxy
+      const again = await app.inject({
+        method: "GET",
+        url: "/api/llm-proxy/default",
+      });
+      expect(again.json().id).toBe(proxy.id);
+
+      const personal = await AgentModel.getPersonalLlmProxy(
+        user.id,
+        organizationId,
+      );
+      expect(personal?.id).toBe(proxy.id);
     });
   });
 

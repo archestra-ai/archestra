@@ -262,7 +262,7 @@ describe("managed MCP Kubernetes NetworkPolicy", () => {
           },
         },
         policyTypes: ["Egress"],
-        egress: expect.arrayContaining([
+        egress: [
           {
             to: [{ ipBlock: { cidr: "203.0.113.0/24" } }],
           },
@@ -272,7 +272,7 @@ describe("managed MCP Kubernetes NetworkPolicy", () => {
           {
             to: [{ domainNames: ["*.example.org"] }],
           },
-        ]),
+        ],
       },
     });
   });

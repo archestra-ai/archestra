@@ -1,8 +1,7 @@
 import {
-  TOOL_ACTIVATE_SKILL_SHORT_NAME,
   TOOL_CREATE_SKILL_SHORT_NAME,
   TOOL_LIST_SKILLS_SHORT_NAME,
-  TOOL_READ_SKILL_FILE_SHORT_NAME,
+  TOOL_LOAD_SKILL_SHORT_NAME,
   TOOL_UPDATE_SKILL_SHORT_NAME,
 } from "@archestra/shared";
 import { z } from "zod";
@@ -27,10 +26,7 @@ import {
 } from "@/skills/skill-activation";
 import { buildSkillCatalogPrompt } from "@/skills/skill-catalog-prompt";
 import { isSkillSandboxAvailableForAgent } from "@/skills/skill-sandbox-availability";
-import {
-  resolveActivationVersion,
-  resolveEffectiveSkillVersion,
-} from "@/skills/skill-version-resolution";
+import { resolveActivationVersion } from "@/skills/skill-version-resolution";
 import {
   isSkillNameConflict,
   refineUniqueFilePaths,
@@ -38,7 +34,7 @@ import {
   SkillManifestContentSchema,
   toSkillFiles,
 } from "@/skills/validation";
-import { ApiError, type Skill } from "@/types";
+import { ApiError, type Skill, type SkillVersion } from "@/types";
 import { archestraMcpBranding } from "./branding";
 import {
   defineArchestraTool,
@@ -52,13 +48,13 @@ import type { ArchestraContext } from "./types";
 /**
  * Agent Skills chat tools.
  *
- * `list_skills`, `activate_skill`, and `read_skill_file` implement the
- * progressive-disclosure tiers of the Agent Skills spec: `list_skills` returns
- * the catalog, `activate_skill` returns a named skill's SKILL.md body, and
- * bundled resource files are fetched individually via `read_skill_file`.
- * Activating a skill also mounts it into the conversation's sandbox (when
- * the sandbox feature + `sandbox:execute` are present), so its scripts become
- * runnable under `/skills` via `run_command`.
+ * `list_skills` and `load_skill` implement the progressive-disclosure tiers of
+ * the Agent Skills spec: `list_skills` returns the catalog, `load_skill` with a
+ * name returns that skill's SKILL.md body and bundled-file list, and `load_skill`
+ * with a name + path returns one bundled resource file. Touching a skill through
+ * either `load_skill` mode also mounts it into the conversation's code sandbox
+ * (when the sandbox feature + `sandbox:execute` are present), so its scripts
+ * become runnable under `/skills` via `run_command`.
  *
  * `create_skill` and `update_skill` let an agent author skills during a
  * conversation. Chat-authored skills are always `personal` to their author;
@@ -74,19 +70,22 @@ import type { ArchestraContext } from "./types";
 
 const ListSkillsSchema = z.object({});
 
-const ActivateSkillSchema = z.object({
+const LoadSkillSchema = z.object({
   name: z
     .string()
     .trim()
     .min(1)
-    .describe("The skill to activate, as named by list_skills."),
-});
-
-const ReadSkillFileSchema = z.object({
-  skill: z.string().describe("The skill that owns the file"),
+    .describe("The skill to load, as named by list_skills."),
   path: z
     .string()
-    .describe("Resource path from the skill, e.g. references/REFERENCE.md"),
+    .trim()
+    .min(1)
+    .optional()
+    .describe(
+      "Optional. Omit to load the skill's instructions and bundled-file list. " +
+        "Pass a resource path from that list (e.g. references/REFERENCE.md) to " +
+        "read one bundled file instead.",
+    ),
 });
 
 const CreateSkillSchema = z
@@ -123,8 +122,8 @@ const UpdateSkillSchema = z
         "Optional. WHEN PROVIDED, REPLACES THE SKILL'S ENTIRE bundled file " +
           "set. Omit it to leave the existing resource files untouched. There " +
           "is no per-file patch: to change one file you must resend all of " +
-          "them — read the current files back first with activate_skill + " +
-          "read_skill_file.",
+          "them — read the current files back first with load_skill (with and " +
+          "without a path).",
       ),
   })
   .strict()
@@ -136,7 +135,7 @@ const registry = defineArchestraTools([
     title: "List Skills",
     description:
       "List the Agent Skills available in this organization — one line per " +
-      "skill (name and description). Call activate_skill with a skill name " +
+      "skill (name and description). Call load_skill with a skill name " +
       "to load its full instructions.",
     schema: ListSkillsSchema,
     async handler({ context }) {
@@ -149,22 +148,20 @@ const registry = defineArchestraTools([
     },
   }),
   defineArchestraTool({
-    shortName: TOOL_ACTIVATE_SKILL_SHORT_NAME,
-    title: "Activate Skill",
+    shortName: TOOL_LOAD_SKILL_SHORT_NAME,
+    title: "Load Skill",
     // a static tool description can't know whether the sandbox tools are
-    // enabled, permitted, and assigned to the calling agent, so mounting is
-    // mentioned only conditionally ("where a sandbox is available"). The
-    // activate_skill *result* adds an agent-aware sandbox hint (see
-    // formatSkillActivation) only when they are genuinely available.
+    // enabled, permitted, and assigned to the calling agent, so it does not
+    // mention them. The load_skill *result* adds an agent-aware sandbox hint
+    // (see formatSkillActivation) only when they are genuinely available.
     description:
-      "Activate a specialized Agent Skill — a reusable SKILL.md instruction " +
-      "set. " +
-      "Call list_skills first to discover what is available, then call this " +
-      "with a skill name to load its full instructions. Activate a skill " +
-      "before attempting the task it covers. To inspect bundled resources " +
-      "use read_skill_file. Where a sandbox is available, activation also " +
-      "mounts the skill under /skills.",
-    schema: ActivateSkillSchema,
+      "Load a specialized Agent Skill — a reusable SKILL.md instruction set. " +
+      "Call list_skills first to discover what is available. Call load_skill " +
+      "with just a name to load the skill's instructions and its bundled-file " +
+      "list; load it before attempting the task it covers. Call it with a name " +
+      "and a path from that list to read one bundled file. To run a bundled " +
+      "script, use run_command (loaded skills are available under /skills).",
+    schema: LoadSkillSchema,
     async handler({ args, context }) {
       const ctx = requireOrgContext(context);
       if (!ctx) {
@@ -178,10 +175,11 @@ const registry = defineArchestraTools([
 
       const canRunSandbox = await canRunSkillSandbox(ctx, context.agent.id);
 
-      // resolve the effective version and, when the sandbox is usable, pin it by
-      // mounting it under /skills. The same version drives the response and the
-      // mount, so the model never sees bytes that differ from what run_command
-      // will execute. Idempotent per skill per sandbox.
+      // Both modes resolve the same way: pin the effective version and, when the
+      // sandbox is usable, mount it under /skills. Mounting on a file read too is
+      // intentional — touching a skill loads it, so the model can never read a
+      // resource without the skill becoming runnable. Idempotent per skill per
+      // sandbox; gated by sandbox:execute and fails closed without a user.
       const activation = await resolveActivationVersion({
         skill,
         organizationId: ctx.organizationId,
@@ -194,8 +192,12 @@ const registry = defineArchestraTools([
         return errorResult(`Skill "${skill.name}" has no readable version.`);
       }
       const { version, mounted } = activation;
-      const files = await SkillVersionModel.findFiles(version.id);
 
+      if (args.path !== undefined) {
+        return readSkillFile({ skill, version, path: args.path });
+      }
+
+      const files = await SkillVersionModel.findFiles(version.id);
       logger.info(
         {
           organizationId: ctx.organizationId,
@@ -204,7 +206,7 @@ const registry = defineArchestraTools([
           mounted,
           fileCount: files.length,
         },
-        "[Skills] Skill activated",
+        "[Skills] Skill loaded",
       );
 
       return successResult(
@@ -228,68 +230,6 @@ const registry = defineArchestraTools([
               })
             : null,
         }),
-      );
-    },
-  }),
-  defineArchestraTool({
-    shortName: TOOL_READ_SKILL_FILE_SHORT_NAME,
-    title: "Read Skill File",
-    description:
-      "Read a bundled resource file from a skill. Paths come from the " +
-      "<skill_resources> list returned by activate_skill. This returns file " +
-      "text for inspection only — to execute a script or run shell commands, " +
-      "use run_command (activated skills are mounted under /skills). Prefer " +
-      "running a skill's own scripts and modules over re-implementing them.",
-    schema: ReadSkillFileSchema,
-    async handler({ args, context }) {
-      const ctx = requireOrgContext(context);
-      if (!ctx) {
-        return errorResult("This tool requires an organization context.");
-      }
-
-      const skill = await findAccessibleSkill(ctx, args.skill);
-      if (!skill) {
-        return unknownSkillError(args.skill);
-      }
-
-      // read from the effective version (the mounted one if mounted, else
-      // latest) so read_skill_file shows the same bytes as activation + the
-      // sandbox.
-      const version = await resolveEffectiveSkillVersion({
-        skill,
-        organizationId: ctx.organizationId,
-        userId: ctx.userId,
-        conversationId: context.conversationId,
-        isolationKey: context.isolationKey,
-      });
-      const file = version
-        ? await SkillVersionModel.findFileByPath(version.id, args.path)
-        : null;
-      if (!file) {
-        const activateSkillName = archestraMcpBranding.getToolName(
-          TOOL_ACTIVATE_SKILL_SHORT_NAME,
-        );
-        return structuredToolErrorResult({
-          error: {
-            type: "tool_state",
-            code: "unknown_skill_file",
-            message: `Skill "${args.skill}" has no file at "${args.path}". Check the <skill_resources> list returned by ${activateSkillName} for the available file paths.`,
-          },
-        });
-      }
-
-      if (file.encoding === "base64") {
-        const approxKb = Math.round((file.content.length * 3) / 4 / 1024);
-        return successResult(
-          `<skill_file skill="${escapeXmlAttr(skill.name)}" path="${escapeXmlAttr(file.path)}" encoding="base64">\n` +
-            `This is a binary asset (~${approxKb} KB) and cannot be read as ` +
-            "text. It is bundled with the skill for redistribution, not for " +
-            "inline use by the model.\n</skill_file>",
-        );
-      }
-
-      return successResult(
-        `<skill_file skill="${escapeXmlAttr(skill.name)}" path="${escapeXmlAttr(file.path)}">\n${neutralizeFrameTags(file.content)}\n</skill_file>`,
       );
     },
   }),
@@ -427,6 +367,44 @@ function unknownSkillError(skillName: string) {
       message: `No skill named "${skillName}" exists. Call ${listSkillsName} to see available skills.`,
     },
   });
+}
+
+// Render one bundled file from an already-resolved skill version into the
+// `<skill_file>` frame. The version is the same one load_skill pinned/mounted, so
+// the bytes match activation and the sandbox.
+async function readSkillFile(params: {
+  skill: Pick<Skill, "name">;
+  version: Pick<SkillVersion, "id">;
+  path: string;
+}) {
+  const { skill, version, path } = params;
+  const file = await SkillVersionModel.findFileByPath(version.id, path);
+  if (!file) {
+    const loadSkillName = archestraMcpBranding.getToolName(
+      TOOL_LOAD_SKILL_SHORT_NAME,
+    );
+    return structuredToolErrorResult({
+      error: {
+        type: "tool_state",
+        code: "unknown_skill_file",
+        message: `Skill "${skill.name}" has no file at "${path}". Check the <skill_resources> list returned by ${loadSkillName} (called without a path) for the available file paths.`,
+      },
+    });
+  }
+
+  if (file.encoding === "base64") {
+    const approxKb = Math.round((file.content.length * 3) / 4 / 1024);
+    return successResult(
+      `<skill_file skill="${escapeXmlAttr(skill.name)}" path="${escapeXmlAttr(file.path)}" encoding="base64">\n` +
+        `This is a binary asset (~${approxKb} KB) and cannot be read as ` +
+        "text. It is bundled with the skill for redistribution, not for " +
+        "inline use by the model.\n</skill_file>",
+    );
+  }
+
+  return successResult(
+    `<skill_file skill="${escapeXmlAttr(skill.name)}" path="${escapeXmlAttr(file.path)}">\n${neutralizeFrameTags(file.content)}\n</skill_file>`,
+  );
 }
 
 interface UserContext {

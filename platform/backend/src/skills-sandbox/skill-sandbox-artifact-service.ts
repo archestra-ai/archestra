@@ -1,5 +1,5 @@
-import { SkillSandboxFileModel } from "@/models";
-import type { SandboxFileListItem } from "@/types";
+import { SkillSandboxFileModel, SkillSandboxFolderModel } from "@/models";
+import type { SandboxFileListItem, SandboxFolderListItem } from "@/types";
 import { getSandboxFileStorage } from "./file-storage";
 
 /**
@@ -26,15 +26,22 @@ class SkillSandboxArtifactService {
     }));
   }
 
-  /** Surface B: all of the user's files; backend hidden behind the router. */
+  /** Surface B: the user's whole PFS; backend hidden behind the router. */
   async listAllForUser(params: {
     organizationId: string;
     userId: string;
-  }): Promise<SandboxFileListItem[]> {
-    const rows = await SkillSandboxFileModel.listUserArtifacts(params);
+  }): Promise<{
+    folders: SandboxFolderListItem[];
+    files: SandboxFileListItem[];
+  }> {
+    const [rows, folderRows] = await Promise.all([
+      SkillSandboxFileModel.listUserArtifacts(params),
+      SkillSandboxFolderModel.listByUser(params),
+    ]);
     return getSandboxFileStorage().listUserFiles({
       userId: params.userId,
       rows,
+      folderRows,
     });
   }
 }

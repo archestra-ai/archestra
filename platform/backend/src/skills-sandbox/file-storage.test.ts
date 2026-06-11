@@ -182,12 +182,26 @@ describe("SandboxFileStorageRouter.listUserFiles (db provider)", () => {
       },
     ];
 
-    const items = await getSandboxFileStorage().listUserFiles({
+    const { folders, files } = await getSandboxFileStorage().listUserFiles({
       userId: "user-1",
       rows,
+      folderRows: [
+        {
+          id: "33333333-3333-3333-3333-333333333333",
+          name: "reports",
+          createdAt: new Date("2026-01-03T00:00:00Z"),
+        },
+      ],
     });
 
-    expect(items).toEqual([
+    expect(folders).toEqual([
+      {
+        id: "33333333-3333-3333-3333-333333333333",
+        name: "reports",
+        createdAt: new Date("2026-01-03T00:00:00Z"),
+      },
+    ]);
+    expect(files).toEqual([
       {
         id: rows[0].id,
         filename: "a.txt",

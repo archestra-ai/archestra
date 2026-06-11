@@ -2,9 +2,13 @@ import config from "@/config";
 import type {
   SandboxArtifactRow,
   SandboxFileListItem,
+  SandboxFolderListItem,
   SkillSandboxFile,
 } from "@/types";
-import { FilesystemSandboxFileStorage } from "./file-storage-filesystem";
+import {
+  FilesystemSandboxFileStorage,
+  SandboxFileMissingError,
+} from "./file-storage-filesystem";
 
 /**
  * Storage for sandbox file bytes (`skill_sandbox_files`), behind one router:
@@ -18,8 +22,11 @@ import { FilesystemSandboxFileStorage } from "./file-storage-filesystem";
  *     config change keep reading from where their bytes actually are.
  *   - `delete` only ever has external bytes to remove (db rows die with the
  *     row via ON DELETE CASCADE).
+ *   - `listUserFiles` / `ensureFolderDir` / `readUserFile` follow the
+ *     configured provider: they describe the user's PFS as it is NOW.
  *
- * See docs/superpowers/specs/2026-06-07-sandbox-file-storage-design.md.
+ * See docs/superpowers/specs/2026-06-07-sandbox-file-storage-design.md and
+ * docs/superpowers/specs/2026-06-11-xfiles-pfs-extensions-design.md.
  */
 interface SandboxFileStorage {
   readonly name: "db" | "filesystem" | "router";
@@ -32,6 +39,8 @@ interface SandboxFileStorage {
     kind: "upload" | "artifact";
     filename: string;
     data: Buffer;
+    /** PFS folder (validated name) the file lands in; null/omitted = root. */
+    folder?: string | null;
   }): Promise<StoredSandboxBlob>;
 
   /** Read a file row's bytes, normalized to a Buffer. */
@@ -48,15 +57,38 @@ interface SandboxFileStorage {
   }): Promise<void>;
 
   /**
-   * List a user's artifact files. `rows` is the storage-agnostic metadata the
-   * model already fetched; the db provider returns it as the listing (there is
-   * no folder), the filesystem provider treats the on-disk directory as the
-   * source of truth.
+   * List a user's PFS: folders and artifact files. `rows`/`folderRows` are the
+   * storage-agnostic metadata the models already fetched; the db provider
+   * returns them as the listing, the filesystem provider treats the on-disk
+   * directory tree (one level deep) as the source of truth.
    */
   listUserFiles(params: {
     userId: string;
     rows: SandboxArtifactRow[];
-  }): Promise<SandboxFileListItem[]>;
+    folderRows: { id: string; name: string; createdAt: Date }[];
+  }): Promise<{
+    folders: SandboxFolderListItem[];
+    files: SandboxFileListItem[];
+  }>;
+
+  /**
+   * Make sure a (validated) folder name exists as a real directory where that
+   * matters. Filesystem: mkdir, adopting an existing hand-made directory.
+   * Db: no-op — the `skill_sandbox_folders` row is the only representation.
+   */
+  ensureFolderDir(params: { userId: string; name: string }): Promise<void>;
+
+  /**
+   * Read a PFS file's bytes by location instead of by row — the only way to
+   * reach an orphan (a filesystem file with no `skill_sandbox_files` row).
+   * Throws {@link SandboxFileMissingError} when nothing is there, including
+   * always under the db provider (orphans cannot exist in db mode).
+   */
+  readUserFile(params: {
+    userId: string;
+    folder: string | null;
+    filename: string;
+  }): Promise<Buffer>;
 }
 
 /** Where a new file's bytes were persisted. */
@@ -89,13 +121,9 @@ export function storageFilename(params: {
 class DbSandboxFileStorage implements SandboxFileStorage {
   readonly name = "db" as const;
 
-  async put(params: {
-    userId: string;
-    fileId: string;
-    kind: "upload" | "artifact";
-    filename: string;
-    data: Buffer;
-  }): Promise<StoredSandboxBlob> {
+  async put(
+    params: Parameters<SandboxFileStorage["put"]>[0],
+  ): Promise<StoredSandboxBlob> {
     return { provider: "db", objectKey: null, dbData: params.data };
   }
 
@@ -118,17 +146,41 @@ class DbSandboxFileStorage implements SandboxFileStorage {
 
   async listUserFiles(
     params: Parameters<SandboxFileStorage["listUserFiles"]>[0],
-  ): Promise<SandboxFileListItem[]> {
+  ): Promise<{
+    folders: SandboxFolderListItem[];
+    files: SandboxFileListItem[];
+  }> {
     // the rows ARE the listing — there is no directory to reconcile against.
-    return params.rows.map((row) => ({
-      id: row.id,
-      filename: row.filename,
-      mimeType: row.mimeType,
-      sizeBytes: row.sizeBytes,
-      createdAt: row.createdAt,
-      downloadable: true,
-      folder: row.folderName,
-    }));
+    return {
+      folders: params.folderRows.map((f) => ({
+        id: f.id,
+        name: f.name,
+        createdAt: f.createdAt,
+      })),
+      files: params.rows.map((row) => ({
+        id: row.id,
+        filename: row.filename,
+        mimeType: row.mimeType,
+        sizeBytes: row.sizeBytes,
+        createdAt: row.createdAt,
+        downloadable: true,
+        folder: row.folderName,
+      })),
+    };
+  }
+
+  async ensureFolderDir(_params: {
+    userId: string;
+    name: string;
+  }): Promise<void> {}
+
+  async readUserFile(
+    params: Parameters<SandboxFileStorage["readUserFile"]>[0],
+  ): Promise<Buffer> {
+    // orphans cannot exist in db mode; row-backed files are read via get().
+    throw new SandboxFileMissingError(
+      params.folder ? `${params.folder}/${params.filename}` : params.filename,
+    );
   }
 }
 
@@ -172,11 +224,33 @@ class SandboxFileStorageRouter implements SandboxFileStorage {
 
   async listUserFiles(
     params: Parameters<SandboxFileStorage["listUserFiles"]>[0],
-  ): Promise<SandboxFileListItem[]> {
+  ): Promise<{
+    folders: SandboxFolderListItem[];
+    files: SandboxFileListItem[];
+  }> {
     if (config.skillsSandbox.fileStorage.provider === "filesystem") {
       return this.getFilesystem().listUserFiles(params);
     }
     return dbProvider.listUserFiles(params);
+  }
+
+  async ensureFolderDir(params: {
+    userId: string;
+    name: string;
+  }): Promise<void> {
+    if (config.skillsSandbox.fileStorage.provider === "filesystem") {
+      return this.getFilesystem().ensureFolderDir(params);
+    }
+    return dbProvider.ensureFolderDir(params);
+  }
+
+  async readUserFile(
+    params: Parameters<SandboxFileStorage["readUserFile"]>[0],
+  ): Promise<Buffer> {
+    if (config.skillsSandbox.fileStorage.provider === "filesystem") {
+      return this.getFilesystem().readUserFile(params);
+    }
+    return dbProvider.readUserFile(params);
   }
 
   private getFilesystem(): FilesystemSandboxFileStorage {

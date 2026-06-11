@@ -279,13 +279,18 @@ describe("X-Files list routes", () => {
       url: "/api/skill-sandbox/files",
     });
     expect(response.statusCode).toBe(200);
-    const body =
-      response.json<
-        Array<{ filename: string; downloadable: boolean; id: string | null }>
-      >();
-    expect(body).toHaveLength(1);
-    expect(body[0]).toMatchObject({ filename: "out.txt", downloadable: true });
-    expect(body[0].id).toBeTruthy();
+    const body = response.json<{
+      folders: Array<{ id: string | null; name: string }>;
+      files: Array<{ filename: string; downloadable: boolean; id: string | null }>;
+    }>();
+    expect(body.folders).toEqual([]);
+    expect(body.files).toHaveLength(1);
+    expect(body.files[0]).toMatchObject({
+      filename: "out.txt",
+      downloadable: true,
+      folder: null,
+    });
+    expect(body.files[0].id).toBeTruthy();
   });
 
   test("GET conversation artifacts returns [] for a conversation with no sandbox files", async ({
@@ -347,7 +352,7 @@ describe("X-Files list routes", () => {
       url: "/api/skill-sandbox/files",
     });
     expect(response.statusCode).toBe(200);
-    const body = response.json<Array<{ filename: string }>>();
-    expect(body.map((f) => f.filename)).toEqual(["mine.txt"]);
+    const body = response.json<{ files: Array<{ filename: string }> }>();
+    expect(body.files.map((f) => f.filename)).toEqual(["mine.txt"]);
   });
 });

@@ -79,15 +79,19 @@ describe("skillSandboxArtifactService", () => {
       });
       await seed(user.id, sandbox.id, "out.txt");
 
-      const items = await skillSandboxArtifactService.listAllForUser({
-        organizationId: org.id,
-        userId: user.id,
-      });
+      const { folders, files } = await skillSandboxArtifactService.listAllForUser(
+        {
+          organizationId: org.id,
+          userId: user.id,
+        },
+      );
 
-      expect(items).toHaveLength(1);
-      expect(items[0]).toMatchObject({
+      expect(folders).toEqual([]);
+      expect(files).toHaveLength(1);
+      expect(files[0]).toMatchObject({
         filename: "out.txt",
         downloadable: true,
+        folder: null,
       });
     });
   });

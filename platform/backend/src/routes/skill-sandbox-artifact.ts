@@ -10,6 +10,7 @@ import {
   ApiError,
   constructResponseSchema,
   SandboxFileListItemSchema,
+  SandboxFolderListItemSchema,
 } from "@/types";
 
 /**
@@ -121,9 +122,16 @@ const skillSandboxArtifactRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.GetSkillSandboxFiles,
-        description: "List all of the calling user's sandbox artifact files.",
+        description:
+          "List the calling user's persistent files (X-Files): folders and " +
+          "artifact files across all conversations.",
         tags: ["Skills"],
-        response: constructResponseSchema(z.array(SandboxFileListItemSchema)),
+        response: constructResponseSchema(
+          z.object({
+            folders: z.array(SandboxFolderListItemSchema),
+            files: z.array(SandboxFileListItemSchema),
+          }),
+        ),
       },
     },
     async ({ organizationId, user }) =>

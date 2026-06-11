@@ -10,7 +10,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { SandboxArtifactRow, SkillSandboxFile } from "@/types";
-import { FilesystemSandboxFileStorage } from "./file-storage-filesystem";
+import {
+  FilesystemSandboxFileStorage,
+  SandboxFileMissingError,
+} from "./file-storage-filesystem";
 
 const USER_ID = "11111111-2222-3333-4444-555555555555";
 const FILE_ID = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
@@ -192,7 +195,7 @@ describe("FilesystemSandboxFileStorage.listUserFiles", () => {
     // a hand-dropped file with no row
     await writeFile(join(root, userId, "manual.csv"), "x,y\n1,2\n");
 
-    const items = await storage.listUserFiles({
+    const { files } = await storage.listUserFiles({
       userId,
       rows: [
         row({
@@ -203,9 +206,10 @@ describe("FilesystemSandboxFileStorage.listUserFiles", () => {
           objectKey: stored.objectKey,
         }),
       ],
+      folderRows: [],
     });
 
-    const byName = Object.fromEntries(items.map((i) => [i.filename, i]));
+    const byName = Object.fromEntries(files.map((i) => [i.filename, i]));
     expect(byName["made.txt"]).toMatchObject({
       id: "00000000-0000-0000-0000-0000000000aa",
       downloadable: true,
@@ -220,22 +224,31 @@ describe("FilesystemSandboxFileStorage.listUserFiles", () => {
 
   test("a row whose disk file is absent is omitted (directory is the truth)", async () => {
     await mkdir(join(root, userId), { recursive: true });
-    const items = await storage.listUserFiles({
+    const listed = await storage.listUserFiles({
       userId,
       rows: [row({ filename: "ghost.txt" })],
+      folderRows: [],
     });
-    expect(items).toEqual([]);
+    expect(listed.files).toEqual([]);
   });
 
   test("skips temp/dot files and returns [] for a missing folder", async () => {
     await mkdir(join(root, userId), { recursive: true });
     await writeFile(join(root, userId, ".hidden"), "x");
     await writeFile(join(root, userId, `.${"abc"}.tmp`), "x");
-    const present = await storage.listUserFiles({ userId, rows: [] });
-    expect(present).toEqual([]);
+    const present = await storage.listUserFiles({
+      userId,
+      rows: [],
+      folderRows: [],
+    });
+    expect(present).toEqual({ folders: [], files: [] });
 
-    const missing = await storage.listUserFiles({ userId: "never", rows: [] });
-    expect(missing).toEqual([]);
+    const missing = await storage.listUserFiles({
+      userId: "never",
+      rows: [],
+      folderRows: [],
+    });
+    expect(missing).toEqual({ folders: [], files: [] });
   });
 
   test("returns matched files newest-first by row createdAt", async () => {
@@ -254,7 +267,7 @@ describe("FilesystemSandboxFileStorage.listUserFiles", () => {
       data: Buffer.from("n"),
     });
 
-    const items = await storage.listUserFiles({
+    const { files } = await storage.listUserFiles({
       userId,
       rows: [
         row({
@@ -268,17 +281,205 @@ describe("FilesystemSandboxFileStorage.listUserFiles", () => {
           createdAt: new Date("2026-02-01T00:00:00Z"),
         }),
       ],
+      folderRows: [],
     });
 
-    expect(items.map((i) => i.filename)).toEqual(["newer.txt", "older.txt"]);
+    expect(files.map((i) => i.filename)).toEqual(["newer.txt", "older.txt"]);
   });
 
-  test("skips subdirectories (only regular files are listed)", async () => {
+  test("subdirectories are PFS folders; their files are listed one level deep", async () => {
     await mkdir(join(root, userId, "nested"), { recursive: true });
+    await mkdir(join(root, userId, "nested", "deeper"), { recursive: true });
     await writeFile(join(root, userId, "flat.txt"), "x");
+    await writeFile(join(root, userId, "nested", "inner.txt"), "y");
+    await writeFile(join(root, userId, "nested", "deeper", "ignored.txt"), "z");
 
-    const items = await storage.listUserFiles({ userId, rows: [] });
+    const { folders, files } = await storage.listUserFiles({
+      userId,
+      rows: [],
+      folderRows: [],
+    });
 
-    expect(items.map((i) => i.filename)).toEqual(["flat.txt"]);
+    expect(folders).toEqual([
+      { id: null, name: "nested", createdAt: expect.any(Date) },
+    ]);
+    expect(files.map((i) => [i.filename, i.folder]).sort()).toEqual([
+      ["flat.txt", null],
+      ["inner.txt", "nested"],
+    ]);
+  });
+
+  test("folders carry the row id when one exists; rows without dirs still list", async () => {
+    await mkdir(join(root, userId, "reports"), { recursive: true });
+    const reportsRow = {
+      id: "99999999-9999-9999-9999-999999999999",
+      name: "reports",
+      createdAt: new Date("2026-03-01T00:00:00Z"),
+    };
+    const ghostRow = {
+      id: "88888888-8888-8888-8888-888888888888",
+      name: "gone",
+      createdAt: new Date("2026-03-02T00:00:00Z"),
+    };
+
+    const { folders } = await storage.listUserFiles({
+      userId,
+      rows: [],
+      folderRows: [reportsRow, ghostRow],
+    });
+
+    expect(folders).toEqual([
+      { id: ghostRow.id, name: "gone", createdAt: ghostRow.createdAt },
+      { id: reportsRow.id, name: "reports", createdAt: reportsRow.createdAt },
+    ]);
+  });
+
+  test("files inside a folder reconcile with rows by folder-scoped object key", async () => {
+    const stored = await storage.put({
+      userId,
+      fileId: "00000000-0000-0000-0000-0000000000cc",
+      kind: "artifact",
+      filename: "chart.png",
+      data: Buffer.from("png"),
+      folder: "reports",
+    });
+    expect(stored.objectKey).toBe(`${userId}/reports/chart.png`);
+
+    const { files } = await storage.listUserFiles({
+      userId,
+      rows: [
+        row({
+          filename: "chart.png",
+          id: "00000000-0000-0000-0000-0000000000cc",
+          mimeType: "image/png",
+          objectKey: stored.objectKey,
+        }),
+      ],
+      folderRows: [],
+    });
+
+    expect(files).toEqual([
+      expect.objectContaining({
+        id: "00000000-0000-0000-0000-0000000000cc",
+        filename: "chart.png",
+        folder: "reports",
+        downloadable: true,
+        mimeType: "image/png",
+      }),
+    ]);
   });
 });
+
+describe("FilesystemSandboxFileStorage folders + readUserFile", () => {
+  let root: string;
+  let storage: FilesystemSandboxFileStorage;
+  const userId = "user-pfs";
+
+  beforeEach(async () => {
+    root = await mkdtemp(join(tmpdir(), "xfiles-pfs-"));
+    storage = new FilesystemSandboxFileStorage(root);
+  });
+  afterEach(async () => {
+    await rm(root, { recursive: true, force: true });
+  });
+
+  test("put with folder writes into the folder dir; collisions stay per-folder", async () => {
+    const first = await storage.put({
+      userId,
+      fileId: "00000000-0000-0000-0000-0000000000d1",
+      kind: "artifact",
+      filename: "a.txt",
+      data: Buffer.from("1"),
+      folder: "f1",
+    });
+    const second = await storage.put({
+      userId,
+      fileId: "00000000-0000-0000-0000-0000000000d2",
+      kind: "artifact",
+      filename: "a.txt",
+      data: Buffer.from("2"),
+      folder: "f1",
+    });
+    const rootCopy = await storage.put({
+      userId,
+      fileId: "00000000-0000-0000-0000-0000000000d3",
+      kind: "artifact",
+      filename: "a.txt",
+      data: Buffer.from("3"),
+    });
+
+    expect(first.objectKey).toBe(`${userId}/f1/a.txt`);
+    expect(second.objectKey).toBe(`${userId}/f1/a (1).txt`);
+    // the root has its own counter sequence
+    expect(rootCopy.objectKey).toBe(`${userId}/a.txt`);
+  });
+
+  test("ensureFolderDir creates the dir and adopts an existing one", async () => {
+    await storage.ensureFolderDir({ userId, name: "fresh" });
+    await storage.ensureFolderDir({ userId, name: "fresh" });
+    const entries = await readdir(join(root, userId));
+    expect(entries).toEqual(["fresh"]);
+  });
+
+  test("readUserFile reads root and folder files, including orphans", async () => {
+    await mkdir(join(root, userId, "docs"), { recursive: true });
+    await writeFile(join(root, userId, "root.txt"), "root-bytes");
+    await writeFile(join(root, userId, "docs", "inner.txt"), "inner-bytes");
+
+    expect(
+      (
+        await storage.readUserFile({
+          userId,
+          folder: null,
+          filename: "root.txt",
+        })
+      ).toString(),
+    ).toBe("root-bytes");
+    expect(
+      (
+        await storage.readUserFile({
+          userId,
+          folder: "docs",
+          filename: "inner.txt",
+        })
+      ).toString(),
+    ).toBe("inner-bytes");
+  });
+
+  test("readUserFile throws SandboxFileMissingError for absent files", async () => {
+    await expect(
+      storage.readUserFile({ userId, folder: null, filename: "nope.txt" }),
+    ).rejects.toBeInstanceOf(SandboxFileMissingError);
+  });
+
+  test("path escapes are rejected on every byte path", async () => {
+    await mkdir(join(root, userId), { recursive: true });
+    await expect(
+      storage.readUserFile({ userId, folder: null, filename: "../escape.txt" }),
+    ).rejects.toThrow(/escapes/);
+    await expect(
+      storage.readUserFile({ userId, folder: "..", filename: "escape.txt" }),
+    ).rejects.toThrow(/escapes/);
+    await expect(
+      storage.put({
+        userId,
+        fileId: "00000000-0000-0000-0000-0000000000e1",
+        kind: "artifact",
+        filename: "..",
+        data: Buffer.from("x"),
+      }),
+    ).rejects.toThrow();
+    await expect(
+      storage.get(fileEscapeRow("../../etc/passwd")),
+    ).rejects.toThrow(/escapes/);
+    await expect(storage.delete("..")).rejects.toThrow(/escapes/);
+  });
+});
+
+function fileEscapeRow(objectKey: string): SkillSandboxFile {
+  return {
+    storageProvider: "filesystem",
+    objectKey,
+    data: null,
+  } as SkillSandboxFile;
+}

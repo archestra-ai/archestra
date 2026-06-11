@@ -390,9 +390,9 @@ const SKILL_MOUNT_CHOWN_CHAIN_LINKS: usize = 3;
 fn snapshot_chain_links(encoding: &str) -> usize {
     match encoding {
         "utf8" => 1,
-        // base64 stages the bytes with `with_new_file` then decodes via
-        // `with_exec`.
-        _ => 2,
+        // base64 runs the decode as root: `with_user` + `with_new_file` +
+        // `with_exec` + `with_user`.
+        _ => 4,
     }
 }
 
@@ -589,7 +589,12 @@ fn apply_snapshot_file(container: Container, root: &str, file: &SnapshotFile) ->
                 .rsplit_once('/')
                 .map(|(parent, _)| parent)
                 .unwrap_or(root);
+            // decode as root: `with_new_file` stages the temp bytes root-owned
+            // (and creates the skill dir tree root-owned), so the redirect must
+            // run as root too. the per-mount `chown -R` below hands the tree back
+            // to the sandbox user once every file in the mount is written.
             Ok(container
+                .with_user("root")
                 .with_new_file(&temp_path, &file.content)
                 .with_exec(vec![
                     "bash".to_string(),
@@ -601,7 +606,8 @@ fn apply_snapshot_file(container: Container, root: &str, file: &SnapshotFile) ->
                         shell_quote(&target),
                         shell_quote(&temp_path),
                     ),
-                ]))
+                ])
+                .with_user(SKILL_SANDBOX_USER))
         }
         other => Err(SandboxError::InvalidInput(format!(
             "unsupported snapshot encoding: {other}"
@@ -839,9 +845,10 @@ mod tests {
     #[test]
     fn snapshot_chain_links_charges_per_encoding() {
         // utf8 snapshot files chain a single with_new_file; base64 files add a
-        // decode exec on top.
+        // root-sandwiched decode exec (with_user + with_new_file + with_exec +
+        // with_user).
         assert_eq!(snapshot_chain_links("utf8"), 1);
-        assert_eq!(snapshot_chain_links("base64"), 2);
+        assert_eq!(snapshot_chain_links("base64"), 4);
     }
 
     #[test]

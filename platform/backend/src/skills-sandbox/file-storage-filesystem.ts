@@ -1,9 +1,11 @@
 import { randomUUID } from "node:crypto";
 import {
   link,
+  lstat,
   mkdir,
   readdir,
   readFile,
+  realpath,
   rm,
   stat,
   unlink,
@@ -62,6 +64,7 @@ export class FilesystemSandboxFileStorage {
     const relDir = folder ? join(params.userId, folder) : params.userId;
     const dirAbs = this.resolveUnderUserDir(params.userId, relDir);
     await mkdir(dirAbs, { recursive: true });
+    await this.assertRealDirUnderUserDir(params.userId, dirAbs);
 
     const tempPath = join(dirAbs, `.${randomUUID()}.tmp`);
     await writeFile(tempPath, params.data, { flag: "wx" });
@@ -87,6 +90,7 @@ export class FilesystemSandboxFileStorage {
     }
     const abs = this.resolveUnderRoot(file.objectKey);
     try {
+      await this.assertNotSymlink(abs);
       return await readFile(abs);
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") {
@@ -120,6 +124,7 @@ export class FilesystemSandboxFileStorage {
       join(params.userId, params.name),
     );
     await mkdir(abs, { recursive: true });
+    await this.assertRealDirUnderUserDir(params.userId, abs);
   }
 
   /**
@@ -136,6 +141,7 @@ export class FilesystemSandboxFileStorage {
       : join(params.userId, params.filename);
     const abs = this.resolveUnderUserDir(params.userId, rel);
     try {
+      await this.assertNotSymlink(abs);
       return await readFile(abs);
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") {
@@ -360,6 +366,41 @@ export class FilesystemSandboxFileStorage {
       this.resolveUnderUserDir(params.userId, random),
     );
     return random;
+  }
+
+  /**
+   * The lexical checks below don't see symlinks: a link planted inside the
+   * tree resolves under the user dir lexically while its target sits outside.
+   * Before writing into a directory, resolve it with realpath(3) and require
+   * the REAL location to still be inside the user's real directory. (The root
+   * itself may legitimately be a symlink — e.g. /var -> /private/var — so the
+   * comparison base is the resolved root.)
+   */
+  private async assertRealDirUnderUserDir(
+    userId: string,
+    dirAbs: string,
+  ): Promise<void> {
+    const realUserDir = join(await realpath(resolve(this.root)), userId);
+    const realDir = await realpath(dirAbs);
+    if (realDir !== realUserDir && !realDir.startsWith(realUserDir + sep)) {
+      throw new Error(
+        `sandbox storage directory resolves outside the user folder: ${dirAbs}`,
+      );
+    }
+  }
+
+  /**
+   * Byte reads address regular files only — a symlink in the tree (which only
+   * someone with host access to the storage folder can plant) is refused
+   * rather than followed.
+   */
+  private async assertNotSymlink(abs: string): Promise<void> {
+    const stats = await lstat(abs);
+    if (stats.isSymbolicLink()) {
+      throw new Error(
+        "sandbox storage entry is a symlink; refusing to follow it",
+      );
+    }
   }
 
   /**

@@ -476,6 +476,65 @@ describe("FilesystemSandboxFileStorage folders + readUserFile", () => {
   });
 });
 
+describe("FilesystemSandboxFileStorage symlink hardening", () => {
+  let root: string;
+  let outside: string;
+  let storage: FilesystemSandboxFileStorage;
+  const userId = "user-links";
+
+  beforeEach(async () => {
+    root = await mkdtemp(join(tmpdir(), "xfiles-links-"));
+    outside = await mkdtemp(join(tmpdir(), "xfiles-outside-"));
+    storage = new FilesystemSandboxFileStorage(root);
+    await mkdir(join(root, userId), { recursive: true });
+  });
+  afterEach(async () => {
+    await rm(root, { recursive: true, force: true });
+    await rm(outside, { recursive: true, force: true });
+  });
+
+  test("put refuses to write through a symlinked folder directory", async () => {
+    const { symlink } = await import("node:fs/promises");
+    await symlink(outside, join(root, userId, "evil"));
+
+    await expect(
+      storage.put({
+        userId,
+        fileId: "00000000-0000-0000-0000-0000000000f1",
+        kind: "artifact",
+        filename: "x.txt",
+        data: Buffer.from("x"),
+        folder: "evil",
+      }),
+    ).rejects.toThrow(/resolves outside/);
+    expect(await readdir(outside)).toEqual([]);
+  });
+
+  test("ensureFolderDir refuses an existing symlinked directory", async () => {
+    const { symlink } = await import("node:fs/promises");
+    await symlink(outside, join(root, userId, "evil"));
+    await expect(
+      storage.ensureFolderDir({ userId, name: "evil" }),
+    ).rejects.toThrow(/resolves outside/);
+  });
+
+  test("readUserFile and get refuse symlinked files", async () => {
+    const { symlink } = await import("node:fs/promises");
+    await writeFile(join(outside, "secret.txt"), "secret");
+    await symlink(
+      join(outside, "secret.txt"),
+      join(root, userId, "alias.txt"),
+    );
+
+    await expect(
+      storage.readUserFile({ userId, folder: null, filename: "alias.txt" }),
+    ).rejects.toThrow(/symlink/);
+    await expect(
+      storage.get(fileEscapeRow(`${userId}/alias.txt`)),
+    ).rejects.toThrow(/symlink/);
+  });
+});
+
 function fileEscapeRow(objectKey: string): SkillSandboxFile {
   return {
     storageProvider: "filesystem",

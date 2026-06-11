@@ -177,35 +177,23 @@ function ChatsList({
           No chats yet — type above to start one.
         </p>
       ) : (
-        <div className="space-y-3">
+        <div className="space-y-1.5">
           {conversations.map((conv) => (
             <Link
               key={conv.id}
               href={`/chat/${conv.id}`}
-              className="flex items-center gap-4 rounded-xl border bg-card px-4 py-4 transition-colors hover:bg-muted/50"
+              className="flex items-center gap-2 rounded-lg border bg-card px-3 py-1.5 transition-colors hover:bg-muted/50"
             >
-              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10">
-                <MessageCircle className="h-5 w-5 text-primary" aria-hidden />
+              <span className="truncate text-sm">
+                {conv.title ?? "Untitled chat"}
               </span>
-              <span className="min-w-0 flex-1">
-                <span className="flex items-center gap-2">
-                  <span className="truncate font-medium">
-                    {conv.title ?? "Untitled chat"}
-                  </span>
-                  {conv.readOnly && (
-                    <Badge variant="outline" className="shrink-0 gap-1">
-                      <Eye className="h-3 w-3" />
-                      read-only
-                    </Badge>
-                  )}
-                </span>
-                <span className="block truncate text-sm text-muted-foreground">
-                  {conv.readOnly
-                    ? `by ${conv.authorName ?? "someone else"}`
-                    : "by you"}
-                </span>
-              </span>
-              <span className="shrink-0 text-sm text-muted-foreground">
+              {conv.readOnly && (
+                <Badge variant="outline" className="shrink-0 gap-1">
+                  <Eye className="h-3 w-3" />
+                  {conv.authorName ?? "someone else"}
+                </Badge>
+              )}
+              <span className="ml-auto shrink-0 text-xs text-muted-foreground">
                 {formatRelativeTimeFromNow(conv.lastMessageAt)}
               </span>
             </Link>

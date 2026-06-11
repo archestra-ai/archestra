@@ -1,12 +1,12 @@
 import {
   ARCHESTRA_MCP_CATALOG_ID,
   TOOL_RUN_COMMAND_FULL_NAME,
+  TOOL_RUN_COMMAND_SHORT_NAME,
 } from "@archestra/shared";
 import config from "@/config";
 import { OrganizationModel, ToolModel } from "@/models";
 import {
   afterAll,
-  afterEach,
   beforeAll,
   beforeEach,
   describe,
@@ -180,6 +180,49 @@ describe("resolveToolGrant", () => {
       });
 
       expect(outcome).toBe("grantable");
+    });
+
+    test("grants a sandbox built-in referenced by its short name", async () => {
+      // The model and the run_tool dispatch use the short name (`run_command`);
+      // the grant path must resolve it to the full Archestra row, not 404.
+      await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+
+      const outcome = await grantToolToAgent({
+        toolName: TOOL_RUN_COMMAND_SHORT_NAME,
+        agentId: agent.id,
+        userId,
+        organizationId,
+      });
+
+      expect(outcome).toBe("grantable");
+      const assigned = await ToolModel.getAssignedToolNames(agent.id);
+      expect(assigned.has(TOOL_RUN_COMMAND_FULL_NAME)).toBe(true);
+    });
+
+    test("unavailable when the user lacks sandbox:execute", async ({
+      makeCustomRole,
+      makeMember,
+      makeUser,
+    }) => {
+      // Catalog visibility alone must not let a user who cannot run the sandbox
+      // grant run_command: per-tool RBAC (sandbox:execute) still gates it.
+      await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+      const memberUser = await makeUser();
+      const role = await makeCustomRole(organizationId, {
+        permission: { agent: ["read", "update"] },
+      });
+      await makeMember(memberUser.id, organizationId, { role: role.role });
+
+      const outcome = await grantToolToAgent({
+        toolName: TOOL_RUN_COMMAND_SHORT_NAME,
+        agentId: agent.id,
+        userId: memberUser.id,
+        organizationId,
+      });
+
+      expect(outcome).toBe("unavailable");
+      const assigned = await ToolModel.getAssignedToolNames(agent.id);
+      expect(assigned.has(TOOL_RUN_COMMAND_FULL_NAME)).toBe(false);
     });
   });
 });

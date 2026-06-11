@@ -278,9 +278,9 @@ async function getSearchableTools(params: {
   const assignedNames = new Set(assignedTools.map((tool) => tool.name));
   // Widened search space: skills reference tools nobody assigned to the agent,
   // so discovery also spans third-party tools from every catalog the user can
-  // access, plus the sandbox built-ins when the feature is on. run_tool
-  // auto-assigns such a tool on first use (or steers the user to an admin),
-  // which keeps these results actionable.
+  // access, plus the sandbox built-ins when the feature is on. Running such a
+  // tool is not silent — run_tool proposes granting it to the agent (or steers
+  // the user to an admin), which keeps these results actionable.
   const discoverableTools = await getUnassignedDiscoverableTools({
     assignedToolNames: assignedNames,
     userId,
@@ -313,8 +313,8 @@ async function getSearchableTools(params: {
   const candidates = new Map<string, SearchCandidate>();
   // First occurrence wins on duplicate names: assigned tools come before the
   // discoverable ones, and the discoverable set is ordered newest-first — the
-  // same row autoAssignToolToAgent resolves, so the description shown by
-  // search matches the row a later run_tool call assigns.
+  // same row the grant flow resolves, so the description shown by search
+  // matches the row a later run_tool grant assigns.
   for (const tool of filteredTools) {
     if (candidates.has(tool.name)) {
       continue;
@@ -957,7 +957,7 @@ function visitSchema(
 // returning them as results would be redundant noise. But "always-exposed" only
 // holds once a tool is assigned: an unassigned sandbox tool the user can reach
 // via sandbox:execute is NOT top-level, so surface it here so the model can
-// discover and auto-assign it. Meta tools are never useful as results.
+// discover it and propose granting it. Meta tools are never useful as results.
 function isExcludedFromSearchResults(
   toolName: string,
   assignedNames: Set<string>,

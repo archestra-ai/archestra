@@ -16,6 +16,7 @@ import { AgentModel, OrganizationModel, TeamModel, ToolModel } from "@/models";
 import { assignToolToAgent } from "@/services/agent-tool-assignment";
 import { ApiError, type Tool } from "@/types";
 import { archestraMcpBranding } from "./branding";
+import { filterToolNamesByPermission } from "./rbac";
 
 // Skills routinely reference tools that nobody assigned to the agent, so the
 // dispatch surface (search_tools / run_tool) is relaxed from "tools assigned to
@@ -90,7 +91,11 @@ async function evaluateToolGrant(params: {
   userId?: string;
   organizationId?: string;
 }): Promise<{ outcome: ToolGrantOutcome; toolId?: string }> {
-  const { agentId, toolName } = params;
+  const { agentId } = params;
+  // Resolve short Archestra names (e.g. `run_command`) to their canonical full
+  // name exactly as run_tool's dispatch does, so the approval gate, the grant
+  // write, and the stored tool row all agree on which row is being granted.
+  const toolName = resolveRunToolTargetName(params.toolName);
   if (isExcludedFromDiscovery(toolName)) {
     return { outcome: "unavailable" };
   }
@@ -110,6 +115,20 @@ async function evaluateToolGrant(params: {
     ? accessible.find((row) => row.catalogId === ARCHESTRA_MCP_CATALOG_ID)
     : accessible[0];
   if (!tool) {
+    return { outcome: "unavailable" };
+  }
+
+  // Per-tool RBAC, mirroring the search surface (search-tools.ts filters the
+  // same way): catalog visibility alone is not enough for built-ins. The
+  // Archestra catalog is visible to everyone, so a sandbox tool must still pass
+  // its `sandbox:execute` check — otherwise a user who can modify the agent but
+  // cannot run the sandbox could persistently assign run_command to it.
+  const permitted = await filterToolNamesByPermission(
+    [tool.name],
+    userId,
+    organizationId,
+  );
+  if (!permitted.has(tool.name)) {
     return { outcome: "unavailable" };
   }
 

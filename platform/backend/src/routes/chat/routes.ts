@@ -1997,12 +1997,35 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { id }, user, organizationId }, reply) => {
-      // Get conversation to retrieve agentId before deletion
+      // Look up the conversation (owner+org-scoped) before deletion so we can
+      // capture its agent and any running active run for post-delete cleanup.
       const conversation = await ConversationModel.findById({
         id,
         userId: user.id,
         organizationId,
       });
+
+      // Capture the running run id before deletion: the cascade removes the run
+      // row, and we need its id afterward to wake the stream's stop/poll loop.
+      // Gated on the owner+org-scoped lookup above, so it never observes another
+      // tenant's run.
+      const runningRunId = conversation
+        ? ((await ActiveChatRunModel.findRunningByConversation(id))?.id ?? null)
+        : null;
+
+      // The delete is the source of truth. Do not stop the stream or tear down
+      // browser runtime before it succeeds: a failed delete must leave the
+      // conversation and its in-flight response intact.
+      await ConversationModel.delete(id, user.id, organizationId);
+
+      // Post-delete best-effort cleanup; failures here must not fail the
+      // already-successful delete. The run row is now cascade-gone, so waking
+      // its stop/poll loop makes the stream observe the missing row promptly.
+      // The run_missing append path and missing-row poll remain as safety nets
+      // if this wake is lost.
+      if (runningRunId) {
+        await activeChatRunService.notifyConversationDeleted(runningRunId);
+      }
 
       if (conversation?.agentId && browserStreamFeature.isEnabled()) {
         // Close browser tab for this conversation (best effort, don't fail if it errors)
@@ -2019,7 +2042,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
-      await ConversationModel.delete(id, user.id, organizationId);
       return reply.send({ success: true });
     },
   );

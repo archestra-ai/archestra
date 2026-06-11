@@ -269,6 +269,74 @@ describe("chat active-run routes", () => {
     expect(response.statusCode).toBe(200);
     expect(readSsePayloads(response.body)).toContainEqual({ type: "start" });
   });
+
+  test("DELETE removes a conversation with a running active run and cascades its run rows", async () => {
+    const run = await ActiveChatRunModel.create({
+      conversationId,
+      userId: user.id,
+      organizationId,
+    });
+
+    const response = await app.inject({
+      method: "DELETE",
+      url: `/api/chat/conversations/${conversationId}`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ success: true });
+    expect(
+      await ConversationModel.findById({
+        id: conversationId,
+        userId: user.id,
+        organizationId,
+      }),
+    ).toBeNull();
+    expect(await ActiveChatRunModel.findById(run?.id ?? "")).toBeNull();
+    expect(
+      await ActiveChatRunModel.findRunningByConversation(conversationId),
+    ).toBeNull();
+  });
+
+  test("DELETE of an inaccessible conversation does not delete or stop another user's running run", async ({
+    makeAgent,
+    makeConversation,
+    makeUser,
+  }) => {
+    const otherUser = await makeUser();
+    const agent = await makeAgent({ organizationId });
+    const inaccessibleConversation = await makeConversation(agent.id, {
+      userId: otherUser.id,
+      organizationId,
+    });
+    const otherRun = await ActiveChatRunModel.create({
+      conversationId: inaccessibleConversation.id,
+      userId: otherUser.id,
+      organizationId,
+    });
+
+    const response = await app.inject({
+      method: "DELETE",
+      url: `/api/chat/conversations/${inaccessibleConversation.id}`,
+    });
+
+    // The owner-scoped delete is a no-op for a conversation this user does not
+    // own, and capturing the run to wake is gated on that same lookup, so the
+    // other user's conversation and running run are left fully intact. The 200
+    // reflects DELETE's existing idempotent contract (unchanged by this fix).
+    expect(response.statusCode).toBe(200);
+    expect(
+      await ConversationModel.findById({
+        id: inaccessibleConversation.id,
+        userId: otherUser.id,
+        organizationId,
+      }),
+    ).not.toBeNull();
+    const run = await ActiveChatRunModel.findRunningByConversation(
+      inaccessibleConversation.id,
+    );
+    expect(run?.id).toBe(otherRun?.id);
+    expect(run?.stopRequestedAt).toBeNull();
+  });
 });
 
 function readSsePayloads(body: string): unknown[] {

@@ -1,5 +1,6 @@
 // biome-ignore-all lint/suspicious/noExplicitAny: test
 import {
+  CONTEXT_TEAM_IDS,
   getArchestraToolFullName,
   TOOL_APP_DATA_GET_SHORT_NAME,
   TOOL_CREATE_APP_SHORT_NAME,
@@ -14,6 +15,7 @@ import { gateAppToolCall } from "./app-tool-runtime-gate";
 async function setup(
   fx: {
     makeOrganization: any;
+    makeUser: any;
     makeApp: any;
     makeInternalMcpCatalog: any;
     makeTool: any;
@@ -27,6 +29,7 @@ async function setup(
   const org = await fx.makeOrganization({
     globalToolPolicy: options.globalToolPolicy ?? "restrictive",
   });
+  const user = await fx.makeUser();
   const app = await fx.makeApp({ organizationId: org.id });
   const catalog = await fx.makeInternalMcpCatalog({ organizationId: org.id });
   const tool = await fx.makeTool({
@@ -37,21 +40,29 @@ async function setup(
   await fx.makeAppTool(app.id, tool.id);
   return {
     organizationId: org.id as string,
+    userId: user.id as string,
     appId: app.id as string,
     toolId: tool.id as string,
     toolName: tool.name as string,
   };
 }
 
+const BASE = {
+  isContextTrusted: true,
+  treatRequireApprovalAsBlock: true,
+} as const;
+
 test("allows an assigned tool with no policy", async ({
   makeOrganization,
+  makeUser,
   makeApp,
   makeInternalMcpCatalog,
   makeTool,
   makeAppTool,
 }) => {
-  const { organizationId, appId, toolName } = await setup({
+  const { organizationId, userId, appId, toolName } = await setup({
     makeOrganization,
+    makeUser,
     makeApp,
     makeInternalMcpCatalog,
     makeTool,
@@ -60,10 +71,10 @@ test("allows an assigned tool with no policy", async ({
   const decision = await gateAppToolCall({
     appId,
     organizationId,
+    userId,
     toolName,
     toolInput: {},
-    isContextTrusted: true,
-    treatRequireApprovalAsBlock: true,
+    ...BASE,
   });
   expect(decision).toEqual({
     allowed: true,
@@ -74,13 +85,15 @@ test("allows an assigned tool with no policy", async ({
 
 test("refuses a tool not assigned to the app", async ({
   makeOrganization,
+  makeUser,
   makeApp,
   makeInternalMcpCatalog,
   makeTool,
   makeAppTool,
 }) => {
-  const { organizationId, appId } = await setup({
+  const { organizationId, userId, appId } = await setup({
     makeOrganization,
+    makeUser,
     makeApp,
     makeInternalMcpCatalog,
     makeTool,
@@ -89,10 +102,10 @@ test("refuses a tool not assigned to the app", async ({
   const decision = await gateAppToolCall({
     appId,
     organizationId,
+    userId,
     toolName: "hf__not_assigned",
     toolInput: {},
-    isContextTrusted: true,
-    treatRequireApprovalAsBlock: true,
+    ...BASE,
   });
   expect(decision.allowed).toBe(false);
   if (!decision.allowed) expect(decision.reason).toContain("not assigned");
@@ -100,13 +113,15 @@ test("refuses a tool not assigned to the app", async ({
 
 test("refuses a management Archestra tool, allows the data store", async ({
   makeOrganization,
+  makeUser,
   makeApp,
   makeInternalMcpCatalog,
   makeTool,
   makeAppTool,
 }) => {
-  const { organizationId, appId } = await setup({
+  const { organizationId, userId, appId } = await setup({
     makeOrganization,
+    makeUser,
     makeApp,
     makeInternalMcpCatalog,
     makeTool,
@@ -115,34 +130,36 @@ test("refuses a management Archestra tool, allows the data store", async ({
   const management = await gateAppToolCall({
     appId,
     organizationId,
+    userId,
     toolName: getArchestraToolFullName(TOOL_CREATE_APP_SHORT_NAME),
     toolInput: {},
-    isContextTrusted: true,
-    treatRequireApprovalAsBlock: true,
+    ...BASE,
   });
   expect(management.allowed).toBe(false);
 
   const dataStore = await gateAppToolCall({
     appId,
     organizationId,
+    userId,
     toolName: getArchestraToolFullName(TOOL_APP_DATA_GET_SHORT_NAME),
     toolInput: {},
-    isContextTrusted: true,
-    treatRequireApprovalAsBlock: true,
+    ...BASE,
   });
   expect(dataStore).toEqual({ allowed: true, kind: "app-data" });
 });
 
 test("refuses a tool whose visibility excludes the app surface", async ({
   makeOrganization,
+  makeUser,
   makeApp,
   makeInternalMcpCatalog,
   makeTool,
   makeAppTool,
 }) => {
-  const { organizationId, appId, toolName } = await setup(
+  const { organizationId, userId, appId, toolName } = await setup(
     {
       makeOrganization,
+      makeUser,
       makeApp,
       makeInternalMcpCatalog,
       makeTool,
@@ -153,10 +170,10 @@ test("refuses a tool whose visibility excludes the app surface", async ({
   const decision = await gateAppToolCall({
     appId,
     organizationId,
+    userId,
     toolName,
     toolInput: {},
-    isContextTrusted: true,
-    treatRequireApprovalAsBlock: true,
+    ...BASE,
   });
   expect(decision.allowed).toBe(false);
   if (!decision.allowed) expect(decision.reason).toContain("visibility");
@@ -164,14 +181,16 @@ test("refuses a tool whose visibility excludes the app surface", async ({
 
 test("enforces a block_always policy on the target (runtime gap fix)", async ({
   makeOrganization,
+  makeUser,
   makeApp,
   makeInternalMcpCatalog,
   makeTool,
   makeAppTool,
   makeToolPolicy,
 }) => {
-  const { organizationId, appId, toolId, toolName } = await setup({
+  const { organizationId, userId, appId, toolId, toolName } = await setup({
     makeOrganization,
+    makeUser,
     makeApp,
     makeInternalMcpCatalog,
     makeTool,
@@ -183,6 +202,7 @@ test("enforces a block_always policy on the target (runtime gap fix)", async ({
     const decision = await gateAppToolCall({
       appId,
       organizationId,
+      userId,
       toolName,
       toolInput: {},
       isContextTrusted: true,
@@ -195,14 +215,16 @@ test("enforces a block_always policy on the target (runtime gap fix)", async ({
 
 test("require_approval blocks the runtime but not preview", async ({
   makeOrganization,
+  makeUser,
   makeApp,
   makeInternalMcpCatalog,
   makeTool,
   makeAppTool,
   makeToolPolicy,
 }) => {
-  const { organizationId, appId, toolId, toolName } = await setup({
+  const { organizationId, userId, appId, toolId, toolName } = await setup({
     makeOrganization,
+    makeUser,
     makeApp,
     makeInternalMcpCatalog,
     makeTool,
@@ -213,6 +235,7 @@ test("require_approval blocks the runtime but not preview", async ({
   const runtime = await gateAppToolCall({
     appId,
     organizationId,
+    userId,
     toolName,
     toolInput: {},
     isContextTrusted: true,
@@ -224,6 +247,7 @@ test("require_approval blocks the runtime but not preview", async ({
   const preview = await gateAppToolCall({
     appId,
     organizationId,
+    userId,
     toolName,
     toolInput: {},
     isContextTrusted: true,
@@ -234,14 +258,16 @@ test("require_approval blocks the runtime but not preview", async ({
 
 test("an untrusted context fires a block_when_context_is_untrusted policy", async ({
   makeOrganization,
+  makeUser,
   makeApp,
   makeInternalMcpCatalog,
   makeTool,
   makeAppTool,
   makeToolPolicy,
 }) => {
-  const { organizationId, appId, toolId, toolName } = await setup({
+  const { organizationId, userId, appId, toolId, toolName } = await setup({
     makeOrganization,
+    makeUser,
     makeApp,
     makeInternalMcpCatalog,
     makeTool,
@@ -252,10 +278,10 @@ test("an untrusted context fires a block_when_context_is_untrusted policy", asyn
     action: "block_when_context_is_untrusted",
   });
 
-  // trusted authoring context → allowed
   const trusted = await gateAppToolCall({
     appId,
     organizationId,
+    userId,
     toolName,
     toolInput: {},
     isContextTrusted: true,
@@ -263,10 +289,10 @@ test("an untrusted context fires a block_when_context_is_untrusted policy", asyn
   });
   expect(trusted.allowed).toBe(true);
 
-  // untrusted context → blocked (preview must not strip this signal)
   const untrusted = await gateAppToolCall({
     appId,
     organizationId,
+    userId,
     toolName,
     toolInput: {},
     isContextTrusted: false,
@@ -275,17 +301,72 @@ test("an untrusted context fires a block_when_context_is_untrusted policy", asyn
   expect(untrusted.allowed).toBe(false);
 });
 
+test("a team-scoped policy is matched against the viewer's teams", async ({
+  makeOrganization,
+  makeUser,
+  makeApp,
+  makeInternalMcpCatalog,
+  makeTool,
+  makeAppTool,
+  makeTeam,
+  makeTeamMember,
+  makeToolPolicy,
+}) => {
+  const org = await makeOrganization({ globalToolPolicy: "restrictive" });
+  const inTeam = await makeUser();
+  const outOfTeam = await makeUser();
+  const team = await makeTeam(org.id, inTeam.id);
+  await makeTeamMember(team.id, inTeam.id);
+  const app = await makeApp({ organizationId: org.id });
+  const catalog = await makeInternalMcpCatalog({ organizationId: org.id });
+  const tool = await makeTool({
+    name: `hf__team_${crypto.randomUUID().slice(0, 8)}`,
+    catalogId: catalog.id,
+  });
+  await makeAppTool(app.id, tool.id);
+  await makeToolPolicy(tool.id, {
+    conditions: [
+      { key: CONTEXT_TEAM_IDS, operator: "contains", value: team.id },
+    ],
+    action: "block_always",
+  });
+
+  // viewer in the team → the team-scoped policy matches and blocks
+  const blocked = await gateAppToolCall({
+    appId: app.id,
+    organizationId: org.id,
+    userId: inTeam.id,
+    toolName: tool.name,
+    toolInput: {},
+    ...BASE,
+  });
+  expect(blocked.allowed).toBe(false);
+
+  // viewer outside the team → the condition does not match
+  const allowed = await gateAppToolCall({
+    appId: app.id,
+    organizationId: org.id,
+    userId: outOfTeam.id,
+    toolName: tool.name,
+    toolInput: {},
+    ...BASE,
+  });
+  expect(allowed.allowed).toBe(true);
+});
+
 test("a permissive org skips policy enforcement", async ({
   makeOrganization,
+  makeUser,
   makeApp,
   makeInternalMcpCatalog,
   makeTool,
   makeAppTool,
   makeToolPolicy,
 }) => {
-  const { organizationId, appId, toolId, toolName } = await setup(
+  const { organizationId, userId, appId, toolId, toolName } = await setup(
     {
       makeOrganization,
+      makeUser,
       makeApp,
       makeInternalMcpCatalog,
       makeTool,
@@ -298,10 +379,10 @@ test("a permissive org skips policy enforcement", async ({
   const decision = await gateAppToolCall({
     appId,
     organizationId,
+    userId,
     toolName,
     toolInput: {},
-    isContextTrusted: true,
-    treatRequireApprovalAsBlock: true,
+    ...BASE,
   });
   expect(decision.allowed).toBe(true);
 });

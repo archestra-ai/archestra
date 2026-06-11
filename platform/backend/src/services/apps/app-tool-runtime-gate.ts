@@ -9,6 +9,7 @@ import type { McpUiToolMeta } from "@modelcontextprotocol/ext-apps";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import {
   OrganizationModel,
+  TeamModel,
   ToolInvocationPolicyModel,
   ToolModel,
 } from "@/models";
@@ -48,17 +49,20 @@ type AppToolGateDecision =
  * `block_when_context_is_untrusted` policy still fires on the authoring path.
  * `require_approval` is enforced by the caller: the iframe runtime has no
  * approval UI so it sets `treatRequireApprovalAsBlock`, while `preview_app_tool`
- * carries its own human-approval gate and does not.
+ * carries its own human-approval gate and does not. As everywhere in the policy
+ * engine, a permissive (`globalToolPolicy`) org short-circuits to allow — so
+ * per-tool block policies do not apply on this path in permissive orgs either.
  */
 export async function gateAppToolCall(params: {
   appId: string;
   organizationId: string;
+  userId: string;
   toolName: string;
   toolInput: Record<string, unknown>;
   isContextTrusted: boolean;
   treatRequireApprovalAsBlock: boolean;
 }): Promise<AppToolGateDecision> {
-  const { appId, organizationId, toolName, toolInput } = params;
+  const { appId, organizationId, userId, toolName, toolInput } = params;
 
   // Archestra built-ins: only the App Data Store tools are dispatchable from an
   // app; they bypass invocation policy (consistent with the rest of the engine).
@@ -104,7 +108,10 @@ export async function gateAppToolCall(params: {
   const organization = await OrganizationModel.getById(organizationId);
   const globalToolPolicy: GlobalToolPolicy =
     organization?.globalToolPolicy ?? "permissive";
-  const policyContext = { teamIds: [] as string[] };
+  // The viewer is the principal executing the call (as the app owner, with the
+  // viewer's credentials), so a team-scoped policy is matched against the
+  // viewer's teams — not an empty set, which would silently miss them.
+  const policyContext = { teamIds: await TeamModel.getUserTeamIds(userId) };
 
   const verdict = await ToolInvocationPolicyModel.evaluateBatch(
     "",

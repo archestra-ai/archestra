@@ -594,6 +594,8 @@ describe("preview_app_tool", () => {
         agent: { id: agent.id, name: agent.name },
         organizationId,
         userId: user.id,
+        // the interactive chat harness sets this after the approval click
+        approvalRequiredPoliciesHandled: true,
       };
 
       const catalog = await makeInternalMcpCatalog({ organizationId });
@@ -632,6 +634,17 @@ describe("preview_app_tool", () => {
     const result = await preview({ appId, toolName: "hf__not_assigned" });
     expect(result.isError).toBe(true);
     expect((result.content[0] as any).text).toContain("not assigned");
+  });
+
+  test("is refused server-side without the approval flag (raw gateway / A2A)", async () => {
+    // the chat carve-out cannot be the only gate: any context that did not pass
+    // through the approval click is refused in the handler itself
+    const result = await preview(
+      { appId, toolName },
+      { ...context, approvalRequiredPoliciesHandled: false },
+    );
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as any).text).toContain("human approval");
   });
 
   test("a member who cannot modify the app is refused", async ({

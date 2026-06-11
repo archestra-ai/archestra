@@ -93,13 +93,22 @@ describe("archestra MCP tool names", () => {
       "upload_file",
       "create_app",
       "update_app",
+      "edit_app",
+      "read_app",
       "render_app",
       "list_apps",
     ]) {
       expect(isAlwaysExposedArchestraToolShortName(shortName)).toBe(true);
     }
-    // destructive and never intent-time-critical, so it stays search-gated
-    expect(isAlwaysExposedArchestraToolShortName("delete_app")).toBe(false);
+    // delete_app stays search-gated (destructive); preview_app_tool and
+    // get_app_diagnostics are follow-up steps reached via run_tool.
+    for (const shortName of [
+      "delete_app",
+      "preview_app_tool",
+      "get_app_diagnostics",
+    ]) {
+      expect(isAlwaysExposedArchestraToolShortName(shortName)).toBe(false);
+    }
   });
 
   test("recognizes always-exposed tools through a white-label prefix", () => {

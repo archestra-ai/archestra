@@ -426,8 +426,11 @@ export const APP_ARCHESTRA_TOOL_SHORT_NAMES = [
  * runtime flow depend on deferred tool loading. App tools stay top-level
  * because "build me an app" intents compete with the model's default of
  * writing code in the reply — the model won't search for a capability it
- * doesn't know exists. delete_app stays behind search: destructive and never
- * intent-time-critical.
+ * doesn't know exists, so the create/read/edit/render authoring surface stays
+ * top-level. delete_app stays behind search (destructive, never
+ * intent-time-critical); preview_app_tool and get_app_diagnostics likewise —
+ * they are follow-up steps the create/edit tool descriptions name explicitly,
+ * so the model reaches them via run_tool once it is already building.
  */
 export const ALWAYS_EXPOSED_ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_LIST_SKILLS_SHORT_NAME,
@@ -440,8 +443,6 @@ export const ALWAYS_EXPOSED_ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_UPDATE_APP_SHORT_NAME,
   TOOL_EDIT_APP_SHORT_NAME,
   TOOL_READ_APP_SHORT_NAME,
-  TOOL_PREVIEW_APP_TOOL_SHORT_NAME,
-  TOOL_GET_APP_DIAGNOSTICS_SHORT_NAME,
   TOOL_RENDER_APP_SHORT_NAME,
   TOOL_LIST_APPS_SHORT_NAME,
 ] as const satisfies readonly ArchestraToolShortName[];

@@ -747,6 +747,17 @@ const registry = defineArchestraTools([
       if (!context.userId || !context.organizationId) {
         return errorResult("Authentication required.");
       }
+      // Server-side approval backstop. The underlying tool was granted to the
+      // app, not the agent, so a preview may run only when the chat harness has
+      // presented the approval gate (it sets approvalRequiredPoliciesHandled
+      // after the click). Every other dispatch path — the raw MCP gateway, A2A,
+      // a run_tool outside chat — lacks the flag and is refused here, so the
+      // carve-out in chat-mcp-client is not the only thing gating it.
+      if (!context.approvalRequiredPoliciesHandled) {
+        return errorResult(
+          "preview_app_tool requires human approval, which only the interactive chat surface can present; it cannot be run from this context.",
+        );
+      }
       const app = await AppModel.findByIdForCaller({
         id: args.appId,
         organizationId: context.organizationId,
@@ -788,6 +799,7 @@ const registry = defineArchestraTools([
       const decision = await gateAppToolCall({
         appId: app.id,
         organizationId: context.organizationId,
+        userId: context.userId,
         toolName: args.toolName,
         toolInput: args.args ?? {},
         isContextTrusted: context.contextIsTrusted ?? true,

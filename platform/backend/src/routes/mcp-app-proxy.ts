@@ -92,6 +92,7 @@ const mcpAppProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         const denied = await rejectDisallowedToolCall({
           appId,
           organizationId,
+          userId,
           body,
           reply,
         });
@@ -180,10 +181,11 @@ function jsonRpcError(
 async function rejectDisallowedToolCall(params: {
   appId: string;
   organizationId: string;
+  userId: string;
   body: Record<string, unknown>;
   reply: StatusReply;
 }): Promise<object | null> {
-  const { appId, organizationId, body, reply } = params;
+  const { appId, organizationId, userId, body, reply } = params;
   const callParams =
     body.params && typeof body.params === "object"
       ? (body.params as { name?: unknown; arguments?: unknown })
@@ -211,6 +213,7 @@ async function rejectDisallowedToolCall(params: {
   const decision = await gateAppToolCall({
     appId,
     organizationId,
+    userId,
     toolName,
     toolInput,
     isContextTrusted: true,

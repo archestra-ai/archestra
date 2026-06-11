@@ -118,11 +118,13 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.SetProjectShare,
         description:
           "Set who can see the project (owner only): the whole organization, " +
-          "specific teams, or nobody (visibility null unshares).",
+          'specific teams, or nobody (visibility "none" unshares).',
         tags: ["Projects"],
         params: z.object({ id: z.string().uuid() }),
         body: z.object({
-          visibility: ProjectShareVisibilitySchema.nullable(),
+          // "none" unshares — expressed as a value (not null) because the
+          // generated client cannot represent a nullable enum.
+          visibility: ProjectShareVisibilitySchema.or(z.literal("none")),
           teamIds: z.array(z.string()).default([]),
         }),
         response: constructResponseSchema(z.object({ ok: z.literal(true) })),
@@ -133,7 +135,7 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
         id,
         organizationId,
         userId: user.id,
-        visibility: body.visibility,
+        visibility: body.visibility === "none" ? null : body.visibility,
         teamIds: body.teamIds,
       });
       return { ok: true as const };

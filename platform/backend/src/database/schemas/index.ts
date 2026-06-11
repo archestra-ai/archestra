@@ -75,11 +75,6 @@ export { default as environmentsTable } from "./environment";
 export { default as githubAppConfigsTable } from "./github-app-config";
 export { default as hookFilesTable } from "./hook-file";
 export { default as identityProvidersTable } from "./identity-provider";
-export {
-  default as projectsTable,
-  projectSharesTable,
-  projectShareTeamsTable,
-} from "./project";
 export { default as incomingEmailSubscriptionsTable } from "./incoming-email-subscription";
 export { default as interactionsTable } from "./interaction";
 export { default as internalMcpCatalogTable } from "./internal-mcp-catalog";
@@ -118,6 +113,11 @@ export { default as optimizationRulesTable } from "./optimization-rule";
 export { default as organizationsTable } from "./organization";
 export { organizationRole as organizationRolesTable } from "./organization-role";
 export { default as processedEmailsTable } from "./processed-email";
+export {
+  default as projectsTable,
+  projectSharesTable,
+  projectShareTeamsTable,
+} from "./project";
 export { default as scheduleTriggersTable } from "./schedule-trigger";
 export { default as scheduleTriggerRunsTable } from "./schedule-trigger-run";
 export { default as secretsTable } from "./secret";

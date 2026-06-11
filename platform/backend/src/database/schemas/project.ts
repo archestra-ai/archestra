@@ -22,7 +22,7 @@ import usersTable from "./user";
  * chat's author, and the result folder is only reachable through project-chat
  * tools.
  */
-export const projectsTable = pgTable(
+const projectsTable = pgTable(
   "projects",
   {
     id: uuid("id").primaryKey().defaultRandom(),

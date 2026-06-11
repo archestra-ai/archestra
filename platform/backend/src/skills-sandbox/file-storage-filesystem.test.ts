@@ -521,10 +521,7 @@ describe("FilesystemSandboxFileStorage symlink hardening", () => {
   test("readUserFile and get refuse symlinked files", async () => {
     const { symlink } = await import("node:fs/promises");
     await writeFile(join(outside, "secret.txt"), "secret");
-    await symlink(
-      join(outside, "secret.txt"),
-      join(root, userId, "alias.txt"),
-    );
+    await symlink(join(outside, "secret.txt"), join(root, userId, "alias.txt"));
 
     await expect(
       storage.readUserFile({ userId, folder: null, filename: "alias.txt" }),

@@ -1597,6 +1597,7 @@ export function ChatPageContent({
         modelId: initialModel,
         chatApiKeyId: initialApiKeyId,
         title,
+        projectId: searchParams.get("project"),
       });
       if (!input) {
         return false;
@@ -1611,7 +1612,13 @@ export function ChatPageContent({
       });
       return true;
     },
-    [initialAgentId, initialModel, initialApiKeyId, createConversationMutation],
+    [
+      initialAgentId,
+      initialModel,
+      initialApiKeyId,
+      createConversationMutation,
+      searchParams,
+    ],
   );
 
   const handleCreateConversationWithUrl = useCallback(

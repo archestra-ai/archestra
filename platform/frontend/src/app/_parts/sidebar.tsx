@@ -14,6 +14,7 @@ import {
   Bug,
   Cable,
   Database,
+  FolderKanban,
   FolderOpen,
   Github,
   type LucideIcon,
@@ -222,6 +223,12 @@ const contentNavGroups: NavGroup[] = [
         icon: Cable,
         customIsActive: (pathname: string) =>
           pathname.startsWith("/connection"),
+      },
+      {
+        title: "Projects",
+        url: "/projects",
+        icon: FolderKanban,
+        customIsActive: (pathname: string) => pathname.startsWith("/projects"),
       },
       {
         title: "X-Files",
@@ -487,6 +494,7 @@ export function AppSidebar() {
         .filter((item) => {
           if (item.title === "Connect" && !showConnect) return false;
           if (item.title === "X-Files" && !sandboxEnabled) return false;
+          if (item.title === "Projects" && !sandboxEnabled) return false;
           return true;
         })
         .map((item) =>

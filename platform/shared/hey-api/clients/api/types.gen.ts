@@ -48945,7 +48945,7 @@ export type UpdateProjectResponse = UpdateProjectResponses[keyof UpdateProjectRe
 
 export type SetProjectShareData = {
     body: {
-        visibility: 'organization' | 'team';
+        visibility: 'organization' | 'team' | 'none';
         teamIds?: Array<string>;
     };
     path: {

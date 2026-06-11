@@ -1,5 +1,4 @@
 import {
-  SandboxFolderExistsError,
   SkillSandboxFileModel,
   SkillSandboxFolderModel,
   SkillSandboxModel,
@@ -8,12 +7,9 @@ import type {
   SandboxFileListItem,
   SandboxFolderListItem,
   SkillSandboxFile,
-  SkillSandboxFolder,
 } from "@/types";
-import { ApiError } from "@/types";
 import { getSandboxFileStorage, storageFilename } from "./file-storage";
 import { SandboxFileMissingError } from "./file-storage-filesystem";
-import { validateSandboxFolderName } from "./folder-name";
 
 /** Bytes + metadata of a PFS file resolved for sandbox upload. */
 type ResolvedXFile = {

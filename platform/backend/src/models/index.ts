@@ -55,6 +55,11 @@ export { default as OAuthClientModel } from "./oauth-client";
 export { default as OptimizationRuleModel } from "./optimization-rule";
 export { default as OrganizationModel } from "./organization";
 export { default as OrganizationRoleModel } from "./organization-role";
+export {
+  default as ProjectModel,
+  ProjectNameExistsError,
+} from "./project";
+export { default as ProjectShareModel } from "./project-share";
 export { default as ScheduleTriggerModel } from "./schedule-trigger";
 export { default as ScheduleTriggerRunModel } from "./schedule-trigger-run";
 /** @public — re-exported for testability (consumed by src/test/fixtures.ts) */
@@ -69,11 +74,6 @@ export {
   SkillInvalidFilePathError,
   SkillSandboxConversationGoneError,
 } from "./skill-sandbox";
-export {
-  default as ProjectModel,
-  ProjectNameExistsError,
-} from "./project";
-export { default as ProjectShareModel } from "./project-share";
 export { default as SkillSandboxFileModel } from "./skill-sandbox-file";
 export {
   default as SkillSandboxFolderModel,

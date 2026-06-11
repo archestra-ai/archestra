@@ -186359,7 +186359,7 @@
         "tags": [
           "Projects"
         ],
-        "description": "Set who can see the project (owner only): the whole organization, specific teams, or nobody (visibility null unshares).\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:update`: Edit project descriptions and sharing",
+        "description": "Set who can see the project (owner only): the whole organization, specific teams, or nobody (visibility \"none\" unshares).\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:update`: Edit project descriptions and sharing",
         "requestBody": {
           "required": true,
           "content": {
@@ -186368,11 +186368,20 @@
                 "type": "object",
                 "properties": {
                   "visibility": {
-                    "nullable": true,
-                    "type": "string",
-                    "enum": [
-                      "organization",
-                      "team"
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "organization",
+                          "team"
+                        ]
+                      },
+                      {
+                        "type": "string",
+                        "enum": [
+                          "none"
+                        ]
+                      }
                     ]
                   },
                   "teamIds": {

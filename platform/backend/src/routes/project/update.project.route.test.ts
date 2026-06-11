@@ -68,7 +68,7 @@ describe("PATCH/PUT share/DELETE /api/projects/:id", () => {
     const unshare = await app.inject({
       method: "PUT",
       url: `/api/projects/${project.id}/share`,
-      payload: { visibility: null, teamIds: [] },
+      payload: { visibility: "none", teamIds: [] },
     });
     expect(unshare.statusCode).toBe(200);
     expect(await ProjectShareModel.findByProjectId(project.id)).toBeNull();
@@ -106,7 +106,7 @@ describe("PATCH/PUT share/DELETE /api/projects/:id", () => {
       {
         method: "PUT" as const,
         url: `/api/projects/${project.id}/share`,
-        payload: { visibility: null, teamIds: [] },
+        payload: { visibility: "none", teamIds: [] },
       },
       {
         method: "DELETE" as const,

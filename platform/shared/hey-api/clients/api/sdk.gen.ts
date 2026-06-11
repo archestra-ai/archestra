@@ -4644,7 +4644,7 @@ export const updateProject = <ThrowOnError extends boolean = false>(options: Opt
 });
 
 /**
- * Set who can see the project (owner only): the whole organization, specific teams, or nobody (visibility null unshares).
+ * Set who can see the project (owner only): the whole organization, specific teams, or nobody (visibility "none" unshares).
  *
  * Authentication:
  *

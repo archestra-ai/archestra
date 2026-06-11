@@ -69,6 +69,11 @@ export {
   SkillInvalidFilePathError,
   SkillSandboxConversationGoneError,
 } from "./skill-sandbox";
+export {
+  default as ProjectModel,
+  ProjectNameExistsError,
+} from "./project";
+export { default as ProjectShareModel } from "./project-share";
 export { default as SkillSandboxFileModel } from "./skill-sandbox-file";
 export {
   default as SkillSandboxFolderModel,

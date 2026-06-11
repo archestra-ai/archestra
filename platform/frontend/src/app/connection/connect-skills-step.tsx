@@ -74,8 +74,9 @@ export function ConnectSkillsStep({
               checked={includeSkills}
               onCheckedChange={(checked) => onIncludeChange(checked === true)}
             />
-            Install all {totalSkills} shared skill
-            {totalSkills === 1 ? "" : "s"}
+            {totalSkills === 1
+              ? "Install the shared skill"
+              : `Install all ${totalSkills} shared skills`}
           </label>
           {includeSkills && (
             <Select value={ttlId} onValueChange={onTtlChange}>

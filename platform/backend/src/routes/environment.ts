@@ -2,12 +2,12 @@ import { RouteId } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import mcpServerRuntimeManager from "@/k8s/mcp-server-runtime/manager";
-import logger from "@/logging";
 import {
   EnvironmentModel,
   InternalMcpCatalogModel,
   McpServerModel,
 } from "@/models";
+import { reconcileCatalogDeployments } from "@/services/environments/deployment-reconciliation";
 import {
   createEnvironment,
   deleteEnvironment,
@@ -20,6 +20,7 @@ import {
   constructResponseSchema,
   DeleteObjectResponseSchema,
   EnvironmentListSchema,
+  type NetworkPolicy,
   SelectEnvironmentSchema,
   UpdateEnvironmentSchema,
   UuidIdSchema,
@@ -78,7 +79,7 @@ const environmentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.UpdateEnvironment,
         description:
-          "Update an environment's name, description, namespace, and restricted flag. When the namespace changes and the runtime is enabled, all MCP servers assigned to this environment are restarted in the new namespace.",
+          "Update an environment's name, description, namespace, network policy, and restricted flag. When the namespace or network policy changes and the runtime is enabled, all MCP servers assigned to this environment are reconciled.",
         tags: ["Organization"],
         params: z.object({ id: UuidIdSchema }),
         body: UpdateEnvironmentSchema,
@@ -87,6 +88,7 @@ const environmentRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async ({ organizationId, params, body }, reply) => {
       const namespaceChanging = body.namespace !== undefined;
+      const networkPolicyChanging = body.networkPolicy !== undefined;
 
       // Validate that the new namespace actually exists in the cluster before
       // touching the DB — avoids a state where DB says "staging" but no such
@@ -108,17 +110,25 @@ const environmentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       // Capture old namespace before the update.
-      const currentEnv = namespaceChanging
-        ? await EnvironmentModel.findByIdForOrganization(
-            params.id,
-            organizationId,
-          )
-        : null;
+      const currentEnv =
+        namespaceChanging || networkPolicyChanging
+          ? await EnvironmentModel.findByIdForOrganization(
+              params.id,
+              organizationId,
+            )
+          : null;
 
       const namespaceActuallyChanging =
         namespaceChanging &&
         currentEnv !== null &&
         body.namespace !== (currentEnv?.namespace ?? null);
+      const networkPolicyActuallyChanging =
+        networkPolicyChanging &&
+        currentEnv !== null &&
+        !sameNetworkPolicy(
+          body.networkPolicy ?? null,
+          currentEnv.networkPolicy,
+        );
 
       // Pre-load deployments while the OLD namespace is still in the DB.
       // getOrLoadDeployment reads environmentId → namespace from the DB;
@@ -136,6 +146,15 @@ const environmentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           servers.map((s) => mcpServerRuntimeManager.getOrLoadDeployment(s.id)),
         );
       }
+      if (
+        networkPolicyActuallyChanging &&
+        !namespaceActuallyChanging &&
+        mcpServerRuntimeManager.isEnabled
+      ) {
+        catalogsToRestart = await InternalMcpCatalogModel.findByEnvironmentId(
+          params.id,
+        );
+      }
 
       const updated = await updateEnvironment({
         id: params.id,
@@ -143,42 +162,16 @@ const environmentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         data: body,
       });
 
-      // Restart affected servers into the new namespace.
-      if (namespaceActuallyChanging && mcpServerRuntimeManager.isEnabled) {
-        const servers = await McpServerModel.findByCatalogIds(
-          catalogsToRestart.map((c) => c.id),
-        );
-        const multitenantCatalogIds = new Set(
-          catalogsToRestart.filter((c) => c.multitenant).map((c) => c.id),
-        );
-        const singleTenantServers = servers.filter(
-          (s) => s.catalogId && !multitenantCatalogIds.has(s.catalogId),
-        );
-
-        await Promise.allSettled([
-          ...singleTenantServers.map(async (s) => {
-            try {
-              await mcpServerRuntimeManager.restartServer(s.id);
-            } catch (err) {
-              logger.warn(
-                { mcpServerId: s.id, err },
-                "Failed to restart server after environment namespace change",
-              );
-            }
-          }),
-          ...[...multitenantCatalogIds].map(async (catalogId) => {
-            try {
-              await mcpServerRuntimeManager.reinstallSharedDeployment(
-                catalogId,
-              );
-            } catch (err) {
-              logger.warn(
-                { catalogId, err },
-                "Failed to reinstall shared deployment after environment namespace change",
-              );
-            }
-          }),
-        ]);
+      if (
+        (namespaceActuallyChanging || networkPolicyActuallyChanging) &&
+        mcpServerRuntimeManager.isEnabled
+      ) {
+        await reconcileCatalogDeployments({
+          catalogs: catalogsToRestart,
+          reason: namespaceActuallyChanging
+            ? "environment namespace change"
+            : "environment network policy change",
+        });
       }
 
       return reply.send(updated);
@@ -205,3 +198,12 @@ const environmentRoutes: FastifyPluginAsyncZod = async (fastify) => {
 };
 
 export default environmentRoutes;
+
+// === Internal helpers ===
+
+function sameNetworkPolicy(
+  a: NetworkPolicy | null,
+  b: NetworkPolicy | null,
+): boolean {
+  return JSON.stringify(a) === JSON.stringify(b);
+}

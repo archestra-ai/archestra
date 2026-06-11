@@ -34821,7 +34821,7 @@
         "tags": [
           "A2A"
         ],
-        "description": "Execute A2A message on an internal agent (must be agentType='agent'). Accepts a JSON-RPC envelope or any JSON payload — non-JSON-RPC payloads are stringified and passed through to the agent as the user message.",
+        "description": "Execute A2A message on an internal agent (must be agentType='agent'). Accepts a JSON-RPC envelope or any JSON payload \u2014 non-JSON-RPC payloads are stringified and passed through to the agent as the user message.",
         "requestBody": {
           "required": true,
           "content": {
@@ -71953,7 +71953,7 @@
         "tags": [
           "Chat"
         ],
-        "description": "List files for a conversation: download_file outputs and user attachments (metadata only).\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`chat:read`: View and access chat conversations",
+        "description": "List files for a conversation: download_file outputs, user attachments, and the persistent files the agent can reach from this chat (metadata only).\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`chat:read`: View and access chat conversations",
         "parameters": [
           {
             "schema": {
@@ -72036,7 +72036,7 @@
                         "additionalProperties": false
                       }
                     },
-                    "xFiles": {
+                    "myFiles": {
                       "type": "array",
                       "items": {
                         "type": "object",
@@ -72066,12 +72066,17 @@
                         ],
                         "additionalProperties": false
                       }
+                    },
+                    "projectName": {
+                      "nullable": true,
+                      "type": "string"
                     }
                   },
                   "required": [
                     "generated",
                     "attachments",
-                    "xFiles"
+                    "myFiles",
+                    "projectName"
                   ],
                   "additionalProperties": false
                 }
@@ -185823,7 +185828,7 @@
         "tags": [
           "Projects"
         ],
-        "description": "Update a project's description (owner only). The name is immutable — it names the result folder.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:update`: Edit project descriptions and sharing",
+        "description": "Update a project's description (owner only). The name is immutable \u2014 it names the result folder.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:update`: Edit project descriptions and sharing",
         "requestBody": {
           "required": true,
           "content": {
@@ -186120,7 +186125,7 @@
         "tags": [
           "Projects"
         ],
-        "description": "Delete a project (owner only). Its chats and result folder survive — chats become ordinary conversations, the folder stays browsable in X-Files.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:delete`: Delete projects",
+        "description": "Delete a project (owner only). Its chats and result folder survive \u2014 chats become ordinary conversations, the folder stays browsable in X-Files.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:delete`: Delete projects",
         "parameters": [
           {
             "schema": {
@@ -203147,38 +203152,6 @@
                 }
               }
             }
-          }
-        },
-        "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "sandbox:execute"
-          ]
-        }
-      }
-    },
-    "/api/skill-sandbox/uploads/{uploadId}": {
-      "get": {
-        "operationId": "getSkillSandboxUpload",
-        "tags": [
-          "Skills"
-        ],
-        "description": "Stream the raw bytes of a sandbox upload (e.g. a persistent file the agent pulled into the sandbox). Inline for known-safe raster images; download for everything else.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`sandbox:execute`: Run commands and upload/download files in code execution sandboxes",
-        "parameters": [
-          {
-            "schema": {
-              "type": "string",
-              "format": "uuid",
-              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-            },
-            "in": "path",
-            "name": "uploadId",
-            "required": true
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Default Response"
           }
         },
         "x-required-permissions": {

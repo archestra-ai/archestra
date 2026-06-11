@@ -25,6 +25,14 @@ export type SkillSandboxFileStorageProvider = z.infer<
   typeof SkillSandboxFileStorageProviderSchema
 >;
 
+/**
+ * How an upload entered the sandbox (nullable column). `x_file` = copied from
+ * the user's persistent X-Files storage; these uploads surface in the
+ * conversation Files panel.
+ */
+export const SandboxFileOriginSchema = z.enum(["x_file"]);
+export type SandboxFileOrigin = z.infer<typeof SandboxFileOriginSchema>;
+
 export const SelectSkillSandboxSchema = createSelectSchema(
   schema.skillSandboxesTable,
 );
@@ -50,6 +58,7 @@ export const SelectSkillSandboxFileSchema = createSelectSchema(
   {
     kind: SkillSandboxFileKindSchema,
     storageProvider: SkillSandboxFileStorageProviderSchema,
+    origin: SandboxFileOriginSchema.nullable(),
   },
 );
 export const InsertSkillSandboxFileSchema = createInsertSchema(
@@ -59,6 +68,7 @@ export const InsertSkillSandboxFileSchema = createInsertSchema(
     // optional: DB column has DEFAULT 'db', so callers may omit it when
     // inserting db-provider rows.
     storageProvider: SkillSandboxFileStorageProviderSchema.optional(),
+    origin: SandboxFileOriginSchema.nullable().optional(),
   },
 ).omit({
   id: true,
@@ -113,7 +123,22 @@ export type SandboxArtifactRow = {
   createdAt: Date;
   storageProvider: SkillSandboxFileStorageProvider;
   objectKey: string | null;
+  folderId: string | null;
+  /** Resolved folder name (left-joined); null for root files. */
+  folderName: string | null;
 };
+
+/**
+ * One PFS folder as the X-Files surfaces render it. `id` is null for a
+ * directory that exists on disk without a `skill_sandbox_folders` row (made by
+ * hand in the storage folder).
+ */
+export const SandboxFolderListItemSchema = z.object({
+  id: z.string().uuid().nullable(),
+  name: z.string(),
+  createdAt: z.date(),
+});
+export type SandboxFolderListItem = z.infer<typeof SandboxFolderListItemSchema>;
 
 /**
  * One file as the X-Files surfaces render it. `id` is the artifact row id used
@@ -128,6 +153,8 @@ export const SandboxFileListItemSchema = z.object({
   sizeBytes: z.number().int().nonnegative(),
   createdAt: z.date(),
   downloadable: z.boolean(),
+  /** PFS folder the file sits in; null for root files. */
+  folder: z.string().nullable(),
 });
 
 export type SandboxFileListItem = z.infer<typeof SandboxFileListItemSchema>;

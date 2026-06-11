@@ -370,6 +370,10 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "child of sandbox; uploaded input + exported artifact file bytes",
   },
+  skillSandboxFoldersTable: {
+    audited: false,
+    reason: "user's own PFS folder names; file organization, no admin signal",
+  },
   skillSandboxReplayEventsTable: {
     audited: false,
     reason: "child of sandbox; append-only ordered replay log",

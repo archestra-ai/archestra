@@ -22,6 +22,7 @@ class SkillSandboxArtifactService {
       sizeBytes: row.sizeBytes,
       createdAt: row.createdAt,
       downloadable: true,
+      folder: row.folderName,
     }));
   }
 

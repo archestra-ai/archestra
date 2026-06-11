@@ -12,10 +12,12 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import type {
+  SandboxFileOrigin,
   SkillSandboxFileKind,
   SkillSandboxFileStorageProvider,
 } from "@/types/skill-sandbox";
 import skillSandboxesTable from "./skill-sandbox";
+import skillSandboxFoldersTable from "./skill-sandbox-folder";
 
 const bytea = customType<{ data: Buffer; driverParam: Buffer }>({
   dataType() {
@@ -80,6 +82,20 @@ const skillSandboxFilesTable = pgTable(
       .default("db"),
     /** Path relative to the configured storage root; filesystem rows only. */
     objectKey: text("object_key"),
+    /**
+     * PFS folder the artifact was exported into; artifacts only. SET NULL on
+     * folder delete (defensive — no folder delete API yet); the on-disk
+     * location is still recorded by `object_key` in filesystem mode.
+     */
+    folderId: uuid("folder_id").references(() => skillSandboxFoldersTable.id, {
+      onDelete: "set null",
+    }),
+    /**
+     * How an upload entered the sandbox: 'x_file' = copied from the user's
+     * persistent X-Files storage (these surface in the conversation Files
+     * panel). Null for artifacts and for ordinary uploads.
+     */
+    origin: text("origin").$type<SandboxFileOrigin>(),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   },
   (table) => [

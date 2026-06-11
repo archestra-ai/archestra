@@ -166,6 +166,8 @@ describe("SandboxFileStorageRouter.listUserFiles (db provider)", () => {
         createdAt: new Date("2026-01-02T00:00:00Z"),
         storageProvider: "db",
         objectKey: null,
+        folderId: null,
+        folderName: null,
       },
       {
         id: "22222222-2222-2222-2222-222222222222",
@@ -175,6 +177,8 @@ describe("SandboxFileStorageRouter.listUserFiles (db provider)", () => {
         createdAt: new Date("2026-01-01T00:00:00Z"),
         storageProvider: "db",
         objectKey: null,
+        folderId: null,
+        folderName: null,
       },
     ];
 
@@ -191,6 +195,7 @@ describe("SandboxFileStorageRouter.listUserFiles (db provider)", () => {
         sizeBytes: 3,
         createdAt: rows[0].createdAt,
         downloadable: true,
+        folder: null,
       },
       {
         id: rows[1].id,
@@ -199,6 +204,7 @@ describe("SandboxFileStorageRouter.listUserFiles (db provider)", () => {
         sizeBytes: 9,
         createdAt: rows[1].createdAt,
         downloadable: true,
+        folder: null,
       },
     ]);
   });

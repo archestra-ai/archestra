@@ -1982,6 +1982,13 @@
       "when": 1781135680365,
       "tag": "0282_noisy_frightful_four",
       "breakpoints": true
+    },
+    {
+      "idx": 283,
+      "version": "7",
+      "when": 1781138375012,
+      "tag": "0283_hesitant_red_wolf",
+      "breakpoints": true
     }
   ]
 }

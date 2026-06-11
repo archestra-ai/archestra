@@ -119,7 +119,7 @@ class DbSandboxFileStorage implements SandboxFileStorage {
   async listUserFiles(
     params: Parameters<SandboxFileStorage["listUserFiles"]>[0],
   ): Promise<SandboxFileListItem[]> {
-    // the rows ARE the listing — there is no folder to reconcile against.
+    // the rows ARE the listing — there is no directory to reconcile against.
     return params.rows.map((row) => ({
       id: row.id,
       filename: row.filename,
@@ -127,6 +127,7 @@ class DbSandboxFileStorage implements SandboxFileStorage {
       sizeBytes: row.sizeBytes,
       createdAt: row.createdAt,
       downloadable: true,
+      folder: row.folderName,
     }));
   }
 }

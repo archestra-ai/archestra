@@ -174,6 +174,8 @@ class SkillSandboxFileModel {
         createdAt: schema.skillSandboxFilesTable.createdAt,
         storageProvider: schema.skillSandboxFilesTable.storageProvider,
         objectKey: schema.skillSandboxFilesTable.objectKey,
+        folderId: schema.skillSandboxFilesTable.folderId,
+        folderName: schema.skillSandboxFoldersTable.name,
       })
       .from(schema.skillSandboxFilesTable)
       .innerJoin(
@@ -181,6 +183,13 @@ class SkillSandboxFileModel {
         eq(
           schema.skillSandboxFilesTable.sandboxId,
           schema.skillSandboxesTable.id,
+        ),
+      )
+      .leftJoin(
+        schema.skillSandboxFoldersTable,
+        eq(
+          schema.skillSandboxFilesTable.folderId,
+          schema.skillSandboxFoldersTable.id,
         ),
       )
       .where(and(...filters))
@@ -197,6 +206,8 @@ class SkillSandboxFileModel {
       createdAt: row.createdAt,
       storageProvider: row.storageProvider,
       objectKey: row.objectKey,
+      folderId: row.folderId,
+      folderName: row.folderName,
     }));
   }
 

@@ -150,6 +150,7 @@ export class FilesystemSandboxFileStorage {
               sizeBytes: stats.size,
               createdAt: match.createdAt,
               downloadable: true,
+              folder: null,
             }
           : {
               id: null,
@@ -158,6 +159,7 @@ export class FilesystemSandboxFileStorage {
               sizeBytes: stats.size,
               createdAt: stats.mtime,
               downloadable: false,
+              folder: null,
             },
       );
     }

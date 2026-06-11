@@ -74,7 +74,14 @@ export function proxyBaseUrlToOrigin(baseUrl: string): string {
   return baseUrl.replace(/\/+$/, "").replace(/\/v1$/, "");
 }
 
-export function renderSetupScript(ctx: SetupScriptContext): string {
+export function renderSetupScript(rawCtx: SetupScriptContext): string {
+  // appName is white-label, admin-controlled text that lands in bash comments
+  // and unquoted echo strings. Collapse control characters (newlines, NUL, …)
+  // to spaces so it can never break out of a comment line and execute.
+  const ctx: SetupScriptContext = {
+    ...rawCtx,
+    appName: sanitizeAppName(rawCtx.appName),
+  };
   const sections: string[] = [header(ctx)];
 
   switch (ctx.clientId) {
@@ -116,6 +123,12 @@ const CLIENT_BINARIES: Partial<Record<ConnectionSetupClientId, string>> = {
 /** Single-quote a value for bash; safe for arbitrary content. */
 function sh(value: string): string {
   return `'${value.replace(/'/g, `'\\''`)}'`;
+}
+
+/** Collapse control characters so appName is safe in comments and bare echoes. */
+function sanitizeAppName(appName: string): string {
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: stripping them is the point
+  return appName.replace(/[\x00-\x1f\x7f]+/g, " ").trim() || "Archestra";
 }
 
 function header(ctx: SetupScriptContext): string {

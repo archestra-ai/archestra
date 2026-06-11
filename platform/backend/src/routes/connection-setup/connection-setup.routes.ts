@@ -166,6 +166,20 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // provider-key mode is passthrough: the script only rewires the base
         // URL, so there is nothing to provision.
         if (proxyAuth === "virtual-key") {
+          // Minting a virtual key requires the same permission as the
+          // dedicated create endpoint (RouteId.CreateVirtualApiKey).
+          const canCreateVirtualKey = await userHasPermission(
+            user.id,
+            organizationId,
+            "llmVirtualKey",
+            "create",
+          );
+          if (!canCreateVirtualKey) {
+            throw new ApiError(
+              403,
+              "You need llmVirtualKey:create permission to use a virtual key. Choose the provider-key option instead.",
+            );
+          }
           virtualApiKeyId = await ensureConnectionVirtualKey({
             organizationId,
             userId: user.id,

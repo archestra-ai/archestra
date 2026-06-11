@@ -342,6 +342,36 @@ describe("POST /api/connection-setups", () => {
     expect(setup?.virtualApiKeyId).toBeNull();
   });
 
+  test("virtual-key mode 403s without llmVirtualKey:create permission", async ({
+    makeAgent,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    mockUserHasPermission.mockImplementation(
+      async (_userId, _orgId, resource, action) =>
+        !(resource === "llmVirtualKey" && action === "create"),
+    );
+    const proxy = await makeAgent({ organizationId, agentType: "llm_proxy" });
+    await makeLlmProviderApiKey(organizationId, (await makeSecret()).id, {
+      provider: "anthropic",
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/connection-setups",
+      payload: {
+        clientId: "claude-code",
+        baseUrl: "http://localhost:9000/v1",
+        llmProxyId: proxy.id,
+        provider: "anthropic",
+        proxyAuth: "virtual-key",
+      },
+    });
+
+    expect(response.statusCode).toBe(403);
+    expect(response.json().error.message).toContain("llmVirtualKey:create");
+  });
+
   test("uses the admin-configured default provider key for auto-provisioning", async ({
     makeAgent,
     makeSecret,

@@ -187,6 +187,19 @@ describe("shell-injection resistance", () => {
   });
 });
 
+describe("appName sanitization", () => {
+  test("collapses control characters so they cannot break out of comments", async () => {
+    const script = renderSetupScript({
+      ...fullContext("claude-code"),
+      appName: "Evil\n# rm -rf / # Co",
+    });
+    await expectValidBash(script);
+    // the newline is gone — no line in the script starts an injected command
+    expect(script).not.toContain("\n# rm -rf /");
+    expect(script).toContain("Evil # rm -rf / # Co setup");
+  });
+});
+
 describe("buildSetupCommand / proxyBaseUrlToOrigin", () => {
   test("strips the /v1 suffix and builds the one-liner", () => {
     expect(proxyBaseUrlToOrigin("https://host.example.com/v1")).toBe(

@@ -7,6 +7,11 @@ import type {
   ChatActiveRunStatus,
 } from "@/types";
 
+// "run_missing" means the parent run row was deleted (e.g. its conversation was
+// hard-deleted and cascaded) before this append landed, so the write is a
+// no-longer-relevant lifecycle event rather than a failure to surface.
+type AppendEventsResult = "appended" | "run_missing";
+
 class ActiveChatRunModel {
   static async create(params: {
     conversationId: string;
@@ -30,31 +35,39 @@ class ActiveChatRunModel {
     seq: number;
     payloads: UIMessageChunk[];
     touchRun?: boolean;
-  }): Promise<void> {
+  }): Promise<AppendEventsResult> {
     if (params.payloads.length === 0) {
-      return;
+      return "appended";
     }
 
-    if (!params.touchRun) {
-      await db.insert(schema.chatActiveRunEventsTable).values({
-        runId: params.runId,
-        seq: params.seq,
-        payloads: params.payloads,
-      });
-      return;
-    }
+    try {
+      if (!params.touchRun) {
+        await db.insert(schema.chatActiveRunEventsTable).values({
+          runId: params.runId,
+          seq: params.seq,
+          payloads: params.payloads,
+        });
+        return "appended";
+      }
 
-    await withDbTransaction(async (tx) => {
-      await tx.insert(schema.chatActiveRunEventsTable).values({
-        runId: params.runId,
-        seq: params.seq,
-        payloads: params.payloads,
+      await withDbTransaction(async (tx) => {
+        await tx.insert(schema.chatActiveRunEventsTable).values({
+          runId: params.runId,
+          seq: params.seq,
+          payloads: params.payloads,
+        });
+        await tx
+          .update(schema.chatActiveRunsTable)
+          .set({ updatedAt: new Date() })
+          .where(eq(schema.chatActiveRunsTable.id, params.runId));
       });
-      await tx
-        .update(schema.chatActiveRunsTable)
-        .set({ updatedAt: new Date() })
-        .where(eq(schema.chatActiveRunsTable.id, params.runId));
-    });
+      return "appended";
+    } catch (error) {
+      if (isRunEventsFkViolation(error)) {
+        return "run_missing";
+      }
+      throw error;
+    }
   }
 
   static async findReplayableByConversation(params: {
@@ -230,3 +243,29 @@ class ActiveChatRunModel {
 }
 
 export default ActiveChatRunModel;
+
+// === internal helpers ===
+
+const RUN_EVENTS_RUN_FK_CONSTRAINT =
+  "chat_active_run_events_run_id_chat_active_runs_id_fk";
+
+// Only the exact run_id foreign key counts as "run gone": a generic FK helper
+// would also swallow unrelated violations. Drizzle wraps the pg error as
+// `cause`, so walk the chain. Mirrors skill-sandbox.ts's isConversationFkViolation.
+function isRunEventsFkViolation(error: unknown): boolean {
+  let current: unknown = error;
+  while (current instanceof Error) {
+    const candidate = current as Error & {
+      code?: unknown;
+      constraint?: unknown;
+    };
+    if (
+      candidate.code === "23503" &&
+      candidate.constraint === RUN_EVENTS_RUN_FK_CONSTRAINT
+    ) {
+      return true;
+    }
+    current = candidate.cause;
+  }
+  return false;
+}

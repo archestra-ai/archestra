@@ -78,7 +78,7 @@ export function useCreateProject() {
       if (!project) return;
       toast.success(`Project "${project.name}" created`);
       queryClient.invalidateQueries({ queryKey: ["projects"] });
-      // its folder appears in X-Files too
+      // its folder appears on the My Files page too
       queryClient.invalidateQueries({ queryKey: ["sandbox-files"] });
     },
   });

@@ -161,7 +161,7 @@ export function ConversationFilesPanel({
           onDownloadArtifactPdf={handleDownloadArtifactPdf}
         />
         <FileSection
-          title="From X-Files"
+          title="From My Files"
           items={xFiles}
           selectedId={selectedId}
           artifact={artifact}

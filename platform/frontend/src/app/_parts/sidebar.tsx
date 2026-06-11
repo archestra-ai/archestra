@@ -231,10 +231,10 @@ const contentNavGroups: NavGroup[] = [
         customIsActive: (pathname: string) => pathname.startsWith("/projects"),
       },
       {
-        title: "X-Files",
-        url: "/x-files",
+        title: "My Files",
+        url: "/my-files",
         icon: FolderOpen,
-        customIsActive: (pathname: string) => pathname.startsWith("/x-files"),
+        customIsActive: (pathname: string) => pathname.startsWith("/my-files"),
       },
     ],
   },
@@ -483,7 +483,7 @@ export function AppSidebar() {
 
   // Skills are gated behind the ARCHESTRA_AGENTS_SKILLS_ENABLED env var.
   const skillsEnabled = useFeature("agentSkillsEnabled") === true;
-  // X-Files (sandbox artifacts) are gated behind the sandbox feature flag.
+  // My Files (sandbox artifacts) are gated behind the sandbox feature flag.
   const sandboxEnabled = useFeature("sandbox") === true;
 
   // Filter nav groups based on connect permissions and feature flags
@@ -493,7 +493,7 @@ export function AppSidebar() {
       items: group.items
         .filter((item) => {
           if (item.title === "Connect" && !showConnect) return false;
-          if (item.title === "X-Files" && !sandboxEnabled) return false;
+          if (item.title === "My Files" && !sandboxEnabled) return false;
           if (item.title === "Projects" && !sandboxEnabled) return false;
           return true;
         })

@@ -125,7 +125,7 @@ function CreateProjectDialog({
           <DialogHeader>
             <DialogTitle>New project</DialogTitle>
             <DialogDescription>
-              A result folder with the same name is created in your X-Files. The
+              A result folder with the same name is created in your files. The
               name cannot be changed later.
             </DialogDescription>
           </DialogHeader>

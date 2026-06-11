@@ -25,19 +25,26 @@ export class P4CliClient {
   private p4Port: string;
   private username: string;
   private password: string;
+  private charset?: string;
   private log: pino.Logger;
 
   constructor(params: {
     p4Port: string;
     username: string;
     password: string;
+    /** Per-connector `P4CHARSET` for unicode-mode servers (e.g. `utf8`). */
+    charset?: string;
     log: pino.Logger;
   }) {
     assertNoControlCharacters("P4PORT", params.p4Port);
     assertNoControlCharacters("username", params.username);
+    if (params.charset !== undefined) {
+      assertNoControlCharacters("charset", params.charset);
+    }
     this.p4Port = params.p4Port;
     this.username = params.username;
     this.password = params.password;
+    this.charset = params.charset;
     this.log = params.log;
   }
 
@@ -247,7 +254,8 @@ export class P4CliClient {
   /**
    * Allowlisted child environment. `P4TRUST` / `P4TICKETS` / `P4CHARSET` pass
    * through from the backend process so deployments can pre-provision SSL
-   * trust, ticket files, or a charset for unicode-mode servers.
+   * trust, ticket files, or a charset for unicode-mode servers. A connector's
+   * own `charset` config overrides the process-level `P4CHARSET`.
    */
   private childEnv(): NodeJS.ProcessEnv {
     const env: NodeJS.ProcessEnv = {
@@ -257,6 +265,9 @@ export class P4CliClient {
       if (process.env[key] !== undefined) {
         env[key] = process.env[key];
       }
+    }
+    if (this.charset !== undefined) {
+      env.P4CHARSET = this.charset;
     }
     return env;
   }

@@ -216,6 +216,7 @@ export class PerforceConnector extends BaseConnector {
       p4Port: config.p4Port,
       username,
       password: credentials.apiToken,
+      charset: config.charset,
       log: this.log,
     });
   }
@@ -272,8 +273,8 @@ export class PerforceConnector extends BaseConnector {
    * Deterministic candidate list for the sweep, pinned to `@target`:
    * extension-filtered server-side via `//path/....<ext>` filespecs, restricted
    * to the `@lastChangelist+1,@target` window on incremental runs, reduced to
-   * printable text filetypes, deduped, and sorted by depot path so
-   * `filesOffset` resumes are stable.
+   * printable text filetypes, filtered against `excludePaths`, deduped, and
+   * sorted by depot path so `filesOffset` resumes are stable.
    */
   private async listCandidateFiles(params: {
     client: P4CliClient;
@@ -302,6 +303,7 @@ export class PerforceConnector extends BaseConnector {
     const skippedNonText = new Map<string, string>();
     for (const filespec of filespecs) {
       for (const file of await client.files([filespec])) {
+        if (isExcluded(file.depotFile, config.excludePaths)) continue;
         if (!isTextFileType(file.type)) {
           skippedNonText.set(file.depotFile, file.type);
           continue;
@@ -396,6 +398,19 @@ function getIndexedExtensions(config: PerforceConfig): string[] {
     .map((extension) =>
       extension.startsWith(".") ? extension : `.${extension}`,
     );
+}
+
+/**
+ * Whether a depot file falls under one of the configured exclude paths.
+ * Prefix match on path-segment boundaries: `//depot/docs/gen` excludes
+ * `//depot/docs/gen/a.md` but not `//depot/docs/gen-notes/a.md`.
+ */
+function isExcluded(
+  depotFile: string,
+  excludePaths: string[] | undefined,
+): boolean {
+  if (!excludePaths || excludePaths.length === 0) return false;
+  return excludePaths.some((prefix) => depotFile.startsWith(`${prefix}/`));
 }
 
 /**

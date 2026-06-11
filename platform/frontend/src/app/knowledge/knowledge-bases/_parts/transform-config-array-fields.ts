@@ -25,6 +25,7 @@ export function transformConfigArrayFields(
     "driveIds",
     "fileTypes",
     "depotPaths",
+    "excludePaths",
     "userIds",
     "projectGids",
     "tagsToSkip",

@@ -16,7 +16,11 @@ const { execState } = vi.hoisted(() => ({
                 killed?: boolean;
               };
             }),
-    calls: [] as Array<{ file: string; args: string[] }>,
+    calls: [] as Array<{
+      file: string;
+      args: string[];
+      env: NodeJS.ProcessEnv;
+    }>,
   },
 }));
 
@@ -25,10 +29,10 @@ vi.mock("node:child_process", () => ({
     (
       file: string,
       args: string[],
-      _options: Record<string, unknown>,
+      options: { env: NodeJS.ProcessEnv },
       callback: (error: Error | null, stdout: string, stderr: string) => void,
     ) => {
-      execState.calls.push({ file, args });
+      execState.calls.push({ file, args, env: options.env });
       if (!execState.handler) {
         throw new Error("execState.handler not configured in test");
       }
@@ -302,6 +306,55 @@ describe("PerforceConnector", () => {
         lastSyncedAt: "2023-11-14T22:13:20.000Z",
         lastChangelist: 120,
       });
+    });
+
+    test("excludePaths carve subtrees out of the sweep on segment boundaries", async () => {
+      fakeP4({
+        latestChange: 120,
+        files: [
+          statFile("//depot/docs/guide.md"),
+          statFile("//depot/docs/generated/api.md"),
+          statFile("//depot/docs/generated-notes/keep.md"),
+        ],
+      });
+
+      const batches = await collectBatches(
+        connector.sync({
+          config: {
+            ...validConfig,
+            excludePaths: ["//depot/docs/generated"],
+          },
+          credentials,
+          checkpoint: null,
+        }),
+      );
+
+      expect(batches[0].documents.map((doc) => doc.id)).toEqual([
+        "//depot/docs/generated-notes/keep.md",
+        "//depot/docs/guide.md",
+      ]);
+      // Excluded by configuration, not a skip worth surfacing on the run.
+      expect(batches[0].skipped).toEqual([]);
+    });
+
+    test("passes the configured charset to every p4 invocation", async () => {
+      fakeP4({
+        latestChange: 120,
+        files: [statFile("//depot/docs/guide.md")],
+      });
+
+      await collectBatches(
+        connector.sync({
+          config: { ...validConfig, charset: "utf8" },
+          credentials,
+          checkpoint: null,
+        }),
+      );
+
+      expect(execState.calls.length).toBeGreaterThan(0);
+      for (const call of execState.calls) {
+        expect(call.env.P4CHARSET).toBe("utf8");
+      }
     });
 
     test("yields one empty final batch when there are no new changes", async () => {

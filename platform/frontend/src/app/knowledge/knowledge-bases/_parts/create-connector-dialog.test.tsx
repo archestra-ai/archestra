@@ -675,6 +675,12 @@ describe("CreateConnectorDialog", () => {
       fireEvent.change(screen.getByLabelText(/File Types/), {
         target: { value: ".md, .yaml" },
       });
+      fireEvent.change(screen.getByLabelText(/Exclude Paths/), {
+        target: { value: "//depot/docs/generated, //depot/docs/vendor" },
+      });
+      fireEvent.change(screen.getByLabelText(/Charset/), {
+        target: { value: "utf8" },
+      });
 
       await user.click(
         screen.getByRole("button", { name: "Create Connector" }),
@@ -697,7 +703,9 @@ describe("CreateConnectorDialog", () => {
         type: "perforce",
         p4Port: "ssl:perforce.example.com:1666",
         depotPaths: ["//depot/docs", "//stream/main/specs"],
+        excludePaths: ["//depot/docs/generated", "//depot/docs/vendor"],
         fileTypes: [".md", ".yaml"],
+        charset: "utf8",
       });
     });
   });

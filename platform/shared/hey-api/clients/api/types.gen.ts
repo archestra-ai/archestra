@@ -34616,7 +34616,9 @@ export type GetConnectorsResponses = {
                 type: 'perforce';
                 p4Port: string;
                 depotPaths: Array<string>;
+                excludePaths?: Array<string>;
                 fileTypes?: Array<string>;
+                charset?: string;
             };
             secretId: string | null;
             schedule: string;
@@ -34788,7 +34790,9 @@ export type CreateConnectorData = {
             type: 'perforce';
             p4Port: string;
             depotPaths: Array<string>;
+            excludePaths?: Array<string>;
             fileTypes?: Array<string>;
+            charset?: string;
         };
         credentials?: {
             email?: string;
@@ -35018,7 +35022,9 @@ export type CreateConnectorResponses = {
             type: 'perforce';
             p4Port: string;
             depotPaths: Array<string>;
+            excludePaths?: Array<string>;
             fileTypes?: Array<string>;
+            charset?: string;
         };
         secretId: string | null;
         schedule: string;
@@ -35340,7 +35346,9 @@ export type GetConnectorResponses = {
             type: 'perforce';
             p4Port: string;
             depotPaths: Array<string>;
+            excludePaths?: Array<string>;
             fileTypes?: Array<string>;
+            charset?: string;
         };
         secretId: string | null;
         schedule: string;
@@ -35498,7 +35506,9 @@ export type UpdateConnectorData = {
             type: 'perforce';
             p4Port: string;
             depotPaths: Array<string>;
+            excludePaths?: Array<string>;
             fileTypes?: Array<string>;
+            charset?: string;
         };
         credentials?: {
             email?: string;
@@ -35729,7 +35739,9 @@ export type UpdateConnectorResponses = {
             type: 'perforce';
             p4Port: string;
             depotPaths: Array<string>;
+            excludePaths?: Array<string>;
             fileTypes?: Array<string>;
+            charset?: string;
         };
         secretId: string | null;
         schedule: string;

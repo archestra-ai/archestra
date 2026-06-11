@@ -70,11 +70,15 @@ const log = {
   error: vi.fn(),
 } as unknown as pino.Logger;
 
-function makeClient(overrides?: { password?: string }): P4CliClient {
+function makeClient(overrides?: {
+  password?: string;
+  charset?: string;
+}): P4CliClient {
   return new P4CliClient({
     p4Port: "perforce.example.com:1666",
     username: "svc-knowledge",
     password: overrides?.password ?? "super-secret-ticket",
+    charset: overrides?.charset,
     log,
   });
 }
@@ -118,6 +122,18 @@ describe("P4CliClient", () => {
     const env = execState.calls[0].options.env;
     expect(env.SOME_UNRELATED_SECRET).toBeUndefined();
     expect(env.PATH).toBe(process.env.PATH);
+    vi.unstubAllEnvs();
+  });
+
+  test("connector charset overrides the process-level P4CHARSET", async () => {
+    vi.stubEnv("P4CHARSET", "auto");
+    execState.handler = () => ({
+      stdout: taggedOutput([{ code: "stat", serverVersion: "P4D/LINUX" }]),
+    });
+
+    await makeClient({ charset: "utf8" }).info();
+
+    expect(execState.calls[0].options.env.P4CHARSET).toBe("utf8");
     vi.unstubAllEnvs();
   });
 

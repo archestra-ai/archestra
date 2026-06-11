@@ -499,6 +499,12 @@ export const PerforceConfigSchema = z.object({
       { message: "Port must be between 1 and 65535" },
     ),
   depotPaths: z.array(depotPathSchema).min(1),
+  /**
+   * Depot paths excluded from the sweep (prefix match under the included
+   * paths). Lets one connector index a broad path while carving out large or
+   * irrelevant subtrees.
+   */
+  excludePaths: z.array(depotPathSchema).optional(),
   /** File extensions to index (defaults applied in the connector: .md, .yaml, .yml). */
   fileTypes: z
     .array(
@@ -507,6 +513,16 @@ export const PerforceConfigSchema = z.object({
           'File types must be plain extensions like ".md" (letters, digits, "-", "_")',
       }),
     )
+    .optional(),
+  /**
+   * `P4CHARSET` for unicode-mode servers (e.g. `utf8`). Unicode-enabled Helix
+   * Core servers reject clients that do not declare a charset.
+   */
+  charset: z
+    .string()
+    .regex(/^[A-Za-z0-9_-]{1,32}$/, {
+      message: 'Charset must be a P4CHARSET name like "utf8"',
+    })
     .optional(),
 });
 export type PerforceConfig = z.infer<typeof PerforceConfigSchema>;

@@ -469,6 +469,47 @@ describe("knowledge-connector schemas", () => {
       expect(bad.success).toBe(false);
     });
 
+    test("accepts exclude paths with the same normalization and rejection rules as depot paths", () => {
+      const ok = PerforceConfigSchema.parse({
+        type: "perforce",
+        p4Port: "perforce.example.com:1666",
+        depotPaths: ["//depot/docs"],
+        excludePaths: ["//depot/docs/generated/...", "//depot/docs/vendor/"],
+      });
+      expect(ok.excludePaths).toEqual([
+        "//depot/docs/generated",
+        "//depot/docs/vendor",
+      ]);
+
+      const bad = PerforceConfigSchema.safeParse({
+        type: "perforce",
+        p4Port: "perforce.example.com:1666",
+        depotPaths: ["//depot/docs"],
+        excludePaths: ["//depot/docs@123"],
+      });
+      expect(bad.success).toBe(false);
+    });
+
+    test("accepts a P4CHARSET name and rejects unsafe values", () => {
+      const ok = PerforceConfigSchema.parse({
+        type: "perforce",
+        p4Port: "perforce.example.com:1666",
+        depotPaths: ["//depot/docs"],
+        charset: "utf8",
+      });
+      expect(ok.charset).toBe("utf8");
+
+      for (const charset of ["utf 8", "utf8;rm -rf /", ""]) {
+        const result = PerforceConfigSchema.safeParse({
+          type: "perforce",
+          p4Port: "perforce.example.com:1666",
+          depotPaths: ["//depot/docs"],
+          charset,
+        });
+        expect(result.success).toBe(false);
+      }
+    });
+
     test("parses sweep cursor fields in checkpoint schema", () => {
       const result = PerforceCheckpointSchema.parse({
         type: "perforce",

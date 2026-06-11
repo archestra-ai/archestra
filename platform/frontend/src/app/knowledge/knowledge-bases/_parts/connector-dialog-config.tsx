@@ -252,7 +252,7 @@ const CONNECTOR_URL_CONFIGS: Record<ConnectorType, ConnectorUrlConfig | null> =
       label: "Server Address (P4PORT)",
       placeholder: "ssl:perforce.example.com:1666",
       description:
-        "Helix Core server address in P4PORT format: host:port, optionally prefixed with ssl:.",
+        "Helix Core server address in P4PORT format: host:port. For TLS-enabled servers, use the ssl: prefix (e.g. ssl:host:1666) — the server certificate must be CA-verifiable or pre-trusted via a P4TRUST file on the backend.",
     },
   };
 

@@ -13,14 +13,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
-import {
-  PromptInput,
-  PromptInputBody,
-  PromptInputFooter,
-  type PromptInputMessage,
-  PromptInputSubmit,
-  PromptInputTextarea,
-} from "@/components/ai-elements/prompt-input";
+import { NewChatComposer } from "@/components/chat/new-chat-composer";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { PageLayout } from "@/components/page-layout";
 import { Badge } from "@/components/ui/badge";
@@ -154,31 +147,20 @@ function ProjectDetail() {
 // === internal components ===
 
 /**
- * Prompt box that starts a chat IN this project. Built from the same
- * prompt-input primitives as the /chat composer, so it looks identical;
- * submitting hands off to /chat, which creates the project chat and sends.
+ * The real /chat composer; submitting hands off to /chat, which creates the
+ * project chat (via ?project=) and sends the prompt (via ?user_prompt=).
  */
 function ProjectChatInput({ projectId }: { projectId: string }) {
   const router = useRouter();
 
-  const handleSubmit = (message: PromptInputMessage) => {
-    const prompt = message.text?.trim();
-    if (!prompt) return;
-    router.push(
-      `/chat?project=${projectId}&user_prompt=${encodeURIComponent(prompt)}`,
-    );
-  };
-
   return (
-    <PromptInput onSubmit={handleSubmit}>
-      <PromptInputBody>
-        <PromptInputTextarea placeholder="Start a chat in this project…" />
-      </PromptInputBody>
-      <PromptInputFooter>
-        <div className="flex-1" />
-        <PromptInputSubmit className="!h-8" status="ready" />
-      </PromptInputFooter>
-    </PromptInput>
+    <NewChatComposer
+      onSubmitPrompt={(text) =>
+        router.push(
+          `/chat?project=${projectId}&user_prompt=${encodeURIComponent(text)}`,
+        )
+      }
+    />
   );
 }
 

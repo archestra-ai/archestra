@@ -26,7 +26,7 @@ import {
   Settings,
   Slack,
   Star,
-  Wrench,
+  PanelsTopLeft,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -82,7 +82,7 @@ interface NavGroup {
   items: NavItem[];
 }
 
-type SidebarMode = "chats" | "harness";
+type SidebarMode = "chats" | "studio";
 
 const SIDEBAR_MODE_STORAGE_KEY = "archestra-sidebar-mode";
 
@@ -116,7 +116,7 @@ function routeSidebarMode(pathname: string): SidebarMode | null {
   ) {
     return "chats";
   }
-  const harnessPrefixes = [
+  const studioPrefixes = [
     "/agents",
     "/scheduled-tasks",
     "/mcp",
@@ -126,15 +126,15 @@ function routeSidebarMode(pathname: string): SidebarMode | null {
     "/connection",
   ];
   if (
-    harnessPrefixes.some((p) => pathname === p || pathname.startsWith(`${p}/`))
+    studioPrefixes.some((p) => pathname === p || pathname.startsWith(`${p}/`))
   ) {
-    return "harness";
+    return "studio";
   }
   return null;
 }
 
 /**
- * Chats/Harness tab state: explicit picks persist, and navigation that
+ * Chats/Studio tab state: explicit picks persist, and navigation that
  * clearly belongs to one tab (deep links included) switches to it.
  */
 function useSidebarMode(pathname: string) {
@@ -145,7 +145,7 @@ function useSidebarMode(pathname: string) {
   React.useEffect(() => {
     const stored = window.localStorage.getItem(SIDEBAR_MODE_STORAGE_KEY);
     if (
-      (stored === "chats" || stored === "harness") &&
+      (stored === "chats" || stored === "studio") &&
       routeSidebarMode(window.location.pathname) === null
     ) {
       setMode(stored);
@@ -165,7 +165,7 @@ function useSidebarMode(pathname: string) {
   return [mode, pick] as const;
 }
 
-/** Segmented Chats/Harness control (hidden when the sidebar is collapsed). */
+/** Segmented Chats/Studio control (hidden when the sidebar is collapsed). */
 function SidebarModeToggle({
   mode,
   onPick,
@@ -193,7 +193,7 @@ function SidebarModeToggle({
   return (
     <div className="mx-2 mt-1 flex rounded-lg border bg-muted p-0.5 group-data-[collapsible=icon]:hidden">
       {segment("chats", "Chats", MessageCircle)}
-      {segment("harness", "Harness", Wrench)}
+      {segment("studio", "Studio", PanelsTopLeft)}
     </div>
   );
 }

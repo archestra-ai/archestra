@@ -20,6 +20,8 @@ import { escapeLikePattern } from "@/utils/sql-search";
 import ConversationChatErrorModel from "./conversation-chat-error";
 import ConversationCompactionModel from "./conversation-compaction";
 import ConversationShareModel from "./conversation-share";
+import ProjectModel from "./project";
+import ProjectShareModel from "./project-share";
 
 class ConversationModel {
   static async create(data: InsertConversation): Promise<Conversation> {
@@ -359,12 +361,43 @@ class ConversationModel {
         userId: params.userId,
       });
 
-    if (!accessibleShare) {
-      return null;
+    if (accessibleShare) {
+      // Shared conversations intentionally return another user's conversation
+      // once share access has been validated for this org/user pair.
+      return ConversationModel.findByIdInOrganization({
+        id: params.id,
+        organizationId: params.organizationId,
+      });
     }
 
-    // Shared conversations intentionally return another user's conversation
-    // once share access has been validated for this org/user pair.
+    // Project membership grants the same read-only view: any chat in a
+    // project the caller can read is viewable (writing stays author-only —
+    // every mutating route resolves the conversation by owner).
+    const [bare] = await db
+      .select({
+        projectId: schema.conversationsTable.projectId,
+        organizationId: schema.conversationsTable.organizationId,
+      })
+      .from(schema.conversationsTable)
+      .where(eq(schema.conversationsTable.id, params.id));
+    if (
+      !bare ||
+      !bare.projectId ||
+      bare.organizationId !== params.organizationId
+    ) {
+      return null;
+    }
+    const project = await ProjectModel.findById(bare.projectId);
+    if (
+      !project ||
+      !(await ProjectShareModel.userCanAccessProject({
+        project,
+        userId: params.userId,
+        organizationId: params.organizationId,
+      }))
+    ) {
+      return null;
+    }
     return ConversationModel.findByIdInOrganization({
       id: params.id,
       organizationId: params.organizationId,

@@ -762,3 +762,110 @@ describe("chat conversation creation in projects", () => {
     expect(unknown.statusCode).toBe(404);
   });
 });
+
+describe("project chats: read-only access for project members", () => {
+  let app: FastifyInstanceWithZod;
+  let author: User;
+  let actingUser: User;
+  let organizationId: string;
+
+  beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
+    author = await makeUser();
+    organizationId = (await makeOrganization()).id;
+    await makeMember(author.id, organizationId, { role: "admin" });
+    actingUser = author;
+
+    app = createFastifyInstance();
+    app.addHook("onRequest", async (request) => {
+      (request as typeof request & { user: User }).user = actingUser;
+      (request as typeof request & { organizationId: string }).organizationId =
+        organizationId;
+    });
+    const { default: chatRoutes } = await import("./routes");
+    await app.register(chatRoutes);
+  });
+
+  afterEach(async () => {
+    await app.close();
+  });
+
+  async function seedProjectChat(params: { shared: boolean }) {
+    const { projectService } = await import("@/services/project");
+    const { ProjectShareModel } = await import("@/models");
+    const project = await projectService.create({
+      organizationId,
+      userId: author.id,
+      name: `ro-${params.shared ? "shared" : "private"}`,
+      description: null,
+    });
+    if (params.shared) {
+      await ProjectShareModel.upsert({
+        projectId: project.id,
+        organizationId,
+        createdByUserId: author.id,
+        visibility: "organization",
+        teamIds: [],
+      });
+    }
+    const conversation = await ConversationModel.create({
+      userId: author.id,
+      organizationId,
+      agentId: null,
+      projectId: project.id,
+    });
+    return { project, conversation };
+  }
+
+  test("a member of a shared project can read the chat but not mutate it", async ({
+    makeUser,
+    makeMember,
+  }) => {
+    const { conversation } = await seedProjectChat({ shared: true });
+    const member = await makeUser({ email: "ro-member@test.com" });
+    await makeMember(member.id, organizationId, {});
+    actingUser = member;
+
+    const read = await app.inject({
+      method: "GET",
+      url: `/api/chat/conversations/${conversation.id}`,
+    });
+    expect(read.statusCode).toBe(200);
+    expect(read.json()).toMatchObject({ id: conversation.id });
+
+    const rename = await app.inject({
+      method: "PATCH",
+      url: `/api/chat/conversations/${conversation.id}`,
+      payload: { title: "hijacked" },
+    });
+    expect([403, 404]).toContain(rename.statusCode);
+
+    // the delete model call is owner-scoped, so a member's DELETE is a no-op
+    // (the route's 200 is pre-existing "idempotent delete" semantics).
+    await app.inject({
+      method: "DELETE",
+      url: `/api/chat/conversations/${conversation.id}`,
+    });
+    const stillThere = await ConversationModel.findById({
+      id: conversation.id,
+      userId: author.id,
+      organizationId,
+    });
+    expect(stillThere).not.toBeNull();
+  });
+
+  test("chats in unshared projects stay invisible to others", async ({
+    makeUser,
+    makeMember,
+  }) => {
+    const { conversation } = await seedProjectChat({ shared: false });
+    const outsider = await makeUser({ email: "ro-outsider@test.com" });
+    await makeMember(outsider.id, organizationId, {});
+    actingUser = outsider;
+
+    const read = await app.inject({
+      method: "GET",
+      url: `/api/chat/conversations/${conversation.id}`,
+    });
+    expect(read.statusCode).toBe(404);
+  });
+});

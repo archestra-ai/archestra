@@ -20,7 +20,6 @@ import {
 } from "@/lib/connection-setup.query";
 import type { ConnectClient } from "./clients";
 import { useConnectSkills } from "./connect-skills-step";
-import { SKILL_MARKETPLACE_TTL_PRESETS } from "./skills-marketplace-clients";
 import { fetchAllSkillIds } from "./skills-marketplace-step";
 import { StepCard } from "./step-card";
 import { TerminalBlock } from "./terminal-block";
@@ -59,7 +58,6 @@ interface ConnectCommandStepProps {
   proxyNeedsProvider: boolean;
   /** Skills opt-in is chosen in the dedicated skills step above. */
   includeSkills: boolean;
-  skillTtlId: string;
   expanded: boolean;
   onToggle: (() => void) | undefined;
 }
@@ -72,7 +70,6 @@ export function ConnectCommandStep({
   proxyAuth,
   proxyNeedsProvider,
   includeSkills,
-  skillTtlId,
   expanded,
   onToggle,
 }: ConnectCommandStepProps) {
@@ -93,10 +90,10 @@ export function ConnectCommandStep({
     if (includeSkillsEffective) {
       const skillIds = await fetchAllSkillIds();
       if (skillIds.length === 0) return;
-      const preset =
-        SKILL_MARKETPLACE_TTL_PRESETS.find((p) => p.id === skillTtlId) ??
-        SKILL_MARKETPLACE_TTL_PRESETS[0];
-      skills = { skillIds, ttlDays: preset.days };
+      // The marketplace link the client clones from must outlive the one-time
+      // setup token, so it never expires — admins revoke it from the Skills
+      // page when needed.
+      skills = { skillIds, ttlDays: null };
     }
 
     const created = await createSetup.mutateAsync({
@@ -116,7 +113,6 @@ export function ConnectCommandStep({
     llmProxy,
     proxyAuth,
     includeSkillsEffective,
-    skillTtlId,
     createSetup,
   ]);
 

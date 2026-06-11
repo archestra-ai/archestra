@@ -184,15 +184,15 @@ function sleep(ms: number, abortSignal?: AbortSignal): Promise<void> {
       return;
     }
 
-    const timer = setTimeout(resolve, ms);
-    abortSignal?.addEventListener(
-      "abort",
-      () => {
-        clearTimeout(timer);
-        reject(createElicitationCancelledError());
-      },
-      { once: true },
-    );
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(createElicitationCancelledError());
+    };
+    const timer = setTimeout(() => {
+      abortSignal?.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+    abortSignal?.addEventListener("abort", onAbort, { once: true });
   });
 }
 

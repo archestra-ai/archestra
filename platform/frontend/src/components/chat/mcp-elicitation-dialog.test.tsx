@@ -99,4 +99,39 @@ describe("McpElicitationDialog", () => {
       "insurance_value",
     );
   });
+
+  it("renders only http and https URLs for url-mode requests", () => {
+    const onRespond = vi.fn();
+    const urlRequest = {
+      ...request,
+      mode: "url" as const,
+      url: "https://example.com/authorize",
+      requestedSchema: undefined,
+    };
+
+    const { rerender } = render(
+      <McpElicitationDialog
+        request={urlRequest}
+        isSubmitting={false}
+        onRespond={onRespond}
+      />,
+    );
+
+    expect(screen.getByRole("link", { name: "Open request" })).toHaveAttribute(
+      "href",
+      "https://example.com/authorize",
+    );
+
+    rerender(
+      <McpElicitationDialog
+        request={{ ...urlRequest, url: "javascript:alert(1)" }}
+        isSubmitting={false}
+        onRespond={onRespond}
+      />,
+    );
+
+    expect(
+      screen.queryByRole("link", { name: "Open request" }),
+    ).not.toBeInTheDocument();
+  });
 });

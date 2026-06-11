@@ -131,7 +131,7 @@ export function McpElicitationDialog({
       }
     >
       <div className="flex flex-col gap-4">
-        {request.mode === "url" && request.url ? (
+        {request.mode === "url" && isHttpUrl(request.url) ? (
           <a
             href={request.url}
             target="_blank"
@@ -399,6 +399,19 @@ function titleize(value: string) {
   return value
     .replace(/[_-]+/g, " ")
     .replace(/\b\w/g, (character) => character.toUpperCase());
+}
+
+function isHttpUrl(value: string | undefined) {
+  if (!value) {
+    return false;
+  }
+
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch {
+    return false;
+  }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

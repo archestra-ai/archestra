@@ -43,6 +43,8 @@ export function configureMcpElicitation(
   client.setNotificationHandler(
     ElicitationCompleteNotificationSchema,
     async ({ params }) => {
+      // The URL flow is completed out-of-band by the server/client pair. The
+      // chat bridge has no local resource to release here, so we only log it.
       logger.info(
         { elicitationId: params.elicitationId },
         "MCP URL elicitation completed",

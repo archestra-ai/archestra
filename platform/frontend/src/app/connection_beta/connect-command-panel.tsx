@@ -38,6 +38,7 @@ import { WizardStep } from "./wizard-step";
 
 type ScriptClientId = CreateConnectionSetupBody["clientId"];
 type ConnectProxyAuth = NonNullable<CreateConnectionSetupBody["proxyAuth"]>;
+type EditableRow = "endpoint" | "gateway" | "proxy" | "skills";
 
 const SCRIPT_CLIENT_IDS: readonly string[] = [
   "claude-code",
@@ -123,10 +124,8 @@ export function ConnectCommandPanel({
 
   const [proxyAuth, setProxyAuth] = useState<ConnectProxyAuth>("provider-key");
   // Which summary line is currently expanded for inline editing (one at a time).
-  const [editing, setEditing] = useState<"gateway" | "proxy" | "skills" | null>(
-    null,
-  );
-  const toggleEdit = (row: "gateway" | "proxy" | "skills") =>
+  const [editing, setEditing] = useState<EditableRow | null>(null);
+  const toggleEdit = (row: EditableRow) =>
     setEditing((cur) => (cur === row ? null : row));
 
   // Providers that have an API key the current user can resolve. Virtual-key
@@ -239,20 +238,9 @@ export function ConnectCommandPanel({
   // Each summary line owns its inline editor. A line is editable only when it
   // has a real choice (e.g. more than one gateway); otherwise no "Change".
   const canPickGateway =
-    !!gateway &&
-    ((mcpGateways && mcpGateways.length > 1) || candidateBaseUrls.length > 1);
+    !!gateway && mcpGateways !== null && mcpGateways.length > 1;
   const gatewayEditor = canPickGateway ? (
     <div className="grid gap-3">
-      {candidateBaseUrls.length > 1 && (
-        <EditorField label="Endpoint">
-          <BaseUrlSelect
-            candidateUrls={candidateBaseUrls}
-            metadata={baseUrlMetadata}
-            value={baseUrl}
-            onChange={onBaseUrlChange}
-          />
-        </EditorField>
-      )}
       {mcpGateways && mcpGateways.length > 1 && gateway && (
         <EditorField label="Gateway">
           <SearchableSelect
@@ -265,6 +253,20 @@ export function ConnectCommandPanel({
       )}
     </div>
   ) : null;
+
+  // The endpoint (base URL) is shared by both the MCP gateway and the LLM
+  // proxy, so it gets its own line/setting rather than living under either.
+  const showEndpoint = candidateBaseUrls.length > 1;
+  const endpointEditor = (
+    <EditorField label="Endpoint">
+      <BaseUrlSelect
+        candidateUrls={candidateBaseUrls}
+        metadata={baseUrlMetadata}
+        value={baseUrl}
+        onChange={onBaseUrlChange}
+      />
+    </EditorField>
+  );
 
   const proxyEditor = proxy ? (
     <div className="grid gap-3">
@@ -412,6 +414,18 @@ export function ConnectCommandPanel({
               )}
             </SummaryRow>
           )}
+          {showEndpoint && (
+            <SummaryRow
+              editable
+              isEditing={editing === "endpoint"}
+              onToggle={() => toggleEdit("endpoint")}
+              editor={endpointEditor}
+              changeTestId="connect-change-endpoint"
+            >
+              Reach the gateway and proxy at{" "}
+              <span className="font-medium text-foreground">{baseUrl}</span>
+            </SummaryRow>
+          )}
         </ul>
       </WizardStep>
 
@@ -445,23 +459,22 @@ export function ConnectCommandPanel({
             />
           </div>
 
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs text-muted-foreground">
-            <span>
-              One-time command — expires in 15 minutes. Re-running the script on
-              the same machine is safe.
+          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 text-xs text-muted-foreground">
+            <span className="max-w-2xl">
+              One-time command, expires in 15 minutes · macOS &amp; Linux only
+              (not Windows) · it edits your client config in place and
+              isn&apos;t undone automatically — revert manually if you need to.
             </span>
-            <Button
+            <button
               type="button"
-              variant="ghost"
-              size="sm"
-              className="h-7 gap-1.5 px-2 text-xs"
               onClick={() => runGeneration(inputsKey)}
               disabled={isPending}
               data-testid="connect-regenerate-command"
+              className="inline-flex shrink-0 items-center gap-1.5 text-muted-foreground/70 transition-colors hover:text-foreground disabled:opacity-50"
             >
               <RotateCcw className="size-3" />
               Regenerate
-            </Button>
+            </button>
           </div>
         </div>
       </WizardStep>

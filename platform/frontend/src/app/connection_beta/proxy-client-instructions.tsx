@@ -5,12 +5,11 @@ import {
   providerDisplayNames,
   type SupportedProvider,
 } from "@archestra/shared";
-import { AlertTriangle, Check, Copy, Search } from "lucide-react";
+import { AlertTriangle, Check, Copy } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { CopyableCode } from "@/components/copyable-code";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import type { ConnectClient, ProxyStep } from "./clients";
 import { UnsupportedPanel } from "./mcp-client-instructions";
@@ -140,10 +139,10 @@ export function ProxyClientInstructions({
       ? urlProvider
       : null;
 
-  // Auto-select the sole supported provider when the card opens for a client
-  // that only supports one option, so the user doesn't have to click it.
+  // Auto-select the first provider when nothing is chosen yet, so the card
+  // opens with that provider's instructions expanded instead of a blank grid.
   useEffect(() => {
-    if (!selectedProvider && supportedProviders.length === 1) {
+    if (!selectedProvider && supportedProviders.length > 0) {
       updateProviderInUrl(supportedProviders[0]);
     }
   }, [selectedProvider, supportedProviders, updateProviderInUrl]);
@@ -382,7 +381,7 @@ function StepList({ steps }: { steps: ProxyStep[] }) {
           key={s.title}
           className="grid grid-cols-[22px_1fr] items-start gap-3"
         >
-          <div className="mt-0.5 flex size-[22px] shrink-0 items-center justify-center rounded-full bg-primary text-[11px] font-semibold text-primary-foreground">
+          <div className="mt-0.5 flex size-[22px] shrink-0 items-center justify-center rounded-full border bg-muted/50 font-mono text-[11px] font-semibold text-muted-foreground">
             {i + 1}
           </div>
           <div className="min-w-0 space-y-3">
@@ -505,59 +504,31 @@ function ProviderGrid({
     "groq",
   ];
   const [showAll, setShowAll] = useState(false);
-  const [query, setQuery] = useState("");
   const compact = providers.filter((p) => PRIMARY.includes(p));
   // If the admin's allow-list excludes every primary provider, there's
   // nothing to collapse to — fall through to the full list instead of
   // rendering an empty grid behind a "Show all" button.
   const canCollapse = compact.length > 0 && compact.length < providers.length;
-  const normalizedQuery = query.trim().toLowerCase();
-  const searching = normalizedQuery.length > 0;
-  // When searching, ignore the compact/expanded toggle and search all providers.
-  const base = searching || showAll || !canCollapse ? providers : compact;
-  const visible = searching
-    ? base.filter((p) =>
-        providerDisplayNames[p].toLowerCase().includes(normalizedQuery),
-      )
-    : base;
+  const visible = showAll || !canCollapse ? providers : compact;
 
   return (
     <div>
-      <div className="flex flex-wrap items-center justify-between gap-3 pb-4">
-        <h3 className="text-[17px] font-bold tracking-tight text-foreground">
+      <div className="flex flex-wrap items-center justify-between gap-3 pb-3">
+        <h4 className="text-sm font-semibold text-foreground">
           Select a provider
-        </h3>
+        </h4>
         {canCollapse && (
-          <div className="flex items-center gap-3">
-            {!searching && (
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-9 text-xs"
-                onClick={() => setShowAll((v) => !v)}
-              >
-                {showAll ? "Show fewer" : `Show all (${providers.length})`}
-              </Button>
-            )}
-            <div className="relative">
-              <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                type="search"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search"
-                className="h-9 w-56 rounded-full pl-8"
-              />
-            </div>
-          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-9 text-xs"
+            onClick={() => setShowAll((v) => !v)}
+          >
+            {showAll ? "Show fewer" : `Show all (${providers.length})`}
+          </Button>
         )}
       </div>
-      {searching && visible.length === 0 && (
-        <div className="rounded-lg border border-dashed bg-muted/30 p-4 text-center text-xs text-muted-foreground">
-          No providers match "{query}".
-        </div>
-      )}
       <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 md:grid-cols-4">
         {visible.map((p) => {
           const isSupported = supported.includes(p);

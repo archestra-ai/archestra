@@ -3,18 +3,18 @@ import { API_BASE_URL } from "../consts";
 import { test } from "../fixtures";
 
 /**
- * /connection one-command wizard for script-capable clients
- * (Claude Code / Codex / Copilot CLI / Cursor) and the unchanged manual
- * flow for n8n. The command auto-generates — there is no generate button.
+ * /connection_beta — the new step-by-step wizard for script-capable clients
+ * (Claude Code / Codex / Copilot CLI / Cursor) and the manual flow for n8n.
+ * The command auto-generates — there is no generate button.
  */
-test.describe("connection one-command setup", () => {
+test.describe("connection_beta wizard", () => {
   test("the wizard auto-generates a one-time curl|bash command", async ({
     page,
     goToPage,
   }) => {
     // no clientId: the wizard preselects the first visible client and the
     // command appears without any clicks
-    await goToPage(page, "/connection");
+    await goToPage(page, "/connection_beta");
 
     const command = page.getByText(/curl -fsSL '.*\/api\/connection-setups\//);
     await expect(command).toBeVisible();
@@ -47,11 +47,11 @@ test.describe("connection one-command setup", () => {
     ).not.toHaveText(commandText);
   });
 
-  test("provider and auth choices live behind tabs and Options", async ({
+  test("provider and auth choices live behind tabs and inline editors", async ({
     page,
     goToPage,
   }) => {
-    await goToPage(page, "/connection?clientId=claude-code");
+    await goToPage(page, "/connection_beta?clientId=claude-code");
 
     // claude-code supports two providers — rendered as flat tabs on the block
     await expect(page.getByRole("button", { name: "Anthropic" })).toBeVisible();
@@ -64,9 +64,7 @@ test.describe("connection one-command setup", () => {
     await expect(
       page.getByRole("tab", { name: /Your provider key/i }),
     ).toBeVisible();
-    await expect(
-      page.getByText(/Passthrough.*reuse your own API key/i),
-    ).toBeVisible();
+    await expect(page.getByText(/your own API key or/i)).toBeVisible();
 
     // switching to a virtual key updates the proxy summary line
     await page.getByRole("tab", { name: /Virtual key/i }).click();
@@ -77,7 +75,7 @@ test.describe("connection one-command setup", () => {
     page,
     goToPage,
   }) => {
-    await goToPage(page, "/connection");
+    await goToPage(page, "/connection_beta");
 
     // the fixture user is an admin, so the settings entry point is visible
     await page.getByTestId("connect-page-settings").click();
@@ -88,7 +86,7 @@ test.describe("connection one-command setup", () => {
   });
 
   test("n8n keeps the manual step-by-step flow", async ({ page, goToPage }) => {
-    await goToPage(page, "/connection?clientId=n8n");
+    await goToPage(page, "/connection_beta?clientId=n8n");
 
     // manual flow: step-by-step instructions remain, no auto-generated command
     await expect(

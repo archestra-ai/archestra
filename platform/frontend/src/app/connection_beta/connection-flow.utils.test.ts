@@ -102,12 +102,22 @@ describe("resolveEffectiveId", () => {
 describe("resolveInitialClientId", () => {
   const visibleClientIds = ["claude-code", "cursor", "generic"] as const;
 
-  it("returns null when nothing else is specified", () => {
+  it("falls back to the first visible client when nothing else is specified", () => {
     expect(
       resolveInitialClientId({
         urlClientId: null,
         adminDefaultClientId: null,
         visibleClientIds,
+      }),
+    ).toBe("claude-code");
+  });
+
+  it("returns null when no clients are visible at all", () => {
+    expect(
+      resolveInitialClientId({
+        urlClientId: null,
+        adminDefaultClientId: null,
+        visibleClientIds: [],
       }),
     ).toBeNull();
   });
@@ -142,14 +152,14 @@ describe("resolveInitialClientId", () => {
     ).toBe("cursor");
   });
 
-  it("returns null when the admin default isn't visible", () => {
+  it("falls back to the first visible client when the admin default isn't visible", () => {
     expect(
       resolveInitialClientId({
         urlClientId: null,
         adminDefaultClientId: "hidden-client",
         visibleClientIds,
       }),
-    ).toBeNull();
+    ).toBe("claude-code");
   });
 });
 

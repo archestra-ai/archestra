@@ -105,6 +105,25 @@ describe("ConnectCommandPanel", () => {
     expect(screen.getByText(/My Gateway/)).toBeInTheDocument();
     expect(screen.getByText(/My Proxy/)).toBeInTheDocument();
     expect(screen.getByText(/2 shared skills/)).toBeInTheDocument();
+    // single endpoint: not worth naming
+    expect(
+      screen.queryByText("http://localhost:9000/v1"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows a separate endpoint line when more than one endpoint is configured", async () => {
+    renderPanel({
+      baseUrl: "https://eu.example.com/v1",
+      candidateBaseUrls: [
+        "https://eu.example.com/v1",
+        "https://us.example.com/v1",
+      ],
+    });
+    await screen.findByText(COMMAND);
+    expect(
+      screen.getByText(/Reach the gateway and proxy at/),
+    ).toBeInTheDocument();
+    expect(screen.getByText("https://eu.example.com/v1")).toBeInTheDocument();
   });
 
   it("regenerates without skills after opting out in Options", async () => {

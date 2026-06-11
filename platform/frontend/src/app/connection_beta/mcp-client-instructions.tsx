@@ -98,10 +98,10 @@ export function McpClientInstructions({
           onValueChange={(v) => setAuthMethod(v as AuthMethod)}
           className="-mt-2"
         >
-          <TabsList className="w-full">
+          <TabsList>
             {tabs.map((t) =>
               t === "oauth" ? (
-                <TabsTrigger key="oauth" value="oauth" className="flex-1">
+                <TabsTrigger key="oauth" value="oauth">
                   OAuth 2.1
                   {client.mcp.kind !== "generic" &&
                     preferredAuth === "oauth" && (
@@ -111,7 +111,7 @@ export function McpClientInstructions({
                     )}
                 </TabsTrigger>
               ) : (
-                <TabsTrigger key="token" value="token" className="flex-1">
+                <TabsTrigger key="token" value="token">
                   Static token
                 </TabsTrigger>
               ),
@@ -217,7 +217,7 @@ function McpBody({
               key={s.title}
               className="grid grid-cols-[22px_1fr] items-start gap-3"
             >
-              <div className="mt-0.5 flex size-[22px] shrink-0 items-center justify-center rounded-full bg-primary text-[11px] font-semibold text-primary-foreground">
+              <div className="mt-0.5 flex size-[22px] shrink-0 items-center justify-center rounded-full border bg-muted/50 font-mono text-[11px] font-semibold text-muted-foreground">
                 {i + 1}
               </div>
               <div className="min-w-0 space-y-3">
@@ -264,7 +264,7 @@ function McpBody({
         <ol className="grid gap-3.5">
           {steps.map((s, i) => (
             <li key={s.title} className="flex gap-3">
-              <div className="flex size-[22px] shrink-0 items-center justify-center rounded-full bg-primary text-[11px] font-semibold text-primary-foreground">
+              <div className="flex size-[22px] shrink-0 items-center justify-center rounded-full border bg-muted/50 font-mono text-[11px] font-semibold text-muted-foreground">
                 {i + 1}
               </div>
               <div>

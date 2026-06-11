@@ -1,11 +1,12 @@
 "use client";
 
-import { SessionsCard, TwoFactorCard } from "@daveyplate/better-auth-ui";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { ChangePasswordDialog } from "@/app/settings/account/_components/change-password-dialog";
 import { LightDarkToggle } from "@/app/settings/account/_components/light-dark-toggle";
+import { SessionsCard } from "@/app/settings/account/_components/sessions-card";
+import { TwoFactorCard } from "@/app/settings/account/_components/two-factor-card";
 import { useSetSettingsAction } from "@/app/settings/layout";
 import { LoadingSpinner } from "@/components/loading";
 import { PersonalTokenCard } from "@/components/settings/personal-token-card";
@@ -52,11 +53,9 @@ function AccountSettingsContent() {
       <SettingsSectionStack>
         <RolePermissionsCard />
         <PersonalTokenCard />
-        {organization?.showTwoFactor && (
-          <TwoFactorCard classNames={{ base: "w-full" }} />
-        )}
+        {organization?.showTwoFactor && <TwoFactorCard />}
         <LightDarkToggle />
-        <SessionsCard classNames={{ base: "w-full" }} />
+        <SessionsCard />
       </SettingsSectionStack>
       {showChangePasswordButton && (
         <ChangePasswordDialog

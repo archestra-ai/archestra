@@ -10,8 +10,12 @@ import {
 import { usePublicConfig } from "@/lib/config/config.query";
 import { AuthViewWithErrorHandling } from "./auth-view-with-error-handling";
 
-vi.mock("@daveyplate/better-auth-ui", () => ({
-  AuthView: () => <div data-testid="auth-view" />,
+vi.mock("./two-factor-view", () => ({
+  TwoFactorView: () => <div data-testid="two-factor-view" />,
+}));
+
+vi.mock("./recover-account-view", () => ({
+  RecoverAccountView: () => <div data-testid="recover-account-view" />,
 }));
 
 const mockSignInMutateAsync = vi.fn();
@@ -71,6 +75,22 @@ describe("AuthViewWithErrorHandling", () => {
       },
       isLoading: false,
     } as ReturnType<typeof usePublicConfig>);
+  });
+
+  it("renders the two-factor view for the two-factor path", () => {
+    mockSearchParams.get.mockReturnValue(null);
+
+    render(<AuthViewWithErrorHandling path="two-factor" />);
+
+    expect(screen.getByTestId("two-factor-view")).toBeInTheDocument();
+  });
+
+  it("renders the recover-account view for the recover-account path", () => {
+    mockSearchParams.get.mockReturnValue(null);
+
+    render(<AuthViewWithErrorHandling path="recover-account" />);
+
+    expect(screen.getByTestId("recover-account-view")).toBeInTheDocument();
   });
 
   it("does not show a failed SSO message on first sign-in page load", () => {

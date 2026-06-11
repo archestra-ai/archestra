@@ -22,11 +22,11 @@ import {
   MessagesSquare,
   MoreHorizontal,
   Network,
+  PanelsTopLeft,
   Route,
   Settings,
   Slack,
   Star,
-  PanelsTopLeft,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";

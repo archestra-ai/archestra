@@ -5883,3 +5883,223 @@ describe("K8sDeployment.streamLogs", () => {
     expect(k8sLogMock).not.toHaveBeenCalled();
   });
 });
+
+describe("K8sDeployment image pull failure handling", () => {
+  function makeDeploymentWithMockedApis(params: {
+    listNamespacedPod: ReturnType<typeof vi.fn>;
+    readNamespacedDeployment?: ReturnType<typeof vi.fn>;
+  }): K8sDeployment {
+    const mockMcpServer = {
+      id: "test-server-id",
+      name: "test-server",
+      // null catalogId so getCatalogItem() short-circuits without a DB lookup
+      catalogId: null,
+    } as unknown as McpServer;
+
+    return new K8sDeployment({
+      mcpServer: mockMcpServer,
+      k8sApi: {
+        listNamespacedPod: params.listNamespacedPod,
+      } as unknown as k8s.CoreV1Api,
+      k8sAppsApi: {
+        readNamespacedDeployment: params.readNamespacedDeployment ?? vi.fn(),
+      } as unknown as k8s.AppsV1Api,
+      k8sNetworkingApi: {} as k8s.NetworkingV1Api,
+      k8sAttach: {} as Attach,
+      k8sLog: {} as Log,
+      k8sExec: {} as Exec,
+      namespace: "default",
+      catalogItem: null,
+    });
+  }
+
+  function makeWaitingPod(reason: string, message: string): k8s.V1Pod {
+    return {
+      metadata: {
+        name: "test-server-abc123",
+        creationTimestamp: new Date(),
+      },
+      status: {
+        phase: "Pending",
+        containerStatuses: [
+          {
+            name: "mcp-server",
+            ready: false,
+            restartCount: 0,
+            state: { waiting: { reason, message } },
+          },
+        ],
+      },
+    } as k8s.V1Pod;
+  }
+
+  const runningPod = {
+    metadata: {
+      name: "test-server-abc123",
+      creationTimestamp: new Date(),
+    },
+    status: {
+      phase: "Running",
+      containerStatuses: [
+        {
+          name: "mcp-server",
+          ready: true,
+          restartCount: 0,
+          state: { running: {} },
+        },
+      ],
+    },
+  } as k8s.V1Pod;
+
+  const imagePullPod = makeWaitingPod(
+    "ImagePullBackOff",
+    'Back-off pulling image "ghcr.io/example/mcp:latest"',
+  );
+
+  describe("refreshState", () => {
+    test("keeps state pending on transient image pull errors", async () => {
+      const listNamespacedPod = vi
+        .fn()
+        .mockResolvedValue({ items: [imagePullPod] });
+      const readNamespacedDeployment = vi
+        .fn()
+        .mockResolvedValue({ status: { availableReplicas: 0 } });
+
+      const deployment = makeDeploymentWithMockedApis({
+        listNamespacedPod,
+        readNamespacedDeployment,
+      });
+      // @ts-expect-error - accessing private property for testing
+      deployment.state = "pending";
+
+      await deployment.refreshState();
+
+      expect(deployment.statusSummary.state).toBe("pending");
+      expect(deployment.statusSummary.error).toContain(
+        "Back-off pulling image",
+      );
+    });
+
+    test("recovers to running once the kubelet pull succeeds", async () => {
+      const listNamespacedPod = vi
+        .fn()
+        // first refresh: findAnyPodForDeployment + failure check see the pull error
+        .mockResolvedValueOnce({ items: [imagePullPod] })
+        .mockResolvedValueOnce({ items: [imagePullPod] })
+        // second refresh: pod is running
+        .mockResolvedValue({ items: [runningPod] });
+      const readNamespacedDeployment = vi
+        .fn()
+        .mockResolvedValueOnce({ status: { availableReplicas: 0 } })
+        .mockResolvedValue({ status: { availableReplicas: 1 } });
+
+      const deployment = makeDeploymentWithMockedApis({
+        listNamespacedPod,
+        readNamespacedDeployment,
+      });
+      // @ts-expect-error - accessing private property for testing
+      deployment.state = "pending";
+
+      await deployment.refreshState();
+      expect(deployment.statusSummary.state).toBe("pending");
+
+      await deployment.refreshState();
+      expect(deployment.statusSummary.state).toBe("running");
+      expect(deployment.statusSummary.error).toBeNull();
+    });
+
+    test("still marks terminal container failures as failed", async () => {
+      const crashLoopPod = makeWaitingPod(
+        "CrashLoopBackOff",
+        "back-off 5m0s restarting failed container",
+      );
+      const listNamespacedPod = vi
+        .fn()
+        .mockResolvedValue({ items: [crashLoopPod] });
+      const readNamespacedDeployment = vi
+        .fn()
+        .mockResolvedValue({ status: { availableReplicas: 0 } });
+
+      const deployment = makeDeploymentWithMockedApis({
+        listNamespacedPod,
+        readNamespacedDeployment,
+      });
+      // @ts-expect-error - accessing private property for testing
+      deployment.state = "running";
+
+      await deployment.refreshState();
+
+      expect(deployment.statusSummary.state).toBe("failed");
+      expect(deployment.statusSummary.error).toContain(
+        "restarting failed container",
+      );
+    });
+  });
+
+  describe("waitForDeploymentReady", () => {
+    test("keeps waiting through image pull errors and succeeds once the pull completes", async () => {
+      const listNamespacedPod = vi
+        .fn()
+        // attempt 1: failure scan sees the pull error (must not fail fast)
+        .mockResolvedValueOnce({ items: [imagePullPod] })
+        // attempt 2: pod is running
+        .mockResolvedValue({ items: [runningPod] });
+      const readNamespacedDeployment = vi
+        .fn()
+        .mockResolvedValueOnce({ status: { availableReplicas: 0 } })
+        .mockResolvedValue({ status: { availableReplicas: 1 } });
+
+      const deployment = makeDeploymentWithMockedApis({
+        listNamespacedPod,
+        readNamespacedDeployment,
+      });
+
+      await expect(
+        deployment.waitForDeploymentReady(5, 1),
+      ).resolves.toBeUndefined();
+      expect(deployment.statusSummary.state).toBe("running");
+      expect(deployment.statusSummary.error).toBeNull();
+    });
+
+    test("fails fast on terminal container states", async () => {
+      const crashLoopPod = makeWaitingPod(
+        "CrashLoopBackOff",
+        "back-off 5m0s restarting failed container",
+      );
+      const listNamespacedPod = vi
+        .fn()
+        .mockResolvedValue({ items: [crashLoopPod] });
+      const readNamespacedDeployment = vi
+        .fn()
+        .mockResolvedValue({ status: { availableReplicas: 0 } });
+
+      const deployment = makeDeploymentWithMockedApis({
+        listNamespacedPod,
+        readNamespacedDeployment,
+      });
+
+      await expect(deployment.waitForDeploymentReady(5, 1)).rejects.toThrow(
+        /CrashLoopBackOff/,
+      );
+      expect(deployment.statusSummary.state).toBe("failed");
+    });
+
+    test("includes the last image pull error when timing out", async () => {
+      const listNamespacedPod = vi
+        .fn()
+        .mockResolvedValue({ items: [imagePullPod] });
+      const readNamespacedDeployment = vi
+        .fn()
+        .mockResolvedValue({ status: { availableReplicas: 0 } });
+
+      const deployment = makeDeploymentWithMockedApis({
+        listNamespacedPod,
+        readNamespacedDeployment,
+      });
+
+      await expect(deployment.waitForDeploymentReady(2, 1)).rejects.toThrow(
+        /did not become ready after 2 attempts.*ImagePullBackOff/,
+      );
+    });
+  });
+});

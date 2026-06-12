@@ -42,42 +42,48 @@ function ensureNamespace(api: unknown, namespace: string): Promise<void> {
   ).ensureNamespace(api, namespace);
 }
 
-describe("runnerHostForEnvironment", () => {
+describe("environmentTargetForEnvironment", () => {
   beforeEach(() => vi.clearAllMocks());
 
   it("returns undefined when Kubernetes is not configured", () => {
     mockIsK8sConfigured.mockReturnValue(false);
     expect(
-      daggerEnvironmentRuntimeManager.runnerHostForEnvironment(makeEnv()),
+      daggerEnvironmentRuntimeManager.environmentTargetForEnvironment(
+        makeEnv(),
+      ),
     ).toBeUndefined();
   });
 
-  it("builds a kube-pod runner host in the environment's explicit namespace", () => {
+  it("returns the environment id + its explicit namespace", () => {
     mockIsK8sConfigured.mockReturnValue(true);
     const env = makeEnv({ namespace: "ns-production" });
-    expect(daggerEnvironmentRuntimeManager.runnerHostForEnvironment(env)).toBe(
-      "kube-pod://dagger-engine-abcdef00-1111-2222-3333-444455556666-0?namespace=ns-production&container=dagger-engine",
-    );
+    expect(
+      daggerEnvironmentRuntimeManager.environmentTargetForEnvironment(env),
+    ).toEqual({
+      environmentId: "abcdef00-1111-2222-3333-444455556666",
+      namespace: "ns-production",
+    });
   });
 
   it("falls back to archestra-dagger-<id8> when the environment has no namespace", () => {
     mockIsK8sConfigured.mockReturnValue(true);
     expect(
-      daggerEnvironmentRuntimeManager.runnerHostForEnvironment(
+      daggerEnvironmentRuntimeManager.environmentTargetForEnvironment(
         makeEnv({ namespace: null }),
       ),
-    ).toBe(
-      "kube-pod://dagger-engine-abcdef00-1111-2222-3333-444455556666-0?namespace=archestra-dagger-abcdef00&container=dagger-engine",
-    );
+    ).toEqual({
+      environmentId: "abcdef00-1111-2222-3333-444455556666",
+      namespace: "archestra-dagger-abcdef00",
+    });
   });
 
   it("treats a blank namespace as no namespace", () => {
     mockIsK8sConfigured.mockReturnValue(true);
     expect(
-      daggerEnvironmentRuntimeManager.runnerHostForEnvironment(
+      daggerEnvironmentRuntimeManager.environmentTargetForEnvironment(
         makeEnv({ namespace: "   " }),
-      ),
-    ).toContain("namespace=archestra-dagger-abcdef00");
+      )?.namespace,
+    ).toBe("archestra-dagger-abcdef00");
   });
 });
 

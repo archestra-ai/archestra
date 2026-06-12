@@ -1,3 +1,4 @@
+import type { EnvironmentTarget } from "@archestra/sandbox-rs";
 import {
   TOOL_DOWNLOAD_FILE_SHORT_NAME,
   TOOL_RUN_COMMAND_SHORT_NAME,
@@ -280,7 +281,7 @@ const registry = defineArchestraTools([
           command: args.command,
           cwd: args.cwd,
           timeoutSeconds: args.timeoutSeconds,
-          runnerHost: await resolveEnvironmentRunnerHost(context),
+          environment: await resolveEnvironmentTarget(context),
         });
 
         logger.info(
@@ -333,7 +334,7 @@ const registry = defineArchestraTools([
           caller: guard.userCtx,
           path: args.path,
           mimeType: args.mimeType,
-          runnerHost: await resolveEnvironmentRunnerHost(context),
+          environment: await resolveEnvironmentTarget(context),
         });
 
         logger.info(
@@ -448,9 +449,9 @@ interface UserContext {
  * the environment is missing, or k8s isn't configured — the run then uses the
  * process-default engine.
  */
-async function resolveEnvironmentRunnerHost(
+async function resolveEnvironmentTarget(
   context: ArchestraContext,
-): Promise<string | undefined> {
+): Promise<EnvironmentTarget | undefined> {
   const { organizationId } = context;
   const agentId = context.agent?.id;
   if (!agentId || !organizationId) return undefined;
@@ -474,14 +475,16 @@ async function resolveEnvironmentRunnerHost(
       `Agent is bound to environment ${agent.environmentId}, which was not found — refusing to run on the shared runtime.`,
     );
   }
-  const runnerHost =
-    daggerEnvironmentRuntimeManager.runnerHostForEnvironment(environment);
-  if (!runnerHost) {
+  const target =
+    daggerEnvironmentRuntimeManager.environmentTargetForEnvironment(
+      environment,
+    );
+  if (!target) {
     throw new Error(
       `Could not resolve the isolated runtime for environment "${environment.name}" — refusing to run on the shared runtime. Is the orchestrator (Kubernetes) configured?`,
     );
   }
-  return runnerHost;
+  return target;
 }
 
 /**

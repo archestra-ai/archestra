@@ -1,3 +1,4 @@
+import type { EnvironmentTarget } from "@archestra/sandbox-rs";
 import type { SandboxId } from "@/types";
 
 /**
@@ -39,7 +40,7 @@ export interface RunCommandParams {
    * (`kube-pod://…`). Omitted runs on the process-default engine. Resolved by
    * the MCP tool from the agent's `environmentId`.
    */
-  runnerHost?: string;
+  environment?: EnvironmentTarget;
 }
 
 export interface CommandResult {
@@ -74,7 +75,7 @@ export interface ExportArtifactParams {
    * extraction replays the recorded commands, so it must target the same engine
    * the sandbox ran on. Resolved by the MCP tool from the agent's `environmentId`.
    */
-  runnerHost?: string;
+  environment?: EnvironmentTarget;
 }
 
 export interface ArtifactRef {

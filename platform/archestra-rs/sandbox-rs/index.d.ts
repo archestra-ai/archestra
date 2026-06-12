@@ -8,11 +8,10 @@ export interface ArtifactBytes {
 export interface CheckSessionInput {
   traceparent?: string
   /**
-   * Optional Dagger runner host to target (e.g. a per-environment engine,
-   * `kube-pod://…`). When set, the session pool connects to / reuses a
-   * session for that host; when omitted, the process-default engine is used.
+   * The isolation target for this session; omit (null) for the process-default
+   * engine. The Dagger address is built in the backend from this.
    */
-  runnerHost?: string
+  environment?: EnvironmentTarget
 }
 
 export interface CommandExecution {
@@ -22,6 +21,17 @@ export interface CommandExecution {
   durationMs: number
   timedOut: boolean
   truncated: boolean
+}
+
+/**
+ * JS input identifying a per-environment isolation target. Omitting it (null)
+ * runs on the process-default engine. The Dagger transport address (`kube-pod://…`)
+ * is constructed inside the Dagger backend from this — it is never carried
+ * across the public API.
+ */
+export interface EnvironmentTarget {
+  environmentId: string
+  namespace: string
 }
 
 export interface Limits {
@@ -43,10 +53,10 @@ export interface ReadArtifactInput {
    */
   defaultCwd: string
   /**
-   * Optional Dagger runner host (the artifact must be read from the same
-   * per-environment engine the sandbox ran on). Omitted = process default.
+   * The isolation target the artifact must be read from — the same engine the
+   * sandbox ran on; omit (null) for the process-default engine.
    */
-  runnerHost?: string
+  environment?: EnvironmentTarget
 }
 
 export interface ReplayCommand {
@@ -100,10 +110,10 @@ export interface RunSandboxInput {
   cwd: string
   timeoutSeconds: number
   /**
-   * Optional Dagger runner host to target this run at a specific engine
-   * (e.g. a per-environment engine, `kube-pod://…`). Omitted = process default.
+   * The isolation target for this run; omit (null) for the process-default
+   * engine. The Dagger address is built in the backend from this.
    */
-  runnerHost?: string
+  environment?: EnvironmentTarget
 }
 
 export interface SnapshotFile {

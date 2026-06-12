@@ -1,4 +1,4 @@
-import type { ReplayEntry } from "@archestra/sandbox-rs";
+import type { EnvironmentTarget, ReplayEntry } from "@archestra/sandbox-rs";
 import {
   context as otelContext,
   propagation as otelPropagation,
@@ -60,7 +60,7 @@ interface RunCommandParams extends LimitOverrides {
    * set, the native session pool runs this command on that engine; omitted uses
    * the process-default engine.
    */
-  runnerHost?: string;
+  environment?: EnvironmentTarget;
 }
 
 interface RunCommandResult {
@@ -86,7 +86,7 @@ interface ReadArtifactParams extends LimitOverrides {
    * commands, so it must run on the same per-environment engine the sandbox ran
    * on (else the replay bypasses the environment's egress policy).
    */
-  runnerHost?: string;
+  environment?: EnvironmentTarget;
 }
 
 interface ReadArtifactResult {
@@ -164,7 +164,7 @@ class SandboxRuntimeService {
           command: params.command,
           cwd: params.cwd,
           timeoutSeconds: params.timeoutSeconds,
-          runnerHost: params.runnerHost,
+          environment: params.environment,
         }),
       );
     } catch (error) {
@@ -186,7 +186,7 @@ class SandboxRuntimeService {
           limits: this.limits(params),
           path: params.path,
           defaultCwd: params.defaultCwd,
-          runnerHost: params.runnerHost,
+          environment: params.environment,
         }),
       );
     } catch (error) {

@@ -29,7 +29,7 @@ use crate::validation::{
 };
 use crate::{
     ArtifactBytes, CommandExecution, EngineFault, ReplayInputFile, ReplayStep, Result,
-    SandboxError, SnapshotFile,
+    RuntimeTarget, SandboxError, SnapshotFile,
 };
 
 /// debian + python + uv + node + npm + common cli, warmed once per process.
@@ -256,6 +256,24 @@ fn resolve_runner_target<'a>(
     requested.or(default)
 }
 
+/// The Dagger runner host for a runtime target: `Default` -> `None` (use the
+/// process-default engine), an environment -> its engine's `kube-pod://` address.
+/// `environment_id` / `namespace` were validated (UUID / RFC1123 label) at the
+/// NAPI boundary, so the formatted address needs no escaping. The pod name and
+/// container MUST match the engine StatefulSet the TS dagger-environment-runtime
+/// manager creates (`daggerEngineDeploymentName` + the `dagger-engine` container).
+fn runtime_target_host(target: &RuntimeTarget) -> Option<String> {
+    match target {
+        RuntimeTarget::Default => None,
+        RuntimeTarget::Environment {
+            environment_id,
+            namespace,
+        } => Some(format!(
+            "kube-pod://dagger-engine-{environment_id}-0?namespace={namespace}&container=dagger-engine"
+        )),
+    }
+}
+
 /// connect to the Dagger engine and drive the generic actor loop for the
 /// connection's lifetime. this is the one place the Dagger backend is selected.
 ///
@@ -264,25 +282,29 @@ fn resolve_runner_target<'a>(
 /// process-global `_EXPERIMENTAL_DAGGER_RUNNER_HOST` env at CLI-spawn time, so we
 /// serialize spawns and pin that env until the session reports ready (by which
 /// point the CLI subprocess has captured it). `None` uses the process default.
-pub(crate) async fn spawn(runner_host: Option<String>) -> Result<Arc<SessionHandle>> {
-    tracing::info!(runner_host = ?runner_host, "spawning dagger session");
+pub(crate) async fn spawn(target: RuntimeTarget) -> Result<Arc<SessionHandle>> {
+    tracing::info!(target = ?target, "spawning dagger session");
     static SPAWN_ENV_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
     // The process default runner host, snapshotted once before any spawn mutates
-    // the env, so a `None` spawn (e.g. the default session re-spawning after a
+    // the env, so a `Default` spawn (e.g. the default session re-spawning after a
     // teardown) restores the real default rather than inheriting whatever host a
-    // prior `Some` spawn pinned.
+    // prior environment spawn pinned.
     static DEFAULT_RUNNER_HOST: std::sync::OnceLock<Option<String>> = std::sync::OnceLock::new();
 
-    // Hold the lock until the session reports ready, so the dagger CLI subprocess
-    // has captured the pinned host before a concurrent spawn can re-pin it.
+    // Hold the lock until the session reports ready (or we abort it below), so the
+    // dagger CLI subprocess has captured the pinned host before a concurrent spawn
+    // can re-pin it.
     let _env_guard = SPAWN_ENV_LOCK.lock().await;
     let default_host =
         DEFAULT_RUNNER_HOST.get_or_init(|| std::env::var("_EXPERIMENTAL_DAGGER_RUNNER_HOST").ok());
-    let target = resolve_runner_target(runner_host.as_deref(), default_host.as_deref());
+    // Resolve the domain target to a runner host here, in the Dagger backend, so
+    // the `kube-pod://` address is never carried across the generic API.
+    let desired_host = runtime_target_host(&target);
+    let pinned = resolve_runner_target(desired_host.as_deref(), default_host.as_deref());
     // SAFETY: serialized by SPAWN_ENV_LOCK; read only by the connect below (the
-    // dagger CLI subprocess) before this spawn reports ready.
+    // dagger CLI subprocess) before this spawn reports ready or is aborted.
     unsafe {
-        match target {
+        match pinned {
             Some(host) => std::env::set_var("_EXPERIMENTAL_DAGGER_RUNNER_HOST", host),
             None => std::env::remove_var("_EXPERIMENTAL_DAGGER_RUNNER_HOST"),
         }
@@ -291,7 +313,7 @@ pub(crate) async fn spawn(runner_host: Option<String>) -> Result<Arc<SessionHand
     let (ready_tx, ready_rx) = oneshot::channel::<()>();
     let (fail_tx, fail_rx) = oneshot::channel::<SandboxError>();
 
-    tokio::spawn(async move {
+    let connect_task = tokio::spawn(async move {
         let cfg = Config::builder()
             .workdir_path(PathBuf::from("/"))
             .load_workspace_modules(false)
@@ -322,7 +344,7 @@ pub(crate) async fn spawn(runner_host: Option<String>) -> Result<Arc<SessionHand
         }
     });
 
-    tokio::select! {
+    let outcome = tokio::select! {
         ready = ready_rx => match ready {
             Ok(()) => {
                 tracing::info!("dagger session ready");
@@ -344,7 +366,15 @@ pub(crate) async fn spawn(runner_host: Option<String>) -> Result<Arc<SessionHand
             message: format!("the Dagger session did not become ready within {}s", SESSION_READY_TIMEOUT.as_secs()),
             fault: EngineFault::Unreachable,
         }),
+    };
+    // A timed-out or failed connect must not outlive the env lock: abort it here,
+    // still holding `_env_guard`, so its in-flight dagger CLI can't end up spawned
+    // against a runner host a later spawn re-pins once we release the guard. On
+    // success the task is the session actor loop, so it is left running.
+    if outcome.is_err() {
+        connect_task.abort();
     }
+    outcome
 }
 
 /// warm-base user-setup command: scaffold the uv project, create the venv at
@@ -769,6 +799,21 @@ mod tests {
     #[test]
     fn runner_target_is_none_when_neither_set() {
         assert_eq!(resolve_runner_target(None, None), None);
+    }
+
+    #[test]
+    fn runtime_target_host_builds_a_kube_pod_address_for_an_environment() {
+        assert_eq!(runtime_target_host(&RuntimeTarget::Default), None);
+        assert_eq!(
+            runtime_target_host(&RuntimeTarget::Environment {
+                environment_id: "abcdef00-1111-2222-3333-444455556666".to_string(),
+                namespace: "ns-production".to_string(),
+            }),
+            Some(
+                "kube-pod://dagger-engine-abcdef00-1111-2222-3333-444455556666-0?namespace=ns-production&container=dagger-engine"
+                    .to_string()
+            )
+        );
     }
 
     /// a GraphQL domain error carrying `message` and an optional typed extension.

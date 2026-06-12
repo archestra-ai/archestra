@@ -1,3 +1,4 @@
+import type { EnvironmentTarget } from "@archestra/sandbox-rs";
 import type * as k8s from "@kubernetes/client-node";
 import config from "@/config";
 import { getK8sCapabilities } from "@/k8s/capabilities";
@@ -45,17 +46,18 @@ const ENGINE_CACHE_SIZE = "50Gi";
  */
 class DaggerEnvironmentRuntimeManager {
   /**
-   * The `kube-pod://` runner host for an environment's engine, or undefined when
-   * k8s isn't configured or the environment has no namespace to run in. Pure
-   * string construction — assumes the engine was provisioned by `reconcile*`.
+   * The isolation target for an environment's engine, or undefined when k8s
+   * isn't configured. The Dagger `kube-pod://` address is built in the
+   * sandbox-core backend from this; the engine is provisioned by `reconcile*`.
    */
-  runnerHostForEnvironment(environment: Environment): string | undefined {
+  environmentTargetForEnvironment(
+    environment: Environment,
+  ): EnvironmentTarget | undefined {
     if (!isK8sConfigured()) return undefined;
-    const namespace = this.engineNamespace(environment);
-    const podName = `${daggerEngineDeploymentName(environment.id)}-0`;
-    return `kube-pod://${encodeURIComponent(podName)}?namespace=${encodeURIComponent(
-      namespace,
-    )}&container=${encodeURIComponent(ENGINE_CONTAINER)}`;
+    return {
+      environmentId: environment.id,
+      namespace: this.engineNamespace(environment),
+    };
   }
 
   /**

@@ -14,7 +14,7 @@ use futures_util::future::{BoxFuture, Shared};
 use tokio::sync::{Mutex, OnceCell, Semaphore, mpsc, oneshot};
 
 use crate::backend::{ArtifactRequest, Backend, RunRequest};
-use crate::{ArtifactBytes, CommandExecution, EngineFault, Result, SandboxError};
+use crate::{ArtifactBytes, CommandExecution, EngineFault, Result, RuntimeTarget, SandboxError};
 
 pub(crate) const CHANNEL_CAPACITY: usize = 64;
 // Rust-side cap on concurrent backend handlers. Defense in depth — the TS
@@ -127,15 +127,15 @@ struct Slot {
     generation: u64,
 }
 
-/// pool of session slots keyed by Dagger runner host (`None` = process default).
-/// each host gets its own warm session so a per-environment engine doesn't
-/// thrash the default engine's session.
-static HANDLE_SLOTS: OnceCell<Mutex<HashMap<Option<String>, Slot>>> = OnceCell::const_new();
+/// pool of session slots keyed by runtime target (`RuntimeTarget::Default` = the
+/// process-default engine). each target gets its own warm session so a
+/// per-environment engine doesn't thrash the default engine's session.
+static HANDLE_SLOTS: OnceCell<Mutex<HashMap<RuntimeTarget, Slot>>> = OnceCell::const_new();
 
-/// returns a live handle for `runner_host`, spawning the actor on first call or
-/// after a previous session for that host tore down (engine restart, panic in
+/// returns a live handle for `target`, spawning the actor on first call or
+/// after a previous session for that target tore down (engine restart, panic in
 /// the connect closure).
-async fn current(runner_host: &Option<String>) -> Result<Arc<SessionHandle>> {
+async fn current(target: &RuntimeTarget) -> Result<Arc<SessionHandle>> {
     let map = HANDLE_SLOTS
         .get_or_init(|| async { Mutex::new(HashMap::new()) })
         .await;
@@ -146,7 +146,7 @@ async fn current(runner_host: &Option<String>) -> Result<Arc<SessionHandle>> {
     // concurrent invalidation that retired this spawn's lineage.
     let (spawn_fut, generation) = {
         let mut guard = map.lock().await;
-        let slot = guard.entry(runner_host.clone()).or_insert_with(|| Slot {
+        let slot = guard.entry(target.clone()).or_insert_with(|| Slot {
             handle: None,
             spawning: None,
             generation: 0,
@@ -161,9 +161,9 @@ async fn current(runner_host: &Option<String>) -> Result<Arc<SessionHandle>> {
             s
         } else {
             // the one hardcoded backend-selection point.
-            let host = runner_host.clone();
+            let owned_target = target.clone();
             let fut: BoxFuture<'static, Result<Arc<SessionHandle>>> =
-                crate::backends::dagger::spawn(host).boxed();
+                crate::backends::dagger::spawn(owned_target).boxed();
             let shared = fut.shared();
             slot.spawning = Some(shared.clone());
             shared
@@ -174,7 +174,7 @@ async fn current(runner_host: &Option<String>) -> Result<Arc<SessionHandle>> {
     let result = spawn_fut.await;
 
     let mut guard = map.lock().await;
-    if let Some(slot) = guard.get_mut(runner_host) {
+    if let Some(slot) = guard.get_mut(target) {
         finish_spawn(slot, generation, result.as_ref().ok());
     }
     result
@@ -194,15 +194,15 @@ fn finish_spawn(slot: &mut Slot, started_generation: u64, handle: Option<&Arc<Se
 }
 
 /// submit a request and await the reply.
-pub(crate) async fn submit<T, F>(runner_host: Option<String>, build: F) -> Result<T>
+pub(crate) async fn submit<T, F>(target: RuntimeTarget, build: F) -> Result<T>
 where
     F: FnMut(oneshot::Sender<Result<T>>) -> SessionMsg,
 {
-    submit_with_attempts(&runner_host, build, MAX_SUBMIT_ATTEMPTS).await
+    submit_with_attempts(&target, build, MAX_SUBMIT_ATTEMPTS).await
 }
 
 async fn submit_with_attempts<T, F>(
-    runner_host: &Option<String>,
+    target: &RuntimeTarget,
     mut build: F,
     max_attempts: usize,
 ) -> Result<T>
@@ -210,7 +210,7 @@ where
     F: FnMut(oneshot::Sender<Result<T>>) -> SessionMsg,
 {
     for attempt in 1..=max_attempts {
-        match attempt_once(runner_host, &mut build).await {
+        match attempt_once(target, &mut build).await {
             Attempt::Done(result) => {
                 if attempt > 1 && result.is_ok() {
                     tracing::info!(attempt, "sandbox request recovered on a fresh session");
@@ -258,12 +258,12 @@ enum Attempt<T> {
 
 /// run one acquire -> send -> await-reply cycle. each failure stage classifies
 /// itself as retryable or terminal; the caller owns the attempt bound and logging.
-async fn attempt_once<T, F>(runner_host: &Option<String>, build: &mut F) -> Attempt<T>
+async fn attempt_once<T, F>(target: &RuntimeTarget, build: &mut F) -> Attempt<T>
 where
     F: FnMut(oneshot::Sender<Result<T>>) -> SessionMsg,
 {
     let (reply_tx, reply_rx) = oneshot::channel();
-    let handle = match current(runner_host).await {
+    let handle = match current(target).await {
         Ok(handle) => handle,
         // the request never left, so a fresh acquire is always side-effect-free.
         Err(err) if is_engine_unreachable(&err) => {
@@ -280,7 +280,7 @@ where
     let operation = msg.operation();
     if let Err(err) = handle.send(msg).await {
         // the actor closed before accepting the message: drop it and retry fresh.
-        invalidate_current(runner_host, &handle, &err).await;
+        invalidate_current(target, &handle, &err).await;
         return Attempt::Retry {
             reason: RetryReason::ClosedSession,
             err,
@@ -299,7 +299,7 @@ where
     match result {
         Ok(value) => Attempt::Done(Ok(value)),
         Err(err) => {
-            invalidate_current_on_engine_error(runner_host, &handle, &err).await;
+            invalidate_current_on_engine_error(target, &handle, &err).await;
             match retry_reason(operation, &err) {
                 Some(reason) => Attempt::Retry {
                     reason,
@@ -349,17 +349,17 @@ fn log_retry(
 }
 
 async fn invalidate_current_on_engine_error(
-    runner_host: &Option<String>,
+    target: &RuntimeTarget,
     handle: &Arc<SessionHandle>,
     err: &SandboxError,
 ) {
     if let SandboxError::EngineUnreachable { .. } = err {
-        invalidate_current(runner_host, handle, err).await;
+        invalidate_current(target, handle, err).await;
     }
 }
 
 async fn invalidate_current(
-    runner_host: &Option<String>,
+    target: &RuntimeTarget,
     handle: &Arc<SessionHandle>,
     err: &SandboxError,
 ) {
@@ -367,7 +367,7 @@ async fn invalidate_current(
         return;
     };
     let mut guard = map.lock().await;
-    if let Some(slot) = guard.get_mut(runner_host)
+    if let Some(slot) = guard.get_mut(target)
         && clear_if_current(slot, handle)
     {
         tracing::warn!(error_code = err.code(), error = %err, "dropping stale sandbox session");

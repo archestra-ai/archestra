@@ -6,7 +6,6 @@ import { APP_DATA_MAX_ENTRIES, APP_DATA_MAX_VALUE_BYTES } from "@/types/app";
 import AppModel from "./app";
 import AppDataModel from "./app-data";
 import AppTeamModel from "./app-team";
-import AppToolModel from "./app-tool";
 import AppVersionModel from "./app-version";
 
 describe("AppModel.create", () => {
@@ -128,24 +127,6 @@ describe("AppVersionModel.computeContentHash", () => {
       uiPermissions: null,
     });
     expect(a).not.toBe(b);
-  });
-});
-
-describe("AppToolModel.isToolAllowed", () => {
-  test("is fail-closed for unassigned tools", async ({
-    makeApp,
-    makeTool,
-    makeAppTool,
-  }) => {
-    const app = await makeApp();
-    const tool = await makeTool({ name: "allowed-tool" });
-    expect(await AppToolModel.isToolAllowed(app.id, "allowed-tool")).toBe(
-      false,
-    );
-
-    await makeAppTool(app.id, tool.id);
-    expect(await AppToolModel.isToolAllowed(app.id, "allowed-tool")).toBe(true);
-    expect(await AppToolModel.isToolAllowed(app.id, "other")).toBe(false);
   });
 });
 

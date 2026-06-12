@@ -5,8 +5,6 @@ import type { InsertAppTool } from "@/types/app";
 
 /**
  * Tool attachments for apps, mirroring `AgentToolModel` with the app as owner.
- * `isToolAllowed` is the per-app allowlist gate consulted (fail-closed) before
- * an app may call an upstream/assigned tool.
  */
 class AppToolModel {
   /** Tools attached to an app. */
@@ -36,28 +34,6 @@ class AppToolModel {
         eq(schema.appToolsTable.toolId, schema.toolsTable.id),
       )
       .where(eq(schema.appToolsTable.appId, appId));
-  }
-
-  /** Fail-closed allowlist check: is a tool with this name attached to the app? */
-  static async isToolAllowed(
-    appId: string,
-    toolName: string,
-  ): Promise<boolean> {
-    const [match] = await db
-      .select({ id: schema.appToolsTable.id })
-      .from(schema.appToolsTable)
-      .innerJoin(
-        schema.toolsTable,
-        eq(schema.appToolsTable.toolId, schema.toolsTable.id),
-      )
-      .where(
-        and(
-          eq(schema.appToolsTable.appId, appId),
-          eq(schema.toolsTable.name, toolName),
-        ),
-      )
-      .limit(1);
-    return match !== undefined;
   }
 
   static async findToolIdsByApp(appId: string): Promise<string[]> {

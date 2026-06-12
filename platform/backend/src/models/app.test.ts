@@ -16,7 +16,6 @@ describe("AppModel.create", () => {
 
     const head = await AppVersionModel.findByAppAndVersion(app.id, 1);
     expect(head?.html).toBe("<h1>hi</h1>");
-    expect(head?.uiCsp).toBeNull();
   });
 
   test("returns null on a name conflict in the same shared namespace", async ({
@@ -25,7 +24,7 @@ describe("AppModel.create", () => {
     const first = await makeApp({ name: "Dup", scope: "org" });
     const dup = await AppModel.create({
       app: { name: "Dup", scope: "org", organizationId: first.organizationId },
-      payload: { html: "<p/>", uiCsp: null, uiPermissions: null },
+      payload: { html: "<p/>", uiPermissions: null },
     });
     expect(dup).toBeNull();
   });
@@ -48,7 +47,7 @@ describe("AppModel.create", () => {
         authorId: b.id,
         organizationId: first.organizationId,
       },
-      payload: { html: "<p/>", uiCsp: null, uiPermissions: null },
+      payload: { html: "<p/>", uiPermissions: null },
     });
     expect(second).not.toBeNull();
   });
@@ -69,7 +68,7 @@ describe("AppModel.update", () => {
     const app = await makeApp({ html: "<h1>v1</h1>" });
     const updated = await AppModel.update({
       id: app.id,
-      version: { html: "<h1>v2</h1>", uiCsp: null, uiPermissions: null },
+      version: { html: "<h1>v2</h1>", uiPermissions: null },
     });
     expect(updated?.latestVersion).toBe(2);
     const v2 = await AppVersionModel.findByAppAndVersion(app.id, 2);
@@ -82,7 +81,7 @@ describe("AppModel.update", () => {
     const app = await makeApp({ html: "<h1>same</h1>" });
     const updated = await AppModel.update({
       id: app.id,
-      version: { html: "<h1>same</h1>", uiCsp: null, uiPermissions: null },
+      version: { html: "<h1>same</h1>", uiPermissions: null },
     });
     expect(updated?.latestVersion).toBe(1);
   });
@@ -100,23 +99,21 @@ describe("AppModel.delete (soft)", () => {
         scope: "org",
         organizationId: app.organizationId,
       },
-      payload: { html: "<p/>", uiCsp: null, uiPermissions: null },
+      payload: { html: "<p/>", uiPermissions: null },
     });
     expect(recreated).not.toBeNull();
   });
 });
 
 describe("AppVersionModel.computeContentHash", () => {
-  test("is stable across CSP key ordering", () => {
+  test("is stable across permission key ordering", () => {
     const a = AppVersionModel.computeContentHash({
       html: "<p/>",
-      uiCsp: { connectDomains: ["https://a"], resourceDomains: ["https://b"] },
-      uiPermissions: null,
+      uiPermissions: { camera: {}, clipboardWrite: {} },
     });
     const b = AppVersionModel.computeContentHash({
       html: "<p/>",
-      uiCsp: { resourceDomains: ["https://b"], connectDomains: ["https://a"] },
-      uiPermissions: null,
+      uiPermissions: { clipboardWrite: {}, camera: {} },
     });
     expect(a).toBe(b);
   });
@@ -124,12 +121,10 @@ describe("AppVersionModel.computeContentHash", () => {
   test("differs when html differs", () => {
     const a = AppVersionModel.computeContentHash({
       html: "<p>1</p>",
-      uiCsp: null,
       uiPermissions: null,
     });
     const b = AppVersionModel.computeContentHash({
       html: "<p>2</p>",
-      uiCsp: null,
       uiPermissions: null,
     });
     expect(a).not.toBe(b);

@@ -581,3 +581,13 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @Wanbogang
 - @GautamBytes
 - @AbhiGupta1310
+- @aurockk
+- @katkream
+- @inamaya591-a11y
+- @sherifmak
+- @Aniket-022
+- @Swately
+- @moshahin19841984-coder
+- @codewithzubair07
+- @seedlord
+- @artisavaliya000-beep

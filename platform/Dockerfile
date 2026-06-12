@@ -343,7 +343,7 @@ COPY docker/scripts/docker-banner.sh /app/docker-banner.sh
 COPY docker/scripts/docker-entrypoint.sh /docker-entrypoint.sh
 # slim Dagger Engine manifest (rendered in the dagger-manifest stage above)
 # applied into the embedded KinD cluster in quickstart mode; backs the skill
-# sandbox / code runtime (archestra__run_python).
+# sandbox / code runtime (archestra__run_command and friends).
 COPY --from=dagger-manifest /dagger-engine.quickstart.yaml /app/dagger-engine.quickstart.yaml
 # engine image baked in (kind-loaded into the node at boot to avoid a registry pull)
 COPY --from=dagger-engine-image /dagger-engine.tar /app/dagger-engine.tar

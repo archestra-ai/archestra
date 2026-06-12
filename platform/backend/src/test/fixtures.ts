@@ -421,7 +421,6 @@ async function makeApp(
     },
     payload: {
       html: html ?? "<!doctype html><title>test app</title>",
-      uiCsp: null,
       uiPermissions: null,
     },
     teamIds,
@@ -443,7 +442,6 @@ async function makeAppVersion(
       html:
         html ??
         `<!doctype html><title>v ${crypto.randomUUID().substring(0, 8)}</title>`,
-      uiCsp: null,
       uiPermissions: null,
     },
   });

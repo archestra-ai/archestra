@@ -72,7 +72,7 @@ describe("formatSkillActivation", () => {
     );
   });
 
-  test("points the model at read_skill_file and the sandbox tools", () => {
+  test("points the model at load_skill and the sandbox tools", () => {
     const result = formatSkillActivation({
       skill: {
         name: "Research",
@@ -85,7 +85,7 @@ describe("formatSkillActivation", () => {
       canRunSandbox: true,
     });
 
-    expect(result).toContain("read_skill_file");
+    expect(result).toContain("load_skill");
     expect(result).toContain("run_command");
     expect(result).toContain("download_file");
     expect(result).toContain("upload_file");
@@ -94,7 +94,7 @@ describe("formatSkillActivation", () => {
     expect(result).not.toMatch(/not executed/i);
   });
 
-  test("mentions read_skill_file but omits sandbox tools when unavailable", () => {
+  test("mentions load_skill but omits sandbox tools when unavailable", () => {
     const result = formatSkillActivation({
       skill: {
         name: "Research",
@@ -107,7 +107,7 @@ describe("formatSkillActivation", () => {
       canRunSandbox: false,
     });
 
-    expect(result).toContain("read_skill_file");
+    expect(result).toContain("load_skill");
     expect(result).not.toContain("run_command");
     expect(result).not.toContain("download_file");
     expect(result).not.toContain("upload_file");
@@ -126,7 +126,7 @@ describe("formatSkillActivation", () => {
       canRunSandbox: true,
     });
 
-    expect(result).not.toContain("read_skill_file");
+    expect(result).not.toContain("load_skill");
     expect(result).not.toContain("run_command");
   });
 
@@ -273,6 +273,45 @@ describe("formatSkillActivation", () => {
     const out = neutralizeFrameTags(hostile);
     expect(performance.now() - start).toBeLessThan(200);
     expect(out).toBe(hostile);
+  });
+
+  // The assertions above pin the conditional structure (which blocks appear
+  // when). These snapshots pin the exact model-facing wording, so a drift away
+  // from the skill terminology glossary fails CI the way a tool-description edit
+  // already does.
+  test("pins the full activation text with the sandbox hint", () => {
+    expect(
+      formatSkillActivation({
+        skill: {
+          name: "Research",
+          content: "Do research.",
+          compatibility: "Python 3.11",
+          allowedTools: "slack__send jira__create",
+          templated: false,
+        },
+        files: [
+          { path: "references/REF.md", kind: "reference" },
+          { path: "scripts/run.py", kind: "script" },
+        ],
+        canRunSandbox: true,
+      }),
+    ).toMatchSnapshot();
+  });
+
+  test("pins the full activation text without the sandbox hint", () => {
+    expect(
+      formatSkillActivation({
+        skill: {
+          name: "Research",
+          content: "Do research.",
+          compatibility: null,
+          allowedTools: null,
+          templated: false,
+        },
+        files: [{ path: "scripts/run.py", kind: "script" }],
+        canRunSandbox: false,
+      }),
+    ).toMatchSnapshot();
   });
 });
 

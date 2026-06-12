@@ -62,19 +62,17 @@ export const InsertAppSchema = createInsertSchema(schema.appsTable, {
   deletedAt: true,
 });
 
-// uiCsp/uiPermissions are nullable columns (null → host default / no perms), so
-// the overrides keep that nullability — a verbatim override would otherwise drop it.
+// uiPermissions is a nullable column (null → no perms), so the override keeps
+// that nullability — a verbatim override would otherwise drop it.
 export const SelectAppVersionSchema = createSelectSchema(
   schema.appVersionsTable,
   {
-    uiCsp: AppUiCspSchema.nullable(),
     uiPermissions: AppUiPermissionsSchema.nullable(),
   },
 );
 export const InsertAppVersionSchema = createInsertSchema(
   schema.appVersionsTable,
   {
-    uiCsp: AppUiCspSchema.nullable().optional(),
     uiPermissions: AppUiPermissionsSchema.nullable().optional(),
   },
 ).omit({ id: true, createdAt: true });

@@ -1,6 +1,6 @@
 import {
   ADMIN_ROLE_NAME,
-  TOOL_ACTIVATE_SKILL_SHORT_NAME,
+  TOOL_LOAD_SKILL_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
 } from "@archestra/shared";
@@ -832,8 +832,8 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
     const { AgentModel } = await import("@/models");
     await AgentModel.update(agentId, { systemPrompt: "You are helpful." });
     mockGetChatMcpTools.mockResolvedValue({
-      [archestraMcpBranding.getToolName(TOOL_ACTIVATE_SKILL_SHORT_NAME)]: {
-        description: "Activate a skill",
+      [archestraMcpBranding.getToolName(TOOL_LOAD_SKILL_SHORT_NAME)]: {
+        description: "Load a skill",
         inputSchema: { jsonSchema: { type: "object", properties: {} } },
       },
     });
@@ -879,7 +879,7 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
       },
       files: [],
     });
-    // beforeEach resets getChatMcpTools to {}, so no activate_skill is exposed
+    // beforeEach resets getChatMcpTools to {}, so no load_skill is exposed
     mockStreamText.mockClear();
 
     const response = await app.inject({
@@ -1209,6 +1209,16 @@ const EMPTY_STREAM_EVENTS = [
   { type: "start" },
   { type: "finish", finishReason: "stop" },
 ];
+// Gemini MALFORMED_FUNCTION_CALL shape: a clean finish with unified "error",
+// the raw provider reason, and no content or error parts.
+const MALFORMED_FUNCTION_CALL_STREAM_EVENTS = [
+  { type: "start" },
+  {
+    type: "finish",
+    finishReason: "error",
+    rawFinishReason: "MALFORMED_FUNCTION_CALL",
+  },
+];
 const RENDERABLE_STREAM_EVENTS = [
   { type: "text-delta", text: "hi" },
   { type: "finish", finishReason: "stop" },
@@ -1333,6 +1343,40 @@ describe("POST /api/chat empty-response retry", () => {
 
     expect(mockStreamText).toHaveBeenCalledTimes(2);
     expect(capturedOuterErrorPayload).toBeUndefined();
+  });
+
+  test("retries an empty error finish (malformed tool call), then streams the renderable one", async ({
+    expect,
+  }) => {
+    mockStreamText
+      .mockImplementationOnce(() =>
+        fakeStreamResult(MALFORMED_FUNCTION_CALL_STREAM_EVENTS),
+      )
+      .mockImplementationOnce(() => fakeStreamResult(RENDERABLE_STREAM_EVENTS));
+
+    const response = await postMessage();
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+
+    expect(mockStreamText).toHaveBeenCalledTimes(2);
+    expect(capturedOuterErrorPayload).toBeUndefined();
+  });
+
+  test("surfaces an EmptyResponse stream error after exhausting retries on error finishes", async ({
+    expect,
+  }) => {
+    mockStreamText.mockImplementation(() =>
+      fakeStreamResult(MALFORMED_FUNCTION_CALL_STREAM_EVENTS),
+    );
+
+    const response = await postMessage();
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+
+    expect(mockStreamText).toHaveBeenCalledTimes(3);
+    expect(capturedOuterErrorPayload).toBeDefined();
+    const payload = JSON.parse(capturedOuterErrorPayload ?? "{}");
+    expect(payload.code).toBe("empty_response");
   });
 
   test("surfaces an EmptyResponse stream error after exhausting retries", async ({

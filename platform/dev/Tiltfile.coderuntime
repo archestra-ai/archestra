@@ -1,4 +1,5 @@
-# code execution runtime — the Dagger Engine that backs the archestra__run_python tool.
+# code execution runtime — the Dagger Engine that backs the sandbox tools
+# (archestra__run_command / upload_file / download_file).
 #
 # deployed through the dagger-runtime companion chart with network policies
 # disabled, because the backend runs on the developer machine and reaches dagger

@@ -120,7 +120,7 @@ describe("resolveEffectiveSkillVersion", () => {
       userId: user.id,
       conversationId: conversation.id,
     });
-    // mounted version wins — activation/read_skill_file/slash all see v1.
+    // mounted version wins — load_skill (with or without a path) and slash all see v1.
     expect(inConversation?.version).toBe(1);
     expect(inConversation?.content).toBe("# v1");
 

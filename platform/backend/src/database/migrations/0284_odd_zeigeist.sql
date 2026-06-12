@@ -1,0 +1,1 @@
+ALTER TABLE "organization" ADD COLUMN "allow_tool_auto_assignment" boolean DEFAULT true NOT NULL;

@@ -448,6 +448,11 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetOrganization]: {},
   [RouteId.CompleteOnboarding]: {},
 
+  // Connection setup: resource-level checks (mcpGateway/llmProxy read access,
+  // skill admin) are conditional on what the setup includes and enforced in
+  // the route handler. The script GET is public (token-authenticated).
+  [RouteId.CreateConnectionSetup]: {},
+
   // Generic agent CRUD routes - enforcement is handled dynamically in route handlers
   // based on agentType (agent, mcp_gateway, llm_proxy map to agent, mcpGateway, llmProxy resources)
   [RouteId.GetAgents]: {},
@@ -478,6 +483,7 @@ export const requiredEndpointPermissionsMap: Partial<
   },
   // Tool-assignment routes: agent-type update checked dynamically in handler
   [RouteId.AssignToolToAgent]: {},
+  [RouteId.GrantToolToAgent]: {},
   [RouteId.BulkAssignTools]: {},
   [RouteId.BulkUpdateAgentTools]: {
     toolPolicy: ["update"],
@@ -745,6 +751,9 @@ export const requiredEndpointPermissionsMap: Partial<
     log: ["read"],
   },
   [RouteId.StreamChat]: {
+    chat: ["read"],
+  },
+  [RouteId.ResolveChatMcpElicitation]: {
     chat: ["read"],
   },
   [RouteId.StopChatStream]: {

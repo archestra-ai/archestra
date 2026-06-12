@@ -56,8 +56,8 @@ const ALLOWED_PERMISSION_KEYS = [
  * the MCP App SDK itself (the platform injects `window.archestra` — see
  * app-sdk-injection.ts). Soft structural issues come back as `warnings` (the
  * save succeeds); they ride the create/update responses so authors — human or
- * model — see them. `uiCsp` is always persisted as null: the serve path pins
- * {@link APP_PLATFORM_CSP} and ignores the column.
+ * model — see them. Versions carry no CSP: the serve path always pins
+ * {@link APP_PLATFORM_CSP}.
  */
 export function buildValidatedVersionPayload(params: {
   html: string;
@@ -77,7 +77,6 @@ export function buildValidatedVersionPayload(params: {
   return {
     payload: {
       html: params.html,
-      uiCsp: null,
       uiPermissions: validateAppUiPermissions(params.uiPermissions ?? null),
     },
     warnings,

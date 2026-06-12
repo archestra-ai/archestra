@@ -64,6 +64,11 @@ import { deriveAuthMethod } from "@/utils/auth-method";
 import { buildMcpClientInfo } from "@/utils/mcp-client-info";
 import { previewToolResultContent } from "@/utils/tool-result-preview";
 import { K8sAttachTransport } from "./k8s-attach-transport";
+import {
+  configureMcpElicitation,
+  type McpElicitationHandler,
+  withMcpElicitationCapability,
+} from "./mcp-elicitation";
 
 const MCP_CLIENT_EXTENSION_CAPABILITIES = {
   ...MCP_APPS_CLIENT_EXTENSION_CAPABILITIES,
@@ -336,6 +341,7 @@ class McpClient {
     options?: {
       conversationId?: string;
       identityProviderRedirectPath?: string;
+      elicitationHandler?: McpElicitationHandler;
     },
   ): Promise<CommonToolResult> {
     return this.executeToolCallForOwner(
@@ -360,6 +366,7 @@ class McpClient {
     options?: {
       conversationId?: string;
       identityProviderRedirectPath?: string;
+      elicitationHandler?: McpElicitationHandler;
     },
   ): Promise<CommonToolResult> {
     // Derive auth info for logging
@@ -482,6 +489,15 @@ class McpClient {
     if (externalIdpUserId) {
       connectionKey = `${connectionKey}:ext:${externalIdpUserId}`;
     }
+    if (options?.elicitationHandler) {
+      // Elicitation support is declared during MCP initialize. Keep these
+      // clients separate so a connection opened without the capability is not
+      // reused for a tool call that may receive elicitation/create requests.
+      // This intentionally keeps a second cached client per server/session
+      // when both interactive and non-interactive callers use the same MCP
+      // server.
+      connectionKey = `${connectionKey}:elicitation`;
+    }
 
     const executeToolCall = async (
       getTransport: () => Promise<Transport>,
@@ -535,6 +551,7 @@ class McpClient {
           transport,
           targetMcpServerId,
           serverState,
+          options?.elicitationHandler,
         );
 
         // Determine the actual tool name by stripping the server/catalog prefix.
@@ -906,7 +923,12 @@ class McpClient {
       catalogItem,
       targetMcpServerId,
     );
-    const concurrencyLimit = this.getConcurrencyLimit(transportKind);
+    // The MCP SDK stores request handlers on the client by method. Serialize
+    // elicitation-capable calls so a cached client's elicitation handler is
+    // not replaced while another tool call on the same connection is active.
+    const concurrencyLimit = options?.elicitationHandler
+      ? 1
+      : this.getConcurrencyLimit(transportKind);
 
     return this.connectionLimiter.runWithLimit(
       connectionKey,
@@ -946,6 +968,7 @@ class McpClient {
     transport: Transport,
     targetMcpServerId: string,
     currentServerState: CachedServerState,
+    elicitationHandler?: McpElicitationHandler,
   ): Promise<Client> {
     const effectiveServerState = this.withLatestCredentialFingerprint(
       connectionKey,
@@ -992,6 +1015,9 @@ class McpClient {
           this.activeConnectionLastValidatedAt.set(connectionKey, Date.now());
         }
         logger.debug({ connectionKey }, "Reusing cached MCP client");
+        if (elicitationHandler) {
+          configureMcpElicitation(reusableClient, elicitationHandler);
+        }
         this.activeConnections.set(connectionKey, reusableClient);
         this.activeConnectionServerState.set(
           connectionKey,
@@ -1023,16 +1049,22 @@ class McpClient {
     }
 
     // Create the client with UI extension capabilities
-    const capabilities: ClientCapabilitiesWithExtensions = {
+    const baseCapabilities: ClientCapabilitiesWithExtensions = {
       roots: { listChanged: true },
       extensions: MCP_CLIENT_EXTENSION_CAPABILITIES,
     };
+    const capabilities = elicitationHandler
+      ? withMcpElicitationCapability(baseCapabilities)
+      : baseCapabilities;
 
     // Create new client
     logger.info({ connectionKey }, "Creating new MCP client");
     const client = new Client(buildMcpClientInfo("archestra-platform"), {
       capabilities,
     });
+    if (elicitationHandler) {
+      configureMcpElicitation(client, elicitationHandler);
+    }
 
     // Track whether we're using a stored session ID (for stale session cleanup)
     const usedStoredSession =

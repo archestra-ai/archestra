@@ -22,13 +22,12 @@ describe("APP_PLATFORM_CSP", () => {
 });
 
 describe("buildValidatedVersionPayload", () => {
-  test("uiCsp persists as null — the serve path pins the platform CSP", () => {
+  test("assembles the payload — html and permissions only, no CSP", () => {
     const { payload, warnings } = buildValidatedVersionPayload({
       html: "<html><head></head><body><h1/></body></html>",
     });
     expect(payload).toEqual({
       html: "<html><head></head><body><h1/></body></html>",
-      uiCsp: null,
       uiPermissions: null,
     });
     expect(warnings).toEqual([]);

@@ -56,12 +56,12 @@ export async function buildSkillCatalogPrompt(params: {
     organizationId,
     agentId,
   }))
-    ? "Call activate_skill with one of these names to load its instructions. " +
-      "Activating a skill mounts it in your sandbox under /skills, so you can " +
+    ? "Call load_skill with one of these names to load its instructions. " +
+      "Loading a skill mounts it in your sandbox under /skills, so you can " +
       "then run its scripts or shell commands with run_command. A skill " +
-      "appears under /skills/<name> only after you activate it — an empty " +
+      "appears under /skills/<name> only after you load it — an empty " +
       "/skills listing does not mean the skill is unavailable."
-    : "Call activate_skill with one of these names to load its instructions.";
+    : "Call load_skill with one of these names to load its instructions.";
 
   return `<available_skills>\n${catalog}\n</available_skills>\n${instructions}`;
 }

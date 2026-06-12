@@ -27,8 +27,13 @@ import { CHATOPS_CHANNEL_AUTO_REPLY } from "./constants";
 
 const CHANNEL = "19:abc@thread.tacv2";
 const THREAD = "1700000000000";
+const TEAMS = {
+  provider: "ms-teams",
+  channelId: CHANNEL,
+  threadId: THREAD,
+} as const;
 
-describe("channel-activation (sticky team-channel auto-reply)", () => {
+describe("channel-activation (sticky channel auto-reply)", () => {
   beforeEach(() => {
     mockCache.clear();
     mockSetCalls.length = 0;
@@ -36,26 +41,45 @@ describe("channel-activation (sticky team-channel auto-reply)", () => {
   });
 
   test("a thread is inactive until it is marked active", async () => {
-    expect(await isChannelThreadActive(CHANNEL, THREAD)).toBe(false);
+    expect(await isChannelThreadActive(TEAMS)).toBe(false);
 
-    await markChannelThreadActive(CHANNEL, THREAD);
+    await markChannelThreadActive(TEAMS);
 
-    expect(await isChannelThreadActive(CHANNEL, THREAD)).toBe(true);
+    expect(await isChannelThreadActive(TEAMS)).toBe(true);
   });
 
   test("activation is scoped per (channel, thread)", async () => {
-    await markChannelThreadActive(CHANNEL, THREAD);
+    await markChannelThreadActive(TEAMS);
 
     // Same channel, different thread → still inactive (mention must be per-thread).
-    expect(await isChannelThreadActive(CHANNEL, "other-thread")).toBe(false);
+    expect(
+      await isChannelThreadActive({ ...TEAMS, threadId: "other-thread" }),
+    ).toBe(false);
     // Different channel, same thread id → independent.
-    expect(await isChannelThreadActive("19:other@thread.tacv2", THREAD)).toBe(
+    expect(
+      await isChannelThreadActive({
+        ...TEAMS,
+        channelId: "19:other@thread.tacv2",
+      }),
+    ).toBe(false);
+  });
+
+  test("activation is scoped per provider", async () => {
+    await markChannelThreadActive(TEAMS);
+
+    // Same channel/thread ids under a different provider → independent.
+    expect(await isChannelThreadActive({ ...TEAMS, provider: "slack" })).toBe(
       false,
+    );
+
+    await markChannelThreadActive({ ...TEAMS, provider: "slack" });
+    expect(await isChannelThreadActive({ ...TEAMS, provider: "slack" })).toBe(
+      true,
     );
   });
 
   test("marking active writes with the configured TTL", async () => {
-    await markChannelThreadActive(CHANNEL, THREAD);
+    await markChannelThreadActive(TEAMS);
 
     expect(mockSetCalls).toHaveLength(1);
     const [key, value, ttl] = mockSetCalls[0];

@@ -2,6 +2,7 @@ import type { UIMessageChunk } from "ai";
 import { eq } from "drizzle-orm";
 import { vi } from "vitest";
 import db, { schema } from "@/database";
+import { ConversationModel } from "@/models";
 import ActiveChatRunModel from "@/models/chat-active-run";
 import {
   ActiveChatRunService,
@@ -467,6 +468,110 @@ test("reapStaleRuns fails runs past the stale cutoff", async ({
   );
 });
 
+test("startStopPolling aborts when the run row no longer exists", async ({
+  makeAgent,
+  makeConversation,
+  makeOrganization,
+  makeUser,
+}) => {
+  const user = await makeUser();
+  const organization = await makeOrganization();
+  const agent = await makeAgent({ organizationId: organization.id });
+  const conversation = await makeConversation(agent.id, {
+    userId: user.id,
+    organizationId: organization.id,
+  });
+  const run = await ActiveChatRunModel.create({
+    conversationId: conversation.id,
+    userId: user.id,
+    organizationId: organization.id,
+  });
+  const notifier = new InMemoryActiveChatRunNotifier();
+  const service = new ActiveChatRunService(notifier, 10_000, 20);
+  const abortController = new AbortController();
+  const stopPolling = service.startStopPolling({
+    runId: run?.id ?? "",
+    conversationId: conversation.id,
+    abortController,
+  });
+
+  // Deleting the conversation cascades the run row away. The stop poll observes
+  // the now-missing row and aborts, the same as DELETE waking it via notify.
+  await ConversationModel.delete(conversation.id, user.id, organization.id);
+  await notifier.notifyStop(run?.id ?? "");
+
+  await waitForAbort(abortController.signal);
+  stopPolling();
+});
+
+test("drainStreamToEvents stops cleanly when the run is deleted before a scheduled flush", async ({
+  makeAgent,
+  makeConversation,
+  makeOrganization,
+  makeUser,
+}) => {
+  const user = await makeUser();
+  const organization = await makeOrganization();
+  const agent = await makeAgent({ organizationId: organization.id });
+  const conversation = await makeConversation(agent.id, {
+    userId: user.id,
+    organizationId: organization.id,
+  });
+  const service = new ActiveChatRunService(
+    new InMemoryActiveChatRunNotifier(),
+    10_000,
+    10_000,
+  );
+  const run = await service.createRun({
+    conversationId: conversation.id,
+    userId: user.id,
+    organizationId: organization.id,
+  });
+
+  // One chunk then the stream stays open: the batcher schedules a timer flush
+  // rather than an immediate batch flush, so the flush fires only after the
+  // conversation is deleted out from under the drain.
+  let sourceCancelled = false;
+  const stream = new ReadableStream<UIMessageChunk>({
+    start(controller) {
+      controller.enqueue({ type: "start" });
+    },
+    cancel() {
+      sourceCancelled = true;
+    },
+  });
+  const abortController = new AbortController();
+
+  const rejections: unknown[] = [];
+  const onRejection = (reason: unknown) => rejections.push(reason);
+  process.on("unhandledRejection", onRejection);
+
+  try {
+    service.drainStreamToEvents({
+      runId: run?.id ?? "",
+      conversationId: conversation.id,
+      stream,
+      abortController,
+      getTerminalStatus: async () => ({ status: "completed" }),
+    });
+
+    await ConversationModel.delete(conversation.id, user.id, organization.id);
+
+    // The scheduled flush sees run_missing, so the drain aborts the chat and
+    // cancels the source instead of leaving a process-level unhandled rejection.
+    // These waits throw if the controlled run-gone path does not run.
+    await waitForCondition(() => abortController.signal.aborted, 3_000);
+    await waitForCondition(() => sourceCancelled, 1_000);
+    // Brief settle so any stray rejection surfaces before we stop listening.
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  } finally {
+    process.off("unhandledRejection", onRejection);
+  }
+
+  expect(rejections).toEqual([]);
+  expect(await ActiveChatRunModel.findById(run?.id ?? "")).toBeNull();
+});
+
 function createChunkStream(
   payloads: UIMessageChunk[],
 ): ReadableStream<UIMessageChunk> {
@@ -516,4 +621,19 @@ async function waitForAbort(signal: AbortSignal): Promise<void> {
   }
 
   throw new Error("Active chat run was not aborted");
+}
+
+async function waitForCondition(
+  predicate: () => boolean,
+  timeoutMs: number,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (predicate()) {
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+
+  throw new Error("Condition was not met within timeout");
 }

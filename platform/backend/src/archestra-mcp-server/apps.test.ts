@@ -168,7 +168,7 @@ describe("app tool execution", () => {
     expect(result.isError).toBe(true);
   });
 
-  test("an html-only update preserves the existing permissions and keeps uiCsp null", async () => {
+  test("an html-only update preserves the existing permissions", async () => {
     const created = await executeArchestraTool(
       getArchestraToolFullName(TOOL_CREATE_APP_SHORT_NAME),
       {
@@ -192,7 +192,6 @@ describe("app tool execution", () => {
       structured(updated).latestVersion as number,
     );
     expect(head?.uiPermissions).toEqual({ camera: {} });
-    expect(head?.uiCsp).toBeNull();
   });
 
   test("create seeds from a template when html is omitted", async () => {

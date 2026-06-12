@@ -77,9 +77,16 @@ export function useSignInWithEmailMutation() {
         return null;
       }
 
+      // Accounts with 2FA enabled get a pending session that must be
+      // completed on /auth/two-factor before any redirect.
+      if (data && "twoFactorRedirect" in data && data.twoFactorRedirect) {
+        return { twoFactorRedirect: true as const, redirectUrl: null };
+      }
+
       await queryClient.invalidateQueries({ queryKey: authQueryKeys.all });
 
       return {
+        twoFactorRedirect: false as const,
         redirectUrl: data?.url ?? params.callbackURL ?? "/",
       };
     },

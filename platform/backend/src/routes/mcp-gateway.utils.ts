@@ -17,6 +17,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import {
   CallToolRequestSchema,
+  ElicitResultSchema,
   ListPromptsRequestSchema,
   ListResourcesRequestSchema,
   ListResourceTemplatesRequestSchema,
@@ -302,7 +303,7 @@ export async function createAgentServer(
 
   server.setRequestHandler(
     CallToolRequestSchema,
-    async ({ params: { name, arguments: args } }) => {
+    async ({ params: { name, arguments: args } }, extra) => {
       const startTime = Date.now();
       const mcpServerName = parseFullToolName(name).serverName ?? "unknown";
 
@@ -468,6 +469,27 @@ export async function createAgentServer(
               toolCall,
               agentId,
               tokenAuth,
+              {
+                elicitationHandler: async (request) => {
+                  try {
+                    return await extra.sendRequest(request, ElicitResultSchema);
+                  } catch (error) {
+                    logger.warn(
+                      {
+                        agentId,
+                        toolName: name,
+                        mode: request.params.mode ?? "form",
+                        error:
+                          error instanceof Error
+                            ? error.message
+                            : String(error),
+                      },
+                      "MCP elicitation request was not completed by caller",
+                    );
+                    throw error;
+                  }
+                },
+              },
             );
             span.setAttribute(ATTR_MCP_IS_ERROR_RESULT, r.isError ?? false);
             return r;

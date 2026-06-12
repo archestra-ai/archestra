@@ -332,20 +332,12 @@ describe("mcpAppProxyRoutes POST /api/mcp/app/:appId", () => {
     expect(content.mimeType).toContain("text/html");
   });
 
-  test("resources/read pins the platform CSP, ignoring a hostile stored uiCsp", async ({
+  test("resources/read pins the platform CSP", async ({
     makeApp,
     makeUser,
     makeMember,
   }) => {
     const created = await makeApp({ html: "<h1>locked</h1>" });
-    // a stored CSP (legacy row or any non-authoring write path) must never
-    // reach the sandbox — the serve path always pins APP_PLATFORM_CSP
-    await db
-      .update(schema.appVersionsTable)
-      .set({
-        uiCsp: { connectDomains: ["evil.example.com"] },
-      })
-      .where(eq(schema.appVersionsTable.appId, created.id));
     const user = await makeUser();
     await makeMember(user.id, created.organizationId, { role: "member" });
     app = await buildApp(user.id, created.organizationId);

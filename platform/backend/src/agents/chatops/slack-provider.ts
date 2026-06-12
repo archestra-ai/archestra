@@ -38,6 +38,10 @@ import {
   isSsoConfigured,
 } from "./auto-provision";
 import {
+  isChannelThreadActive,
+  markChannelThreadActive,
+} from "./channel-activation";
+import {
   CHATOPS_ATTACHMENT_LIMITS,
   CHATOPS_THREAD_HISTORY,
   SLACK_DEFAULT_CONNECTION_MODE,
@@ -275,14 +279,24 @@ class SlackProvider implements ChatOpsProvider {
     const text = event.text || "";
     const isThreadReply = Boolean(event.thread_ts);
     const isDM = event.channel_type === "im";
+    const threadTs = event.thread_ts || event.ts;
+    const hasBotMention =
+      event.type === "app_mention" ||
+      Boolean(this.botUserId && text.includes(`<@${this.botUserId}>`));
 
-    // In channels (including thread replies), only respond when the bot is
-    // @mentioned (app_mention event or message text containing <@BOT_ID>).
-    // DMs are always processed without requiring a mention.
+    // Channel auto-reply gate: in channels the bot stays quiet until
+    // @mentioned (app_mention event or message text containing <@BOT_ID>),
+    // then keeps replying to that thread without further mentions until the
+    // activation TTL lapses. DMs are always processed without a mention.
     if (!isDM) {
-      const hasBotMention =
-        this.botUserId && text.includes(`<@${this.botUserId}>`);
-      if (event.type !== "app_mention" && !hasBotMention) {
+      const activation = {
+        provider: this.providerId,
+        channelId: event.channel,
+        threadId: threadTs,
+      };
+      if (hasBotMention) {
+        await markChannelThreadActive(activation);
+      } else if (!(await isChannelThreadActive(activation))) {
         return null;
       }
     }
@@ -292,10 +306,36 @@ class SlackProvider implements ChatOpsProvider {
       return null;
     }
 
-    const threadTs = event.thread_ts || event.ts;
-
     // Download file attachments if present
     const attachments = await this.downloadSlackFiles(event.files);
+
+    // Resolve display names in one LRU-cached batch: the sender (so prompts
+    // say "ildar", not "U0966V5MTM4"), the bot itself (so the agent
+    // recognizes messages addressing it by name, e.g. "Ildestra how are
+    // you?"), and OTHER people @mentioned in the message — a message
+    // @mentioning someone else is most likely addressed to them.
+    const mentionedOtherIds = [
+      ...new Set(
+        [...text.matchAll(/<@([A-Z0-9]+)>/g)]
+          .map((match) => match[1])
+          .filter((id) => id !== this.botUserId),
+      ),
+    ];
+    const idsToResolve = [
+      ...(event.user ? [event.user] : []),
+      ...(!isDM && this.botUserId ? [this.botUserId] : []),
+      ...(!isDM ? mentionedOtherIds : []),
+    ];
+    const names = idsToResolve.length
+      ? await this.resolveUserNames([...new Set(idsToResolve)])
+      : new Map<string, string>();
+    const senderName = event.user
+      ? (names.get(event.user) ?? event.user)
+      : "Unknown User";
+    const botName = this.botUserId ? (names.get(this.botUserId) ?? null) : null;
+    const mentionedOthers = !isDM
+      ? mentionedOtherIds.map((id) => names.get(id) ?? id)
+      : [];
 
     return {
       messageId: event.ts,
@@ -303,7 +343,7 @@ class SlackProvider implements ChatOpsProvider {
       workspaceId: body.team_id || null,
       threadId: threadTs,
       senderId: event.user || "unknown",
-      senderName: event.user || "Unknown User",
+      senderName,
       text: cleanedText,
       rawText: text,
       timestamp: new Date(Number.parseFloat(event.ts) * 1000),
@@ -311,6 +351,17 @@ class SlackProvider implements ChatOpsProvider {
       metadata: {
         eventType: event.type,
         channelType: event.channel_type,
+        // Lets the manager frame group conversations for the agent
+        // ("personal", "groupChat", or "channel") and tell it whether it
+        // was addressed — same vocabulary as the MS Teams provider.
+        conversationType: isDM
+          ? "personal"
+          : event.channel_type === "mpim"
+            ? "groupChat"
+            : "channel",
+        botMentioned: hasBotMention,
+        ...(botName && botName !== this.botUserId && { botName }),
+        ...(mentionedOthers.length > 0 && { mentionedOthers }),
       },
       ...(attachments.length > 0 && { attachments }),
     };
@@ -1135,6 +1186,25 @@ class SlackProvider implements ChatOpsProvider {
       logger.debug(
         { error: errorMessage(error) },
         "[SlackProvider] setTypingStatus failed (non-fatal)",
+      );
+    }
+  }
+
+  async clearTypingStatus(channelId: string, threadTs: string): Promise<void> {
+    if (!this.client) return;
+    try {
+      // Slack clears the assistant status when an empty string is set. Without
+      // this, a deliberate no-reply leaves "is thinking..." spinning forever —
+      // Slack only auto-clears the status when a message is posted.
+      await this.client.assistant.threads.setStatus({
+        channel_id: channelId,
+        thread_ts: threadTs,
+        status: "",
+      });
+    } catch (error) {
+      logger.debug(
+        { error: errorMessage(error) },
+        "[SlackProvider] clearTypingStatus failed (non-fatal)",
       );
     }
   }

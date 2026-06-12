@@ -2,9 +2,8 @@ import {
   APP_ARCHESTRA_TOOL_SHORT_NAMES,
   ARCHESTRA_MCP_CATALOG_ID,
   getArchestraToolFullName,
-  TOOL_ACTIVATE_SKILL_FULL_NAME,
   TOOL_CREATE_SKILL_FULL_NAME,
-  TOOL_READ_SKILL_FILE_FULL_NAME,
+  TOOL_LOAD_SKILL_FULL_NAME,
 } from "@archestra/shared";
 import { getArchestraMcpTools } from "@/archestra-mcp-server";
 import config from "@/config";
@@ -194,8 +193,7 @@ describe("Archestra Tools Dynamic Assignment", () => {
     expect(count).toBe(2);
 
     const skillToolNames = [
-      TOOL_ACTIVATE_SKILL_FULL_NAME,
-      TOOL_READ_SKILL_FILE_FULL_NAME,
+      TOOL_LOAD_SKILL_FULL_NAME,
       TOOL_CREATE_SKILL_FULL_NAME,
     ];
     for (const agentId of [agentA.id, agentB.id]) {
@@ -225,8 +223,7 @@ describe("Archestra Tools Dynamic Assignment", () => {
     const names = (await ToolModel.getMcpToolsByAgent(gateway.id)).map(
       (t) => t.name,
     );
-    expect(names).toContain(TOOL_ACTIVATE_SKILL_FULL_NAME);
-    expect(names).toContain(TOOL_READ_SKILL_FILE_FULL_NAME);
+    expect(names).toContain(TOOL_LOAD_SKILL_FULL_NAME);
   });
 
   test("backfillSkillToolsToOrgAgents is idempotent", async ({
@@ -257,9 +254,7 @@ describe("Archestra Tools Dynamic Assignment", () => {
     await ToolModel.backfillSkillToolsToOrgAgents(orgA.id);
 
     const toolsB = await ToolModel.getMcpToolsByAgent(agentB.id);
-    expect(toolsB.map((t) => t.name)).not.toContain(
-      TOOL_ACTIVATE_SKILL_FULL_NAME,
-    );
+    expect(toolsB.map((t) => t.name)).not.toContain(TOOL_LOAD_SKILL_FULL_NAME);
   });
 
   test("backfillSkillToolsToOrgAgents skips soft-deleted agents", async ({
@@ -284,7 +279,7 @@ describe("Archestra Tools Dynamic Assignment", () => {
     expect(count).toBe(1);
     const activeTools = await ToolModel.getMcpToolsByAgent(activeAgent.id);
     expect(activeTools.map((tool) => tool.name)).toContain(
-      TOOL_ACTIVATE_SKILL_FULL_NAME,
+      TOOL_LOAD_SKILL_FULL_NAME,
     );
 
     const deletedToolIds = await AgentToolModel.findToolIdsByAgent(
@@ -304,9 +299,7 @@ describe("Archestra Tools Dynamic Assignment", () => {
     await ToolModel.assignSkillToolsToAgent(agent.id, org.id);
 
     const tools = await ToolModel.getMcpToolsByAgent(agent.id);
-    expect(tools.map((t) => t.name)).not.toContain(
-      TOOL_ACTIVATE_SKILL_FULL_NAME,
-    );
+    expect(tools.map((t) => t.name)).not.toContain(TOOL_LOAD_SKILL_FULL_NAME);
   });
 
   test("assignSkillToolsToAgent assigns when org flag is on", async ({
@@ -323,8 +316,7 @@ describe("Archestra Tools Dynamic Assignment", () => {
     const names = (await ToolModel.getMcpToolsByAgent(agent.id)).map(
       (t) => t.name,
     );
-    expect(names).toContain(TOOL_ACTIVATE_SKILL_FULL_NAME);
-    expect(names).toContain(TOOL_READ_SKILL_FILE_FULL_NAME);
+    expect(names).toContain(TOOL_LOAD_SKILL_FULL_NAME);
   });
 
   test("backfillNewSkillToolsToEnabledOrgs backfills agents of opted-in orgs when a skill tool first appears", async ({

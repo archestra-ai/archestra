@@ -140,6 +140,7 @@ import {
 } from "./swap-agent-boundary";
 import { TodoWriteTool } from "./todo-write-tool";
 import { ToolErrorLogsButton } from "./tool-error-logs-button";
+import { ToolGrantApprovalCard } from "./tool-grant-approval-card";
 import { ToolStatusRow } from "./tool-status-row";
 
 interface ChatMessagesProps {
@@ -312,6 +313,7 @@ export function ChatMessages({
   const session = conversationId ? getSession(conversationId) : null;
   const earlyToolUiStarts = session?.earlyToolUiStarts || {};
   const contextCompaction = session?.contextCompaction;
+  const hasPendingMcpElicitation = Boolean(session?.pendingMcpElicitation);
 
   // Debounce resize mode change when exiting edit mode to let DOM settle
   const isEditing = editingPartKey !== null;
@@ -1376,7 +1378,7 @@ export function ChatMessages({
               }
               feedback={contextCompactionFeedback}
             />
-            {isResponseInProgress && (
+            {isResponseInProgress && !hasPendingMcpElicitation && (
               <div className="absolute bottom-[-10] left-0">
                 <Message from="assistant">
                   <img
@@ -1701,6 +1703,7 @@ const MessageTool = memo(
     const runToolInput =
       getToolShortName(toolName) === TOOL_RUN_TOOL_SHORT_NAME
         ? (part.input as {
+            tool_name?: string;
             tool_args?: Record<string, unknown>;
           } | null)
         : null;
@@ -2010,7 +2013,17 @@ const MessageTool = memo(
           {isApprovalRequested &&
             onToolApprovalResponse &&
             "approval" in part &&
-            part.approval?.id && (
+            part.approval?.id &&
+            (runToolInput?.tool_name && agentId ? (
+              // run_tool targeting a tool the agent may not have yet — propose
+              // granting it (assign + run) rather than a bare approve/deny.
+              <ToolGrantApprovalCard
+                targetToolName={runToolInput.tool_name}
+                agentId={agentId}
+                approvalId={part.approval.id}
+                onRespond={onToolApprovalResponse}
+              />
+            ) : (
               <ToolStatusRow
                 icon={
                   <ClockIcon className="mt-0.5 size-4 flex-none text-amber-600" />
@@ -2042,7 +2055,7 @@ const MessageTool = memo(
                   },
                 ]}
               />
-            )}
+            ))}
           {errorText && !authToolBody ? (
             <ToolErrorDetails errorText={errorText} />
           ) : null}

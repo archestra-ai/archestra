@@ -272,7 +272,7 @@ describe("appRoutes /api/apps", () => {
     expect(conflict.statusCode).toBe(409);
   });
 
-  test("create ignores a supplied uiCsp — versions persist null", async ({
+  test("create ignores a stray uiCsp body key (apps carry no author CSP)", async ({
     makeUser,
     makeOrganization,
     makeMember,
@@ -282,8 +282,8 @@ describe("appRoutes /api/apps", () => {
     await makeMember(user.id, org.id, { role: ADMIN_ROLE_NAME });
     app = await buildApp(user.id, org.id);
 
-    // uiCsp is no longer an authoring field: the body schema strips it and the
-    // version persists null (the serve path pins the platform CSP).
+    // uiCsp is not an authoring field: the body schema strips it and the serve
+    // path pins the platform CSP.
     const response = await app.inject({
       method: "POST",
       url: "/api/apps",
@@ -300,7 +300,7 @@ describe("appRoutes /api/apps", () => {
       created.id,
       created.latestVersion,
     );
-    expect(head?.uiCsp).toBeNull();
+    expect(head).not.toBeNull();
   });
 
   test("a user cannot GET an app belonging to another organization", async ({

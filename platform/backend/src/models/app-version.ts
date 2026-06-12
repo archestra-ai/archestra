@@ -1,12 +1,11 @@
 import { createHash } from "node:crypto";
 import { and, desc, eq } from "drizzle-orm";
 import db, { schema, type Transaction } from "@/database";
-import type { AppUiCsp, AppUiPermissions, AppVersion } from "@/types/app";
+import type { AppUiPermissions, AppVersion } from "@/types/app";
 
 /** The canonical, hashable payload of an app version. */
 export interface VersionPayload {
   html: string;
-  uiCsp: AppUiCsp | null;
   uiPermissions: AppUiPermissions | null;
 }
 
@@ -28,13 +27,13 @@ function stableStringify(value: unknown): string {
 
 /**
  * Owns immutable app version snapshots (`app_versions`). A version is forked by
- * `AppModel` whenever an edit changes the canonical payload (html + csp +
+ * `AppModel` whenever an edit changes the canonical payload (html +
  * permissions); this model handles the writes and the head/specific lookups
  * that resolve which artifact a runtime should serve.
  */
 class AppVersionModel {
   /**
-   * sha256 over the canonical payload (html + CSP + permissions). Two edits that
+   * sha256 over the canonical payload (html + permissions). Two edits that
    * produce identical artifacts hash equal, which is how `AppModel` suppresses
    * no-op version forks.
    */
@@ -42,8 +41,6 @@ class AppVersionModel {
     const hash = createHash("sha256");
     hash.update("html\0");
     hash.update(payload.html);
-    hash.update("\0csp\0");
-    hash.update(stableStringify(payload.uiCsp ?? null));
     hash.update("\0permissions\0");
     hash.update(stableStringify(payload.uiPermissions ?? null));
     return hash.digest("hex");
@@ -65,7 +62,6 @@ class AppVersionModel {
         appId: params.appId,
         version: params.version,
         html: params.payload.html,
-        uiCsp: params.payload.uiCsp,
         uiPermissions: params.payload.uiPermissions,
         contentHash: params.contentHash,
       })

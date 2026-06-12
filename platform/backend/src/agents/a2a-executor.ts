@@ -3,7 +3,7 @@ import {
   buildUserSystemPromptContext,
   type InteractionSource,
   PLAYWRIGHT_MCP_CATALOG_ID,
-  TOOL_ACTIVATE_SKILL_SHORT_NAME,
+  TOOL_LOAD_SKILL_SHORT_NAME,
 } from "@archestra/shared";
 import type { ModelMessage, UIMessage, UserContent } from "ai";
 import {
@@ -244,10 +244,9 @@ export async function executeA2AMessage(
     });
 
     // eagerly list the agent's skills in the prompt — autonomous runs have no
-    // human to type a slash command — but only when the agent can activate them.
+    // human to type a slash command — but only when the agent can load them.
     if (
-      archestraMcpBranding.getToolName(TOOL_ACTIVATE_SKILL_SHORT_NAME) in
-      mcpTools
+      archestraMcpBranding.getToolName(TOOL_LOAD_SKILL_SHORT_NAME) in mcpTools
     ) {
       const skillCatalogPrompt = await buildSkillCatalogPrompt({
         organizationId,

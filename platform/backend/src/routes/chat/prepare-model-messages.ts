@@ -148,11 +148,13 @@ function prepareMessagesForProvider(params: {
   }
 
   if (provider === "bedrock") {
-    return messages.map((message) =>
-      ensureBedrockMessageHasContent(
-        ensureBedrockUserMessageHasTextPart(message),
-      ),
-    );
+    return messages
+      .map(normalizeBedrockMessageFileParts)
+      .map((message) =>
+        ensureBedrockMessageHasContent(
+          ensureBedrockUserMessageHasTextPart(message),
+        ),
+      );
   }
 
   return messages;
@@ -193,6 +195,23 @@ function normalizeAnthropicMessageFileParts(message: ChatMessage): ChatMessage {
   let changed = false;
   const parts = message.parts.map((part) => {
     const normalizedPart = normalizeAnthropicFilePart(part);
+    if (normalizedPart !== part) {
+      changed = true;
+    }
+    return normalizedPart;
+  });
+
+  return changed ? { ...message, parts } : message;
+}
+
+function normalizeBedrockMessageFileParts(message: ChatMessage): ChatMessage {
+  if (!message.parts?.length) {
+    return message;
+  }
+
+  let changed = false;
+  const parts = message.parts.map((part) => {
+    const normalizedPart = normalizeBedrockFilePart(part);
     if (normalizedPart !== part) {
       changed = true;
     }
@@ -375,6 +394,32 @@ function isAnthropicTextDocumentMimeType(mediaType: string): boolean {
     mediaType === "application/vnd.ms-excel" ||
     mediaType === "application/json"
   );
+}
+
+function normalizeBedrockFilePart(part: ChatMessagePart): ChatMessagePart {
+  if (
+    part.type !== "file" ||
+    typeof part.mediaType !== "string" ||
+    !isBedrockTextNormalizableMimeType(part.mediaType)
+  ) {
+    return part;
+  }
+
+  return {
+    ...part,
+    mediaType: "text/plain",
+    url: normalizeDataUrlMediaType({
+      url: typeof part.url === "string" ? part.url : undefined,
+      fromMediaType: part.mediaType,
+      toMediaType: "text/plain",
+    }),
+  };
+}
+
+// MIMEs that contain text content but aren't in Bedrock's natively supported
+// document list — normalize to text/plain so the AI SDK can relay them.
+function isBedrockTextNormalizableMimeType(mediaType: string): boolean {
+  return mediaType === "application/json" || mediaType === "application/csv";
 }
 
 function normalizeDataUrlMediaType(params: {

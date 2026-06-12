@@ -405,6 +405,57 @@ describe("prepareMessagesForProvider", () => {
 
     expect(messages[0]).toBe(message);
   });
+
+  it("normalizes application/json files to text/plain for bedrock", () => {
+    const messages = __prepareTest.prepareMessagesForProvider({
+      provider: "bedrock",
+      messages: [
+        {
+          role: "user",
+          parts: [
+            { type: "text", text: "review this" },
+            {
+              type: "file",
+              mediaType: "application/json",
+              filename: "data.json",
+              url: "data:application/json;base64,eyJhIjoxfQ==",
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(messages[0].parts?.find((p) => p.type === "file")).toMatchObject({
+      type: "file",
+      mediaType: "text/plain",
+      filename: "data.json",
+      url: "data:text/plain;base64,eyJhIjoxfQ==",
+    });
+  });
+
+  it("leaves bedrock pdf files unchanged after normalization", () => {
+    const message = {
+      role: "user" as const,
+      parts: [
+        { type: "text", text: "Summarize this" },
+        {
+          type: "file",
+          mediaType: "application/pdf",
+          filename: "report.pdf",
+          url: "data:application/pdf;base64,JVBERi0=",
+        },
+      ],
+    };
+
+    const messages = __prepareTest.prepareMessagesForProvider({
+      provider: "bedrock",
+      messages: [message],
+    });
+
+    expect(messages[0].parts?.find((p) => p.type === "file")).toMatchObject({
+      mediaType: "application/pdf",
+    });
+  });
 });
 
 describe("buildModelMessagesForProvider", () => {

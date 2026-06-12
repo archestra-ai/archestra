@@ -3,7 +3,7 @@
 import { E2eTestId } from "@archestra/shared";
 import type { ColumnDef } from "@tanstack/react-table";
 import { formatDistanceToNow } from "date-fns";
-import { Copy, Eye, Plus, Shield, Trash2, UserCog } from "lucide-react";
+import { Copy, Eye, Gauge, Plus, Shield, Trash2, UserCog } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
@@ -392,6 +392,12 @@ function MembersTab({
                     },
                   ]
                 : []),
+              {
+                icon: <Gauge className="h-4 w-4" />,
+                label: "Manage limits",
+                permissions: { llmLimit: ["read"] },
+                href: `/llm/limits?appliedTo=user&entityId=${member.userId}`,
+              },
               {
                 icon: <Trash2 className="h-4 w-4" />,
                 label: "Remove user",

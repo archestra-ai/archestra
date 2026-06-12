@@ -5,6 +5,7 @@ import type { ColumnDef } from "@tanstack/react-table";
 import {
   Building2,
   Edit,
+  Gauge,
   Info,
   Key,
   Network,
@@ -184,6 +185,7 @@ export default function LimitsPage() {
   const statusFilter = searchParams.get("status") || "all";
   const appliedToFilter = searchParams.get("appliedTo") || "all";
   const modelFilter = searchParams.get("model") || "all";
+  const entityIdFilter = searchParams.get("entityId") || "all";
   const [editingLimit, setEditingLimit] = useState<LimitData | null>(null);
   const [limitToDelete, setLimitToDelete] = useState<LimitData | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -209,9 +211,28 @@ export default function LimitsPage() {
 
   const handleCreateOpen = useCallback(() => {
     setEditingLimit(null);
-    setFormState(DEFAULT_FORM_STATE);
+    const initialEntityType = appliedToFilter !== "all" ? (appliedToFilter as LimitFormEntityType) : "organization";
+    const initialEntityId = entityIdFilter !== "all" ? entityIdFilter : "";
+    setFormState({
+      entityType: initialEntityType,
+      entityId: initialEntityId,
+      limitValue: "",
+      cleanupInterval: DEFAULT_LIMIT_CLEANUP_INTERVAL,
+      models: [],
+      isAllModels: true,
+    });
     setIsDialogOpen(true);
-  }, []);
+  }, [appliedToFilter, entityIdFilter]);
+
+  // Handle 'create' URL parameter to open the Add Limit dialog
+  const createFromUrl = searchParams.get("create") === "true";
+  useEffect(() => {
+    if (createFromUrl) {
+      handleCreateOpen();
+      // Remove the 'create' parameter from URL after opening the dialog
+      updateQueryParams({ create: null });
+    }
+  }, [createFromUrl, handleCreateOpen, updateQueryParams]);
 
   useEffect(() => {
     setActionButton(
@@ -375,8 +396,10 @@ export default function LimitsPage() {
         modelFilter === "all" ||
         (Array.isArray(limit.model) && limit.model.includes(modelFilter)) ||
         isAllModelsLimit;
+      const matchesEntityId =
+        entityIdFilter === "all" || limit.entityId === entityIdFilter;
 
-      return matchesStatus && matchesAppliedTo && matchesModel;
+      return matchesStatus && matchesAppliedTo && matchesModel && matchesEntityId;
     });
   }, [
     appliedToFilter,
@@ -386,6 +409,7 @@ export default function LimitsPage() {
     getUsageStatus,
     agents,
     llmProxies,
+    entityIdFilter,
   ]);
 
   const columns = useMemo<ColumnDef<LimitData>[]>(
@@ -563,7 +587,8 @@ export default function LimitsPage() {
   const hasActiveFilters =
     statusFilter !== "all" ||
     appliedToFilter !== "all" ||
-    modelFilter !== "all";
+    modelFilter !== "all" ||
+    entityIdFilter !== "all";
   const shouldShowDefaultUserLimitNotice =
     formState.entityType === "user" && !!organization?.defaultUserLimitValue;
 
@@ -697,7 +722,7 @@ export default function LimitsPage() {
           hasActiveFilters={hasActiveFilters}
           filteredEmptyMessage="No limits match your filters. Try adjusting your search."
           onClearFilters={() => {
-            updateQueryParams({ status: null, appliedTo: null, model: null });
+            updateQueryParams({ status: null, appliedTo: null, model: null, entityId: null });
           }}
         />
       </LoadingWrapper>

@@ -46,6 +46,7 @@ type LimitViolationResponse = [
   metadata?: {
     entityType: LimitEntityType;
     limitType: "token_cost";
+    entityId?: string;
   },
 ];
 
@@ -1287,7 +1288,7 @@ Please contact your administrator to increase the limit or wait for the usage to
   return [
     `${archestraMetadata}\n${contentMessage}`,
     contentMessage,
-    { entityType: params.entityType, limitType: "token_cost" },
+    { entityType: params.entityType, limitType: "token_cost", entityId: params.entityId },
   ];
 }
 

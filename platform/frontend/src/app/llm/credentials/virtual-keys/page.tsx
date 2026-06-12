@@ -8,6 +8,7 @@ import {
 } from "@archestra/shared";
 import type { ColumnDef } from "@tanstack/react-table";
 import {
+  Gauge,
   Globe,
   Key,
   Loader2,
@@ -187,6 +188,12 @@ export default function VirtualKeysPage() {
                 icon: <Pencil className="h-4 w-4" />,
                 label: "Edit",
                 onClick: () => setEditingKey(row.original),
+              },
+              {
+                icon: <Gauge className="h-4 w-4" />,
+                label: "Manage limits",
+                permissions: { llmLimit: ["read"] },
+                href: `/llm/limits?appliedTo=virtual_key&entityId=${row.original.id}`,
               },
               {
                 icon: <Trash2 className="h-4 w-4" />,

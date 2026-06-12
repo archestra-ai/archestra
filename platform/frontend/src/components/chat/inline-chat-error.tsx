@@ -12,6 +12,8 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+import Link from "next/link";
+import { Badge } from "@/components/ui/badge";
 import { Message, MessageContent } from "@/components/ai-elements/message";
 import { Button } from "@/components/ui/button";
 import {
@@ -108,6 +110,149 @@ export function InlineChatError({
       slimChatErrorUi ? "Error details copied" : "Debug info copied",
     );
   };
+
+  if (isUsageLimitExceeded) {
+    if (slimChatErrorUi) {
+      return (
+        <Message from="assistant">
+          <MessageContent className="bg-orange-500/5 border border-orange-500/20 rounded-lg">
+            <div className="flex items-start gap-2">
+              <StatusIcon
+                className={`h-4 w-4 mt-0.5 flex-shrink-0 text-orange-600`}
+              />
+              <div className="flex-1 space-y-2">
+                <p className="text-sm text-foreground">
+                  {supportMessage ? supportMessage : chatError.message}
+                </p>
+
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  {refEntries.map((entry) => (
+                    <span
+                      key={entry.label}
+                      className="inline-flex items-center gap-1 rounded bg-muted/60 px-1.5 py-0.5 text-[11px] text-muted-foreground font-mono"
+                    >
+                      <span className="opacity-60">{entry.label}</span>
+                      <span>{entry.value}</span>
+                    </span>
+                  ))}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-5 w-5 p-0 text-muted-foreground hover:text-foreground"
+                    onClick={copyDebugInfo}
+                    aria-label="Copy error details"
+                    title="Copy error details"
+                  >
+                    <Copy className="h-3 w-3" />
+                  </Button>
+                </div>
+                {isAdmin && (
+                  <div className="pt-1">
+                    <Button asChild size="sm" variant="outline" className="h-7 text-xs border-orange-500/30 hover:bg-orange-500/10 hover:text-orange-600">
+                      <Link href={`/llm/limits?appliedTo=${chatError.usageLimitEntityType || "all"}&entityId=${chatError.usageLimitEntityId || ""}&status=danger`}>
+                        Manage Limits
+                      </Link>
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </div>
+          </MessageContent>
+        </Message>
+      );
+    }
+
+    return (
+      <Message from="assistant">
+        <MessageContent className="bg-orange-500/5 border border-orange-500/20 rounded-lg p-4">
+          <div className="flex items-start gap-3">
+            <div className="rounded-full bg-orange-500/10 p-2 text-orange-600">
+              <Gauge className="h-5 w-5 flex-shrink-0" />
+            </div>
+            <div className="flex-1 space-y-2 min-w-0">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <h4 className="text-sm font-semibold text-foreground">
+                  Usage Limit Exceeded
+                </h4>
+                <Badge variant="outline" className="bg-orange-500/10 text-orange-600 border-orange-500/30 text-[10px] uppercase font-bold">
+                  {chatError.usageLimitEntityType?.replace(/_/g, " ") || "Usage"} Limit
+                </Badge>
+              </div>
+              <p className="text-sm text-muted-foreground whitespace-pre-wrap leading-relaxed">
+                {supportMessage ? supportMessage : chatError.message}
+              </p>
+              
+              <div className="flex items-center gap-2 pt-2">
+                {isAdmin && (
+                  <Button asChild size="sm" variant="outline" className="h-8 text-xs border-orange-500/30 hover:bg-orange-500/10 hover:text-orange-600">
+                    <Link href={`/llm/limits?appliedTo=${chatError.usageLimitEntityType || "all"}&entityId=${chatError.usageLimitEntityId || ""}&status=danger`}>
+                      Manage Limits
+                    </Link>
+                  </Button>
+                )}
+                
+                {isAdmin && (
+                  <Collapsible open={isDetailsOpen} onOpenChange={setIsDetailsOpen}>
+                    <CollapsibleTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 p-0 px-2 text-xs text-muted-foreground hover:text-foreground"
+                      >
+                        {isDetailsOpen ? (
+                          <ChevronDown className="h-3 w-3 mr-1" />
+                        ) : (
+                          <ChevronRight className="h-3 w-3 mr-1" />
+                        )}
+                        Error Details
+                      </Button>
+                    </CollapsibleTrigger>
+                  </Collapsible>
+                )}
+              </div>
+
+              {isAdmin && isDetailsOpen && (
+                <div className="space-y-2 mt-2 pt-2 border-t border-border/50">
+                  <div className="flex items-center gap-2">
+                    <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-muted text-muted-foreground">
+                      {chatError.code}
+                    </span>
+                  </div>
+                  {chatError.originalError && (
+                    <pre className="max-h-48 overflow-auto rounded-md bg-muted/50 p-3 text-xs font-mono whitespace-pre-wrap break-words text-foreground">
+                      {formatOriginalError(chatError.originalError)}
+                    </pre>
+                  )}
+                </div>
+              )}
+              
+              <div className="flex items-center gap-1.5 flex-wrap pt-1">
+                {refEntries.map((entry) => (
+                  <span
+                    key={entry.label}
+                    className="inline-flex items-center gap-1 rounded bg-muted/60 px-1.5 py-0.5 text-[11px] text-muted-foreground font-mono"
+                  >
+                    <span className="opacity-60">{entry.label}</span>
+                    <span>{entry.value}</span>
+                  </span>
+                ))}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-5 w-5 p-0 text-muted-foreground hover:text-foreground"
+                  onClick={copyDebugInfo}
+                  aria-label="Copy error details"
+                  title="Copy error details"
+                >
+                  <Copy className="h-3 w-3" />
+                </Button>
+              </div>
+            </div>
+          </div>
+        </MessageContent>
+      </Message>
+    );
+  }
 
   if (slimChatErrorUi) {
     return (

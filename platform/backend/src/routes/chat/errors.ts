@@ -318,7 +318,7 @@ function extractArchestraInternalCode(
 
 function extractUsageLimitError(
   responseBody: string | undefined,
-): { entityType?: string } | null {
+): { entityType?: string; entityId?: string } | null {
   if (!responseBody) return null;
   try {
     const parsed = JSON.parse(responseBody);
@@ -329,6 +329,10 @@ function extractUsageLimitError(
       entityType:
         typeof parsed.error.usage_limit?.entity_type === "string"
           ? parsed.error.usage_limit.entity_type
+          : undefined,
+      entityId:
+        typeof parsed.error.usage_limit?.entity_id === "string"
+          ? parsed.error.usage_limit.entity_id
           : undefined,
     };
   } catch {
@@ -1562,7 +1566,7 @@ function createErrorResponse(
   originalMessage: string,
   errorType: string | undefined,
   rawError: unknown,
-  usageLimitError?: { entityType?: string } | null,
+  usageLimitError?: { entityType?: string; entityId?: string } | null,
 ): ChatErrorResponse {
   const response: ChatErrorResponse = {
     code,
@@ -1581,6 +1585,7 @@ function createErrorResponse(
   if (usageLimitError) {
     response.usageLimitExceeded = true;
     response.usageLimitEntityType = usageLimitError.entityType;
+    response.usageLimitEntityId = usageLimitError.entityId;
   }
   return response;
 }
@@ -1833,6 +1838,7 @@ export function sanitizeChatErrorForFrontend(
   if (error.usageLimitExceeded) {
     sanitized.usageLimitExceeded = true;
     sanitized.usageLimitEntityType = error.usageLimitEntityType;
+    sanitized.usageLimitEntityId = error.usageLimitEntityId;
   }
   return sanitized;
 }

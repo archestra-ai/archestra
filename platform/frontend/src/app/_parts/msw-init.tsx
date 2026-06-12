@@ -34,6 +34,49 @@ export function MswInit({ children }: { children: React.ReactNode }) {
   return <MswInitInner>{children}</MswInitInner>;
 }
 
+// Singleton: React strict mode double-invokes the mount effect, and two
+// concurrent worker.start() calls make the loser throw "cannot configure an
+// already enabled network" — skipping the registry replay, so the app could
+// mount with base handlers while the test's overrides were still pending.
+// Both effect runs must await the same end-to-end initialization instead.
+let mswInitPromise: Promise<void> | null = null;
+
+function initMswOnce(): Promise<void> {
+  mswInitPromise ??= (async () => {
+    const [{ worker }, { isApiRequest }, msw, { buildHandler }] =
+      await Promise.all([
+        import("@/mocks/browser"),
+        import("@/mocks/match"),
+        import("msw"),
+        import("@/mocks/build-handler"),
+      ]);
+    await worker.start({
+      // Strict mode: any unmocked API request is tracked and asserted at
+      // test teardown. Non-API requests (Next.js internals, telemetry,
+      // fonts, source maps) silently bypass — they aren't the contract
+      // these tests verify. See src/mocks/match.ts for the predicate.
+      onUnhandledRequest(req) {
+        if (!isApiRequest(req.url)) return;
+        window.__archestraUnhandledRequests ??= [];
+        window.__archestraUnhandledRequests.push(`${req.method} ${req.url}`);
+      },
+      serviceWorker: { url: "/mockServiceWorker.js" },
+    });
+    await applyOverridesFromRegistry(worker, msw, buildHandler);
+    // The Playwright `MswControl` fixture calls these after every
+    // use(...) / reset(). Apply pushes a single handler — no
+    // reset-and-replay, because that would resurrect `once: true`
+    // handlers MSW had already consumed.
+    window.__archestraApplyMswOverride = async (override) => {
+      worker.use(buildHandler(msw, override.url, override));
+    };
+    window.__archestraResetMswOverrides = () => {
+      worker.resetHandlers();
+    };
+  })();
+  return mswInitPromise;
+}
+
 function MswInitInner({ children }: { children: React.ReactNode }) {
   const [ready, setReady] = useState(false);
 
@@ -41,38 +84,7 @@ function MswInitInner({ children }: { children: React.ReactNode }) {
     let cancelled = false;
     void (async () => {
       try {
-        const [{ worker }, { isApiRequest }, msw, { buildHandler }] =
-          await Promise.all([
-            import("@/mocks/browser"),
-            import("@/mocks/match"),
-            import("msw"),
-            import("@/mocks/build-handler"),
-          ]);
-        await worker.start({
-          // Strict mode: any unmocked API request is tracked and asserted at
-          // test teardown. Non-API requests (Next.js internals, telemetry,
-          // fonts, source maps) silently bypass — they aren't the contract
-          // these tests verify. See src/mocks/match.ts for the predicate.
-          onUnhandledRequest(req) {
-            if (!isApiRequest(req.url)) return;
-            window.__archestraUnhandledRequests ??= [];
-            window.__archestraUnhandledRequests.push(
-              `${req.method} ${req.url}`,
-            );
-          },
-          serviceWorker: { url: "/mockServiceWorker.js" },
-        });
-        await applyOverridesFromRegistry(worker, msw, buildHandler);
-        // The Playwright `MswControl` fixture calls these after every
-        // use(...) / reset(). Apply pushes a single handler — no
-        // reset-and-replay, because that would resurrect `once: true`
-        // handlers MSW had already consumed.
-        window.__archestraApplyMswOverride = async (override) => {
-          worker.use(buildHandler(msw, override.url, override));
-        };
-        window.__archestraResetMswOverrides = () => {
-          worker.resetHandlers();
-        };
+        await initMswOnce();
       } catch (e) {
         // Surface the failure loudly so the test harness sees it. Without
         // this, a service-worker registration error would leave the page in

@@ -47,7 +47,7 @@ import {
   CONNECTION_SETUP_SCRIPT_PREFIX,
   SKILL_MARKETPLACE_PREFIX,
 } from "../route-paths";
-import { deriveMarketplaceName } from "../skill-share";
+import { deriveMarketplaceName } from "../skill-share/skill-share.routes";
 
 /** Providers each scriptable client can be wired to (mirrors the wizard UI). */
 const CLIENT_SUPPORTED_PROVIDERS: Record<

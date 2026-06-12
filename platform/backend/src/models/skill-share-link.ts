@@ -208,12 +208,21 @@ class SkillShareLinkModel {
     return rows.map((r) => r.id);
   }
 
-  /** Idempotent: revoking an already-revoked link is a no-op. */
+  /**
+   * Idempotent: revoking an already-revoked link is a no-op.
+   * With `tx`, the revoke commits (or rolls back) with the caller's work —
+   * used by rotation, where the new link must replace the old one atomically.
+   * With `onlyIfUnrevoked`, an already-revoked link matches nothing and
+   * returns null — rotation uses this as a single-shot claim, so a replayed
+   * or concurrent rotate of the same link cannot mint a second replacement.
+   */
   static async revoke(params: {
     id: string;
     organizationId: string;
+    tx?: Transaction;
+    onlyIfUnrevoked?: boolean;
   }): Promise<SkillShareLink | null> {
-    const [updated] = await db
+    const [updated] = await (params.tx ?? db)
       .update(schema.skillShareLinksTable)
       .set({
         revokedAt: sql`COALESCE(${schema.skillShareLinksTable.revokedAt}, NOW())`,
@@ -222,6 +231,9 @@ class SkillShareLinkModel {
         and(
           eq(schema.skillShareLinksTable.id, params.id),
           eq(schema.skillShareLinksTable.organizationId, params.organizationId),
+          ...(params.onlyIfUnrevoked
+            ? [isNull(schema.skillShareLinksTable.revokedAt)]
+            : []),
         ),
       )
       .returning();

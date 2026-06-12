@@ -550,6 +550,7 @@ export const RouteId = {
   GetSkillShareLinks: "getSkillShareLinks",
   CreateSkillShareLink: "createSkillShareLink",
   RevokeSkillShareLink: "revokeSkillShareLink",
+  RotateSkillShareLink: "rotateSkillShareLink",
 
   // Connection Setup Routes
   CreateConnectionSetup: "createConnectionSetup",

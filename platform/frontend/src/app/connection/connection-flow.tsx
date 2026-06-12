@@ -1,21 +1,14 @@
 "use client";
 
-import { isSupportedProvider, type SupportedProvider } from "@archestra/shared";
+import type { SupportedProvider } from "@archestra/shared";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useProfiles } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import config from "@/lib/config/config";
 import { ClientPicker } from "./client-grid";
 import { CONNECT_CLIENTS } from "./clients";
-import {
-  ConnectCommandStep,
-  type ConnectProxyAuth,
-  isScriptClient,
-} from "./connect-command-step";
-import { ConnectSkillsStep } from "./connect-skills-step";
 import {
   type ConnectionBaseUrl,
   resolveAdminDefaultBaseUrl,
@@ -31,7 +24,7 @@ import { SkillsMarketplaceStep } from "./skills-marketplace-step";
 import { StepCard, type StepState } from "./step-card";
 import { useUpdateUrlParams } from "./use-update-url-params";
 
-type OpenKey = "client" | "mcp" | "proxy" | "skills" | "connect";
+type OpenKey = "client" | "mcp" | "proxy" | "skills";
 
 interface ConnectionFlowProps {
   defaultMcpGatewayId?: string;
@@ -113,7 +106,6 @@ export function ConnectionFlow({
         initial.add("proxy");
         initial.add("skills");
       }
-      initial.add("connect");
     }
     return initial;
   });
@@ -136,10 +128,10 @@ export function ConnectionFlow({
     // Otherwise expand both steps so the full flow is visible.
     const toOpen: OpenKey[] =
       fromTable && urlGatewayId && !urlProxyId
-        ? ["mcp", "connect"]
+        ? ["mcp"]
         : fromTable && urlProxyId && !urlGatewayId
-          ? ["proxy", "connect"]
-          : ["mcp", "proxy", "skills", "connect"];
+          ? ["proxy"]
+          : ["mcp", "proxy", "skills"];
     setOpenSteps((s) => new Set<OpenKey>([...s, ...toOpen]));
   };
 
@@ -205,18 +197,6 @@ export function ConnectionFlow({
   });
 
   const selectedMcp = mcpGateways?.find((g) => g.id === effectiveMcpId);
-  const selectedProxy = llmProxies?.find((p) => p.id === effectiveProxyId);
-
-  // Script-capable clients get selection-only steps plus a final card that
-  // turns the selections into one `curl | bash` command.
-  const scriptClient = clientId !== null && isScriptClient(clientId);
-  // Passthrough by default: the script rewires the base URL and the user
-  // keeps their own provider credentials. "virtual-key" auto-provisions one.
-  const [proxyAuth, setProxyAuth] = useState<ConnectProxyAuth>("provider-key");
-  const [includeSkills, setIncludeSkills] = useState(false);
-  const urlProviderId = searchParams.get("providerId");
-  const selectedProvider: SupportedProvider | null =
-    urlProviderId && isSupportedProvider(urlProviderId) ? urlProviderId : null;
 
   const mcpState: StepState = !clientId
     ? "todo"
@@ -272,17 +252,7 @@ export function ConnectionFlow({
             ) : null
           }
         >
-          {client && selectedMcp && effectiveMcpId && scriptClient && (
-            <div className="rounded-lg border bg-muted/30 p-4 text-sm text-muted-foreground">
-              The setup command registers{" "}
-              <span className="font-medium text-foreground">
-                {selectedMcp.name}
-              </span>{" "}
-              in {client.label} with OAuth — no tokens to copy. Generate the
-              command in the last step.
-            </div>
-          )}
-          {client && selectedMcp && effectiveMcpId && !scriptClient && (
+          {client && selectedMcp && effectiveMcpId && (
             <McpClientInstructions
               client={client}
               gatewayId={effectiveMcpId}
@@ -332,38 +302,15 @@ export function ConnectionFlow({
           }
         >
           {client && effectiveProxyId && (
-            <div className="space-y-3">
-              {scriptClient && (
-                <div className="space-y-2">
-                  <Tabs
-                    value={proxyAuth}
-                    onValueChange={(v) => setProxyAuth(v as ConnectProxyAuth)}
-                  >
-                    <TabsList className="w-full">
-                      <TabsTrigger value="provider-key" className="flex-1">
-                        Your provider key
-                      </TabsTrigger>
-                      <TabsTrigger value="virtual-key" className="flex-1">
-                        Virtual key
-                      </TabsTrigger>
-                    </TabsList>
-                  </Tabs>
-                  <p className="text-sm text-muted-foreground">
-                    {proxyAuth === "provider-key"
-                      ? "Pick the provider to route through the proxy — the setup command rewires the base URL and you keep using your own API key or login."
-                      : "Pick the provider to route through the proxy — the setup command wires it up with a virtual key created for you."}
-                  </p>
-                </div>
-              )}
-              <ProxyClientInstructions
-                client={client}
-                profileId={effectiveProxyId}
-                profileName={selectedProxy?.name ?? ""}
-                shownProviders={shownProviders}
-                baseUrl={baseUrl}
-                selectionOnly={scriptClient}
-              />
-            </div>
+            <ProxyClientInstructions
+              client={client}
+              profileId={effectiveProxyId}
+              profileName={
+                llmProxies?.find((p) => p.id === effectiveProxyId)?.name ?? ""
+              }
+              shownProviders={shownProviders}
+              baseUrl={baseUrl}
+            />
           )}
           {client && !effectiveProxyId && (
             <div className="rounded-lg border border-dashed bg-muted/30 p-6 text-center text-sm text-muted-foreground">
@@ -380,60 +327,12 @@ export function ConnectionFlow({
         </StepCard>
       )}
 
-      {/* Step 4 — Skills. Non-script clients get the marketplace link UI;
-          script clients get a checkbox that folds skills into the command. */}
-      {!scriptClient && (
-        <SkillsMarketplaceStep
-          client={client}
-          expanded={isOpen("skills")}
-          onToggle={client ? () => toggleOne("skills") : undefined}
-        />
-      )}
-      {scriptClient && client && (
-        <ConnectSkillsStep
-          includeSkills={includeSkills}
-          onIncludeChange={setIncludeSkills}
-          expanded={isOpen("skills")}
-          onToggle={() => toggleOne("skills")}
-        />
-      )}
-
-      {/* Final step — one command that connects everything (script clients) */}
-      {scriptClient && client && (
-        <ConnectCommandStep
-          client={client}
-          baseUrl={baseUrl}
-          mcpGateway={
-            canReadMcpGateway && selectedMcp && effectiveMcpId
-              ? { id: effectiveMcpId, name: selectedMcp.name }
-              : null
-          }
-          llmProxy={
-            canReadLlmProxy &&
-            selectedProxy &&
-            effectiveProxyId &&
-            selectedProvider
-              ? {
-                  id: effectiveProxyId,
-                  name: selectedProxy.name,
-                  provider: selectedProvider,
-                }
-              : null
-          }
-          proxyAuth={proxyAuth}
-          proxyNeedsProvider={
-            !!(
-              canReadLlmProxy &&
-              selectedProxy &&
-              effectiveProxyId &&
-              !selectedProvider
-            )
-          }
-          includeSkills={includeSkills}
-          expanded={isOpen("connect")}
-          onToggle={() => toggleOne("connect")}
-        />
-      )}
+      {/* Step 4 — Skills marketplace (no-ops when feature off or non-admin) */}
+      <SkillsMarketplaceStep
+        client={client}
+        expanded={isOpen("skills")}
+        onToggle={client ? () => toggleOne("skills") : undefined}
+      />
     </div>
   );
 }

@@ -200279,6 +200279,13 @@
                         "additionalProperties": false
                       }
                     },
+                    "skippedFiles": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "description": "Resource paths not imported: oversized, beyond the per-skill file cap, or unfetchable"
+                    },
                     "sourceRef": {
                       "type": "string"
                     },
@@ -200296,6 +200303,7 @@
                     "templated",
                     "metadata",
                     "files",
+                    "skippedFiles",
                     "sourceRef",
                     "sourceCommit"
                   ],
@@ -200721,11 +200729,35 @@
                       "items": {
                         "type": "string"
                       }
+                    },
+                    "skippedFiles": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "skillPath": {
+                            "type": "string"
+                          },
+                          "files": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "required": [
+                          "skillPath",
+                          "files"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "description": "Per created skill, resource paths not imported: oversized, beyond the per-skill file cap, or unfetchable"
                     }
                   },
                   "required": [
                     "created",
-                    "skipped"
+                    "skipped",
+                    "skippedFiles"
                   ],
                   "additionalProperties": false
                 }

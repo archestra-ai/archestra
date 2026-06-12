@@ -168,9 +168,10 @@ archestra:
   envFrom: []
 
   # code execution runtime configuration.
-  # enables the archestra__run_python tool and points the backend at a Dagger
-  # runtime pod. The Python execution image remains a backend default;
-  # override ARCHESTRA_CODE_RUNTIME_IMAGE through archestra.env only when required.
+  # enables the sandbox tools (archestra__run_command / upload_file /
+  # download_file) and points the backend at a Dagger runtime pod. The
+  # execution image remains a backend default; override
+  # ARCHESTRA_DAGGER_RUNTIME_IMAGE through archestra.env only when required.
   codeRuntime:
     # enable or disable code execution runtime support.
     enabled: false

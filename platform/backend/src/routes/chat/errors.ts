@@ -1123,65 +1123,30 @@ type ParsedProviderError =
   | ParsedGeminiError
   | ParsedCohereError
   | ParsedZhipuaiError
+  | ParsedMinimaxError
   | ParsedBedrockError;
 
-type ErrorParser = (responseBody: string) => ParsedProviderError | null;
-type ErrorMapper = (
-  statusCode: number | undefined,
-  parsedError: ParsedProviderError | null,
-) => ChatErrorCode;
-
 /**
- * Wrapper functions that accept the union type for type compatibility
+ * A provider's matched error parse/map pair. The narrowing cast in the factory
+ * below is sound only because each registry entry pairs a mapper with the
+ * parser that produces its expected type — the mapper never sees anything else.
  */
-function mapOpenAIErrorWrapper(
-  statusCode: number | undefined,
-  parsedError: ParsedProviderError | null,
-): ChatErrorCode {
-  return mapOpenAIErrorToCode(
-    statusCode,
-    parsedError as ParsedOpenAIError | null,
-  );
+interface ProviderErrorHandler {
+  parse: (responseBody: string) => ParsedProviderError | null;
+  map: (
+    statusCode: number | undefined,
+    parsedError: ParsedProviderError | null,
+  ) => ChatErrorCode;
 }
 
-function mapAnthropicErrorWrapper(
-  statusCode: number | undefined,
-  parsedError: ParsedProviderError | null,
-): ChatErrorCode {
-  return mapAnthropicErrorToCode(
-    statusCode,
-    parsedError as ParsedAnthropicError | null,
-  );
-}
-
-function mapGeminiErrorWrapper(
-  statusCode: number | undefined,
-  parsedError: ParsedProviderError | null,
-): ChatErrorCode {
-  return mapGeminiErrorToCode(
-    statusCode,
-    parsedError as ParsedGeminiError | null,
-  );
-}
-
-function mapCohereErrorWrapper(
-  statusCode: number | undefined,
-  parsedError: ParsedProviderError | null,
-): ChatErrorCode {
-  return mapCohereErrorToCode(
-    statusCode,
-    parsedError as ParsedCohereError | null,
-  );
-}
-
-function mapZhipuaiErrorWrapper(
-  statusCode: number | undefined,
-  parsedError: ParsedProviderError | null,
-): ChatErrorCode {
-  return mapZhipuaiErrorToCode(
-    statusCode,
-    parsedError as ParsedZhipuaiError | null,
-  );
+function providerErrorHandler<T extends ParsedProviderError>(
+  parse: (responseBody: string) => T | null,
+  map: (statusCode: number | undefined, parsedError: T | null) => ChatErrorCode,
+): ProviderErrorHandler {
+  return {
+    parse,
+    map: (statusCode, parsedError) => map(statusCode, parsedError as T | null),
+  };
 }
 
 /**
@@ -1228,37 +1193,6 @@ function mapMinimaxErrorToCode(
   // Use http_code from MiniMax response if available
   const effectiveStatus = httpCode ? Number.parseInt(httpCode, 10) : statusCode;
   return mapStatusCodeToErrorCode(effectiveStatus);
-}
-
-function mapMinimaxErrorWrapper(
-  statusCode: number | undefined,
-  parsedError: ParsedProviderError | null,
-): ChatErrorCode {
-  return mapMinimaxErrorToCode(
-    statusCode,
-    parsedError as ParsedMinimaxError | null,
-  );
-}
-
-function mapBedrockErrorWrapper(
-  statusCode: number | undefined,
-  parsedError: ParsedProviderError | null,
-): ChatErrorCode {
-  return mapBedrockErrorToCode(
-    statusCode,
-    parsedError as ParsedBedrockError | null,
-  );
-}
-
-/**
- * Parse vLLM error response body.
- * vLLM uses OpenAI-compatible error format: { error: { type, code, message } }
- *
- * @see https://docs.vllm.ai/en/latest/features/openai_api.html
- */
-function parseVllmError(responseBody: string): ParsedOpenAIError | null {
-  // vLLM uses the same error format as OpenAI
-  return parseOpenAIError(responseBody);
 }
 
 /**
@@ -1313,27 +1247,6 @@ function mapVllmErrorToCode(
   return mapOpenAIErrorToCode(statusCode, parsedError);
 }
 
-function mapVllmErrorWrapper(
-  statusCode: number | undefined,
-  parsedError: ParsedProviderError | null,
-): ChatErrorCode {
-  return mapVllmErrorToCode(
-    statusCode,
-    parsedError as ParsedOpenAIError | null,
-  );
-}
-
-/**
- * Parse Ollama error response body.
- * Ollama uses OpenAI-compatible error format: { error: { type, code, message } }
- *
- * @see https://github.com/ollama/ollama/blob/main/docs/openai.md
- */
-function parseOllamaError(responseBody: string): ParsedOpenAIError | null {
-  // Ollama uses the same error format as OpenAI
-  return parseOpenAIError(responseBody);
-}
-
 /**
  * Map Ollama error to ChatErrorCode.
  * Ollama uses OpenAI-compatible error format with some additional codes.
@@ -1386,64 +1299,36 @@ function mapOllamaErrorToCode(
   return mapOpenAIErrorToCode(statusCode, parsedError);
 }
 
-function mapOllamaErrorWrapper(
-  statusCode: number | undefined,
-  parsedError: ParsedProviderError | null,
-): ChatErrorCode {
-  return mapOllamaErrorToCode(
-    statusCode,
-    parsedError as ParsedOpenAIError | null,
-  );
-}
+// vLLM and Ollama expose the same OpenAI-compatible error body but carry a few
+// provider-specific codes, hence their dedicated mappers over the shared parser.
+const openAiCompatibleErrorHandler = providerErrorHandler(
+  parseOpenAIError,
+  mapOpenAIErrorToCode,
+);
 
 /**
- * Registry of provider-specific error parsers.
+ * Registry of provider-specific error parse/map pairs.
  * Using Record<SupportedProvider, ...> ensures TypeScript will error
  * if a new provider is added to SupportedProvider without updating this map.
  */
-const providerParsers: Record<SupportedProvider, ErrorParser> = {
-  openai: parseOpenAIError,
-  anthropic: parseAnthropicError,
-  gemini: parseGeminiError,
-  bedrock: parseBedrockError,
-  cerebras: parseOpenAIError, // Cerebras uses OpenAI-compatible API
-  cohere: parseCohereError,
-  mistral: parseOpenAIError, // Mistral uses OpenAI-compatible API
-  perplexity: parseOpenAIError, // Perplexity uses OpenAI-compatible API
-  groq: parseOpenAIError, // Groq uses OpenAI-compatible API
-  xai: parseOpenAIError, // xAI uses OpenAI-compatible API
-  openrouter: parseOpenAIError, // OpenRouter uses OpenAI-compatible API
-  vllm: parseVllmError,
-  ollama: parseOllamaError,
-  zhipuai: parseZhipuaiError,
-  deepseek: parseOpenAIError, // DeepSeek uses OpenAI-compatible API
-  minimax: parseMinimaxError, // MiniMax has unique error format
-  azure: parseOpenAIError, // Azure uses OpenAI-compatible API
-};
-
-/**
- * Registry of provider-specific error mappers.
- * Using Record<SupportedProvider, ...> ensures TypeScript will error
- * if a new provider is added to SupportedProvider without updating this map.
- */
-const providerMappers: Record<SupportedProvider, ErrorMapper> = {
-  openai: mapOpenAIErrorWrapper,
-  anthropic: mapAnthropicErrorWrapper,
-  gemini: mapGeminiErrorWrapper,
-  bedrock: mapBedrockErrorWrapper,
-  cerebras: mapOpenAIErrorWrapper, // Cerebras uses OpenAI-compatible API
-  cohere: mapCohereErrorWrapper,
-  mistral: mapOpenAIErrorWrapper, // Mistral uses OpenAI-compatible API
-  perplexity: mapOpenAIErrorWrapper, // Perplexity uses OpenAI-compatible API
-  groq: mapOpenAIErrorWrapper, // Groq uses OpenAI-compatible API
-  xai: mapOpenAIErrorWrapper, // xAI uses OpenAI-compatible API
-  openrouter: mapOpenAIErrorWrapper, // OpenRouter uses OpenAI-compatible API
-  vllm: mapVllmErrorWrapper,
-  ollama: mapOllamaErrorWrapper,
-  zhipuai: mapZhipuaiErrorWrapper,
-  deepseek: mapOpenAIErrorWrapper, // DeepSeek uses OpenAI-compatible API
-  minimax: mapMinimaxErrorWrapper,
-  azure: mapOpenAIErrorWrapper, // Azure uses OpenAI-compatible API
+const providerErrorHandlers: Record<SupportedProvider, ProviderErrorHandler> = {
+  openai: openAiCompatibleErrorHandler,
+  anthropic: providerErrorHandler(parseAnthropicError, mapAnthropicErrorToCode),
+  gemini: providerErrorHandler(parseGeminiError, mapGeminiErrorToCode),
+  bedrock: providerErrorHandler(parseBedrockError, mapBedrockErrorToCode),
+  cerebras: openAiCompatibleErrorHandler,
+  cohere: providerErrorHandler(parseCohereError, mapCohereErrorToCode),
+  mistral: openAiCompatibleErrorHandler,
+  perplexity: openAiCompatibleErrorHandler,
+  groq: openAiCompatibleErrorHandler,
+  xai: openAiCompatibleErrorHandler,
+  openrouter: openAiCompatibleErrorHandler,
+  vllm: providerErrorHandler(parseOpenAIError, mapVllmErrorToCode),
+  ollama: providerErrorHandler(parseOpenAIError, mapOllamaErrorToCode),
+  zhipuai: providerErrorHandler(parseZhipuaiError, mapZhipuaiErrorToCode),
+  deepseek: openAiCompatibleErrorHandler,
+  minimax: providerErrorHandler(parseMinimaxError, mapMinimaxErrorToCode),
+  azure: openAiCompatibleErrorHandler,
 };
 
 // =============================================================================
@@ -1675,8 +1560,7 @@ export function mapProviderError(
   }
 
   // Get provider-specific parser and mapper
-  const parseError = providerParsers[provider];
-  const mapError = providerMappers[provider];
+  const { parse: parseError, map: mapError } = providerErrorHandlers[provider];
 
   let statusCode: number | undefined;
   let responseBody: string | undefined;

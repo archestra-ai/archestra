@@ -722,14 +722,12 @@ const isSupportedDaggerRunnerHost = (runnerHost: string): boolean =>
 // the code execution sandbox (run_command / upload_file / download_file, plus
 // skill activation-mounts) needs a Dagger runner host. it is independent of the
 // skills *read* feature — skills can be listed/activated/read with the sandbox
-// off. the former `run_python` code-runtime env vars now gate the sandbox.
+// off.
 const skillsSandboxRequested =
   process.env.ARCHESTRA_CODE_RUNTIME_ENABLED === "true";
 const skillsSandboxDaggerRunnerHost = parseCodeRuntimeDaggerRunnerHost({
   enabled: skillsSandboxRequested,
-  envValue:
-    process.env.ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST ||
-    process.env.ARCHESTRA_SKILLS_SANDBOX_DAGGER_RUNNER_HOST,
+  envValue: process.env.ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST,
 });
 // a missing/invalid runner host disables the feature instead of crashing boot.
 const skillsSandboxEnabled =
@@ -1123,7 +1121,6 @@ const config = {
     runnerHost: daggerRuntimeRunnerHost,
     cliBin:
       process.env.ARCHESTRA_DAGGER_RUNTIME_CLI_BIN ||
-      process.env.ARCHESTRA_SKILLS_SANDBOX_DAGGER_CLI_BIN ||
       process.env.ARCHESTRA_CODE_RUNTIME_DAGGER_CLI_BIN ||
       undefined,
     maxConcurrent: parsePositiveInt(

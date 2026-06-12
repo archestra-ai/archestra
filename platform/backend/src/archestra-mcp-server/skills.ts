@@ -33,6 +33,7 @@ import {
   SkillFileInputSchema,
   SkillManifestContentSchema,
   toSkillFiles,
+  toSkillInsertFields,
 } from "@/skills/validation";
 import { ApiError, type Skill, type SkillVersion } from "@/types";
 import { archestraMcpBranding } from "./branding";
@@ -261,16 +262,9 @@ const registry = defineArchestraTools([
       // the skill:create permission already enforced on this tool.
       const skill = await SkillModel.createWithFiles({
         skill: {
+          ...toSkillInsertFields(parsed),
           organizationId: ctx.organizationId,
           authorId: ctx.userId,
-          name: parsed.name,
-          description: parsed.description,
-          content: parsed.content,
-          license: parsed.license,
-          compatibility: parsed.compatibility,
-          allowedTools: parsed.allowedTools,
-          templated: parsed.templated,
-          metadata: parsed.metadata,
           sourceType: "manual",
           scope: "personal",
         },
@@ -324,14 +318,7 @@ const registry = defineArchestraTools([
         updated = await SkillModel.updateWithFiles({
           id: skill.id,
           skill: {
-            name: parsed.name,
-            description: parsed.description,
-            content: parsed.content,
-            license: parsed.license,
-            compatibility: parsed.compatibility,
-            allowedTools: parsed.allowedTools,
-            templated: parsed.templated,
-            metadata: parsed.metadata,
+            ...toSkillInsertFields(parsed),
             scope: skill.scope,
           },
           files:

@@ -256,6 +256,11 @@ export const POPULAR_REPOS: PopularRepo[] = [
     stars: 31,
   },
   {
+    repo: "arsenyinfo/skills",
+    description: "Agent skills for autonomous software engineering and AI/ML.",
+    stars: 20,
+  },
+  {
     repo: "aws-samples/sample-agent-skills-for-builders",
     description: "AWS developer building blocks and workflows.",
     stars: 12,

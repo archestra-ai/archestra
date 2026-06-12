@@ -32,7 +32,7 @@ describe("POST /api/skills/:id/reset", () => {
       ).organizationId = organizationId;
     });
 
-    const { default: skillRoutes } = await import("./skill");
+    const { default: skillRoutes } = await import("./skill.routes");
     await app.register(skillRoutes);
 
     await syncBuiltInSkills();

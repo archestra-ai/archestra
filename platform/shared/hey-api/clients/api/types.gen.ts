@@ -52910,6 +52910,10 @@ export type PreviewGithubSkillResponses = {
             encoding: 'utf8' | 'base64';
             kind: 'reference' | 'script' | 'asset';
         }>;
+        /**
+         * Resource paths not imported: oversized, beyond the per-skill file cap, or unfetchable
+         */
+        skippedFiles: Array<string>;
         sourceRef: string;
         sourceCommit: string;
     };
@@ -53025,6 +53029,13 @@ export type ImportGithubSkillsResponses = {
             updatedAt: string;
         }>;
         skipped: Array<string>;
+        /**
+         * Per created skill, resource paths not imported: oversized, beyond the per-skill file cap, or unfetchable
+         */
+        skippedFiles: Array<{
+            skillPath: string;
+            files: Array<string>;
+        }>;
     };
 };
 

@@ -88,6 +88,14 @@ verifyDepsBeforeRun: false
 # https://daniakash.com/posts/simplest-supply-chain-defense/
 minimumReleaseAge: 10080
 
+# next 16.3.0-preview.3 (and its same-versioned @next/* swc binaries) ships
+# `turbopackMemoryEviction`, which we need to test as the fix for the Turbopack
+# IOAccelerator memory leak on Apple Silicon (vercel/next.js#92055). Remove
+# once we settle on a stable next release older than the quarantine window.
+minimumReleaseAgeExclude:
+  - next
+  - "@next/*"
+
 # OpenTelemetry instrumentation requires these packages hoisted to root.
 # @hookform/resolvers/zod statically imports `zod/v4/core` but does not declare
 # zod as a peer dependency, so hoist zod to the root node_modules.

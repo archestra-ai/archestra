@@ -19,6 +19,14 @@ import {
   teamsSeed,
 } from "./data/organization";
 import { installedServersSeed } from "./data/servers";
+import {
+  catalogSkillSeed,
+  githubDiscoverSeed,
+  githubPreviewSeed,
+  makeImportedSkill,
+  skillCatalogSearchSeed,
+  skillsListSeed,
+} from "./data/skills";
 
 // Register each endpoint twice: absolute URL for SSR (Next.js server
 // components fetch the backend origin directly) and relative URL for the
@@ -156,6 +164,35 @@ export const handlers: HttpHandler[] = [
   ...postJson("/api/llm-virtual-keys", makeCreatedVirtualKey()),
   ...patchJson("/api/llm-virtual-keys/:id", makeCreatedVirtualKey()),
   ...deleteJson("/api/llm-virtual-keys/:id"),
+
+  // Skills (list page, the "new skill" chooser, and the GitHub import dialog)
+  ...getJson("/api/skills", skillsListSeed),
+  ...getJson("/api/skills/source-repos", { repos: [] }),
+  ...getJson("/api/skills/catalog/search", skillCatalogSearchSeed),
+  ...postJson("/api/skills/github/discover", githubDiscoverSeed),
+  ...postJson("/api/skills/github/preview", githubPreviewSeed),
+  // Conditional on the request payload: `mswControl.use(...)` overrides can
+  // only return static bodies, so the import spec asserts the request payload
+  // indirectly — the import only succeeds for the exact body the catalog flow
+  // must send. Any other payload is reported skipped, which keeps the import
+  // dialog open and fails the spec's dialog-closed assertion.
+  ...paired("/api/skills/github/import").map((url) =>
+    http.post(url, async ({ request }) => {
+      const body = (await request.json()) as {
+        repoUrl?: string;
+        skillPaths?: string[];
+      };
+      const isExpectedPayload =
+        body.repoUrl === catalogSkillSeed.repo &&
+        body.skillPaths?.length === 1 &&
+        body.skillPaths[0] === catalogSkillSeed.skillPath;
+      return HttpResponse.json(
+        isExpectedPayload
+          ? { created: [makeImportedSkill()], skipped: [], skippedFiles: [] }
+          : { created: [], skipped: body.skillPaths ?? [], skippedFiles: [] },
+      );
+    }),
+  ),
 
   // Misc endpoints the agent dialog and key dialogs probe at open. Default
   // empty so the strict-mode unhandled-request guard doesn't fire on

@@ -46,7 +46,7 @@ export const skillCatalogSearchSeed: CatalogSearch = {
   totalCount: 2,
 };
 
-export function makeDiscoveredSkill(
+function makeDiscoveredSkill(
   overrides: Partial<DiscoveredSkill> = {},
 ): DiscoveredSkill {
   return {

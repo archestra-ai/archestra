@@ -1127,9 +1127,9 @@ type ParsedProviderError =
   | ParsedBedrockError;
 
 /**
- * A provider's matched error parse/map pair. The mapper only ever receives
- * what the paired parser produced, so the union-to-specific narrowing lives in
- * one place (the factory below) instead of per-provider cast wrappers.
+ * A provider's matched error parse/map pair. The narrowing cast in the factory
+ * below is sound only because each registry entry pairs a mapper with the
+ * parser that produces its expected type — the mapper never sees anything else.
  */
 interface ProviderErrorHandler {
   parse: (responseBody: string) => ParsedProviderError | null;

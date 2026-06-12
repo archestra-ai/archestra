@@ -17,7 +17,6 @@ import {
   generateText,
   hasToolCall,
   stepCountIs,
-  type streamText,
   type UIMessage,
   type UIMessageChunk,
 } from "ai";
@@ -125,7 +124,10 @@ import {
   buildModelMessages,
   prepareMessagesForLLM,
 } from "./prepare-model-messages";
-import { streamTextWithRecovery } from "./stream-probe";
+import {
+  type ChatStreamTextConfig,
+  streamTextWithRecovery,
+} from "./stream-probe";
 import { createToolUiStartTransform } from "./tool-ui-stream";
 
 const PromoteChatAttachmentResultSchema = z.object({
@@ -698,7 +700,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   abortSignal: chatAbortController.signal,
                   emit: (event) => writer.write(event),
                 });
-                const streamTextConfig: Parameters<typeof streamText>[0] = {
+                const streamTextConfig: ChatStreamTextConfig = {
                   model,
                   messages: modelMessages,
                   ...(supportsToolCalling && { tools: mcpTools }),
@@ -748,7 +750,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 }
 
                 const result = await streamTextWithRecovery({
-                  config: { ...streamTextConfig, messages: modelMessages },
+                  config: streamTextConfig,
                   conversationId,
                   onEmptyResponseExhausted: async () => {
                     // Persist before the throw — nothing has merged yet, so the

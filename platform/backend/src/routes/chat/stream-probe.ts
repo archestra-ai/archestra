@@ -5,7 +5,6 @@
 // It pulls the stream iterator manually (never via `for await`) and returns
 // without calling `iterator.return()` — an early `for await` break would cancel
 // the underlying generation and break the subsequent `toUIMessageStream` merge.
-// This mirrors the existing context-trim first-chunk probe.
 
 import { type ModelMessage, streamText } from "ai";
 import logger from "@/logging";
@@ -15,7 +14,7 @@ import {
 } from "./context-trimming";
 import { EmptyModelResponseError } from "./errors";
 
-type ChatStreamTextConfig = Parameters<typeof streamText>[0] & {
+export type ChatStreamTextConfig = Parameters<typeof streamText>[0] & {
   messages: ModelMessage[];
 };
 

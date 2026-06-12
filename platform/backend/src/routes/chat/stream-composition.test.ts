@@ -301,8 +301,9 @@ describe("POST /api/chat handler composition", () => {
     await executionPromise;
 
     // The injected activation block must survive the rest of the message
-    // preparation (normalization, compaction pass-through, conversion) and
-    // reach streamText prepended to the user's text.
+    // preparation (normalization and the compaction pass-through; conversion
+    // is identity-mocked here) and reach streamText prepended to the user's
+    // text.
     expect(mockStreamText).toHaveBeenCalledTimes(1);
     const sentMessages = mockStreamText.mock.calls[0]?.[0].messages as Array<{
       role: string;

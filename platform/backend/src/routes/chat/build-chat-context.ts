@@ -19,6 +19,7 @@ import {
   renderSystemPrompt,
   type UserSystemPromptContext,
 } from "@/templating";
+import type { ToolExposureMode } from "@/types";
 
 /**
  * Assemble everything the chat stream needs about its agent before the first
@@ -31,7 +32,7 @@ export async function buildChatContext(params: {
   agent: {
     name: string;
     systemPrompt: string | null;
-    toolExposureMode: string | null;
+    toolExposureMode: ToolExposureMode;
   };
   user: { id: string; email: string; name: string };
   organizationId: string;

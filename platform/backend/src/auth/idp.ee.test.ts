@@ -90,6 +90,43 @@ describe("syncSsoRole", () => {
     expect(member?.role).toBe(ADMIN_ROLE_NAME);
   });
 
+  test("never rewrites the role for linked-token-only providers, even when a rule matches", async ({
+    makeIdentityProvider,
+    makeMember,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser({ email: "linked-only@example.com" });
+    await makeMember(user.id, org.id, { role: ADMIN_ROLE_NAME });
+
+    // Downstream IdP used only for MCP token exchange: SSO login disabled,
+    // but a role-mapping rule exists that would demote the user on match.
+    const provider = await makeIdentityProvider(org.id, {
+      providerId: "sso-linked-only",
+      ssoLoginEnabled: false,
+      roleMapping: {
+        rules: [
+          {
+            expression: '{{#equals groups "members-only"}}true{{/equals}}',
+            role: MEMBER_ROLE_NAME,
+          },
+        ],
+      },
+    });
+
+    await seedSsoAccount({
+      userId: user.id,
+      providerId: provider.providerId,
+      idTokenClaims: { email: user.email, groups: "members-only" },
+    });
+
+    await syncSsoRole(user.id, user.email, provider.providerId);
+
+    const member = await MemberModel.getByUserId(user.id, org.id);
+    expect(member?.role).toBe(ADMIN_ROLE_NAME);
+  });
+
   test("applies the resolved role when a mapping rule explicitly matches", async ({
     makeIdentityProvider,
     makeMember,

@@ -74,7 +74,7 @@ Per-provider pages walk through each of these steps with concrete field values f
 
 The IdP used for Archestra sign-in does not have to be the same IdP used for a downstream MCP tool. For example, users can sign into Archestra with Okta while one MCP tool calls an Entra-protected internal API.
 
-Configure the downstream IdP in **Settings > Identity Providers**, then disable **Show on sign-in page**. The provider remains usable for account linking and Enterprise-Managed Auth, but it will not appear as a primary SSO option on the login screen.
+Configure the downstream IdP in **Settings > Identity Providers**, then disable **Use for Single Sign-On**. The provider remains usable for account linking and Enterprise-Managed Auth, but it will not appear as a primary SSO option on the login screen, and its role mapping and team sync never run — so connecting it for a downstream token cannot change the user's Archestra role or team memberships.
 
 For this pattern to work, each user needs a downstream IdP session at least once so Archestra has a usable token for that IdP. Users do not need to find or configure this manually: if a tool call needs that token and it is missing or expired, Archestra returns an authentication-required tool result with a direct SSO link for the downstream IdP. After the user completes that SSO flow, Archestra links the downstream IdP account to the Archestra user who started the tool call, restores the original browser session, and sends the user back to the same chat so they can retry.
 

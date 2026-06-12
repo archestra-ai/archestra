@@ -11,16 +11,22 @@ export const MANIFEST = [
   "Use pdftotext -layout.",
 ].join("\n");
 
-/** A SKILL.md manifest with a custom name (org+name must be unique). */
-export function manifestNamed(name: string): string {
+/**
+ * A SKILL.md manifest with a custom name (org+name must be unique) and
+ * optional extra frontmatter lines.
+ */
+export function manifestNamed(name: string, extraFrontmatter = ""): string {
   return [
     "---",
     `name: ${name}`,
     "description: A scoped skill.",
+    extraFrontmatter,
     "---",
     "",
     `# ${name}`,
-  ].join("\n");
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 
 /** A github-sourced skill written directly through the model layer. */

@@ -49,19 +49,12 @@ describe("POST /api/skills", () => {
   });
 
   test("derives allowedTools from frontmatter when the payload omits it", async () => {
-    const manifest = [
-      "---",
-      "name: pdf-processing",
-      "description: Extract text from PDF files.",
-      "allowed-tools: Read Bash",
-      "---",
-      "",
-      "# PDF Processing",
-    ].join("\n");
     const response = await ctx.app.inject({
       method: "POST",
       url: "/api/skills",
-      payload: { content: manifest },
+      payload: {
+        content: manifestNamed("pdf-processing", "allowed-tools: Read Bash"),
+      },
     });
 
     expect(response.statusCode).toBe(200);
@@ -69,19 +62,13 @@ describe("POST /api/skills", () => {
   });
 
   test("explicit allowedTools overrides the frontmatter", async () => {
-    const manifest = [
-      "---",
-      "name: pdf-processing",
-      "description: Extract text from PDF files.",
-      "allowed-tools: Read",
-      "---",
-      "",
-      "# PDF Processing",
-    ].join("\n");
     const response = await ctx.app.inject({
       method: "POST",
       url: "/api/skills",
-      payload: { content: manifest, allowedTools: ["Bash", "Edit"] },
+      payload: {
+        content: manifestNamed("pdf-processing", "allowed-tools: Read"),
+        allowedTools: ["Bash", "Edit"],
+      },
     });
 
     expect(response.statusCode).toBe(200);
@@ -89,19 +76,13 @@ describe("POST /api/skills", () => {
   });
 
   test("an empty allowedTools array clears the frontmatter value", async () => {
-    const manifest = [
-      "---",
-      "name: pdf-processing",
-      "description: Extract text from PDF files.",
-      "allowed-tools: Read",
-      "---",
-      "",
-      "# PDF Processing",
-    ].join("\n");
     const response = await ctx.app.inject({
       method: "POST",
       url: "/api/skills",
-      payload: { content: manifest, allowedTools: [] },
+      payload: {
+        content: manifestNamed("pdf-processing", "allowed-tools: Read"),
+        allowedTools: [],
+      },
     });
 
     expect(response.statusCode).toBe(200);

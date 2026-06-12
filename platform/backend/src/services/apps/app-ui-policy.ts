@@ -30,14 +30,16 @@ import {
  * `sanitizeCspDomains` filter accept exactly this form. A future feature may
  * make this list org-configurable.
  */
+export const APP_PLATFORM_CSP_RESOURCE_DOMAINS = [
+  "cdn.jsdelivr.net",
+  "unpkg.com",
+  "cdnjs.cloudflare.com",
+  "fonts.googleapis.com",
+  "fonts.gstatic.com",
+] as const;
+
 export const APP_PLATFORM_CSP: AppUiCsp = {
-  resourceDomains: [
-    "cdn.jsdelivr.net",
-    "unpkg.com",
-    "cdnjs.cloudflare.com",
-    "fonts.googleapis.com",
-    "fonts.gstatic.com",
-  ],
+  resourceDomains: [...APP_PLATFORM_CSP_RESOURCE_DOMAINS],
 };
 
 // The only iframe permissions an app may request. Mirrors AppUiPermissionsSchema

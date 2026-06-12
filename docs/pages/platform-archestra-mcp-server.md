@@ -1622,3 +1622,295 @@ Required RBAC permission: `skill:update`
 | `files[].content` | `string` | Yes | Text content of the file |
 | `files[].encoding` | `"utf8" \| "base64"` | No |  |
 
+
+### Apps
+
+| Tool | Description | Required RBAC Permission |
+|------|-------------|--------------------------|
+| `create_app` | Build an interactive app — a to-do list, dashboard, form, tracker, game, or any custom UI — from a single self-contained HTML document. | `app:create` |
+| `list_apps` | List apps visible to the caller, optionally filtered by name. | `app:read` |
+| `render_app` | Render an existing app by id, if the caller may view it. | `app:read` |
+| `read_app` | Return an app's stored HTML (pre-injection — exactly what was saved, without the platform SDK or base stylesheet) plus its version, byte size, name, and scope. | `app:read` |
+| `update_app` | Replace an existing app's HTML wholesale, and/or change its assigned tools or metadata. | `app:update` |
+| `edit_app` | Apply targeted str_replace edits to an existing app's HTML — the efficient path for small changes (fix a bug, tweak a style, add a section) without re-streaming the whole document. | `app:update` |
+| `preview_app_tool` | Run one of an app's assigned MCP tools server-side, exactly as the rendered app would (as you, the viewing user, with your MCP credentials), and return its real output. | `app:update` |
+| `get_app_diagnostics` | Check how the app's current version rendered for you. | `app:read` |
+| `delete_app` | Soft-delete an app the caller owns or administers. | `app:delete` |
+| `app_data_get` | Read a value from the calling app's data store (per-user or shared partition). | `app:read` |
+| `app_data_set` | Write a value to the calling app's data store (per-user or shared partition). | `app:update` |
+| `app_data_list` | List all entries in one partition of the calling app's data store. | `app:read` |
+| `app_data_delete` | Delete a key from the calling app's data store (per-user or shared partition). | `app:update` |
+
+#### create_app
+
+Required RBAC permission: `app:create`
+
+##### Input
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `name` | `string` | Yes | App name. |
+| `description` | `string` | No | Optional description. |
+| `html` | `string` | No | The app's complete, self-contained HTML document — inline all CSS/JS (rendered in a sandboxed iframe). Omit it to scaffold from templateId instead. |
+| `scope` | `"personal" \| "team" \| "org"` | No | Visibility scope. Defaults to personal (owned by the calling user). |
+| `templateId` | `string` | No | Template to scaffold from when html is omitted (one of: blank, form); the result returns the seeded HTML for editing. With html present it is recorded as provenance only. |
+| `uiPermissions` | `object` | No | Optional iframe permissions (camera/microphone/geolocation/clipboardWrite). |
+| `uiPermissions.camera` | `object` | No |  |
+| `uiPermissions.microphone` | `object` | No |  |
+| `uiPermissions.geolocation` | `object` | No |  |
+| `uiPermissions.clipboardWrite` | `object` | No |  |
+| `tools` | `string[]` | No | Upstream MCP tool names to assign to the app (e.g. from search_tools), callable from its HTML via archestra.tools.call with the viewing user's credentials. Declarative: the given list replaces the app's current assignments ([] clears them); omitted leaves them unchanged. |
+
+##### Output
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `id` | `string` | Yes |  |
+| `name` | `string` | Yes |  |
+| `description` | `string \| null` | Yes |  |
+| `scope` | `"personal" \| "team" \| "org"` | Yes |  |
+| `latestVersion` | `number` | Yes |  |
+| `warnings` | `string[]` | No | Soft save-time validation warnings about the html (the save succeeded); fix them via update_app. |
+| `tools` | `string[]` | No | The app's assigned tool names after this call (present when the tools param was given). |
+
+#### list_apps
+
+Required RBAC permission: `app:read`
+
+##### Input
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `name` | `string` | No | Filter by name (substring match). |
+| `limit` | `integer` | No |  |
+
+##### Output
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `apps` | `object[]` | Yes |  |
+| `apps[].id` | `string` | Yes |  |
+| `apps[].name` | `string` | Yes |  |
+| `apps[].description` | `string \| null` | Yes |  |
+| `apps[].scope` | `"personal" \| "team" \| "org"` | Yes |  |
+| `apps[].latestVersion` | `number` | Yes |  |
+| `apps[].warnings` | `string[]` | No | Soft save-time validation warnings about the html (the save succeeded); fix them via update_app. |
+
+#### render_app
+
+Required RBAC permission: `app:read`
+
+##### Input
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `appId` | `string` | Yes | The app id. |
+
+##### Output
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `id` | `string` | Yes |  |
+| `name` | `string` | Yes |  |
+| `description` | `string \| null` | Yes |  |
+| `scope` | `"personal" \| "team" \| "org"` | Yes |  |
+| `latestVersion` | `number` | Yes |  |
+| `warnings` | `string[]` | No | Soft save-time validation warnings about the html (the save succeeded); fix them via update_app. |
+
+#### read_app
+
+Required RBAC permission: `app:read`
+
+##### Input
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `appId` | `string` | Yes | The app id. |
+| `version` | `integer` | No | Specific version to read; defaults to the current head. |
+
+##### Output
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `id` | `string` | Yes |  |
+| `name` | `string` | Yes |  |
+| `scope` | `"personal" \| "team" \| "org"` | Yes |  |
+| `version` | `number` | Yes |  |
+| `byteSize` | `number` | Yes |  |
+| `html` | `string` | Yes | The stored HTML, pre-injection (no SDK/base CSS). |
+
+#### update_app
+
+Required RBAC permission: `app:update`
+
+##### Input
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `appId` | `string` | Yes | The app id. |
+| `name` | `string` | No |  |
+| `description` | `string \| null` | No |  |
+| `scope` | `"personal" \| "team" \| "org"` | No |  |
+| `html` | `string` | No | New HTML; supplying it forks a new immutable version (no-op if unchanged). |
+| `tools` | `string[]` | No | Upstream MCP tool names to assign to the app (e.g. from search_tools), callable from its HTML via archestra.tools.call with the viewing user's credentials. Declarative: the given list replaces the app's current assignments ([] clears them); omitted leaves them unchanged. |
+| `uiPermissions` | `object` | No | New iframe permissions; part of the version envelope, so it requires html too. |
+| `uiPermissions.camera` | `object` | No |  |
+| `uiPermissions.microphone` | `object` | No |  |
+| `uiPermissions.geolocation` | `object` | No |  |
+| `uiPermissions.clipboardWrite` | `object` | No |  |
+
+##### Output
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `id` | `string` | Yes |  |
+| `name` | `string` | Yes |  |
+| `description` | `string \| null` | Yes |  |
+| `scope` | `"personal" \| "team" \| "org"` | Yes |  |
+| `latestVersion` | `number` | Yes |  |
+| `warnings` | `string[]` | No | Soft save-time validation warnings about the html (the save succeeded); fix them via update_app. |
+| `tools` | `string[]` | No | The app's assigned tool names after this call (present when the tools param was given). |
+
+#### edit_app
+
+Required RBAC permission: `app:update`
+
+##### Input
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `appId` | `string` | Yes | The app id. |
+| `baseVersion` | `integer` | Yes | The version the edits are based on (from read_app). The edit is rejected if the app's head has moved past it. |
+| `edits` | `object[]` | Yes | str_replace edits applied in order to the current HTML; the whole edit is atomic (any failure leaves the app unchanged). |
+| `edits[].old_str` | `string` | Yes | Exact text to replace; must occur exactly once in the current HTML (add surrounding context to disambiguate). |
+| `edits[].new_str` | `string` | Yes | Replacement text (may be empty to delete). |
+
+##### Output
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `id` | `string` | Yes |  |
+| `name` | `string` | Yes |  |
+| `description` | `string \| null` | Yes |  |
+| `scope` | `"personal" \| "team" \| "org"` | Yes |  |
+| `latestVersion` | `number` | Yes |  |
+| `warnings` | `string[]` | No | Soft save-time validation warnings about the html (the save succeeded); fix them via update_app. |
+| `tools` | `string[]` | No | The app's assigned tool names after this call (present when the tools param was given). |
+
+#### preview_app_tool
+
+Required RBAC permission: `app:update`
+
+##### Input
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `appId` | `string` | Yes | The app id whose assigned tool to run. |
+| `toolName` | `string` | Yes | Name of an MCP tool assigned to the app (exactly as archestra.tools.call would receive it). |
+| `args` | `object` | No | Arguments to pass to the tool (defaults to {}). |
+
+##### Output
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `toolName` | `string` | Yes |  |
+| `isError` | `boolean` | Yes |  |
+| `truncated` | `boolean` | Yes |  |
+| `output` | `string` | Yes | The tool's output, framed as untrusted data. |
+
+#### get_app_diagnostics
+
+Required RBAC permission: `app:read`
+
+##### Input
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `appId` | `string` | Yes | The app id. |
+
+##### Output
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `status` | `"no_render_observed" \| "clean" \| "errors"` | Yes |  |
+| `version` | `number \| null` | Yes | The rendered version, or the current head when none observed. |
+| `entries` | `object[]` | Yes |  |
+| `entries[].type` | `string` | Yes |  |
+| `entries[].message` | `string` | Yes |  |
+| `renderedAt` | `string \| null` | Yes |  |
+
+#### delete_app
+
+Required RBAC permission: `app:delete`
+
+##### Input
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `appId` | `string` | Yes | The app id. |
+
+
+#### app_data_get
+
+Required RBAC permission: `app:read`
+
+##### Input
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `key` | `string` | Yes | The data store key. |
+| `scope` | `"user" \| "app"` | No | Storage partition: "user" (default) is private to the viewing user, "app" is shared by everyone using the app. |
+
+##### Output
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `value` | `any` | Yes |  |
+
+#### app_data_set
+
+Required RBAC permission: `app:update`
+
+##### Input
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `key` | `string` | Yes | The data store key. |
+| `value` | `any` | Yes | Any JSON-serializable value except null (use app_data_delete to clear a key). Pass objects/arrays directly — get returns exactly what was stored, no JSON.stringify needed. |
+| `scope` | `"user" \| "app"` | No | Storage partition: "user" (default) is private to the viewing user, "app" is shared by everyone using the app. |
+
+##### Output
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `key` | `string` | Yes |  |
+
+#### app_data_list
+
+Required RBAC permission: `app:read`
+
+##### Input
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `scope` | `"user" \| "app"` | No | Storage partition: "user" (default) is private to the viewing user, "app" is shared by everyone using the app. |
+
+##### Output
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `entries` | `object[]` | Yes |  |
+| `entries[].key` | `string` | Yes |  |
+| `entries[].value` | `any` | Yes |  |
+
+#### app_data_delete
+
+Required RBAC permission: `app:update`
+
+##### Input
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `key` | `string` | Yes | The data store key. |
+| `scope` | `"user" \| "app"` | No | Storage partition: "user" (default) is private to the viewing user, "app" is shared by everyone using the app. |
+

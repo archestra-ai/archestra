@@ -6,7 +6,7 @@ import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 
-describe("POST /api/skills/github/import", () => {
+describe("POST /api/skills/github/{discover,preview,import}", () => {
   let app: FastifyInstanceWithZod;
   let user: User;
   let organizationId: string;

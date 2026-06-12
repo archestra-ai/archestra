@@ -73,6 +73,7 @@ prev-static-assets/*
 tsconfig.tsbuildinfo
 benchmark-config.env
 archestra-rs/sandbox-rs/index.js
+archestra-rs/app-runtime-rs/index.js
 
 # Playwright
 /playwright/

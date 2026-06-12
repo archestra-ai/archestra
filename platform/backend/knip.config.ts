@@ -22,6 +22,7 @@ const config: KnipConfig = {
     // Native CommonJS addon loaded through package exports; knip does not
     // resolve the workspace package's generated N-API entrypoint correctly.
     "@archestra/sandbox-rs",
+    "@archestra/app-runtime-rs",
   ],
   ignoreBinaries: [
     // biome and concurrently are in root package.json

@@ -105,6 +105,12 @@ importers:
         specifier: ^2.9.14
         version: 2.9.14
 
+  archestra-rs/app-runtime-rs:
+    devDependencies:
+      '@napi-rs/cli':
+        specifier: ^3.4.0
+        version: 3.6.2(@emnapi/runtime@1.8.1)(@types/node@25.9.1)
+
   archestra-rs/sandbox-rs:
     devDependencies:
       '@napi-rs/cli':
@@ -149,6 +155,9 @@ importers:
       '@anthropic-ai/tokenizer':
         specifier: ^0.0.4
         version: 0.0.4
+      '@archestra/app-runtime-rs':
+        specifier: workspace:*
+        version: link:../archestra-rs/app-runtime-rs
       '@archestra/sandbox-rs':
         specifier: workspace:*
         version: link:../archestra-rs/sandbox-rs

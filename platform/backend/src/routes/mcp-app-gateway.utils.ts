@@ -123,7 +123,7 @@ export async function createAppServer(
             // Owned apps get the Apps SDK (window.archestra) injected at serve
             // time; the stored HTML stays pure UI. The bootstrap carries the
             // viewer identity and the assigned-tool descriptors.
-            text: injectAppSdk(head.html, {
+            text: await injectAppSdk(head.html, {
               user: viewer ? { id: viewer.id, name: viewer.name } : null,
               tools: await buildAppSdkTools(appId, tokenAuth),
             }),

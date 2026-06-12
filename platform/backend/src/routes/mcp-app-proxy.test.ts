@@ -1,3 +1,4 @@
+import { prepareAppEnvelope } from "@archestra/app-runtime-rs";
 import {
   getArchestraToolFullName,
   TOOL_APP_DATA_SET_SHORT_NAME,
@@ -10,6 +11,7 @@ import {
   validatorCompiler,
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
+import { vi } from "vitest";
 import config from "@/config";
 import db, { schema } from "@/database";
 import { AppDataModel } from "@/models";
@@ -17,6 +19,14 @@ import { APP_PLATFORM_CSP } from "@/services/apps/app-ui-policy";
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "@/test";
 import { ApiError } from "@/types";
 import mcpAppProxyRoutes from "./mcp-app-proxy";
+
+// The app HTML envelope (injection bytes) lives in app_runtime_core and is
+// covered by its table tests + the app-runtime-rs smoke test. Mock the native
+// here so the route tests run without the built .node (matching the sandbox-rs
+// convention) and assert the gateway's wiring rather than the envelope bytes.
+vi.mock("@archestra/app-runtime-rs", () => ({
+  prepareAppEnvelope: vi.fn((html: string) => `<!--app-envelope-->${html}`),
+}));
 
 const originalAppsEnabled = config.apps.enabled;
 beforeAll(() => {
@@ -319,15 +329,14 @@ describe("mcpAppProxyRoutes POST /api/mcp/app/:appId", () => {
 
     expect(response.statusCode).toBe(200);
     const content = response.json().result.contents[0];
-    // The stored HTML is served with the Apps SDK injected at serve time —
-    // bootstrap context (viewer identity) first, then the SDK script tag — so
-    // window.archestra exists without any authored glue.
+    // The envelope transform (anchor/escaping/injection bytes) is covered by the
+    // app_runtime_core table tests; here we assert the gateway invoked it with
+    // the stored HTML and the per-viewer context, and served its output back.
     expect(content.text).toContain("<h1>hello app</h1>");
-    expect(content.text).toContain("data-archestra-app-bootstrap");
-    expect(content.text).toContain("window.__ARCHESTRA_APP_CONTEXT__");
-    expect(content.text).toContain('src="/_sandbox/archestra-app-sdk.js"');
-    expect(content.text.indexOf("data-archestra-app-bootstrap")).toBeLessThan(
-      content.text.indexOf("data-archestra-app-sdk"),
+    expect(content.text.startsWith("<!--app-envelope-->")).toBe(true);
+    expect(vi.mocked(prepareAppEnvelope)).toHaveBeenCalledWith(
+      "<h1>hello app</h1>",
+      expect.stringContaining(`"id":"${user.id}"`),
     );
     expect(content.mimeType).toContain("text/html");
   });

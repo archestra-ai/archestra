@@ -4,6 +4,7 @@ packages:
   - "frontend"
   - "shared"
   - "archestra-rs/sandbox-rs"
+  - "archestra-rs/app-runtime-rs"
   - "e2e-tests"
 
 catalog:

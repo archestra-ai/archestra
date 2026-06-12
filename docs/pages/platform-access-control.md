@@ -3,7 +3,7 @@ title: "Access Control"
 category: Administration
 description: "Role-based access control (RBAC) system for managing user permissions in Archestra"
 order: 1
-lastUpdated: 2026-06-09
+lastUpdated: 2026-06-12
 ---
 <!--
 Check ../docs_writer_prompt.md before changing this file.

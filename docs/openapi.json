@@ -136751,6 +136751,18 @@
                               "failed"
                             ]
                           },
+                          "embeddingError": {
+                            "nullable": true,
+                            "type": "string",
+                            "enum": [
+                              "rate_limit",
+                              "api_key",
+                              "model_not_found",
+                              "provider_error",
+                              "dimensions_mismatch",
+                              "unknown"
+                            ]
+                          },
                           "chunkCount": {
                             "type": "integer",
                             "minimum": -2147483648,
@@ -136882,6 +136894,7 @@
                           "acl",
                           "metadata",
                           "embeddingStatus",
+                          "embeddingError",
                           "chunkCount",
                           "createdAt",
                           "updatedAt",
@@ -137265,6 +137278,18 @@
                         "failed"
                       ]
                     },
+                    "embeddingError": {
+                      "nullable": true,
+                      "type": "string",
+                      "enum": [
+                        "rate_limit",
+                        "api_key",
+                        "model_not_found",
+                        "provider_error",
+                        "dimensions_mismatch",
+                        "unknown"
+                      ]
+                    },
                     "chunkCount": {
                       "type": "integer",
                       "minimum": -2147483648,
@@ -137397,6 +137422,7 @@
                     "acl",
                     "metadata",
                     "embeddingStatus",
+                    "embeddingError",
                     "chunkCount",
                     "createdAt",
                     "updatedAt",
@@ -140946,6 +140972,18 @@
                               "failed"
                             ]
                           },
+                          "embeddingError": {
+                            "nullable": true,
+                            "type": "string",
+                            "enum": [
+                              "rate_limit",
+                              "api_key",
+                              "model_not_found",
+                              "provider_error",
+                              "dimensions_mismatch",
+                              "unknown"
+                            ]
+                          },
                           "assignedAgents": {
                             "type": "array",
                             "items": {
@@ -141719,6 +141757,18 @@
                         "failed"
                       ]
                     },
+                    "embeddingError": {
+                      "nullable": true,
+                      "type": "string",
+                      "enum": [
+                        "rate_limit",
+                        "api_key",
+                        "model_not_found",
+                        "provider_error",
+                        "dimensions_mismatch",
+                        "unknown"
+                      ]
+                    },
                     "assignedAgents": {
                       "type": "array",
                       "items": {
@@ -142126,6 +142176,18 @@
                         "processing",
                         "completed",
                         "failed"
+                      ]
+                    },
+                    "embeddingError": {
+                      "nullable": true,
+                      "type": "string",
+                      "enum": [
+                        "rate_limit",
+                        "api_key",
+                        "model_not_found",
+                        "provider_error",
+                        "dimensions_mismatch",
+                        "unknown"
                       ]
                     },
                     "assignedAgents": {

@@ -38,6 +38,7 @@ import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { TruncatedTooltip } from "@/components/ui/truncated-tooltip";
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
 import {
@@ -490,7 +491,8 @@ function FileStatusBadge({ file }: { file: KnowledgeFile }) {
         : file.processingStatus === "failed"
           ? "Failed"
           : "Queued";
-    return (
+    
+    const badge = (
       <Badge
         variant={
           file.processingStatus === "failed" ? "destructive" : "secondary"
@@ -503,9 +505,20 @@ function FileStatusBadge({ file }: { file: KnowledgeFile }) {
         {label}
       </Badge>
     );
+
+    if (file.processingStatus === "failed" && file.processingError) {
+      return (
+        <Tooltip>
+          <TooltipTrigger asChild>{badge}</TooltipTrigger>
+          <TooltipContent>{file.processingError}</TooltipContent>
+        </Tooltip>
+      );
+    }
+
+    return badge;
   }
 
-  return (
+  const badge = (
     <Badge
       variant={file.embeddingStatus === "failed" ? "destructive" : "secondary"}
       className="text-xs"
@@ -516,6 +529,30 @@ function FileStatusBadge({ file }: { file: KnowledgeFile }) {
       {file.embeddingStatus === "completed" ? "Indexed" : file.embeddingStatus}
     </Badge>
   );
+
+  // Extend KnowledgeFile locally or check if property exists to satisfy typescript pre-codegen
+  const embeddingError = (file as unknown as { embeddingError?: string | null }).embeddingError;
+
+  if (file.embeddingStatus === "failed" && embeddingError) {
+    const errorMessages: Record<string, string> = {
+      rate_limit: "Rate limit exceeded. Please try again later.",
+      api_key: "Invalid or missing API key. Check LLM provider settings.",
+      model_not_found: "The configured embedding model was not found by the provider.",
+      provider_error: "The embedding provider returned a server error.",
+      dimensions_mismatch: "Embedding dimension mismatch. Check model dimensions config.",
+      unknown: "An unknown error occurred during embedding.",
+    };
+    const message = errorMessages[embeddingError] ?? "An unknown error occurred during embedding.";
+
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>{badge}</TooltipTrigger>
+        <TooltipContent>{message}</TooltipContent>
+      </Tooltip>
+    );
+  }
+
+  return badge;
 }
 
 function VisibilityBadge({ file }: { file: KnowledgeFile }) {

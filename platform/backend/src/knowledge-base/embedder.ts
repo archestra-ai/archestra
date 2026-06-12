@@ -1,13 +1,17 @@
 import { addNomicTaskPrefix, EMBEDDING_BATCH_SIZE } from "@archestra/shared";
 import logger from "@/logging";
 import { KbChunkModel, KbDocumentModel } from "@/models";
+import type { EmbeddingError } from "@/types";
 import {
+  AzureEmbeddingError,
   callEmbedding,
   type EmbeddingApiResponse,
   type EmbeddingInput,
+  GeminiEmbeddingError,
   getEmbeddingDiscriminator,
   getEmbeddingRetryDelayMs,
   isRetryableEmbeddingError,
+  OpenAIEmbeddingError,
 } from "./embedding-clients";
 import {
   buildEmbeddingInteraction,
@@ -48,6 +52,7 @@ class EmbeddingService {
       if (chunks.length === 0) {
         await KbDocumentModel.update(documentId, {
           embeddingStatus: "completed",
+          embeddingError: null,
           chunkCount: 0,
         });
         return;
@@ -81,6 +86,7 @@ class EmbeddingService {
 
       await KbDocumentModel.update(documentId, {
         embeddingStatus: "completed",
+        embeddingError: null,
         chunkCount: chunks.length,
       });
 
@@ -89,8 +95,10 @@ class EmbeddingService {
         "[Embedder] Document embeddings completed",
       );
     } catch (error) {
+      const embeddingError = classifyEmbeddingError(error);
       await KbDocumentModel.update(documentId, {
         embeddingStatus: "failed",
+        embeddingError,
       });
       logger.error(
         {
@@ -158,6 +166,7 @@ class EmbeddingService {
       if (chunks.length === 0) {
         await KbDocumentModel.update(documentId, {
           embeddingStatus: "completed",
+          embeddingError: null,
           chunkCount: 0,
         });
         continue;
@@ -195,6 +204,7 @@ class EmbeddingService {
     const ctx = orgConfig.config;
     const embeddingResults = new Map<string, number[]>();
     const failedChunkIds = new Set<string>();
+    const chunkIdToError = new Map<string, unknown>();
 
     for (let i = 0; i < allChunks.length; i += EMBEDDING_BATCH_SIZE) {
       const batch = allChunks.slice(i, i + EMBEDDING_BATCH_SIZE);
@@ -223,6 +233,7 @@ class EmbeddingService {
         );
         for (const chunk of batch) {
           failedChunkIds.add(chunk.chunkId);
+          chunkIdToError.set(chunk.chunkId, error);
         }
       }
     }
@@ -232,14 +243,37 @@ class EmbeddingService {
       ([chunkId, embedding]) => ({ chunkId, embedding }),
     );
     if (successfulUpdates.length > 0) {
-      await KbChunkModel.updateEmbeddings(successfulUpdates, ctx.dimensions);
+      try {
+        await KbChunkModel.updateEmbeddings(successfulUpdates, ctx.dimensions);
+      } catch (error) {
+        logger.error(
+          {
+            runId: connectorRunId,
+            error: error instanceof Error ? error.message : String(error),
+          },
+          "[Embedder] Database update of embeddings failed",
+        );
+        for (const update of successfulUpdates) {
+          failedChunkIds.add(update.chunkId);
+          chunkIdToError.set(update.chunkId, error);
+        }
+      }
     }
 
     for (const { documentId, chunkIds, chunkCount } of docChunkMap) {
       const anyFailed = chunkIds.some((id) => failedChunkIds.has(id));
       if (anyFailed) {
+        const failedChunkId = chunkIds.find((id) => failedChunkIds.has(id));
+        const chunkError = failedChunkId
+          ? chunkIdToError.get(failedChunkId)
+          : undefined;
+        const embeddingError = classifyEmbeddingError(
+          chunkError ?? new Error("Batch failure"),
+        );
+
         await KbDocumentModel.update(documentId, {
           embeddingStatus: "failed",
+          embeddingError,
         });
         logger.error(
           { documentId, runId: connectorRunId },
@@ -248,6 +282,7 @@ class EmbeddingService {
       } else {
         await KbDocumentModel.update(documentId, {
           embeddingStatus: "completed",
+          embeddingError: null,
           chunkCount,
         });
         logger.info(
@@ -344,4 +379,85 @@ function chunkToEmbeddingInput(
     content + (metadataSuffix ?? ""),
     "search_document",
   );
+}
+
+/**
+ * Helper to classify embedding errors into structured enum categories.
+ */
+function classifyEmbeddingError(error: unknown): EmbeddingError {
+  if (!error) return "unknown";
+
+  const errMsg = error instanceof Error ? error.message : String(error);
+  const errMsgLower = errMsg.toLowerCase();
+
+  // 1. Check database/vector dimension mismatch errors first
+  if (
+    errMsgLower.includes("dimension") ||
+    errMsgLower.includes("different vector") ||
+    errMsgLower.includes("vector")
+  ) {
+    return "dimensions_mismatch";
+  }
+
+  // 2. Check specific embedding client errors
+  if (
+    error instanceof AzureEmbeddingError ||
+    error instanceof GeminiEmbeddingError ||
+    error instanceof OpenAIEmbeddingError
+  ) {
+    const status = error.status;
+    if (status === 429) {
+      return "rate_limit";
+    }
+    if (status === 401 || status === 403) {
+      return "api_key";
+    }
+    if (status === 404) {
+      return "model_not_found";
+    }
+    if (status >= 500) {
+      return "provider_error";
+    }
+  }
+
+  // 3. Fallback to message-based heuristic checks
+  if (
+    errMsgLower.includes("rate limit") ||
+    errMsgLower.includes("too many requests") ||
+    errMsgLower.includes("429")
+  ) {
+    return "rate_limit";
+  }
+  if (
+    errMsgLower.includes("api key") ||
+    errMsgLower.includes("api_key") ||
+    errMsgLower.includes("unauthorized") ||
+    errMsgLower.includes("forbidden") ||
+    errMsgLower.includes("401") ||
+    errMsgLower.includes("403")
+  ) {
+    return "api_key";
+  }
+  if (
+    errMsgLower.includes("model not found") ||
+    errMsgLower.includes("model_not_found") ||
+    errMsgLower.includes("does not exist") ||
+    (errMsgLower.includes("model") && errMsgLower.includes("found")) ||
+    errMsgLower.includes("404")
+  ) {
+    return "model_not_found";
+  }
+  if (
+    errMsgLower.includes("500") ||
+    errMsgLower.includes("502") ||
+    errMsgLower.includes("503") ||
+    errMsgLower.includes("504") ||
+    errMsgLower.includes("bad gateway") ||
+    errMsgLower.includes("service unavailable") ||
+    errMsgLower.includes("server error")
+  ) {
+    return "provider_error";
+  }
+
+  return "unknown";
 }

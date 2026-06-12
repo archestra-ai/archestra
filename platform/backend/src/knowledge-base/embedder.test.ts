@@ -113,7 +113,7 @@ describe("EmbeddingService", () => {
     });
   });
 
-  test("OpenAI failure marks document as failed", async ({
+  test("OpenAI rate limit failure marks document as failed with rate_limit error", async ({
     makeOrganization,
     makeKnowledgeBase,
     makeKnowledgeBaseConnector,
@@ -145,6 +145,138 @@ describe("EmbeddingService", () => {
 
     const updated = await KbDocumentModel.findById(doc.id);
     expect(updated?.embeddingStatus).toBe("failed");
+    expect(updated?.embeddingError).toBe("rate_limit");
+  });
+
+  test("OpenAI 401 unauthorized marks document as failed with api_key error", async ({
+    makeOrganization,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+  }) => {
+    const org = await makeOrganization();
+    const kb = await makeKnowledgeBase(org.id);
+    const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+
+    const doc = await KbDocumentModel.create({
+      connectorId: connector.id,
+      organizationId: org.id,
+      title: "Auth Fail Doc",
+      content: "Content",
+      contentHash: "hash-auth",
+      embeddingStatus: "pending",
+    });
+
+    await KbChunkModel.insertMany([
+      {
+        documentId: doc.id,
+        content: "Some chunk",
+        chunkIndex: 0,
+      },
+    ]);
+
+    const OpenAIMod = (await import("openai")).default;
+    const authError = Object.assign(new Error("Incorrect API key"), {
+      status: 401,
+    });
+    Object.setPrototypeOf(authError, OpenAIMod.APIError.prototype);
+
+    mockEmbeddingsCreate.mockRejectedValueOnce(authError);
+
+    await embeddingService.processDocument(doc.id, makeEmbeddingContext());
+
+    const updated = await KbDocumentModel.findById(doc.id);
+    expect(updated?.embeddingStatus).toBe("failed");
+    expect(updated?.embeddingError).toBe("api_key");
+  });
+
+  test("OpenAI 404 model not found marks document as failed with model_not_found error", async ({
+    makeOrganization,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+  }) => {
+    const org = await makeOrganization();
+    const kb = await makeKnowledgeBase(org.id);
+    const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+
+    const doc = await KbDocumentModel.create({
+      connectorId: connector.id,
+      organizationId: org.id,
+      title: "Model Fail Doc",
+      content: "Content",
+      contentHash: "hash-model",
+      embeddingStatus: "pending",
+    });
+
+    await KbChunkModel.insertMany([
+      {
+        documentId: doc.id,
+        content: "Some chunk",
+        chunkIndex: 0,
+      },
+    ]);
+
+    const OpenAIMod = (await import("openai")).default;
+    const modelError = Object.assign(new Error("The model does not exist"), {
+      status: 404,
+    });
+    Object.setPrototypeOf(modelError, OpenAIMod.APIError.prototype);
+
+    mockEmbeddingsCreate.mockRejectedValueOnce(modelError);
+
+    await embeddingService.processDocument(doc.id, makeEmbeddingContext());
+
+    const updated = await KbDocumentModel.findById(doc.id);
+    expect(updated?.embeddingStatus).toBe("failed");
+    expect(updated?.embeddingError).toBe("model_not_found");
+  });
+
+  test("database dimensions mismatch sets dimensions_mismatch error", async ({
+    makeOrganization,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+  }) => {
+    const org = await makeOrganization();
+    const kb = await makeKnowledgeBase(org.id);
+    const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+
+    const doc = await KbDocumentModel.create({
+      connectorId: connector.id,
+      organizationId: org.id,
+      title: "Dim Fail Doc",
+      content: "Content",
+      contentHash: "hash-dim",
+      embeddingStatus: "pending",
+    });
+
+    await KbChunkModel.insertMany([
+      {
+        documentId: doc.id,
+        content: "Some chunk",
+        chunkIndex: 0,
+      },
+    ]);
+
+    const emb = makeFakeEmbedding(1);
+    mockEmbeddingsCreate.mockResolvedValueOnce({
+      object: "list",
+      data: [{ object: "embedding", embedding: emb, index: 0 }],
+      model: "text-embedding-3-small",
+      usage: { prompt_tokens: 5, total_tokens: 5 },
+    });
+
+    const spy = vi
+      .spyOn(KbChunkModel, "updateEmbeddings")
+      .mockRejectedValueOnce(
+        new Error("different vector dimensions: expected 1536, got 3"),
+      );
+
+    await embeddingService.processDocument(doc.id, makeEmbeddingContext());
+
+    const updated = await KbDocumentModel.findById(doc.id);
+    expect(updated?.embeddingStatus).toBe("failed");
+    expect(updated?.embeddingError).toBe("dimensions_mismatch");
+
+    spy.mockRestore();
   });
 
   test("no chunks marks document as completed with chunkCount 0", async ({
@@ -293,6 +425,7 @@ describe("EmbeddingService", () => {
 
     const updated = await KbDocumentModel.findById(doc.id);
     expect(updated?.embeddingStatus).toBe("failed");
+    expect(updated?.embeddingError).toBe("provider_error");
     expect(mockEmbeddingsCreate).toHaveBeenCalledTimes(3);
   });
 

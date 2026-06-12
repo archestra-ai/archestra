@@ -227,11 +227,11 @@ function ExistingLinkPanel({
       previousLinkId: link.id,
       body: { skillIds, expiresAt: link.expiresAt },
     });
-    if (!result?.created) return;
+    if (!result) return;
     onReveal({
-      linkId: result.created.link.id,
-      cloneUrl: result.created.cloneUrl,
-      marketplaceName: result.created.marketplaceName,
+      linkId: result.link.id,
+      cloneUrl: result.cloneUrl,
+      marketplaceName: result.marketplaceName,
     });
   }, [rotateShare, link, onReveal]);
 

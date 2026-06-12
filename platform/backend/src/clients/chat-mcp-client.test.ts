@@ -14,6 +14,7 @@ import { TeamTokenModel } from "@/models";
 import ToolModel from "@/models/tool";
 import { resolveSessionExternalIdpToken } from "@/services/identity-providers/session-token";
 import { describe, expect, test } from "@/test";
+import { agentOwner } from "@/types";
 import * as chatClient from "./chat-mcp-client";
 import { mcpToolToModelOutput } from "./chat-mcp-client";
 import mcpClient from "./mcp-client";
@@ -42,7 +43,7 @@ vi.mock("@modelcontextprotocol/sdk/client/streamableHttp.js", () => ({
 
 vi.mock("@/clients/mcp-client", () => ({
   default: {
-    executeToolCall: vi.fn(),
+    executeToolCallForOwner: vi.fn(),
   },
 }));
 
@@ -57,7 +58,7 @@ vi.mock("@/services/identity-providers/session-token", () => ({
 }));
 
 beforeEach(() => {
-  vi.mocked(mcpClient.executeToolCall).mockReset();
+  vi.mocked(mcpClient.executeToolCallForOwner).mockReset();
   vi.mocked(resolveSessionExternalIdpToken).mockResolvedValue(null);
   vi.mocked(StreamableHTTPClientTransport).mockClear();
 });
@@ -496,7 +497,7 @@ describe("executeMcpTool error handling", () => {
   });
 
   test("returns error text from text content array", async () => {
-    vi.mocked(mcpClient.executeToolCall).mockResolvedValueOnce(
+    vi.mocked(mcpClient.executeToolCallForOwner).mockResolvedValueOnce(
       mockResult({
         content: [{ type: "text", text: "Auth required: install the server" }],
         _meta: {
@@ -540,7 +541,7 @@ describe("executeMcpTool error handling", () => {
   });
 
   test("joins multiple text content items with newline", async () => {
-    vi.mocked(mcpClient.executeToolCall).mockResolvedValueOnce(
+    vi.mocked(mcpClient.executeToolCallForOwner).mockResolvedValueOnce(
       mockResult({
         content: [
           { type: "text", text: "Error line 1" },
@@ -554,7 +555,7 @@ describe("executeMcpTool error handling", () => {
   });
 
   test("falls back to JSON.stringify for non-text content items", async () => {
-    vi.mocked(mcpClient.executeToolCall).mockResolvedValueOnce(
+    vi.mocked(mcpClient.executeToolCallForOwner).mockResolvedValueOnce(
       mockResult({
         content: [{ type: "image", data: "base64..." }],
       }),
@@ -567,7 +568,7 @@ describe("executeMcpTool error handling", () => {
   });
 
   test("returns error string when content is not an array", async () => {
-    vi.mocked(mcpClient.executeToolCall).mockResolvedValueOnce(
+    vi.mocked(mcpClient.executeToolCallForOwner).mockResolvedValueOnce(
       mockResult({ content: null, error: "Something failed" }),
     );
 
@@ -576,7 +577,7 @@ describe("executeMcpTool error handling", () => {
   });
 
   test("returns fallback message when no content and no error", async () => {
-    vi.mocked(mcpClient.executeToolCall).mockResolvedValueOnce(
+    vi.mocked(mcpClient.executeToolCallForOwner).mockResolvedValueOnce(
       mockResult({ content: null }),
     );
 
@@ -585,7 +586,7 @@ describe("executeMcpTool error handling", () => {
   });
 
   test("preserves structured error metadata for auth-expired tool errors", async () => {
-    vi.mocked(mcpClient.executeToolCall).mockResolvedValueOnce(
+    vi.mocked(mcpClient.executeToolCallForOwner).mockResolvedValueOnce(
       mockResult({
         content: [
           {
@@ -648,7 +649,7 @@ describe("executeMcpTool error handling", () => {
     const agent = await makeAgent();
     const tool = await makeTool({ name: "test_tool" });
 
-    vi.mocked(mcpClient.executeToolCall).mockResolvedValueOnce({
+    vi.mocked(mcpClient.executeToolCallForOwner).mockResolvedValueOnce({
       id: "call-1",
       name: "test_tool",
       content: [{ type: "text", text: "ARCH_TEST = secret-value" }],
@@ -747,7 +748,7 @@ describe("chat-mcp-client tool caching", () => {
       cacheKey,
       mockClient as unknown as Client,
     );
-    vi.mocked(mcpClient.executeToolCall).mockResolvedValueOnce({
+    vi.mocked(mcpClient.executeToolCallForOwner).mockResolvedValueOnce({
       content: [{ type: "text", text: "Workspace projects" }],
       isError: false,
     } as never);
@@ -773,12 +774,12 @@ describe("chat-mcp-client tool caching", () => {
     );
 
     expect(result).toBe("Workspace projects");
-    expect(mcpClient.executeToolCall).toHaveBeenCalledWith(
+    expect(mcpClient.executeToolCallForOwner).toHaveBeenCalledWith(
       expect.objectContaining({
         name: "workspace__find_projects",
         arguments: {},
       }),
-      agent.id,
+      agentOwner(agent.id),
       expect.objectContaining({
         organizationId: org.id,
         isUserToken: true,
@@ -900,7 +901,7 @@ describe("chat-mcp-client tool caching", () => {
       ),
     ).resolves.toBe(false);
 
-    vi.mocked(mcpClient.executeToolCall).mockResolvedValueOnce({
+    vi.mocked(mcpClient.executeToolCallForOwner).mockResolvedValueOnce({
       content: [{ type: "text", text: "Export queued" }],
       isError: false,
     } as never);
@@ -914,12 +915,12 @@ describe("chat-mcp-client tool caching", () => {
     );
 
     expect(result).toBe("Export queued");
-    expect(mcpClient.executeToolCall).toHaveBeenCalledWith(
+    expect(mcpClient.executeToolCallForOwner).toHaveBeenCalledWith(
       expect.objectContaining({
         name: targetTool.name,
         arguments: { destination: "external" },
       }),
-      agent.id,
+      agentOwner(agent.id),
       expect.anything(),
       { conversationId },
     );

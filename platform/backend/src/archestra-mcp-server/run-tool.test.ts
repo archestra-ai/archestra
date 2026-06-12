@@ -27,14 +27,14 @@ import {
   expect,
   test,
 } from "@/test";
-import type { Agent } from "@/types";
+import { type Agent, agentOwner } from "@/types";
 import { type ArchestraContext, executeArchestraTool } from ".";
 
 const mockExecuteA2AMessage = vi.fn();
 
 vi.mock("@/clients/mcp-client", () => ({
   default: {
-    executeToolCall: vi.fn(),
+    executeToolCallForOwner: vi.fn(),
   },
 }));
 
@@ -97,7 +97,7 @@ describe("run_tool", () => {
       "Validation error in archestra__run_tool",
     );
     expect((result.content[0] as any).text).toContain("tool_name:");
-    expect(mcpClient.executeToolCall).not.toHaveBeenCalled();
+    expect(mcpClient.executeToolCallForOwner).not.toHaveBeenCalled();
   });
 
   test("prevents run_tool from invoking itself by full name", async () => {
@@ -111,7 +111,7 @@ describe("run_tool", () => {
     expect((result.content[0] as any).text).toContain(
       "run_tool cannot invoke itself",
     );
-    expect(mcpClient.executeToolCall).not.toHaveBeenCalled();
+    expect(mcpClient.executeToolCallForOwner).not.toHaveBeenCalled();
   });
 
   test("prevents run_tool from invoking itself by short name", async () => {
@@ -125,7 +125,7 @@ describe("run_tool", () => {
     expect((result.content[0] as any).text).toContain(
       "run_tool cannot invoke itself",
     );
-    expect(mcpClient.executeToolCall).not.toHaveBeenCalled();
+    expect(mcpClient.executeToolCallForOwner).not.toHaveBeenCalled();
   });
 
   test("dispatches built-in tools by short name", async ({
@@ -143,7 +143,7 @@ describe("run_tool", () => {
       agentId: testAgent.id,
       agentName: testAgent.name,
     });
-    expect(mcpClient.executeToolCall).not.toHaveBeenCalled();
+    expect(mcpClient.executeToolCallForOwner).not.toHaveBeenCalled();
   });
 
   test("dispatches built-in tools by full name", async ({
@@ -161,7 +161,7 @@ describe("run_tool", () => {
       agentId: testAgent.id,
       agentName: testAgent.name,
     });
-    expect(mcpClient.executeToolCall).not.toHaveBeenCalled();
+    expect(mcpClient.executeToolCallForOwner).not.toHaveBeenCalled();
   });
 
   test("returns target built-in tool validation errors", async ({
@@ -190,7 +190,7 @@ describe("run_tool", () => {
       "Validation error in archestra__todo_write",
     );
     expect((result.content[0] as any).text).toContain("todos[0].status:");
-    expect(mcpClient.executeToolCall).not.toHaveBeenCalled();
+    expect(mcpClient.executeToolCallForOwner).not.toHaveBeenCalled();
   });
 
   test("blocks built-in Archestra tools that are not assigned to the agent", async ({
@@ -219,7 +219,7 @@ describe("run_tool", () => {
     expect((result._meta?.archestraError as any)?.code).toBe(
       "tool_not_assigned",
     );
-    expect(mcpClient.executeToolCall).not.toHaveBeenCalled();
+    expect(mcpClient.executeToolCallForOwner).not.toHaveBeenCalled();
   });
 
   test("routes agent delegation tool names through the built-in dispatcher", async ({
@@ -258,7 +258,7 @@ describe("run_tool", () => {
         parentDelegationChain: testAgent.id,
       }),
     );
-    expect(mcpClient.executeToolCall).not.toHaveBeenCalled();
+    expect(mcpClient.executeToolCallForOwner).not.toHaveBeenCalled();
   });
 
   test("requires agent context before dispatching third-party MCP tools", async () => {
@@ -272,7 +272,7 @@ describe("run_tool", () => {
     expect((result.content[0] as any).text).toContain(
       "run_tool requires agent context to dispatch to third-party MCP tools",
     );
-    expect(mcpClient.executeToolCall).not.toHaveBeenCalled();
+    expect(mcpClient.executeToolCallForOwner).not.toHaveBeenCalled();
   });
 
   test("dispatches third-party MCP tools through the MCP client", async ({
@@ -287,7 +287,7 @@ describe("run_tool", () => {
     });
     await makeAgentTool(testAgent.id, tool.id);
 
-    vi.mocked(mcpClient.executeToolCall).mockResolvedValueOnce({
+    vi.mocked(mcpClient.executeToolCallForOwner).mockResolvedValueOnce({
       content: [{ type: "text", text: "Third-party response" }],
       isError: false,
       _meta: { requestId: "request-1" },
@@ -303,13 +303,13 @@ describe("run_tool", () => {
       mockContext,
     );
 
-    expect(mcpClient.executeToolCall).toHaveBeenCalledWith(
+    expect(mcpClient.executeToolCallForOwner).toHaveBeenCalledWith(
       {
         id: expect.stringMatching(/^run-tool-/),
         name: "github__search_repositories",
         arguments: { query: "archestra" },
       },
-      testAgent.id,
+      agentOwner(testAgent.id),
       mockContext.tokenAuth,
       { conversationId: testConversationId },
     );
@@ -351,7 +351,7 @@ describe("run_tool", () => {
       expect((result.content[0] as any).text).toContain(
         'No tool named "github__search_repositories"',
       );
-      expect(mcpClient.executeToolCall).not.toHaveBeenCalled();
+      expect(mcpClient.executeToolCallForOwner).not.toHaveBeenCalled();
       const assignedNames = await ToolModel.getAssignedToolNames(testAgent.id);
       expect(assignedNames.has("github__search_repositories")).toBe(false);
     });
@@ -382,7 +382,7 @@ describe("run_tool", () => {
 
       expect(result.isError).toBe(true);
       expect((result.content[0] as any).text).toContain("ask an admin");
-      expect(mcpClient.executeToolCall).not.toHaveBeenCalled();
+      expect(mcpClient.executeToolCallForOwner).not.toHaveBeenCalled();
       const assignedNames = await ToolModel.getAssignedToolNames(testAgent.id);
       expect(assignedNames.has("github__search_repositories")).toBe(false);
     });
@@ -419,7 +419,7 @@ describe("run_tool", () => {
       expect((result.content[0] as any).text).toContain(
         'No tool named "giphy__image_search"',
       );
-      expect(mcpClient.executeToolCall).not.toHaveBeenCalled();
+      expect(mcpClient.executeToolCallForOwner).not.toHaveBeenCalled();
       // the blocked call must not leave a persistent agent mutation behind
       const assignedNames = await ToolModel.getAssignedToolNames(testAgent.id);
       expect(assignedNames.has("giphy__image_search")).toBe(false);
@@ -447,7 +447,7 @@ describe("run_tool", () => {
       expect((result.content[0] as any).text).toContain(
         'No tool named "github__search_repositories"',
       );
-      expect(mcpClient.executeToolCall).not.toHaveBeenCalled();
+      expect(mcpClient.executeToolCallForOwner).not.toHaveBeenCalled();
       const assignedNames = await ToolModel.getAssignedToolNames(testAgent.id);
       expect(assignedNames.has("github__search_repositories")).toBe(false);
     });
@@ -476,7 +476,7 @@ describe("run_tool", () => {
       expect((result.content[0] as any).text).toContain(
         'No tool named "github__search_repositories"',
       );
-      expect(mcpClient.executeToolCall).not.toHaveBeenCalled();
+      expect(mcpClient.executeToolCallForOwner).not.toHaveBeenCalled();
       const assignedNames = await ToolModel.getAssignedToolNames(testAgent.id);
       expect(assignedNames.has("github__search_repositories")).toBe(false);
     });
@@ -523,7 +523,7 @@ describe("run_tool", () => {
 
       expect(result.isError).toBe(true);
       expect((result.content[0] as any).text).toContain("ask an admin");
-      expect(mcpClient.executeToolCall).not.toHaveBeenCalled();
+      expect(mcpClient.executeToolCallForOwner).not.toHaveBeenCalled();
       const assignedNames = await ToolModel.getAssignedToolNames(teamAgent.id);
       expect(assignedNames.has("github__search_repositories")).toBe(false);
     });
@@ -560,7 +560,7 @@ describe("run_tool", () => {
       expect((result.content[0] as any).text).toContain(
         'No tool named "giphy__image_search"',
       );
-      expect(mcpClient.executeToolCall).not.toHaveBeenCalled();
+      expect(mcpClient.executeToolCallForOwner).not.toHaveBeenCalled();
       const assignedNames = await ToolModel.getAssignedToolNames(testAgent.id);
       expect(assignedNames.has("giphy__image_search")).toBe(false);
     });
@@ -757,7 +757,7 @@ describe("run_tool", () => {
     });
     await makeAgentTool(testAgent.id, tool.id);
 
-    vi.mocked(mcpClient.executeToolCall).mockResolvedValueOnce({
+    vi.mocked(mcpClient.executeToolCallForOwner).mockResolvedValueOnce({
       content: [{ type: "text", text: "ok" }],
       isError: false,
     } as any);
@@ -774,9 +774,9 @@ describe("run_tool", () => {
 
     // concurrent headless executions must not share an MCP session (e.g. a
     // browser context), so the per-execution key scopes the connection.
-    expect(mcpClient.executeToolCall).toHaveBeenCalledWith(
+    expect(mcpClient.executeToolCallForOwner).toHaveBeenCalledWith(
       expect.objectContaining({ name: "github__search_repositories" }),
-      testAgent.id,
+      agentOwner(testAgent.id),
       mockContext.tokenAuth,
       { conversationId: isolationKey },
     );
@@ -815,7 +815,7 @@ describe("run_tool", () => {
       expect((result.content[0] as any).text).toContain(
         "not enabled for this conversation",
       );
-      expect(mcpClient.executeToolCall).not.toHaveBeenCalled();
+      expect(mcpClient.executeToolCallForOwner).not.toHaveBeenCalled();
     });
 
     test("dispatches a third-party tool enabled for the conversation", async ({
@@ -833,7 +833,7 @@ describe("run_tool", () => {
         tool.id,
       ]);
 
-      vi.mocked(mcpClient.executeToolCall).mockResolvedValueOnce({
+      vi.mocked(mcpClient.executeToolCallForOwner).mockResolvedValueOnce({
         content: [{ type: "text", text: "ok" }],
         isError: false,
         _meta: {},
@@ -847,7 +847,7 @@ describe("run_tool", () => {
       );
 
       expect(result.isError).toBe(false);
-      expect(mcpClient.executeToolCall).toHaveBeenCalled();
+      expect(mcpClient.executeToolCallForOwner).toHaveBeenCalled();
     });
 
     test("allows Archestra built-ins under an empty custom selection", async ({
@@ -899,7 +899,7 @@ describe("run_tool", () => {
       // merely "not enabled for this conversation".
       expect(text).toContain('No tool named "giphy__image_search"');
       expect(text).not.toContain("not enabled for this conversation");
-      expect(mcpClient.executeToolCall).not.toHaveBeenCalled();
+      expect(mcpClient.executeToolCallForOwner).not.toHaveBeenCalled();
     });
 
     test("rejects an agent-delegation tool disabled for the conversation", async ({
@@ -959,7 +959,7 @@ describe("run_tool", () => {
     expect(text).toContain('No tool named "giphy__image_search_tool"');
     expect(text).toContain("search_tools");
     expect(text).not.toContain("not enabled for this conversation");
-    expect(mcpClient.executeToolCall).not.toHaveBeenCalled();
+    expect(mcpClient.executeToolCallForOwner).not.toHaveBeenCalled();
   });
 
   test("recovery message wins over the policy refusal when the agent has other tools", async ({
@@ -988,7 +988,7 @@ describe("run_tool", () => {
     const text = (result.content[0] as any).text;
     expect(text).toContain('No tool named "giphy__image_search_tool"');
     expect(text).not.toContain("not enabled for this conversation");
-    expect(mcpClient.executeToolCall).not.toHaveBeenCalled();
+    expect(mcpClient.executeToolCallForOwner).not.toHaveBeenCalled();
   });
 
   test("blocks third-party MCP tools when target invocation policy denies the call", async ({
@@ -1042,7 +1042,7 @@ describe("run_tool", () => {
     expect((result.content[0] as any).text).toContain(
       "External export blocked",
     );
-    expect(mcpClient.executeToolCall).not.toHaveBeenCalled();
+    expect(mcpClient.executeToolCallForOwner).not.toHaveBeenCalled();
   });
 
   test("blocks third-party MCP tools that require approval when approval was not handled", async ({
@@ -1093,7 +1093,7 @@ describe("run_tool", () => {
     expect((result.content[0] as any).text).toContain(
       TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON,
     );
-    expect(mcpClient.executeToolCall).not.toHaveBeenCalled();
+    expect(mcpClient.executeToolCallForOwner).not.toHaveBeenCalled();
   });
 
   test("dispatches approval-required third-party MCP tools after chat approval was handled", async ({
@@ -1123,7 +1123,7 @@ describe("run_tool", () => {
       action: "require_approval",
       conditions: [],
     });
-    vi.mocked(mcpClient.executeToolCall).mockResolvedValueOnce({
+    vi.mocked(mcpClient.executeToolCallForOwner).mockResolvedValueOnce({
       content: [{ type: "text", text: "Approved response" }],
       isError: false,
     } as any);
@@ -1145,12 +1145,12 @@ describe("run_tool", () => {
     );
 
     expect(result.isError).toBe(false);
-    expect(mcpClient.executeToolCall).toHaveBeenCalledWith(
+    expect(mcpClient.executeToolCallForOwner).toHaveBeenCalledWith(
       expect.objectContaining({
         name: tool.name,
         arguments: { destination: "external" },
       }),
-      agent.id,
+      agentOwner(agent.id),
       mockContext.tokenAuth,
       { conversationId: testConversationId },
     );
@@ -1171,7 +1171,7 @@ describe("run_tool", () => {
     });
     await makeAgentTool(testAgent.id, tool.id);
 
-    vi.mocked(mcpClient.executeToolCall).mockResolvedValueOnce({
+    vi.mocked(mcpClient.executeToolCallForOwner).mockResolvedValueOnce({
       content: { ok: true },
       isError: false,
     } as any);

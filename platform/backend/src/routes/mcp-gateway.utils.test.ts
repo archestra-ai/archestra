@@ -1659,7 +1659,7 @@ describe("createAgentServer tools/list", () => {
     await makeAgentTool(agent.id, tool.id);
 
     const executeToolCallSpy = vi
-      .spyOn(mcpClient, "executeToolCall")
+      .spyOn(mcpClient, "executeToolCallForOwner")
       .mockResolvedValueOnce({
         id: "call_123",
         name: "workspace__create_event",

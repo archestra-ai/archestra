@@ -61,7 +61,7 @@ import type {
   GlobalToolPolicy,
   UnsafeContextBoundary,
 } from "@/types";
-import { UNSAFE_CONTEXT_BOUNDARY_REASON } from "@/types";
+import { agentOwner, UNSAFE_CONTEXT_BOUNDARY_REASON } from "@/types";
 import type { ClientCapabilitiesWithExtensions } from "@/types/mcp-capabilities";
 import { buildMcpClientInfo } from "@/utils/mcp-client-info";
 
@@ -1626,11 +1626,11 @@ async function executeMcpTool(ctx: ToolExecutionContext): Promise<{
     arguments: toolArguments ?? {},
   };
 
-  let result: Awaited<ReturnType<typeof mcpClient.executeToolCall>>;
+  let result: Awaited<ReturnType<typeof mcpClient.executeToolCallForOwner>>;
   try {
-    result = await mcpClient.executeToolCall(
+    result = await mcpClient.executeToolCallForOwner(
       toolCall,
-      agentId,
+      agentOwner(agentId),
       mcpGwToken
         ? {
             tokenId: mcpGwToken.tokenId,

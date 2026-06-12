@@ -93,7 +93,7 @@ export class McpServerConnectionTimeoutError extends Error {
 
 /**
  * Thrown when a stored HTTP session ID is no longer valid (e.g. pod restarted).
- * Caught by executeToolCall to trigger a transparent retry with a fresh session.
+ * Caught by executeToolCallForOwner to trigger a transparent retry with a fresh session.
  */
 class StaleSessionError extends Error {
   constructor(connectionKey: string) {
@@ -326,29 +326,6 @@ class McpClient {
         { connectionKey, err },
         "Failed to delete stored MCP HTTP session (non-fatal)",
       ),
-    );
-  }
-
-  /**
-   * Execute a single tool call against its assigned MCP server, on behalf of an
-   * agent. Thin shim over {@link executeToolCallForOwner}; kept so the many
-   * agent call sites stay unchanged.
-   */
-  async executeToolCall(
-    toolCall: CommonToolCall,
-    agentId: string,
-    tokenAuth?: TokenAuthContext,
-    options?: {
-      conversationId?: string;
-      identityProviderRedirectPath?: string;
-      elicitationHandler?: McpElicitationHandler;
-    },
-  ): Promise<CommonToolResult> {
-    return this.executeToolCallForOwner(
-      toolCall,
-      agentOwner(agentId),
-      tokenAuth,
-      options,
     );
   }
 

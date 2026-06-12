@@ -285,6 +285,9 @@ describe("POST /api/chat handler composition", () => {
       },
       files: [],
     });
+    if (!skill) {
+      throw new Error("Failed to create test skill");
+    }
 
     const response = await postMessage([
       {

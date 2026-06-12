@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto";
 import {
   BUILT_IN_AGENT_IDS,
-  buildUserSystemPromptContext,
   CHAT_TITLE_GENERATION_SYSTEM_PROMPT,
   type ChatErrorResponse,
   isModelSelectionComplete,
@@ -9,9 +8,6 @@ import {
   RouteId,
   type SupportedProvider,
   TimeInMs,
-  TOOL_LOAD_SKILL_SHORT_NAME,
-  TOOL_RUN_TOOL_SHORT_NAME,
-  TOOL_SEARCH_TOOLS_SHORT_NAME,
   type TokenUsage,
 } from "@archestra/shared";
 import {
@@ -33,7 +29,6 @@ import { CacheKey, cacheManager } from "@/cache-manager";
 import {
   fetchToolUiResource,
   getChatMcpTools,
-  getChatMcpToolUiResourceUris,
   type ToolUiResourceData,
 } from "@/clients/chat-mcp-client";
 import {
@@ -81,12 +76,7 @@ import {
   activeChatRunService,
 } from "@/services/active-chat-run";
 import { conversationFilesService } from "@/services/conversation-files";
-import { buildSkillCatalogPrompt } from "@/skills/skill-catalog-prompt";
-import {
-  promptNeedsRendering,
-  renderSystemPrompt,
-  type UserSystemPromptContext,
-} from "@/templating";
+import { renderSystemPrompt } from "@/templating";
 import {
   ApiError,
   type ChatMessage,
@@ -112,6 +102,7 @@ import {
   isSafeInlineMimeType,
   sanitizeAttachmentContentType,
 } from "./attachment-content-type";
+import { buildChatContext } from "./build-chat-context";
 import {
   compactMessagesForChat,
   invalidateConversationCompactions,
@@ -175,15 +166,59 @@ function getMinimalFrontendError(errorForFrontend: ChatErrorResponse) {
   };
 }
 
-function buildLoadToolsWhenNeededSystemPrompt(): string {
-  const searchToolsName = archestraMcpBranding.getToolName(
-    TOOL_SEARCH_TOOLS_SHORT_NAME,
-  );
-  const runToolName = archestraMcpBranding.getToolName(
-    TOOL_RUN_TOOL_SHORT_NAME,
+/**
+ * Build the error JSON payload streamed to the frontend: attach trace
+ * correlation ids, apply the org's slim-error setting, persist the error on
+ * the conversation, and serialize defensively (mapProviderError already
+ * serializes raw errors safely, the fallback guards the rest).
+ */
+function buildStreamErrorPayload(params: {
+  error: unknown;
+  mappedError: ChatErrorResponse;
+  conversationId: string;
+  slimChatErrorUi: boolean;
+  /** Log label distinguishing the pre-stream and mid-stream error paths. */
+  stage: "before stream starts" | "via stream";
+}): string {
+  const { error, mappedError, conversationId, slimChatErrorUi, stage } = params;
+  const traceContext = getActiveTraceContext();
+  const correlationLogFields = getCorrelationLogFields(traceContext);
+  const fullError = { ...mappedError, ...traceContext };
+  const errorForFrontend = slimChatErrorUi
+    ? sanitizeChatErrorForFrontend(fullError)
+    : fullError;
+
+  let serialized: string;
+  try {
+    serialized = JSON.stringify(errorForFrontend);
+  } catch (stringifyError) {
+    logger.error(
+      {
+        stringifyError,
+        errorCode: mappedError.code,
+        ...correlationLogFields,
+      },
+      "Failed to stringify mapped error, returning minimal error",
+    );
+    serialized = JSON.stringify(getMinimalFrontendError(errorForFrontend));
+  }
+
+  persistConversationChatError({
+    conversationId,
+    error: errorForFrontend,
+  });
+
+  logger.info(
+    {
+      mappedError: fullError,
+      originalErrorType: error instanceof Error ? error.name : typeof error,
+      willBeSentToFrontend: true,
+      ...correlationLogFields,
+    },
+    `Returning mapped error to frontend ${stage}`,
   );
 
-  return `Some available tools are not listed upfront and must be discovered. If the visible tools do not fit the task, call \`${searchToolsName}\` to find relevant tools, then call \`${runToolName}\` with a tool name it returned. Only pass \`${runToolName}\` a tool name that \`${searchToolsName}\` returned or that appeared verbatim earlier in this conversation; if you do not have an exact name, call \`${searchToolsName}\` first.`;
+  return serialized;
 }
 
 const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
@@ -403,103 +438,26 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           abortSignal: chatAbortController.signal,
         });
 
-        // Fetch enabled tool IDs and custom selection status in parallel
+        // Tools + system prompt, alongside the org settings the stream needs.
         const [
-          enabledToolIds,
-          hasCustomSelection,
+          { mcpTools, toolUiResourceUris, systemPrompt, toolSelection },
           slimChatErrorUi,
           organization,
         ] = await Promise.all([
-          ConversationEnabledToolModel.findByConversation(conversationId),
-          ConversationEnabledToolModel.hasCustomSelection(conversationId),
+          buildChatContext({
+            conversationId,
+            agentId,
+            agent,
+            user: { id: user.id, email: user.email, name: user.name },
+            organizationId,
+            hookSessionContext,
+            hookRunCollector,
+            elicitation: chatMcpElicitation,
+            abortSignal: chatAbortController.signal,
+          }),
           OrganizationModel.getSlimChatErrorUi(organizationId),
           OrganizationModel.getById(organizationId),
         ]);
-
-        // Fetch MCP tools with enabled tool filtering
-        // Pass undefined if no custom selection (use all tools)
-        // Pass the actual array (even if empty) if there is custom selection
-        const [mcpTools, toolUiResourceUris] = await Promise.all([
-          getChatMcpTools({
-            agentName: agent.name,
-            agentId,
-            userId: user.id,
-            enabledToolIds: hasCustomSelection ? enabledToolIds : undefined,
-            conversationId: conversation.id,
-            organizationId,
-            // Pass conversationId as sessionId to group all chat requests (including delegated agents) together
-            sessionId: conversation.id,
-            // Pass agentId as initial delegation chain (will be extended by delegated agents)
-            delegationChain: agentId,
-            abortSignal: chatAbortController.signal,
-            elicitation: chatMcpElicitation,
-            user: { id: user.id, email: user.email, name: user.name },
-            hookRunCollector,
-          }),
-          getChatMcpToolUiResourceUris(conversation.agentId),
-        ]);
-
-        // Build system prompt from agent's systemPrompt field
-        let systemPrompt: string | undefined;
-
-        // Build template context only when prompts use Handlebars syntax
-        let promptContext: UserSystemPromptContext | null = null;
-        if (promptNeedsRendering(agent.systemPrompt)) {
-          const userTeams = await TeamModel.getUserTeamsForOrganization({
-            userId: user.id,
-            organizationId,
-          });
-          promptContext = buildUserSystemPromptContext({
-            userName: user.name,
-            userEmail: user.email,
-            userTeams: userTeams.map((t) => t.name),
-          });
-        }
-
-        const renderedPrompt = renderSystemPrompt(
-          agent.systemPrompt,
-          promptContext,
-        );
-
-        let toolResultInstructions: string = "";
-        // Add MCP UI instruction when tools are available
-        if (Object.keys(mcpTools).length > 0) {
-          toolResultInstructions =
-            "When a tool result includes a UI resource, it means an interactive UI was rendered for the user. Respond with at most one brief sentence. Never describe, list, or explain what the UI shows.";
-        }
-
-        const toolDenialInstruction =
-          "When a tool execution is not approved by the user, do not retry it. Explain what happened and ask the user what they'd like to do instead.";
-
-        const toolLoadingInstructions =
-          agent.toolExposureMode === "search_and_run_only"
-            ? buildLoadToolsWhenNeededSystemPrompt()
-            : "";
-
-        // eagerly list the agent's skills in the prompt (like Claude Code /
-        // opencode), but only when the agent can actually load them.
-        const skillCatalogPrompt =
-          archestraMcpBranding.getToolName(TOOL_LOAD_SKILL_SHORT_NAME) in
-          mcpTools
-            ? await buildSkillCatalogPrompt({
-                organizationId,
-                userId: user.id,
-                agentId,
-              })
-            : null;
-
-        systemPrompt =
-          [
-            toolLoadingInstructions,
-            renderedPrompt,
-            skillCatalogPrompt,
-            toolDenialInstruction,
-            toolResultInstructions,
-            // Context returned by SessionStart hooks.
-            hookSessionContext,
-          ]
-            .filter(Boolean)
-            .join("\n\n") || undefined;
 
         // The conversation stores a model_id FK; dereference it to the
         // proxy-facing model string + provider (env/config fallback if unset).
@@ -513,9 +471,9 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
             userId: user.id,
             orgId: organizationId,
             toolCount: Object.keys(mcpTools).length,
-            hasCustomToolSelection: hasCustomSelection,
-            enabledToolCount: hasCustomSelection
-              ? enabledToolIds.length
+            hasCustomToolSelection: toolSelection.hasCustomSelection,
+            enabledToolCount: toolSelection.hasCustomSelection
+              ? toolSelection.enabledToolCount
               : "all",
             model: selectedModel,
             provider,
@@ -650,43 +608,13 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   );
                 });
 
-                const mapped = mapProviderError(error, provider);
-                const traceContext = getActiveTraceContext();
-                const correlationLogFields =
-                  getCorrelationLogFields(traceContext);
-                const fullError = { ...mapped, ...traceContext };
-                const errorForFrontend = slimChatErrorUi
-                  ? sanitizeChatErrorForFrontend(fullError)
-                  : fullError;
-                persistConversationChatError({
+                return buildStreamErrorPayload({
+                  error,
+                  mappedError: mapProviderError(error, provider),
                   conversationId,
-                  error: errorForFrontend,
+                  slimChatErrorUi,
+                  stage: "before stream starts",
                 });
-
-                logger.info(
-                  {
-                    mappedError: fullError,
-                    originalErrorType:
-                      error instanceof Error ? error.name : typeof error,
-                    willBeSentToFrontend: true,
-                    ...correlationLogFields,
-                  },
-                  "Returning mapped error to frontend before stream starts",
-                );
-                try {
-                  return JSON.stringify(errorForFrontend);
-                } catch {
-                  logger.error(
-                    {
-                      errorCode: mapped.code,
-                      ...correlationLogFields,
-                    },
-                    "Failed to stringify mapped pre-stream error, returning minimal error",
-                  );
-                  return JSON.stringify(
-                    getMinimalFrontendError(errorForFrontend),
-                  );
-                }
               },
               execute: async ({ writer }) => {
                 chatMcpElicitation.setWriter(writer);
@@ -888,38 +816,18 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                       return serializedToolError;
                     }
 
-                    const traceContext = getActiveTraceContext();
-                    const correlationLogFields =
-                      getCorrelationLogFields(traceContext);
-
                     // Use pre-built error from subagent if available (preserves correct provider),
                     // otherwise map the error with the current provider
-                    const mappedError: ChatErrorResponse =
-                      error instanceof ProviderError
-                        ? error.chatErrorResponse
-                        : mapProviderError(error, provider);
-                    const fullError = { ...mappedError, ...traceContext };
-                    const errorForFrontend = slimChatErrorUi
-                      ? sanitizeChatErrorForFrontend(fullError)
-                      : fullError;
-
-                    // mapProviderError safely serializes raw errors, but add defensive try-catch
-                    let serializedChatError: string;
-                    try {
-                      serializedChatError = JSON.stringify(errorForFrontend);
-                    } catch (stringifyError) {
-                      logger.error(
-                        {
-                          stringifyError,
-                          errorCode: mappedError.code,
-                          ...correlationLogFields,
-                        },
-                        "Failed to stringify mapped error, returning minimal error",
-                      );
-                      serializedChatError = JSON.stringify(
-                        getMinimalFrontendError(errorForFrontend),
-                      );
-                    }
+                    const serializedChatError = buildStreamErrorPayload({
+                      error,
+                      mappedError:
+                        error instanceof ProviderError
+                          ? error.chatErrorResponse
+                          : mapProviderError(error, provider),
+                      conversationId,
+                      slimChatErrorUi,
+                      stage: "via stream",
+                    });
                     returnedChatErrorPayloads.add(serializedChatError);
 
                     activeRunError =
@@ -938,7 +846,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                           error,
                           conversationId,
                           agentId,
-                          ...correlationLogFields,
+                          ...getCorrelationLogFields(getActiveTraceContext()),
                         },
                         "Chat stream error occurred",
                       );
@@ -966,22 +874,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                         "Unexpected error in onError async handler",
                       );
                     });
-
-                    persistConversationChatError({
-                      conversationId,
-                      error: errorForFrontend,
-                    });
-
-                    logger.info(
-                      {
-                        mappedError: fullError,
-                        originalErrorType:
-                          error instanceof Error ? error.name : typeof error,
-                        willBeSentToFrontend: true,
-                        ...correlationLogFields,
-                      },
-                      "Returning mapped error to frontend via stream",
-                    );
 
                     return serializedChatError;
                   },

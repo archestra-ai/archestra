@@ -11827,7 +11827,7 @@ export type ImportAgentData = {
             /**
              * Connector type (e.g. confluence, github)
              */
-            connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'file_upload' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler';
+            connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'file_upload' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler' | 'perforce';
         }>;
     };
     path?: never;
@@ -12818,7 +12818,7 @@ export type ExportAgentResponses = {
             /**
              * Connector type (e.g. confluence, github)
              */
-            connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'file_upload' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler';
+            connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'file_upload' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler' | 'perforce';
         }>;
     };
 };
@@ -35117,7 +35117,7 @@ export type GetKnowledgeBasesResponses = {
             connectors: Array<{
                 id: string;
                 name: string;
-                connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'file_upload' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler';
+                connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'file_upload' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler' | 'perforce';
             }>;
             totalDocsIndexed: number;
             assignedAgents: Array<{
@@ -35595,7 +35595,7 @@ export type GetConnectorsData = {
         offset?: number;
         knowledgeBaseId?: string;
         search?: string;
-        connectorType?: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'file_upload' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler';
+        connectorType?: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'file_upload' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler' | 'perforce';
     };
     url: '/api/connectors';
 };
@@ -35677,7 +35677,7 @@ export type GetConnectorsResponses = {
             description: string | null;
             visibility: 'org-wide' | 'team-scoped';
             teamIds: Array<string>;
-            connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'file_upload' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler';
+            connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'file_upload' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler' | 'perforce';
             config: {
                 type: 'jira';
                 jiraBaseUrl: unknown;
@@ -35807,6 +35807,12 @@ export type GetConnectorsResponses = {
                 batchSize?: number;
                 requestDelayMs?: number;
                 userAgent?: string;
+            } | {
+                type: 'perforce';
+                serverUrl: unknown;
+                depotPaths: Array<string>;
+                excludePaths?: Array<string>;
+                fileTypes?: Array<string>;
             };
             secretId: string | null;
             schedule: string;
@@ -35844,7 +35850,7 @@ export type CreateConnectorData = {
         description?: string | null;
         visibility?: 'org-wide' | 'team-scoped';
         teamIds?: Array<string>;
-        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'file_upload' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler';
+        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'file_upload' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler' | 'perforce';
         config: {
             type: 'jira';
             jiraBaseUrl: string;
@@ -35974,6 +35980,12 @@ export type CreateConnectorData = {
             batchSize?: number;
             requestDelayMs?: number;
             userAgent?: string;
+        } | {
+            type: 'perforce';
+            serverUrl: string;
+            depotPaths: Array<string>;
+            excludePaths?: Array<string>;
+            fileTypes?: Array<string>;
         };
         credentials?: {
             email?: string;
@@ -36069,7 +36081,7 @@ export type CreateConnectorResponses = {
         description: string | null;
         visibility: 'org-wide' | 'team-scoped';
         teamIds: Array<string>;
-        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'file_upload' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler';
+        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'file_upload' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler' | 'perforce';
         config: {
             type: 'jira';
             jiraBaseUrl: unknown;
@@ -36199,6 +36211,12 @@ export type CreateConnectorResponses = {
             batchSize?: number;
             requestDelayMs?: number;
             userAgent?: string;
+        } | {
+            type: 'perforce';
+            serverUrl: unknown;
+            depotPaths: Array<string>;
+            excludePaths?: Array<string>;
+            fileTypes?: Array<string>;
         };
         secretId: string | null;
         schedule: string;
@@ -36386,7 +36404,7 @@ export type GetConnectorResponses = {
         description: string | null;
         visibility: 'org-wide' | 'team-scoped';
         teamIds: Array<string>;
-        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'file_upload' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler';
+        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'file_upload' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler' | 'perforce';
         config: {
             type: 'jira';
             jiraBaseUrl: unknown;
@@ -36516,6 +36534,12 @@ export type GetConnectorResponses = {
             batchSize?: number;
             requestDelayMs?: number;
             userAgent?: string;
+        } | {
+            type: 'perforce';
+            serverUrl: unknown;
+            depotPaths: Array<string>;
+            excludePaths?: Array<string>;
+            fileTypes?: Array<string>;
         };
         secretId: string | null;
         schedule: string;
@@ -36669,6 +36693,12 @@ export type UpdateConnectorData = {
             batchSize?: number;
             requestDelayMs?: number;
             userAgent?: string;
+        } | {
+            type: 'perforce';
+            serverUrl: string;
+            depotPaths: Array<string>;
+            excludePaths?: Array<string>;
+            fileTypes?: Array<string>;
         };
         credentials?: {
             email?: string;
@@ -36765,7 +36795,7 @@ export type UpdateConnectorResponses = {
         description: string | null;
         visibility: 'org-wide' | 'team-scoped';
         teamIds: Array<string>;
-        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'file_upload' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler';
+        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'file_upload' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler' | 'perforce';
         config: {
             type: 'jira';
             jiraBaseUrl: unknown;
@@ -36895,6 +36925,12 @@ export type UpdateConnectorResponses = {
             batchSize?: number;
             requestDelayMs?: number;
             userAgent?: string;
+        } | {
+            type: 'perforce';
+            serverUrl: unknown;
+            depotPaths: Array<string>;
+            excludePaths?: Array<string>;
+            fileTypes?: Array<string>;
         };
         secretId: string | null;
         schedule: string;
@@ -37011,7 +37047,7 @@ export type GetConnectorDocumentsResponses = {
             chunkCount: number;
             createdAt: string;
             updatedAt: string;
-            connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'file_upload' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler';
+            connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'file_upload' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler' | 'perforce';
         }>;
         pagination: {
             currentPage: number;
@@ -37208,7 +37244,7 @@ export type GetConnectorDocumentResponses = {
         chunkCount: number;
         createdAt: string;
         updatedAt: string;
-        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'file_upload' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler';
+        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'file_upload' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler' | 'perforce';
     };
 };
 
@@ -54127,6 +54163,10 @@ export type PreviewGithubSkillResponses = {
             encoding: 'utf8' | 'base64';
             kind: 'reference' | 'script' | 'asset';
         }>;
+        /**
+         * Resource paths not imported: oversized, beyond the per-skill file cap, or unfetchable
+         */
+        skippedFiles: Array<string>;
         sourceRef: string;
         sourceCommit: string;
     };
@@ -54242,6 +54282,13 @@ export type ImportGithubSkillsResponses = {
             updatedAt: string;
         }>;
         skipped: Array<string>;
+        /**
+         * Per created skill, resource paths not imported: oversized, beyond the per-skill file cap, or unfetchable
+         */
+        skippedFiles: Array<{
+            skillPath: string;
+            files: Array<string>;
+        }>;
     };
 };
 
@@ -54473,6 +54520,116 @@ export type CreateSkillShareLinkResponses = {
 };
 
 export type CreateSkillShareLinkResponse = CreateSkillShareLinkResponses[keyof CreateSkillShareLinkResponses];
+
+export type RotateSkillShareLinkData = {
+    body: {
+        skillIds: Array<string>;
+        name?: string;
+        expiresAt?: string | null;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/skill-share-links/{id}/rotate';
+};
+
+export type RotateSkillShareLinkErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type RotateSkillShareLinkError = RotateSkillShareLinkErrors[keyof RotateSkillShareLinkErrors];
+
+export type RotateSkillShareLinkResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        link: {
+            id: string;
+            organizationId: string;
+            createdByUserId: string;
+            tokenStart: string;
+            name: string | null;
+            marketplaceName: string;
+            expiresAt: string | null;
+            revokedAt: string | null;
+            lastUsedAt: string | null;
+            createdAt: string;
+            updatedAt: string;
+            status: 'active' | 'expired' | 'revoked';
+            skills: Array<{
+                id: string;
+                name: string;
+                description: string;
+            }>;
+        };
+        rawToken: string;
+        cloneUrl: string;
+        marketplaceName: string;
+    };
+};
+
+export type RotateSkillShareLinkResponse = RotateSkillShareLinkResponses[keyof RotateSkillShareLinkResponses];
 
 export type RevokeSkillShareLinkData = {
     body?: never;

@@ -1272,6 +1272,7 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetSkillShareLinks]: { skill: ["admin"] },
   [RouteId.CreateSkillShareLink]: { skill: ["admin"] },
   [RouteId.RevokeSkillShareLink]: { skill: ["admin"] },
+  [RouteId.RotateSkillShareLink]: { skill: ["admin"] },
 
   // MCP App Routes - per-instance scope is enforced in the handlers
   [RouteId.GetApps]: { app: ["read"] },

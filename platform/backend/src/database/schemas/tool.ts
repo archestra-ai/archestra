@@ -15,6 +15,10 @@ import type { ToolParametersContent } from "@/types";
 import agentsTable from "./agent";
 import mcpCatalogTable from "./internal-mcp-catalog";
 
+/** Partial unique index enforcing one row per (catalog_id, name) for built-in Archestra tools. */
+export const ARCHESTRA_TOOL_NAME_UNIQUE_INDEX =
+  "tools_archestra_catalog_name_uidx";
+
 const toolsTable = pgTable(
   "tools",
   {
@@ -86,7 +90,7 @@ const toolsTable = pgTable(
     // composite unique() above is NULLS-DISTINCT and never enforces uniqueness for them.
     // Enforce one row per (catalog_id, name) within the Archestra built-in catalog.
     // The catalog id is inlined as a literal (index predicates can't be parameterized).
-    uniqueIndex("tools_archestra_catalog_name_uidx")
+    uniqueIndex(ARCHESTRA_TOOL_NAME_UNIQUE_INDEX)
       .on(table.catalogId, table.name)
       .where(
         sql`${table.catalogId} = ${sql.raw(`'${ARCHESTRA_MCP_CATALOG_ID}'`)} and ${table.agentId} is null and ${table.delegateToAgentId} is null`,

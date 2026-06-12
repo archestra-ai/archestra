@@ -2,6 +2,7 @@ import { DEFAULT_APP_NAME, RouteId } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { getSkillPermissionChecker } from "@/auth/skill-permissions";
+import { withDbTransaction } from "@/database";
 import logger from "@/logging";
 import { OrganizationModel, SkillModel, SkillShareLinkModel } from "@/models";
 import { marketplaceMaterializer } from "@/skills/marketplace";
@@ -16,8 +17,8 @@ import {
   SkillShareLinkStatusSchema,
   type SkillShareLinkWithSkills,
 } from "@/types";
-import { getPublicRequestOrigin } from "./request-origin";
-import { SKILL_MARKETPLACE_PREFIX } from "./route-paths";
+import { getPublicRequestOrigin } from "../request-origin";
+import { SKILL_MARKETPLACE_PREFIX } from "../route-paths";
 
 const SkillShareLinkSkillSummarySchema = z.object({
   id: z.string(),
@@ -148,6 +149,104 @@ const skillShareRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
+  fastify.post(
+    "/api/skill-share-links/:id/rotate",
+    {
+      schema: {
+        operationId: RouteId.RotateSkillShareLink,
+        description:
+          "Rotate a share link: revoke it and create its replacement in one transaction, so no failure mode leaves both tokens live. The new raw token is returned exactly once.",
+        tags: ["Skills"],
+        params: z.object({ id: z.string().uuid() }),
+        body: CreateSkillShareLinkBodySchema,
+        response: constructResponseSchema(CreateSkillShareLinkResponseSchema),
+      },
+    },
+    async (request, reply) => {
+      const { body, params, organizationId, user } = request;
+      await requireSkillAdmin({ userId: user.id, organizationId });
+
+      await assertSkillsBelongToOrg({
+        skillIds: body.skillIds,
+        organizationId,
+      });
+
+      const existing = await SkillShareLinkModel.findById(params.id);
+      if (!existing || existing.organizationId !== organizationId) {
+        throw new ApiError(404, "Skill share link not found");
+      }
+
+      const marketplaceName = await deriveMarketplaceName(organizationId);
+      if (isReservedMarketplaceName(marketplaceName)) {
+        throw new ApiError(
+          400,
+          `Marketplace name "${marketplaceName}" is reserved`,
+        );
+      }
+
+      const expiresAt =
+        body.expiresAt === undefined || body.expiresAt === null
+          ? null
+          : new Date(body.expiresAt);
+
+      const { link, rawToken } = await withDbTransaction(async (tx) => {
+        const claimed = await SkillShareLinkModel.revoke({
+          id: params.id,
+          organizationId,
+          tx,
+          onlyIfUnrevoked: true,
+        });
+        if (!claimed) {
+          // a replayed or concurrent rotate of the same link: the loser must
+          // not mint a second replacement token
+          throw new ApiError(409, "Skill share link is already revoked");
+        }
+        return SkillShareLinkModel.create({
+          organizationId,
+          createdByUserId: user.id,
+          skillIds: body.skillIds,
+          marketplaceName,
+          name: body.name ?? null,
+          expiresAt,
+          tx,
+        });
+      });
+
+      // best-effort cleanup of the old link's materialized repo; failures must
+      // not surface to the user — the rotation already committed in the DB.
+      void marketplaceMaterializer
+        .get()
+        .revoke(params.id)
+        .catch((err: unknown) => {
+          logger.warn(
+            { err, shareLinkId: params.id },
+            "skill-share: failed to drop materialized repo after rotate",
+          );
+        });
+
+      const origin = getPublicRequestOrigin(request);
+      const cloneUrl = `${origin}${SKILL_MARKETPLACE_PREFIX}/${rawToken}/repo.git`;
+
+      logger.info(
+        {
+          rotatedShareLinkId: params.id,
+          shareLinkId: link.id,
+          organizationId,
+          skillCount: link.skills.length,
+          createdByUserId: user.id,
+        },
+        "skill-share: rotated share link",
+      );
+
+      return reply.send({
+        link: toShareLinkResponse(link),
+        rawToken,
+        cloneUrl,
+        marketplaceName,
+      });
+    },
+  );
+
   fastify.delete(
     "/api/skill-share-links/:id",
     {
@@ -225,16 +324,15 @@ async function assertSkillsBelongToOrg(params: {
 }
 
 /**
- * Marketplace name is frozen at create time and registered in the user's local
- * client config under this exact name — changing it later would silently break
- * every installed marketplace, so we snapshot the current app+org branding now.
+ * Deterministic marketplace name for an organization. Also used by the
+ * connection-setup script endpoint, which creates share links at render time.
+ *
+ * The name is frozen at create time and registered in the user's local client
+ * config under this exact name — changing it later would silently break every
+ * installed marketplace, so we snapshot the current app+org branding now.
  *
  * Format: `<app-slug>-<org-slug>-skills`, e.g. `archestra-acme-corp-skills`.
  * Falls back to a hex slice of the org id if both slug and name are unusable.
- */
-/**
- * Deterministic marketplace name for an organization. Also used by the
- * connection-setup script endpoint, which creates share links at render time.
  */
 export async function deriveMarketplaceName(
   organizationId: string,

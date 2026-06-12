@@ -16,7 +16,11 @@ import { resolveSessionExternalIdpToken } from "@/services/identity-providers/se
 import { describe, expect, test } from "@/test";
 import { agentOwner } from "@/types";
 import * as chatClient from "./chat-mcp-client";
-import { mcpToolToModelOutput } from "./chat-mcp-client";
+import {
+  buildArchestraToolOutput,
+  mcpToolToModelOutput,
+  __test as toolBuilderTest,
+} from "./chat-tool-builder";
 import mcpClient from "./mcp-client";
 
 const mockConnect = vi.fn().mockRejectedValue(new Error("Connection closed"));
@@ -93,7 +97,7 @@ describe("isBrowserMcpTool", () => {
 });
 
 describe("normalizeJsonSchema", () => {
-  const { normalizeJsonSchema } = chatClient.__test;
+  const { normalizeJsonSchema } = toolBuilderTest;
 
   test("returns fallback schema for missing/invalid input", () => {
     expect(normalizeJsonSchema(null)).toEqual({
@@ -521,7 +525,7 @@ describe("executeMcpTool error handling", () => {
       }),
     );
 
-    const result = await chatClient.__test.executeMcpTool(baseCtx);
+    const result = await toolBuilderTest.executeMcpTool(baseCtx);
     expect(result.content).toBe("Auth required: install the server");
     expect(result._meta).toMatchObject({
       archestraError: expect.objectContaining({
@@ -550,7 +554,7 @@ describe("executeMcpTool error handling", () => {
       }),
     );
 
-    const result = await chatClient.__test.executeMcpTool(baseCtx);
+    const result = await toolBuilderTest.executeMcpTool(baseCtx);
     expect(result.content).toBe("Error line 1\nError line 2");
   });
 
@@ -561,7 +565,7 @@ describe("executeMcpTool error handling", () => {
       }),
     );
 
-    const result = await chatClient.__test.executeMcpTool(baseCtx);
+    const result = await toolBuilderTest.executeMcpTool(baseCtx);
     expect(result.content).toBe(
       JSON.stringify({ type: "image", data: "base64..." }),
     );
@@ -572,7 +576,7 @@ describe("executeMcpTool error handling", () => {
       mockResult({ content: null, error: "Something failed" }),
     );
 
-    const result = await chatClient.__test.executeMcpTool(baseCtx);
+    const result = await toolBuilderTest.executeMcpTool(baseCtx);
     expect(result.content).toBe("Something failed");
   });
 
@@ -581,7 +585,7 @@ describe("executeMcpTool error handling", () => {
       mockResult({ content: null }),
     );
 
-    const result = await chatClient.__test.executeMcpTool(baseCtx);
+    const result = await toolBuilderTest.executeMcpTool(baseCtx);
     expect(result.content).toBe("Tool execution failed");
   });
 
@@ -619,7 +623,7 @@ describe("executeMcpTool error handling", () => {
       }),
     );
 
-    const result = await chatClient.__test.executeMcpTool(baseCtx);
+    const result = await toolBuilderTest.executeMcpTool(baseCtx);
 
     expect(result._meta).toMatchObject({
       archestraError: expect.objectContaining({
@@ -661,7 +665,7 @@ describe("executeMcpTool error handling", () => {
       action: "mark_as_untrusted",
     });
 
-    const result = await chatClient.__test.executeMcpTool({
+    const result = await toolBuilderTest.executeMcpTool({
       ...baseCtx,
       agentId: agent.id,
       globalToolPolicy: "restrictive",
@@ -1590,7 +1594,7 @@ describe("buildArchestraToolOutput", () => {
     makeAgent,
   }) => {
     const agent = await makeAgent();
-    const result = await chatClient.buildArchestraToolOutput({
+    const result = await buildArchestraToolOutput({
       response: archestraResponse,
       toolName: "archestra__whoami",
       toolArguments: {},
@@ -1614,7 +1618,7 @@ describe("buildArchestraToolOutput", () => {
       isError: false,
     };
 
-    const result = await chatClient.buildArchestraToolOutput({
+    const result = await buildArchestraToolOutput({
       response: appResponse,
       toolName: `archestra__${shortName}`,
       toolArguments: {},
@@ -1638,7 +1642,7 @@ describe("buildArchestraToolOutput", () => {
       isError: false,
     };
 
-    const result = await chatClient.buildArchestraToolOutput({
+    const result = await buildArchestraToolOutput({
       response: appResponse,
       toolName: "archestra__run_tool",
       toolArguments: { tool_name: "create_app", tool_args: {} },
@@ -1655,7 +1659,7 @@ describe("buildArchestraToolOutput", () => {
     makeAgent,
   }) => {
     const agent = await makeAgent();
-    const result = await chatClient.buildArchestraToolOutput({
+    const result = await buildArchestraToolOutput({
       response: {
         content: [
           { type: "text" as const, text: "Error: Authentication required." },
@@ -1674,7 +1678,7 @@ describe("buildArchestraToolOutput", () => {
     makeAgent,
   }) => {
     const agent = await makeAgent();
-    const result = await chatClient.buildArchestraToolOutput({
+    const result = await buildArchestraToolOutput({
       response: {
         content: [{ type: "text" as const, text: "2 apps" }],
         structuredContent: { apps: [] },
@@ -1701,7 +1705,7 @@ describe("buildArchestraToolOutput", () => {
       // biome-ignore lint/suspicious/noExplicitAny: test mock data
       .mockResolvedValueOnce(mockToolDef as any);
 
-    const result = await chatClient.buildArchestraToolOutput({
+    const result = await buildArchestraToolOutput({
       response: archestraResponse,
       toolName: "archestra__run_tool",
       toolArguments: {
@@ -1734,7 +1738,7 @@ describe("buildArchestraToolOutput", () => {
       // biome-ignore lint/suspicious/noExplicitAny: test mock data
       .mockResolvedValueOnce({ name: "context7__search", meta: null } as any);
 
-    const result = await chatClient.buildArchestraToolOutput({
+    const result = await buildArchestraToolOutput({
       response: archestraResponse,
       toolName: "archestra__run_tool",
       toolArguments: { tool_name: "context7__search", tool_args: {} },
@@ -1749,7 +1753,7 @@ describe("buildArchestraToolOutput", () => {
 
 describe("throwIfApprovalRequired", () => {
   const { resolveApprovalPolicyTarget, throwIfApprovalRequired } =
-    chatClient.__test;
+    toolBuilderTest;
 
   test("does not throw when globalToolPolicy is permissive", async () => {
     await expect(

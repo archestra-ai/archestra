@@ -70,6 +70,7 @@ export const CONNECTOR_TYPE_LABELS = {
   outline: "Outline",
   salesforce: "Salesforce",
   web_crawler: "Web Crawler",
+  perforce: "Perforce (Helix Core)",
 } as const;
 
 export type ConnectorType = keyof typeof CONNECTOR_TYPE_LABELS;

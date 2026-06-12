@@ -718,6 +718,63 @@ describe("knowledge base routes", () => {
         });
       }
     });
+
+    test("creates a perforce connector and normalizes depot paths", async () => {
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/connectors",
+        payload: {
+          name: "Docs Depot",
+          connectorType: "perforce",
+          config: {
+            type: "perforce",
+            serverUrl: "https://perforce.example.com:8080",
+            depotPaths: ["//depot/docs/...", "//stream/main/specs/"],
+            fileTypes: [".md", ".yaml"],
+          },
+          credentials: {
+            email: "svc-knowledge",
+            apiToken: "perforce-ticket",
+          },
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const connector = response.json();
+      expect(connector.connectorType).toBe("perforce");
+      expect(connector.config).toMatchObject({
+        type: "perforce",
+        serverUrl: "https://perforce.example.com:8080",
+        depotPaths: ["//depot/docs", "//stream/main/specs"],
+      });
+
+      const stored = await KnowledgeBaseConnectorModel.findById(connector.id);
+      expect(stored?.config).toMatchObject({
+        depotPaths: ["//depot/docs", "//stream/main/specs"],
+      });
+    });
+
+    test("rejects perforce depot paths containing revision metacharacters", async () => {
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/connectors",
+        payload: {
+          name: "Bad Depot",
+          connectorType: "perforce",
+          config: {
+            type: "perforce",
+            serverUrl: "https://perforce.example.com:8080",
+            depotPaths: ["//depot/docs@123"],
+          },
+          credentials: {
+            email: "svc-knowledge",
+            apiToken: "perforce-ticket",
+          },
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
   });
 
   describe("GET /api/connectors", () => {
@@ -807,6 +864,43 @@ describe("knowledge base routes", () => {
   });
 
   describe("PUT /api/connectors/:id", () => {
+    test("preserves the stored username when rotating only the token", async () => {
+      const connector = await KnowledgeBaseConnectorModel.create({
+        organizationId,
+        name: "Rotate Connector",
+        connectorType: "perforce",
+        config: {
+          type: "perforce",
+          serverUrl: "https://perforce.example.com:8080",
+          depotPaths: ["//depot/docs"],
+        },
+      });
+      const secret = await secretManager().createSecret(
+        { email: "svc-knowledge", apiToken: "old-ticket" },
+        "connector-rotate",
+      );
+      await KnowledgeBaseConnectorModel.update(connector.id, {
+        secretId: secret.id,
+      });
+
+      // The edit dialog omits the email field when left blank.
+      const response = await app.inject({
+        method: "PUT",
+        url: `/api/connectors/${connector.id}`,
+        payload: {
+          name: "Rotate Connector",
+          credentials: { apiToken: "new-ticket" },
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const updatedSecret = await secretManager().getSecret(secret.id);
+      expect(updatedSecret?.secret).toMatchObject({
+        email: "svc-knowledge",
+        apiToken: "new-ticket",
+      });
+    });
+
     test("updates a connector name and schedule", async () => {
       const connector = await KnowledgeBaseConnectorModel.create({
         organizationId,

@@ -42,6 +42,7 @@ import { secretManager } from "@/secrets-manager";
 import { modelSyncService } from "@/services/model-sync";
 import {
   BUILT_IN_SKILLS,
+  builtInSkillShippedWrite,
   builtInSkillSourceRef,
   builtInSkillVersion,
 } from "@/skills/built-in-skills";
@@ -212,12 +213,7 @@ export async function syncBuiltInSkills(): Promise<void> {
   for (const organization of organizations) {
     for (const builtInSkill of BUILT_IN_SKILLS) {
       const sourceRef = builtInSkillSourceRef(builtInSkill.builtInSkillId);
-      const shippedVersion = builtInSkillVersion(builtInSkill);
-      const files = builtInSkill.files.map((file) => ({
-        path: file.path,
-        content: file.content,
-        kind: file.kind,
-      }));
+      const shipped = builtInSkillShippedWrite(builtInSkill);
 
       const existing = await SkillModel.findBuiltIn({
         organizationId: organization.id,
@@ -229,14 +225,11 @@ export async function syncBuiltInSkills(): Promise<void> {
           skill: {
             organizationId: organization.id,
             scope: "org",
-            name: builtInSkill.name,
-            description: builtInSkill.description,
-            content: builtInSkill.content,
             sourceType: "built_in",
             sourceRef,
-            sourceCommit: shippedVersion,
+            ...shipped.skill,
           },
-          files,
+          files: shipped.files,
         });
         // createWithFiles is ON CONFLICT DO NOTHING on the per-org shared-name
         // index, so a null means a pre-existing non-built-in skill already
@@ -263,7 +256,7 @@ export async function syncBuiltInSkills(): Promise<void> {
         continue;
       }
 
-      if (existing.sourceCommit === shippedVersion) {
+      if (existing.sourceCommit === shipped.skill.sourceCommit) {
         continue;
       }
 
@@ -288,13 +281,8 @@ export async function syncBuiltInSkills(): Promise<void> {
 
       await SkillModel.updateWithFiles({
         id: existing.id,
-        skill: {
-          name: builtInSkill.name,
-          description: builtInSkill.description,
-          content: builtInSkill.content,
-          sourceCommit: shippedVersion,
-        },
-        files,
+        skill: shipped.skill,
+        files: shipped.files,
       });
       logger.info(
         {

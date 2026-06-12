@@ -15,6 +15,7 @@ import {
 import type { OTLPExporterNodeConfigBase } from "@opentelemetry/otlp-exporter-base";
 import dotenv from "dotenv";
 import logger from "@/logging";
+import { SKILL_MARKETPLACE_PREFIX } from "@/routes/route-paths";
 import {
   type EmailProviderType,
   EmailProviderTypeSchema,
@@ -767,7 +768,7 @@ const config = {
     endpoint: "/v1/mcp",
   },
   skillMarketplace: {
-    endpoint: "/skills/m",
+    endpoint: SKILL_MARKETPLACE_PREFIX,
     /**
      * Cache directory for materialized share-link git repos. The cache is a
      * derived view of the `skill_share_link_revision` history — wiping it is

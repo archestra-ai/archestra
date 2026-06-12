@@ -55,6 +55,7 @@ const CONNECTOR_TYPE_OPTIONS = [
   "github",
   "gitlab",
   "servicenow",
+  "perforce",
   "web_crawler",
 ] as ConnectorType[];
 

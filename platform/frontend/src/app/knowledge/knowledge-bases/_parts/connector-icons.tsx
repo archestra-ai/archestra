@@ -1,5 +1,5 @@
 import type { archestraApiTypes } from "@archestra/shared";
-import { Github, Globe, Upload } from "lucide-react";
+import { FolderGit2, Github, Globe, Upload } from "lucide-react";
 import type { ReactNode } from "react";
 
 type ConnectorType =
@@ -33,6 +33,10 @@ const CONNECTOR_ICON_MAP: Partial<Record<ConnectorType, ConnectorIcon>> = {
   web_crawler: {
     kind: "element",
     render: (className) => <Globe className={className} />,
+  },
+  perforce: {
+    kind: "element",
+    render: (className) => <FolderGit2 className={className} />,
   },
 };
 

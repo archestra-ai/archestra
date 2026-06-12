@@ -182,7 +182,6 @@ export const __test = {
   getCacheKey,
   isBrowserMcpTool,
   filterToolsByEnabledIds,
-  pingClientWithTimeout,
 };
 
 /**

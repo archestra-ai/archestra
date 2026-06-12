@@ -8,8 +8,8 @@ import {
 import { SESSION_ID_KEY } from "@/observability/request-context";
 import type { AgentType } from "@/types";
 import {
-  ATTR_ARCHESTRA_AGENT_TYPE,
   ATTR_ARCHESTRA_AGENT_LABEL_PREFIX,
+  ATTR_ARCHESTRA_AGENT_TYPE,
   ATTR_ARCHESTRA_TRIGGER_SOURCE,
   ATTR_GENAI_AGENT_ID,
   ATTR_GENAI_AGENT_NAME,

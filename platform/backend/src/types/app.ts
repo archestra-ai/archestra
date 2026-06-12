@@ -22,9 +22,9 @@ export const APP_DATA_MAX_ENTRIES = 1000;
 export const APP_DATA_KEY_MAX_LENGTH = 256;
 
 /**
- * Structural validators for the snapshotted CSP/permissions. These check shape
- * only; strict hostname/whitelist validation is layered on at the save path
- * (Component 7), not here, so the column types stay reusable.
+ * Shape of the platform-pinned CSP (APP_PLATFORM_CSP) and the snapshotted
+ * permissions column. These check shape only; strict hostname/whitelist
+ * validation is layered on at the save path, not here.
  */
 export const AppUiCspSchema = z
   .object({

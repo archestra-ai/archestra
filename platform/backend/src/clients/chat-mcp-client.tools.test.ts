@@ -141,14 +141,17 @@ describe("getChatMcpTools per-kind tool shape", () => {
       conversationId: conversation.id,
     });
 
-    const mcpTool = tools["extsrv__fetch_data"];
+    const mcpTool = tools.extsrv__fetch_data;
     expect(mcpTool).toBeDefined();
     expect(mcpTool.description).toBe("Tool: extsrv__fetch_data");
     expect(typeof mcpTool.toModelOutput).toBe("function");
     expect(typeof mcpTool.needsApproval).toBe("function");
     expect(
-      (mcpTool.inputSchema as { jsonSchema: Record<string, unknown> })
-        .jsonSchema,
+      (
+        mcpTool.inputSchema as unknown as {
+          jsonSchema: Record<string, unknown>;
+        }
+      ).jsonSchema,
     ).toMatchObject({ type: "object", additionalProperties: false });
 
     const agentTool = tools[delegationTool.name];
@@ -214,7 +217,7 @@ describe("getChatMcpTools MCP tool execute pipeline", () => {
       conversationId: conversation.id,
     });
 
-    const result = await tools["extsrv__fetch_data"].execute?.(
+    const result = await tools.extsrv__fetch_data.execute?.(
       { query: "q" },
       execOptions("call-1"),
     );
@@ -274,7 +277,7 @@ describe("getChatMcpTools MCP tool execute pipeline", () => {
       conversationId: conversation.id,
     });
 
-    const result = await tools["extsrv__fetch_data"].execute?.(
+    const result = await tools.extsrv__fetch_data.execute?.(
       { query: "q" },
       execOptions("call-2"),
     );
@@ -338,7 +341,7 @@ describe("getChatMcpTools MCP tool execute pipeline", () => {
       conversationId: conversation.id,
     });
 
-    const result = await tools["extsrv__fetch_data"].execute?.(
+    const result = await tools.extsrv__fetch_data.execute?.(
       { query: "q" },
       execOptions("call-3"),
     );
@@ -486,11 +489,11 @@ describe("getChatMcpTools approval gating", () => {
       blockOnApprovalRequired: true,
     });
 
-    expect(tools["extsrv__restricted_export"].needsApproval).toBeUndefined();
+    expect(tools.extsrv__restricted_export.needsApproval).toBeUndefined();
     expect(tools[delegationTool.name].needsApproval).toBeUndefined();
 
     await expect(
-      tools["extsrv__restricted_export"].execute?.(
+      tools.extsrv__restricted_export.execute?.(
         { query: "q" },
         execOptions("call-5"),
       ),

@@ -55,6 +55,7 @@ export async function startActiveMcpSpan<T>(params: {
   mcpServerName: string;
   agent: SpanAgentInfo;
   teams?: SpanTeamInfo[];
+  userTeams?: SpanTeamInfo[];
   sessionId?: string | null;
   agentType?: AgentType;
   toolCallId?: string;
@@ -86,7 +87,8 @@ export async function startActiveMcpSpan<T>(params: {
     ctx,
     async (span) => {
       setAgentAttributes(span, params.agent);
-      setTeamAttributes(span, params.teams);
+      setTeamAttributes(span, params.teams, "agent");
+      setTeamAttributes(span, params.userTeams, "user");
       setSessionId(span, params.sessionId);
 
       if (params.agentType) {
@@ -137,6 +139,7 @@ export function recordBlockedToolSpans(params: {
   blockedReason: string;
   agent: SpanAgentInfo;
   teams?: SpanTeamInfo[];
+  userTeams?: SpanTeamInfo[];
   sessionId?: string | null;
   agentType?: AgentType;
   user?: SpanUserInfo | null;
@@ -170,7 +173,8 @@ export function recordBlockedToolSpans(params: {
     );
 
     setAgentAttributes(span, params.agent);
-    setTeamAttributes(span, params.teams);
+    setTeamAttributes(span, params.teams, "agent");
+    setTeamAttributes(span, params.userTeams, "user");
     setSessionId(span, params.sessionId);
 
     if (params.agentType) {

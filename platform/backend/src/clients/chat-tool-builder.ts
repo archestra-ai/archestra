@@ -77,6 +77,8 @@ export interface ChatToolContext {
   user?: { id: string; email?: string; name?: string };
   /** The agent's teams (with labels) for OTEL span attributes */
   teams?: SpanTeamInfo[];
+  /** The requesting user's teams (with labels) for OTEL span attributes */
+  userTeams?: SpanTeamInfo[];
   /** Block tool execution when policy is require_approval (A2A/autonomous contexts) */
   blockOnApprovalRequired?: boolean;
   /** Per-turn sink for inline `data-hook-run` entries (chat path only). */
@@ -546,6 +548,7 @@ async function executeWithToolSpan<R>(params: {
     mcpServerName: serverName ?? "unknown",
     agent: { id: ctx.agentId, name: ctx.agentName },
     teams: ctx.teams,
+    userTeams: ctx.userTeams,
     sessionId: ctx.sessionId,
     toolArgs: spanToolArgs,
     user: ctx.user,

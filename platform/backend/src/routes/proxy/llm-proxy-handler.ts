@@ -31,6 +31,7 @@ import {
   LimitValidationService,
   LlmProviderApiKeyModel,
   ModelModel,
+  TeamModel,
   ToolInvocationPolicyModel,
   UserModel,
 } from "@/models";
@@ -134,6 +135,7 @@ export interface LLMProxyContext<TRequest> {
   parentContext?: Context;
   teamIds?: string[];
   teams?: SpanTeamInfo[];
+  userTeams?: SpanTeamInfo[];
 }
 
 export type LLMProxyAuthOverride = {
@@ -621,6 +623,14 @@ export async function handleLLMProxy<
       await AgentTeamModel.getTeamLabelInfoForAgent(resolvedAgentId);
     const teamIds = teams.map((team) => team.id);
 
+    // Fetch the requesting user's teams (with labels) for trace span attributes.
+    const userTeams = userId
+      ? await TeamModel.getTeamLabelInfoForUser({
+          userId,
+          organizationId: resolvedAgent.organizationId,
+        })
+      : [];
+
     // Evaluate trusted data policies
     logger.debug(
       {
@@ -846,6 +856,7 @@ export async function handleLLMProxy<
       parentContext,
       teamIds,
       teams,
+      userTeams,
     };
 
     if (requestAdapter.isStreaming()) {
@@ -951,6 +962,7 @@ async function handleStreaming<
     parentContext,
     teamIds,
     teams,
+    userTeams,
   } = ctx;
 
   const providerName = provider.provider;
@@ -977,6 +989,7 @@ async function handleStreaming<
       stream: true,
       agent,
       teams,
+      userTeams,
       sessionId,
       executionId,
       externalAgentId,
@@ -1192,6 +1205,7 @@ async function handleStreaming<
         reason,
         agent,
         teams,
+        userTeams,
         sessionId,
         resolvedUser,
         providerName,
@@ -1366,6 +1380,7 @@ async function handleNonStreaming<
     parentContext,
     teamIds,
     teams,
+    userTeams,
   } = ctx;
 
   const providerName = provider.provider;
@@ -1383,6 +1398,7 @@ async function handleNonStreaming<
     stream: false,
     agent,
     teams,
+    userTeams,
     sessionId,
     executionId,
     externalAgentId,
@@ -1492,6 +1508,7 @@ async function handleNonStreaming<
         reason,
         agent,
         teams,
+        userTeams,
         sessionId,
         resolvedUser,
         providerName,

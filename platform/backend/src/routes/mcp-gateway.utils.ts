@@ -50,6 +50,7 @@ import {
   McpToolCallModel,
   MemberModel,
   OAuthAccessTokenModel,
+  TeamModel,
   TeamTokenModel,
   ToolModel,
   UserModel,
@@ -170,8 +171,15 @@ export async function createAgentServer(
   const agent = await AgentModel.findById(agentId);
   if (!agent) throw new Error(`Agent not found: ${agentId}`);
 
-  // Fetch the agent's teams (with labels) for trace span team attributes.
+  // Fetch the agent's teams and the calling user's teams (with labels) for
+  // trace span team attributes.
   const teams = await AgentTeamModel.getTeamLabelInfoForAgent(agentId);
+  const userTeams = tokenAuth?.userId
+    ? await TeamModel.getTeamLabelInfoForUser({
+        userId: tokenAuth.userId,
+        organizationId: tokenAuth.organizationId,
+      })
+    : [];
 
   // Create a map of Archestra tool names to their titles
   // This is needed because the database schema doesn't include a title field
@@ -367,6 +375,7 @@ export async function createAgentServer(
             mcpServerName,
             agent,
             teams,
+            userTeams,
             agentType: agent.agentType,
             toolCallId: `archestra-${Date.now()}`,
             toolArgs: args,
@@ -465,6 +474,7 @@ export async function createAgentServer(
           mcpServerName,
           agent,
           teams,
+          userTeams,
           agentType: agent.agentType,
           toolCallId,
           toolArgs: args,

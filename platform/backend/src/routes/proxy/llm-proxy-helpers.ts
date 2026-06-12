@@ -199,6 +199,7 @@ export function recordBlockedToolCallMetrics(params: {
   reason: string;
   agent: Agent;
   teams?: SpanTeamInfo[];
+  userTeams?: SpanTeamInfo[];
   sessionId?: string | null;
   resolvedUser?: { id: string; email: string; name: string } | null;
   providerName: SupportedProvider;
@@ -212,6 +213,7 @@ export function recordBlockedToolCallMetrics(params: {
     blockedReason: params.reason,
     agent: params.agent,
     teams: params.teams,
+    userTeams: params.userTeams,
     sessionId: params.sessionId,
     agentType: params.agent.agentType ?? undefined,
     user: toSpanUserInfo(params.resolvedUser),

@@ -44,16 +44,28 @@ function captureSpan(fn: (span: Span) => void): ReadableSpan {
 }
 
 describe("setTeamAttributes", () => {
-  test("sets array-valued team ids and names", () => {
+  test("namespaces ids and names by scope (agent vs user)", () => {
     const teams: SpanTeamInfo[] = [
       { id: "t1", name: "Platform", labels: [] },
       { id: "t2", name: "Security", labels: [] },
     ];
 
-    const span = captureSpan((s) => setTeamAttributes(s, teams));
+    const agentSpan = captureSpan((s) => setTeamAttributes(s, teams, "agent"));
+    expect(agentSpan.attributes["archestra.agent.team.ids"]).toEqual([
+      "t1",
+      "t2",
+    ]);
+    expect(agentSpan.attributes["archestra.agent.team.names"]).toEqual([
+      "Platform",
+      "Security",
+    ]);
 
-    expect(span.attributes["archestra.team.ids"]).toEqual(["t1", "t2"]);
-    expect(span.attributes["archestra.team.names"]).toEqual([
+    const userSpan = captureSpan((s) => setTeamAttributes(s, teams, "user"));
+    expect(userSpan.attributes["archestra.user.team.ids"]).toEqual([
+      "t1",
+      "t2",
+    ]);
+    expect(userSpan.attributes["archestra.user.team.names"]).toEqual([
       "Platform",
       "Security",
     ]);
@@ -80,20 +92,24 @@ describe("setTeamAttributes", () => {
       },
     ];
 
-    const span = captureSpan((s) => setTeamAttributes(s, teams));
+    const span = captureSpan((s) => setTeamAttributes(s, teams, "agent"));
 
-    const envValues = span.attributes["archestra.team.label.env"] as string[];
+    const envValues = span.attributes[
+      "archestra.agent.team.label.env"
+    ] as string[];
     expect([...envValues].sort()).toEqual(["prod", "staging"]);
-    expect(span.attributes["archestra.team.label.region"]).toEqual([
+    expect(span.attributes["archestra.agent.team.label.region"]).toEqual([
       "us-east-1",
     ]);
   });
 
   test("is a no-op for empty or undefined teams", () => {
-    const emptySpan = captureSpan((s) => setTeamAttributes(s, []));
-    expect(emptySpan.attributes["archestra.team.ids"]).toBeUndefined();
+    const emptySpan = captureSpan((s) => setTeamAttributes(s, [], "agent"));
+    expect(emptySpan.attributes["archestra.agent.team.ids"]).toBeUndefined();
 
-    const undefinedSpan = captureSpan((s) => setTeamAttributes(s, undefined));
-    expect(undefinedSpan.attributes["archestra.team.ids"]).toBeUndefined();
+    const undefinedSpan = captureSpan((s) =>
+      setTeamAttributes(s, undefined, "user"),
+    );
+    expect(undefinedSpan.attributes["archestra.user.team.ids"]).toBeUndefined();
   });
 });

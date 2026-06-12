@@ -491,6 +491,10 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           agentId,
           sessionId: conversationId,
           teams: await AgentTeamModel.getTeamLabelInfoForAgent(agentId),
+          userTeams: await TeamModel.getTeamLabelInfoForUser({
+            userId: user.id,
+            organizationId,
+          }),
           user: { id: user.id, email: user.email, name: user.name },
           callback: async () => {
             // Create LLM model using shared service

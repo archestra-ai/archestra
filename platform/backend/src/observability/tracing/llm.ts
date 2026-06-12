@@ -72,6 +72,7 @@ export async function startActiveLlmSpan<T>(params: {
   stream: boolean;
   agent?: Agent;
   teams?: SpanTeamInfo[];
+  userTeams?: SpanTeamInfo[];
   sessionId?: string | null;
   executionId?: string;
   externalAgentId?: string;
@@ -121,7 +122,8 @@ export async function startActiveLlmSpan<T>(params: {
       setAgentAttributes(span, params.agent);
     }
 
-    setTeamAttributes(span, params.teams);
+    setTeamAttributes(span, params.teams, "agent");
+    setTeamAttributes(span, params.userTeams, "user");
     setSessionId(span, params.sessionId);
 
     if (params.executionId) {

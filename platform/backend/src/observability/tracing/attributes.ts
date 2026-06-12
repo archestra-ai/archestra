@@ -84,14 +84,12 @@ export const ATTR_ARCHESTRA_APP_NAME = "archestra.app.name";
 export const ATTR_ARCHESTRA_USER_ID = "archestra.user.id";
 export const ATTR_ARCHESTRA_USER_EMAIL = "archestra.user.email";
 export const ATTR_ARCHESTRA_USER_NAME = "archestra.user.name";
-export const ATTR_ARCHESTRA_LABEL_PREFIX = "archestra.label.";
+export const ATTR_ARCHESTRA_AGENT_LABEL_PREFIX = "archestra.agent.label.";
 // Team metadata. Teams are an Archestra concept with no OTEL semantic-convention
-// registry equivalent, so the custom `archestra.team.*` namespace is used. An
-// agent can belong to multiple teams, so ids/names are array-valued and team
-// label values are merged per key across all of the agent's teams.
-const ATTR_ARCHESTRA_TEAM_IDS = "archestra.team.ids";
-const ATTR_ARCHESTRA_TEAM_NAMES = "archestra.team.names";
-const ATTR_ARCHESTRA_TEAM_LABEL_PREFIX = "archestra.team.label.";
+// registry equivalent, so the custom `archestra.<scope>.team.*` namespace is
+// used, where scope is the principal the teams belong to (`agent` or `user`). A
+// principal can belong to multiple teams, so ids/names are array-valued and team
+// label values are merged per key across all of the principal's teams.
 
 // --- MCP custom ---
 export const ATTR_MCP_SERVER_NAME = "mcp.server.name";
@@ -116,6 +114,9 @@ export interface SpanTeamInfo {
   labels?: { key: string; value: string }[];
 }
 
+/** The principal a set of teams belongs to, used to namespace team span attributes. */
+export type TeamScope = "agent" | "user";
+
 export interface SpanUserInfo {
   id: string;
   email?: string;
@@ -137,29 +138,37 @@ export function setAgentAttributes(span: Span, agent: SpanAgentInfo): void {
   if (agent.labels && agent.labels.length > 0) {
     for (const label of agent.labels) {
       span.setAttribute(
-        `${ATTR_ARCHESTRA_LABEL_PREFIX}${label.key}`,
+        `${ATTR_ARCHESTRA_AGENT_LABEL_PREFIX}${label.key}`,
         label.value,
       );
     }
   }
 }
 
+/**
+ * Set team span attributes for a principal under `archestra.<scope>.team.*`:
+ * `.ids` and `.names` (array-valued, since a principal can belong to multiple
+ * teams) and `.label.<key>` (label values merged per key across the principal's
+ * teams). `scope` distinguishes the agent's teams from the requesting user's.
+ */
 export function setTeamAttributes(
   span: Span,
   teams: SpanTeamInfo[] | null | undefined,
+  scope: TeamScope,
 ): void {
   if (!teams || teams.length === 0) return;
 
+  const base = `archestra.${scope}.team`;
   span.setAttribute(
-    ATTR_ARCHESTRA_TEAM_IDS,
+    `${base}.ids`,
     teams.map((team) => team.id),
   );
   span.setAttribute(
-    ATTR_ARCHESTRA_TEAM_NAMES,
+    `${base}.names`,
     teams.map((team) => team.name),
   );
 
-  // Merge label values per key across all of the agent's teams. A key can carry
+  // Merge label values per key across the principal's teams. A key can carry
   // different values on different teams, so each attribute is array-valued.
   const valuesByKey = new Map<string, Set<string>>();
   for (const team of teams) {
@@ -170,7 +179,7 @@ export function setTeamAttributes(
     }
   }
   for (const [key, values] of valuesByKey) {
-    span.setAttribute(`${ATTR_ARCHESTRA_TEAM_LABEL_PREFIX}${key}`, [...values]);
+    span.setAttribute(`${base}.label.${key}`, [...values]);
   }
 }
 

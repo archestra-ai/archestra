@@ -534,6 +534,33 @@ class TeamModel {
   }
 
   /**
+   * Get the teams a user belongs to within an organization, with labels, shaped
+   * for trace span attributes. Org-scoped so spans never leak team metadata from
+   * the user's other organizations.
+   */
+  static async getTeamLabelInfoForUser(params: {
+    userId: string;
+    organizationId: string;
+  }): Promise<
+    Array<{ id: string; name: string; labels: AgentLabelWithDetails[] }>
+  > {
+    const teams = await TeamModel.getUserTeamsForOrganization(params);
+    if (teams.length === 0) {
+      return [];
+    }
+
+    const labelsByTeam = await TeamLabelModel.getLabelsForTeams(
+      teams.map((team) => team.id),
+    );
+
+    return teams.map((team) => ({
+      id: team.id,
+      name: team.name,
+      labels: labelsByTeam.get(team.id) ?? [],
+    }));
+  }
+
+  /**
    * Get paginated teams a user belongs to with optional name filter
    */
   static async getUserTeamsPaginated(params: {

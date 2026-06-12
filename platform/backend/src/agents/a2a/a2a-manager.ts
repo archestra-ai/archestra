@@ -226,6 +226,12 @@ export class A2AManager {
         agentType: agent.agentType ?? undefined,
         sessionId,
         teams: await AgentTeamModel.getTeamLabelInfoForAgent(agentId),
+        userTeams: a2aUser
+          ? await TeamModel.getTeamLabelInfoForUser({
+              userId: a2aUser.id,
+              organizationId: agent.organizationId,
+            })
+          : [],
         routeCategory: systemParams?.routeCategory ?? RouteCategory.A2A,
         user: a2aUser
           ? { id: a2aUser.id, email: a2aUser.email, name: a2aUser.name }

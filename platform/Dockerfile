@@ -147,6 +147,7 @@ COPY backend/package.json backend/
 COPY frontend/package.json frontend/
 COPY shared/package.json shared/
 COPY archestra-rs/sandbox-rs/package.json archestra-rs/sandbox-rs/
+COPY archestra-rs/app-runtime-rs/package.json archestra-rs/app-runtime-rs/
 
 # Install all dependencies
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile
@@ -179,6 +180,7 @@ COPY --from=deps /app/backend/node_modules ./backend/node_modules
 COPY --from=deps /app/frontend/node_modules ./frontend/node_modules
 COPY --from=deps /app/shared/node_modules ./shared/node_modules
 COPY --from=deps /app/archestra-rs/sandbox-rs/node_modules ./archestra-rs/sandbox-rs/node_modules
+COPY --from=deps /app/archestra-rs/app-runtime-rs/node_modules ./archestra-rs/app-runtime-rs/node_modules
 
 # Copy source files
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json ./
@@ -188,6 +190,8 @@ COPY shared ./shared
 COPY archestra-rs/Cargo.toml archestra-rs/Cargo.lock ./archestra-rs/
 COPY archestra-rs/sandbox-core ./archestra-rs/sandbox-core
 COPY archestra-rs/sandbox-rs ./archestra-rs/sandbox-rs
+COPY archestra-rs/app-runtime-core ./archestra-rs/app-runtime-core
+COPY archestra-rs/app-runtime-rs ./archestra-rs/app-runtime-rs
 
 # Build the Rust N-API skill sandbox addon during the JS workspace build.
 RUN apk add --no-cache build-base cargo rust
@@ -339,6 +343,7 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
 COPY backend/package.json backend/
 COPY frontend/package.json frontend/
 COPY archestra-rs/sandbox-rs/package.json archestra-rs/sandbox-rs/
+COPY archestra-rs/app-runtime-rs/package.json archestra-rs/app-runtime-rs/
 COPY docker/scripts/docker-banner.sh /app/docker-banner.sh
 COPY docker/scripts/docker-entrypoint.sh /docker-entrypoint.sh
 # slim Dagger Engine manifest (rendered in the dagger-manifest stage above)
@@ -373,6 +378,9 @@ COPY --from=builder /app/backend/src/database/migrations ./backend/src/database/
 COPY --from=builder /app/archestra-rs/sandbox-rs/index.cjs ./archestra-rs/sandbox-rs/
 COPY --from=builder /app/archestra-rs/sandbox-rs/index.d.ts ./archestra-rs/sandbox-rs/
 COPY --from=builder /app/archestra-rs/sandbox-rs/*.node ./archestra-rs/sandbox-rs/
+COPY --from=builder /app/archestra-rs/app-runtime-rs/index.cjs ./archestra-rs/app-runtime-rs/
+COPY --from=builder /app/archestra-rs/app-runtime-rs/index.d.ts ./archestra-rs/app-runtime-rs/
+COPY --from=builder /app/archestra-rs/app-runtime-rs/*.node ./archestra-rs/app-runtime-rs/
 RUN chmod +x /app/backend/scripts/start-production.sh
 
 # Copy built frontend

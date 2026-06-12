@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildSkillCatalogIndex,
   dedupeSkillCatalogEntries,
   type SkillCatalogEntry,
-  searchSkillCatalogEntries,
+  searchSkillCatalogIndex,
 } from "./skill-catalog-index";
 
 describe("dedupeSkillCatalogEntries", () => {
@@ -43,10 +44,10 @@ describe("dedupeSkillCatalogEntries", () => {
   });
 });
 
-describe("searchSkillCatalogEntries", () => {
+describe("searchSkillCatalogIndex", () => {
   it("ranks skill name matches above repo and description matches", () => {
-    const results = searchSkillCatalogEntries({
-      entries: [
+    const results = search(
+      [
         skill({
           name: "Workflow Builder",
           description: "Design policy workflows for agents.",
@@ -61,8 +62,8 @@ describe("searchSkillCatalogEntries", () => {
           description: "Map teams to agent tools.",
         }),
       ],
-      query: "policy",
-    });
+      "policy",
+    );
 
     expect(results.map((result) => result.name)).toEqual([
       "Policy Designer",
@@ -72,8 +73,8 @@ describe("searchSkillCatalogEntries", () => {
   });
 
   it("requires every search token to match", () => {
-    const results = searchSkillCatalogEntries({
-      entries: [
+    const results = search(
+      [
         skill({
           name: "Policy Designer",
           description: "Write safe tool invocation rules.",
@@ -83,47 +84,48 @@ describe("searchSkillCatalogEntries", () => {
           description: "Design policy workflows for agents.",
         }),
       ],
-      query: "policy workflow",
-    });
+      "policy workflow",
+    );
 
     expect(results.map((result) => result.name)).toEqual(["Workflow Builder"]);
   });
 
   it("matches token prefixes", () => {
-    const results = searchSkillCatalogEntries({
-      entries: [
-        skill({ name: "Workflow Builder" }),
-        skill({ name: "Policy Designer" }),
-      ],
-      query: "work",
-    });
+    const results = search(
+      [skill({ name: "Workflow Builder" }), skill({ name: "Policy Designer" })],
+      "work",
+    );
 
     expect(results.map((result) => result.name)).toEqual(["Workflow Builder"]);
   });
 
   it("ignores stop words in the query", () => {
-    const results = searchSkillCatalogEntries({
-      entries: [
+    const results = search(
+      [
         skill({
           name: "Policy Designer",
           description: "Write safe tool invocation rules.",
         }),
       ],
-      query: "the policy",
-    });
+      "the policy",
+    );
 
     expect(results.map((result) => result.name)).toEqual(["Policy Designer"]);
   });
 
   it("returns nothing for an all-stop-word query", () => {
-    const results = searchSkillCatalogEntries({
-      entries: [skill({ name: "Policy Designer" })],
-      query: "the and of",
-    });
+    const results = search([skill({ name: "Policy Designer" })], "the and of");
 
     expect(results).toEqual([]);
   });
 });
+
+function search(
+  entries: readonly SkillCatalogEntry[],
+  query: string,
+): SkillCatalogEntry[] {
+  return searchSkillCatalogIndex(buildSkillCatalogIndex(entries), query);
+}
 
 function skill(overrides: Partial<SkillCatalogEntry>): SkillCatalogEntry {
   return {

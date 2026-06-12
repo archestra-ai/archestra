@@ -253,7 +253,7 @@ const registry = defineArchestraTools([
       "runs in a uv project at /home/sandbox: `python3` is the project venv; " +
       "install packages with `uv add --project /home/sandbox <pkg>` (pip is " +
       `disabled). Files the user attached to the chat are auto-staged under ${SKILL_SANDBOX_ATTACHMENTS_DIR}/. ` +
-      "Activated skills are mounted under /skills and are on PYTHONPATH, so " +
+      "Loaded skills are mounted under /skills and are on PYTHONPATH, so " +
       "their modules import directly. Returns stdout, stderr, " +
       "exit code, and timing (text only — use download_file for generated " +
       "files). Requires `sandbox:execute`.",

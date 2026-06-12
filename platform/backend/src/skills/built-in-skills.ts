@@ -71,6 +71,35 @@ export function builtInSkillVersion(params: {
   return createHash("sha256").update(canonical).digest("hex");
 }
 
+/**
+ * Skill row fields and resource files for writing a shipped definition to the
+ * database, shared by startup sync and reset-to-default so the two can never
+ * drift on what a pristine copy looks like.
+ */
+export function builtInSkillShippedWrite(definition: BuiltInSkill): {
+  skill: {
+    name: string;
+    description: string;
+    content: string;
+    sourceCommit: string;
+  };
+  files: { path: string; content: string; kind: SkillFileKind }[];
+} {
+  return {
+    skill: {
+      name: definition.name,
+      description: definition.description,
+      content: definition.content,
+      sourceCommit: builtInSkillVersion(definition),
+    },
+    files: definition.files.map((file) => ({
+      path: file.path,
+      content: file.content,
+      kind: file.kind,
+    })),
+  };
+}
+
 const BUILT_IN_SKILL_SOURCE_REF_PREFIX = "builtin:";
 
 // `BUILT_IN_SKILLS` is declared at the bottom of the file because it references

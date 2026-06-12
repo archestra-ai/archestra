@@ -36,7 +36,7 @@ import {
 import { secretManager } from "@/secrets-manager";
 import { agentToSkill, SCOPE_FIELD } from "@/skills/agent-migration";
 import {
-  builtInSkillVersion,
+  builtInSkillShippedWrite,
   findBuiltInSkillBySourceRef,
 } from "@/skills/built-in-skills";
 import {
@@ -59,6 +59,7 @@ import {
   SkillFileInputSchema,
   SkillManifestContentSchema,
   toSkillFiles,
+  toSkillInsertFields,
 } from "@/skills/validation";
 import {
   ApiError,
@@ -293,36 +294,20 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const scope = body.scope ?? "personal";
       const teamIds = scope === "team" ? dedupe(body.teamIds ?? []) : [];
 
-      const checker = await getSkillPermissionChecker({
+      await authorizeSkillCreate({
         userId: user.id,
         organizationId,
-      });
-      const userTeamIds = checker.isAdmin
-        ? []
-        : await TeamModel.getUserTeamIds(user.id);
-      authorizeSkillScope({
-        checker,
         scope,
-        authorId: user.id,
-        requestedTeamIds: teamIds,
-        userTeamIds,
-        userId: user.id,
+        teamIds,
       });
-      await assertSkillTeams({ scope, teamIds, organizationId });
 
       const skill = await withTeamFkErrorMapped(() =>
         SkillModel.createWithFiles({
           skill: {
+            ...toSkillInsertFields(parsed),
             organizationId,
             authorId: user.id,
-            name: parsed.name,
-            description: parsed.description,
-            content: parsed.content,
-            license: parsed.license,
-            compatibility: parsed.compatibility,
             allowedTools: resolveAllowedTools(body, parsed),
-            templated: parsed.templated,
-            metadata: parsed.metadata,
             sourceType: "manual",
             scope,
           },
@@ -439,22 +424,12 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       // ...and be allowed to create a skill in the scope inherited from the agent.
-      const skillChecker = await getSkillPermissionChecker({
+      await authorizeSkillCreate({
         userId: user.id,
         organizationId,
-      });
-      const userTeamIds = skillChecker.isAdmin
-        ? []
-        : await TeamModel.getUserTeamIds(user.id);
-      authorizeSkillScope({
-        checker: skillChecker,
         scope: draft.scope,
-        authorId: user.id,
-        requestedTeamIds: teamIds,
-        userTeamIds,
-        userId: user.id,
+        teamIds,
       });
-      await assertSkillTeams({ scope: draft.scope, teamIds, organizationId });
 
       // Create the skill and (optionally) delete the source agent in one
       // transaction so convert+delete is all-or-nothing: a failed delete rolls
@@ -466,16 +441,9 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
           const created = await SkillModel.createWithFiles(
             {
               skill: {
+                ...toSkillInsertFields(draft),
                 organizationId,
                 authorId: user.id,
-                name: draft.name,
-                description: draft.description,
-                content: draft.content,
-                license: draft.license,
-                compatibility: draft.compatibility,
-                allowedTools: draft.allowedTools,
-                templated: draft.templated,
-                metadata: draft.metadata,
                 sourceType: "manual",
                 scope: draft.scope,
               },
@@ -683,14 +651,8 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
           SkillModel.updateWithFiles({
             id,
             skill: {
-              name: parsed.name,
-              description: parsed.description,
-              content: parsed.content,
-              license: parsed.license,
-              compatibility: parsed.compatibility,
+              ...toSkillInsertFields(parsed),
               allowedTools: resolveAllowedTools(body, parsed),
-              templated: parsed.templated,
-              metadata: parsed.metadata,
               scope: newScope,
             },
             files:
@@ -849,19 +811,11 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
       });
 
+      const shipped = builtInSkillShippedWrite(definition);
       const reset = await SkillModel.updateWithFiles({
         id,
-        skill: {
-          name: definition.name,
-          description: definition.description,
-          content: definition.content,
-          sourceCommit: builtInSkillVersion(definition),
-        },
-        files: definition.files.map((file) => ({
-          path: file.path,
-          content: file.content,
-          kind: file.kind,
-        })),
+        skill: shipped.skill,
+        files: shipped.files,
       });
       if (!reset) {
         throw new ApiError(404, "Skill not found");
@@ -1250,14 +1204,10 @@ async function findSkillOrThrow(id: string, organizationId: string) {
   return skill;
 }
 
-async function loadFiles(skillId: string) {
-  return await SkillFileModel.findBySkillId(skillId);
-}
-
 /** A skill with its files and team assignments, for detail responses. */
 async function loadSkillDetail(skill: Skill) {
   const [files, teamsBySkill] = await Promise.all([
-    loadFiles(skill.id),
+    SkillFileModel.findBySkillId(skill.id),
     SkillTeamModel.getTeamDetailsForSkills([skill.id]),
   ]);
   return { ...skill, files, teams: teamsBySkill.get(skill.id) ?? [] };
@@ -1358,6 +1308,39 @@ function authorizeSkillScope(params: {
       );
     }
   }
+}
+
+/**
+ * Authorization for creating a skill in a given scope: the caller must hold
+ * the scope-appropriate create permission and may only target teams they
+ * belong to (admins excepted), and those teams must exist in the org.
+ */
+async function authorizeSkillCreate(params: {
+  userId: string;
+  organizationId: string;
+  scope: ResourceVisibilityScope;
+  teamIds: string[];
+}): Promise<void> {
+  const checker = await getSkillPermissionChecker({
+    userId: params.userId,
+    organizationId: params.organizationId,
+  });
+  const userTeamIds = checker.isAdmin
+    ? []
+    : await TeamModel.getUserTeamIds(params.userId);
+  authorizeSkillScope({
+    checker,
+    scope: params.scope,
+    authorId: params.userId,
+    requestedTeamIds: params.teamIds,
+    userTeamIds,
+    userId: params.userId,
+  });
+  await assertSkillTeams({
+    scope: params.scope,
+    teamIds: params.teamIds,
+    organizationId: params.organizationId,
+  });
 }
 
 /** Explicit `allowedTools` wins over the SKILL.md frontmatter when provided. */

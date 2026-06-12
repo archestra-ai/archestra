@@ -225,19 +225,6 @@ export function searchSkillCatalogIndex(
   return ranked.slice(0, limit).map(({ entry }) => entry);
 }
 
-/** @public — convenience for tests: build a one-shot index, then query. */
-export function searchSkillCatalogEntries(params: {
-  entries: readonly SkillCatalogEntry[];
-  query: string;
-  limit?: number;
-}): SkillCatalogEntry[] {
-  return searchSkillCatalogIndex(
-    buildSkillCatalogIndex(params.entries),
-    params.query,
-    params.limit,
-  );
-}
-
 // ===== Internal helpers =====
 
 function indexField(

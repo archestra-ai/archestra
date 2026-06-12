@@ -41,7 +41,7 @@ describe("POST /api/agents/:id/convert-to-skill", () => {
         organizationId;
     });
 
-    const { default: skillRoutes } = await import("./skill");
+    const { default: skillRoutes } = await import("./skill.routes");
     await app.register(skillRoutes);
   });
 

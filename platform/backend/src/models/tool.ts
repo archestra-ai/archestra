@@ -36,6 +36,7 @@ import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { getArchestraMcpCatalogMetadata } from "@/archestra-mcp-server/metadata";
 import db, { schema } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
+import { ARCHESTRA_TOOL_NAME_UNIQUE_INDEX } from "@/database/schemas/tool";
 import {
   createPaginatedResult,
   type PaginatedResult,
@@ -54,6 +55,7 @@ import type {
   ToolWithAssignments,
   UpdateTool,
 } from "@/types";
+import { isUniqueConstraintError } from "@/utils/db";
 import AgentModel from "./agent";
 import AgentConnectorAssignmentModel from "./agent-connector-assignment";
 import AgentTeamModel from "./agent-team";
@@ -1063,14 +1065,31 @@ class ToolModel {
           JSON.stringify(archestraTool.inputSchema);
 
         if (nameChanged || descChanged || paramsChanged) {
-          await db
-            .update(schema.toolsTable)
-            .set({
-              name: archestraTool.name,
-              description: newDescription,
-              parameters: archestraTool.inputSchema,
-            })
-            .where(eq(schema.toolsTable.id, existingTool.id));
+          try {
+            await db
+              .update(schema.toolsTable)
+              .set({
+                name: archestraTool.name,
+                description: newDescription,
+                parameters: archestraTool.inputSchema,
+              })
+              .where(eq(schema.toolsTable.id, existingTool.id));
+          } catch (error) {
+            // A sibling row already holds the branded name (a legacy/branded
+            // dual-prefix duplicate that reduces to the same short name). The
+            // 0285 dedup migration collapses these on deploy; one built-in
+            // failing to reconcile must not crash platform startup, so log and
+            // keep seeding the rest.
+            if (
+              !isUniqueConstraintError(error, ARCHESTRA_TOOL_NAME_UNIQUE_INDEX)
+            ) {
+              throw error;
+            }
+            logger.warn(
+              { shortName, targetName: archestraTool.name },
+              "Skipped reconciling built-in Archestra tool: a duplicate row already holds its name",
+            );
+          }
         }
       }
     }

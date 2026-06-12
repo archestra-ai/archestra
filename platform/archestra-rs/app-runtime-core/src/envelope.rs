@@ -4,13 +4,21 @@ use regex::Regex;
 
 use crate::contract;
 
+// The exact set the original JS regex `\s` matched (ECMAScript WhiteSpace +
+// LineTerminator). Spelled out because Rust's Unicode-aware `\s` differs at the
+// edges — it excludes U+FEFF and includes U+0085 — which would anchor exotic
+// `<head…>`/`<html…>` tags differently than the TypeScript original did.
+const JS_WS: &str = r"[\t\n\x0B\x0C\r \u{00A0}\u{1680}\u{2000}-\u{200A}\u{2028}\u{2029}\u{202F}\u{205F}\u{3000}\u{FEFF}]";
+
 // Anchors tolerate attributes (`<head lang="en">`) but never a longer tag name
-// (`(\s[^>]*)?` requires whitespace-or-`>` right after the name, so `<header>`
-// is not a head anchor). Case-insensitive, matching the TypeScript original.
-static HEAD_ANCHOR: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"(?i)<head(\s[^>]*)?>").expect("static head anchor regex"));
-static HTML_ANCHOR: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"(?i)<html(\s[^>]*)?>").expect("static html anchor regex"));
+// (the `(JS_WS[^>]*)?` requires whitespace-or-`>` right after the name, so
+// `<header>` is not a head anchor). Case-insensitive, matching the TS original.
+static HEAD_ANCHOR: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(&format!(r"(?i)<head({JS_WS}[^>]*)?>")).expect("static head anchor regex")
+});
+static HTML_ANCHOR: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(&format!(r"(?i)<html({JS_WS}[^>]*)?>")).expect("static html anchor regex")
+});
 static DOCTYPE_ANCHOR: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"(?i)<!DOCTYPE[^>]*>").expect("static doctype anchor regex"));
 
@@ -204,5 +212,23 @@ mod tests {
             CONTEXT_JSON,
         );
         assert_eq!(count(&result, BOOTSTRAP_MARKER), 1);
+    }
+
+    // The anchor whitespace class must match ECMAScript `\s`, not Rust's
+    // Unicode-aware `\s` (which excludes U+FEFF and includes U+0085). These pin
+    // the two edge code points where they disagree.
+    #[test]
+    fn feff_after_head_name_is_an_attribute_separator_like_js() {
+        // U+FEFF is whitespace in JS `\s`, so `<head\u{FEFF}x>` anchors as head.
+        let result = prepare_app_envelope("<head\u{FEFF}x></head>", CONTEXT_JSON);
+        assert!(result.contains(&format!("<head\u{FEFF}x>{BASE_CSS_LINK}")));
+    }
+
+    #[test]
+    fn nel_after_head_name_is_not_whitespace_like_js() {
+        // U+0085 (NEL) is NOT whitespace in JS `\s`, so `<head\u{0085}x>` is not
+        // a head anchor; with no html/doctype the injection prepends.
+        let result = prepare_app_envelope("<head\u{0085}x></head>", CONTEXT_JSON);
+        assert!(result.starts_with(BASE_CSS_LINK));
     }
 }

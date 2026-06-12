@@ -202,13 +202,15 @@ ENV NEXT_TELEMETRY_DISABLED=1
 # VERSION is exported as env var for child processes (used by Sentry source map upload)
 ENV VERSION=${VERSION}
 
-FROM builder-base AS sandbox-rs-musl-smoke
+FROM builder-base AS rust-napi-musl-smoke
 # cache cargo registry/git + the workspace target dir so heavy deps
 # (dagger-sdk, tokio, …) aren't recompiled on every build of this stage.
+# Smokes every N-API addon under musl: build the .node, then load and call it so
+# a musl-specific loader/linkage regression fails here rather than at runtime.
 RUN --mount=type=cache,target=/root/.cargo/registry \
     --mount=type=cache,target=/root/.cargo/git \
     --mount=type=cache,target=/app/archestra-rs/target \
-    pnpm --filter @archestra/sandbox-rs check:musl
+    pnpm --filter @archestra/sandbox-rs --filter @archestra/app-runtime-rs check:musl
 
 # <----- Builder stage ----->
 FROM builder-base AS builder
@@ -227,7 +229,7 @@ FROM builder-base AS builder
 # Cache cargo registry/git, the Rust workspace target dir, turbo's local cache,
 # and Next.js's build cache so a cold `pnpm build` (which recompiles the Rust
 # N-API addon and builds the frontend) reuses prior work on subsequent builds.
-# The cargo targets match the sandbox-rs-musl-smoke stage above, so that stage
+# The cargo targets match the rust-napi-musl-smoke stage above, so that stage
 # warms the registry for this one; cargo isolates artifacts by target triple.
 RUN --mount=type=cache,target=/root/.cargo/registry \
     --mount=type=cache,target=/root/.cargo/git \

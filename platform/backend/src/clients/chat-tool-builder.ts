@@ -116,15 +116,8 @@ export function buildMcpGatewayTool(params: {
         run: async ({ span, startTime }) => {
           // PreToolUse lifecycle hook: a block short-circuits execution
           // and returns an explanatory tool-result instead of running.
-          const hookCtx: ToolHookContext = {
-            agentId: ctx.agentId,
-            organizationId: ctx.organizationId,
-            userId: ctx.userId,
-            conversationId: ctx.conversationId,
-            hookRunCollector: ctx.hookRunCollector,
-          };
           const preBlockReason = await firePreToolUseHook({
-            ctx: hookCtx,
+            ctx,
             toolName: mcpTool.name,
             toolInput: toolArguments,
             toolCallId: options.toolCallId,
@@ -234,7 +227,7 @@ export function buildMcpGatewayTool(params: {
           // PostToolUse lifecycle hook: append any block feedback to the
           // tool result the model sees, preserving its shape.
           const postFeedback = await firePostToolUseHook({
-            ctx: hookCtx,
+            ctx,
             toolName: mcpTool.name,
             toolInput: toolArguments,
             toolResponse: toolResultText(toolResult),

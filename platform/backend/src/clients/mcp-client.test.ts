@@ -373,7 +373,10 @@ describe("McpClient", () => {
         arguments: { param: "value" },
       };
 
-      const result = await mcpClient.executeToolCallForOwner(toolCall, agentOwner(agentId));
+      const result = await mcpClient.executeToolCallForOwner(
+        toolCall,
+        agentOwner(agentId),
+      );
       expect(result).toMatchObject({
         id: "call_123",
         isError: true,
@@ -571,7 +574,10 @@ describe("McpClient", () => {
           arguments: {},
         };
 
-        const firstResult = await mcpClient.executeToolCallForOwner(toolCall, agentOwner(agentId));
+        const firstResult = await mcpClient.executeToolCallForOwner(
+          toolCall,
+          agentOwner(agentId),
+        );
         expect(firstResult.isError).toBe(false);
         expect(getSecretSpy).toHaveBeenCalledTimes(1);
 
@@ -583,7 +589,10 @@ describe("McpClient", () => {
           secretId: rotatedSecret.id,
         });
 
-        const secondResult = await mcpClient.executeToolCallForOwner(toolCall, agentOwner(agentId));
+        const secondResult = await mcpClient.executeToolCallForOwner(
+          toolCall,
+          agentOwner(agentId),
+        );
         expect(secondResult.isError).toBe(false);
         expect(getSecretSpy).toHaveBeenCalledTimes(2);
 
@@ -620,13 +629,19 @@ describe("McpClient", () => {
           arguments: {},
         };
 
-        const firstResult = await mcpClient.executeToolCallForOwner(toolCall, agentOwner(agentId));
+        const firstResult = await mcpClient.executeToolCallForOwner(
+          toolCall,
+          agentOwner(agentId),
+        );
         expect(firstResult.isError).toBe(false);
         expect(mockConnect).toHaveBeenCalledTimes(1);
 
         await vi.advanceTimersByTimeAsync(15 * 60 * 1000 + 1);
 
-        const secondResult = await mcpClient.executeToolCallForOwner(toolCall, agentOwner(agentId));
+        const secondResult = await mcpClient.executeToolCallForOwner(
+          toolCall,
+          agentOwner(agentId),
+        );
         expect(secondResult.isError).toBe(false);
 
         expect(mockConnect).toHaveBeenCalledTimes(2);
@@ -662,7 +677,10 @@ describe("McpClient", () => {
         arguments: {},
       };
 
-      const firstResult = await mcpClient.executeToolCallForOwner(toolCall, agentOwner(agentId));
+      const firstResult = await mcpClient.executeToolCallForOwner(
+        toolCall,
+        agentOwner(agentId),
+      );
       expect(firstResult.isError).toBe(false);
       expect(mockConnect).toHaveBeenCalledTimes(1);
 
@@ -672,7 +690,10 @@ describe("McpClient", () => {
       );
       await McpServerModel.update(mcpServerId, { secretId: rotatedSecret.id });
 
-      const secondResult = await mcpClient.executeToolCallForOwner(toolCall, agentOwner(agentId));
+      const secondResult = await mcpClient.executeToolCallForOwner(
+        toolCall,
+        agentOwner(agentId),
+      );
       expect(secondResult.isError).toBe(false);
       expect(mockClose).toHaveBeenCalledTimes(1);
       expect(mockConnect).toHaveBeenCalledTimes(2);
@@ -704,7 +725,10 @@ describe("McpClient", () => {
         arguments: {},
       };
 
-      const firstResult = await mcpClient.executeToolCallForOwner(toolCall, agentOwner(agentId));
+      const firstResult = await mcpClient.executeToolCallForOwner(
+        toolCall,
+        agentOwner(agentId),
+      );
       expect(firstResult.isError).toBe(false);
       expect(mockConnect).toHaveBeenCalledTimes(1);
 
@@ -712,7 +736,10 @@ describe("McpClient", () => {
         oauthRefreshError: "refresh_failed",
       });
 
-      const secondResult = await mcpClient.executeToolCallForOwner(toolCall, agentOwner(agentId));
+      const secondResult = await mcpClient.executeToolCallForOwner(
+        toolCall,
+        agentOwner(agentId),
+      );
       expect(secondResult.isError).toBe(false);
       expect(mockClose).toHaveBeenCalledTimes(0);
       expect(mockConnect).toHaveBeenCalledTimes(1);
@@ -744,14 +771,20 @@ describe("McpClient", () => {
         arguments: {},
       };
 
-      const firstResult = await mcpClient.executeToolCallForOwner(toolCall, agentOwner(agentId));
+      const firstResult = await mcpClient.executeToolCallForOwner(
+        toolCall,
+        agentOwner(agentId),
+      );
       expect(firstResult.isError).toBe(false);
       expect(mockConnect).toHaveBeenCalledTimes(1);
       expect(mockPing).not.toHaveBeenCalled();
 
       mockPing.mockClear();
 
-      const secondResult = await mcpClient.executeToolCallForOwner(toolCall, agentOwner(agentId));
+      const secondResult = await mcpClient.executeToolCallForOwner(
+        toolCall,
+        agentOwner(agentId),
+      );
       expect(secondResult.isError).toBe(false);
       expect(mockConnect).toHaveBeenCalledTimes(1);
       expect(mockPing).not.toHaveBeenCalled();
@@ -813,7 +846,10 @@ describe("McpClient", () => {
             arguments: {},
           };
 
-          const result = await mcpClient.executeToolCallForOwner(toolCall, agentOwner(agentId));
+          const result = await mcpClient.executeToolCallForOwner(
+            toolCall,
+            agentOwner(agentId),
+          );
 
           expect(runWithLimitSpy).toHaveBeenCalled();
           expect(runWithLimitSpy.mock.calls[0]?.[1]).toBe(4);
@@ -906,7 +942,10 @@ describe("McpClient", () => {
           arguments: { input: "test" },
         };
 
-        const result = await mcpClient.executeToolCallForOwner(toolCall, agentOwner(agentId));
+        const result = await mcpClient.executeToolCallForOwner(
+          toolCall,
+          agentOwner(agentId),
+        );
 
         // Verify HTTP transport was detected
         expect(mockUsesStreamableHttp).toHaveBeenCalledWith(localMcpServerId);
@@ -951,7 +990,10 @@ describe("McpClient", () => {
           arguments: { input: "test" },
         };
 
-        const result = await mcpClient.executeToolCallForOwner(toolCall, agentOwner(agentId));
+        const result = await mcpClient.executeToolCallForOwner(
+          toolCall,
+          agentOwner(agentId),
+        );
 
         // Verify error result
 
@@ -1018,7 +1060,10 @@ describe("McpClient", () => {
           arguments: { input: "test" },
         };
 
-        const result = await mcpClient.executeToolCallForOwner(toolCall, agentOwner(agentId));
+        const result = await mcpClient.executeToolCallForOwner(
+          toolCall,
+          agentOwner(agentId),
+        );
 
         // Verify K8s attach transport was used (not HTTP transport)
         expect(mockUsesStreamableHttp).toHaveBeenCalledWith(localMcpServerId);
@@ -1089,7 +1134,10 @@ describe("McpClient", () => {
             arguments: {},
           };
 
-          const result = await mcpClient.executeToolCallForOwner(toolCall, agentOwner(agentId));
+          const result = await mcpClient.executeToolCallForOwner(
+            toolCall,
+            agentOwner(agentId),
+          );
 
           expect(runWithLimitSpy).toHaveBeenCalled();
           expect(runWithLimitSpy.mock.calls[0]?.[1]).toBe(1);
@@ -1133,7 +1181,10 @@ describe("McpClient", () => {
           arguments: {},
         };
 
-        const result = await mcpClient.executeToolCallForOwner(toolCall, agentOwner(agentId));
+        const result = await mcpClient.executeToolCallForOwner(
+          toolCall,
+          agentOwner(agentId),
+        );
 
         // Verify the tool was called with just the tool name (stripped using catalogName)
         expect(mockCallTool).toHaveBeenCalledWith({
@@ -1185,7 +1236,10 @@ describe("McpClient", () => {
           arguments: {},
         };
 
-        const result = await mcpClient.executeToolCallForOwner(toolCall, agentOwner(agentId));
+        const result = await mcpClient.executeToolCallForOwner(
+          toolCall,
+          agentOwner(agentId),
+        );
 
         // Verify stripping worked using mcpServerName fallback
         expect(mockCallTool).toHaveBeenCalledWith({
@@ -1227,7 +1281,10 @@ describe("McpClient", () => {
           arguments: {},
         };
 
-        const result = await mcpClient.executeToolCallForOwner(toolCall, agentOwner(agentId));
+        const result = await mcpClient.executeToolCallForOwner(
+          toolCall,
+          agentOwner(agentId),
+        );
 
         // Verify the tool name was not mangled since no prefix matched
         expect(mockCallTool).toHaveBeenCalledWith({
@@ -1251,7 +1308,10 @@ describe("McpClient", () => {
           arguments: {},
         };
 
-        const result = await mcpClient.executeToolCallForOwner(toolCall, agentOwner(agentId));
+        const result = await mcpClient.executeToolCallForOwner(
+          toolCall,
+          agentOwner(agentId),
+        );
 
         expect(result).toMatchObject({
           id: "call_error_content",
@@ -1299,12 +1359,16 @@ describe("McpClient", () => {
           arguments: { query: "test" },
         };
 
-        const result = await mcpClient.executeToolCallForOwner(toolCall, agentOwner(agentId), {
-          tokenId: "test-token",
-          teamId: null,
-          isOrganizationToken: false,
-          userId: testUser.id,
-        });
+        const result = await mcpClient.executeToolCallForOwner(
+          toolCall,
+          agentOwner(agentId),
+          {
+            tokenId: "test-token",
+            teamId: null,
+            isOrganizationToken: false,
+            userId: testUser.id,
+          },
+        );
 
         // Should return an error with the install URL
         expect(result).toMatchObject({
@@ -1379,11 +1443,15 @@ describe("McpClient", () => {
           arguments: { key: "PROJ-1" },
         };
 
-        const result = await mcpClient.executeToolCallForOwner(toolCall, agentOwner(agentId), {
-          tokenId: "team-token",
-          teamId: team.id,
-          isOrganizationToken: false,
-        });
+        const result = await mcpClient.executeToolCallForOwner(
+          toolCall,
+          agentOwner(agentId),
+          {
+            tokenId: "team-token",
+            teamId: team.id,
+            isOrganizationToken: false,
+          },
+        );
 
         expect(result).toMatchObject({
           isError: true,
@@ -1453,11 +1521,15 @@ describe("McpClient", () => {
         };
 
         // Call with teamMember's team token - serverOwner is NOT in this team
-        const result = await mcpClient.executeToolCallForOwner(toolCall, agentOwner(agentId), {
-          tokenId: "team-token-no-cred",
-          teamId: team.id,
-          isOrganizationToken: false,
-        });
+        const result = await mcpClient.executeToolCallForOwner(
+          toolCall,
+          agentOwner(agentId),
+          {
+            tokenId: "team-token-no-cred",
+            teamId: team.id,
+            isOrganizationToken: false,
+          },
+        );
 
         expect(result).toMatchObject({ isError: true });
         expect(result?.error).toContain(
@@ -1527,12 +1599,16 @@ describe("McpClient", () => {
           arguments: { title: "Test issue" },
         };
 
-        const result = await mcpClient.executeToolCallForOwner(toolCall, agentOwner(agentId), {
-          tokenId: "invoker-token",
-          teamId: null,
-          isOrganizationToken: false,
-          userId: invokingUser.id,
-        });
+        const result = await mcpClient.executeToolCallForOwner(
+          toolCall,
+          agentOwner(agentId),
+          {
+            tokenId: "invoker-token",
+            teamId: null,
+            isOrganizationToken: false,
+            userId: invokingUser.id,
+          },
+        );
 
         expect(result).toMatchObject({ isError: true });
         expect(result?.error).toContain(
@@ -3085,12 +3161,16 @@ describe("McpClient", () => {
           arguments: {},
         };
 
-        const result = await mcpClient.executeToolCallForOwner(toolCall, agentOwner(agentId), {
-          tokenId: "test-token",
-          teamId: null,
-          isOrganizationToken: false,
-          userId: testUser.id,
-        });
+        const result = await mcpClient.executeToolCallForOwner(
+          toolCall,
+          agentOwner(agentId),
+          {
+            tokenId: "test-token",
+            teamId: null,
+            isOrganizationToken: false,
+            userId: testUser.id,
+          },
+        );
 
         expect(result).toMatchObject({ isError: true });
         expect(result?.error).toContain(
@@ -3175,12 +3255,16 @@ describe("McpClient", () => {
           arguments: {},
         };
 
-        const result = await mcpClient.executeToolCallForOwner(toolCall, agentOwner(agentId), {
-          tokenId: "test-token",
-          teamId: null,
-          isOrganizationToken: false,
-          userId: testUser.id,
-        });
+        const result = await mcpClient.executeToolCallForOwner(
+          toolCall,
+          agentOwner(agentId),
+          {
+            tokenId: "test-token",
+            teamId: null,
+            isOrganizationToken: false,
+            userId: testUser.id,
+          },
+        );
 
         expect(result).toMatchObject({ isError: true });
         expect(result?.error).toContain(
@@ -3241,12 +3325,16 @@ describe("McpClient", () => {
           arguments: {},
         };
 
-        const result = await mcpClient.executeToolCallForOwner(toolCall, agentOwner(agentId), {
-          tokenId: "test-token",
-          teamId: null,
-          isOrganizationToken: false,
-          userId: testUser.id,
-        });
+        const result = await mcpClient.executeToolCallForOwner(
+          toolCall,
+          agentOwner(agentId),
+          {
+            tokenId: "test-token",
+            teamId: null,
+            isOrganizationToken: false,
+            userId: testUser.id,
+          },
+        );
 
         expect(result).toMatchObject({ isError: true });
         // Non-OAuth servers with existing credentials should get expired-auth message
@@ -3315,12 +3403,16 @@ describe("McpClient", () => {
           arguments: {},
         };
 
-        const result = await mcpClient.executeToolCallForOwner(toolCall, agentOwner(agentId), {
-          tokenId: "test-token",
-          teamId: null,
-          isOrganizationToken: false,
-          userId: testUser.id,
-        });
+        const result = await mcpClient.executeToolCallForOwner(
+          toolCall,
+          agentOwner(agentId),
+          {
+            tokenId: "test-token",
+            teamId: null,
+            isOrganizationToken: false,
+            userId: testUser.id,
+          },
+        );
 
         expect(result).toMatchObject({ isError: true });
         expect(result?.error).toContain(
@@ -3395,11 +3487,15 @@ describe("McpClient", () => {
           arguments: {},
         };
 
-        const result = await mcpClient.executeToolCallForOwner(toolCall, agentOwner(agentId), {
-          tokenId: "team-token",
-          teamId: team.id,
-          isOrganizationToken: false,
-        });
+        const result = await mcpClient.executeToolCallForOwner(
+          toolCall,
+          agentOwner(agentId),
+          {
+            tokenId: "team-token",
+            teamId: team.id,
+            isOrganizationToken: false,
+          },
+        );
 
         expect(result).toMatchObject({ isError: true });
         expect(result?.error).toContain(
@@ -3553,7 +3649,10 @@ describe("McpClient", () => {
           arguments: {},
         };
 
-        const result = await mcpClient.executeToolCallForOwner(toolCall, agentOwner(agentId));
+        const result = await mcpClient.executeToolCallForOwner(
+          toolCall,
+          agentOwner(agentId),
+        );
 
         // Should succeed after retry
         expect(result).toMatchObject({
@@ -3608,7 +3707,10 @@ describe("McpClient", () => {
           arguments: {},
         };
 
-        const result = await mcpClient.executeToolCallForOwner(toolCall, agentOwner(agentId));
+        const result = await mcpClient.executeToolCallForOwner(
+          toolCall,
+          agentOwner(agentId),
+        );
 
         // Should return error (no infinite retry loop)
         expect(result).toMatchObject({
@@ -3669,7 +3771,10 @@ describe("McpClient", () => {
           arguments: {},
         };
 
-        const result = await mcpClient.executeToolCallForOwner(toolCall, agentOwner(agentId));
+        const result = await mcpClient.executeToolCallForOwner(
+          toolCall,
+          agentOwner(agentId),
+        );
 
         // Should succeed after retry
         expect(result).toMatchObject({
@@ -4553,7 +4658,10 @@ describe("McpClient", () => {
           arguments: {},
         };
 
-        const result = await mcpClient.executeToolCallForOwner(toolCall, agentOwner(agentId));
+        const result = await mcpClient.executeToolCallForOwner(
+          toolCall,
+          agentOwner(agentId),
+        );
 
         expect(result.isError).toBe(false);
         // The tool name should be rewritten to the full prefixed name
@@ -4568,7 +4676,10 @@ describe("McpClient", () => {
           arguments: {},
         };
 
-        const result = await mcpClient.executeToolCallForOwner(toolCall, agentOwner(agentId));
+        const result = await mcpClient.executeToolCallForOwner(
+          toolCall,
+          agentOwner(agentId),
+        );
 
         expect(result.isError).toBe(true);
         expect(result.error).toContain("No tool named");
@@ -5634,7 +5745,10 @@ describe("McpClient", () => {
           arguments: {},
         };
 
-        const result = await mcpClient.executeToolCallForOwner(toolCall, agentOwner(agentId));
+        const result = await mcpClient.executeToolCallForOwner(
+          toolCall,
+          agentOwner(agentId),
+        );
 
         expect(result.isError).toBe(false);
         expect(result._meta).toEqual(toolMeta);
@@ -5665,7 +5779,10 @@ describe("McpClient", () => {
           arguments: {},
         };
 
-        const result = await mcpClient.executeToolCallForOwner(toolCall, agentOwner(agentId));
+        const result = await mcpClient.executeToolCallForOwner(
+          toolCall,
+          agentOwner(agentId),
+        );
 
         expect(result.isError).toBe(false);
         expect(result.structuredContent).toEqual(structured);

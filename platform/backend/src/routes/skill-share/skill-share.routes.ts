@@ -190,7 +190,17 @@ const skillShareRoutes: FastifyPluginAsyncZod = async (fastify) => {
           : new Date(body.expiresAt);
 
       const { link, rawToken } = await withDbTransaction(async (tx) => {
-        await SkillShareLinkModel.revoke({ id: params.id, organizationId, tx });
+        const claimed = await SkillShareLinkModel.revoke({
+          id: params.id,
+          organizationId,
+          tx,
+          onlyIfUnrevoked: true,
+        });
+        if (!claimed) {
+          // a replayed or concurrent rotate of the same link: the loser must
+          // not mint a second replacement token
+          throw new ApiError(409, "Skill share link is already revoked");
+        }
         return SkillShareLinkModel.create({
           organizationId,
           createdByUserId: user.id,

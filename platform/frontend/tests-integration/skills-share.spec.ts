@@ -66,6 +66,16 @@ test.describe("Skills marketplace share step", () => {
     await expect(page.getByText(STEP_TITLE)).toBeHidden();
   });
 
+  test("the step is hidden for clients without marketplace support", async ({
+    page,
+  }) => {
+    await page.goto("/connection?clientId=n8n");
+    await expect(
+      page.getByRole("heading", { name: "Select your client" }),
+    ).toBeVisible();
+    await expect(page.getByText(STEP_TITLE)).toBeHidden();
+  });
+
   test("an existing active link is not rotated on load", async ({
     page,
     mswControl,

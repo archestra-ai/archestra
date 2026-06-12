@@ -156,7 +156,7 @@ describe("POST /api/skill-share-links/:id/rotate", () => {
     expect(response.statusCode).toBe(404);
   });
 
-  test("rotating an already-revoked link still issues a replacement", async ({
+  test("rotating an already-revoked link returns 409 and mints nothing", async ({
     makeMember,
   }) => {
     await makeMember(user.id, organizationId, { role: ADMIN_ROLE_NAME });
@@ -173,14 +173,20 @@ describe("POST /api/skill-share-links/:id/rotate", () => {
       url: `/api/skill-share-links/${created.link.id}`,
     });
 
+    // a replayed rotate (client retry, double-submit) must not create a
+    // second live replacement token
     const response = await app.inject({
       method: "POST",
       url: `/api/skill-share-links/${created.link.id}/rotate`,
       payload: { skillIds: [skill.id] },
     });
 
-    expect(response.statusCode).toBe(200);
-    expect(response.json().link.status).toBe("active");
+    expect(response.statusCode).toBe(409);
+    const list = (
+      await app.inject({ method: "GET", url: "/api/skill-share-links" })
+    ).json();
+    expect(list.links).toHaveLength(1);
+    expect(list.links[0].status).toBe("revoked");
   });
 
   test("member without admin role gets 403", async ({ makeMember }) => {

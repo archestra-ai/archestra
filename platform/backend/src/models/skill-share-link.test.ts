@@ -402,7 +402,7 @@ describe("SkillShareLinkModel.revoke with caller transaction", () => {
       marketplaceName: "org-revoke-rollback-skills",
     });
 
-    // rotation revokes the old link and creates its replacement on one
+    // rotation revokes the old link and creates its replacement in one
     // transaction; if the replacement fails, the revoke must undo too
     await expect(
       withDbTransaction(async (tx) => {

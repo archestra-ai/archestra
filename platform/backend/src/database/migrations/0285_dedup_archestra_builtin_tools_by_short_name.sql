@@ -24,8 +24,19 @@ DELETE FROM "agent_tools" a
 USING remap r
 WHERE a.tool_id = r.loser_id
   AND EXISTS (
-    SELECT 1 FROM "agent_tools" s
-    WHERE s.agent_id = a.agent_id AND s.tool_id = r.survivor_id
+    -- Drop this loser assignment when another row for the same agent already
+    -- resolves to the survivor: the survivor itself, or an earlier-sorted loser
+    -- in the same short-name group. Without this, three-plus siblings collide
+    -- on agent_tools' unique(agent_id, tool_id) during the repoint UPDATE below.
+    SELECT 1 FROM "agent_tools" keep
+    LEFT JOIN remap kr ON kr.loser_id = keep.tool_id
+    WHERE keep.agent_id = a.agent_id
+      AND keep.tool_id <> a.tool_id
+      AND COALESCE(kr.survivor_id, keep.tool_id) = r.survivor_id
+      AND (
+        keep.tool_id = r.survivor_id
+        OR (kr.survivor_id IS NOT NULL AND keep.tool_id < a.tool_id)
+      )
   );
 --> statement-breakpoint
 WITH ranked AS (
@@ -57,8 +68,18 @@ DELETE FROM "conversation_enabled_tools" c
 USING remap r
 WHERE c.tool_id = r.loser_id
   AND EXISTS (
-    SELECT 1 FROM "conversation_enabled_tools" s
-    WHERE s.conversation_id = c.conversation_id AND s.tool_id = r.survivor_id
+    -- Same loser-vs-loser guard as agent_tools, against the composite primary
+    -- key (conversation_id, tool_id): keep one source row per conversation per
+    -- short-name group so the repoint UPDATE cannot produce a duplicate.
+    SELECT 1 FROM "conversation_enabled_tools" keep
+    LEFT JOIN remap kr ON kr.loser_id = keep.tool_id
+    WHERE keep.conversation_id = c.conversation_id
+      AND keep.tool_id <> c.tool_id
+      AND COALESCE(kr.survivor_id, keep.tool_id) = r.survivor_id
+      AND (
+        keep.tool_id = r.survivor_id
+        OR (kr.survivor_id IS NOT NULL AND keep.tool_id < c.tool_id)
+      )
   );
 --> statement-breakpoint
 WITH ranked AS (

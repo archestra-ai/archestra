@@ -12,7 +12,7 @@ import {
 } from "@archestra/shared";
 import type { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import type { Tool } from "ai";
-import { beforeEach, vi } from "vitest";
+import { afterEach, beforeEach, vi } from "vitest";
 import { hookDispatcherService } from "@/hooks/hook-dispatcher-service";
 import { ToolModel } from "@/models";
 import { metrics } from "@/observability";
@@ -91,6 +91,90 @@ const externalTool = (name: string, description = "") => ({
   },
 });
 
+// The client and tool caches are module-level and outlive each test's
+// truncated DB rows, so setup tracks agents for the afterEach cache reset.
+let cleanupAgentIds: string[] = [];
+
+/**
+ * Creates the org/admin-user/agent backdrop every wrapper test needs, resets
+ * the per-agent client and tool caches, and seeds the gateway client cache for
+ * the test's scope (a conversation by default, an isolationKey when given).
+ * Returns the matching base getChatMcpTools params. Takes the test-context
+ * fixtures it uses (vitest only initializes destructured fixtures).
+ */
+async function setupChatToolEnv(params: {
+  makeOrganization: (
+    overrides?: Record<string, unknown>,
+  ) => Promise<{ id: string }>;
+  makeUser: () => Promise<{ id: string }>;
+  makeMember: (
+    userId: string,
+    organizationId: string,
+    overrides: { role: string },
+  ) => Promise<unknown>;
+  makeAgent: (
+    overrides: Record<string, unknown>,
+  ) => Promise<{ id: string; name: string }>;
+  makeConversation?: (
+    agentId: string,
+    overrides: Record<string, unknown>,
+  ) => Promise<{ id: string }>;
+  gatewayTools?: Array<Record<string, unknown>>;
+  gatewayClient?: Client;
+  orgOverrides?: Record<string, unknown>;
+  isolationKey?: string;
+}) {
+  const org = await params.makeOrganization(params.orgOverrides);
+  const user = await params.makeUser();
+  await params.makeMember(user.id, org.id, { role: "admin" });
+  const agent = await params.makeAgent({
+    organizationId: org.id,
+    name: "Test Agent",
+  });
+
+  let conversation: { id: string } | undefined;
+  let scopeKey: string;
+  if (params.isolationKey) {
+    scopeKey = params.isolationKey;
+  } else if (params.makeConversation) {
+    conversation = await params.makeConversation(agent.id, {
+      organizationId: org.id,
+      userId: user.id,
+    });
+    scopeKey = conversation.id;
+  } else {
+    throw new Error("pass makeConversation or an isolationKey");
+  }
+
+  chatClient.clearChatMcpClient(agent.id);
+  await chatClient.__test.clearToolCache();
+  cleanupAgentIds.push(agent.id);
+
+  const gatewayClient =
+    params.gatewayClient ?? buildMockGatewayClient(params.gatewayTools ?? []);
+  chatClient.__test.setCachedClient(
+    chatClient.__test.getCacheKey(agent.id, user.id, scopeKey),
+    gatewayClient,
+  );
+
+  return {
+    org,
+    user,
+    agent,
+    conversation,
+    gatewayClient,
+    baseParams: {
+      agentName: agent.name,
+      agentId: agent.id,
+      userId: user.id,
+      organizationId: org.id,
+      ...(params.isolationKey
+        ? { isolationKey: params.isolationKey }
+        : { conversationId: scopeKey }),
+    },
+  };
+}
+
 beforeEach(() => {
   vi.restoreAllMocks();
   vi.mocked(mcpClient.executeToolCall).mockReset();
@@ -98,24 +182,33 @@ beforeEach(() => {
   vi.mocked(resolveSessionExternalIdpToken).mockResolvedValue(null);
 });
 
+afterEach(async () => {
+  for (const agentId of cleanupAgentIds) {
+    chatClient.clearChatMcpClient(agentId);
+  }
+  cleanupAgentIds = [];
+  await chatClient.__test.clearToolCache();
+});
+
 describe("getChatMcpTools per-kind tool shape", () => {
   test("pins schema normalization, description fallback, and toModelOutput per kind", async ({
-    makeAgent,
-    makeAgentTool,
-    makeUser,
     makeOrganization,
+    makeUser,
     makeMember,
+    makeAgent,
     makeConversation,
+    makeAgentTool,
   }) => {
-    const org = await makeOrganization();
-    const user = await makeUser();
-    await makeMember(user.id, org.id, { role: "admin" });
-    const agent = await makeAgent({
-      organizationId: org.id,
-      name: "Shape Agent",
+    const { agent, baseParams } = await setupChatToolEnv({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeAgent,
+      makeConversation,
+      gatewayTools: [externalTool("extsrv__fetch_data")],
     });
     const targetAgent = await makeAgent({
-      organizationId: org.id,
+      organizationId: baseParams.organizationId,
       name: "Research Helper",
       description: "Researches things",
     });
@@ -124,24 +217,7 @@ describe("getChatMcpTools per-kind tool shape", () => {
     );
     await makeAgentTool(agent.id, delegationTool.id);
 
-    const conversation = await makeConversation(agent.id, {
-      organizationId: org.id,
-      userId: user.id,
-    });
-    chatClient.clearChatMcpClient(agent.id);
-    await chatClient.__test.clearToolCache();
-    chatClient.__test.setCachedClient(
-      chatClient.__test.getCacheKey(agent.id, user.id, conversation.id),
-      buildMockGatewayClient([externalTool("extsrv__fetch_data")]),
-    );
-
-    const tools = await chatClient.getChatMcpTools({
-      agentName: agent.name,
-      agentId: agent.id,
-      userId: user.id,
-      organizationId: org.id,
-      conversationId: conversation.id,
-    });
+    const tools = await chatClient.getChatMcpTools(baseParams);
 
     const mcpTool = tools.extsrv__fetch_data;
     expect(mcpTool).toBeDefined();
@@ -163,37 +239,25 @@ describe("getChatMcpTools per-kind tool shape", () => {
     );
     expect(agentTool.toModelOutput).toBeUndefined();
     expect(typeof agentTool.needsApproval).toBe("function");
-
-    chatClient.clearChatMcpClient(agent.id);
-    await chatClient.__test.clearToolCache();
   });
 });
 
 describe("getChatMcpTools MCP tool execute pipeline", () => {
   test("executes an external tool through pre-hook, gateway call, post-hook in order", async ({
-    makeAgent,
-    makeUser,
     makeOrganization,
+    makeUser,
     makeMember,
+    makeAgent,
     makeConversation,
   }) => {
-    const org = await makeOrganization();
-    const user = await makeUser();
-    await makeMember(user.id, org.id, { role: "admin" });
-    const agent = await makeAgent({
-      organizationId: org.id,
-      name: "Pipeline Agent",
+    const { baseParams } = await setupChatToolEnv({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeAgent,
+      makeConversation,
+      gatewayTools: [externalTool("extsrv__fetch_data")],
     });
-    const conversation = await makeConversation(agent.id, {
-      organizationId: org.id,
-      userId: user.id,
-    });
-    chatClient.clearChatMcpClient(agent.id);
-    await chatClient.__test.clearToolCache();
-    chatClient.__test.setCachedClient(
-      chatClient.__test.getCacheKey(agent.id, user.id, conversation.id),
-      buildMockGatewayClient([externalTool("extsrv__fetch_data")]),
-    );
 
     const callOrder: string[] = [];
     const fireSpy = vi
@@ -211,14 +275,7 @@ describe("getChatMcpTools MCP tool execute pipeline", () => {
       } as never;
     });
 
-    const tools = await chatClient.getChatMcpTools({
-      agentName: agent.name,
-      agentId: agent.id,
-      userId: user.id,
-      organizationId: org.id,
-      conversationId: conversation.id,
-    });
-
+    const tools = await chatClient.getChatMcpTools(baseParams);
     const result = await tools.extsrv__fetch_data.execute?.(
       { query: "q" },
       execOptions("call-1"),
@@ -234,35 +291,23 @@ describe("getChatMcpTools MCP tool execute pipeline", () => {
         isError: false,
       }),
     );
-
-    chatClient.clearChatMcpClient(agent.id);
-    await chatClient.__test.clearToolCache();
   });
 
   test("a PreToolUse block short-circuits the gateway call and reports an error metric", async ({
-    makeAgent,
-    makeUser,
     makeOrganization,
+    makeUser,
     makeMember,
+    makeAgent,
     makeConversation,
   }) => {
-    const org = await makeOrganization();
-    const user = await makeUser();
-    await makeMember(user.id, org.id, { role: "admin" });
-    const agent = await makeAgent({
-      organizationId: org.id,
-      name: "Blocked Agent",
+    const { baseParams } = await setupChatToolEnv({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeAgent,
+      makeConversation,
+      gatewayTools: [externalTool("extsrv__fetch_data")],
     });
-    const conversation = await makeConversation(agent.id, {
-      organizationId: org.id,
-      userId: user.id,
-    });
-    chatClient.clearChatMcpClient(agent.id);
-    await chatClient.__test.clearToolCache();
-    chatClient.__test.setCachedClient(
-      chatClient.__test.getCacheKey(agent.id, user.id, conversation.id),
-      buildMockGatewayClient([externalTool("extsrv__fetch_data")]),
-    );
 
     const fireSpy = vi.spyOn(hookDispatcherService, "fire").mockResolvedValue({
       decision: "block",
@@ -271,14 +316,7 @@ describe("getChatMcpTools MCP tool execute pipeline", () => {
     });
     const metricsSpy = vi.spyOn(metrics.mcp, "reportMcpToolCall");
 
-    const tools = await chatClient.getChatMcpTools({
-      agentName: agent.name,
-      agentId: agent.id,
-      userId: user.id,
-      organizationId: org.id,
-      conversationId: conversation.id,
-    });
-
+    const tools = await chatClient.getChatMcpTools(baseParams);
     const result = await tools.extsrv__fetch_data.execute?.(
       { query: "q" },
       execOptions("call-2"),
@@ -294,35 +332,23 @@ describe("getChatMcpTools MCP tool execute pipeline", () => {
     expect(metricsSpy).toHaveBeenCalledWith(
       expect.objectContaining({ isError: true }),
     );
-
-    chatClient.clearChatMcpClient(agent.id);
-    await chatClient.__test.clearToolCache();
   });
 
   test("appends PostToolUse feedback to the tool result", async ({
-    makeAgent,
-    makeUser,
     makeOrganization,
+    makeUser,
     makeMember,
+    makeAgent,
     makeConversation,
   }) => {
-    const org = await makeOrganization();
-    const user = await makeUser();
-    await makeMember(user.id, org.id, { role: "admin" });
-    const agent = await makeAgent({
-      organizationId: org.id,
-      name: "Feedback Agent",
+    const { baseParams } = await setupChatToolEnv({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeAgent,
+      makeConversation,
+      gatewayTools: [externalTool("extsrv__fetch_data")],
     });
-    const conversation = await makeConversation(agent.id, {
-      organizationId: org.id,
-      userId: user.id,
-    });
-    chatClient.clearChatMcpClient(agent.id);
-    await chatClient.__test.clearToolCache();
-    chatClient.__test.setCachedClient(
-      chatClient.__test.getCacheKey(agent.id, user.id, conversation.id),
-      buildMockGatewayClient([externalTool("extsrv__fetch_data")]),
-    );
 
     vi.spyOn(hookDispatcherService, "fire").mockImplementation(
       async ({ event }) =>
@@ -335,14 +361,7 @@ describe("getChatMcpTools MCP tool execute pipeline", () => {
       isError: false,
     } as never);
 
-    const tools = await chatClient.getChatMcpTools({
-      agentName: agent.name,
-      agentId: agent.id,
-      userId: user.id,
-      organizationId: org.id,
-      conversationId: conversation.id,
-    });
-
+    const tools = await chatClient.getChatMcpTools(baseParams);
     const result = await tools.extsrv__fetch_data.execute?.(
       { query: "q" },
       execOptions("call-3"),
@@ -350,46 +369,33 @@ describe("getChatMcpTools MCP tool execute pipeline", () => {
 
     expect(toolResultContent(result)).toContain("external result");
     expect(toolResultContent(result)).toContain("[hook feedback] be careful");
-
-    chatClient.clearChatMcpClient(agent.id);
-    await chatClient.__test.clearToolCache();
   });
 });
 
 describe("getChatMcpTools agent delegation execute pipeline", () => {
   test("executes a delegation tool via the child-agent boundary without firing hooks", async ({
-    makeAgent,
-    makeAgentTool,
-    makeUser,
     makeOrganization,
+    makeUser,
     makeMember,
+    makeAgent,
     makeConversation,
+    makeAgentTool,
   }) => {
-    const org = await makeOrganization();
-    const user = await makeUser();
-    await makeMember(user.id, org.id, { role: "admin" });
-    const agent = await makeAgent({
-      organizationId: org.id,
-      name: "Delegating Agent",
+    const { agent, baseParams, conversation } = await setupChatToolEnv({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeAgent,
+      makeConversation,
     });
     const targetAgent = await makeAgent({
-      organizationId: org.id,
+      organizationId: baseParams.organizationId,
       name: "Child Worker",
     });
     const delegationTool = await ToolModel.findOrCreateDelegationTool(
       targetAgent.id,
     );
     await makeAgentTool(agent.id, delegationTool.id);
-    const conversation = await makeConversation(agent.id, {
-      organizationId: org.id,
-      userId: user.id,
-    });
-    chatClient.clearChatMcpClient(agent.id);
-    await chatClient.__test.clearToolCache();
-    chatClient.__test.setCachedClient(
-      chatClient.__test.getCacheKey(agent.id, user.id, conversation.id),
-      buildMockGatewayClient([]),
-    );
 
     const fireSpy = vi.spyOn(hookDispatcherService, "fire");
     const metricsSpy = vi.spyOn(metrics.mcp, "reportMcpToolCall");
@@ -400,14 +406,9 @@ describe("getChatMcpTools agent delegation execute pipeline", () => {
     });
 
     const tools = await chatClient.getChatMcpTools({
-      agentName: agent.name,
-      agentId: agent.id,
-      userId: user.id,
-      organizationId: org.id,
-      conversationId: conversation.id,
+      ...baseParams,
       delegationChain: agent.id,
     });
-
     const result = await tools[delegationTool.name].execute?.(
       { message: "do the work" },
       execOptions("call-4"),
@@ -419,7 +420,7 @@ describe("getChatMcpTools agent delegation execute pipeline", () => {
       expect.objectContaining({
         agentId: targetAgent.id,
         message: "do the work",
-        conversationId: conversation.id,
+        conversationId: conversation?.id,
         parentDelegationChain: agent.id,
       }),
     );
@@ -431,29 +432,28 @@ describe("getChatMcpTools agent delegation execute pipeline", () => {
         isError: false,
       }),
     );
-
-    chatClient.clearChatMcpClient(agent.id);
-    await chatClient.__test.clearToolCache();
   });
 });
 
 describe("getChatMcpTools approval gating", () => {
   test("blockOnApprovalRequired removes needsApproval and blocks approval-required execution", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
     makeAgent,
     makeAgentTool,
     makeInternalMcpCatalog,
     makeTool,
     makeToolPolicy,
-    makeUser,
-    makeOrganization,
-    makeMember,
   }) => {
-    const org = await makeOrganization({ globalToolPolicy: "restrictive" });
-    const user = await makeUser();
-    await makeMember(user.id, org.id, { role: "admin" });
-    const agent = await makeAgent({
-      organizationId: org.id,
-      name: "Autonomous Agent",
+    const { agent, org, baseParams } = await setupChatToolEnv({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeAgent,
+      orgOverrides: { globalToolPolicy: "restrictive" },
+      isolationKey: "headless-exec-1",
+      gatewayTools: [externalTool("extsrv__restricted_export")],
     });
     const catalog = await makeInternalMcpCatalog({ organizationId: org.id });
     const restrictedTool = await makeTool({
@@ -474,20 +474,8 @@ describe("getChatMcpTools approval gating", () => {
     );
     await makeAgentTool(agent.id, delegationTool.id);
 
-    const isolationKey = "headless-exec-1";
-    chatClient.clearChatMcpClient(agent.id);
-    await chatClient.__test.clearToolCache();
-    chatClient.__test.setCachedClient(
-      chatClient.__test.getCacheKey(agent.id, user.id, isolationKey),
-      buildMockGatewayClient([externalTool("extsrv__restricted_export")]),
-    );
-
     const tools = await chatClient.getChatMcpTools({
-      agentName: agent.name,
-      agentId: agent.id,
-      userId: user.id,
-      organizationId: org.id,
-      isolationKey,
+      ...baseParams,
       blockOnApprovalRequired: true,
     });
 
@@ -501,48 +489,25 @@ describe("getChatMcpTools approval gating", () => {
       ),
     ).rejects.toThrow(TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON);
     expect(mcpClient.executeToolCall).not.toHaveBeenCalled();
-
-    chatClient.clearChatMcpClient(agent.id);
-    await chatClient.__test.clearToolCache();
   });
 
   test("run_tool proposes a grant approval only for an accessible-but-unassigned target", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
     makeAgent,
+    makeConversation,
     makeAgentTool,
     makeInternalMcpCatalog,
     makeTool,
-    makeUser,
-    makeOrganization,
-    makeMember,
-    makeConversation,
   }) => {
-    const org = await makeOrganization();
-    const user = await makeUser();
-    await makeMember(user.id, org.id, { role: "admin" });
-    const agent = await makeAgent({
-      organizationId: org.id,
-      name: "Grant Agent",
-    });
-    const catalog = await makeInternalMcpCatalog({ organizationId: org.id });
-    const unassignedTool = await makeTool({
-      name: "github__search_repositories",
-      catalogId: catalog.id,
-    });
-    const assignedTool = await makeTool({
-      name: "workspace__list_projects",
-      catalogId: catalog.id,
-    });
-    await makeAgentTool(agent.id, assignedTool.id);
-
-    const conversation = await makeConversation(agent.id, {
-      organizationId: org.id,
-      userId: user.id,
-    });
-    chatClient.clearChatMcpClient(agent.id);
-    await chatClient.__test.clearToolCache();
-    chatClient.__test.setCachedClient(
-      chatClient.__test.getCacheKey(agent.id, user.id, conversation.id),
-      buildMockGatewayClient([
+    const { agent, org, baseParams } = await setupChatToolEnv({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeAgent,
+      makeConversation,
+      gatewayTools: [
         {
           name: getArchestraToolFullName("run_tool"),
           description: "Run tool",
@@ -555,16 +520,20 @@ describe("getChatMcpTools approval gating", () => {
             required: ["tool_name"],
           },
         },
-      ]),
-    );
-
-    const tools = await chatClient.getChatMcpTools({
-      agentName: agent.name,
-      agentId: agent.id,
-      userId: user.id,
-      organizationId: org.id,
-      conversationId: conversation.id,
+      ],
     });
+    const catalog = await makeInternalMcpCatalog({ organizationId: org.id });
+    const unassignedTool = await makeTool({
+      name: "github__search_repositories",
+      catalogId: catalog.id,
+    });
+    const assignedTool = await makeTool({
+      name: "workspace__list_projects",
+      catalogId: catalog.id,
+    });
+    await makeAgentTool(agent.id, assignedTool.id);
+
+    const tools = await chatClient.getChatMcpTools(baseParams);
 
     const needsApproval = callableNeedsApproval(
       tools[getArchestraToolFullName("run_tool")],
@@ -581,28 +550,26 @@ describe("getChatMcpTools approval gating", () => {
         execOptions(),
       ),
     ).resolves.toBe(false);
-
-    chatClient.clearChatMcpClient(agent.id);
-    await chatClient.__test.clearToolCache();
   });
 
   test("delegation needsApproval targets the delegation tool itself, not a tool_name in args", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
     makeAgent,
+    makeConversation,
     makeAgentTool,
     makeInternalMcpCatalog,
     makeTool,
     makeToolPolicy,
-    makeUser,
-    makeOrganization,
-    makeMember,
-    makeConversation,
   }) => {
-    const org = await makeOrganization({ globalToolPolicy: "restrictive" });
-    const user = await makeUser();
-    await makeMember(user.id, org.id, { role: "admin" });
-    const agent = await makeAgent({
-      organizationId: org.id,
-      name: "Retarget Agent",
+    const { agent, org, baseParams } = await setupChatToolEnv({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeAgent,
+      makeConversation,
+      orgOverrides: { globalToolPolicy: "restrictive" },
     });
     const catalog = await makeInternalMcpCatalog({ organizationId: org.id });
     const guardedTool = await makeTool({
@@ -622,24 +589,7 @@ describe("getChatMcpTools approval gating", () => {
     );
     await makeAgentTool(agent.id, delegationTool.id);
 
-    const conversation = await makeConversation(agent.id, {
-      organizationId: org.id,
-      userId: user.id,
-    });
-    chatClient.clearChatMcpClient(agent.id);
-    await chatClient.__test.clearToolCache();
-    chatClient.__test.setCachedClient(
-      chatClient.__test.getCacheKey(agent.id, user.id, conversation.id),
-      buildMockGatewayClient([]),
-    );
-
-    const tools = await chatClient.getChatMcpTools({
-      agentName: agent.name,
-      agentId: agent.id,
-      userId: user.id,
-      organizationId: org.id,
-      conversationId: conversation.id,
-    });
+    const tools = await chatClient.getChatMcpTools(baseParams);
 
     const needsApproval = callableNeedsApproval(tools[delegationTool.name]);
     await expect(
@@ -652,92 +602,51 @@ describe("getChatMcpTools approval gating", () => {
         execOptions(),
       ),
     ).resolves.toBe(false);
-
-    chatClient.clearChatMcpClient(agent.id);
-    await chatClient.__test.clearToolCache();
   });
 });
 
 describe("getChatMcpTools failure and cache gating", () => {
   test("returns no tools when the gateway listing fails", async ({
-    makeAgent,
-    makeUser,
     makeOrganization,
+    makeUser,
     makeMember,
+    makeAgent,
     makeConversation,
   }) => {
-    const org = await makeOrganization();
-    const user = await makeUser();
-    await makeMember(user.id, org.id, { role: "admin" });
-    const agent = await makeAgent({
-      organizationId: org.id,
-      name: "Failing Gateway Agent",
-    });
-    const conversation = await makeConversation(agent.id, {
-      organizationId: org.id,
-      userId: user.id,
-    });
-    chatClient.clearChatMcpClient(agent.id);
-    await chatClient.__test.clearToolCache();
-    chatClient.__test.setCachedClient(
-      chatClient.__test.getCacheKey(agent.id, user.id, conversation.id),
-      {
+    const { baseParams } = await setupChatToolEnv({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeAgent,
+      makeConversation,
+      gatewayClient: {
         ping: vi.fn().mockResolvedValue({}),
         listTools: vi.fn().mockRejectedValue(new Error("gateway down")),
         callTool: vi.fn(),
         close: vi.fn(),
       } as unknown as Client,
-    );
-
-    const tools = await chatClient.getChatMcpTools({
-      agentName: agent.name,
-      agentId: agent.id,
-      userId: user.id,
-      organizationId: org.id,
-      conversationId: conversation.id,
     });
 
-    expect(tools).toEqual({});
+    const tools = await chatClient.getChatMcpTools(baseParams);
 
-    chatClient.clearChatMcpClient(agent.id);
-    await chatClient.__test.clearToolCache();
+    expect(tools).toEqual({});
   });
 
   test("abortSignal bypasses the tool cache; calls without it reuse the entry", async ({
-    makeAgent,
-    makeUser,
     makeOrganization,
+    makeUser,
     makeMember,
+    makeAgent,
     makeConversation,
   }) => {
-    const org = await makeOrganization();
-    const user = await makeUser();
-    await makeMember(user.id, org.id, { role: "admin" });
-    const agent = await makeAgent({
-      organizationId: org.id,
-      name: "Cache Gate Agent",
+    const { baseParams, gatewayClient } = await setupChatToolEnv({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeAgent,
+      makeConversation,
+      gatewayTools: [externalTool("extsrv__fetch_data")],
     });
-    const conversation = await makeConversation(agent.id, {
-      organizationId: org.id,
-      userId: user.id,
-    });
-    chatClient.clearChatMcpClient(agent.id);
-    await chatClient.__test.clearToolCache();
-    const gatewayClient = buildMockGatewayClient([
-      externalTool("extsrv__fetch_data"),
-    ]);
-    chatClient.__test.setCachedClient(
-      chatClient.__test.getCacheKey(agent.id, user.id, conversation.id),
-      gatewayClient,
-    );
-
-    const baseParams = {
-      agentName: agent.name,
-      agentId: agent.id,
-      userId: user.id,
-      organizationId: org.id,
-      conversationId: conversation.id,
-    };
 
     const abortController = new AbortController();
     await chatClient.getChatMcpTools({
@@ -755,68 +664,43 @@ describe("getChatMcpTools failure and cache gating", () => {
     const second = await chatClient.getChatMcpTools(baseParams);
     expect(gatewayClient.listTools).toHaveBeenCalledTimes(1);
     expect(Object.keys(second)).toEqual(Object.keys(first));
-
-    chatClient.clearChatMcpClient(agent.id);
-    await chatClient.__test.clearToolCache();
   });
 
   test("tool cache entries are scoped per conversation", async ({
-    makeAgent,
-    makeUser,
     makeOrganization,
+    makeUser,
     makeMember,
+    makeAgent,
     makeConversation,
   }) => {
-    const org = await makeOrganization();
-    const user = await makeUser();
-    await makeMember(user.id, org.id, { role: "admin" });
-    const agent = await makeAgent({
-      organizationId: org.id,
-      name: "Scoped Cache Agent",
-    });
-    const conversationA = await makeConversation(agent.id, {
-      organizationId: org.id,
-      userId: user.id,
-    });
+    const { agent, user, org, baseParams, gatewayClient } =
+      await setupChatToolEnv({
+        makeOrganization,
+        makeUser,
+        makeMember,
+        makeAgent,
+        makeConversation,
+        gatewayTools: [externalTool("extsrv__a")],
+      });
     const conversationB = await makeConversation(agent.id, {
       organizationId: org.id,
       userId: user.id,
     });
-    chatClient.clearChatMcpClient(agent.id);
-    await chatClient.__test.clearToolCache();
-    const clientA = buildMockGatewayClient([externalTool("extsrv__a")]);
     const clientB = buildMockGatewayClient([externalTool("extsrv__b")]);
-    chatClient.__test.setCachedClient(
-      chatClient.__test.getCacheKey(agent.id, user.id, conversationA.id),
-      clientA,
-    );
     chatClient.__test.setCachedClient(
       chatClient.__test.getCacheKey(agent.id, user.id, conversationB.id),
       clientB,
     );
 
-    const baseParams = {
-      agentName: agent.name,
-      agentId: agent.id,
-      userId: user.id,
-      organizationId: org.id,
-    };
-
-    const toolsA = await chatClient.getChatMcpTools({
-      ...baseParams,
-      conversationId: conversationA.id,
-    });
+    const toolsA = await chatClient.getChatMcpTools(baseParams);
     const toolsB = await chatClient.getChatMcpTools({
       ...baseParams,
       conversationId: conversationB.id,
     });
 
-    expect(clientA.listTools).toHaveBeenCalledTimes(1);
+    expect(gatewayClient.listTools).toHaveBeenCalledTimes(1);
     expect(clientB.listTools).toHaveBeenCalledTimes(1);
     expect(Object.keys(toolsA)).toEqual(["extsrv__a"]);
     expect(Object.keys(toolsB)).toEqual(["extsrv__b"]);
-
-    chatClient.clearChatMcpClient(agent.id);
-    await chatClient.__test.clearToolCache();
   });
 });

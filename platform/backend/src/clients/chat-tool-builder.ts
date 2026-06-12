@@ -39,11 +39,7 @@ import {
   ATTR_MCP_IS_ERROR_RESULT,
   startActiveMcpSpan,
 } from "@/observability/tracing";
-import type {
-  AgentType,
-  GlobalToolPolicy,
-  UnsafeContextBoundary,
-} from "@/types";
+import type { GlobalToolPolicy, UnsafeContextBoundary } from "@/types";
 import { UNSAFE_CONTEXT_BOUNDARY_REASON } from "@/types";
 
 /** Gateway token selected for the current call (see selectMCPGatewayToken). */
@@ -601,11 +597,10 @@ interface ToolExecutionContext {
    * MCP session reuse. Equals the conversation id in UI chat.
    */
   isolationKey?: string;
-  mcpGwToken: {
-    tokenId: string;
-    teamId: string | null;
-    isOrganizationToken: boolean;
-  } | null;
+  mcpGwToken: Pick<
+    McpGatewayToken,
+    "tokenId" | "teamId" | "isOrganizationToken"
+  > | null;
   globalToolPolicy: GlobalToolPolicy;
   considerContextUntrusted: boolean;
   abortSignal?: AbortSignal;
@@ -968,34 +963,23 @@ async function evaluateUnsafeContextBoundaryForToolResult(params: {
   );
 
   const toolResultEvaluation = evaluation.get("0");
-  if (!toolResultEvaluation) {
-    return {
-      kind: "tool_result",
-      reason: UNSAFE_CONTEXT_BOUNDARY_REASON.toolResultMarkedUntrusted,
-      toolCallId: params.toolCallId,
-      toolName: params.toolName,
-    };
+  const reason = !toolResultEvaluation
+    ? UNSAFE_CONTEXT_BOUNDARY_REASON.toolResultMarkedUntrusted
+    : toolResultEvaluation.isBlocked
+      ? UNSAFE_CONTEXT_BOUNDARY_REASON.toolResultBlocked
+      : toolResultEvaluation.isTrusted
+        ? undefined
+        : UNSAFE_CONTEXT_BOUNDARY_REASON.toolResultMarkedUntrusted;
+  if (!reason) {
+    return undefined;
   }
 
-  if (toolResultEvaluation.isBlocked) {
-    return {
-      kind: "tool_result",
-      reason: UNSAFE_CONTEXT_BOUNDARY_REASON.toolResultBlocked,
-      toolCallId: params.toolCallId,
-      toolName: params.toolName,
-    };
-  }
-
-  if (!toolResultEvaluation.isTrusted) {
-    return {
-      kind: "tool_result",
-      reason: UNSAFE_CONTEXT_BOUNDARY_REASON.toolResultMarkedUntrusted,
-      toolCallId: params.toolCallId,
-      toolName: params.toolName,
-    };
-  }
-
-  return undefined;
+  return {
+    kind: "tool_result",
+    reason,
+    toolCallId: params.toolCallId,
+    toolName: params.toolName,
+  };
 }
 
 function buildTokenAuthContext({
@@ -1092,7 +1076,6 @@ function reportToolMetrics(params: {
   toolName: string;
   agentId: string;
   agentName: string;
-  agentType?: AgentType | null;
   startTime: number;
   isError: boolean;
 }): void {
@@ -1100,7 +1083,7 @@ function reportToolMetrics(params: {
   metrics.mcp.reportMcpToolCall({
     agentId: params.agentId,
     agentName: params.agentName,
-    agentType: params.agentType ?? null,
+    agentType: null,
     mcpServerName: serverName ?? "unknown",
     toolName: params.toolName,
     durationSeconds: (Date.now() - params.startTime) / 1000,

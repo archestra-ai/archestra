@@ -1,63 +1,10 @@
 import { ADMIN_ROLE_NAME, MEMBER_ROLE_NAME } from "@archestra/shared";
-import { SkillModel, SkillTeamModel } from "@/models";
-import type { FastifyInstanceWithZod } from "@/server";
-import { createFastifyInstance } from "@/server";
-import { afterEach, beforeEach, describe, expect, test } from "@/test";
-import type { User } from "@/types";
-import type { ResourceVisibilityScope } from "@/types/visibility";
-
-async function seedImportedSkill(params: {
-  organizationId: string;
-  name: string;
-  sourceRef: string;
-  scope: ResourceVisibilityScope;
-  authorId?: string | null;
-  teamIds?: string[];
-}) {
-  const skill = await SkillModel.createWithFiles({
-    skill: {
-      organizationId: params.organizationId,
-      authorId: params.authorId ?? null,
-      name: params.name,
-      description: `${params.name} description`,
-      content: `# ${params.name}`,
-      metadata: {},
-      sourceType: "github",
-      sourceRef: params.sourceRef,
-      scope: params.scope,
-    },
-    files: [],
-  });
-  if (!skill) throw new Error("seed failed");
-  if (params.teamIds?.length) {
-    await SkillTeamModel.syncSkillTeams(skill.id, params.teamIds);
-  }
-  return skill;
-}
+import { describe, expect, test, useRouteTestApp } from "@/test";
+import skillRoutes from "./skill.routes";
+import { seedImportedSkill } from "./skill.test-helpers";
 
 describe("GET /api/skills/source-repos", () => {
-  let app: FastifyInstanceWithZod;
-  let user: User;
-  let organizationId: string;
-
-  beforeEach(async ({ makeOrganization, makeUser }) => {
-    user = await makeUser();
-    organizationId = (await makeOrganization()).id;
-
-    app = createFastifyInstance();
-    app.addHook("onRequest", async (request) => {
-      (request as typeof request & { user: unknown }).user = user;
-      (request as typeof request & { organizationId: string }).organizationId =
-        organizationId;
-    });
-
-    const { default: skillRoutes } = await import("./skill.routes");
-    await app.register(skillRoutes);
-  });
-
-  afterEach(async () => {
-    await app.close();
-  });
+  const ctx = useRouteTestApp(skillRoutes);
 
   test("non-admins see repositories only for skills within their scope", async ({
     makeMember,
@@ -65,48 +12,50 @@ describe("GET /api/skills/source-repos", () => {
     makeTeamMember,
     makeUser,
   }) => {
-    await makeMember(user.id, organizationId, { role: MEMBER_ROLE_NAME });
+    await makeMember(ctx.user.id, ctx.organizationId, {
+      role: MEMBER_ROLE_NAME,
+    });
     const otherAuthor = await makeUser();
-    const team = await makeTeam(organizationId, user.id);
-    await makeTeamMember(team.id, user.id);
-    const inaccessibleTeam = await makeTeam(organizationId, otherAuthor.id);
+    const team = await makeTeam(ctx.organizationId, ctx.user.id);
+    await makeTeamMember(team.id, ctx.user.id);
+    const inaccessibleTeam = await makeTeam(ctx.organizationId, otherAuthor.id);
 
     await seedImportedSkill({
-      organizationId,
+      organizationId: ctx.organizationId,
       name: "org-imported",
       sourceRef: "shared/org-repo@main:SKILL.md",
       scope: "org",
     });
     await seedImportedSkill({
-      organizationId,
+      organizationId: ctx.organizationId,
       name: "own-imported",
       sourceRef: "mine/personal-repo@main:SKILL.md",
       scope: "personal",
-      authorId: user.id,
+      authorId: ctx.user.id,
     });
     await seedImportedSkill({
-      organizationId,
+      organizationId: ctx.organizationId,
       name: "team-imported",
       sourceRef: "team/team-repo@main:SKILL.md",
       scope: "team",
       teamIds: [team.id],
     });
     await seedImportedSkill({
-      organizationId,
+      organizationId: ctx.organizationId,
       name: "private-imported",
       sourceRef: "secret/private-repo@main:SKILL.md",
       scope: "personal",
       authorId: otherAuthor.id,
     });
     await seedImportedSkill({
-      organizationId,
+      organizationId: ctx.organizationId,
       name: "inaccessible-team-imported",
       sourceRef: "secret/team-repo@main:SKILL.md",
       scope: "team",
       teamIds: [inaccessibleTeam.id],
     });
 
-    const response = await app.inject({
+    const response = await ctx.app.inject({
       method: "GET",
       url: "/api/skills/source-repos",
     });
@@ -123,24 +72,26 @@ describe("GET /api/skills/source-repos", () => {
     makeMember,
     makeUser,
   }) => {
-    await makeMember(user.id, organizationId, { role: ADMIN_ROLE_NAME });
+    await makeMember(ctx.user.id, ctx.organizationId, {
+      role: ADMIN_ROLE_NAME,
+    });
     const otherAuthor = await makeUser();
 
     await seedImportedSkill({
-      organizationId,
+      organizationId: ctx.organizationId,
       name: "org-imported",
       sourceRef: "shared/org-repo@main:SKILL.md",
       scope: "org",
     });
     await seedImportedSkill({
-      organizationId,
+      organizationId: ctx.organizationId,
       name: "private-imported",
       sourceRef: "secret/private-repo@main:SKILL.md",
       scope: "personal",
       authorId: otherAuthor.id,
     });
 
-    const response = await app.inject({
+    const response = await ctx.app.inject({
       method: "GET",
       url: "/api/skills/source-repos",
     });
@@ -156,18 +107,20 @@ describe("GET /api/skills/source-repos", () => {
     makeMember,
     makeUser,
   }) => {
-    await makeMember(user.id, organizationId, { role: MEMBER_ROLE_NAME });
+    await makeMember(ctx.user.id, ctx.organizationId, {
+      role: MEMBER_ROLE_NAME,
+    });
     const otherAuthor = await makeUser();
 
     await seedImportedSkill({
-      organizationId,
+      organizationId: ctx.organizationId,
       name: "private-imported",
       sourceRef: "secret/private-repo@main:SKILL.md",
       scope: "personal",
       authorId: otherAuthor.id,
     });
 
-    const response = await app.inject({
+    const response = await ctx.app.inject({
       method: "GET",
       url: "/api/skills/source-repos",
     });

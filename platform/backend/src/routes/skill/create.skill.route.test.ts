@@ -1,59 +1,15 @@
 import { ADMIN_ROLE_NAME, EDITOR_ROLE_NAME } from "@archestra/shared";
 import { SkillModel, SkillTeamModel } from "@/models";
-import type { FastifyInstanceWithZod } from "@/server";
-import { createFastifyInstance } from "@/server";
 import { MAX_SKILL_FILE_BYTES } from "@/skills/github-import";
-import { afterEach, beforeEach, describe, expect, test } from "@/test";
-import type { User } from "@/types";
-
-const MANIFEST = [
-  "---",
-  "name: pdf-processing",
-  "description: Extract text from PDF files.",
-  "---",
-  "",
-  "# PDF Processing",
-  "Use pdftotext -layout.",
-].join("\n");
-
-/** A SKILL.md manifest with a custom name (org+name must be unique). */
-function manifestNamed(name: string): string {
-  return [
-    "---",
-    `name: ${name}`,
-    "description: A scoped skill.",
-    "---",
-    "",
-    `# ${name}`,
-  ].join("\n");
-}
+import { describe, expect, test, useRouteTestApp } from "@/test";
+import skillRoutes from "./skill.routes";
+import { MANIFEST, manifestNamed } from "./skill.test-helpers";
 
 describe("POST /api/skills", () => {
-  let app: FastifyInstanceWithZod;
-  let user: User;
-  let organizationId: string;
-
-  beforeEach(async ({ makeOrganization, makeUser }) => {
-    user = await makeUser();
-    organizationId = (await makeOrganization()).id;
-
-    app = createFastifyInstance();
-    app.addHook("onRequest", async (request) => {
-      (request as typeof request & { user: unknown }).user = user;
-      (request as typeof request & { organizationId: string }).organizationId =
-        organizationId;
-    });
-
-    const { default: skillRoutes } = await import("./skill.routes");
-    await app.register(skillRoutes);
-  });
-
-  afterEach(async () => {
-    await app.close();
-  });
+  const ctx = useRouteTestApp(skillRoutes);
 
   test("creates a skill from a SKILL.md manifest", async () => {
-    const response = await app.inject({
+    const response = await ctx.app.inject({
       method: "POST",
       url: "/api/skills",
       payload: { content: MANIFEST },
@@ -65,12 +21,12 @@ describe("POST /api/skills", () => {
     expect(body.description).toBe("Extract text from PDF files.");
     expect(body.content).toContain("# PDF Processing");
     expect(body.sourceType).toBe("manual");
-    expect(body.authorId).toBe(user.id);
+    expect(body.authorId).toBe(ctx.user.id);
     expect(body.files).toEqual([]);
   });
 
   test("stores resource files with derived kinds", async () => {
-    const response = await app.inject({
+    const response = await ctx.app.inject({
       method: "POST",
       url: "/api/skills",
       payload: {
@@ -102,7 +58,7 @@ describe("POST /api/skills", () => {
       "",
       "# PDF Processing",
     ].join("\n");
-    const response = await app.inject({
+    const response = await ctx.app.inject({
       method: "POST",
       url: "/api/skills",
       payload: { content: manifest },
@@ -122,7 +78,7 @@ describe("POST /api/skills", () => {
       "",
       "# PDF Processing",
     ].join("\n");
-    const response = await app.inject({
+    const response = await ctx.app.inject({
       method: "POST",
       url: "/api/skills",
       payload: { content: manifest, allowedTools: ["Bash", "Edit"] },
@@ -142,7 +98,7 @@ describe("POST /api/skills", () => {
       "",
       "# PDF Processing",
     ].join("\n");
-    const response = await app.inject({
+    const response = await ctx.app.inject({
       method: "POST",
       url: "/api/skills",
       payload: { content: manifest, allowedTools: [] },
@@ -153,7 +109,7 @@ describe("POST /api/skills", () => {
   });
 
   test("rejects a manifest with no frontmatter", async () => {
-    const response = await app.inject({
+    const response = await ctx.app.inject({
       method: "POST",
       url: "/api/skills",
       payload: { content: "# no frontmatter" },
@@ -163,12 +119,12 @@ describe("POST /api/skills", () => {
   });
 
   test("rejects a duplicate skill name", async () => {
-    await app.inject({
+    await ctx.app.inject({
       method: "POST",
       url: "/api/skills",
       payload: { content: MANIFEST },
     });
-    const response = await app.inject({
+    const response = await ctx.app.inject({
       method: "POST",
       url: "/api/skills",
       payload: { content: MANIFEST },
@@ -178,7 +134,7 @@ describe("POST /api/skills", () => {
   });
 
   test("rejects duplicate resource file paths with a 400", async () => {
-    const response = await app.inject({
+    const response = await ctx.app.inject({
       method: "POST",
       url: "/api/skills",
       payload: {
@@ -194,7 +150,7 @@ describe("POST /api/skills", () => {
   });
 
   test("rejects a manifest larger than the size cap", async () => {
-    const response = await app.inject({
+    const response = await ctx.app.inject({
       method: "POST",
       url: "/api/skills",
       payload: { content: MANIFEST + "x".repeat(MAX_SKILL_FILE_BYTES) },
@@ -206,7 +162,7 @@ describe("POST /api/skills", () => {
   describe("scope", () => {
     test("a new skill defaults to personal scope owned by the author", async () => {
       const body = (
-        await app.inject({
+        await ctx.app.inject({
           method: "POST",
           url: "/api/skills",
           payload: { content: MANIFEST },
@@ -214,12 +170,12 @@ describe("POST /api/skills", () => {
       ).json();
 
       expect(body.scope).toBe("personal");
-      expect(body.authorId).toBe(user.id);
+      expect(body.authorId).toBe(ctx.user.id);
       expect(body.teams).toEqual([]);
     });
 
     test("non-admins cannot create an org-scoped skill", async () => {
-      const response = await app.inject({
+      const response = await ctx.app.inject({
         method: "POST",
         url: "/api/skills",
         payload: { content: MANIFEST, scope: "org" },
@@ -229,9 +185,11 @@ describe("POST /api/skills", () => {
     });
 
     test("admins can create an org-scoped skill", async ({ makeMember }) => {
-      await makeMember(user.id, organizationId, { role: ADMIN_ROLE_NAME });
+      await makeMember(ctx.user.id, ctx.organizationId, {
+        role: ADMIN_ROLE_NAME,
+      });
 
-      const response = await app.inject({
+      const response = await ctx.app.inject({
         method: "POST",
         url: "/api/skills",
         payload: { content: MANIFEST, scope: "org" },
@@ -246,12 +204,14 @@ describe("POST /api/skills", () => {
       makeTeam,
       makeTeamMember,
     }) => {
-      await makeMember(user.id, organizationId, { role: EDITOR_ROLE_NAME });
-      const ownTeam = await makeTeam(organizationId, user.id);
-      await makeTeamMember(ownTeam.id, user.id);
-      const foreignTeam = await makeTeam(organizationId, user.id);
+      await makeMember(ctx.user.id, ctx.organizationId, {
+        role: EDITOR_ROLE_NAME,
+      });
+      const ownTeam = await makeTeam(ctx.organizationId, ctx.user.id);
+      await makeTeamMember(ownTeam.id, ctx.user.id);
+      const foreignTeam = await makeTeam(ctx.organizationId, ctx.user.id);
 
-      const ok = await app.inject({
+      const ok = await ctx.app.inject({
         method: "POST",
         url: "/api/skills",
         payload: {
@@ -263,7 +223,7 @@ describe("POST /api/skills", () => {
       expect(ok.statusCode).toBe(200);
       expect(ok.json().teams).toHaveLength(1);
 
-      const denied = await app.inject({
+      const denied = await ctx.app.inject({
         method: "POST",
         url: "/api/skills",
         payload: {
@@ -280,9 +240,11 @@ describe("POST /api/skills", () => {
     }) => {
       // admins bypass the team-membership check, so an unknown id reaches the
       // existence validation rather than 403-ing first.
-      await makeMember(user.id, organizationId, { role: ADMIN_ROLE_NAME });
+      await makeMember(ctx.user.id, ctx.organizationId, {
+        role: ADMIN_ROLE_NAME,
+      });
 
-      const response = await app.inject({
+      const response = await ctx.app.inject({
         method: "POST",
         url: "/api/skills",
         payload: {
@@ -295,7 +257,7 @@ describe("POST /api/skills", () => {
       expect(response.statusCode).toBe(400);
       // the skill row must not have been committed
       expect(
-        await SkillModel.findByName(organizationId, "orphan-check"),
+        await SkillModel.findByName(ctx.organizationId, "orphan-check"),
       ).toBeNull();
     });
 
@@ -304,11 +266,13 @@ describe("POST /api/skills", () => {
       makeTeam,
       makeTeamMember,
     }) => {
-      await makeMember(user.id, organizationId, { role: EDITOR_ROLE_NAME });
-      const team = await makeTeam(organizationId, user.id);
-      await makeTeamMember(team.id, user.id);
+      await makeMember(ctx.user.id, ctx.organizationId, {
+        role: EDITOR_ROLE_NAME,
+      });
+      const team = await makeTeam(ctx.organizationId, ctx.user.id);
+      await makeTeamMember(team.id, ctx.user.id);
 
-      const response = await app.inject({
+      const response = await ctx.app.inject({
         method: "POST",
         url: "/api/skills",
         payload: {
@@ -330,9 +294,11 @@ describe("POST /api/skills", () => {
     }) => {
       // admins bypass the team-membership check, so an empty team list is not
       // caught there — the explicit team validation must reject it.
-      await makeMember(user.id, organizationId, { role: ADMIN_ROLE_NAME });
+      await makeMember(ctx.user.id, ctx.organizationId, {
+        role: ADMIN_ROLE_NAME,
+      });
 
-      const response = await app.inject({
+      const response = await ctx.app.inject({
         method: "POST",
         url: "/api/skills",
         payload: {
@@ -344,7 +310,7 @@ describe("POST /api/skills", () => {
 
       expect(response.statusCode).toBe(400);
       expect(
-        await SkillModel.findByName(organizationId, "teamless-skill"),
+        await SkillModel.findByName(ctx.organizationId, "teamless-skill"),
       ).toBeNull();
     });
   });

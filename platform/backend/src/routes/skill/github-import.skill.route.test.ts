@@ -1,39 +1,16 @@
 import { EDITOR_ROLE_NAME } from "@archestra/shared";
 import { GithubAppConfigModel } from "@/models";
 import { secretManager } from "@/secrets-manager";
-import type { FastifyInstanceWithZod } from "@/server";
-import { createFastifyInstance } from "@/server";
-import { afterEach, beforeEach, describe, expect, test } from "@/test";
-import type { User } from "@/types";
+import { describe, expect, test, useRouteTestApp } from "@/test";
+import skillRoutes from "./skill.routes";
 
 describe("POST /api/skills/github/{discover,preview,import}", () => {
-  let app: FastifyInstanceWithZod;
-  let user: User;
-  let organizationId: string;
-
-  beforeEach(async ({ makeOrganization, makeUser }) => {
-    user = await makeUser();
-    organizationId = (await makeOrganization()).id;
-
-    app = createFastifyInstance();
-    app.addHook("onRequest", async (request) => {
-      (request as typeof request & { user: unknown }).user = user;
-      (request as typeof request & { organizationId: string }).organizationId =
-        organizationId;
-    });
-
-    const { default: skillRoutes } = await import("./skill.routes");
-    await app.register(skillRoutes);
-  });
-
-  afterEach(async () => {
-    await app.close();
-  });
+  const ctx = useRouteTestApp(skillRoutes);
 
   describe("scope", () => {
     test("non-admins cannot import skills as org-scoped", async () => {
       // scope is authorized before any GitHub call, so this 403s without network
-      const response = await app.inject({
+      const response = await ctx.app.inject({
         method: "POST",
         url: "/api/skills/github/import",
         payload: {
@@ -49,7 +26,7 @@ describe("POST /api/skills/github/{discover,preview,import}", () => {
 
   describe("GitHub App auth for imports", () => {
     test("rejects supplying both githubToken and githubAppConfigId", async () => {
-      const response = await app.inject({
+      const response = await ctx.app.inject({
         method: "POST",
         url: "/api/skills/github/discover",
         payload: {
@@ -64,8 +41,10 @@ describe("POST /api/skills/github/{discover,preview,import}", () => {
     test("rejects a malformed githubAppConfigId before it reaches the database", async ({
       makeMember,
     }) => {
-      await makeMember(user.id, organizationId, { role: EDITOR_ROLE_NAME });
-      const response = await app.inject({
+      await makeMember(ctx.user.id, ctx.organizationId, {
+        role: EDITOR_ROLE_NAME,
+      });
+      const response = await ctx.app.inject({
         method: "POST",
         url: "/api/skills/github/discover",
         payload: {
@@ -78,7 +57,7 @@ describe("POST /api/skills/github/{discover,preview,import}", () => {
 
     test("403 when the user cannot read GitHub App configs", async () => {
       // the default test user has no githubAppConfig:read permission
-      const response = await app.inject({
+      const response = await ctx.app.inject({
         method: "POST",
         url: "/api/skills/github/discover",
         payload: {
@@ -93,8 +72,10 @@ describe("POST /api/skills/github/{discover,preview,import}", () => {
       makeMember,
     }) => {
       // editors (not default members) hold githubAppConfig:read
-      await makeMember(user.id, organizationId, { role: EDITOR_ROLE_NAME });
-      const response = await app.inject({
+      await makeMember(ctx.user.id, ctx.organizationId, {
+        role: EDITOR_ROLE_NAME,
+      });
+      const response = await ctx.app.inject({
         method: "POST",
         url: "/api/skills/github/discover",
         payload: {
@@ -108,13 +89,15 @@ describe("POST /api/skills/github/{discover,preview,import}", () => {
     test("400 when the GitHub App config targets GitHub Enterprise", async ({
       makeMember,
     }) => {
-      await makeMember(user.id, organizationId, { role: EDITOR_ROLE_NAME });
+      await makeMember(ctx.user.id, ctx.organizationId, {
+        role: EDITOR_ROLE_NAME,
+      });
       const secret = await secretManager().createSecret(
         { apiToken: "pem" },
         "ghes-app",
       );
       const appConfig = await GithubAppConfigModel.create({
-        organizationId,
+        organizationId: ctx.organizationId,
         name: "GHES App",
         githubUrl: "https://github.acme.com/api/v3",
         appId: "1",
@@ -122,7 +105,7 @@ describe("POST /api/skills/github/{discover,preview,import}", () => {
         secretId: secret.id,
       });
 
-      const response = await app.inject({
+      const response = await ctx.app.inject({
         method: "POST",
         url: "/api/skills/github/discover",
         payload: {

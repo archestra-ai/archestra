@@ -51,10 +51,7 @@ export const SkillManifestContentSchema = z
       "list of tools the skill is pre-approved to use.",
   );
 
-/** Manifest-derived columns valid in both insert and update rows, so a schema
- * divergence is caught here rather than at a spread site. */
-type SkillManifestFields = Pick<
-  InsertSkill,
+type SkillManifestFieldKey =
   | "name"
   | "description"
   | "content"
@@ -62,19 +59,12 @@ type SkillManifestFields = Pick<
   | "compatibility"
   | "allowedTools"
   | "templated"
-  | "metadata"
-> &
-  Pick<
-    UpdateSkill,
-    | "name"
-    | "description"
-    | "content"
-    | "license"
-    | "compatibility"
-    | "allowedTools"
-    | "templated"
-    | "metadata"
-  >;
+  | "metadata";
+
+/** Manifest-derived columns valid in both insert and update rows, so a schema
+ * divergence is caught here rather than at a spread site. */
+type SkillManifestFields = Pick<InsertSkill, SkillManifestFieldKey> &
+  Pick<UpdateSkill, SkillManifestFieldKey>;
 
 /**
  * The skill-row columns every write surface (REST create/update, agent

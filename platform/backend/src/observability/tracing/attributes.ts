@@ -115,7 +115,7 @@ export interface SpanTeamInfo {
 }
 
 /** The principal a set of teams belongs to, used to namespace team span attributes. */
-export type TeamScope = "agent" | "user";
+type TeamScope = "agent" | "user";
 
 export interface SpanUserInfo {
   id: string;

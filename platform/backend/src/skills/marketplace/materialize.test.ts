@@ -1,18 +1,16 @@
+import { execFile } from "node:child_process";
 import { promises as fs } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { promisify } from "node:util";
+import { SkillModel, SkillShareLinkModel } from "@/models";
+import SkillShareLinkRevisionModel from "@/models/skill-share-link-revision";
 import { parseSkillManifest } from "@/skills/parser";
-import type {
-  RevisionPayload,
-  SkillShareLinkRevision,
-} from "@/types/skill-share-link-revision";
+import { afterEach, beforeEach, describe, expect, test, vi } from "@/test";
 import {
-  type AppendRevisionParams,
   MarketplaceMaterializer,
   type MaterializeRequest,
   type MaterializeSkillInput,
-  type RevisionStore,
 } from "./materialize";
 
 function makeSkill(
@@ -35,10 +33,11 @@ function makeSkill(
 }
 
 function makeRequest(
-  overrides: Partial<MaterializeRequest> = {},
+  linkId: string,
+  overrides: Partial<Omit<MaterializeRequest, "linkId">> = {},
 ): MaterializeRequest {
   return {
-    linkId: "aaaaaaaa-1111-2222-3333-444444444444",
+    linkId,
     marketplaceName: "org-abcd1234-skills",
     ownerName: "Acme Corp",
     displayName: "Acme Skills",
@@ -47,79 +46,52 @@ function makeRequest(
   };
 }
 
-/** In-memory revision store for tests; mirrors SkillShareLinkRevisionModel. */
-class InMemoryRevisionStore implements RevisionStore {
-  private byLink = new Map<string, SkillShareLinkRevision[]>();
-
-  async getLatestByLink(
-    linkId: string,
-  ): Promise<SkillShareLinkRevision | null> {
-    const list = this.byLink.get(linkId);
-    return list && list.length > 0 ? (list.at(-1) ?? null) : null;
-  }
-
-  async listByLink(linkId: string): Promise<SkillShareLinkRevision[]> {
-    return [...(this.byLink.get(linkId) ?? [])];
-  }
-
-  async append(
-    params: AppendRevisionParams,
-    sequence: number,
-  ): Promise<SkillShareLinkRevision> {
-    const row: SkillShareLinkRevision = {
-      id: `rev-${params.linkId}-${sequence}`,
-      linkId: params.linkId,
-      sequence,
-      contentHash: params.contentHash,
-      commitSha: params.commitSha,
-      parentSha: params.parentSha,
-      createdAt: params.createdAt,
-      payload: params.payload as RevisionPayload,
-    };
-    const list = this.byLink.get(params.linkId) ?? [];
-    list.push(row);
-    this.byLink.set(params.linkId, list);
-    return row;
-  }
-}
-
 /**
- * Persists the revision (simulating another replica winning the sequence) and
- * then throws a unique-violation on the first append, to exercise the
- * cross-replica collision retry in doMaterialize.
+ * Revision rows FK to `skill_share_links`, so every test that materializes
+ * needs a real link row; each call seeds an isolated org/user/skill chain.
  */
-class CollideOnceRevisionStore extends InMemoryRevisionStore {
-  private collided = false;
-
-  override async append(
-    params: AppendRevisionParams,
-    sequence: number,
-  ): Promise<SkillShareLinkRevision> {
-    const row = await super.append(params, sequence);
-    if (!this.collided) {
-      this.collided = true;
-      throw Object.assign(
-        new Error(
-          'duplicate key value violates unique constraint "skill_share_link_revision_link_seq_idx"',
-        ),
-        { code: "23505", constraint: "skill_share_link_revision_link_seq_idx" },
-      );
-    }
-    return row;
-  }
+async function seedLink(fx: {
+  makeOrganization: () => Promise<{ id: string }>;
+  makeUser: () => Promise<{ id: string }>;
+  makeMember: (userId: string, organizationId: string) => Promise<unknown>;
+}): Promise<string> {
+  const org = await fx.makeOrganization();
+  const user = await fx.makeUser();
+  await fx.makeMember(user.id, org.id);
+  const skill = await SkillModel.createWithFiles({
+    skill: {
+      organizationId: org.id,
+      authorId: null,
+      name: "shared-skill",
+      description: "shared skill description",
+      content: "# shared skill",
+      metadata: {},
+      sourceType: "manual",
+      scope: "org",
+    },
+    files: [],
+  });
+  if (!skill) throw new Error("failed to seed skill");
+  const { link } = await SkillShareLinkModel.create({
+    organizationId: org.id,
+    createdByUserId: user.id,
+    skillIds: [skill.id],
+    marketplaceName: "org-abcd1234-skills",
+  });
+  return link.id;
 }
 
 describe("MarketplaceMaterializer", () => {
   let cacheDir: string;
-  let revisionStore: InMemoryRevisionStore;
   let materializer: MarketplaceMaterializer;
+  let linkId: string;
 
-  beforeEach(async () => {
+  beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
     cacheDir = await fs.mkdtemp(
       path.join(tmpdir(), "archestra-materialize-test-"),
     );
-    revisionStore = new InMemoryRevisionStore();
-    materializer = new MarketplaceMaterializer({ cacheDir, revisionStore });
+    materializer = new MarketplaceMaterializer({ cacheDir });
+    linkId = await seedLink({ makeOrganization, makeUser, makeMember });
   });
 
   afterEach(async () => {
@@ -127,7 +99,7 @@ describe("MarketplaceMaterializer", () => {
   });
 
   test("produces the documented on-disk layout for a single skill", async () => {
-    const req = makeRequest({
+    const req = makeRequest(linkId, {
       skills: [
         makeSkill({
           name: "PDF Helper",
@@ -157,9 +129,7 @@ describe("MarketplaceMaterializer", () => {
     const result = await materializer.materialize(req);
 
     expect(result.reused).toBe(false);
-    expect(result.repoPath).toBe(
-      path.join(cacheDir, "aaaaaaaa-1111-2222-3333-444444444444", "repo"),
-    );
+    expect(result.repoPath).toBe(path.join(cacheDir, linkId, "repo"));
 
     const expected = [
       ".claude-plugin/marketplace.json",
@@ -206,24 +176,38 @@ describe("MarketplaceMaterializer", () => {
   });
 
   test("recovers from a cross-replica revision sequence collision", async () => {
-    // a concurrent replica wins the sequence with the same content; the unique
-    // violation must be caught and the existing revision reused, not surfaced
-    const colliding = new CollideOnceRevisionStore();
-    const racy = new MarketplaceMaterializer({
-      cacheDir,
-      revisionStore: colliding,
-    });
+    // Simulate a concurrent replica winning the same sequence: the first
+    // append persists the winner's row for real, then re-appends with the
+    // same sequence so the caller receives a genuine unique violation from
+    // the real index. The materializer must catch it and reuse the winner's
+    // revision, not surface the error.
+    const realAppend = SkillShareLinkRevisionModel.append.bind(
+      SkillShareLinkRevisionModel,
+    );
+    const spy = vi
+      .spyOn(SkillShareLinkRevisionModel, "append")
+      .mockImplementationOnce(async (params, sequence) => {
+        await realAppend(params, sequence);
+        return realAppend(params, sequence);
+      });
 
-    const result = await racy.materialize(makeRequest());
+    try {
+      const result = await materializer.materialize(makeRequest(linkId));
 
-    expect(result.reused).toBe(true);
-    expect(result.commitHash).toMatch(/^[0-9a-f]{40}$/);
-    // only the one revision the "winner" wrote exists — no duplicate sequence
-    expect(await colliding.listByLink(makeRequest().linkId)).toHaveLength(1);
+      expect(result.reused).toBe(true);
+      expect(result.commitHash).toMatch(/^[0-9a-f]{40}$/);
+      // only the one revision the "winner" wrote exists — no duplicate sequence
+      expect(await SkillShareLinkRevisionModel.listByLink(linkId)).toHaveLength(
+        1,
+      );
+    } finally {
+      // the global test setup clears mocks but does not restore originals
+      spy.mockRestore();
+    }
   });
 
   test("SKILL.md frontmatter round-trips through the parser", async () => {
-    const req = makeRequest({
+    const req = makeRequest(linkId, {
       skills: [
         makeSkill({
           name: "PDF Helper",
@@ -254,7 +238,7 @@ describe("MarketplaceMaterializer", () => {
   });
 
   test("resource file with path SKILL.md does not overwrite generated manifest", async () => {
-    const req = makeRequest({
+    const req = makeRequest(linkId, {
       skills: [
         makeSkill({
           name: "PDF Helper",
@@ -286,7 +270,7 @@ describe("MarketplaceMaterializer", () => {
   });
 
   test("resource file with path SKILL.md/foo does not collide with the generated manifest", async () => {
-    const req = makeRequest({
+    const req = makeRequest(linkId, {
       skills: [
         makeSkill({
           name: "PDF Helper",
@@ -325,7 +309,7 @@ describe("MarketplaceMaterializer", () => {
   });
 
   test("resource file with double-slash absolute path cannot escape skill root", async () => {
-    const req = makeRequest({
+    const req = makeRequest(linkId, {
       skills: [
         makeSkill({
           name: "PDF Helper",
@@ -351,7 +335,7 @@ describe("MarketplaceMaterializer", () => {
 
   test("binary resource files round-trip via base64", async () => {
     const original = Buffer.from([0x00, 0x01, 0x02, 0xff, 0xfe]);
-    const req = makeRequest({
+    const req = makeRequest(linkId, {
       skills: [
         makeSkill({
           files: [
@@ -383,7 +367,7 @@ describe("MarketplaceMaterializer", () => {
       makeSkill({ id: "b", name: "Beta" }),
       makeSkill({ id: "a", name: "Alpha" }),
     ];
-    const req = makeRequest({ skills });
+    const req = makeRequest(linkId, { skills });
     const result = await materializer.materialize(req);
     const manifest = JSON.parse(
       await fs.readFile(
@@ -409,7 +393,7 @@ describe("MarketplaceMaterializer", () => {
   });
 
   test("identical content reuses the existing HEAD instead of committing again", async () => {
-    const req = makeRequest();
+    const req = makeRequest(linkId);
     const first = await materializer.materialize(req);
     expect(first.reused).toBe(false);
 
@@ -419,19 +403,19 @@ describe("MarketplaceMaterializer", () => {
     expect(second.contentHash).toBe(first.contentHash);
 
     // and only one revision was persisted
-    const revs = await revisionStore.listByLink(req.linkId);
+    const revs = await SkillShareLinkRevisionModel.listByLink(linkId);
     expect(revs).toHaveLength(1);
   });
 
   test("changed content advances HEAD with a child commit (no unrelated histories)", async () => {
-    const first = await materializer.materialize(makeRequest());
+    const first = await materializer.materialize(makeRequest(linkId));
 
     const updatedSkill = makeSkill({
       updatedAt: new Date("2026-02-01T00:00:00.000Z"),
       content: "# Updated body",
     });
     const second = await materializer.materialize(
-      makeRequest({ skills: [updatedSkill] }),
+      makeRequest(linkId, { skills: [updatedSkill] }),
     );
 
     expect(second.reused).toBe(false);
@@ -441,14 +425,14 @@ describe("MarketplaceMaterializer", () => {
     expect(parent).toBe(first.commitHash);
 
     // both revisions persisted with parent chain
-    const revs = await revisionStore.listByLink(makeRequest().linkId);
+    const revs = await SkillShareLinkRevisionModel.listByLink(linkId);
     expect(revs).toHaveLength(2);
     expect(revs[0].parentSha).toBeNull();
     expect(revs[1].parentSha).toBe(revs[0].commitSha);
   });
 
   test("per-link mutex serializes concurrent calls into a single commit", async () => {
-    const req = makeRequest();
+    const req = makeRequest(linkId);
     const [a, b] = await Promise.all([
       materializer.materialize(req),
       materializer.materialize(req),
@@ -462,29 +446,31 @@ describe("MarketplaceMaterializer", () => {
   });
 
   test("revoke removes the per-link directory", async () => {
-    const req = makeRequest();
+    const req = makeRequest(linkId);
     const result = await materializer.materialize(req);
     await expect(fs.access(result.repoPath)).resolves.toBeUndefined();
 
-    await materializer.revoke(req.linkId);
+    await materializer.revoke(linkId);
     await expect(fs.access(result.repoPath)).rejects.toThrow();
   });
 
-  test("sweepOrphans removes directories not in the live link set", async () => {
-    const liveId = "bbbbbbbb-1111-2222-3333-444444444444";
-    const orphanId = "cccccccc-1111-2222-3333-444444444444";
-    await materializer.materialize(makeRequest({ linkId: liveId }));
+  test("sweepOrphans removes directories not in the live link set", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+  }) => {
+    const orphanId = await seedLink({ makeOrganization, makeUser, makeMember });
+    await materializer.materialize(makeRequest(linkId));
     await materializer.materialize(
-      makeRequest({
-        linkId: orphanId,
+      makeRequest(orphanId, {
         skills: [makeSkill({ id: "22222222-2222-3333-4444-555555555555" })],
       }),
     );
 
-    const removed = await materializer.sweepOrphans([liveId]);
+    const removed = await materializer.sweepOrphans([linkId]);
     expect(removed).toEqual([orphanId]);
     await expect(
-      fs.access(path.join(cacheDir, liveId)),
+      fs.access(path.join(cacheDir, linkId)),
     ).resolves.toBeUndefined();
     await expect(fs.access(path.join(cacheDir, orphanId))).rejects.toThrow();
   });
@@ -502,29 +488,28 @@ describe("MarketplaceMaterializer", () => {
   test("sweepOrphans tolerates a missing cache dir", async () => {
     const empty = new MarketplaceMaterializer({
       cacheDir: path.join(cacheDir, "does-not-exist"),
-      revisionStore,
     });
     await expect(empty.sweepOrphans([])).resolves.toEqual([]);
   });
 
   test("wiping the cache replays revisions to byte-identical SHAs", async () => {
-    const req = makeRequest();
+    const req = makeRequest(linkId);
     const first = await materializer.materialize(req);
     const updated = await materializer.materialize(
-      makeRequest({
+      makeRequest(linkId, {
         skills: [makeSkill({ content: "# Updated body" })],
       }),
     );
 
     // simulate a cache wipe (server reboot, container restart, etc.)
-    await fs.rm(materializer.repoPathFor(req.linkId), {
+    await fs.rm(materializer.repoPathFor(linkId), {
       recursive: true,
       force: true,
     });
 
     // re-materializing the same content should not write a new revision
     const replayed = await materializer.materialize(
-      makeRequest({
+      makeRequest(linkId, {
         skills: [makeSkill({ content: "# Updated body" })],
       }),
     );
@@ -537,16 +522,18 @@ describe("MarketplaceMaterializer", () => {
     expect(await readParent(replayed.repoPath)).toBe(first.commitHash);
 
     // store still holds exactly two revisions
-    expect(await revisionStore.listByLink(req.linkId)).toHaveLength(2);
+    expect(await SkillShareLinkRevisionModel.listByLink(linkId)).toHaveLength(
+      2,
+    );
   });
 
   test("same content materialized twice produces the same commit SHA across instances", async () => {
-    const req = makeRequest();
+    const req = makeRequest(linkId);
 
     // first instance writes revision 1
     const firstResult = await materializer.materialize(req);
 
-    // second instance with a fresh cache but the same revisionStore — must
+    // second instance with a fresh cache but the same revision history — must
     // replay to identical SHA, not produce a new commit
     const cacheDir2 = await fs.mkdtemp(
       path.join(tmpdir(), "archestra-materialize-test-"),
@@ -554,13 +541,14 @@ describe("MarketplaceMaterializer", () => {
     try {
       const materializer2 = new MarketplaceMaterializer({
         cacheDir: cacheDir2,
-        revisionStore,
       });
       const replayed = await materializer2.materialize(req);
       expect(replayed.reused).toBe(true);
       expect(replayed.commitHash).toBe(firstResult.commitHash);
       expect(await diskHead(replayed.repoPath)).toBe(firstResult.commitHash);
-      expect(await revisionStore.listByLink(req.linkId)).toHaveLength(1);
+      expect(await SkillShareLinkRevisionModel.listByLink(linkId)).toHaveLength(
+        1,
+      );
     } finally {
       await fs.rm(cacheDir2, { recursive: true, force: true });
     }
@@ -568,12 +556,8 @@ describe("MarketplaceMaterializer", () => {
 
   test("commit author and committer use the configured identity", async () => {
     const identity = { name: "Test Marketplace", email: "test@example.com" };
-    const m = new MarketplaceMaterializer({
-      cacheDir,
-      revisionStore: new InMemoryRevisionStore(),
-      identity,
-    });
-    const result = await m.materialize(makeRequest());
+    const m = new MarketplaceMaterializer({ cacheDir, identity });
+    const result = await m.materialize(makeRequest(linkId));
     const meta = await readCommitMeta(result.repoPath);
     expect(meta.authorName).toBe(identity.name);
     expect(meta.authorEmail).toBe(identity.email);
@@ -584,93 +568,42 @@ describe("MarketplaceMaterializer", () => {
 
 // ===== test helpers =====
 
+const execFileAsync = promisify(execFile);
+
+async function git(repoPath: string, ...args: string[]): Promise<string> {
+  const { stdout } = await execFileAsync("git", args, { cwd: repoPath });
+  return stdout.trim();
+}
+
 async function readParent(repoPath: string): Promise<string | null> {
-  const { spawn } = await import("node:child_process");
-  return new Promise((resolve, reject) => {
-    const proc = spawn("git", ["rev-parse", "HEAD^"], { cwd: repoPath });
-    let stdout = "";
-    let stderr = "";
-    proc.stdout.on("data", (d) => {
-      stdout += d.toString();
-    });
-    proc.stderr.on("data", (d) => {
-      stderr += d.toString();
-    });
-    proc.on("close", (code) => {
-      if (code === 0) resolve(stdout.trim());
-      else if (/unknown revision/.test(stderr)) resolve(null);
-      else reject(new Error(stderr));
-    });
-  });
+  try {
+    return await git(repoPath, "rev-parse", "HEAD^");
+  } catch (error) {
+    const stderr = (error as { stderr?: string }).stderr ?? "";
+    if (/unknown revision/.test(stderr)) return null;
+    throw error;
+  }
 }
 
 async function commitCount(repoPath: string): Promise<number> {
-  const { spawn } = await import("node:child_process");
-  return new Promise((resolve, reject) => {
-    const proc = spawn("git", ["rev-list", "--count", "HEAD"], {
-      cwd: repoPath,
-    });
-    let stdout = "";
-    let stderr = "";
-    proc.stdout.on("data", (d) => {
-      stdout += d.toString();
-    });
-    proc.stderr.on("data", (d) => {
-      stderr += d.toString();
-    });
-    proc.on("close", (code) => {
-      if (code === 0) resolve(Number.parseInt(stdout.trim(), 10));
-      else reject(new Error(stderr));
-    });
-  });
+  return Number.parseInt(
+    await git(repoPath, "rev-list", "--count", "HEAD"),
+    10,
+  );
 }
 
-async function diskHead(repoPath: string): Promise<string> {
-  const { spawn } = await import("node:child_process");
-  return new Promise((resolve, reject) => {
-    const proc = spawn("git", ["rev-parse", "HEAD"], { cwd: repoPath });
-    let stdout = "";
-    let stderr = "";
-    proc.stdout.on("data", (d) => {
-      stdout += d.toString();
-    });
-    proc.stderr.on("data", (d) => {
-      stderr += d.toString();
-    });
-    proc.on("close", (code) => {
-      if (code === 0) resolve(stdout.trim());
-      else reject(new Error(stderr));
-    });
-  });
+function diskHead(repoPath: string): Promise<string> {
+  return git(repoPath, "rev-parse", "HEAD");
 }
 
-interface CommitMeta {
+async function readCommitMeta(repoPath: string): Promise<{
   authorName: string;
   authorEmail: string;
   committerName: string;
   committerEmail: string;
-}
-
-async function readCommitMeta(repoPath: string): Promise<CommitMeta> {
-  const { spawn } = await import("node:child_process");
-  return new Promise((resolve, reject) => {
-    const proc = spawn("git", ["log", "-1", "--pretty=%an%n%ae%n%cn%n%ce"], {
-      cwd: repoPath,
-    });
-    let stdout = "";
-    let stderr = "";
-    proc.stdout.on("data", (d) => {
-      stdout += d.toString();
-    });
-    proc.stderr.on("data", (d) => {
-      stderr += d.toString();
-    });
-    proc.on("close", (code) => {
-      if (code !== 0) return reject(new Error(stderr));
-      const [authorName, authorEmail, committerName, committerEmail] = stdout
-        .trim()
-        .split("\n");
-      resolve({ authorName, authorEmail, committerName, committerEmail });
-    });
-  });
+}> {
+  const [authorName, authorEmail, committerName, committerEmail] = (
+    await git(repoPath, "log", "-1", "--pretty=%an%n%ae%n%cn%n%ce")
+  ).split("\n");
+  return { authorName, authorEmail, committerName, committerEmail };
 }

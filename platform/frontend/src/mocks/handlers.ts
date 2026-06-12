@@ -20,6 +20,11 @@ import {
 } from "./data/organization";
 import { installedServersSeed } from "./data/servers";
 import {
+  activeShareLinkSeed,
+  makeShareLinkCreateResult,
+  shareableSkillIds,
+} from "./data/skill-share";
+import {
   catalogSkillSeed,
   githubDiscoverSeed,
   githubPreviewSeed,
@@ -193,6 +198,50 @@ export const handlers: HttpHandler[] = [
       );
     }),
   ),
+
+  // /connection probes the org's default gateway/proxy to preselect them
+  ...getJson("/api/mcp-gateways/default", makeAgent()),
+  ...getJson("/api/llm-proxy/default", makeAgent()),
+
+  // Skill share links (the marketplace step on /connection). The create and
+  // rotate handlers are conditional on the request payload for the same
+  // reason as the github import handler above: success (snippets revealed)
+  // pins the exact body the step must send.
+  ...getJson("/api/skill-share-links", { links: [] }),
+  ...paired("/api/skill-share-links").map((url) =>
+    http.post(url, async ({ request }) => {
+      const body = (await request.json()) as { skillIds?: string[] };
+      const isExpectedPayload =
+        [...(body.skillIds ?? [])].sort().join() ===
+        [...shareableSkillIds].sort().join();
+      return isExpectedPayload
+        ? HttpResponse.json(makeShareLinkCreateResult("created0"))
+        : HttpResponse.json(
+            { error: { message: "unexpected create payload", type: "test" } },
+            { status: 400 },
+          );
+    }),
+  ),
+  ...paired("/api/skill-share-links/:id/rotate").map((url) =>
+    http.post(url, async ({ request, params }) => {
+      const body = (await request.json()) as {
+        skillIds?: string[];
+        expiresAt?: string | null;
+      };
+      const isExpectedPayload =
+        params.id === activeShareLinkSeed.id &&
+        body.expiresAt === activeShareLinkSeed.expiresAt &&
+        [...(body.skillIds ?? [])].sort().join() ===
+          [...shareableSkillIds].sort().join();
+      return isExpectedPayload
+        ? HttpResponse.json(makeShareLinkCreateResult("rotated0"))
+        : HttpResponse.json(
+            { error: { message: "unexpected rotate payload", type: "test" } },
+            { status: 400 },
+          );
+    }),
+  ),
+  ...deleteJson("/api/skill-share-links/:id", { success: true }),
 
   // Misc endpoints the agent dialog and key dialogs probe at open. Default
   // empty so the strict-mode unhandled-request guard doesn't fire on

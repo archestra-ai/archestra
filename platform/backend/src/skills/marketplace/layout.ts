@@ -4,12 +4,10 @@ import logger from "@/logging";
 import type { SkillFile } from "@/types";
 import type { RevisionPayloadFile } from "@/types/skill-share-link-revision";
 import {
-  buildClaudeMarketplaceManifest,
-  buildClaudePluginManifest,
   buildCodexMarketplaceManifest,
   buildCodexPluginManifest,
-  buildCursorMarketplaceManifest,
-  buildCursorPluginManifest,
+  buildSimpleMarketplaceManifest,
+  buildSimplePluginManifest,
   type MarketplaceSkillInput,
   resolveMarketplaceSkills,
 } from "./manifest";
@@ -35,7 +33,6 @@ export interface MaterializeSkillInput {
   allowedTools: string | null;
   templated: boolean;
   metadata: Record<string, string>;
-  version?: string | null;
   updatedAt: Date;
   files: SkillFile[];
 }
@@ -53,24 +50,26 @@ export function computeLayout(req: MaterializeRequest): RevisionPayloadFile[] {
     id: skill.id,
     name: skill.name,
     description: skill.description,
-    version: skill.version,
     updatedAt: skill.updatedAt,
   }));
   const resolved = resolveMarketplaceSkills(manifestSkills);
 
   const files: RevisionPayloadFile[] = [];
 
+  // Claude Code and Cursor read byte-identical marketplace manifests; only
+  // the path differs.
+  const simpleMarketplaceJson = jsonStringify(
+    buildSimpleMarketplaceManifest({
+      marketplaceName: req.marketplaceName,
+      ownerName: req.ownerName,
+      skills: manifestSkills,
+    }),
+  );
   files.push(
-    textFile(
-      ".claude-plugin/marketplace.json",
-      jsonStringify(
-        buildClaudeMarketplaceManifest({
-          marketplaceName: req.marketplaceName,
-          ownerName: req.ownerName,
-          skills: manifestSkills,
-        }),
-      ),
-    ),
+    textFile(".claude-plugin/marketplace.json", simpleMarketplaceJson),
+  );
+  files.push(
+    textFile(".cursor-plugin/marketplace.json", simpleMarketplaceJson),
   );
   files.push(
     textFile(
@@ -84,31 +83,19 @@ export function computeLayout(req: MaterializeRequest): RevisionPayloadFile[] {
       ),
     ),
   );
-  files.push(
-    textFile(
-      ".cursor-plugin/marketplace.json",
-      jsonStringify(
-        buildCursorMarketplaceManifest({
-          marketplaceName: req.marketplaceName,
-          ownerName: req.ownerName,
-          skills: manifestSkills,
-        }),
-      ),
-    ),
-  );
-
   const pluginRoot = `plugins/${req.marketplaceName}`;
+  const simplePluginJson = jsonStringify(
+    buildSimplePluginManifest({
+      marketplaceName: req.marketplaceName,
+      ownerName: req.ownerName,
+      skills: manifestSkills,
+    }),
+  );
   files.push(
-    textFile(
-      `${pluginRoot}/.claude-plugin/plugin.json`,
-      jsonStringify(
-        buildClaudePluginManifest({
-          marketplaceName: req.marketplaceName,
-          ownerName: req.ownerName,
-          skills: manifestSkills,
-        }),
-      ),
-    ),
+    textFile(`${pluginRoot}/.claude-plugin/plugin.json`, simplePluginJson),
+  );
+  files.push(
+    textFile(`${pluginRoot}/.cursor-plugin/plugin.json`, simplePluginJson),
   );
   files.push(
     textFile(
@@ -122,19 +109,6 @@ export function computeLayout(req: MaterializeRequest): RevisionPayloadFile[] {
       ),
     ),
   );
-  files.push(
-    textFile(
-      `${pluginRoot}/.cursor-plugin/plugin.json`,
-      jsonStringify(
-        buildCursorPluginManifest({
-          marketplaceName: req.marketplaceName,
-          ownerName: req.ownerName,
-          skills: manifestSkills,
-        }),
-      ),
-    ),
-  );
-
   const skillById = new Map(req.skills.map((s) => [s.id, s]));
   // Guard against two files whose paths differ only in case: on a
   // case-insensitive filesystem the second write would silently overwrite the

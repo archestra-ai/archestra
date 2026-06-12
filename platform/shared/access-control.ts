@@ -1266,6 +1266,7 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetSkillShareLinks]: { skill: ["admin"] },
   [RouteId.CreateSkillShareLink]: { skill: ["admin"] },
   [RouteId.RevokeSkillShareLink]: { skill: ["admin"] },
+  [RouteId.RotateSkillShareLink]: { skill: ["admin"] },
 
   // Config endpoint - any authenticated user can access
   [RouteId.GetConfig]: {},

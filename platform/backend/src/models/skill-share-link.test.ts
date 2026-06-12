@@ -383,3 +383,38 @@ describe("SkillShareLinkModel.create with caller transaction", () => {
     ).toEqual([]);
   });
 });
+
+describe("SkillShareLinkModel.revoke with caller transaction", () => {
+  test("rolls back with the caller's transaction (link stays valid)", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id);
+    const skill = await seedSkill({ organizationId: org.id, name: "rv-rb" });
+
+    const { link, rawToken } = await SkillShareLinkModel.create({
+      organizationId: org.id,
+      createdByUserId: user.id,
+      skillIds: [skill.id],
+      marketplaceName: "org-revoke-rollback-skills",
+    });
+
+    // rotation revokes the old link and creates its replacement in one
+    // transaction; if the replacement fails, the revoke must undo too
+    await expect(
+      withDbTransaction(async (tx) => {
+        await SkillShareLinkModel.revoke({
+          id: link.id,
+          organizationId: org.id,
+          tx,
+        });
+        throw new Error("replacement failed");
+      }),
+    ).rejects.toThrow("replacement failed");
+
+    expect(await SkillShareLinkModel.validate({ rawToken })).not.toBeNull();
+  });
+});

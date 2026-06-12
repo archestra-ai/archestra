@@ -63,7 +63,7 @@ export { default as siteNotificationRoutes } from "./site-notification";
 export { default as skillRoutes } from "./skill/skill.routes";
 export { default as skillMarketplacePublicRoutes } from "./skill-marketplace-public";
 export { default as skillSandboxArtifactRoutes } from "./skill-sandbox-artifact";
-export { default as skillShareRoutes } from "./skill-share";
+export { default as skillShareRoutes } from "./skill-share/skill-share.routes";
 export { default as statisticsRoutes } from "./statistics";
 export { default as teamRoutes } from "./team";
 export { default as tokenRoutes } from "./token";

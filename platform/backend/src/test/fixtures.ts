@@ -217,7 +217,7 @@ async function makeTeam(
 async function makeTeamMember(
   teamId: string,
   userId: string,
-  overrides: { role?: string; syncedFromSso?: boolean } = {},
+  overrides: { role?: "admin" | "member"; syncedFromSso?: boolean } = {},
 ): Promise<TeamMember> {
   return await TeamModel.addMember(
     teamId,
@@ -808,7 +808,13 @@ async function makeLlmProviderApiKey(
   overrides: Partial<
     Pick<
       InsertLlmProviderApiKey,
-      "name" | "provider" | "scope" | "userId" | "teamId"
+      | "name"
+      | "provider"
+      | "scope"
+      | "userId"
+      | "teamId"
+      | "baseUrl"
+      | "inferenceBaseUrl"
     >
   > = {},
 ) {
@@ -821,6 +827,8 @@ async function makeLlmProviderApiKey(
     scope: overrides.scope ?? "org",
     userId: overrides.userId ?? null,
     teamId: overrides.teamId ?? null,
+    baseUrl: overrides.baseUrl ?? null,
+    inferenceBaseUrl: overrides.inferenceBaseUrl ?? null,
   });
 }
 

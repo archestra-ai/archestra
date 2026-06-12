@@ -823,6 +823,10 @@ The following environment variables can be used to configure Archestra Platform.
   - Default: `false`
   - Values: `true`, `false`
 
+- **`ARCHESTRA_AGENT_HOOKS_ENABLED`** - Enables agent lifecycle hooks — user-defined scripts that run at chat lifecycle events (and the admin-only `/debug` chip mode in chat). Only takes effect when the agent runtime is also on (`ARCHESTRA_CODE_RUNTIME_ENABLED=true`), since hooks execute in the per-conversation sandbox. When off, the per-agent hooks editor is hidden and no hooks run.
+  - Default: `false`
+  - Values: `true`, `false`
+
 - **`ARCHESTRA_GIT_BINARY_PATH`** - Path to the `git` binary. The public marketplace endpoint shells out to `git http-backend` (CGI) for clone/pull traffic — make sure the binary is present in the backend container image.
   - Default: `git`
 
@@ -1286,6 +1290,16 @@ These environment variables configure the ChatOps feature, which allows users to
 - **`ARCHESTRA_CHATOPS_MS_TEAMS_GRAPH_CLIENT_SECRET`** - Azure AD application client secret for Graph API.
   - Optional: Only required if you want to fetch conversation history for context
   - Note: Keep this value secure; do not commit to version control
+
+#### Public URL (ngrok)
+
+Inbound chatops webhooks (MS Teams, Slack webhook mode) require this instance to be reachable from the Internet. When `ARCHESTRA_NGROK_AUTH_TOKEN` is set, the backend opens an [ngrok](https://ngrok.com) tunnel in-process on startup — no separate ngrok process or CLI binary is needed.
+
+- **`ARCHESTRA_NGROK_AUTH_TOKEN`** - ngrok auth token. When set, the backend tunnels the API port so webhooks are reachable.
+  - Get one at [dashboard.ngrok.com](https://dashboard.ngrok.com/get-started/your-authtoken)
+- **`ARCHESTRA_NGROK_DOMAIN`** - Reserved ngrok domain for a stable public URL.
+  - Optional: without it ngrok assigns an ephemeral domain that rotates on each restart
+  - Recommended for MS Teams, whose messaging endpoint is registered statically in Azure
 
 #### Slack
 

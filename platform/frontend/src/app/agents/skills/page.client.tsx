@@ -358,7 +358,7 @@ function SkillsList() {
 
 /**
  * Org-level toggle exposing skills as `/skill-name` slash commands in chat.
- * Independent of `skillToolsEnabled` (the model-facing `activate_skill` tool).
+ * Independent of `skillToolsEnabled` (the model-facing `load_skill` tool).
  */
 function SkillSlashCommandToggle() {
   const { data: organization } = useOrganization();

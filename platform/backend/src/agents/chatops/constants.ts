@@ -54,6 +54,25 @@ export const CHATOPS_CHANNEL_DISCOVERY = {
 };
 
 /**
+ * Sticky auto-reply for MS Teams team channels.
+ *
+ * The bot must be @mentioned to start replying in a channel thread; once
+ * mentioned, it keeps replying to that thread without further mentions until
+ * this TTL lapses (so stale threads stop auto-replying on their own).
+ */
+export const CHATOPS_CHANNEL_AUTO_REPLY = {
+  /** How long a thread stays "active" after the last @mention (30 days) */
+  ACTIVE_TTL_MS: TimeInMs.Day * 30,
+};
+
+/**
+ * In group conversations the agent hears every message but should not answer
+ * every one. When it decides no reply is needed it answers with exactly this
+ * token, and the chatops layer posts nothing instead of a message.
+ */
+export const CHATOPS_NO_REPLY_SENTINEL = "[NO_REPLY]";
+
+/**
  * Bot commands recognized by the chatops system
  */
 export const CHATOPS_COMMANDS = {

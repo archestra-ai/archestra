@@ -14,7 +14,7 @@ export function SetupStep({
   children,
 }: {
   title: string;
-  description: string;
+  description?: string;
   done: boolean;
   ctaLabel?: string;
   onAction?: () => void;
@@ -28,7 +28,7 @@ export function SetupStep({
         <div
           className={cn(
             "flex items-center justify-between gap-4",
-            children && "pb-2 border-b",
+            children && description && "pb-2 border-b",
           )}
         >
           <CardTitle>
@@ -40,9 +40,11 @@ export function SetupStep({
               )}
               <div className="flex flex-col gap-1">
                 <div className="font-medium text-sm">{title}</div>
-                <div className="text-muted-foreground text-xs font-normal">
-                  {description}
-                </div>
+                {description && (
+                  <div className="text-muted-foreground text-xs font-normal">
+                    {description}
+                  </div>
+                )}
               </div>
             </div>
           </CardTitle>

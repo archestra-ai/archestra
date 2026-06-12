@@ -728,6 +728,13 @@ function SandboxIframe({
       window.removeEventListener("message", onMessage);
       iframe.remove();
       iframeRef.current = null;
+      // Reset connection state so the send effects below don't fire against a
+      // bridge whose iframe we just removed. Without this, ready/initialized
+      // stay stale-true after a re-render that re-runs this effect (e.g.
+      // editing a message re-renders the message list), and sendToolInput
+      // throws "Not connected".
+      setReady(false);
+      setInitialized(false);
     };
   }, [sandboxUrl.href, appBridge, useDedicatedOrigin]);
 
@@ -766,15 +773,32 @@ function SandboxIframe({
   // Send tool input when available
   useEffect(() => {
     if (!ready || !initialized || !toolInput) return;
-    appBridge.sendToolInput({ arguments: toolInput });
+    // Guard the synchronous send: the bridge can drop between render and effect
+    // (iframe closed by a re-render). A dropped bridge is transient — the effect
+    // re-fires once it reconnects — so swallow rather than crash the page.
+    try {
+      appBridge.sendToolInput({ arguments: toolInput });
+    } catch (err) {
+      console.warn(
+        "[mcp-app] sendToolInput skipped (bridge not connected)",
+        err,
+      );
+    }
   }, [ready, initialized, toolInput, appBridge]);
 
   // Send tool result when available
   useEffect(() => {
     if (!ready || !initialized || !toolResult) return;
-    // Cast needed: our McpCallToolResult is looser than the SDK's strict union type
-    // biome-ignore lint/suspicious/noExplicitAny: McpCallToolResult is structurally compatible but TypeScript can't prove it
-    appBridge.sendToolResult(toolResult as any);
+    try {
+      // Cast needed: our McpCallToolResult is looser than the SDK's strict union type
+      // biome-ignore lint/suspicious/noExplicitAny: McpCallToolResult is structurally compatible but TypeScript can't prove it
+      appBridge.sendToolResult(toolResult as any);
+    } catch (err) {
+      console.warn(
+        "[mcp-app] sendToolResult skipped (bridge not connected)",
+        err,
+      );
+    }
   }, [ready, initialized, toolResult, appBridge]);
 
   return (

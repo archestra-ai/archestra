@@ -1,6 +1,16 @@
-import { and, eq, isNotNull } from "drizzle-orm";
+import { and, asc, eq, isNotNull } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type { InsertSkillSandboxFile, SkillSandboxFile } from "@/types";
+import { normalizeByteaField } from "@/utils/normalize-bytea";
+
+/** Artifact row without its bytes — what the Files panel needs to list outputs. */
+type SkillSandboxArtifactMeta = {
+  id: string;
+  path: string;
+  mimeType: string;
+  sizeBytes: number;
+  createdAt: Date;
+};
 
 /**
  * Read/write access to `skill_sandbox_files` for the `artifact` role — output
@@ -19,7 +29,7 @@ class SkillSandboxFileModel {
     if (!row) {
       throw new Error("failed to insert sandbox artifact");
     }
-    return normalizeFileData(row);
+    return normalizeByteaField(row, "data");
   }
 
   static async findArtifactById(id: string): Promise<SkillSandboxFile | null> {
@@ -32,7 +42,68 @@ class SkillSandboxFileModel {
           eq(schema.skillSandboxFilesTable.kind, "artifact"),
         ),
       );
-    return row ? normalizeFileData(row) : null;
+    return row ? normalizeByteaField(row, "data") : null;
+  }
+
+  /**
+   * Artifact-file metadata (no bytes) for every sandbox attached to a
+   * conversation within an org, oldest first. Joins through `skill_sandboxes`
+   * because files carry only a `sandboxId`, and filters on the join's
+   * `organizationId` so a conversation reused across orgs cannot leak.
+   */
+  static async listArtifactMetadataByConversationId(params: {
+    conversationId: string;
+    organizationId: string;
+  }): Promise<SkillSandboxArtifactMeta[]> {
+    return db
+      .select({
+        id: schema.skillSandboxFilesTable.id,
+        path: schema.skillSandboxFilesTable.path,
+        mimeType: schema.skillSandboxFilesTable.mimeType,
+        sizeBytes: schema.skillSandboxFilesTable.sizeBytes,
+        createdAt: schema.skillSandboxFilesTable.createdAt,
+      })
+      .from(schema.skillSandboxFilesTable)
+      .innerJoin(
+        schema.skillSandboxesTable,
+        eq(
+          schema.skillSandboxFilesTable.sandboxId,
+          schema.skillSandboxesTable.id,
+        ),
+      )
+      .where(
+        and(
+          eq(schema.skillSandboxFilesTable.kind, "artifact"),
+          eq(schema.skillSandboxesTable.conversationId, params.conversationId),
+          eq(schema.skillSandboxesTable.organizationId, params.organizationId),
+        ),
+      )
+      .orderBy(
+        asc(schema.skillSandboxFilesTable.createdAt),
+        asc(schema.skillSandboxFilesTable.id),
+      );
+  }
+
+  /**
+   * Look up an already-staged upload by its dedup id (stored as
+   * `source_attachment_id`). Used by `uploadFile` to return a stable ref when
+   * the idempotency index fires and `appendUpload` returns null.
+   */
+  static async findUploadByDedupeId(
+    sandboxId: string,
+    dedupeId: string,
+  ): Promise<SkillSandboxFile | null> {
+    const [row] = await db
+      .select()
+      .from(schema.skillSandboxFilesTable)
+      .where(
+        and(
+          eq(schema.skillSandboxFilesTable.sandboxId, sandboxId),
+          eq(schema.skillSandboxFilesTable.sourceAttachmentId, dedupeId),
+          eq(schema.skillSandboxFilesTable.kind, "upload"),
+        ),
+      );
+    return row ? normalizeByteaField(row, "data") : null;
   }
 
   /**
@@ -58,14 +129,3 @@ class SkillSandboxFileModel {
 }
 
 export default SkillSandboxFileModel;
-
-// === internal helpers ===
-
-/**
- * pg returns `bytea` as Buffer; PGlite returns Uint8Array. Callers rely on
- * Buffer semantics, so normalize at the read boundary.
- */
-function normalizeFileData(row: SkillSandboxFile): SkillSandboxFile {
-  if (Buffer.isBuffer(row.data)) return row;
-  return { ...row, data: Buffer.from(row.data as unknown as Uint8Array) };
-}

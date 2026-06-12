@@ -60,6 +60,10 @@ export {
 export { default as chatopsChannelBindingsTable } from "./chatops-channel-binding";
 export { default as chatopsProcessedMessagesTable } from "./chatops-processed-message";
 export { default as chatopsThreadAgentOverrideTable } from "./chatops-thread-agent-override";
+export {
+  connectionSetupSkillsTable,
+  default as connectionSetupsTable,
+} from "./connection-setup";
 export { default as connectorRunsTable } from "./connector-run";
 export { default as conversationsTable } from "./conversation";
 export { default as conversationAttachmentsTable } from "./conversation-attachment";
@@ -73,6 +77,7 @@ export {
 } from "./conversation-share";
 export { default as environmentsTable } from "./environment";
 export { default as githubAppConfigsTable } from "./github-app-config";
+export { default as hookFilesTable } from "./hook-file";
 export { default as identityProvidersTable } from "./identity-provider";
 export { default as incomingEmailSubscriptionsTable } from "./incoming-email-subscription";
 export { default as interactionsTable } from "./interaction";

@@ -451,9 +451,6 @@ export default function ApiKeysPage() {
                   label: "Edit",
                   permissions: {
                     llmProviderApiKey: ["update"],
-                    ...(row.original.scope === "org"
-                      ? { team: ["admin"] }
-                      : {}),
                   },
                   disabled: isSystem,
                   disabledTooltip: "System keys cannot be edited",
@@ -466,9 +463,6 @@ export default function ApiKeysPage() {
                   variant: "destructive",
                   permissions: {
                     llmProviderApiKey: ["delete"],
-                    ...(row.original.scope === "org"
-                      ? { team: ["admin"] }
-                      : {}),
                   },
                   disabled: isSystem || isInUse,
                   disabledTooltip: isInUse

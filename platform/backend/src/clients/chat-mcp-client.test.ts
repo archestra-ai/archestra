@@ -686,9 +686,13 @@ describe("executeMcpTool error handling", () => {
 describe("chat-mcp-client tool caching", () => {
   test("passes token auth context when chat executes archestra run_tool", async ({
     makeAgent,
+    makeAgentTool,
+    makeInternalMcpCatalog,
+    makeTool,
     makeUser,
     makeOrganization,
     makeMember,
+    makeConversation,
   }) => {
     const org = await makeOrganization();
     const user = await makeUser();
@@ -697,8 +701,18 @@ describe("chat-mcp-client tool caching", () => {
       organizationId: org.id,
       name: "Chat Run Tool Agent",
     });
+    const catalog = await makeInternalMcpCatalog();
+    const targetTool = await makeTool({
+      name: "workspace__find_projects",
+      catalogId: catalog.id,
+    });
+    await makeAgentTool(agent.id, targetTool.id);
 
-    const conversationId = "conversation-1";
+    const conversation = await makeConversation(agent.id, {
+      organizationId: org.id,
+      userId: user.id,
+    });
+    const conversationId = conversation.id;
     const cacheKey = chatClient.__test.getCacheKey(
       agent.id,
       user.id,
@@ -782,11 +796,14 @@ describe("chat-mcp-client tool caching", () => {
 
   test("requests approval for run_tool when the target tool requires approval", async ({
     makeAgent,
+    makeAgentTool,
+    makeInternalMcpCatalog,
     makeUser,
     makeOrganization,
     makeMember,
     makeTool,
     makeToolPolicy,
+    makeConversation,
   }) => {
     const org = await makeOrganization({ globalToolPolicy: "restrictive" });
     const user = await makeUser();
@@ -795,9 +812,12 @@ describe("chat-mcp-client tool caching", () => {
       organizationId: org.id,
       name: "Chat Wrapped Approval Agent",
     });
+    const catalog = await makeInternalMcpCatalog();
     const targetTool = await makeTool({
       name: `workspace__export_${crypto.randomUUID().slice(0, 8)}`,
+      catalogId: catalog.id,
     });
+    await makeAgentTool(agent.id, targetTool.id);
     await makeToolPolicy(targetTool.id, {
       action: "require_approval",
       conditions: [
@@ -805,7 +825,11 @@ describe("chat-mcp-client tool caching", () => {
       ],
     });
 
-    const conversationId = "conversation-approval";
+    const conversation = await makeConversation(agent.id, {
+      organizationId: org.id,
+      userId: user.id,
+    });
+    const conversationId = conversation.id;
     const cacheKey = chatClient.__test.getCacheKey(
       agent.id,
       user.id,

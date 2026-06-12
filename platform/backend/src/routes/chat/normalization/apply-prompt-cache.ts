@@ -7,16 +7,25 @@ import type { ModelMessage } from "ai";
 //   - Anthropic: `{ anthropic: { cacheControl: { type: "ephemeral" } } }`
 //   - Bedrock:   `{ bedrock:   { cachePoint:   { type: "default"   } } }`
 const CACHE_BREAKPOINTS = {
-  anthropic: {
-    key: "anthropic",
-    field: "cacheControl",
-    value: { type: "ephemeral" },
-  },
-  bedrock: { key: "bedrock", field: "cachePoint", value: { type: "default" } },
+  anthropic: { key: "anthropic", field: "cacheControl", type: "ephemeral" },
+  bedrock: { key: "bedrock", field: "cachePoint", type: "default" },
 } as const;
 
 type CacheBreakpointConfig =
   (typeof CACHE_BREAKPOINTS)[keyof typeof CACHE_BREAKPOINTS];
+
+// Claude Sonnet/Haiku/Opus 4.5 and newer support a 1-hour cache TTL; older
+// models (and other providers) only support the 5-minute default. Matches bare
+// ids ("claude-sonnet-4-5") and Bedrock inference-profile ids
+// ("us.anthropic.claude-opus-4-6-..."). Claude Sonnet/Opus 4
+// ("claude-sonnet-4-20250514") and Claude 3.x are intentionally excluded.
+// `(?!\d)` stops the minor-version digit from matching the leading digit of a
+// dated id like "claude-sonnet-4-20250514" (Sonnet 4, not 4.5).
+const ONE_HOUR_CACHE_MODEL = /claude-(?:sonnet|haiku|opus)-4-[5-9](?!\d)/;
+
+function supportsOneHourCache(model: string): boolean {
+  return ONE_HOUR_CACHE_MODEL.test(model);
+}
 
 // Anthropic and Bedrock both reject a request with more than 4 cache
 // breakpoints, and the AI SDK provider throws before the call. Breakpoints
@@ -43,15 +52,20 @@ const MAX_CACHE_BREAKPOINTS = 4;
  * budget. Messages that already carry a breakpoint for this provider are left
  * alone — their prefix is already cacheable and re-marking would waste budget.
  *
+ * On models that support it the breakpoints use a 1-hour TTL; both breakpoints
+ * share the same TTL so there is no ordering constraint between them.
+ *
  * No-op for providers other than Anthropic and Bedrock: OpenAI, Gemini,
  * DeepSeek, etc. cache prefixes automatically and reject or ignore explicit
  * markers.
  */
 export function applyPromptCacheBreakpoints(params: {
   provider: string;
+  /** Resolved model id; used to decide cache TTL. Absent → 5-minute default. */
+  model?: string;
   messages: ModelMessage[];
 }): ModelMessage[] {
-  const { provider, messages } = params;
+  const { provider, model, messages } = params;
   const config = (CACHE_BREAKPOINTS as Record<string, CacheBreakpointConfig>)[
     provider
   ];
@@ -67,6 +81,17 @@ export function applyPromptCacheBreakpoints(params: {
   if (budget <= 0) {
     return messages;
   }
+
+  // Only opt into the 1h TTL when this request has no other breakpoints. Other
+  // breakpoints (e.g. `materializeAttachments`' per-part markers) use the 5m
+  // default, and Anthropic/Bedrock reject a longer TTL placed after a shorter
+  // one — so mixing 1h here with those 5m markers can fail the request. Staying
+  // uniformly 5m when any marker pre-exists keeps ordering valid.
+  const useOneHour =
+    !!model && supportsOneHourCache(model) && existingBreakpoints === 0;
+  const markerValue = useOneHour
+    ? { type: config.type, ttl: "1h" }
+    : { type: config.type };
 
   const lastIndex = messages.length - 1;
   // Prefer the rolling (last) breakpoint, then the stable (first) one. A single
@@ -87,7 +112,9 @@ export function applyPromptCacheBreakpoints(params: {
   }
 
   return messages.map((message, index) =>
-    indicesToMark.has(index) ? withCacheBreakpoint(message, config) : message,
+    indicesToMark.has(index)
+      ? withCacheBreakpoint(message, config, markerValue)
+      : message,
   );
 }
 
@@ -128,6 +155,7 @@ function hasCacheBreakpoint(
 function withCacheBreakpoint(
   message: ModelMessage,
   config: CacheBreakpointConfig,
+  markerValue: { type: string; ttl?: string },
 ): ModelMessage {
   const providerOptions = (message.providerOptions ?? {}) as Record<
     string,
@@ -138,7 +166,7 @@ function withCacheBreakpoint(
     ...message,
     providerOptions: {
       ...providerOptions,
-      [config.key]: { ...providerEntry, [config.field]: config.value },
+      [config.key]: { ...providerEntry, [config.field]: markerValue },
     },
   } as ModelMessage;
 }

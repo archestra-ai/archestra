@@ -9,6 +9,7 @@ import { ServiceAccountModel, UserModel } from "@/models";
 import { MODEL_ROUTER_PREFIX } from "@/routes/proxy/common";
 import {
   ARCHESTRA_CATALOG_PROXY_PREFIX,
+  CONNECTION_SETUP_SCRIPT_PREFIX,
   HEALTH_PATH,
   INCOMING_EMAIL_WEBHOOK_PREFIX,
   METRICS_PATH,
@@ -95,10 +96,13 @@ export class Authnz {
   }: FastifyRequest): Promise<boolean> => {
     // Skip CORS preflight and HEAD requests globally
     if (method === "OPTIONS" || method === "HEAD") {
-      // marketplace URLs embed a raw share token — omit from trace to avoid leaking it
-      const safeUrl = url.startsWith(`${SKILL_MARKETPLACE_PREFIX}/`)
-        ? undefined
-        : url;
+      // marketplace and connection-setup URLs embed a raw token — omit from
+      // trace to avoid leaking it
+      const safeUrl =
+        url.startsWith(`${SKILL_MARKETPLACE_PREFIX}/`) ||
+        url.startsWith(`${CONNECTION_SETUP_SCRIPT_PREFIX}/`)
+          ? undefined
+          : url;
       logger.trace(
         { url: safeUrl, method },
         "[Authnz] Skipping auth for preflight/HEAD request",
@@ -127,6 +131,9 @@ export class Authnz {
       // Public skill marketplace git endpoint: token in URL, no session
       url === config.skillMarketplace.endpoint ||
       url.startsWith(`${config.skillMarketplace.endpoint}/`) ||
+      // Public connection-setup script endpoint: one-time token in URL, no session
+      (method === "GET" &&
+        url.startsWith(`${CONNECTION_SETUP_SCRIPT_PREFIX}/`)) ||
       // A2A routes use token auth handled in route, similar to MCP Gateway
       url.startsWith(config.a2aGateway.endpoint) ||
       url.startsWith(config.a2aV2Gateway.endpoint) ||

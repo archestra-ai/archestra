@@ -1007,6 +1007,7 @@ const updateSecuritySettings = async (
   updates: {
     globalToolPolicy?: "permissive" | "restrictive";
     allowChatFileUploads?: boolean;
+    allowToolAutoAssignment?: boolean;
   },
 ) =>
   makeApiRequest({

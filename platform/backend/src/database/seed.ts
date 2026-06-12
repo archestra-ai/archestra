@@ -309,7 +309,7 @@ export async function syncBuiltInSkills(): Promise<void> {
 
 /**
  * Seeds Archestra MCP catalog and tools.
- * ToolModel.seedArchestraTools handles catalog creation with onConflictDoNothing().
+ * ToolModel.seedArchestraTools upserts the catalog and built-in tools idempotently.
  * Tools are NOT automatically assigned to agents - users must assign them manually.
  */
 async function seedArchestraCatalogAndTools(): Promise<void> {
@@ -787,6 +787,52 @@ async function ensureExistingUsersHavePersonalMcpGateways(): Promise<void> {
   }
 }
 
+/**
+ * Ensures every member has a personal LLM proxy. Runs on startup to backfill
+ * members created before this feature. Single LEFT JOIN + bulk INSERT.
+ */
+async function ensureExistingUsersHavePersonalLlmProxies(): Promise<void> {
+  try {
+    const created = await AgentModel.bulkBackfillPersonalLlmProxies();
+    if (created > 0) {
+      logger.info(
+        { count: created },
+        "Created personal LLM proxies for existing members",
+      );
+    }
+  } catch (error) {
+    logger.error(
+      { err: error },
+      "Failed to backfill personal LLM proxies for existing members",
+    );
+  }
+}
+
+/**
+ * When the skills feature flag is enabled, turn on the Agent Skill tools for
+ * every organization that hasn't already opted in. This makes skills a default
+ * capability: newly created agents inherit the model-facing skill tools and the
+ * slash-command toggle unlocks without an admin first clicking "enable".
+ * Pre-existing agents are not retrofitted. No-op when the flag is off.
+ */
+async function enableSkillToolsWhenFeatureEnabled(): Promise<void> {
+  if (!config.agents.skillsEnabled) return;
+  try {
+    const enabled = await OrganizationModel.enableSkillToolsForAllOrgs();
+    if (enabled > 0) {
+      logger.info(
+        { count: enabled },
+        "Enabled Agent Skill tools by default for organizations",
+      );
+    }
+  } catch (error) {
+    logger.error(
+      { err: error },
+      "Failed to enable Agent Skill tools by default",
+    );
+  }
+}
+
 export async function seedRequiredStartingData(): Promise<void> {
   ensureEncryptionKeyAvailable();
   await migrateSecretsToEncrypted();
@@ -796,6 +842,7 @@ export async function seedRequiredStartingData(): Promise<void> {
   await syncBuiltInAgents();
   await syncBuiltInSkills();
   await seedArchestraCatalogAndTools();
+  await enableSkillToolsWhenFeatureEnabled();
   await seedPlaywrightCatalog();
   await migratePlaywrightToolsToDynamicCredential();
   await seedTestMcpServer();
@@ -805,6 +852,7 @@ export async function seedRequiredStartingData(): Promise<void> {
   await ensureExistingUsersHavePersonalChatAgents();
   // Ensure all existing members have a personal MCP gateway
   await ensureExistingUsersHavePersonalMcpGateways();
+  await ensureExistingUsersHavePersonalLlmProxies();
   // Clean up orphaned MCP HTTP sessions (older than 24h)
   await McpHttpSessionModel.deleteExpired();
 }

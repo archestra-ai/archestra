@@ -285,8 +285,11 @@ describe("limits routes", () => {
         500,
       );
 
+      // First day of the previous calendar month, so the default
+      // calendar_month cleanup fires regardless of today's day-of-month.
       const oldDate = new Date();
-      oldDate.setDate(oldDate.getDate() - 7);
+      oldDate.setDate(1);
+      oldDate.setMonth(oldDate.getMonth() - 1);
       await LimitModel.patch(limit.id, { lastCleanup: oldDate });
 
       const response = await app.inject({

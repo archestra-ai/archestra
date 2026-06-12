@@ -4,7 +4,7 @@ import * as k8s from "@kubernetes/client-node";
 import { vi } from "vitest";
 import type * as originalConfigModule from "@/config";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
-import type { McpServer } from "@/types";
+import type { McpServer, NetworkPolicy } from "@/types";
 
 // Mock fs module first
 vi.mock("node:fs");
@@ -1224,6 +1224,53 @@ describe("McpServerRuntimeManager", () => {
       cleanup();
     });
 
+    test("uses the organization default network policy for global catalog installs", async () => {
+      const defaultNetworkPolicy = {
+        egressMode: "restricted",
+        domainPreset: "package_managers",
+        allowedDomains: ["docs.example.com"],
+        allowedCidrs: [],
+      } satisfies NetworkPolicy;
+      const OrganizationModel = (await import("@/models/organization")).default;
+      vi.mocked(OrganizationModel.getFirst).mockResolvedValueOnce({
+        id: "org-with-network-policy",
+        defaultNetworkPolicy,
+      } as unknown as Awaited<ReturnType<typeof OrganizationModel.getFirst>>);
+
+      const { resolveEffectiveNetworkPolicy } = await import(
+        "@/services/environments/network-policy"
+      );
+      vi.mocked(resolveEffectiveNetworkPolicy).mockResolvedValueOnce({
+        source: "organization_default",
+        policy: defaultNetworkPolicy,
+      });
+
+      const { manager, mcpServer, cleanup } = await setupStartServerTest({
+        vaultSecret: {},
+        catalogEnvironment: [],
+        mcpServerOverrides: {
+          secretId: null,
+        },
+      });
+
+      await manager.startServer(mcpServer);
+
+      expect(resolveEffectiveNetworkPolicy).toHaveBeenCalledWith({
+        organizationId: "org-with-network-policy",
+        environmentId: undefined,
+        environmentNetworkPolicy: undefined,
+        defaultNetworkPolicy,
+      });
+      expect(mockK8sDeploymentInstances.at(-1)?.options).toMatchObject({
+        effectiveNetworkPolicy: {
+          source: "organization_default",
+          policy: defaultNetworkPolicy,
+        },
+      });
+
+      cleanup();
+    });
+
     test("does not create K8s secret when server has no secretId", async () => {
       mockCreateK8sSecret.mockClear();
       mockStartOrCreateDeployment.mockClear();
@@ -1528,6 +1575,18 @@ describe("McpServerRuntimeManager", () => {
 });
 
 describe("McpServerRuntimeManager.listDockerRegistrySecrets", () => {
+  function dockerConfigData(registryServers: string[]) {
+    return {
+      ".dockerconfigjson": Buffer.from(
+        JSON.stringify({
+          auths: Object.fromEntries(
+            registryServers.map((server) => [server, { auth: "redacted" }]),
+          ),
+        }),
+      ).toString("base64"),
+    };
+  }
+
   test("returns empty array when k8sApi is not initialized", async () => {
     const { McpServerRuntimeManager } = await import("./manager");
     const manager = new McpServerRuntimeManager();
@@ -1573,6 +1632,7 @@ describe("McpServerRuntimeManager.listDockerRegistrySecrets", () => {
               "team-id": "team-a",
             },
           },
+          data: dockerConfigData(["registry-b.example.com"]),
         },
         {
           metadata: {
@@ -1583,6 +1643,7 @@ describe("McpServerRuntimeManager.listDockerRegistrySecrets", () => {
               "team-id": "team-b",
             },
           },
+          data: dockerConfigData(["registry-a.example.com"]),
         },
       ],
     });
@@ -1592,8 +1653,14 @@ describe("McpServerRuntimeManager.listDockerRegistrySecrets", () => {
 
     const result = await manager.listDockerRegistrySecrets({ isAdmin: true });
     expect(result).toEqual([
-      { name: "regcred-team-a" },
-      { name: "regcred-team-b" },
+      {
+        name: "regcred-team-a",
+        registryServers: ["registry-b.example.com"],
+      },
+      {
+        name: "regcred-team-b",
+        registryServers: ["registry-a.example.com"],
+      },
     ]);
 
     expect(mockListSecrets).toHaveBeenCalledWith(
@@ -1644,7 +1711,7 @@ describe("McpServerRuntimeManager.listDockerRegistrySecrets", () => {
     const result = await manager.listDockerRegistrySecrets({
       teamIds: ["team-a"],
     });
-    expect(result).toEqual([{ name: "regcred-team-a" }]);
+    expect(result).toEqual([{ name: "regcred-team-a", registryServers: [] }]);
   });
 
   test("non-admin with no teams sees no secrets", async () => {
@@ -1671,6 +1738,74 @@ describe("McpServerRuntimeManager.listDockerRegistrySecrets", () => {
 
     const result = await manager.listDockerRegistrySecrets({ teamIds: [] });
     expect(result).toEqual([]);
+  });
+
+  test("returns sorted registry servers parsed from docker config json", async () => {
+    const { McpServerRuntimeManager } = await import("./manager");
+    const manager = new McpServerRuntimeManager();
+
+    (manager as unknown as { k8sApi: unknown }).k8sApi = {
+      listNamespacedSecret: vi.fn().mockResolvedValue({
+        items: [
+          {
+            metadata: {
+              name: "regcred-private",
+              labels: {
+                app: "mcp-server",
+                type: "regcred",
+                "team-id": "team-a",
+              },
+            },
+            data: dockerConfigData([
+              "z.registry.example.com",
+              "a.registry.example.com",
+            ]),
+          },
+        ],
+      }),
+    };
+
+    const result = await manager.listDockerRegistrySecrets({
+      teamIds: ["team-a"],
+    });
+
+    expect(result).toEqual([
+      {
+        name: "regcred-private",
+        registryServers: ["a.registry.example.com", "z.registry.example.com"],
+      },
+    ]);
+  });
+
+  test("returns empty registry server list when docker config json is invalid", async () => {
+    const { McpServerRuntimeManager } = await import("./manager");
+    const manager = new McpServerRuntimeManager();
+
+    (manager as unknown as { k8sApi: unknown }).k8sApi = {
+      listNamespacedSecret: vi.fn().mockResolvedValue({
+        items: [
+          {
+            metadata: {
+              name: "regcred-private",
+              labels: {
+                app: "mcp-server",
+                type: "regcred",
+                "team-id": "team-a",
+              },
+            },
+            data: {
+              ".dockerconfigjson": Buffer.from("not-json").toString("base64"),
+            },
+          },
+        ],
+      }),
+    };
+
+    const result = await manager.listDockerRegistrySecrets({
+      teamIds: ["team-a"],
+    });
+
+    expect(result).toEqual([{ name: "regcred-private", registryServers: [] }]);
   });
 });
 

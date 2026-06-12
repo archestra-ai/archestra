@@ -36,6 +36,13 @@ const environmentsTable = pgTable(
     namespace: text("namespace"),
     networkPolicy: jsonb("network_policy").$type<NetworkPolicy>(),
     /**
+     * ALLOWLIST regex (JS source, no delimiters/flags) applied to user-supplied
+     * config field values when a catalog item bound to this environment is
+     * installed. A value is allowed only if it MATCHES. NULL disables. Block a
+     * substring (e.g. "prod" in staging) with a negative lookahead.
+     */
+    validationRegex: text("validation_regex"),
+    /**
      * When true, assigning a catalog item to this environment requires the
      * `environment:admin` permission. Unrestricted environments (and the
      * org-default/null environment) are open to anyone who can create catalog

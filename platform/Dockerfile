@@ -2,7 +2,7 @@
 # the Alpine packages/binaries have historically lagged on Go patch releases, so
 # we compile these tools ourselves to pick up upstream fixes without local vendoring hacks.
 ARG GOLANG_IMAGE=golang:1.25.11-alpine@sha256:c05ba4b73604069d376c4f41346b05374335b5ca0c46fb6dfede5a59f5196931
-ARG NODE_IMAGE=node:24-alpine3.23@sha256:7fddd9ddeae8196abf4a3ef2de34e11f7b1a722119f91f28ddf1e99dcafdf114
+ARG NODE_IMAGE=node:24-alpine3.23@sha256:2bdb65ed1dab192432bc31c95f94155ca5ad7fc1392fb7eb7526ab682fa5bf14
 ARG KIND_VERSION=v0.31.0
 ARG KIND_COMMIT=a323333ff9efd8099f95a8a6b5c86c75a210d00f
 ARG DOCKER_CLI_VERSION=v29.3.0
@@ -98,6 +98,35 @@ RUN git clone --depth 1 --branch "${KUBECTL_VERSION}" https://github.com/kuberne
     -ldflags "-X k8s.io/component-base/version.gitVersion=${KUBECTL_VERSION} -X k8s.io/component-base/version.gitCommit=${KUBECTL_COMMIT} -X k8s.io/component-base/version.gitTreeState=clean" \
     -o /kubectl-binary ./cmd/kubectl
 
+# render the quickstart Dagger Engine manifest from the helm/dagger-runtime chart
+# at build time (offline — the subchart is vendored in charts/). rendering here
+# instead of committing a snapshot keeps it in lockstep with the chart used in
+# prod/dev. laptop-sized resources so the embedded KinD cluster can schedule it;
+# kube-pod:// transport needs no Service/TCP listener.
+FROM ${NODE_IMAGE} AS dagger-manifest
+RUN apk add --no-cache helm
+COPY helm/dagger-runtime /chart/dagger-runtime
+RUN helm template dagger-runtime /chart/dagger-runtime --namespace default \
+        --set networkPolicy.create=false \
+        --set dagger.engine.resources.requests.cpu=500m \
+        --set dagger.engine.resources.requests.memory=2Gi \
+        --set dagger.engine.resources.limits.memory=6Gi \
+        --set dagger.engine.statefulSet.persistentVolumeClaim.resources.requests.storage=20Gi \
+        > /dagger-engine.quickstart.yaml
+
+# pre-bake the Dagger Engine image as a docker-archive so the quickstart can
+# kind-load it into the embedded node instead of pulling ~352MB from the registry
+# on every boot (KinD recreates its node each run and its containerd cannot see
+# the host Docker image cache). tagged to match the engine ref the rendered
+# manifest uses, so imagePullPolicy: IfNotPresent finds it locally.
+FROM ${NODE_IMAGE} AS dagger-engine-image
+ARG TARGETARCH
+ARG DAGGER_VERSION
+RUN apk add --no-cache skopeo
+RUN skopeo copy --override-os linux --override-arch "${TARGETARCH}" \
+        "docker://registry.dagger.io/engine:${DAGGER_VERSION}" \
+        "docker-archive:/dagger-engine.tar:registry.dagger.io/engine:${DAGGER_VERSION}"
+
 FROM ${NODE_IMAGE} AS base
 
 # Enable pnpm
@@ -105,7 +134,7 @@ ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
 RUN corepack enable
 
-RUN corepack prepare pnpm@11.4.0 --activate
+RUN corepack prepare pnpm@11.5.2 --activate
 
 # Dependencies stage
 FROM base AS deps
@@ -118,7 +147,6 @@ COPY backend/package.json backend/
 COPY frontend/package.json frontend/
 COPY shared/package.json shared/
 COPY archestra-rs/sandbox-rs/package.json archestra-rs/sandbox-rs/
-COPY patches/ patches/
 
 # Install all dependencies
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile
@@ -311,9 +339,14 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
 COPY backend/package.json backend/
 COPY frontend/package.json frontend/
 COPY archestra-rs/sandbox-rs/package.json archestra-rs/sandbox-rs/
-COPY patches/ patches/
 COPY docker/scripts/docker-banner.sh /app/docker-banner.sh
 COPY docker/scripts/docker-entrypoint.sh /docker-entrypoint.sh
+# slim Dagger Engine manifest (rendered in the dagger-manifest stage above)
+# applied into the embedded KinD cluster in quickstart mode; backs the skill
+# sandbox / code runtime (archestra__run_python).
+COPY --from=dagger-manifest /dagger-engine.quickstart.yaml /app/dagger-engine.quickstart.yaml
+# engine image baked in (kind-loaded into the node at boot to avoid a registry pull)
+COPY --from=dagger-engine-image /dagger-engine.tar /app/dagger-engine.tar
 COPY docker/supervisord/supervisord.conf /etc/supervisord.conf
 COPY docker/supervisord/postgres.conf /etc/supervisord.postgres.conf
 

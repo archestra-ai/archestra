@@ -16,6 +16,7 @@ import {
 } from "drizzle-orm/pg-core";
 import type {
   ConnectionBaseUrl,
+  ConnectionDefaultProviderKeys,
   GlobalToolPolicy,
   LimitCleanupInterval,
   NetworkPolicy,
@@ -39,10 +40,7 @@ const organizationsTable = pgTable("organization", {
   createdAt: timestamp("created_at").notNull(),
   metadata: text("metadata"),
   onboardingComplete: boolean("onboarding_complete").notNull().default(false),
-  theme: text("theme")
-    .$type<OrganizationTheme>()
-    .notNull()
-    .default("cosmic-night"),
+  theme: text("theme").$type<OrganizationTheme>().notNull().default("caffeine"),
   customFont: text("custom_font")
     .$type<OrganizationCustomFont>()
     .notNull()
@@ -64,6 +62,17 @@ const organizationsTable = pgTable("organization", {
    * so admins may want to disable this until file-based policy support is added.
    */
   allowChatFileUploads: boolean("allow_chat_file_uploads")
+    .notNull()
+    .default(true),
+
+  /**
+   * Whether search_tools may surface catalog tools beyond the agent's
+   * assigned set and run_tool may auto-assign them on first use (gated by the
+   * user's catalog access and permission to modify the agent). Defaults to
+   * true. Admins disable it when catalog tool names must not be exposed to
+   * users beyond their agents' assigned toolsets.
+   */
+  allowToolAutoAssignment: boolean("allow_tool_auto_assignment")
     .notNull()
     .default(true),
 
@@ -221,6 +230,16 @@ const organizationsTable = pgTable("organization", {
   >(),
 
   /**
+   * Admin-chosen provider API key per provider for auto-provisioned
+   * connection virtual keys (provider → llm_provider_api_keys.id). When a
+   * provider has no entry, provisioning falls back to the user's
+   * personal → team → org key resolution.
+   */
+  connectionDefaultProviderKeys: jsonb(
+    "connection_default_provider_keys",
+  ).$type<ConnectionDefaultProviderKeys>(),
+
+  /**
    * Legacy preset columns (feature removed) — retained inert (non-destructive,
    * no migration) and no longer read or written. Held admin-chosen singular/
    * plural labels that the catalog UI used to override "Preset"/"presets" copy.
@@ -271,9 +290,18 @@ const organizationsTable = pgTable("organization", {
     .default(false),
 
   /**
-   * When true, the Agent Skill tools (`list_skills`, `activate_skill`,
-   * `read_skill_file`) are assigned to every agent in the org and added to all
-   * new agents. Flipped on
+   * ALLOWLIST regex (JS source, no delimiters/flags) for the implicit "default"
+   * environment (internal_mcp_catalog.environment_id = null). User-supplied
+   * config values are allowed only if they MATCH. NULL disables. Mirrors
+   * `environment.validation_regex` for the default scope.
+   */
+  defaultEnvironmentValidationRegex: text(
+    "default_environment_validation_regex",
+  ),
+
+  /**
+   * When true, the Agent Skill tools (`list_skills`, `load_skill`) are assigned
+   * to every agent in the org and added to all new agents. Flipped on
    * by the "Enable and create a new skill" empty-state button on /agents/skills.
    */
   skillToolsEnabled: boolean("skill_tools_enabled").notNull().default(false),
@@ -282,7 +310,7 @@ const organizationsTable = pgTable("organization", {
    * When true, the org's skills are exposed in chat as slash commands
    * (`/skill-name`). Invoking one injects the skill's content directly into the
    * conversation, independent of `skillToolsEnabled` (which only governs the
-   * model-facing `activate_skill` tool).
+   * model-facing `load_skill` tool).
    */
   skillSlashCommandsEnabled: boolean("skill_slash_commands_enabled")
     .notNull()

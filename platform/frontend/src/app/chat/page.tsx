@@ -42,7 +42,7 @@ import {
   collectBrowserToolCallIds,
   deriveCanvasesFromMessages,
 } from "@/components/chat/chat-messages.utils";
-import { ConversationArtifactPanel } from "@/components/chat/conversation-artifact";
+import { ConversationFilesPanel } from "@/components/chat/conversation-files-panel";
 import { InitialAgentSelector } from "@/components/chat/initial-agent-selector";
 import { OnboardingWizardButton } from "@/components/chat/onboarding-wizard-button";
 import { PinnedCanvasProvider } from "@/components/chat/pinned-canvas-context";
@@ -102,6 +102,7 @@ import {
   fetchConversationEnabledTools,
   useCompactConversation,
   useConversation,
+  useConversationFiles,
   useCreateConversation,
   useHasPlaywrightMcpTools,
   useMemberDefaultModel,
@@ -203,7 +204,6 @@ export function ChatPageContent({
   // Skill invoked via slash command on the first message of a new chat,
   // held until the conversation exists and the message can be sent.
   const pendingSkillRef = useRef<ChatSkillMetadata | undefined>(undefined);
-  const userMessageJustEdited = useRef(false);
   const pendingInitialSendConversationRef = useRef<string | undefined>(
     undefined,
   );
@@ -279,8 +279,7 @@ export function ChatPageContent({
 
   // Tracks which tab the right-side panel last showed; restored when the panel
   // is re-opened via the header toggle.
-  const [activeRightTab, setActiveRightTab] =
-    useState<RightPanelTab>("artifact");
+  const [activeRightTab, setActiveRightTab] = useState<RightPanelTab>("files");
 
   // Independent of artifact/browser open state — toggled when the canvas tab is selected.
   const [isCanvasTabOpen, setIsCanvasTabOpen] = useState(false);
@@ -894,6 +893,30 @@ export function ChatPageContent({
     previousArtifactRef.current = conversation?.artifact;
   }, [conversation?.artifact, isArtifactOpen, conversationId]);
 
+  // Auto-open the Files panel to the list when a generated file arrives and
+  // there is no artifact (the artifact case is handled by the effects above,
+  // which open straight to artifact.md).
+  const { data: conversationFiles } = useConversationFiles(conversationId);
+  const generatedCount = conversationFiles?.generated?.length ?? 0;
+  const previousGeneratedCountRef = useRef<number | undefined>(undefined);
+  useEffect(() => {
+    if (
+      conversationId &&
+      !conversation?.artifact &&
+      previousGeneratedCountRef.current !== undefined &&
+      generatedCount > previousGeneratedCountRef.current &&
+      !isArtifactOpen
+    ) {
+      setActiveRightTab("files");
+      setIsArtifactOpen(true);
+      localStorage.setItem(
+        conversationStorageKeys(conversationId).artifactOpen,
+        "true",
+      );
+    }
+    previousGeneratedCountRef.current = generatedCount;
+  }, [generatedCount, conversation?.artifact, isArtifactOpen, conversationId]);
+
   // While a conversation tab is open, useChat owns the thread.
   // We only fall back to persisted messages before the session initializes or
   // for read-only shared conversations that do not create a live chat session.
@@ -920,11 +943,19 @@ export function ChatPageContent({
     [messages, chatSession?.earlyToolUiStarts],
   );
   const sendMessage = chatSession?.sendMessage;
+  const regenerateUserMessage = chatSession?.regenerateUserMessage;
   const status = chatSession?.status ?? "ready";
   const setMessages = chatSession?.setMessages;
   const stop = chatSession?.stop;
+  // Hide the error while the session is auto-recovering (retry scheduled or
+  // reattaching to the still-running response) — flashing a "connection
+  // error" card for a turn that restores itself a second later reads as
+  // breakage. If recovery fails, the terminal error clears isRecovering and
+  // surfaces here.
   const error =
-    status === "submitted" || status === "streaming"
+    status === "submitted" ||
+    status === "streaming" ||
+    chatSession?.isRecovering
       ? undefined
       : chatSession?.error;
   const addToolResult = chatSession?.addToolResult;
@@ -1204,11 +1235,6 @@ export function ChatPageContent({
       return;
     }
 
-    // Clear the edit flag when status changes to ready (streaming finished)
-    if (status === "ready" && userMessageJustEdited.current) {
-      userMessageJustEdited.current = false;
-    }
-
     const hasPendingInitialMessage =
       !!pendingPromptRef.current ||
       pendingFilesRef.current.length > 0 ||
@@ -1285,6 +1311,9 @@ export function ChatPageContent({
       queryClient.invalidateQueries({
         queryKey: ["conversation", conversationId],
       });
+      queryClient.invalidateQueries({
+        queryKey: ["conversation-files", conversationId],
+      });
     }, 3000);
 
     return () => clearInterval(interval);
@@ -1295,6 +1324,20 @@ export function ChatPageContent({
     status,
     queryClient,
   ]);
+
+  // Refresh the Files list and the conversation (for the artifact) whenever the
+  // chat settles to "ready" — the initial open and the end of every turn. This
+  // surfaces `download_file` outputs and picks up a rewritten artifact, so the
+  // Files panel can follow the latest output.
+  useEffect(() => {
+    if (!conversationId || status !== "ready") return;
+    queryClient.invalidateQueries({
+      queryKey: ["conversation-files", conversationId],
+    });
+    queryClient.invalidateQueries({
+      queryKey: ["conversation", conversationId],
+    });
+  }, [status, conversationId, queryClient]);
 
   // Auto-focus textarea when status becomes ready (message sent or stream finished)
   // or when conversation loads (e.g., new chat created, hard refresh)
@@ -1409,14 +1452,14 @@ export function ChatPageContent({
     } else if (isBrowserPanelVisible && !isArtifactOpen) {
       setActiveRightTab("browser");
     } else if (isArtifactOpen) {
-      setActiveRightTab("artifact");
+      setActiveRightTab("files");
     }
   }, [isArtifactOpen, isBrowserPanelVisible, isCanvasTabOpen]);
 
   const openRightPanelTab = useCallback(
     (tab: RightPanelTab) => {
       setActiveRightTab(tab);
-      if (tab === "artifact") {
+      if (tab === "files") {
         setIsArtifactOpen(true);
         setIsBrowserPanelOpen(false);
         setIsCanvasTabOpen(false);
@@ -1474,7 +1517,7 @@ export function ChatPageContent({
     } else {
       const target =
         activeRightTab === "browser" && !showBrowserButton
-          ? "artifact"
+          ? "files"
           : activeRightTab;
       openRightPanelTab(target);
     }
@@ -2049,12 +2092,12 @@ export function ChatPageContent({
                           if (isArtifactOpen) {
                             closeRightPanel();
                           } else {
-                            openRightPanelTab("artifact");
+                            openRightPanelTab("files");
                           }
                         }}
                       >
                         <FileText className="h-4 w-4" />
-                        {isArtifactOpen ? "Hide Artifact" : "Show Artifact"}
+                        {isArtifactOpen ? "Hide Files" : "Show Files"}
                       </DropdownMenuItem>
                       {showBrowserButton && (
                         <DropdownMenuItem
@@ -2082,13 +2125,12 @@ export function ChatPageContent({
             {/* Mobile: Inline artifact/browser panel below header */}
             {isRightPanelOpen && (
               <div className="flex-1 flex flex-col min-h-0 overflow-hidden md:hidden">
-                {activeRightTab === "artifact" && (
+                {activeRightTab === "files" && (
                   <div className="flex-1 min-h-0 overflow-auto">
-                    <ConversationArtifactPanel
+                    <ConversationFilesPanel
+                      conversationId={conversationId}
                       artifact={conversation?.artifact}
-                      isOpen
-                      onToggle={closeRightPanel}
-                      embedded
+                      onClose={closeRightPanel}
                     />
                   </div>
                 )}
@@ -2158,29 +2200,7 @@ export function ChatPageContent({
                       }
                       chatErrors={conversation?.chatErrors ?? []}
                       compactions={conversation?.compactions ?? []}
-                      onUserMessageEdit={(
-                        editedMessage,
-                        updatedMessages,
-                        editedPartIndex,
-                      ) => {
-                        if (setMessages && sendMessage) {
-                          userMessageJustEdited.current = true;
-                          const messagesWithoutEditedMessage =
-                            updatedMessages.slice(0, -1);
-                          setMessages(messagesWithoutEditedMessage);
-                          const editedPart =
-                            editedMessage.parts?.[editedPartIndex];
-                          const editedText =
-                            editedPart?.type === "text" ? editedPart.text : "";
-                          if (editedText?.trim()) {
-                            sendMessage({
-                              role: "user",
-                              parts: [{ type: "text", text: editedText }],
-                              metadata: { createdAt: new Date().toISOString() },
-                            });
-                          }
-                        }
-                      }}
+                      onRegenerateUserMessage={regenerateUserMessage}
                       error={error}
                       onToolApprovalResponse={
                         addToolApprovalResponse
@@ -2280,6 +2300,7 @@ export function ChatPageContent({
                           }
                           isModelsLoading={isModelsLoading}
                           tokensUsed={tokensUsed}
+                          cachedTokens={tokenUsage?.cacheReadTokens}
                           maxContextLength={selectedModelContextLength}
                           inputModalities={selectedModelInputModalities}
                           agentLlmApiKeyId={

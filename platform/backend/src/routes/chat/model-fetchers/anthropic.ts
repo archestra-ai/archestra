@@ -11,6 +11,7 @@ import {
 import config from "@/config";
 import logger from "@/logging";
 import type { Anthropic } from "@/types";
+import { joinBaseUrl } from "@/utils/base-url";
 import type { ModelInfo } from "./types";
 
 export async function fetchAnthropicModels(
@@ -19,7 +20,7 @@ export async function fetchAnthropicModels(
   extraHeaders?: Record<string, string> | null,
 ): Promise<ModelInfo[]> {
   const baseUrl = baseUrlOverride || config.llm.anthropic.baseUrl;
-  const url = `${baseUrl}/v1/models?limit=100`;
+  const url = joinBaseUrl(baseUrl, "/v1/models?limit=100");
 
   const response = await fetch(url, {
     headers: {

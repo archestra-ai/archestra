@@ -4,6 +4,7 @@ import {
   ARCHESTRA_MCP_CATALOG_ID,
   hasArchestraTokenPrefix,
   isAgentTool,
+  isAlwaysExposedArchestraToolShortName,
   MCP_APPS_SERVER_EXTENSION_CAPABILITIES,
   MCP_ENTERPRISE_AUTH_EXTENSION_CAPABILITIES,
   OAUTH_TOKEN_ID_PREFIX,
@@ -16,6 +17,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import {
   CallToolRequestSchema,
+  ElicitResultSchema,
   ListPromptsRequestSchema,
   ListResourcesRequestSchema,
   ListResourceTemplatesRequestSchema,
@@ -301,7 +303,7 @@ export async function createAgentServer(
 
   server.setRequestHandler(
     CallToolRequestSchema,
-    async ({ params: { name, arguments: args } }) => {
+    async ({ params: { name, arguments: args } }, extra) => {
       const startTime = Date.now();
       const mcpServerName = parseFullToolName(name).serverName ?? "unknown";
 
@@ -467,6 +469,27 @@ export async function createAgentServer(
               toolCall,
               agentId,
               tokenAuth,
+              {
+                elicitationHandler: async (request) => {
+                  try {
+                    return await extra.sendRequest(request, ElicitResultSchema);
+                  } catch (error) {
+                    logger.warn(
+                      {
+                        agentId,
+                        toolName: name,
+                        mode: request.params.mode ?? "form",
+                        error:
+                          error instanceof Error
+                            ? error.message
+                            : String(error),
+                      },
+                      "MCP elicitation request was not completed by caller",
+                    );
+                    throw error;
+                  }
+                },
+              },
             );
             span.setAttribute(ATTR_MCP_IS_ERROR_RESULT, r.isError ?? false);
             return r;
@@ -1409,10 +1432,12 @@ function filterExposedTools(params: {
 }) {
   const { toolExposureMode, tools } = params;
   return tools.filter((tool) => {
-    const isMetaTool = isArchestraMetaTool(tool.name);
+    // `search_and_run_only` normally hides every tool behind search_tools/run_tool,
+    // but the meta tools themselves and the always-exposed skill path must stay
+    // top-level. `full` mode hides only the meta tools.
     return toolExposureMode === "search_and_run_only"
-      ? isMetaTool
-      : !isMetaTool;
+      ? isArchestraMetaTool(tool.name) || isAlwaysExposedTool(tool.name)
+      : !isArchestraMetaTool(tool.name);
   });
 }
 
@@ -1537,4 +1562,9 @@ function isArchestraMetaTool(toolName: string) {
     shortName === TOOL_SEARCH_TOOLS_SHORT_NAME ||
     shortName === TOOL_RUN_TOOL_SHORT_NAME
   );
+}
+
+function isAlwaysExposedTool(toolName: string) {
+  const shortName = archestraMcpBranding.getToolShortName(toolName);
+  return shortName !== null && isAlwaysExposedArchestraToolShortName(shortName);
 }

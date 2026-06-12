@@ -45,6 +45,12 @@ interface HeaderDialogProps {
   existingHeaderNames: string[];
   disableInstallation?: boolean;
   disableInstallationReason?: string;
+  /**
+   * Optional validator for a static header value (e.g. an environment's
+   * allowlist regex). Returns an error message to show under the value input
+   * and block confirm, or null when the value is allowed.
+   */
+  validateValue?: (value: string) => string | null;
   onClose: () => void;
   onConfirm: (draft: HeaderDraft) => void;
 }
@@ -66,6 +72,7 @@ export function HeaderDialog({
   existingHeaderNames,
   disableInstallation = false,
   disableInstallationReason,
+  validateValue,
   onClose,
   onConfirm,
 }: HeaderDialogProps) {
@@ -85,9 +92,17 @@ export function HeaderDialog({
   }, [existingHeaderNames, trimmedName]);
 
   const valueRequired = draft.scope === "static";
+  // A static header value persists as userConfig.default plaintext, so apply the
+  // environment's allowlist rule to it. Installation-scope values are entered at
+  // install time (validated there).
+  const valueError =
+    validateValue && draft.scope === "static" && draft.value.length > 0
+      ? validateValue(draft.value)
+      : null;
   const canSubmit =
     trimmedName.length > 0 &&
     !duplicate &&
+    !valueError &&
     (!valueRequired || draft.value.trim().length > 0);
 
   function updateDraft(patch: Partial<HeaderDraft>) {
@@ -188,8 +203,12 @@ export function HeaderDialog({
               onChange={(e) => updateDraft({ value: e.target.value })}
               placeholder="header value"
               className="font-mono"
+              aria-invalid={valueError ? true : undefined}
               autoComplete={MCP_CONFIG_AUTOCOMPLETE}
             />
+            {valueError && (
+              <p className="text-xs text-destructive">{valueError}</p>
+            )}
           </div>
         )}
 

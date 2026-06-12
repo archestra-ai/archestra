@@ -6,6 +6,7 @@ import {
   type ActiveChatRunNotifier,
   createActiveChatRunNotifier,
 } from "@/services/active-chat-run-notifier";
+import type { ChatActiveRunStatus } from "@/types/chat-active-run";
 
 const EVENT_FLUSH_INTERVAL_MS = 500;
 const EVENT_BATCH_SIZE = 256;
@@ -20,6 +21,10 @@ export const ACTIVE_CHAT_RUN_TERMINAL_REPLAY_GRACE_MS = 2 * 60 * 1000;
  */
 export class ActiveChatRunService {
   private nextTerminalCleanupAt = 0;
+  // Run ids this process created and believes may still be 'running'. Used to
+  // fail only this pod's runs on graceful shutdown (no schema-level pod id).
+  private readonly inFlightRunIds = new Set<string>();
+  private isShuttingDown = false;
 
   constructor(
     private readonly notifier: ActiveChatRunNotifier,
@@ -27,16 +32,26 @@ export class ActiveChatRunService {
     private readonly stopPollIntervalMs: number,
   ) {}
 
+  get shuttingDown(): boolean {
+    return this.isShuttingDown;
+  }
+
   async createRun(params: {
     conversationId: string;
     userId: string;
     organizationId: string;
   }) {
+    // Refuse new runs once shutdown started, so nothing is created after
+    // failInFlightRuns() has already snapshotted this pod's runs to fail.
+    if (this.isShuttingDown) {
+      return null;
+    }
+
     this.cleanupTerminalRunsIfNeeded(params.conversationId);
 
     const run = await ActiveChatRunModel.create(params);
     if (run) {
-      return run;
+      return this.registerCreatedRun(run);
     }
 
     try {
@@ -48,7 +63,66 @@ export class ActiveChatRunService {
       );
     }
 
-    return ActiveChatRunModel.create(params);
+    const retriedRun = await ActiveChatRunModel.create(params);
+    return retriedRun ? this.registerCreatedRun(retriedRun) : null;
+  }
+
+  beginShutdown(): void {
+    this.isShuttingDown = true;
+  }
+
+  // Single terminal-transition entry point so the in-flight set stays bounded.
+  // Removes from the set only after the DB write resolves: if it throws, the id
+  // is retained so failInFlightRuns()/the reaper still fail the run later.
+  async markTerminal(params: {
+    runId: string;
+    status: Exclude<ChatActiveRunStatus, "running">;
+    error?: string | null;
+  }): Promise<void> {
+    await ActiveChatRunModel.markTerminal(params);
+    this.inFlightRunIds.delete(params.runId);
+  }
+
+  // Periodic safety net for runs orphaned by a hard kill (OOM/SIGKILL) that
+  // never reached graceful shutdown. Graceful shutdown handles the common case.
+  // Intentionally does not prune inFlightRunIds: a leftover id is a harmless
+  // no-op for failInFlightRuns (it re-asserts status='running' in SQL), and the
+  // set is fully cleared on shutdown.
+  async reapStaleRuns(): Promise<void> {
+    try {
+      const reaped =
+        await ActiveChatRunModel.markStaleRunningAsFailed(STALE_RUNNING_MS);
+      if (reaped > 0) {
+        logger.info({ reaped }, "Reaped stale active chat runs");
+      }
+    } catch (error) {
+      logger.warn({ error }, "Failed to reap stale active chat runs");
+    }
+  }
+
+  // Best-effort cleanup on graceful shutdown: fail this pod's still-running runs
+  // so their conversations are not blocked until the stale reaper catches up.
+  async failInFlightRuns(): Promise<number> {
+    const ids = Array.from(this.inFlightRunIds);
+
+    const failed = await ActiveChatRunModel.markRunningAsFailedByIds({
+      ids,
+      error: "Server shut down before the chat stream completed.",
+    });
+
+    // Remove only the snapshotted ids, and only after the write resolves
+    // (mirrors markTerminal): on throw the ids are retained for the stale-run
+    // reaper, and a run registered concurrently during the shutdown window is
+    // left to its own registerCreatedRun/markTerminal rather than clobbered.
+    for (const id of ids) {
+      this.inFlightRunIds.delete(id);
+    }
+
+    if (failed > 0) {
+      logger.info({ failed }, "Failed in-flight active chat runs on shutdown");
+    }
+
+    return failed;
   }
 
   async requestStop(params: {
@@ -63,6 +137,15 @@ export class ActiveChatRunService {
     return run;
   }
 
+  // Wake the stop-poll loop for a run whose conversation was just deleted. The
+  // run row is already cascade-gone, so the woken poll observes the missing row
+  // and aborts the stream (see startStopPolling). Best-effort: the underlying
+  // notify swallows its own errors, so a lost wake falls back to the poll
+  // interval and never fails the caller's delete.
+  async notifyConversationDeleted(runId: string): Promise<void> {
+    await this.notifyStop(runId);
+  }
+
   drainStreamToEvents(params: {
     runId: string;
     conversationId: string;
@@ -74,21 +157,56 @@ export class ActiveChatRunService {
     abortController?: AbortController;
   }): void {
     void (async () => {
-      const writer = new ActiveChatRunEventBatcher(params.runId, () =>
-        this.notifyEvent(params.runId),
-      );
       const reader = params.stream.getReader();
+      // A timer-triggered flush can fail (or observe the run as gone) while the
+      // drain is blocked on reader.read(). The batcher owns that failure and
+      // wakes us here: abort the chat so upstream stops producing, and cancel
+      // the reader so the pending read resolves and the loop reaches its catch.
+      const writer = new ActiveChatRunEventBatcher({
+        runId: params.runId,
+        onFlush: () => this.notifyEvent(params.runId),
+        onAsyncFailure: () => {
+          if (!params.abortController?.signal.aborted) {
+            params.abortController?.abort();
+          }
+          void reader.cancel().catch((cancelError) => {
+            logger.warn(
+              { cancelError, runId: params.runId },
+              "Failed to cancel active chat run event reader after async flush failure",
+            );
+          });
+        },
+      });
 
       try {
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
           await writer.write(value);
+
+          // An error chunk is terminal for the client (the error renders and
+          // the user can immediately retry/resend), but the row only flips to
+          // `failed` once this drain completes — and a wedged upstream stream
+          // can keep it `running` until the stale reaper, 409-blocking every
+          // send in the meantime. Fail the run the moment the error event is
+          // durably flushed: write-then-flush ordering guarantees a replaying
+          // client can never observe the failed status without the error
+          // event, and markTerminal's running-only guard makes the
+          // end-of-stream terminal write below a no-op.
+          if (value.type === "error") {
+            await writer.flush();
+            await this.markTerminal({
+              runId: params.runId,
+              status: "failed",
+              error: value.errorText,
+            });
+            await this.notifyEvent(params.runId);
+          }
         }
 
         await writer.flush();
         const terminal = await params.getTerminalStatus();
-        await ActiveChatRunModel.markTerminal({
+        await this.markTerminal({
           runId: params.runId,
           status: terminal.status,
           error: terminal.error,
@@ -104,13 +222,29 @@ export class ActiveChatRunService {
             "Failed to cancel active chat run event reader after drain error",
           );
         });
+
+        // The run row was deleted (its conversation was hard-deleted and
+        // cascaded) while this drain was alive. This is an expected lifecycle
+        // exit, not a persistence failure: stop draining, do not retry inserts
+        // for the gone row, and route through markTerminal only to drop the id
+        // from in-flight tracking (its running-only guard makes the write a
+        // no-op against the missing row).
+        if (error instanceof ActiveChatRunGoneError) {
+          logger.info(
+            { runId: params.runId, conversationId: params.conversationId },
+            "Active chat run row gone during drain, stopping persistence",
+          );
+          await this.markTerminal({ runId: params.runId, status: "cancelled" });
+          return;
+        }
+
         await writer.flush().catch((flushError) => {
           logger.error(
             { flushError, runId: params.runId },
             "Failed to flush active chat run events after drain error",
           );
         });
-        await ActiveChatRunModel.markTerminal({
+        await this.markTerminal({
           runId: params.runId,
           status: "failed",
           error: error instanceof Error ? error.message : String(error),
@@ -210,7 +344,20 @@ export class ActiveChatRunService {
 
         try {
           const run = await ActiveChatRunModel.findById(params.runId);
-          if (run?.stopRequestedAt && !params.abortController.signal.aborted) {
+          // The row existed when polling started, so a null read now means the
+          // run was deleted — its conversation was hard-deleted and cascaded.
+          // Treat that as cancellation: there is nothing left to stream into.
+          if (!run) {
+            if (!params.abortController.signal.aborted) {
+              logger.info(
+                { conversationId: params.conversationId, runId: params.runId },
+                "Active chat run row no longer exists, aborting stream",
+              );
+              params.abortController.abort();
+            }
+            return;
+          }
+          if (run.stopRequestedAt && !params.abortController.signal.aborted) {
             logger.info(
               { conversationId: params.conversationId, runId: params.runId },
               "Active chat run stop requested, aborting stream",
@@ -231,6 +378,25 @@ export class ActiveChatRunService {
       stopped = true;
       waitController.abort();
     };
+  }
+
+  // Track a freshly created run, closing the window where shutdown began while
+  // ActiveChatRunModel.create was awaiting: fail it now rather than orphan it.
+  private async registerCreatedRun(
+    run: NonNullable<Awaited<ReturnType<typeof ActiveChatRunModel.create>>>,
+  ): Promise<typeof run | null> {
+    this.inFlightRunIds.add(run.id);
+
+    if (this.isShuttingDown) {
+      await this.markTerminal({
+        runId: run.id,
+        status: "failed",
+        error: "Server shut down before the chat stream completed.",
+      });
+      return null;
+    }
+
+    return run;
   }
 
   private async notifyEvent(runId: string): Promise<void> {
@@ -275,13 +441,26 @@ class ActiveChatRunEventBatcher {
   private flushTimer: NodeJS.Timeout | null = null;
   private flushPromise: Promise<void> = Promise.resolve();
   private lastRunTouchAt = 0;
+  private asyncFailure: unknown = null;
+  private readonly runId: string;
+  private readonly onFlush: () => Promise<void>;
+  private readonly onAsyncFailure: (error: unknown) => void;
 
-  constructor(
-    private readonly runId: string,
-    private readonly onFlush: () => Promise<void>,
-  ) {}
+  constructor(params: {
+    runId: string;
+    onFlush: () => Promise<void>;
+    onAsyncFailure: (error: unknown) => void;
+  }) {
+    this.runId = params.runId;
+    this.onFlush = params.onFlush;
+    this.onAsyncFailure = params.onAsyncFailure;
+  }
 
   async write(payload: UIMessageChunk): Promise<void> {
+    if (this.asyncFailure) {
+      throw this.asyncFailure;
+    }
+
     this.pending.push(payload);
 
     if (this.pending.length >= EVENT_BATCH_SIZE) {
@@ -290,13 +469,25 @@ class ActiveChatRunEventBatcher {
     }
 
     if (!this.flushTimer) {
+      // Own the timer-triggered flush: an unowned rejection here (e.g. the FK
+      // violation from a deleted run) would escape as a process-level
+      // unhandledRejection and trip the DB safety net into exiting. Store it so
+      // the next write()/flush() surfaces it into the drain catch, and wake an
+      // idle drain immediately via onAsyncFailure.
       this.flushTimer = setTimeout(() => {
-        void this.flush();
+        void this.flush().catch((error) => {
+          this.asyncFailure ??= error;
+          this.onAsyncFailure(error);
+        });
       }, EVENT_FLUSH_INTERVAL_MS);
     }
   }
 
   async flush(): Promise<void> {
+    if (this.asyncFailure) {
+      throw this.asyncFailure;
+    }
+
     if (this.flushTimer) {
       clearTimeout(this.flushTimer);
       this.flushTimer = null;
@@ -313,14 +504,18 @@ class ActiveChatRunEventBatcher {
     this.pending = [];
     this.nextSeq += 1;
 
-    this.flushPromise = this.flushPromise.then(() =>
-      ActiveChatRunModel.appendEvents({
+    this.flushPromise = this.flushPromise.then(async () => {
+      const result = await ActiveChatRunModel.appendEvents({
         runId: this.runId,
         seq,
         payloads,
         touchRun,
-      }).then(() => this.onFlush()),
-    );
+      });
+      if (result === "run_missing") {
+        throw new ActiveChatRunGoneError(this.runId);
+      }
+      await this.onFlush();
+    });
 
     await this.flushPromise;
   }
@@ -336,6 +531,15 @@ class ActiveChatRunEventBatcher {
 
     this.lastRunTouchAt = now;
     return true;
+  }
+}
+
+// Signals that the run row was deleted out from under an in-flight drain, so
+// the drain should stop persisting rather than treat it as a generic failure.
+class ActiveChatRunGoneError extends Error {
+  constructor(runId: string) {
+    super(`Active chat run ${runId} no longer exists`);
+    this.name = "ActiveChatRunGoneError";
   }
 }
 

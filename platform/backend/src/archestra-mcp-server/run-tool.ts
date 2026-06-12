@@ -1,6 +1,5 @@
 import {
   ARCHESTRA_TOOL_SHORT_NAMES,
-  type ArchestraToolShortName,
   getArchestraToolFullName,
   isAgentTool,
   TOOL_RUN_TOOL_SHORT_NAME,
@@ -10,12 +9,20 @@ import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import { evaluateSingleMcpToolInvocationPolicy } from "@/guardrails/tool-invocation";
 import logger from "@/logging";
+import { ConversationEnabledToolModel, ToolModel } from "@/models";
 import { archestraMcpBranding } from "./branding";
+import { isToolEnabledForConversation } from "./conversation-tool-filter";
 import {
   defineArchestraTool,
   defineArchestraTools,
   errorResult,
 } from "./helpers";
+import { resolveRunToolTargetName, resolveToolGrant } from "./tool-auto-assign";
+import {
+  toolNotAssignedAskAdminMessage,
+  toolNotEnabledForConversationMessage,
+  unavailableThirdPartyToolMessage,
+} from "./tool-recovery-messages";
 
 const RunToolArgsSchema = z
   .object({
@@ -40,7 +47,7 @@ const registry = defineArchestraTools([
   defineArchestraTool({
     shortName: TOOL_RUN_TOOL_SHORT_NAME,
     title: "Run Tool",
-    description: `Dispatch to any tool available to this agent, including built-in platform tools, agent delegation tools ('agent-<id>'), or third-party MCP tools exposed through the MCP Gateway (e.g. 'context7__resolve-library-id'). Pass the tool name exactly as it appears in the tools list or use a built-in platform tool short name like 'whoami' or 'get_agent'. Prefer using ${TOOL_SEARCH_TOOLS_SHORT_NAME} first when you need to discover the right exact name. The target tool must be assigned to this agent; target-tool RBAC, argument validation, and output validation all still apply.`,
+    description: `Dispatch to any tool available to this agent, including built-in platform tools, agent delegation tools ('agent-<id>'), or third-party MCP tools exposed through the MCP Gateway (e.g. 'context7__resolve-library-id'). Pass the tool name exactly as it appears in the tools list or use a built-in platform tool short name like 'whoami' or 'get_agent'. Prefer using ${TOOL_SEARCH_TOOLS_SHORT_NAME} first when you need to discover the right exact name. If you call a tool the user can access but the agent does not have yet, the user is asked to confirm adding it (or told to ask an admin) before it runs — it is not assigned silently; target-tool RBAC, argument validation, and output validation all still apply.`,
     schema: RunToolArgsSchema,
     async handler({ args, context }) {
       const requestedName = args.tool_name;
@@ -55,10 +62,9 @@ const registry = defineArchestraTools([
           ? "archestra"
           : "third-party";
 
-      const resolvedName =
-        route === "archestra" && isArchestraShortName && !isArchestraPrefixed
-          ? getArchestraToolFullName(requestedName as ArchestraToolShortName)
-          : requestedName;
+      // Shared with the grant check (isToolGrantApprovable) so dispatch and the
+      // chat grant approval resolve a target name the same way.
+      const resolvedName = resolveRunToolTargetName(requestedName);
 
       logger.info(
         {
@@ -77,21 +83,99 @@ const registry = defineArchestraTools([
         return errorResult(`${TOOL_RUN_TOOL_SHORT_NAME} cannot invoke itself`);
       }
 
+      // Per-conversation enabled-tool gate: in a chat with a custom tool
+      // selection, a tool the user disabled must not be runnable via run_tool
+      // (the visible tool list already hides it). Returns an error result when
+      // the tool is disabled, else null. Archestra built-ins always pass (and
+      // skip the lookup) so run_tool/search_tools themselves are never blocked.
+      // conversationId is server-set, never model-supplied, so it cannot be
+      // forged to bypass. Callers apply this AFTER the existence/assignment
+      // check so an unassigned name still gets the "no such tool" recovery
+      // message rather than a misleading "not enabled" one.
+      const checkConversationGate = async (
+        name: string,
+      ): Promise<CallToolResult | null> => {
+        if (!context.conversationId || archestraMcpBranding.isToolName(name)) {
+          return null;
+        }
+        const enabledNames =
+          await ConversationEnabledToolModel.getEnabledToolNameSet(
+            context.conversationId,
+          );
+        if (isToolEnabledForConversation(name, enabledNames)) {
+          return null;
+        }
+        logger.info(
+          { agentId: context.agentId, requestedName, resolvedName: name },
+          `${TOOL_RUN_TOOL_SHORT_NAME} dispatched to a tool disabled for this conversation`,
+        );
+        return errorResult(toolNotEnabledForConversationMessage(name));
+      };
+
       if (route === "archestra") {
+        // Delegation (agent-<id>) names are gated here; executeArchestraTool
+        // enforces existence/assignment for genuinely unknown archestra names.
+        const gateError = await checkConversationGate(resolvedName);
+        if (gateError) return gateError;
+
         // Dynamic import avoids the circular import between this file and
         // ./index (index.ts imports every tool group, including this one).
         const { executeArchestraTool } = await import("./index");
         return executeArchestraTool(resolvedName, args.tool_args, context);
       }
 
-      // Third-party MCP Gateway path.
+      // Third-party MCP Gateway path. Hallucinated archestra-prefixed names and
+      // bogus agent-<id> delegations are handled by the "archestra" route above
+      // (executeArchestraTool / checkToolAssignedToAgent), not this check.
       if (!context.agentId) {
         return errorResult(
           `${TOOL_RUN_TOOL_SHORT_NAME} requires agent context to dispatch to third-party MCP tools`,
         );
       }
 
+      // Gate dispatch on the assigned-tool set. An unassigned tool is never run
+      // silently: discovery widens the search space to tools the user can access,
+      // but actually putting one on the agent goes through the grant flow (chat
+      // proposes it, the user confirms, the assign endpoint writes it, then this
+      // call resumes with the tool assigned). So a miss here means the tool was
+      // not granted (or there is no UI to propose it): steer the user. The set is
+      // reused by the policy gate below so it is fetched only once.
+      const assignedToolNames = await ToolModel.getAssignedToolNames(
+        context.agentId,
+      );
+      if (!assignedToolNames.has(resolvedName)) {
+        // A custom per-conversation tool selection is an allowlist over the
+        // agent's assigned tools, so an unassigned tool can never be enabled in
+        // it — return the same unavailable recovery search_tools shows.
+        if (await checkConversationGate(resolvedName)) {
+          return errorResult(unavailableThirdPartyToolMessage(resolvedName));
+        }
+        const grant = await resolveToolGrant({
+          toolName: resolvedName,
+          agentId: context.agentId,
+          userId: context.userId,
+          organizationId: context.organizationId,
+        });
+        logger.info(
+          { agentId: context.agentId, requestedName, resolvedName, grant },
+          `${TOOL_RUN_TOOL_SHORT_NAME} dispatched to an unassigned tool`,
+        );
+        // "ask an admin" when the user cannot assign it; otherwise the generic
+        // recovery (the grant approval already handles the can-assign case
+        // before execution, so reaching here means it was not granted).
+        return errorResult(
+          grant === "forbidden"
+            ? toolNotAssignedAskAdminMessage(resolvedName)
+            : unavailableThirdPartyToolMessage(resolvedName),
+        );
+      }
+
+      // The tool exists and is assigned — enforce the per-conversation selection.
+      const gateError = await checkConversationGate(resolvedName);
+      if (gateError) return gateError;
+
       const toolInput = args.tool_args ?? {};
+      // Reuse the set computed above so the policy gate does not re-query it.
       const policyBlock = await evaluateSingleMcpToolInvocationPolicy({
         agentId: context.agentId,
         toolName: resolvedName,
@@ -99,6 +183,7 @@ const registry = defineArchestraTools([
         organizationId: context.organizationId,
         contextIsTrusted: context.contextIsTrusted ?? true,
         enforceApprovalRequired: !context.approvalRequiredPoliciesHandled,
+        enabledToolNames: assignedToolNames,
       });
       if (policyBlock) {
         return errorResult(policyBlock.refusalMessage);
@@ -116,7 +201,10 @@ const registry = defineArchestraTools([
         },
         context.agentId,
         context.tokenAuth,
-        { conversationId: context.conversationId },
+        // mcp-client scopes per-conversation sessions (e.g. browser contexts)
+        // by this key; headless executions use their isolation key so
+        // concurrent runs never share a session and cleanup can close it.
+        { conversationId: context.isolationKey ?? context.conversationId },
       );
 
       const callToolResult: CallToolResult = {

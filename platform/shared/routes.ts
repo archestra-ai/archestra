@@ -30,6 +30,7 @@ export const RouteId = {
 
   // Agent Tool Routes
   AssignToolToAgent: "assignToolToAgent",
+  GrantToolToAgent: "grantToolToAgent",
   BulkAssignTools: "bulkAssignTools",
   BulkUpdateAgentTools: "bulkUpdateAgentTools",
   AutoConfigureAgentToolPolicies: "autoConfigureAgentToolPolicies",
@@ -109,6 +110,7 @@ export const RouteId = {
   DeleteTeam: "deleteTeam",
   GetTeamMembers: "getTeamMembers",
   AddTeamMember: "addTeamMember",
+  UpdateTeamMember: "updateTeamMember",
   RemoveTeamMember: "removeTeamMember",
 
   // Team External Group Routes (SSO Team Sync)
@@ -171,6 +173,8 @@ export const RouteId = {
   OpenAiResponsesWithAgent: "openAiResponsesWithAgent",
   OpenAiEmbeddingsWithDefaultAgent: "openAiEmbeddingsWithDefaultAgent",
   OpenAiEmbeddingsWithAgent: "openAiEmbeddingsWithAgent",
+  OpenAiListModelsWithDefaultAgent: "openAiListModelsWithDefaultAgent",
+  OpenAiListModelsWithAgent: "openAiListModelsWithAgent",
 
   // Proxy Routes - OpenAI-compatible model router
   ModelRouterChatCompletionsWithDefaultAgent:
@@ -188,6 +192,8 @@ export const RouteId = {
   // Proxy Routes - Anthropic
   AnthropicMessagesWithDefaultAgent: "anthropicMessagesWithDefaultAgent",
   AnthropicMessagesWithAgent: "anthropicMessagesWithAgent",
+  AnthropicListModelsWithDefaultAgent: "anthropicListModelsWithDefaultAgent",
+  AnthropicListModelsWithAgent: "anthropicListModelsWithAgent",
 
   // Proxy Routes - Cohere
   CohereChatWithDefaultAgent: "cohereChatWithDefaultAgent",
@@ -270,14 +276,17 @@ export const RouteId = {
 
   // Chat Routes
   StreamChat: "streamChat",
+  ResolveChatMcpElicitation: "resolveChatMcpElicitation",
   StopChatStream: "stopChatStream",
   GetActiveChatRun: "getActiveChatRun",
   GetChatConversations: "getChatConversations",
   GetChatConversation: "getChatConversation",
+  GetChatConversationFiles: "getChatConversationFiles",
   GetChatAgentMcpTools: "getChatAgentMcpTools",
   CreateChatConversation: "createChatConversation",
   ForkChatConversation: "forkChatConversation",
   UpdateChatConversation: "updateChatConversation",
+  SetConversationHooksDebug: "setConversationHooksDebug",
   DeleteChatConversation: "deleteChatConversation",
   CompactChatConversation: "compactChatConversation",
   GenerateChatConversationTitle: "generateChatConversationTitle",
@@ -457,6 +466,9 @@ export const RouteId = {
   CreateChatOpsDmBinding: "createChatOpsDmBinding",
   UpdateChatOpsConfigInQuickstart: "updateChatOpsConfigInQuickstart",
   UpdateSlackChatOpsConfig: "updateSlackChatOpsConfig",
+  ConnectNgrok: "connectNgrok",
+  DisconnectNgrok: "disconnectNgrok",
+  GetNgrokConfig: "getNgrokConfig",
   RefreshChatOpsChannelDiscovery: "refreshChatOpsChannelDiscovery",
 
   // Knowledge Base Routes
@@ -528,10 +540,20 @@ export const RouteId = {
   // Audit Log Routes
   GetAuditLogs: "getAuditLogs",
 
+  // Hook File Routes
+  GetHooks: "getHooks",
+  CreateHook: "createHook",
+  UpdateHook: "updateHook",
+  DeleteHook: "deleteHook",
+
   // Skill Share Link Routes
   GetSkillShareLinks: "getSkillShareLinks",
   CreateSkillShareLink: "createSkillShareLink",
   RevokeSkillShareLink: "revokeSkillShareLink",
+
+  // Connection Setup Routes
+  CreateConnectionSetup: "createConnectionSetup",
+  GetConnectionSetupScript: "getConnectionSetupScript",
 } as const;
 
 export type RouteId = (typeof RouteId)[keyof typeof RouteId];

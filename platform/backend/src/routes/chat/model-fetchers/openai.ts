@@ -1,5 +1,6 @@
 import config from "@/config";
 import type { OpenAi } from "@/types";
+import { joinBaseUrl } from "@/utils/base-url";
 import { fetchModelsWithBearerAuth } from "./openai-compatible";
 import type { ModelInfo } from "./types";
 
@@ -57,7 +58,7 @@ export async function fetchOpenAiModels(
   const data = await fetchModelsWithBearerAuth<{
     data: (OpenAi.Types.Model | OpenAi.Types.OrlandoModel)[];
   }>({
-    url: `${baseUrl}/models`,
+    url: joinBaseUrl(baseUrl, "/models"),
     apiKey,
     errorLabel: "OpenAI models",
     extraHeaders,

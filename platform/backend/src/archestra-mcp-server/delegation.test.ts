@@ -76,9 +76,10 @@ describe("delegation tool execution", () => {
       mockContext,
     );
     expect(result.isError).toBe(true);
-    expect((result.content[0] as any).text).toContain(
-      "not found or not configured for delegation",
-    );
+    const text = (result.content[0] as any).text;
+    expect(text).toContain("No delegation is configured");
+    expect(text).toContain(`${AGENT_TOOL_PREFIX}*`);
+    expect(text).toContain("Do not guess delegation names");
   });
 
   test("propagates the current trust state to delegated subagents", async ({

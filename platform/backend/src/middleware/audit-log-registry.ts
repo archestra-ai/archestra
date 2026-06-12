@@ -486,6 +486,12 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     fetchById: (_id, _orgId) =>
       chatOpsConfigModel.getRedactedSnapshotForAudit(),
   },
+  "/api/chatops/config/ngrok": {
+    resourceType: "chatOpsConfig",
+    resourceIdSource: "organizationContext",
+    fetchById: (_id, _orgId) =>
+      chatOpsConfigModel.getRedactedSnapshotForAudit(),
+  },
   // Channel discovery refresh is semantically distinct from a generic binding update.
   "/api/chatops/channel-discovery/refresh": {
     resourceType: "chatOpsBinding",

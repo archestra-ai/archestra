@@ -51,6 +51,7 @@ import {
   EmptyToolArgsSchema,
   errorResult,
   structuredSuccessResult,
+  structuredToolErrorResult,
   successResult,
 } from "./helpers";
 import type { ArchestraContext } from "./types";
@@ -657,7 +658,7 @@ async function handleGetKnowledgeBase(params: {
 
     const kb = await KnowledgeBaseModel.findById(args.id);
     if (!kb || kb.organizationId !== context.organizationId) {
-      return errorResult(`Knowledge base not found: ${args.id}`);
+      return knowledgeBaseNotFound(args.id);
     }
     return structuredSuccessResult(
       { knowledgeBase: kb },
@@ -688,11 +689,11 @@ async function handleUpdateKnowledgeBase(params: {
 
     const existing = await KnowledgeBaseModel.findById(args.id);
     if (!existing || existing.organizationId !== context.organizationId) {
-      return errorResult(`Knowledge base not found: ${args.id}`);
+      return knowledgeBaseNotFound(args.id);
     }
     const kb = await KnowledgeBaseModel.update(args.id, updates);
     if (!kb) {
-      return errorResult(`Knowledge base not found: ${args.id}`);
+      return knowledgeBaseNotFound(args.id);
     }
     return structuredSuccessResult(
       { knowledgeBase: kb },
@@ -716,7 +717,7 @@ async function handleDeleteKnowledgeBase(params: {
 
     const existing = await KnowledgeBaseModel.findById(args.id);
     if (!existing || existing.organizationId !== context.organizationId) {
-      return errorResult(`Knowledge base not found: ${args.id}`);
+      return knowledgeBaseNotFound(args.id);
     }
     await KnowledgeBaseModel.delete(args.id);
     return successResult(`Knowledge base deleted: ${args.id}`);
@@ -830,7 +831,7 @@ async function handleGetKnowledgeConnector(params: {
           connector,
         ))
     ) {
-      return errorResult(`Knowledge connector not found: ${args.id}`);
+      return knowledgeConnectorNotFound(args.id);
     }
     return structuredSuccessResult(
       { knowledgeConnector: connector },
@@ -884,7 +885,7 @@ async function handleUpdateKnowledgeConnector(params: {
           existingConnector,
         ))
     ) {
-      return errorResult(`Knowledge connector not found: ${args.id}`);
+      return knowledgeConnectorNotFound(args.id);
     }
     const nextVisibility = updates.visibility ?? existingConnector.visibility;
     const nextTeamIds = updates.teamIds ?? existingConnector.teamIds;
@@ -903,7 +904,7 @@ async function handleUpdateKnowledgeConnector(params: {
       updates,
     );
     if (!connector) {
-      return errorResult(`Knowledge connector not found: ${args.id}`);
+      return knowledgeConnectorNotFound(args.id);
     }
     if (
       didKnowledgeSourceAclInputsChange({
@@ -958,7 +959,7 @@ async function handleDeleteKnowledgeConnector(params: {
           existing,
         ))
     ) {
-      return errorResult(`Knowledge connector not found: ${args.id}`);
+      return knowledgeConnectorNotFound(args.id);
     }
     await KnowledgeBaseConnectorModel.delete(args.id);
     return successResult(`Knowledge connector deleted: ${args.id}`);
@@ -1103,4 +1104,35 @@ async function handleUnassignKnowledgeConnectorFromAgent(params: {
   } catch (error) {
     return catchError(error, "unassigning knowledge connector from agent");
   }
+}
+
+// === Internal helpers ===
+
+// Recovery-oriented results for unknown knowledge ids: a missing/inaccessible id
+// is recoverable by listing the accessible entries first. Branded so the tool
+// name matches what the model sees.
+function knowledgeBaseNotFound(id: string) {
+  const listTool = archestraMcpBranding.getToolName(
+    TOOL_GET_KNOWLEDGE_BASES_SHORT_NAME,
+  );
+  return structuredToolErrorResult({
+    error: {
+      type: "tool_state",
+      code: "unknown_knowledge_base",
+      message: `Knowledge base not found: ${id}. Call ${listTool} to list accessible knowledge bases and use an exact id.`,
+    },
+  });
+}
+
+function knowledgeConnectorNotFound(id: string) {
+  const listTool = archestraMcpBranding.getToolName(
+    TOOL_GET_KNOWLEDGE_CONNECTORS_SHORT_NAME,
+  );
+  return structuredToolErrorResult({
+    error: {
+      type: "tool_state",
+      code: "unknown_knowledge_connector",
+      message: `Knowledge connector not found: ${id}. Call ${listTool} to list accessible connectors and use an exact id.`,
+    },
+  });
 }

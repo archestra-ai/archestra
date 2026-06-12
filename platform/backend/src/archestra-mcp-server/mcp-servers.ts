@@ -40,6 +40,7 @@ import {
   UuidIdSchema,
 } from "@/types";
 import { broadcastMcpInstallationStatus } from "@/websocket";
+import { archestraMcpBranding } from "./branding";
 import {
   catchError,
   deduplicateLabels,
@@ -643,7 +644,12 @@ async function handleGetMcpServerTools(
       },
     );
     if (!catalogItem) {
-      return errorResult("MCP server not found or you don't have access.");
+      const getMcpServersName = archestraMcpBranding.getToolName(
+        TOOL_GET_MCP_SERVERS_SHORT_NAME,
+      );
+      return errorResult(
+        `MCP server not found or you don't have access. Call ${getMcpServersName} to list the MCP servers available to you and use an exact catalog id.`,
+      );
     }
 
     const tools = await ToolModel.findByCatalogId(args.mcpServerId);
@@ -1544,15 +1550,21 @@ async function authorizeDeployScope(params: {
     if (!team) {
       return "Team not found.";
     }
-    const isTeamAdmin = await userHasPermission(
+    const canManageAllTeams = await userHasPermission(
       userId,
       organizationId,
       "team",
-      "admin",
+      "create",
     );
-    if (isTeamAdmin) {
+    if (canManageAllTeams) {
       return null;
     }
+
+    const isLiteralTeamAdmin = await TeamModel.isUserTeamAdmin(teamId, userId);
+    if (isLiteralTeamAdmin) {
+      return null;
+    }
+
     const hasMcpServerUpdate = await userHasPermission(
       userId,
       organizationId,

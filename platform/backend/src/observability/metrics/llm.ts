@@ -22,8 +22,14 @@ import type { Agent } from "@/types";
 import { getExemplarLabels, sanitizeLabelKey } from "./utils";
 
 type UsageExtractor =
-  // biome-ignore lint/suspicious/noExplicitAny: usage comes from parsed JSON (cloned.json())
-  ((usage: any) => { input?: number; output?: number }) | null;
+  | // biome-ignore lint/suspicious/noExplicitAny: usage comes from parsed JSON (cloned.json())
+  ((usage: any) => {
+      input?: number;
+      output?: number;
+      cacheRead?: number;
+      cacheWrite?: number;
+    })
+  | null;
 
 /**
  * Maps each provider to its usage token extraction function for fetch-based observability.
@@ -60,6 +66,7 @@ type Fetch = (
 // You can monitor request count, duration and error rate with these.
 let llmRequestDuration: client.Histogram<string>;
 let llmTokensCounter: client.Counter<string>;
+let llmCacheTokensCounter: client.Counter<string>;
 let llmBlockedToolCounter: client.Counter<string>;
 let llmCostTotal: client.Counter<string>;
 let llmTimeToFirstToken: client.Histogram<string>;
@@ -84,6 +91,7 @@ export function initializeMetrics(labelKeys: string[]): void {
     !labelKeysChanged &&
     llmRequestDuration &&
     llmTokensCounter &&
+    llmCacheTokensCounter &&
     llmBlockedToolCounter &&
     llmCostTotal &&
     llmTimeToFirstToken &&
@@ -105,6 +113,9 @@ export function initializeMetrics(labelKeys: string[]): void {
     }
     if (llmTokensCounter) {
       client.register.removeSingleMetric("llm_tokens_total");
+    }
+    if (llmCacheTokensCounter) {
+      client.register.removeSingleMetric("llm_cache_tokens_total");
     }
     if (llmBlockedToolCounter) {
       client.register.removeSingleMetric("llm_blocked_tools_total");
@@ -152,6 +163,15 @@ export function initializeMetrics(labelKeys: string[]): void {
     name: "llm_tokens_total",
     help: "Total tokens used",
     labelNames: [...baseLabelNames, "type", ...nextLabelKeys], // type: input|output
+    enableExemplars: true,
+  });
+
+  // Separate from llm_tokens_total so existing input/output aggregates keep
+  // their meaning; prompt-cache read/write are disjoint from input/output.
+  llmCacheTokensCounter = new client.Counter({
+    name: "llm_cache_tokens_total",
+    help: "Total prompt-cache tokens (read = reused prefix, write = newly cached)",
+    labelNames: [...baseLabelNames, "cache_type", ...nextLabelKeys], // cache_type: read|write
     enableExemplars: true,
   });
 
@@ -253,7 +273,12 @@ function buildMetricLabels(
 export function reportLLMTokens(
   provider: SupportedProvider,
   profile: Agent,
-  usage: { input?: number; output?: number },
+  usage: {
+    input?: number;
+    output?: number;
+    cacheRead?: number;
+    cacheWrite?: number;
+  },
   model: string,
   source: InteractionSource,
   externalAgentId?: string,
@@ -288,6 +313,33 @@ export function reportLLMTokens(
         externalAgentId,
       ),
       value: usage.output,
+      exemplarLabels,
+    });
+  }
+
+  if (usage.cacheRead && usage.cacheRead > 0) {
+    llmCacheTokensCounter.inc({
+      labels: buildMetricLabels(
+        profile,
+        { provider, cache_type: "read" },
+        model,
+        source,
+        externalAgentId,
+      ),
+      value: usage.cacheRead,
+      exemplarLabels,
+    });
+  }
+  if (usage.cacheWrite && usage.cacheWrite > 0) {
+    llmCacheTokensCounter.inc({
+      labels: buildMetricLabels(
+        profile,
+        { provider, cache_type: "write" },
+        model,
+        source,
+        externalAgentId,
+      ),
+      value: usage.cacheWrite,
       exemplarLabels,
     });
   }
@@ -586,11 +638,13 @@ export function getObservableFetch(
         }
         const extractor = fetchUsageExtractors[provider];
         if (extractor) {
-          const { input, output } = extractor(data.usage);
+          const { input, output, cacheRead, cacheWrite } = extractor(
+            data.usage,
+          );
           reportLLMTokens(
             provider,
             profile,
-            { input, output },
+            { input, output, cacheRead, cacheWrite },
             model ?? "unknown",
             source,
             externalAgentId,
@@ -651,11 +705,11 @@ export function getObservableGenAI(
       // Record token metrics
       const usage = result.usageMetadata;
       if (usage) {
-        const { input, output } = getGeminiUsage(usage);
+        const { input, output, cacheRead, cacheWrite } = getGeminiUsage(usage);
         reportLLMTokens(
           provider,
           profile,
-          { input, output },
+          { input, output, cacheRead, cacheWrite },
           model ?? "unknown",
           source,
           externalAgentId,

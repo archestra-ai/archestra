@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { withDbTransaction } from "@/database";
 import { SkillModel, SkillShareLinkModel } from "@/models";
 import { SKILL_SHARE_LINK_TOKEN_PREFIX } from "@/models/skill-share-link";
 import { describe, expect, test } from "@/test";
@@ -320,5 +321,65 @@ describe("deriveSkillShareLinkStatus", () => {
         now,
       ),
     ).toBe("revoked");
+  });
+});
+
+describe("SkillShareLinkModel.create with caller transaction", () => {
+  test("commits with the caller's transaction and is queryable afterwards", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id);
+    const skill = await seedSkill({ organizationId: org.id, name: "tx-ok" });
+
+    const { link, rawToken } = await withDbTransaction((tx) =>
+      SkillShareLinkModel.create({
+        organizationId: org.id,
+        createdByUserId: user.id,
+        skillIds: [skill.id],
+        marketplaceName: "org-tx-skills",
+        tx,
+      }),
+    );
+
+    expect(link.skills).toHaveLength(1);
+    const validated = await SkillShareLinkModel.validate({ rawToken });
+    expect(validated?.link.id).toBe(link.id);
+  });
+
+  test("rolls back with the caller's transaction (no orphaned link)", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id);
+    const skill = await seedSkill({ organizationId: org.id, name: "tx-rb" });
+
+    let rawToken = "";
+    await expect(
+      withDbTransaction(async (tx) => {
+        const created = await SkillShareLinkModel.create({
+          organizationId: org.id,
+          createdByUserId: user.id,
+          skillIds: [skill.id],
+          marketplaceName: "org-tx-rollback-skills",
+          tx,
+        });
+        rawToken = created.rawToken;
+        throw new Error("render failed");
+      }),
+    ).rejects.toThrow("render failed");
+
+    expect(await SkillShareLinkModel.validate({ rawToken })).toBeNull();
+    expect(
+      await SkillShareLinkModel.listByOrganization({
+        organizationId: org.id,
+      }),
+    ).toEqual([]);
   });
 });

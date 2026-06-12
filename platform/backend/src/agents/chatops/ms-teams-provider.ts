@@ -100,8 +100,16 @@ class MSTeamsProvider implements ChatOpsProvider {
       ? new PasswordServiceClientCredentialFactory(appId, appSecret, tenantId)
       : new PasswordServiceClientCredentialFactory(appId, appSecret);
 
+    // A tenant ID means this is a single-tenant Azure Bot. The adapter must be
+    // told so (MicrosoftAppType=SingleTenant) — otherwise it defaults to
+    // MultiTenant and validates tokens against the wrong (common) authority,
+    // rejecting every inbound activity with "Unauthorized. No valid identity."
     const auth = new ConfigurationBotFrameworkAuthentication(
-      { MicrosoftAppId: appId, MicrosoftAppTenantId: tenantId || undefined },
+      {
+        MicrosoftAppId: appId,
+        MicrosoftAppType: tenantId ? "SingleTenant" : "MultiTenant",
+        MicrosoftAppTenantId: tenantId || undefined,
+      },
       credentialsFactory,
     );
 
@@ -238,23 +246,9 @@ class MSTeamsProvider implements ChatOpsProvider {
       return null;
     }
 
-    // In team channels, only respond when the bot is @mentioned.
-    // Normalizes IDs before comparing (strips "28:" prefix, case-insensitive)
-    // since Teams may format recipient.id and mentioned.id differently.
-    if (activity.conversation?.conversationType === "channel") {
-      const botId = activity.recipient?.id;
-      const isBotMentioned =
-        botId &&
-        activity.entities?.some(
-          (e) =>
-            e.type === "mention" &&
-            e.mentioned?.id != null &&
-            normalizeTeamsId(e.mentioned.id) === normalizeTeamsId(botId),
-        );
-      if (!isBotMentioned) {
-        return null;
-      }
-    }
+    // Note: in team channels the bot stays quiet until @mentioned, then keeps
+    // replying to the thread. That gating is enforced by the webhook route via
+    // wasBotMentioned() + channel-activation, not here, so parsing stays pure.
 
     const conversationId = activity.conversation?.id;
     const isThreadReply =
@@ -292,9 +286,45 @@ class MSTeamsProvider implements ChatOpsProvider {
           >[0],
         ),
         authHeader: headers.authorization || headers.Authorization,
+        // Lets the manager frame group conversations for the agent ("personal",
+        // "groupChat", or "channel") and tell it whether it was addressed.
+        conversationType: activity.conversation?.conversationType,
+        botMentioned: this.wasBotMentioned(activity),
+        botName: activity.recipient?.name,
+        // Names of OTHER people @mentioned in the message — a message
+        // @mentioning someone else is most likely addressed to them.
+        mentionedOthers: extractMentionedOthers(activity),
       },
       ...(attachments.length > 0 && { attachments }),
     };
+  }
+
+  /**
+   * Whether this activity @mentions the bot.
+   *
+   * Normalizes IDs before comparing (strips the "28:" prefix, case-insensitive)
+   * since Teams may format recipient.id and the mention's id differently. The
+   * webhook route uses this to gate team-channel replies (see channel-activation).
+   */
+  wasBotMentioned(activity: {
+    recipient?: { id?: string } | null;
+    entities?: Array<{
+      type?: string;
+      mentioned?: { id?: string } | null;
+    } | null> | null;
+  }): boolean {
+    const botId = activity.recipient?.id;
+    if (!botId) {
+      return false;
+    }
+    return Boolean(
+      activity.entities?.some(
+        (e) =>
+          e?.type === "mention" &&
+          e.mentioned?.id != null &&
+          normalizeTeamsId(e.mentioned.id) === normalizeTeamsId(botId),
+      ),
+    );
   }
 
   async sendReply(options: ChatReplyOptions): Promise<string> {
@@ -1702,6 +1732,28 @@ const UUID_REGEX =
 
 function normalizeTeamsId(id: string): string {
   return id.replace(/^28:/, "").toLowerCase();
+}
+
+/** Display names of @mentioned participants other than the bot itself. */
+function extractMentionedOthers(activity: {
+  recipient?: { id?: string };
+  entities?: Array<{
+    type?: string;
+    mentioned?: { id?: string; name?: string };
+  }>;
+}): string[] {
+  const botId = activity.recipient?.id;
+  const names = (activity.entities ?? [])
+    .filter(
+      (e) =>
+        e?.type === "mention" &&
+        e.mentioned?.id != null &&
+        (botId == null ||
+          normalizeTeamsId(e.mentioned.id) !== normalizeTeamsId(botId)),
+    )
+    .map((e) => e.mentioned?.name)
+    .filter((name): name is string => Boolean(name));
+  return [...new Set(names)];
 }
 
 /**

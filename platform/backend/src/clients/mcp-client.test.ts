@@ -31,6 +31,8 @@ const mockClose = vi.fn();
 const mockListTools = vi.fn();
 const mockListResources = vi.fn();
 const mockPing = vi.fn();
+const mockSetRequestHandler = vi.fn();
+const mockSetNotificationHandler = vi.fn();
 
 vi.mock("@modelcontextprotocol/sdk/client/index.js", () => ({
   // biome-ignore lint/suspicious/noExplicitAny: test..
@@ -41,6 +43,8 @@ vi.mock("@modelcontextprotocol/sdk/client/index.js", () => ({
     this.listTools = mockListTools;
     this.listResources = mockListResources;
     this.ping = mockPing;
+    this.setRequestHandler = mockSetRequestHandler;
+    this.setNotificationHandler = mockSetNotificationHandler;
   }),
 }));
 
@@ -127,6 +131,8 @@ describe("McpClient", () => {
     mockListTools.mockReset();
     mockListResources.mockReset();
     mockPing.mockReset();
+    mockSetRequestHandler.mockReset();
+    mockSetNotificationHandler.mockReset();
     mockUsesStreamableHttp.mockReset();
     mockGetHttpEndpointUrl.mockReset();
     mockGetRunningPodHttpEndpoint.mockReset();
@@ -275,8 +281,13 @@ describe("McpClient", () => {
       expect(result).toMatchObject({
         id: "call_123",
         isError: true,
-        error: expect.stringContaining("Tool not found"),
+        error: expect.stringContaining("No tool named"),
       });
+      expect(result.error).toContain("Do not guess tool names");
+      expect(
+        (result._meta as { archestraError?: { code?: string } } | undefined)
+          ?.archestraError?.code,
+      ).toBe("unknown_tool");
     });
 
     test("declares MCP Apps and enterprise auth extensions during initialize", async () => {
@@ -313,7 +324,12 @@ describe("McpClient", () => {
       );
       expect(clientConstructor).toHaveBeenCalled();
       const options = clientConstructor.mock.calls.at(-1)?.[1] as
-        | { capabilities?: { extensions?: Record<string, unknown> } }
+        | {
+            capabilities?: {
+              elicitation?: Record<string, unknown>;
+              extensions?: Record<string, unknown>;
+            };
+          }
         | undefined;
       expect(options?.capabilities?.extensions).toEqual({
         [MCP_APPS_EXTENSION_ID]: {
@@ -321,6 +337,63 @@ describe("McpClient", () => {
         },
         [MCP_ENTERPRISE_AUTH_EXTENSION_ID]: {},
       });
+      expect(options?.capabilities?.elicitation).toBeUndefined();
+      expect(mockSetRequestHandler).not.toHaveBeenCalled();
+      expect(mockSetNotificationHandler).not.toHaveBeenCalled();
+    });
+
+    test("declares elicitation support when a gateway bridge handler is provided", async () => {
+      const tool = await ToolModel.createToolIfNotExists({
+        name: "github-mcp-server__elicitation_bridge",
+        description: "Elicitation bridge test",
+        parameters: {},
+        catalogId,
+      });
+
+      await AgentToolModel.create(agentId, tool.id, {
+        mcpServerId,
+        credentialResolutionMode: "static",
+      });
+
+      mockConnect.mockResolvedValue(undefined);
+      mockCallTool.mockResolvedValue({
+        content: [{ type: "text", text: "ok" }],
+      });
+
+      const result = await mcpClient.executeToolCall(
+        {
+          id: "call_elicitation",
+          name: tool.name,
+          arguments: {},
+        },
+        agentId,
+        undefined,
+        {
+          elicitationHandler: async () => ({
+            action: "accept",
+            content: {},
+          }),
+        },
+      );
+
+      expect(result.isError).toBe(false);
+
+      const clientConstructor = vi.mocked(
+        (await import("@modelcontextprotocol/sdk/client/index.js")).Client,
+      );
+      const options = clientConstructor.mock.calls.at(-1)?.[1] as
+        | {
+            capabilities?: {
+              elicitation?: Record<string, unknown>;
+            };
+          }
+        | undefined;
+      expect(options?.capabilities?.elicitation).toEqual({
+        form: { applyDefaults: true },
+        url: {},
+      });
+      expect(mockSetRequestHandler).toHaveBeenCalledOnce();
+      expect(mockSetNotificationHandler).toHaveBeenCalledOnce();
     });
 
     describe("Secrets caching (N+1 prevention)", () => {
@@ -4402,7 +4475,7 @@ describe("McpClient", () => {
         const result = await mcpClient.executeToolCall(toolCall, agentId);
 
         expect(result.isError).toBe(true);
-        expect(result.error).toContain("Tool not found");
+        expect(result.error).toContain("No tool named");
       });
     });
 

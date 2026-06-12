@@ -131,7 +131,7 @@ const mcpProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             jsonrpc: "2.0",
             error: {
               code: -32601,
-              message: `Tool "${toolName}" not found`,
+              message: `No tool named "${toolName}" is available here. Call tools/list to see the available tools and use an exact name from it. Do not guess tool names.`,
             },
             id: body.id ?? null,
           };

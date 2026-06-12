@@ -482,6 +482,7 @@ describe("StatisticsModel", () => {
           requests: 10,
           inputTokens: 1000,
           outputTokens: 500,
+          cacheReadTokens: 100,
           cost: 0.05,
         },
         {
@@ -490,6 +491,7 @@ describe("StatisticsModel", () => {
           requests: 5,
           inputTokens: 500,
           outputTokens: 250,
+          cacheReadTokens: 8448,
           cost: 0.025,
         },
       ];
@@ -504,6 +506,11 @@ describe("StatisticsModel", () => {
       expect(result[0].inputTokens).toBe(1500);
       expect(result[0].outputTokens).toBe(750);
       expect(result[0].cost).toBeCloseTo(0.075);
+      // cacheReadTokens must sum across merged rows, not keep the first row's
+      // value — regression guard for cache reads vanishing at fine timeframes.
+      expect((result[0] as { cacheReadTokens: number }).cacheReadTokens).toBe(
+        8548,
+      );
     });
 
     test("should preserve separate entries for different teams in same time bucket", () => {

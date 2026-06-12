@@ -17,6 +17,7 @@
 #   dev-stack.sh up           [--detach] [--namespace NAME]
 #   dev-stack.sh down
 #   dev-stack.sh hydrate
+#   dev-stack.sh status
 #
 # `up`:   without --detach, execs `tilt up` in the foreground (Ctrl+C stops
 #         it). With --detach, runs Tilt in the background via nohup, writes
@@ -33,6 +34,12 @@
 #         `up --detach` finishes. Idempotent via ON CONFLICT DO NOTHING —
 #         re-runs top up new rows main has gained without deleting
 #         anything you added by hand.
+#
+# `status`:
+#         lists every git worktree and whether its frontend is responding,
+#         with the URL. Read-only — starts/stops nothing. The main worktree
+#         shows on :3000; parallel worktrees show their persisted
+#         ARCHESTRA_FRONTEND_PORT. Run from any worktree's platform/ dir.
 #
 # `--namespace` overrides the auto-derived K8s namespace (default:
 # `archestra-dev-<sanitized-branch-name>`).
@@ -113,14 +120,26 @@ EOF
     namespace="archestra-dev-${sanitized}"
   fi
 
+  # Reuse this worktree's previously-assigned ports when they're still usable,
+  # so restarts keep the same URLs (stable bookmarks / SSH tunnels). Only reuse
+  # once this .env has already been through a parallel `up`, detected by the
+  # ARCHESTRA_TILT_PORT marker — a var only this script writes, so it's absent
+  # in the .env just auto-copied from the main worktree. Without that gate a
+  # first run would reuse the inherited main-stack defaults (e.g. backend :9000)
+  # and collide with the main stack. The backend port has no dedicated var — it
+  # lives inside ARCHESTRA_INTERNAL_API_BASE_URL — so recover it from the URL's
+  # trailing :port.
+  local prior_parallel=false
+  [ -n "$(read_env_var ARCHESTRA_TILT_PORT "$env_file")" ] && prior_parallel=true
+
   local frontend_port backend_port metrics_port pg_port pg_metrics_port int_tests_port tilt_port
-  frontend_port=$(pick_port)
-  backend_port=$(pick_port)
-  metrics_port=$(pick_port)
-  pg_port=$(pick_port)
-  pg_metrics_port=$(pick_port)
-  int_tests_port=$(pick_port)
-  tilt_port=$(pick_port)
+  frontend_port=$(resolve_port "$(persisted_port ARCHESTRA_FRONTEND_PORT "$env_file" "$prior_parallel")")
+  backend_port=$(resolve_port "$(persisted_port ARCHESTRA_INTERNAL_API_BASE_URL "$env_file" "$prior_parallel" | sed -E 's#.*:([0-9]+).*#\1#')")
+  metrics_port=$(resolve_port "$(persisted_port ARCHESTRA_METRICS_PORT "$env_file" "$prior_parallel")")
+  pg_port=$(resolve_port "$(persisted_port ARCHESTRA_POSTGRES_HOST_PORT "$env_file" "$prior_parallel")")
+  pg_metrics_port=$(resolve_port "$(persisted_port ARCHESTRA_POSTGRES_METRICS_HOST_PORT "$env_file" "$prior_parallel")")
+  int_tests_port=$(resolve_port "$(persisted_port ARCHESTRA_FRONTEND_INT_TESTS_PORT "$env_file" "$prior_parallel")")
+  tilt_port=$(resolve_port "$(persisted_port ARCHESTRA_TILT_PORT "$env_file" "$prior_parallel")")
 
   echo "→ Rewriting $env_file with parallel-instance overrides" >&2
   # ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE is overridden too so MCP server pods
@@ -145,6 +164,7 @@ EOF
   ARCHESTRA_POSTGRES_METRICS_HOST_PORT="$pg_metrics_port" \
   ARCHESTRA_FRONTEND_PORT="$frontend_port" \
   ARCHESTRA_FRONTEND_INT_TESTS_PORT="$int_tests_port" \
+  ARCHESTRA_TILT_PORT="$tilt_port" \
   python3 - "$env_file" <<'PYEOF'
 import os, re, sys
 keys = [
@@ -159,6 +179,7 @@ keys = [
   "ARCHESTRA_POSTGRES_METRICS_HOST_PORT",
   "ARCHESTRA_FRONTEND_PORT",
   "ARCHESTRA_FRONTEND_INT_TESTS_PORT",
+  "ARCHESTRA_TILT_PORT",
 ]
 overrides = {k: os.environ[k] for k in keys}
 path = sys.argv[1]
@@ -237,6 +258,7 @@ cmd_down() {
   done
 
   require_platform_cwd
+  local platform_dir; platform_dir="$(pwd)"
   local worktree_dir; worktree_dir="$(cd .. && pwd)"
   local pid_file="$worktree_dir/.dev-stack.pid"
 
@@ -257,6 +279,34 @@ cmd_down() {
 
   echo "→ Running tilt down" >&2
   tilt down || echo "⚠ tilt down reported errors" >&2
+
+  # The local dev-server processes (next-server, backend) can briefly outlive
+  # `tilt down` and keep their host ports bound. Wait (bounded) for this stack's
+  # persisted ports to be released so an immediate `up` reuses them instead of
+  # seeing them taken and re-randomizing. Times out gracefully — a port still
+  # held by something else just gets reallocated on the next `up`.
+  local env_file="$platform_dir/.env"
+  local stack_ports
+  stack_ports=$( {
+    read_env_var ARCHESTRA_FRONTEND_PORT "$env_file"
+    read_env_var ARCHESTRA_INTERNAL_API_BASE_URL "$env_file" | sed -E 's#.*:([0-9]+).*#\1#'
+    read_env_var ARCHESTRA_METRICS_PORT "$env_file"
+    read_env_var ARCHESTRA_POSTGRES_HOST_PORT "$env_file"
+    read_env_var ARCHESTRA_POSTGRES_METRICS_HOST_PORT "$env_file"
+    read_env_var ARCHESTRA_FRONTEND_INT_TESTS_PORT "$env_file"
+  } | grep -E '^[0-9]+$' || true)
+  if [ -n "$stack_ports" ]; then
+    local j p all_free
+    for j in $(seq 1 15); do
+      all_free=true
+      for p in $stack_ports; do
+        port_is_free "$p" || { all_free=false; break; }
+      done
+      [ "$all_free" = true ] && break
+      sleep 1
+    done
+  fi
+
   echo "✅ Parallel dev stack stopped." >&2
 }
 
@@ -316,8 +366,126 @@ cmd_hydrate() {
     pnpm --filter @backend db:hydrate-from
 }
 
+cmd_status() {
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      -h|--help) usage 0 ;;
+      *)         echo "unknown arg: $1" >&2; usage 1 ;;
+    esac
+  done
+
+  local bold='' dim='' green='' reset=''
+  if [ -t 1 ]; then
+    bold=$'\033[1m'; dim=$'\033[2m'; green=$'\033[32m'; reset=$'\033[0m'
+  fi
+
+  # Parse `git worktree list --porcelain` into parallel path/branch arrays. Each
+  # worktree is a "worktree <path>" line followed by branch/detached lines and a
+  # blank separator; the main worktree is listed first.
+  local -a paths=() branches=()
+  local path="" branch="" line
+  while IFS= read -r line; do
+    case "$line" in
+      "worktree "*)
+        [ -n "$path" ] && { paths+=("$path"); branches+=("${branch:-(detached)}"); }
+        path="${line#worktree }"; branch="" ;;
+      "branch refs/heads/"*) branch="${line#branch refs/heads/}" ;;
+    esac
+  done < <(git worktree list --porcelain 2>/dev/null)
+  [ -n "$path" ] && { paths+=("$path"); branches+=("${branch:-(detached)}"); }
+
+  if [ "${#paths[@]}" -eq 0 ]; then
+    echo "No git worktrees found (run from inside the repo)." >&2
+    exit 1
+  fi
+
+  # Resolve each worktree's frontend port and liveness. Only the main worktree
+  # (index 0, plain `tilt up`) defaults to :3000; a non-main worktree without a
+  # persisted ARCHESTRA_FRONTEND_PORT has no parallel stack, so don't probe :3000
+  # for it and falsely report the main frontend as its own.
+  local -a names=() urls=() up=()
+  local i port name_w=0 branch_w=0
+  for i in "${!paths[@]}"; do
+    names[i]="$(basename "${paths[i]}")"
+    port="$(read_env_var ARCHESTRA_FRONTEND_PORT "${paths[i]}/platform/.env" || true)"
+    if ! [[ "$port" =~ ^[0-9]+$ ]]; then
+      [ "$i" -eq 0 ] && port=3000 || port=""
+    fi
+    if [ -n "$port" ] && curl -sf -o /dev/null --max-time 2 "http://localhost:${port}/" 2>/dev/null; then
+      up[i]=1
+    else
+      up[i]=0
+    fi
+    urls[i]="${port:+http://localhost:${port}}"
+    urls[i]="${urls[i]:-(no parallel stack)}"
+    [ "${#names[i]}" -gt "$name_w" ] && name_w="${#names[i]}"
+    [ "${#branches[i]}" -gt "$branch_w" ] && branch_w="${#branches[i]}"
+  done
+
+  printf '%s\n' "${bold}Archestra frontends${reset}"
+  local glyph tag color name_pad branch_pad
+  for i in "${!paths[@]}"; do
+    if [ "${up[i]}" -eq 1 ]; then glyph="${green}●${reset}"; color=""; else glyph="${dim}○${reset}"; color="$dim"; fi
+    [ "$i" -eq 0 ] && tag="${bold}[main]${reset}" || tag="      "
+    printf -v name_pad   '%-*s' "$name_w"   "${names[i]}"
+    printf -v branch_pad '%-*s' "$branch_w" "${branches[i]}"
+    printf ' %s  %s%s%s  %s  %s%s%s  %s%s%s\n' \
+      "$glyph" "$color" "$name_pad" "$reset" "$tag" \
+      "$color" "$branch_pad" "$reset" "$color" "${urls[i]}" "$reset"
+  done
+}
+
 pick_port() {
   python3 -c 'import socket; s=socket.socket(); s.bind(("",0)); print(s.getsockname()[1]); s.close()'
+}
+
+# Read a single VAR=value from an env file (last assignment wins, value verbatim).
+# Prints nothing if the file or key is absent.
+read_env_var() {
+  local key="$1" file="$2"
+  [ -f "$file" ] || return 0
+  grep -E "^[[:space:]]*${key}[[:space:]]*=" "$file" | tail -n1 | sed -E "s/^[[:space:]]*${key}[[:space:]]*=//"
+}
+
+# Persisted port candidate for reuse: value of key $1 in env file $2, but only
+# when $3 == "true" (this .env was already parallelized). Empty otherwise, so
+# the caller allocates a fresh port instead of reusing an inherited main default.
+persisted_port() {
+  [ "$3" = true ] && read_env_var "$1" "$2"
+}
+
+port_is_free() {
+  python3 - "$1" <<'PYEOF'
+import socket, sys
+s = socket.socket()
+# SO_REUSEADDR mirrors how the dev servers themselves bind, so a port lingering
+# in TIME_WAIT from this stack's own just-stopped process reads as free (the
+# server can rebind it) rather than as taken. An actively-LISTENING port still
+# fails to bind, so genuine conflicts are still detected.
+s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+try:
+    s.bind(("", int(sys.argv[1])))
+    ok = True
+except OSError:
+    ok = False
+finally:
+    s.close()
+sys.exit(0 if ok else 1)
+PYEOF
+}
+
+# Keep parallel-stack ports stable across restarts: reuse the port already
+# persisted in .env when it's a usable parallel port — numeric, not the default
+# 3000 (which belongs to a plain `tilt up`), and currently free. Otherwise fall
+# back to a fresh OS-assigned free port (which the .env rewrite then persists).
+# $1 = candidate value previously read from .env (may be empty/non-numeric).
+resolve_port() {
+  local candidate="$1"
+  if [[ "$candidate" =~ ^[0-9]+$ ]] && [ "$candidate" != "3000" ] && port_is_free "$candidate"; then
+    echo "$candidate"
+  else
+    pick_port
+  fi
 }
 
 if [ $# -lt 1 ]; then usage 1; fi
@@ -326,6 +494,7 @@ case "$subcommand" in
   up)             cmd_up "$@" ;;
   down)           cmd_down "$@" ;;
   hydrate)        cmd_hydrate "$@" ;;
+  status)         cmd_status "$@" ;;
   -h|--help) usage 0 ;;
   *)         echo "unknown subcommand: $subcommand" >&2; usage 1 ;;
 esac

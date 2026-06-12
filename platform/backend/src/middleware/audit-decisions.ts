@@ -328,6 +328,10 @@ export const AUDIT_DECISIONS = {
   // =========================================================================
   // Children of audited parents
   // =========================================================================
+  hookFilesTable: {
+    audited: false,
+    reason: "agent-scoped hook script config; child of agent (audited)",
+  },
   skillTeamsTable: {
     audited: false,
     reason: "join: skill × team; parent (skill) audited",
@@ -335,6 +339,16 @@ export const AUDIT_DECISIONS = {
   skillFilesTable: {
     audited: false,
     reason: "child of skill; parent (skill) audited",
+  },
+  connectionSetupsTable: {
+    audited: false,
+    reason:
+      "ephemeral 15-minute render tickets for /connection setup scripts; durable artifacts (virtual key, skill share link) carry the audit signal",
+  },
+  connectionSetupSkillsTable: {
+    audited: false,
+    reason:
+      "join: connection setup × skill; parent (connectionSetups) ephemeral",
   },
   skillShareLinksTable: {
     audited: false,

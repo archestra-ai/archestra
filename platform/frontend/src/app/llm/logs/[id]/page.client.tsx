@@ -143,6 +143,15 @@ function LogDetail({
                 {(dynamicInteraction.inputTokens ?? 0).toLocaleString()} in /{" "}
                 {(dynamicInteraction.outputTokens ?? 0).toLocaleString()} out
               </div>
+              {((dynamicInteraction.cacheReadTokens ?? 0) > 0 ||
+                (dynamicInteraction.cacheWriteTokens ?? 0) > 0) && (
+                <div className="font-mono text-muted-foreground">
+                  {(dynamicInteraction.cacheReadTokens ?? 0).toLocaleString()}{" "}
+                  cache read /{" "}
+                  {(dynamicInteraction.cacheWriteTokens ?? 0).toLocaleString()}{" "}
+                  cache write
+                </div>
+              )}
             </MetadataItem>
             <MetadataItem label="Cost">
               <div className="font-mono">

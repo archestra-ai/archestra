@@ -442,6 +442,32 @@ export function formatZodError(error: ZodError): string {
   return error.issues.map(formatZodIssue).join("; ");
 }
 
+/**
+ * Like {@link formatZodError}, but uses the validating schema to enrich
+ * discriminated-union failures. A missing/invalid discriminator otherwise
+ * renders as the opaque "type: Invalid input", which gives a model no way to
+ * recover (it cannot tell what values the discriminator accepts). With the
+ * schema in hand we enumerate the allowed values, e.g.
+ * `source.type: set "type" to one of: "base64", "text"`. Best-effort: every
+ * introspection step is guarded, so any shape we cannot read falls back to the
+ * plain message rather than throwing.
+ */
+export function formatZodErrorWithSchema(
+  error: ZodError,
+  schema: ZodType,
+): string {
+  return error.issues
+    .map((issue) => {
+      const enumerated = enumerateDiscriminatorValues(issue, schema);
+      if (!enumerated) {
+        return formatZodIssue(issue);
+      }
+      const path = formatIssuePath(issue.path);
+      return path ? `${path}: ${enumerated}` : enumerated;
+    })
+    .join("; ");
+}
+
 function isUniqueConstraintError(error: unknown): boolean {
   if (!(error instanceof Error)) return false;
   // PostgreSQL unique_violation code
@@ -451,6 +477,109 @@ function isUniqueConstraintError(error: unknown): boolean {
 function formatZodIssue(issue: z.core.$ZodIssue): string {
   const path = formatIssuePath(issue.path);
   return path ? `${path}: ${issue.message}` : issue.message;
+}
+
+// minimal view over the Zod v4 schema internals (`.def`) we read to enumerate a
+// discriminated union's allowed discriminator values. accessed defensively — an
+// absent field just ends the walk.
+interface ZodDefView {
+  innerType?: ZodType;
+  element?: ZodType;
+  shape?: Record<string, ZodType>;
+  discriminator?: string;
+  options?: ZodType[];
+  values?: unknown[];
+}
+
+function defOf(schema: ZodType): ZodDefView | undefined {
+  const def = (schema as { def?: unknown }).def;
+  return def && typeof def === "object" ? (def as ZodDefView) : undefined;
+}
+
+/** Peel optional/nullable/default/readonly wrappers to the inner schema. */
+function unwrapSchema(schema: ZodType): ZodType {
+  let current = schema;
+  // bounded to avoid spinning on an unexpected self-referential def.
+  for (let depth = 0; depth < 16; depth++) {
+    const inner = defOf(current)?.innerType;
+    if (!inner) break;
+    current = inner;
+  }
+  return current;
+}
+
+// Walk a schema down an issue path (object keys, array indices) or bail. Only
+// object/array containers are traversed; a path that descends through a union's
+// variants (a discriminated union nested inside another union's option) returns
+// null and the caller falls back to the plain message. No such schema exists in
+// the tool surface today, and the fallback is graceful (never throws).
+function navigateSchema(root: ZodType, path: PropertyKey[]): ZodType | null {
+  let current = unwrapSchema(root);
+  for (const segment of path) {
+    const def = defOf(current);
+    if (!def) return null;
+    if (typeof segment === "string" && def.shape?.[segment]) {
+      current = unwrapSchema(def.shape[segment]);
+    } else if (typeof segment === "number" && def.element) {
+      current = unwrapSchema(def.element);
+    } else {
+      return null;
+    }
+  }
+  return current;
+}
+
+/**
+ * For a discriminated-union `invalid_union` issue, resolve the allowed
+ * discriminator values from the schema and render a recovery hint, or null when
+ * the issue is unrelated or the schema cannot be introspected.
+ */
+function enumerateDiscriminatorValues(
+  issue: z.core.$ZodIssue,
+  root: ZodType,
+): string | null {
+  if (issue.code !== "invalid_union") return null;
+  const discriminator = (issue as { discriminator?: unknown }).discriminator;
+  if (typeof discriminator !== "string") return null;
+
+  const path = issue.path ?? [];
+  // the issue points at the discriminator field inside the union; the union
+  // itself is one level up.
+  if (path[path.length - 1] !== discriminator) return null;
+  const union = navigateSchema(root, path.slice(0, -1));
+  const def = union ? defOf(union) : undefined;
+  if (
+    !def ||
+    def.discriminator !== discriminator ||
+    !Array.isArray(def.options)
+  )
+    return null;
+
+  const values: string[] = [];
+  for (const option of def.options) {
+    const field = defOf(unwrapSchema(option))?.shape?.[discriminator];
+    const literals = field ? defOf(unwrapSchema(field))?.values : undefined;
+    // each option must declare its discriminator as a renderable literal; a
+    // z.enum (which uses `entries`, not `values`) or anything exotic makes the
+    // menu incomplete, so bail to the plain message rather than mislead.
+    if (!Array.isArray(literals) || literals.length === 0) return null;
+    for (const value of literals) {
+      if (!isRenderableLiteral(value)) return null;
+      values.push(typeof value === "string" ? `"${value}"` : String(value));
+    }
+  }
+  if (values.length === 0) return null;
+  return `set "${discriminator}" to one of: ${values.join(", ")}`;
+}
+
+function isRenderableLiteral(
+  value: unknown,
+): value is string | number | boolean {
+  return (
+    typeof value === "string" ||
+    typeof value === "number" ||
+    typeof value === "boolean"
+  );
 }
 
 function formatIssuePath(path: PropertyKey[] | undefined): string {

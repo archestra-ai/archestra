@@ -118,7 +118,7 @@ export function EditCatalogContent({
       onDirtyChange={onDirtyChange}
       submitRef={submitRef}
       affectedServerCount={affectedServerCount}
-      footer={({ isDirty, onReset }) => {
+      footer={({ isDirty, onReset, hasBlockingErrors }) => {
         if (keepOpenOnSave && !isDirty) return null;
         const Footer = keepOpenOnSave ? DialogStickyFooter : DialogFooter;
         return (
@@ -134,7 +134,9 @@ export function EditCatalogContent({
             )}
             <Button
               type="submit"
-              disabled={updateMutation.isPending || !isDirty}
+              disabled={
+                updateMutation.isPending || !isDirty || hasBlockingErrors
+              }
             >
               {updateMutation.isPending ? "Saving..." : "Save Changes"}
             </Button>

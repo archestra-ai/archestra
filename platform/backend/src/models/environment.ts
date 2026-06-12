@@ -12,6 +12,7 @@ interface EnvironmentWithAssignedCount {
   namespace: string | null;
   networkPolicy: NetworkPolicy | null;
   restricted: boolean;
+  validationRegex: string | null;
   sortOrder: number;
   createdAt: Date;
   updatedAt: Date;
@@ -31,6 +32,7 @@ class EnvironmentModel {
         namespace: schema.environmentsTable.namespace,
         networkPolicy: schema.environmentsTable.networkPolicy,
         restricted: schema.environmentsTable.restricted,
+        validationRegex: schema.environmentsTable.validationRegex,
         sortOrder: schema.environmentsTable.sortOrder,
         createdAt: schema.environmentsTable.createdAt,
         updatedAt: schema.environmentsTable.updatedAt,
@@ -94,6 +96,7 @@ class EnvironmentModel {
     namespace?: string | null;
     networkPolicy?: NetworkPolicy | null;
     restricted?: boolean;
+    validationRegex?: string | null;
   }): Promise<typeof schema.environmentsTable.$inferSelect> {
     const {
       organizationId,
@@ -102,6 +105,7 @@ class EnvironmentModel {
       namespace,
       networkPolicy,
       restricted,
+      validationRegex,
     } = params;
     const [row] = await db
       .insert(schema.environmentsTable)
@@ -112,6 +116,7 @@ class EnvironmentModel {
         namespace: namespace ?? null,
         networkPolicy: networkPolicy ?? null,
         restricted: restricted ?? false,
+        validationRegex: validationRegex ?? null,
         sortOrder: await EnvironmentModel.nextSortOrder(organizationId),
       })
       .returning();
@@ -126,6 +131,7 @@ class EnvironmentModel {
     namespace?: string | null;
     networkPolicy?: NetworkPolicy | null;
     restricted?: boolean;
+    validationRegex?: string | null;
   }): Promise<typeof schema.environmentsTable.$inferSelect | null> {
     const {
       id,
@@ -135,6 +141,7 @@ class EnvironmentModel {
       namespace,
       networkPolicy,
       restricted,
+      validationRegex,
     } = params;
     const patch: Record<string, unknown> = {};
     if (name !== undefined) patch.name = name;
@@ -142,6 +149,7 @@ class EnvironmentModel {
     if (namespace !== undefined) patch.namespace = namespace;
     if (networkPolicy !== undefined) patch.networkPolicy = networkPolicy;
     if (restricted !== undefined) patch.restricted = restricted;
+    if (validationRegex !== undefined) patch.validationRegex = validationRegex;
 
     const [row] = await db
       .update(schema.environmentsTable)

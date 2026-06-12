@@ -64,6 +64,7 @@ vi.mock("@/components/default-credentials-warning", () => ({
 }));
 
 const mockRouterPush = vi.fn();
+const mockRouterReplace = vi.fn();
 const mockRetry = vi.fn();
 
 describe("AuthPageWithInvitationCheck", () => {
@@ -71,6 +72,7 @@ describe("AuthPageWithInvitationCheck", () => {
     vi.clearAllMocks();
     vi.mocked(useRouter).mockReturnValue({
       push: mockRouterPush,
+      replace: mockRouterReplace,
     } as unknown as ReturnType<typeof useRouter>);
     vi.mocked(usePublicConfig).mockReturnValue({
       data: {
@@ -195,9 +197,10 @@ describe("AuthPageWithInvitationCheck", () => {
       ).toBeInTheDocument();
     });
 
-    it("should show loading spinner while checking invitation", () => {
+    it("should redirect to the sign-up-with-invitation page when an invitationId is present", () => {
       vi.mocked(useSearchParams).mockReturnValue({
         get: vi.fn((key: string) => (key === "invitationId" ? "inv123" : null)),
+        toString: vi.fn(() => "invitationId=inv123&email=new%40example.com"),
       } as unknown as ReturnType<typeof useSearchParams>);
       vi.mocked(useInvitationCheck).mockReturnValue({
         data: undefined,
@@ -206,41 +209,12 @@ describe("AuthPageWithInvitationCheck", () => {
 
       render(<AuthPageWithInvitationCheck path="sign-up" />);
 
-      // Should not show the invitation required message while loading
-      expect(screen.queryByText("Invitation Required")).not.toBeInTheDocument();
-      // AuthView should not be rendered while loading
-      expect(screen.queryByTestId("auth-view")).not.toBeInTheDocument();
-    });
-
-    it("should redirect existing users from sign-up to sign-in", () => {
-      vi.mocked(useSearchParams).mockReturnValue({
-        get: vi.fn((key: string) => (key === "invitationId" ? "inv123" : null)),
-      } as unknown as ReturnType<typeof useSearchParams>);
-      vi.mocked(useInvitationCheck).mockReturnValue({
-        data: { userExists: true },
-        isLoading: false,
-      } as ReturnType<typeof useInvitationCheck>);
-
-      render(<AuthPageWithInvitationCheck path="sign-up" />);
-
-      expect(mockRouterPush).toHaveBeenCalledWith(
-        "/auth/sign-in?invitationId=inv123",
+      expect(mockRouterReplace).toHaveBeenCalledWith(
+        "/auth/sign-up-with-invitation?invitationId=inv123&email=new%40example.com",
       );
-    });
-
-    it("should render sign-up form for new users with invitation", () => {
-      vi.mocked(useSearchParams).mockReturnValue({
-        get: vi.fn((key: string) => (key === "invitationId" ? "inv123" : null)),
-      } as unknown as ReturnType<typeof useSearchParams>);
-      vi.mocked(useInvitationCheck).mockReturnValue({
-        data: { userExists: false },
-        isLoading: false,
-      } as ReturnType<typeof useInvitationCheck>);
-
-      render(<AuthPageWithInvitationCheck path="sign-up" />);
-
-      expect(screen.getByTestId("auth-view")).toBeInTheDocument();
-      expect(screen.getByTestId("auth-path")).toHaveTextContent("sign-up");
+      // Only a spinner is shown while redirecting
+      expect(screen.queryByText("Invitation Required")).not.toBeInTheDocument();
+      expect(screen.queryByTestId("auth-view")).not.toBeInTheDocument();
     });
   });
 
@@ -258,22 +232,6 @@ describe("AuthPageWithInvitationCheck", () => {
 
       expect(screen.getByTestId("auth-callback")).toHaveTextContent(
         "/auth/sign-in?invitationId=inv123",
-      );
-    });
-
-    it("should pass invitation callback URL for sign-up with invitationId", () => {
-      vi.mocked(useSearchParams).mockReturnValue({
-        get: vi.fn((key: string) => (key === "invitationId" ? "inv123" : null)),
-      } as unknown as ReturnType<typeof useSearchParams>);
-      vi.mocked(useInvitationCheck).mockReturnValue({
-        data: { userExists: false },
-        isLoading: false,
-      } as ReturnType<typeof useInvitationCheck>);
-
-      render(<AuthPageWithInvitationCheck path="sign-up" />);
-
-      expect(screen.getByTestId("auth-callback")).toHaveTextContent(
-        "/auth/sign-up?invitationId=inv123",
       );
     });
 

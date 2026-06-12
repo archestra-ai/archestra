@@ -25,29 +25,26 @@ export function AuthPageWithInvitationCheck({ path }: { path: string }) {
   const invitationId = searchParams.get("invitationId");
   const redirectTo = searchParams.get("redirectTo");
 
-  const { data: invitationData, isLoading } = useInvitationCheck(invitationId);
+  const { data: invitationData } = useInvitationCheck(invitationId);
   const { data: publicConfig, isLoading: isLoadingPublicConfig } =
     usePublicConfig();
   const isBasicAuthDisabled = publicConfig?.disableBasicAuth ?? false;
 
-  // Check if this is a sign-up path (includes "sign-up-with-invitation")
   const isSignUpPath = path.startsWith("sign-up");
 
-  // Redirect existing users from sign-up to sign-in
+  // Sign-up always goes through the invitation flow, which has its own page
+  // (with invitation validation and existing-user handling).
   useEffect(() => {
-    if (
-      isSignUpPath &&
-      invitationId &&
-      invitationData &&
-      invitationData.userExists
-    ) {
-      // User already exists, redirect to sign-in with invitation ID preserved
-      router.push(`/auth/sign-in?invitationId=${invitationId}`);
+    if (isSignUpPath && invitationId) {
+      router.replace(
+        `/auth/sign-up-with-invitation?${searchParams.toString()}`,
+      );
     }
-  }, [isSignUpPath, invitationId, invitationData, router]);
+  }, [isSignUpPath, invitationId, router, searchParams]);
 
-  // Show loading while checking invitation
-  if (isLoading && invitationId && isSignUpPath) {
+  // Show loading while checking the invitation or redirecting to the
+  // sign-up-with-invitation page
+  if (invitationId && isSignUpPath) {
     return (
       <main className="h-full flex items-center justify-center">
         <LoadingSpinner />
@@ -142,7 +139,6 @@ export function AuthPageWithInvitationCheck({ path }: { path: string }) {
             path={path}
             callbackURL={getAuthCallbackURL({
               invitationId,
-              path,
               redirectTo,
               searchParams,
             })}
@@ -164,16 +160,15 @@ const OAUTH_AUTHORIZE_REQUIRED_PARAMS = [
 
 function getAuthCallbackURL(params: {
   invitationId: string | null;
-  path: string;
   redirectTo: string | null;
   searchParams: ReturnType<typeof useSearchParams>;
 }) {
-  const { invitationId, path, redirectTo, searchParams } = params;
+  const { invitationId, redirectTo, searchParams } = params;
 
   if (invitationId) {
-    return `${
-      path === "sign-in" ? "/auth/sign-in" : "/auth/sign-up"
-    }?invitationId=${invitationId}`;
+    // Only sign-in reaches this point; sign-up with an invitation is
+    // redirected to /auth/sign-up-with-invitation before rendering.
+    return `/auth/sign-in?invitationId=${invitationId}`;
   }
 
   const oauthAuthorizeCallbackURL = getOAuthAuthorizeCallbackURL(searchParams);

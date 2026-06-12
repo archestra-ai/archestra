@@ -1300,6 +1300,13 @@ export type AnthropicMessagesRequestInput = {
             } | null;
             cache_control?: unknown;
         } | {
+            type: 'thinking';
+            thinking: string;
+            signature: string;
+        } | {
+            type: 'redacted_thinking';
+            data: string;
+        } | {
             id: string;
             input: unknown;
             name: string;
@@ -1360,8 +1367,14 @@ export type AnthropicMessagesRequestInput = {
                 cache_control?: unknown;
             }>;
             is_error?: boolean;
+        } | {
+            type: 'search_result' | 'server_tool_use' | 'web_search_tool_result' | 'web_fetch_tool_result' | 'code_execution_tool_result' | 'bash_code_execution_tool_result' | 'text_editor_code_execution_tool_result' | 'tool_search_tool_result' | 'container_upload';
+            [key: string]: unknown;
+        } | {
+            type: string;
+            [key: string]: unknown;
         }>;
-        role: 'user' | 'assistant';
+        role: 'user' | 'assistant' | 'system';
     }>;
     max_tokens: number;
     container?: string | null;
@@ -1476,6 +1489,12 @@ export type AnthropicMessagesResponseInput = {
     usage: {
         input_tokens: number;
         output_tokens: number;
+        cache_read_input_tokens?: number | null;
+        cache_creation_input_tokens?: number | null;
+        cache_creation?: {
+            ephemeral_1h_input_tokens?: number | null;
+            ephemeral_5m_input_tokens?: number | null;
+        } | null;
     };
 };
 
@@ -6577,6 +6596,13 @@ export type AnthropicMessagesRequest = {
             } | null;
             cache_control?: unknown;
         } | {
+            type: 'thinking';
+            thinking: string;
+            signature: string;
+        } | {
+            type: 'redacted_thinking';
+            data: string;
+        } | {
             id: string;
             input: unknown;
             name: string;
@@ -6637,8 +6663,14 @@ export type AnthropicMessagesRequest = {
                 cache_control?: unknown;
             }>;
             is_error?: boolean;
+        } | {
+            type: 'search_result' | 'server_tool_use' | 'web_search_tool_result' | 'web_fetch_tool_result' | 'code_execution_tool_result' | 'bash_code_execution_tool_result' | 'text_editor_code_execution_tool_result' | 'tool_search_tool_result' | 'container_upload';
+            [key: string]: unknown;
+        } | {
+            type: string;
+            [key: string]: unknown;
         }>;
-        role: 'user' | 'assistant';
+        role: 'user' | 'assistant' | 'system';
     }>;
     max_tokens: number;
     container?: string | null;
@@ -6753,6 +6785,12 @@ export type AnthropicMessagesResponse = {
     usage: {
         input_tokens: number;
         output_tokens: number;
+        cache_read_input_tokens?: number | null;
+        cache_creation_input_tokens?: number | null;
+        cache_creation?: {
+            ephemeral_1h_input_tokens?: number | null;
+            ephemeral_5m_input_tokens?: number | null;
+        } | null;
     };
 };
 
@@ -10852,6 +10890,7 @@ export type GetAgentsResponses = {
             slug: string | null;
             isDefault: boolean;
             isPersonalGateway: boolean;
+            isPersonalProxy: boolean;
             considerContextUntrusted: boolean;
             agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
             systemPrompt: string | null;
@@ -10954,6 +10993,7 @@ export type CreateAgentData = {
         scope: 'personal' | 'team' | 'org';
         name: string;
         isDefault?: boolean;
+        isPersonalProxy?: boolean;
         considerContextUntrusted?: boolean;
         agentType?: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
         systemPrompt?: string | null;
@@ -11079,6 +11119,7 @@ export type CreateAgentResponses = {
         slug: string | null;
         isDefault: boolean;
         isPersonalGateway: boolean;
+        isPersonalProxy: boolean;
         considerContextUntrusted: boolean;
         agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
         systemPrompt: string | null;
@@ -11276,6 +11317,7 @@ export type GetAllAgentsResponses = {
         slug: string | null;
         isDefault: boolean;
         isPersonalGateway: boolean;
+        isPersonalProxy: boolean;
         considerContextUntrusted: boolean;
         agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
         systemPrompt: string | null;
@@ -11448,6 +11490,7 @@ export type GetDefaultMcpGatewayResponses = {
         slug: string | null;
         isDefault: boolean;
         isPersonalGateway: boolean;
+        isPersonalProxy: boolean;
         considerContextUntrusted: boolean;
         agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
         systemPrompt: string | null;
@@ -11620,6 +11663,7 @@ export type GetDefaultLlmProxyResponses = {
         slug: string | null;
         isDefault: boolean;
         isPersonalGateway: boolean;
+        isPersonalProxy: boolean;
         considerContextUntrusted: boolean;
         agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
         systemPrompt: string | null;
@@ -11870,6 +11914,7 @@ export type ImportAgentResponses = {
             slug: string | null;
             isDefault: boolean;
             isPersonalGateway: boolean;
+            isPersonalProxy: boolean;
             considerContextUntrusted: boolean;
             agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
             systemPrompt: string | null;
@@ -12135,6 +12180,7 @@ export type GetAgentResponses = {
         slug: string | null;
         isDefault: boolean;
         isPersonalGateway: boolean;
+        isPersonalProxy: boolean;
         considerContextUntrusted: boolean;
         agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
         systemPrompt: string | null;
@@ -12228,6 +12274,7 @@ export type UpdateAgentData = {
         scope?: 'personal' | 'team' | 'org';
         name?: string;
         isDefault?: boolean;
+        isPersonalProxy?: boolean;
         considerContextUntrusted?: boolean;
         agentType?: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
         systemPrompt?: string | null;
@@ -12355,6 +12402,7 @@ export type UpdateAgentResponses = {
         slug: string | null;
         isDefault: boolean;
         isPersonalGateway: boolean;
+        isPersonalProxy: boolean;
         considerContextUntrusted: boolean;
         agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
         systemPrompt: string | null;
@@ -12529,6 +12577,7 @@ export type CloneAgentResponses = {
         slug: string | null;
         isDefault: boolean;
         isPersonalGateway: boolean;
+        isPersonalProxy: boolean;
         considerContextUntrusted: boolean;
         agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
         systemPrompt: string | null;
@@ -12863,6 +12912,7 @@ export type RestoreAgentResponses = {
         slug: string | null;
         isDefault: boolean;
         isPersonalGateway: boolean;
+        isPersonalProxy: boolean;
         considerContextUntrusted: boolean;
         agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
         systemPrompt: string | null;
@@ -13690,6 +13740,93 @@ export type AssignToolToAgentResponses = {
 };
 
 export type AssignToolToAgentResponse = AssignToolToAgentResponses[keyof AssignToolToAgentResponses];
+
+export type GrantToolToAgentData = {
+    body: {
+        toolName: string;
+    };
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/api/agents/{agentId}/tools/grant';
+};
+
+export type GrantToolToAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GrantToolToAgentError = GrantToolToAgentErrors[keyof GrantToolToAgentErrors];
+
+export type GrantToolToAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type GrantToolToAgentResponse = GrantToolToAgentResponses[keyof GrantToolToAgentResponses];
 
 export type BulkAssignToolsData = {
     body: {
@@ -14651,6 +14788,196 @@ export type AnthropicMessagesWithAgentResponses = {
 };
 
 export type AnthropicMessagesWithAgentResponse = AnthropicMessagesWithAgentResponses[keyof AnthropicMessagesWithAgentResponses];
+
+export type AnthropicListModelsWithDefaultAgentData = {
+    body?: never;
+    headers?: {
+        'x-api-key'?: string;
+        authorization?: string;
+        'anthropic-version'?: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/v1/anthropic/v1/models';
+};
+
+export type AnthropicListModelsWithDefaultAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type AnthropicListModelsWithDefaultAgentError = AnthropicListModelsWithDefaultAgentErrors[keyof AnthropicListModelsWithDefaultAgentErrors];
+
+export type AnthropicListModelsWithDefaultAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        data: Array<{
+            type: 'model';
+            id: string;
+            display_name: string;
+            created_at?: string;
+        }>;
+        has_more: boolean;
+    };
+};
+
+export type AnthropicListModelsWithDefaultAgentResponse = AnthropicListModelsWithDefaultAgentResponses[keyof AnthropicListModelsWithDefaultAgentResponses];
+
+export type AnthropicListModelsWithAgentData = {
+    body?: never;
+    headers?: {
+        'x-api-key'?: string;
+        authorization?: string;
+        'anthropic-version'?: string;
+    };
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/v1/anthropic/{agentId}/v1/models';
+};
+
+export type AnthropicListModelsWithAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type AnthropicListModelsWithAgentError = AnthropicListModelsWithAgentErrors[keyof AnthropicListModelsWithAgentErrors];
+
+export type AnthropicListModelsWithAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        data: Array<{
+            type: 'model';
+            id: string;
+            display_name: string;
+            created_at?: string;
+        }>;
+        has_more: boolean;
+    };
+};
+
+export type AnthropicListModelsWithAgentResponse = AnthropicListModelsWithAgentResponses[keyof AnthropicListModelsWithAgentResponses];
 
 export type GetApiKeysData = {
     body?: never;
@@ -17834,6 +18161,10 @@ export type BedrockConverseWithDefaultAgentResponses = {
             totalTokens?: number;
             cacheReadInputTokens?: number;
             cacheWriteInputTokens?: number;
+            cacheDetails?: Array<{
+                ttl?: string;
+                inputTokens?: number;
+            }>;
         };
         metrics?: {
             latencyMs?: number;
@@ -18156,6 +18487,10 @@ export type BedrockConverseWithAgentResponses = {
             totalTokens?: number;
             cacheReadInputTokens?: number;
             cacheWriteInputTokens?: number;
+            cacheDetails?: Array<{
+                ttl?: string;
+                inputTokens?: number;
+            }>;
         };
         metrics?: {
             latencyMs?: number;
@@ -18871,6 +19206,10 @@ export type BedrockConverseWithAgentAndModelResponses = {
             totalTokens?: number;
             cacheReadInputTokens?: number;
             cacheWriteInputTokens?: number;
+            cacheDetails?: Array<{
+                ttl?: string;
+                inputTokens?: number;
+            }>;
         };
         metrics?: {
             latencyMs?: number;
@@ -19362,6 +19701,97 @@ export type StreamChatErrors = {
 
 export type StreamChatError = StreamChatErrors[keyof StreamChatErrors];
 
+export type ResolveChatMcpElicitationData = {
+    body: {
+        conversationId: string;
+        action: 'accept' | 'decline' | 'cancel';
+        content?: {
+            [key: string]: string | number | boolean | Array<string>;
+        };
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/chat/elicitation/{id}';
+};
+
+export type ResolveChatMcpElicitationErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ResolveChatMcpElicitationError = ResolveChatMcpElicitationErrors[keyof ResolveChatMcpElicitationErrors];
+
+export type ResolveChatMcpElicitationResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type ResolveChatMcpElicitationResponse = ResolveChatMcpElicitationResponses[keyof ResolveChatMcpElicitationResponses];
+
 export type StopChatStreamData = {
     body?: never;
     path: {
@@ -19623,6 +20053,7 @@ export type GetChatConversationsResponses = {
         selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
         modelId: string | null;
         hasCustomToolSelection: boolean;
+        hooksDebugEnabled: boolean;
         todoList: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown> | null;
@@ -19775,6 +20206,7 @@ export type CreateChatConversationResponses = {
         selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
         modelId: string | null;
         hasCustomToolSelection: boolean;
+        hooksDebugEnabled: boolean;
         todoList: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown> | null;
@@ -20009,6 +20441,7 @@ export type GetChatConversationResponses = {
         selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
         modelId: string | null;
         hasCustomToolSelection: boolean;
+        hooksDebugEnabled: boolean;
         todoList: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown> | null;
@@ -20165,6 +20598,7 @@ export type UpdateChatConversationResponses = {
         selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
         modelId: string | null;
         hasCustomToolSelection: boolean;
+        hooksDebugEnabled: boolean;
         todoList: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown> | null;
@@ -20224,6 +20658,191 @@ export type UpdateChatConversationResponses = {
 };
 
 export type UpdateChatConversationResponse = UpdateChatConversationResponses[keyof UpdateChatConversationResponses];
+
+export type SetConversationHooksDebugData = {
+    body: {
+        enabled: boolean;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/chat/conversations/{id}/hooks-debug';
+};
+
+export type SetConversationHooksDebugErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type SetConversationHooksDebugError = SetConversationHooksDebugErrors[keyof SetConversationHooksDebugErrors];
+
+export type SetConversationHooksDebugResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        hooksDebugEnabled: boolean;
+    };
+};
+
+export type SetConversationHooksDebugResponse = SetConversationHooksDebugResponses[keyof SetConversationHooksDebugResponses];
+
+export type GetChatConversationFilesData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/chat/conversations/{id}/files';
+};
+
+export type GetChatConversationFilesErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetChatConversationFilesError = GetChatConversationFilesErrors[keyof GetChatConversationFilesErrors];
+
+export type GetChatConversationFilesResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        generated: Array<{
+            id: string;
+            name: string;
+            mimeType: string;
+            contentUrl: string;
+            createdAt: string;
+        }>;
+        attachments: Array<{
+            id: string;
+            name: string;
+            mimeType: string;
+            contentUrl: string;
+            createdAt: string;
+        }>;
+    };
+};
+
+export type GetChatConversationFilesResponse = GetChatConversationFilesResponses[keyof GetChatConversationFilesResponses];
 
 export type GetChatAttachmentContentData = {
     body?: never;
@@ -20481,6 +21100,7 @@ export type ForkChatConversationResponses = {
         selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
         modelId: string | null;
         hasCustomToolSelection: boolean;
+        hooksDebugEnabled: boolean;
         todoList: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown> | null;
@@ -20734,6 +21354,7 @@ export type CompactChatConversationResponses = {
             selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
             modelId: string | null;
             hasCustomToolSelection: boolean;
+            hooksDebugEnabled: boolean;
             todoList: string | number | boolean | null | {
                 [key: string]: unknown;
             } | Array<unknown> | null;
@@ -21157,6 +21778,7 @@ export type GetSharedConversationResponses = {
         selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
         modelId: string | null;
         hasCustomToolSelection: boolean;
+        hooksDebugEnabled: boolean;
         todoList: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown> | null;
@@ -21309,6 +21931,7 @@ export type ForkSharedConversationResponses = {
         selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
         modelId: string | null;
         hasCustomToolSelection: boolean;
+        hooksDebugEnabled: boolean;
         todoList: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown> | null;
@@ -21463,6 +22086,7 @@ export type GenerateChatConversationTitleResponses = {
         selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
         modelId: string | null;
         hasCustomToolSelection: boolean;
+        hooksDebugEnabled: boolean;
         todoList: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown> | null;
@@ -21616,6 +22240,7 @@ export type UpdateChatMessageResponses = {
         selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
         modelId: string | null;
         hasCustomToolSelection: boolean;
+        hooksDebugEnabled: boolean;
         todoList: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown> | null;
@@ -22805,6 +23430,260 @@ export type UpdateChatOpsConfigInQuickstartResponses = {
 
 export type UpdateChatOpsConfigInQuickstartResponse = UpdateChatOpsConfigInQuickstartResponses[keyof UpdateChatOpsConfigInQuickstartResponses];
 
+export type DisconnectNgrokData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/chatops/config/ngrok';
+};
+
+export type DisconnectNgrokErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type DisconnectNgrokError = DisconnectNgrokErrors[keyof DisconnectNgrokErrors];
+
+export type DisconnectNgrokResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type DisconnectNgrokResponse = DisconnectNgrokResponses[keyof DisconnectNgrokResponses];
+
+export type GetNgrokConfigData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/chatops/config/ngrok';
+};
+
+export type GetNgrokConfigErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetNgrokConfigError = GetNgrokConfigErrors[keyof GetNgrokConfigErrors];
+
+export type GetNgrokConfigResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        hasAuthToken: boolean;
+        domain: string;
+    };
+};
+
+export type GetNgrokConfigResponse = GetNgrokConfigResponses[keyof GetNgrokConfigResponses];
+
+export type ConnectNgrokData = {
+    body: {
+        authToken?: string;
+        domain?: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/chatops/config/ngrok';
+};
+
+export type ConnectNgrokErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ConnectNgrokError = ConnectNgrokErrors[keyof ConnectNgrokErrors];
+
+export type ConnectNgrokResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+        domain: string;
+    };
+};
+
+export type ConnectNgrokResponse = ConnectNgrokResponses[keyof ConnectNgrokResponses];
+
 export type UpdateSlackChatOpsConfigData = {
     body: {
         enabled?: boolean;
@@ -23234,6 +24113,7 @@ export type GetConfigResponses = {
             mcpSandboxDomain: string | null;
             maintenanceMode: string | null;
             chatSecretScanEnabled: boolean;
+            agentHooksEnabled: boolean;
         };
         providerBaseUrls: {
             [key: string]: string | null;
@@ -23242,6 +24122,119 @@ export type GetConfigResponses = {
 };
 
 export type GetConfigResponse = GetConfigResponses[keyof GetConfigResponses];
+
+export type CreateConnectionSetupData = {
+    body: {
+        clientId: 'claude-code' | 'codex' | 'copilot-cli' | 'cursor';
+        baseUrl: string;
+        mcpGatewayId?: string;
+        llmProxyId?: string;
+        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
+        proxyAuth?: 'provider-key' | 'virtual-key';
+        skills?: {
+            skillIds: Array<string>;
+            ttlDays: number | null;
+        };
+    };
+    path?: never;
+    query?: never;
+    url: '/api/connection-setups';
+};
+
+export type CreateConnectionSetupErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type CreateConnectionSetupError = CreateConnectionSetupErrors[keyof CreateConnectionSetupErrors];
+
+export type CreateConnectionSetupResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        command: string;
+        expiresAt: string;
+        tokenStart: string;
+    };
+};
+
+export type CreateConnectionSetupResponse = CreateConnectionSetupResponses[keyof CreateConnectionSetupResponses];
+
+export type GetConnectionSetupScriptData = {
+    body?: never;
+    path: {
+        token: string;
+    };
+    query?: never;
+    url: '/api/connection-setups/script/{token}';
+};
+
+export type GetConnectionSetupScriptResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
 
 export type DeepseekChatCompletionsWithDefaultAgentData = {
     body: DeepSeekChatCompletionRequestInput;
@@ -23516,6 +24509,7 @@ export type ListEnvironmentsResponses = {
                 allowedDomains: Array<string>;
                 allowedCidrs: Array<string>;
             } | null;
+            validationRegex: string | null;
             restricted: boolean;
             sortOrder: number;
             createdAt: string;
@@ -23540,6 +24534,7 @@ export type CreateEnvironmentData = {
             allowedCidrs?: Array<string>;
         } | null;
         restricted?: boolean;
+        validationRegex?: string | null;
     };
     path?: never;
     query?: never;
@@ -23627,6 +24622,7 @@ export type CreateEnvironmentResponses = {
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
         } | null;
+        validationRegex: string | null;
         restricted: boolean;
         sortOrder: number;
         createdAt: string;
@@ -23733,6 +24729,7 @@ export type UpdateEnvironmentData = {
             allowedCidrs?: Array<string>;
         } | null;
         restricted?: boolean;
+        validationRegex?: string | null;
     };
     path: {
         id: string;
@@ -23822,6 +24819,7 @@ export type UpdateEnvironmentResponses = {
             allowedDomains: Array<string>;
             allowedCidrs: Array<string>;
         } | null;
+        validationRegex: string | null;
         restricted: boolean;
         sortOrder: number;
         createdAt: string;
@@ -24905,6 +25903,384 @@ export type GetReadyResponses = {
 
 export type GetReadyResponse = GetReadyResponses[keyof GetReadyResponses];
 
+export type GetHooksData = {
+    body?: never;
+    path?: never;
+    query: {
+        agentId: string;
+    };
+    url: '/api/hooks';
+};
+
+export type GetHooksErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetHooksError = GetHooksErrors[keyof GetHooksErrors];
+
+export type GetHooksResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        organizationId: string;
+        agentId: string;
+        event: 'session_start' | 'pre_tool_use' | 'post_tool_use';
+        fileName: string;
+        content: string;
+        requirements: Array<string>;
+        enabled: boolean;
+        createdAt: string;
+        updatedAt: string;
+    }>;
+};
+
+export type GetHooksResponse = GetHooksResponses[keyof GetHooksResponses];
+
+export type CreateHookData = {
+    body: {
+        agentId: string;
+        event: 'session_start' | 'pre_tool_use' | 'post_tool_use';
+        fileName: string;
+        content: string;
+        requirements?: Array<string>;
+        enabled?: boolean;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/hooks';
+};
+
+export type CreateHookErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type CreateHookError = CreateHookErrors[keyof CreateHookErrors];
+
+export type CreateHookResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        agentId: string;
+        event: 'session_start' | 'pre_tool_use' | 'post_tool_use';
+        fileName: string;
+        content: string;
+        requirements: Array<string>;
+        enabled: boolean;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type CreateHookResponse = CreateHookResponses[keyof CreateHookResponses];
+
+export type DeleteHookData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/hooks/{id}';
+};
+
+export type DeleteHookErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type DeleteHookError = DeleteHookErrors[keyof DeleteHookErrors];
+
+export type DeleteHookResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type DeleteHookResponse = DeleteHookResponses[keyof DeleteHookResponses];
+
+export type UpdateHookData = {
+    body: {
+        event?: 'session_start' | 'pre_tool_use' | 'post_tool_use';
+        fileName?: string;
+        content?: string;
+        requirements?: Array<string>;
+        enabled?: boolean;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/hooks/{id}';
+};
+
+export type UpdateHookErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type UpdateHookError = UpdateHookErrors[keyof UpdateHookErrors];
+
+export type UpdateHookResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        agentId: string;
+        event: 'session_start' | 'pre_tool_use' | 'post_tool_use';
+        fileName: string;
+        content: string;
+        requirements: Array<string>;
+        enabled: boolean;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type UpdateHookResponse = UpdateHookResponses[keyof UpdateHookResponses];
+
 export type PostApiWebhooksIncomingEmailData = {
     body: unknown;
     path?: never;
@@ -25528,8 +26904,12 @@ export type GetInteractionsResponses = {
             baselineModel: string | null;
             inputTokens: number | null;
             outputTokens: number | null;
+            cacheReadTokens: number | null;
+            cacheWriteTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
+            cacheCost: string | null;
+            cacheSavings: string | null;
             toonTokensBefore: number | null;
             toonTokensAfter: number | null;
             toonCostSavings: string | null;
@@ -25713,8 +27093,12 @@ export type GetInteractionsResponses = {
             baselineModel: string | null;
             inputTokens: number | null;
             outputTokens: number | null;
+            cacheReadTokens: number | null;
+            cacheWriteTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
+            cacheCost: string | null;
+            cacheSavings: string | null;
             toonTokensBefore: number | null;
             toonTokensAfter: number | null;
             toonCostSavings: string | null;
@@ -25804,8 +27188,12 @@ export type GetInteractionsResponses = {
             baselineModel: string | null;
             inputTokens: number | null;
             outputTokens: number | null;
+            cacheReadTokens: number | null;
+            cacheWriteTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
+            cacheCost: string | null;
+            cacheSavings: string | null;
             toonTokensBefore: number | null;
             toonTokensAfter: number | null;
             toonCostSavings: string | null;
@@ -25871,8 +27259,12 @@ export type GetInteractionsResponses = {
             baselineModel: string | null;
             inputTokens: number | null;
             outputTokens: number | null;
+            cacheReadTokens: number | null;
+            cacheWriteTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
+            cacheCost: string | null;
+            cacheSavings: string | null;
             toonTokensBefore: number | null;
             toonTokensAfter: number | null;
             toonCostSavings: string | null;
@@ -25940,8 +27332,12 @@ export type GetInteractionsResponses = {
             baselineModel: string | null;
             inputTokens: number | null;
             outputTokens: number | null;
+            cacheReadTokens: number | null;
+            cacheWriteTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
+            cacheCost: string | null;
+            cacheSavings: string | null;
             toonTokensBefore: number | null;
             toonTokensAfter: number | null;
             toonCostSavings: string | null;
@@ -26352,6 +27748,10 @@ export type GetInteractionsResponses = {
                     totalTokens?: number;
                     cacheReadInputTokens?: number;
                     cacheWriteInputTokens?: number;
+                    cacheDetails?: Array<{
+                        ttl?: string;
+                        inputTokens?: number;
+                    }>;
                 };
                 metrics?: {
                     latencyMs?: number;
@@ -26403,8 +27803,12 @@ export type GetInteractionsResponses = {
             baselineModel: string | null;
             inputTokens: number | null;
             outputTokens: number | null;
+            cacheReadTokens: number | null;
+            cacheWriteTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
+            cacheCost: string | null;
+            cacheSavings: string | null;
             toonTokensBefore: number | null;
             toonTokensAfter: number | null;
             toonCostSavings: string | null;
@@ -26472,8 +27876,12 @@ export type GetInteractionsResponses = {
             baselineModel: string | null;
             inputTokens: number | null;
             outputTokens: number | null;
+            cacheReadTokens: number | null;
+            cacheWriteTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
+            cacheCost: string | null;
+            cacheSavings: string | null;
             toonTokensBefore: number | null;
             toonTokensAfter: number | null;
             toonCostSavings: string | null;
@@ -26541,8 +27949,12 @@ export type GetInteractionsResponses = {
             baselineModel: string | null;
             inputTokens: number | null;
             outputTokens: number | null;
+            cacheReadTokens: number | null;
+            cacheWriteTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
+            cacheCost: string | null;
+            cacheSavings: string | null;
             toonTokensBefore: number | null;
             toonTokensAfter: number | null;
             toonCostSavings: string | null;
@@ -26610,8 +28022,12 @@ export type GetInteractionsResponses = {
             baselineModel: string | null;
             inputTokens: number | null;
             outputTokens: number | null;
+            cacheReadTokens: number | null;
+            cacheWriteTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
+            cacheCost: string | null;
+            cacheSavings: string | null;
             toonTokensBefore: number | null;
             toonTokensAfter: number | null;
             toonCostSavings: string | null;
@@ -26679,8 +28095,12 @@ export type GetInteractionsResponses = {
             baselineModel: string | null;
             inputTokens: number | null;
             outputTokens: number | null;
+            cacheReadTokens: number | null;
+            cacheWriteTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
+            cacheCost: string | null;
+            cacheSavings: string | null;
             toonTokensBefore: number | null;
             toonTokensAfter: number | null;
             toonCostSavings: string | null;
@@ -26748,8 +28168,12 @@ export type GetInteractionsResponses = {
             baselineModel: string | null;
             inputTokens: number | null;
             outputTokens: number | null;
+            cacheReadTokens: number | null;
+            cacheWriteTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
+            cacheCost: string | null;
+            cacheSavings: string | null;
             toonTokensBefore: number | null;
             toonTokensAfter: number | null;
             toonCostSavings: string | null;
@@ -26817,8 +28241,12 @@ export type GetInteractionsResponses = {
             baselineModel: string | null;
             inputTokens: number | null;
             outputTokens: number | null;
+            cacheReadTokens: number | null;
+            cacheWriteTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
+            cacheCost: string | null;
+            cacheSavings: string | null;
             toonTokensBefore: number | null;
             toonTokensAfter: number | null;
             toonCostSavings: string | null;
@@ -26886,8 +28314,12 @@ export type GetInteractionsResponses = {
             baselineModel: string | null;
             inputTokens: number | null;
             outputTokens: number | null;
+            cacheReadTokens: number | null;
+            cacheWriteTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
+            cacheCost: string | null;
+            cacheSavings: string | null;
             toonTokensBefore: number | null;
             toonTokensAfter: number | null;
             toonCostSavings: string | null;
@@ -26953,8 +28385,12 @@ export type GetInteractionsResponses = {
             baselineModel: string | null;
             inputTokens: number | null;
             outputTokens: number | null;
+            cacheReadTokens: number | null;
+            cacheWriteTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
+            cacheCost: string | null;
+            cacheSavings: string | null;
             toonTokensBefore: number | null;
             toonTokensAfter: number | null;
             toonCostSavings: string | null;
@@ -27020,8 +28456,12 @@ export type GetInteractionsResponses = {
             baselineModel: string | null;
             inputTokens: number | null;
             outputTokens: number | null;
+            cacheReadTokens: number | null;
+            cacheWriteTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
+            cacheCost: string | null;
+            cacheSavings: string | null;
             toonTokensBefore: number | null;
             toonTokensAfter: number | null;
             toonCostSavings: string | null;
@@ -27089,8 +28529,12 @@ export type GetInteractionsResponses = {
             baselineModel: string | null;
             inputTokens: number | null;
             outputTokens: number | null;
+            cacheReadTokens: number | null;
+            cacheWriteTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
+            cacheCost: string | null;
+            cacheSavings: string | null;
             toonTokensBefore: number | null;
             toonTokensAfter: number | null;
             toonCostSavings: string | null;
@@ -27158,8 +28602,12 @@ export type GetInteractionsResponses = {
             baselineModel: string | null;
             inputTokens: number | null;
             outputTokens: number | null;
+            cacheReadTokens: number | null;
+            cacheWriteTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
+            cacheCost: string | null;
+            cacheSavings: string | null;
             toonTokensBefore: number | null;
             toonTokensAfter: number | null;
             toonCostSavings: string | null;
@@ -27227,8 +28675,12 @@ export type GetInteractionsResponses = {
             baselineModel: string | null;
             inputTokens: number | null;
             outputTokens: number | null;
+            cacheReadTokens: number | null;
+            cacheWriteTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
+            cacheCost: string | null;
+            cacheSavings: string | null;
             toonTokensBefore: number | null;
             toonTokensAfter: number | null;
             toonCostSavings: string | null;
@@ -27363,8 +28815,12 @@ export type GetInteractionsResponses = {
             baselineModel: string | null;
             inputTokens: number | null;
             outputTokens: number | null;
+            cacheReadTokens: number | null;
+            cacheWriteTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
+            cacheCost: string | null;
+            cacheSavings: string | null;
             toonTokensBefore: number | null;
             toonTokensAfter: number | null;
             toonCostSavings: string | null;
@@ -27548,8 +29004,12 @@ export type GetInteractionsResponses = {
             baselineModel: string | null;
             inputTokens: number | null;
             outputTokens: number | null;
+            cacheReadTokens: number | null;
+            cacheWriteTokens: number | null;
             baselineCost: string | null;
             cost: string | null;
+            cacheCost: string | null;
+            cacheSavings: string | null;
             toonTokensBefore: number | null;
             toonTokensAfter: number | null;
             toonCostSavings: string | null;
@@ -27710,9 +29170,12 @@ export type GetInteractionSessionsResponses = {
             requestCount: number;
             totalInputTokens: number;
             totalOutputTokens: number;
+            totalCacheReadTokens: number;
+            totalCacheWriteTokens: number;
             totalCost: string | null;
             totalBaselineCost: string | null;
             totalToonCostSavings: string | null;
+            totalCacheSavings: string | null;
             toonSkipReasonCounts: {
                 applied: number;
                 notEnabled: number;
@@ -28031,8 +29494,12 @@ export type GetInteractionResponses = {
         baselineModel: string | null;
         inputTokens: number | null;
         outputTokens: number | null;
+        cacheReadTokens: number | null;
+        cacheWriteTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
+        cacheCost: string | null;
+        cacheSavings: string | null;
         toonTokensBefore: number | null;
         toonTokensAfter: number | null;
         toonCostSavings: string | null;
@@ -28216,8 +29683,12 @@ export type GetInteractionResponses = {
         baselineModel: string | null;
         inputTokens: number | null;
         outputTokens: number | null;
+        cacheReadTokens: number | null;
+        cacheWriteTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
+        cacheCost: string | null;
+        cacheSavings: string | null;
         toonTokensBefore: number | null;
         toonTokensAfter: number | null;
         toonCostSavings: string | null;
@@ -28307,8 +29778,12 @@ export type GetInteractionResponses = {
         baselineModel: string | null;
         inputTokens: number | null;
         outputTokens: number | null;
+        cacheReadTokens: number | null;
+        cacheWriteTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
+        cacheCost: string | null;
+        cacheSavings: string | null;
         toonTokensBefore: number | null;
         toonTokensAfter: number | null;
         toonCostSavings: string | null;
@@ -28374,8 +29849,12 @@ export type GetInteractionResponses = {
         baselineModel: string | null;
         inputTokens: number | null;
         outputTokens: number | null;
+        cacheReadTokens: number | null;
+        cacheWriteTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
+        cacheCost: string | null;
+        cacheSavings: string | null;
         toonTokensBefore: number | null;
         toonTokensAfter: number | null;
         toonCostSavings: string | null;
@@ -28443,8 +29922,12 @@ export type GetInteractionResponses = {
         baselineModel: string | null;
         inputTokens: number | null;
         outputTokens: number | null;
+        cacheReadTokens: number | null;
+        cacheWriteTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
+        cacheCost: string | null;
+        cacheSavings: string | null;
         toonTokensBefore: number | null;
         toonTokensAfter: number | null;
         toonCostSavings: string | null;
@@ -28855,6 +30338,10 @@ export type GetInteractionResponses = {
                 totalTokens?: number;
                 cacheReadInputTokens?: number;
                 cacheWriteInputTokens?: number;
+                cacheDetails?: Array<{
+                    ttl?: string;
+                    inputTokens?: number;
+                }>;
             };
             metrics?: {
                 latencyMs?: number;
@@ -28906,8 +30393,12 @@ export type GetInteractionResponses = {
         baselineModel: string | null;
         inputTokens: number | null;
         outputTokens: number | null;
+        cacheReadTokens: number | null;
+        cacheWriteTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
+        cacheCost: string | null;
+        cacheSavings: string | null;
         toonTokensBefore: number | null;
         toonTokensAfter: number | null;
         toonCostSavings: string | null;
@@ -28975,8 +30466,12 @@ export type GetInteractionResponses = {
         baselineModel: string | null;
         inputTokens: number | null;
         outputTokens: number | null;
+        cacheReadTokens: number | null;
+        cacheWriteTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
+        cacheCost: string | null;
+        cacheSavings: string | null;
         toonTokensBefore: number | null;
         toonTokensAfter: number | null;
         toonCostSavings: string | null;
@@ -29044,8 +30539,12 @@ export type GetInteractionResponses = {
         baselineModel: string | null;
         inputTokens: number | null;
         outputTokens: number | null;
+        cacheReadTokens: number | null;
+        cacheWriteTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
+        cacheCost: string | null;
+        cacheSavings: string | null;
         toonTokensBefore: number | null;
         toonTokensAfter: number | null;
         toonCostSavings: string | null;
@@ -29113,8 +30612,12 @@ export type GetInteractionResponses = {
         baselineModel: string | null;
         inputTokens: number | null;
         outputTokens: number | null;
+        cacheReadTokens: number | null;
+        cacheWriteTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
+        cacheCost: string | null;
+        cacheSavings: string | null;
         toonTokensBefore: number | null;
         toonTokensAfter: number | null;
         toonCostSavings: string | null;
@@ -29182,8 +30685,12 @@ export type GetInteractionResponses = {
         baselineModel: string | null;
         inputTokens: number | null;
         outputTokens: number | null;
+        cacheReadTokens: number | null;
+        cacheWriteTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
+        cacheCost: string | null;
+        cacheSavings: string | null;
         toonTokensBefore: number | null;
         toonTokensAfter: number | null;
         toonCostSavings: string | null;
@@ -29251,8 +30758,12 @@ export type GetInteractionResponses = {
         baselineModel: string | null;
         inputTokens: number | null;
         outputTokens: number | null;
+        cacheReadTokens: number | null;
+        cacheWriteTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
+        cacheCost: string | null;
+        cacheSavings: string | null;
         toonTokensBefore: number | null;
         toonTokensAfter: number | null;
         toonCostSavings: string | null;
@@ -29320,8 +30831,12 @@ export type GetInteractionResponses = {
         baselineModel: string | null;
         inputTokens: number | null;
         outputTokens: number | null;
+        cacheReadTokens: number | null;
+        cacheWriteTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
+        cacheCost: string | null;
+        cacheSavings: string | null;
         toonTokensBefore: number | null;
         toonTokensAfter: number | null;
         toonCostSavings: string | null;
@@ -29389,8 +30904,12 @@ export type GetInteractionResponses = {
         baselineModel: string | null;
         inputTokens: number | null;
         outputTokens: number | null;
+        cacheReadTokens: number | null;
+        cacheWriteTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
+        cacheCost: string | null;
+        cacheSavings: string | null;
         toonTokensBefore: number | null;
         toonTokensAfter: number | null;
         toonCostSavings: string | null;
@@ -29456,8 +30975,12 @@ export type GetInteractionResponses = {
         baselineModel: string | null;
         inputTokens: number | null;
         outputTokens: number | null;
+        cacheReadTokens: number | null;
+        cacheWriteTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
+        cacheCost: string | null;
+        cacheSavings: string | null;
         toonTokensBefore: number | null;
         toonTokensAfter: number | null;
         toonCostSavings: string | null;
@@ -29523,8 +31046,12 @@ export type GetInteractionResponses = {
         baselineModel: string | null;
         inputTokens: number | null;
         outputTokens: number | null;
+        cacheReadTokens: number | null;
+        cacheWriteTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
+        cacheCost: string | null;
+        cacheSavings: string | null;
         toonTokensBefore: number | null;
         toonTokensAfter: number | null;
         toonCostSavings: string | null;
@@ -29592,8 +31119,12 @@ export type GetInteractionResponses = {
         baselineModel: string | null;
         inputTokens: number | null;
         outputTokens: number | null;
+        cacheReadTokens: number | null;
+        cacheWriteTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
+        cacheCost: string | null;
+        cacheSavings: string | null;
         toonTokensBefore: number | null;
         toonTokensAfter: number | null;
         toonCostSavings: string | null;
@@ -29661,8 +31192,12 @@ export type GetInteractionResponses = {
         baselineModel: string | null;
         inputTokens: number | null;
         outputTokens: number | null;
+        cacheReadTokens: number | null;
+        cacheWriteTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
+        cacheCost: string | null;
+        cacheSavings: string | null;
         toonTokensBefore: number | null;
         toonTokensAfter: number | null;
         toonCostSavings: string | null;
@@ -29730,8 +31265,12 @@ export type GetInteractionResponses = {
         baselineModel: string | null;
         inputTokens: number | null;
         outputTokens: number | null;
+        cacheReadTokens: number | null;
+        cacheWriteTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
+        cacheCost: string | null;
+        cacheSavings: string | null;
         toonTokensBefore: number | null;
         toonTokensAfter: number | null;
         toonCostSavings: string | null;
@@ -29866,8 +31405,12 @@ export type GetInteractionResponses = {
         baselineModel: string | null;
         inputTokens: number | null;
         outputTokens: number | null;
+        cacheReadTokens: number | null;
+        cacheWriteTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
+        cacheCost: string | null;
+        cacheSavings: string | null;
         toonTokensBefore: number | null;
         toonTokensAfter: number | null;
         toonCostSavings: string | null;
@@ -30051,8 +31594,12 @@ export type GetInteractionResponses = {
         baselineModel: string | null;
         inputTokens: number | null;
         outputTokens: number | null;
+        cacheReadTokens: number | null;
+        cacheWriteTokens: number | null;
         baselineCost: string | null;
         cost: string | null;
+        cacheCost: string | null;
+        cacheSavings: string | null;
         toonTokensBefore: number | null;
         toonTokensAfter: number | null;
         toonCostSavings: string | null;
@@ -31926,6 +33473,7 @@ export type GetK8sImagePullSecretsResponses = {
      */
     200: Array<{
         name: string;
+        registryServers: Array<string>;
     }>;
 };
 
@@ -43287,6 +44835,192 @@ export type OpenAiChatCompletionsWithAgentResponses = {
 
 export type OpenAiChatCompletionsWithAgentResponse = OpenAiChatCompletionsWithAgentResponses[keyof OpenAiChatCompletionsWithAgentResponses];
 
+export type OpenAiListModelsWithDefaultAgentData = {
+    body?: never;
+    headers?: {
+        authorization?: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/v1/openai/models';
+};
+
+export type OpenAiListModelsWithDefaultAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type OpenAiListModelsWithDefaultAgentError = OpenAiListModelsWithDefaultAgentErrors[keyof OpenAiListModelsWithDefaultAgentErrors];
+
+export type OpenAiListModelsWithDefaultAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        object: 'list';
+        data: Array<{
+            id: string;
+            object: 'model';
+            created: number;
+            owned_by: string;
+        }>;
+    };
+};
+
+export type OpenAiListModelsWithDefaultAgentResponse = OpenAiListModelsWithDefaultAgentResponses[keyof OpenAiListModelsWithDefaultAgentResponses];
+
+export type OpenAiListModelsWithAgentData = {
+    body?: never;
+    headers?: {
+        authorization?: string;
+    };
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/v1/openai/{agentId}/models';
+};
+
+export type OpenAiListModelsWithAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type OpenAiListModelsWithAgentError = OpenAiListModelsWithAgentErrors[keyof OpenAiListModelsWithAgentErrors];
+
+export type OpenAiListModelsWithAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        object: 'list';
+        data: Array<{
+            id: string;
+            object: 'model';
+            created: number;
+            owned_by: string;
+        }>;
+    };
+};
+
+export type OpenAiListModelsWithAgentResponse = OpenAiListModelsWithAgentResponses[keyof OpenAiListModelsWithAgentResponses];
+
 export type OpenrouterChatCompletionsWithDefaultAgentData = {
     body: XaiChatCompletionRequestInput;
     headers: {
@@ -44556,6 +46290,7 @@ export type GetOrganizationResponses = {
         compressionScope: 'organization' | 'team';
         globalToolPolicy: 'permissive' | 'restrictive';
         allowChatFileUploads: boolean;
+        allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
         embeddingDimensions: EmbeddingDimensions | null;
         embeddingChatApiKeyId: string | null;
@@ -44603,6 +46338,9 @@ export type GetOrganizationResponses = {
             isDefault: boolean;
             visible: boolean;
         }> | null;
+        connectionDefaultProviderKeys: {
+            [key: string]: string;
+        } | null;
         defaultEnvironmentName: string | null;
         defaultEnvironmentNamespace: string | null;
         defaultEnvironmentDescription: string | null;
@@ -44613,6 +46351,7 @@ export type GetOrganizationResponses = {
             allowedCidrs: Array<string>;
         } | null;
         defaultEnvironmentRestricted: boolean;
+        defaultEnvironmentValidationRegex: string | null;
         skillToolsEnabled: boolean;
         skillSlashCommandsEnabled: boolean;
     };
@@ -44844,6 +46583,7 @@ export type UpdateAppearanceSettingsResponses = {
         compressionScope: 'organization' | 'team';
         globalToolPolicy: 'permissive' | 'restrictive';
         allowChatFileUploads: boolean;
+        allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
         embeddingDimensions: EmbeddingDimensions | null;
         embeddingChatApiKeyId: string | null;
@@ -44891,6 +46631,9 @@ export type UpdateAppearanceSettingsResponses = {
             isDefault: boolean;
             visible: boolean;
         }> | null;
+        connectionDefaultProviderKeys: {
+            [key: string]: string;
+        } | null;
         defaultEnvironmentName: string | null;
         defaultEnvironmentNamespace: string | null;
         defaultEnvironmentDescription: string | null;
@@ -44901,6 +46644,7 @@ export type UpdateAppearanceSettingsResponses = {
             allowedCidrs: Array<string>;
         } | null;
         defaultEnvironmentRestricted: boolean;
+        defaultEnvironmentValidationRegex: string | null;
         skillToolsEnabled: boolean;
         skillSlashCommandsEnabled: boolean;
     };
@@ -44912,6 +46656,7 @@ export type UpdateSecuritySettingsData = {
     body: {
         globalToolPolicy?: 'permissive' | 'restrictive';
         allowChatFileUploads?: boolean;
+        allowToolAutoAssignment?: boolean;
     };
     path?: never;
     query?: never;
@@ -45003,6 +46748,7 @@ export type UpdateSecuritySettingsResponses = {
         compressionScope: 'organization' | 'team';
         globalToolPolicy: 'permissive' | 'restrictive';
         allowChatFileUploads: boolean;
+        allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
         embeddingDimensions: EmbeddingDimensions | null;
         embeddingChatApiKeyId: string | null;
@@ -45050,6 +46796,9 @@ export type UpdateSecuritySettingsResponses = {
             isDefault: boolean;
             visible: boolean;
         }> | null;
+        connectionDefaultProviderKeys: {
+            [key: string]: string;
+        } | null;
         defaultEnvironmentName: string | null;
         defaultEnvironmentNamespace: string | null;
         defaultEnvironmentDescription: string | null;
@@ -45060,6 +46809,7 @@ export type UpdateSecuritySettingsResponses = {
             allowedCidrs: Array<string>;
         } | null;
         defaultEnvironmentRestricted: boolean;
+        defaultEnvironmentValidationRegex: string | null;
         skillToolsEnabled: boolean;
         skillSlashCommandsEnabled: boolean;
     };
@@ -45165,6 +46915,7 @@ export type UpdateLlmSettingsResponses = {
         compressionScope: 'organization' | 'team';
         globalToolPolicy: 'permissive' | 'restrictive';
         allowChatFileUploads: boolean;
+        allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
         embeddingDimensions: EmbeddingDimensions | null;
         embeddingChatApiKeyId: string | null;
@@ -45212,6 +46963,9 @@ export type UpdateLlmSettingsResponses = {
             isDefault: boolean;
             visible: boolean;
         }> | null;
+        connectionDefaultProviderKeys: {
+            [key: string]: string;
+        } | null;
         defaultEnvironmentName: string | null;
         defaultEnvironmentNamespace: string | null;
         defaultEnvironmentDescription: string | null;
@@ -45222,6 +46976,7 @@ export type UpdateLlmSettingsResponses = {
             allowedCidrs: Array<string>;
         } | null;
         defaultEnvironmentRestricted: boolean;
+        defaultEnvironmentValidationRegex: string | null;
         skillToolsEnabled: boolean;
         skillSlashCommandsEnabled: boolean;
     };
@@ -45326,6 +47081,7 @@ export type UpdateAgentSettingsResponses = {
         compressionScope: 'organization' | 'team';
         globalToolPolicy: 'permissive' | 'restrictive';
         allowChatFileUploads: boolean;
+        allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
         embeddingDimensions: EmbeddingDimensions | null;
         embeddingChatApiKeyId: string | null;
@@ -45373,6 +47129,9 @@ export type UpdateAgentSettingsResponses = {
             isDefault: boolean;
             visible: boolean;
         }> | null;
+        connectionDefaultProviderKeys: {
+            [key: string]: string;
+        } | null;
         defaultEnvironmentName: string | null;
         defaultEnvironmentNamespace: string | null;
         defaultEnvironmentDescription: string | null;
@@ -45383,6 +47142,7 @@ export type UpdateAgentSettingsResponses = {
             allowedCidrs: Array<string>;
         } | null;
         defaultEnvironmentRestricted: boolean;
+        defaultEnvironmentValidationRegex: string | null;
         skillToolsEnabled: boolean;
         skillSlashCommandsEnabled: boolean;
     };
@@ -45393,6 +47153,9 @@ export type UpdateAgentSettingsResponse = UpdateAgentSettingsResponses[keyof Upd
 export type UpdateConnectionSettingsData = {
     body: {
         connectionDefaultMcpGatewayId?: string | null;
+        connectionDefaultProviderKeys?: {
+            [key: string]: string;
+        } | null;
         connectionDefaultLlmProxyId?: string | null;
         connectionDefaultClientId?: string | null;
         connectionShownClientIds?: Array<string> | null;
@@ -45494,6 +47257,7 @@ export type UpdateConnectionSettingsResponses = {
         compressionScope: 'organization' | 'team';
         globalToolPolicy: 'permissive' | 'restrictive';
         allowChatFileUploads: boolean;
+        allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
         embeddingDimensions: EmbeddingDimensions | null;
         embeddingChatApiKeyId: string | null;
@@ -45541,6 +47305,9 @@ export type UpdateConnectionSettingsResponses = {
             isDefault: boolean;
             visible: boolean;
         }> | null;
+        connectionDefaultProviderKeys: {
+            [key: string]: string;
+        } | null;
         defaultEnvironmentName: string | null;
         defaultEnvironmentNamespace: string | null;
         defaultEnvironmentDescription: string | null;
@@ -45551,6 +47318,7 @@ export type UpdateConnectionSettingsResponses = {
             allowedCidrs: Array<string>;
         } | null;
         defaultEnvironmentRestricted: boolean;
+        defaultEnvironmentValidationRegex: string | null;
         skillToolsEnabled: boolean;
         skillSlashCommandsEnabled: boolean;
     };
@@ -45570,6 +47338,7 @@ export type UpdateDefaultEnvironmentData = {
             allowedCidrs?: Array<string>;
         } | null;
         restricted?: boolean;
+        validationRegex?: string | null;
     };
     path?: never;
     query?: never;
@@ -45661,6 +47430,7 @@ export type UpdateDefaultEnvironmentResponses = {
         compressionScope: 'organization' | 'team';
         globalToolPolicy: 'permissive' | 'restrictive';
         allowChatFileUploads: boolean;
+        allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
         embeddingDimensions: EmbeddingDimensions | null;
         embeddingChatApiKeyId: string | null;
@@ -45708,6 +47478,9 @@ export type UpdateDefaultEnvironmentResponses = {
             isDefault: boolean;
             visible: boolean;
         }> | null;
+        connectionDefaultProviderKeys: {
+            [key: string]: string;
+        } | null;
         defaultEnvironmentName: string | null;
         defaultEnvironmentNamespace: string | null;
         defaultEnvironmentDescription: string | null;
@@ -45718,6 +47491,7 @@ export type UpdateDefaultEnvironmentResponses = {
             allowedCidrs: Array<string>;
         } | null;
         defaultEnvironmentRestricted: boolean;
+        defaultEnvironmentValidationRegex: string | null;
         skillToolsEnabled: boolean;
         skillSlashCommandsEnabled: boolean;
     };
@@ -45820,6 +47594,7 @@ export type UpdateAuthSettingsResponses = {
         compressionScope: 'organization' | 'team';
         globalToolPolicy: 'permissive' | 'restrictive';
         allowChatFileUploads: boolean;
+        allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
         embeddingDimensions: EmbeddingDimensions | null;
         embeddingChatApiKeyId: string | null;
@@ -45867,6 +47642,9 @@ export type UpdateAuthSettingsResponses = {
             isDefault: boolean;
             visible: boolean;
         }> | null;
+        connectionDefaultProviderKeys: {
+            [key: string]: string;
+        } | null;
         defaultEnvironmentName: string | null;
         defaultEnvironmentNamespace: string | null;
         defaultEnvironmentDescription: string | null;
@@ -45877,6 +47655,7 @@ export type UpdateAuthSettingsResponses = {
             allowedCidrs: Array<string>;
         } | null;
         defaultEnvironmentRestricted: boolean;
+        defaultEnvironmentValidationRegex: string | null;
         skillToolsEnabled: boolean;
         skillSlashCommandsEnabled: boolean;
     };
@@ -45981,6 +47760,7 @@ export type UpdateKnowledgeSettingsResponses = {
         compressionScope: 'organization' | 'team';
         globalToolPolicy: 'permissive' | 'restrictive';
         allowChatFileUploads: boolean;
+        allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
         embeddingDimensions: EmbeddingDimensions | null;
         embeddingChatApiKeyId: string | null;
@@ -46028,6 +47808,9 @@ export type UpdateKnowledgeSettingsResponses = {
             isDefault: boolean;
             visible: boolean;
         }> | null;
+        connectionDefaultProviderKeys: {
+            [key: string]: string;
+        } | null;
         defaultEnvironmentName: string | null;
         defaultEnvironmentNamespace: string | null;
         defaultEnvironmentDescription: string | null;
@@ -46038,6 +47821,7 @@ export type UpdateKnowledgeSettingsResponses = {
             allowedCidrs: Array<string>;
         } | null;
         defaultEnvironmentRestricted: boolean;
+        defaultEnvironmentValidationRegex: string | null;
         skillToolsEnabled: boolean;
         skillSlashCommandsEnabled: boolean;
     };
@@ -46137,6 +47921,7 @@ export type DropEmbeddingConfigResponses = {
         compressionScope: 'organization' | 'team';
         globalToolPolicy: 'permissive' | 'restrictive';
         allowChatFileUploads: boolean;
+        allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
         embeddingDimensions: EmbeddingDimensions | null;
         embeddingChatApiKeyId: string | null;
@@ -46184,6 +47969,9 @@ export type DropEmbeddingConfigResponses = {
             isDefault: boolean;
             visible: boolean;
         }> | null;
+        connectionDefaultProviderKeys: {
+            [key: string]: string;
+        } | null;
         defaultEnvironmentName: string | null;
         defaultEnvironmentNamespace: string | null;
         defaultEnvironmentDescription: string | null;
@@ -46194,6 +47982,7 @@ export type DropEmbeddingConfigResponses = {
             allowedCidrs: Array<string>;
         } | null;
         defaultEnvironmentRestricted: boolean;
+        defaultEnvironmentValidationRegex: string | null;
         skillToolsEnabled: boolean;
         skillSlashCommandsEnabled: boolean;
     };
@@ -46382,6 +48171,7 @@ export type CompleteOnboardingResponses = {
         compressionScope: 'organization' | 'team';
         globalToolPolicy: 'permissive' | 'restrictive';
         allowChatFileUploads: boolean;
+        allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
         embeddingDimensions: EmbeddingDimensions | null;
         embeddingChatApiKeyId: string | null;
@@ -46429,6 +48219,9 @@ export type CompleteOnboardingResponses = {
             isDefault: boolean;
             visible: boolean;
         }> | null;
+        connectionDefaultProviderKeys: {
+            [key: string]: string;
+        } | null;
         defaultEnvironmentName: string | null;
         defaultEnvironmentNamespace: string | null;
         defaultEnvironmentDescription: string | null;
@@ -46439,6 +48232,7 @@ export type CompleteOnboardingResponses = {
             allowedCidrs: Array<string>;
         } | null;
         defaultEnvironmentRestricted: boolean;
+        defaultEnvironmentValidationRegex: string | null;
         skillToolsEnabled: boolean;
         skillSlashCommandsEnabled: boolean;
     };
@@ -48202,6 +49996,7 @@ export type CreateScheduleTriggerRunConversationResponses = {
         selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
         modelId: string | null;
         hasCustomToolSelection: boolean;
+        hooksDebugEnabled: boolean;
         todoList: string | number | boolean | null | {
             [key: string]: unknown;
         } | Array<unknown> | null;
@@ -49851,14 +51646,27 @@ export type GetSkillsResponse = GetSkillsResponses[keyof GetSkillsResponses];
 
 export type CreateSkillData = {
     body: {
+        /**
+         * A complete SKILL.md manifest: a YAML frontmatter block with `name` and `description` (and optional `license`, `compatibility`, `allowed-tools`, `templated`, `metadata`), followed by the Markdown instruction body. Set `templated: true` to render the body through Handlebars (e.g. `{{user.name}}`) at activation. `allowed-tools` is a space-separated list of tools the skill is pre-approved to use.
+         */
         content: string;
         files?: Array<{
+            /**
+             * Resource path, e.g. references/API.md or scripts/run.py
+             */
             path: string;
+            /**
+             * Text content of the file
+             */
             content: string;
             encoding?: 'utf8' | 'base64';
         }>;
         scope?: 'personal' | 'team' | 'org';
         teamIds?: Array<string>;
+        /**
+         * Tools the skill expects, overriding the SKILL.md `allowed-tools` frontmatter. Omit to use the frontmatter; pass [] to clear.
+         */
+        allowedTools?: Array<string>;
     };
     path?: never;
     query?: never;
@@ -50395,14 +52203,27 @@ export type GetSkillResponse = GetSkillResponses[keyof GetSkillResponses];
 
 export type UpdateSkillData = {
     body: {
+        /**
+         * A complete SKILL.md manifest: a YAML frontmatter block with `name` and `description` (and optional `license`, `compatibility`, `allowed-tools`, `templated`, `metadata`), followed by the Markdown instruction body. Set `templated: true` to render the body through Handlebars (e.g. `{{user.name}}`) at activation. `allowed-tools` is a space-separated list of tools the skill is pre-approved to use.
+         */
         content: string;
         files?: Array<{
+            /**
+             * Resource path, e.g. references/API.md or scripts/run.py
+             */
             path: string;
+            /**
+             * Text content of the file
+             */
             content: string;
             encoding?: 'utf8' | 'base64';
         }>;
         scope?: 'personal' | 'team' | 'org';
         teamIds?: Array<string>;
+        /**
+         * Tools the skill expects, overriding the SKILL.md `allowed-tools` frontmatter. Omit to use the frontmatter; pass [] to clear.
+         */
+        allowedTools?: Array<string>;
     };
     path: {
         id: string;
@@ -51709,6 +53530,7 @@ export type GetAgentStatisticsResponses = {
         requests: number;
         inputTokens: number;
         outputTokens: number;
+        cacheReadTokens: number;
         cost: number;
         timeSeries: Array<{
             timestamp: string;
@@ -51802,6 +53624,7 @@ export type GetModelStatisticsResponses = {
         requests: number;
         inputTokens: number;
         outputTokens: number;
+        cacheReadTokens: number;
         cost: number;
         percentage: number;
         timeSeries: Array<{
@@ -51987,12 +53810,14 @@ export type GetCostSavingsStatisticsResponses = {
         totalSavings: number;
         totalOptimizationSavings: number;
         totalToonSavings: number;
+        totalCacheSavings: number;
         timeSeries: Array<{
             timestamp: string;
             baselineCost: number;
             actualCost: number;
             optimizationSavings: number;
             toonSavings: number;
+            cacheSavings: number;
         }>;
     };
 };
@@ -52006,6 +53831,7 @@ export type GetTeamsData = {
         limit?: number;
         offset?: number;
         name?: string;
+        mine?: boolean;
     };
     url: '/api/teams';
 };
@@ -52597,7 +54423,7 @@ export type GetTeamMembersResponse = GetTeamMembersResponses[keyof GetTeamMember
 export type AddTeamMemberData = {
     body: {
         userId: string;
-        role?: string;
+        role?: 'admin' | 'member';
     };
     path: {
         id: string;
@@ -52772,6 +54598,99 @@ export type RemoveTeamMemberResponses = {
 };
 
 export type RemoveTeamMemberResponse = RemoveTeamMemberResponses[keyof RemoveTeamMemberResponses];
+
+export type UpdateTeamMemberData = {
+    body: {
+        role: 'admin' | 'member';
+    };
+    path: {
+        id: string;
+        userId: string;
+    };
+    query?: never;
+    url: '/api/teams/{id}/members/{userId}';
+};
+
+export type UpdateTeamMemberErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type UpdateTeamMemberError = UpdateTeamMemberErrors[keyof UpdateTeamMemberErrors];
+
+export type UpdateTeamMemberResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        teamId: string;
+        userId: string;
+        role: string;
+        syncedFromSso: boolean;
+        createdAt: string;
+    };
+};
+
+export type UpdateTeamMemberResponse = UpdateTeamMemberResponses[keyof UpdateTeamMemberResponses];
 
 export type GetTeamExternalGroupsData = {
     body?: never;

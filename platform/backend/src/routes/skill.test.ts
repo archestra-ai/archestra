@@ -128,6 +128,66 @@ describe("skill routes", () => {
       expect(byPath["scripts/run.py"]).toBe("script");
     });
 
+    test("derives allowedTools from frontmatter when the payload omits it", async () => {
+      const manifest = [
+        "---",
+        "name: pdf-processing",
+        "description: Extract text from PDF files.",
+        "allowed-tools: Read Bash",
+        "---",
+        "",
+        "# PDF Processing",
+      ].join("\n");
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/skills",
+        payload: { content: manifest },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().allowedTools).toBe("Read Bash");
+    });
+
+    test("explicit allowedTools overrides the frontmatter", async () => {
+      const manifest = [
+        "---",
+        "name: pdf-processing",
+        "description: Extract text from PDF files.",
+        "allowed-tools: Read",
+        "---",
+        "",
+        "# PDF Processing",
+      ].join("\n");
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/skills",
+        payload: { content: manifest, allowedTools: ["Bash", "Edit"] },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().allowedTools).toBe("Bash Edit");
+    });
+
+    test("an empty allowedTools array clears the frontmatter value", async () => {
+      const manifest = [
+        "---",
+        "name: pdf-processing",
+        "description: Extract text from PDF files.",
+        "allowed-tools: Read",
+        "---",
+        "",
+        "# PDF Processing",
+      ].join("\n");
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/skills",
+        payload: { content: manifest, allowedTools: [] },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().allowedTools).toBeNull();
+    });
+
     test("rejects a manifest with no frontmatter", async () => {
       const response = await app.inject({
         method: "POST",
@@ -351,6 +411,35 @@ describe("skill routes", () => {
       expect(body.description).toBe("Extract text and tables from PDF files.");
       expect(body.files).toHaveLength(1);
       expect(body.files[0].path).toBe("references/NEW.md");
+    });
+
+    test("explicit allowedTools overrides the frontmatter on update", async () => {
+      const created = (
+        await app.inject({
+          method: "POST",
+          url: "/api/skills",
+          payload: { content: MANIFEST, allowedTools: ["Read"] },
+        })
+      ).json();
+      expect(created.allowedTools).toBe("Read");
+
+      const response = await app.inject({
+        method: "PUT",
+        url: `/api/skills/${created.id}`,
+        payload: { content: MANIFEST, allowedTools: ["Bash Edit"] },
+      });
+
+      expect(response.statusCode).toBe(200);
+      // space-separated entries are normalized like the frontmatter form
+      expect(response.json().allowedTools).toBe("Bash Edit");
+
+      const cleared = await app.inject({
+        method: "PUT",
+        url: `/api/skills/${created.id}`,
+        payload: { content: MANIFEST },
+      });
+      // omitting the field falls back to the (absent) frontmatter value
+      expect(cleared.json().allowedTools).toBeNull();
     });
 
     test("leaves resource files untouched when `files` is omitted", async () => {

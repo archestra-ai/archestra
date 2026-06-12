@@ -56,21 +56,12 @@ CRITICAL RULES:
 - Internal self-hosted READ tools (Jira reads, GitHub reads, GitLab reads, Confluence reads, database reads, internal wikis) → allow_when_context_is_sensitive (safe to call) + mark_as_sensitive (results contain org data that must not leak).
 - External-facing tools (browsers, Playwright, web search, email, external APIs) → block_when_context_is_sensitive (could leak context) + mark_as_safe (their results are controlled by us, not sensitive org data).
 
-Examples:
-- jira__get_issue: invocation="allow_when_context_is_sensitive", result="mark_as_sensitive" (read-only internal tool)
-- github__list_pull_requests: invocation="allow_when_context_is_sensitive", result="mark_as_sensitive" (read-only internal tool)
-- database__query: invocation="allow_when_context_is_sensitive", result="mark_as_sensitive" (read-only internal tool)
-- confluence__get_page: invocation="allow_when_context_is_sensitive", result="mark_as_sensitive" (read-only internal tool)
-- playwright__navigate: invocation="block_when_context_is_sensitive", result="mark_as_safe" (external-facing tool)
-- playwright__screenshot: invocation="block_when_context_is_sensitive", result="mark_as_safe" (external-facing tool)
+Examples — one per outcome; apply the rules above to classify any tool, not just these:
+- jira__get_issue: invocation="allow_when_context_is_sensitive", result="mark_as_sensitive" (read-only internal)
+- playwright__navigate: invocation="block_when_context_is_sensitive", result="mark_as_safe" (external-facing)
 - jira__create_issue: invocation="require_approval", result="mark_as_sensitive" (mutating internal write, not destructive)
-- github__merge_pull_request: invocation="require_approval", result="mark_as_sensitive" (mutating internal write, not destructive)
 - email__send: invocation="require_approval", result="mark_as_safe" (sends data outward, needs human confirmation)
-- payment__charge: invocation="require_approval", result="mark_as_safe" (consequential write, needs human confirmation)
-- jira__delete_issue: invocation="block_always", result="mark_as_safe" (destructive: delete)
-- github__delete_repo: invocation="block_always", result="mark_as_safe" (destructive: delete)
-- database__drop_table: invocation="block_always", result="mark_as_safe" (destructive: drop)
-- file_delete: invocation="block_always", result="mark_as_safe" (destructive: delete)`;
+- database__drop_table: invocation="block_always", result="mark_as_safe" (destructive: name dedicated to deletion)`;
 
 export const DUAL_LLM_MAIN_SYSTEM_PROMPT = `You are the privileged side of the Dual LLM security workflow.
 

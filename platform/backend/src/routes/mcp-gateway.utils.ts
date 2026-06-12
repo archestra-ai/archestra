@@ -170,6 +170,9 @@ export async function createAgentServer(
   const agent = await AgentModel.findById(agentId);
   if (!agent) throw new Error(`Agent not found: ${agentId}`);
 
+  // Fetch the agent's teams (with labels) for trace span team attributes.
+  const teams = await AgentTeamModel.getTeamLabelInfoForAgent(agentId);
+
   // Create a map of Archestra tool names to their titles
   // This is needed because the database schema doesn't include a title field
   const archestraTools = getArchestraMcpTools();
@@ -363,6 +366,7 @@ export async function createAgentServer(
             toolName: name,
             mcpServerName,
             agent,
+            teams,
             agentType: agent.agentType,
             toolCallId: `archestra-${Date.now()}`,
             toolArgs: args,
@@ -460,6 +464,7 @@ export async function createAgentServer(
           toolName: name,
           mcpServerName,
           agent,
+          teams,
           agentType: agent.agentType,
           toolCallId,
           toolArgs: args,

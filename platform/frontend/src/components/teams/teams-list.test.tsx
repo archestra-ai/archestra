@@ -12,11 +12,23 @@ const {
   useHasPermissionsMock,
   useSessionMock,
   useTeamsMock,
+  useTeamLabelKeysMock,
+  useTeamLabelValuesMock,
+  queryParamsHolder,
 } = vi.hoisted(() => ({
   mockSetSettingsAction: vi.fn(),
   useHasPermissionsMock: vi.fn(),
   useSessionMock: vi.fn(),
   useTeamsMock: vi.fn(),
+  useTeamLabelKeysMock: vi.fn(),
+  useTeamLabelValuesMock: vi.fn(),
+  queryParamsHolder: { current: new URLSearchParams() },
+}));
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ replace: vi.fn(), push: vi.fn() }),
+  usePathname: () => "/settings/teams",
+  useSearchParams: () => new URLSearchParams(),
 }));
 
 vi.mock("@/app/settings/layout", () => ({
@@ -105,13 +117,15 @@ vi.mock("@/lib/auth/auth.query", () => ({
 
 vi.mock("@/lib/hooks/use-data-table-query-params", () => ({
   useDataTableQueryParams: () => ({
-    searchParams: new URLSearchParams(),
+    searchParams: queryParamsHolder.current,
     updateQueryParams: vi.fn(),
   }),
 }));
 
 vi.mock("@/lib/teams/team.query", () => ({
   useTeams: useTeamsMock,
+  useTeamLabelKeys: useTeamLabelKeysMock,
+  useTeamLabelValues: useTeamLabelValuesMock,
 }));
 
 vi.mock("./team-management-dialog", () => ({
@@ -131,6 +145,10 @@ describe("TeamsList", () => {
     useHasPermissionsMock.mockImplementation((permissions) => ({
       data: !permissions.team?.includes("update"),
     }));
+    useTeamLabelKeysMock.mockReturnValue({ data: [] });
+    useTeamLabelValuesMock.mockReturnValue({ data: [] });
+    useTeamsMock.mockReturnValue({ data: [], isLoading: false });
+    queryParamsHolder.current = new URLSearchParams();
   });
 
   it("lets literal team admins edit their team without organization-level team update permission", () => {
@@ -176,6 +194,18 @@ describe("TeamsList", () => {
     renderTeamsList();
 
     expect(screen.getByRole("button", { name: "Edit" })).toBeDisabled();
+  });
+
+  it("passes the name and labels URL params to the teams query (server-side filtering)", () => {
+    queryParamsHolder.current = new URLSearchParams(
+      "search=platform&labels=env:prod",
+    );
+
+    renderTeamsList();
+
+    expect(useTeamsMock).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "platform", labels: "env:prod" }),
+    );
   });
 });
 

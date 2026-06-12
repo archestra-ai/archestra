@@ -56,6 +56,7 @@ import logger from "@/logging";
 import {
   ActiveChatRunModel,
   AgentModel,
+  AgentTeamModel,
   ConversationAttachmentModel,
   ConversationChatErrorModel,
   ConversationEnabledToolModel,
@@ -489,6 +490,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           agentName: agent.name,
           agentId,
           sessionId: conversationId,
+          teams: await AgentTeamModel.getTeamLabelInfoForAgent(agentId),
           user: { id: user.id, email: user.email, name: user.name },
           callback: async () => {
             // Create LLM model using shared service

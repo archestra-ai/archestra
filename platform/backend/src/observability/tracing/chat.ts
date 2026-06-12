@@ -16,9 +16,11 @@ import {
   ATTR_GENAI_OPERATION_NAME,
   ATTR_ROUTE_CATEGORY,
   RouteCategory,
+  type SpanTeamInfo,
   type SpanUserInfo,
   setSessionId,
   setSpanError,
+  setTeamAttributes,
   setUserAttributes,
 } from "./attributes";
 
@@ -33,6 +35,7 @@ import {
  * @param params.agentType - The agent type (optional)
  * @param params.sessionId - Conversation/session ID (optional)
  * @param params.labels - Agent labels (optional)
+ * @param params.teams - The agent's teams with labels (optional)
  * @param params.routeCategory - The route category (defaults to RouteCategory.CHAT)
  * @param params.triggerSource - The invocation trigger (e.g. "ms-teams", "slack", "email", "mcp-tool")
  * @param params.callback - The callback function to execute within the span context
@@ -44,6 +47,7 @@ export async function startActiveChatSpan<T>(params: {
   agentType?: AgentType;
   sessionId?: string;
   labels?: { key: string; value: string }[];
+  teams?: SpanTeamInfo[];
   routeCategory?: RouteCategory;
   triggerSource?: string;
   user?: SpanUserInfo | null;
@@ -91,6 +95,8 @@ export async function startActiveChatSpan<T>(params: {
           );
         }
       }
+
+      setTeamAttributes(span, params.teams);
 
       try {
         const result = await params.callback(span);

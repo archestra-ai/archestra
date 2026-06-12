@@ -27,10 +27,12 @@ import {
   ATTR_SERVER_ADDRESS,
   EVENT_GENAI_CONTENT_PROMPT,
   RouteCategory,
+  type SpanTeamInfo,
   type SpanUserInfo,
   setAgentAttributes,
   setSessionId,
   setSpanError,
+  setTeamAttributes,
   setUserAttributes,
   truncateContent,
 } from "./attributes";
@@ -69,6 +71,7 @@ export async function startActiveLlmSpan<T>(params: {
   model: string;
   stream: boolean;
   agent?: Agent;
+  teams?: SpanTeamInfo[];
   sessionId?: string | null;
   executionId?: string;
   externalAgentId?: string;
@@ -118,6 +121,7 @@ export async function startActiveLlmSpan<T>(params: {
       setAgentAttributes(span, params.agent);
     }
 
+    setTeamAttributes(span, params.teams);
     setSessionId(span, params.sessionId);
 
     if (params.executionId) {

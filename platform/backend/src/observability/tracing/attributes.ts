@@ -85,6 +85,13 @@ export const ATTR_ARCHESTRA_USER_ID = "archestra.user.id";
 export const ATTR_ARCHESTRA_USER_EMAIL = "archestra.user.email";
 export const ATTR_ARCHESTRA_USER_NAME = "archestra.user.name";
 export const ATTR_ARCHESTRA_LABEL_PREFIX = "archestra.label.";
+// Team metadata. Teams are an Archestra concept with no OTEL semantic-convention
+// registry equivalent, so the custom `archestra.team.*` namespace is used. An
+// agent can belong to multiple teams, so ids/names are array-valued and team
+// label values are merged per key across all of the agent's teams.
+const ATTR_ARCHESTRA_TEAM_IDS = "archestra.team.ids";
+const ATTR_ARCHESTRA_TEAM_NAMES = "archestra.team.names";
+const ATTR_ARCHESTRA_TEAM_LABEL_PREFIX = "archestra.team.label.";
 
 // --- MCP custom ---
 export const ATTR_MCP_SERVER_NAME = "mcp.server.name";
@@ -100,6 +107,12 @@ export interface SpanAgentInfo {
   id: string;
   name: string;
   agentType?: string;
+  labels?: { key: string; value: string }[];
+}
+
+export interface SpanTeamInfo {
+  id: string;
+  name: string;
   labels?: { key: string; value: string }[];
 }
 
@@ -128,6 +141,36 @@ export function setAgentAttributes(span: Span, agent: SpanAgentInfo): void {
         label.value,
       );
     }
+  }
+}
+
+export function setTeamAttributes(
+  span: Span,
+  teams: SpanTeamInfo[] | null | undefined,
+): void {
+  if (!teams || teams.length === 0) return;
+
+  span.setAttribute(
+    ATTR_ARCHESTRA_TEAM_IDS,
+    teams.map((team) => team.id),
+  );
+  span.setAttribute(
+    ATTR_ARCHESTRA_TEAM_NAMES,
+    teams.map((team) => team.name),
+  );
+
+  // Merge label values per key across all of the agent's teams. A key can carry
+  // different values on different teams, so each attribute is array-valued.
+  const valuesByKey = new Map<string, Set<string>>();
+  for (const team of teams) {
+    for (const label of team.labels ?? []) {
+      const values = valuesByKey.get(label.key) ?? new Set<string>();
+      values.add(label.value);
+      valuesByKey.set(label.key, values);
+    }
+  }
+  for (const [key, values] of valuesByKey) {
+    span.setAttribute(`${ATTR_ARCHESTRA_TEAM_LABEL_PREFIX}${key}`, [...values]);
   }
 }
 

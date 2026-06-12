@@ -47,6 +47,7 @@ import {
   ATTR_GENAI_USAGE_OUTPUT_TOKENS,
   ATTR_GENAI_USAGE_TOTAL_TOKENS,
   EVENT_GENAI_CONTENT_COMPLETION,
+  type SpanTeamInfo,
 } from "@/observability/tracing";
 import {
   type Agent,
@@ -132,6 +133,7 @@ export interface LLMProxyContext<TRequest> {
   executionId?: string;
   parentContext?: Context;
   teamIds?: string[];
+  teams?: SpanTeamInfo[];
 }
 
 export type LLMProxyAuthOverride = {
@@ -613,8 +615,11 @@ export async function handleLLMProxy<
     const globalToolPolicy =
       await utils.toolInvocation.getGlobalToolPolicy(resolvedAgentId);
 
-    // Fetch team IDs for policy evaluation context (needed for trusted data evaluation)
-    const teamIds = await AgentTeamModel.getTeamsForAgent(resolvedAgentId);
+    // Fetch the agent's teams (with labels) once. Used both for policy
+    // evaluation context (trusted data) and for trace span team attributes.
+    const teams =
+      await AgentTeamModel.getTeamLabelInfoForAgent(resolvedAgentId);
+    const teamIds = teams.map((team) => team.id);
 
     // Evaluate trusted data policies
     logger.debug(
@@ -840,6 +845,7 @@ export async function handleLLMProxy<
       executionId,
       parentContext,
       teamIds,
+      teams,
     };
 
     if (requestAdapter.isStreaming()) {
@@ -944,6 +950,7 @@ async function handleStreaming<
     executionId,
     parentContext,
     teamIds,
+    teams,
   } = ctx;
 
   const providerName = provider.provider;
@@ -969,6 +976,7 @@ async function handleStreaming<
       model: actualModel,
       stream: true,
       agent,
+      teams,
       sessionId,
       executionId,
       externalAgentId,
@@ -1183,6 +1191,7 @@ async function handleStreaming<
         allToolCallNames,
         reason,
         agent,
+        teams,
         sessionId,
         resolvedUser,
         providerName,
@@ -1356,6 +1365,7 @@ async function handleNonStreaming<
     executionId,
     parentContext,
     teamIds,
+    teams,
   } = ctx;
 
   const providerName = provider.provider;
@@ -1372,6 +1382,7 @@ async function handleNonStreaming<
     model: actualModel,
     stream: false,
     agent,
+    teams,
     sessionId,
     executionId,
     externalAgentId,
@@ -1480,6 +1491,7 @@ async function handleNonStreaming<
         allToolCallNames,
         reason,
         agent,
+        teams,
         sessionId,
         resolvedUser,
         providerName,

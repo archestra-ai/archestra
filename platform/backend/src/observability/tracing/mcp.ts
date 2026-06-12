@@ -21,10 +21,12 @@ import {
   EVENT_GENAI_CONTENT_OUTPUT,
   RouteCategory,
   type SpanAgentInfo,
+  type SpanTeamInfo,
   type SpanUserInfo,
   setAgentAttributes,
   setSessionId,
   setSpanError,
+  setTeamAttributes,
   setUserAttributes,
   truncateContent,
 } from "./attributes";
@@ -52,6 +54,7 @@ export async function startActiveMcpSpan<T>(params: {
   toolName: string;
   mcpServerName: string;
   agent: SpanAgentInfo;
+  teams?: SpanTeamInfo[];
   sessionId?: string | null;
   agentType?: AgentType;
   toolCallId?: string;
@@ -83,6 +86,7 @@ export async function startActiveMcpSpan<T>(params: {
     ctx,
     async (span) => {
       setAgentAttributes(span, params.agent);
+      setTeamAttributes(span, params.teams);
       setSessionId(span, params.sessionId);
 
       if (params.agentType) {
@@ -132,6 +136,7 @@ export function recordBlockedToolSpans(params: {
   toolCallNames: string[];
   blockedReason: string;
   agent: SpanAgentInfo;
+  teams?: SpanTeamInfo[];
   sessionId?: string | null;
   agentType?: AgentType;
   user?: SpanUserInfo | null;
@@ -165,6 +170,7 @@ export function recordBlockedToolSpans(params: {
     );
 
     setAgentAttributes(span, params.agent);
+    setTeamAttributes(span, params.teams);
     setSessionId(span, params.sessionId);
 
     if (params.agentType) {

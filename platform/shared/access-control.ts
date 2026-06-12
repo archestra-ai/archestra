@@ -688,6 +688,12 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.RemoveTeamMember]: {
     team: ["read"],
   },
+  [RouteId.GetTeamLabelKeys]: {
+    team: ["read"],
+  },
+  [RouteId.GetTeamLabelValues]: {
+    team: ["read"],
+  },
   // Team External Group Routes (SSO Team Sync) - requires team admin permission
   [RouteId.GetTeamExternalGroups]: {
     team: ["read"],

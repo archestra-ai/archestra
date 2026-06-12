@@ -4,7 +4,7 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { executeA2AMessage } from "@/agents/a2a-executor";
 import config from "@/config";
-import { AgentModel, UserModel } from "@/models";
+import { AgentModel, AgentTeamModel, UserModel } from "@/models";
 import { RouteCategory, startActiveChatSpan } from "@/observability/tracing";
 import { ProviderError } from "@/routes/chat/errors";
 import {
@@ -326,6 +326,7 @@ const a2aRoutes: FastifyPluginAsyncZod = async (fastify) => {
           agentId,
           agentType: agent.agentType ?? undefined,
           sessionId,
+          teams: await AgentTeamModel.getTeamLabelInfoForAgent(agentId),
           routeCategory: RouteCategory.A2A,
           user: a2aUser
             ? { id: a2aUser.id, email: a2aUser.email, name: a2aUser.name }

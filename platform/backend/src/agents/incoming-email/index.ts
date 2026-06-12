@@ -799,6 +799,7 @@ ${formattedHistory}
   const result = await startActiveChatSpan({
     agentName: agent.name,
     agentId,
+    teams: await AgentTeamModel.getTeamLabelInfoForAgent(agentId),
     routeCategory: RouteCategory.EMAIL,
     triggerSource: "email",
     user: emailUser

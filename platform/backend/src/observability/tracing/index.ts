@@ -46,11 +46,13 @@ export {
   RouteCategory,
   // Types
   type SpanAgentInfo,
+  type SpanTeamInfo,
   type SpanUserInfo,
   // Helpers
   setAgentAttributes,
   setSessionId,
   setSpanError,
+  setTeamAttributes,
   setUserAttributes,
 } from "./attributes";
 export { startActiveChatSpan } from "./chat";

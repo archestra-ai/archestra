@@ -2,13 +2,14 @@ import {
   calculatePaginationMeta,
   createPaginatedResponseSchema,
   PaginationQuerySchema,
+  parseLabelsParam,
   RouteId,
 } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { hasAnyAgentTypeAdminPermission, hasPermission } from "@/auth";
 import config from "@/config";
-import { AgentToolModel, TeamModel } from "@/models";
+import { AgentToolModel, TeamLabelModel, TeamModel } from "@/models";
 import {
   AddTeamExternalGroupBodySchema,
   AddTeamMemberBodySchema,
@@ -34,6 +35,9 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tags: ["Teams"],
         querystring: PaginationQuerySchema.extend({
           name: z.string().optional(),
+          // Filter teams by labels. Format: key1:val1|val2;key2:val3
+          // (AND across keys, OR within a key's values).
+          labels: z.string().optional(),
           // When true, always return only the teams the caller is a member of,
           // even for organization-level team managers. Resource
           // team-assignment pickers use this so a manager who isn't a member of
@@ -49,6 +53,7 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       const { limit, offset, name, mine } = request.query;
+      const labels = parseLabelsParam(request.query.labels);
       const { success: canManageAllTeams } = await hasPermission(
         { team: ["create"] },
         request.headers,
@@ -61,6 +66,7 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
           limit,
           offset,
           name,
+          labels,
         });
         return reply.send({
           data: result.data,
@@ -73,6 +79,7 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
         limit,
         offset,
         name,
+        labels,
       });
       return reply.send({
         data: result.data,
@@ -92,13 +99,17 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectTeamSchema),
       },
     },
-    async ({ body: { name, description }, user, organizationId }, reply) => {
+    async (
+      { body: { name, description, labels }, user, organizationId },
+      reply,
+    ) => {
       return reply.send(
         await TeamModel.create({
           name,
           description,
           organizationId,
           createdBy: user.id,
+          labels,
         }),
       );
     },
@@ -140,7 +151,8 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
-      return reply.send(team);
+      const labels = await TeamLabelModel.getLabelsForTeam(id);
+      return reply.send({ ...team, labels });
     },
   );
 
@@ -422,6 +434,43 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       return reply.send({ success: true });
+    },
+  );
+
+  fastify.get(
+    "/api/teams/labels/keys",
+    {
+      schema: {
+        operationId: RouteId.GetTeamLabelKeys,
+        description: "Get all label keys used by teams",
+        tags: ["Teams"],
+        response: constructResponseSchema(z.array(z.string())),
+      },
+    },
+    async ({ organizationId }, reply) => {
+      return reply.send(await TeamLabelModel.getAllKeys(organizationId));
+    },
+  );
+
+  fastify.get(
+    "/api/teams/labels/values",
+    {
+      schema: {
+        operationId: RouteId.GetTeamLabelValues,
+        description: "Get all label values used by teams",
+        tags: ["Teams"],
+        querystring: z.object({
+          key: z.string().optional().describe("Filter values by label key"),
+        }),
+        response: constructResponseSchema(z.array(z.string())),
+      },
+    },
+    async ({ query: { key }, organizationId }, reply) => {
+      return reply.send(
+        key
+          ? await TeamLabelModel.getValuesByKey({ organizationId, key })
+          : await TeamLabelModel.getAllValues(organizationId),
+      );
     },
   );
 

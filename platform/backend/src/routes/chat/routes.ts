@@ -21,7 +21,7 @@ import {
   generateText,
   hasToolCall,
   stepCountIs,
-  streamText,
+  type streamText,
   type UIMessage,
   type UIMessageChunk,
 } from "ai";
@@ -117,11 +117,6 @@ import {
   invalidateConversationCompactions,
 } from "./context-compaction";
 import {
-  parseMaxInputTokens,
-  trimMessagesToTokenLimit,
-} from "./context-trimming";
-import {
-  EmptyModelResponseError,
   formatUnavailableToolErrorDetails,
   getActiveTraceContext,
   getUnavailableToolErrorDetails,
@@ -139,10 +134,7 @@ import {
   buildModelMessages,
   prepareMessagesForLLM,
 } from "./prepare-model-messages";
-import {
-  isRetryableEmptyFinishReason,
-  probeFirstRenderableEvent,
-} from "./stream-probe";
+import { streamTextWithRecovery } from "./stream-probe";
 import { createToolUiStartTransform } from "./tool-ui-stream";
 
 const PromoteChatAttachmentResultSchema = z.object({
@@ -827,117 +819,29 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   };
                 }
 
-                // Probe each attempt's stream for its first renderable event
-                // before merging it to the client. This lets us, before anything
-                // reaches the user:
-                //   - trim + retry on a context-length rejection (vLLM/LiteLLM), and
-                //   - silently retry a clean-but-empty response (a stupid-model /
-                //     inference glitch), then surface a stream error if it persists.
-                // tee() buffers the stream, so consuming the probe prefix does not
-                // drop events from the toUIMessageStream merge below. Returning on
-                // the first *renderable* event (not first text) keeps Gemini's
-                // tool-call-before-text turns streaming the tool indicator promptly.
-                const MAX_EMPTY_RESPONSE_ATTEMPTS = 3;
-                // a still-too-long trimmed payload reproduces the same context
-                // error (trim is deterministic from the unchanged messages), so
-                // cap trim retries to avoid an unbounded loop; on the cap we fall
-                // through to merge and let the existing onError surface it.
-                const MAX_CONTEXT_TRIM_ATTEMPTS = 1;
-                let emptyResponseAttempts = 0;
-                let contextTrimAttempts = 0;
-                // the config the loop retries from; trim replaces its messages so
-                // a later empty-response retry reuses the trimmed payload instead
-                // of resending the original (too-large) one.
-                let currentConfig = streamTextConfig;
-                let result = streamText(currentConfig);
-
-                while (true) {
-                  const probe = await probeFirstRenderableEvent(
-                    result.fullStream[Symbol.asyncIterator](),
-                  );
-
-                  if (probe.kind === "renderable" || probe.kind === "aborted") {
-                    break;
-                  }
-
-                  if (probe.kind === "error") {
-                    const maxTokens = parseMaxInputTokens(probe.error);
-                    if (
-                      maxTokens !== null &&
-                      contextTrimAttempts < MAX_CONTEXT_TRIM_ATTEMPTS
-                    ) {
-                      contextTrimAttempts++;
-                      const trimmed = trimMessagesToTokenLimit({
-                        messages: modelMessages,
-                        maxTokens,
-                        systemPrompt,
-                      });
-                      logger.info(
-                        {
-                          maxTokens,
-                          originalMessages: modelMessages.length,
-                          trimmedMessages: trimmed.length,
+                const result = await streamTextWithRecovery({
+                  config: { ...streamTextConfig, messages: modelMessages },
+                  conversationId,
+                  onEmptyResponseExhausted: async () => {
+                    // Persist before the throw — nothing has merged yet, so the
+                    // stream onError/onFinish won't fire to do it.
+                    if (!messagesPersisted && conversationId) {
+                      messagesPersisted = true;
+                      try {
+                        await persistNewMessages(
                           conversationId,
-                        },
-                        "[ContextTrimming] retrying with trimmed messages",
-                      );
-                      currentConfig = {
-                        ...currentConfig,
-                        messages: trimmed,
-                      };
-                      result = streamText(currentConfig);
-                      continue;
+                          messages,
+                          "onExecuteError",
+                        );
+                      } catch (persistError) {
+                        logger.error(
+                          { persistError, conversationId },
+                          "Failed to persist messages during empty-response error",
+                        );
+                      }
                     }
-                    // Non-context error, or context-trim retries exhausted: fall
-                    // through to the merge so the existing toUIMessageStream
-                    // onError surfaces it (preserving e.g. unavailable-tool
-                    // handling). tee() replays the error.
-                    break;
-                  }
-
-                  // probe.kind === "empty": the provider finished with no content.
-                  emptyResponseAttempts++;
-                  const canRetryEmptyResponse =
-                    isRetryableEmptyFinishReason(probe.finishReason) &&
-                    emptyResponseAttempts < MAX_EMPTY_RESPONSE_ATTEMPTS;
-                  if (canRetryEmptyResponse) {
-                    logger.warn(
-                      {
-                        conversationId,
-                        finishReason: probe.finishReason,
-                        rawFinishReason: probe.rawFinishReason,
-                        attempt: emptyResponseAttempts,
-                      },
-                      "[EmptyResponse] model produced no content, retrying",
-                    );
-                    result = streamText(currentConfig);
-                    continue;
-                  }
-
-                  // Exhausted retries (or a non-retryable finishReason): treat the
-                  // empty turn as a stream error. Persist first — this runs before
-                  // writer.merge(), so the stream onError/onFinish won't fire.
-                  if (!messagesPersisted && conversationId) {
-                    messagesPersisted = true;
-                    try {
-                      await persistNewMessages(
-                        conversationId,
-                        messages,
-                        "onExecuteError",
-                      );
-                    } catch (persistError) {
-                      logger.error(
-                        { persistError, conversationId },
-                        "Failed to persist messages during empty-response error",
-                      );
-                    }
-                  }
-                  throw new EmptyModelResponseError({
-                    finishReason: probe.finishReason,
-                    rawFinishReason: probe.rawFinishReason,
-                    attempts: emptyResponseAttempts,
-                  });
-                }
+                  },
+                });
 
                 // toUIMessageStream invokes onError twice for the same upstream
                 // error: first with the real error to build the chunk's

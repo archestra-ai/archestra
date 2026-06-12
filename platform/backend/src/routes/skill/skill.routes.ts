@@ -976,6 +976,11 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 kind: z.enum(["reference", "script", "asset"]),
               }),
             ),
+            skippedFiles: z
+              .array(z.string())
+              .describe(
+                "Resource paths not imported: oversized, beyond the per-skill file cap, or unfetchable",
+              ),
             sourceRef: z.string(),
             sourceCommit: z.string(),
           }),
@@ -1003,6 +1008,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       return reply.send({
         ...item.parsed,
         files: item.files,
+        skippedFiles: item.skippedFiles,
         sourceRef: item.sourceRef,
         sourceCommit: item.sourceCommit,
       });
@@ -1028,6 +1034,16 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
           z.object({
             created: z.array(SelectSkillSchema),
             skipped: z.array(z.string()),
+            skippedFiles: z
+              .array(
+                z.object({
+                  skillPath: z.string(),
+                  files: z.array(z.string()),
+                }),
+              )
+              .describe(
+                "Per created skill, resource paths not imported: oversized, beyond the per-skill file cap, or unfetchable",
+              ),
           }),
         ),
       },
@@ -1040,22 +1056,12 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const scope = body.scope ?? "personal";
       const teamIds = scope === "team" ? dedupe(body.teamIds ?? []) : [];
 
-      const checker = await getSkillPermissionChecker({
+      await authorizeSkillCreate({
         userId: user.id,
         organizationId,
-      });
-      const userTeamIds = checker.isAdmin
-        ? []
-        : await TeamModel.getUserTeamIds(user.id);
-      authorizeSkillScope({
-        checker,
         scope,
-        authorId: user.id,
-        requestedTeamIds: teamIds,
-        userTeamIds,
-        userId: user.id,
+        teamIds,
       });
-      await assertSkillTeams({ scope, teamIds, organizationId });
 
       const githubToken = await resolveGithubImportToken({
         githubToken: body.githubToken,
@@ -1074,20 +1080,14 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       const created: Skill[] = [];
       const skipped: string[] = [];
+      const skippedFiles: { skillPath: string; files: string[] }[] = [];
       for (const item of imported) {
         const skill = await withTeamFkErrorMapped(() =>
           SkillModel.createWithFiles({
             skill: {
+              ...toSkillInsertFields(item.parsed),
               organizationId,
               authorId: user.id,
-              name: item.parsed.name,
-              description: item.parsed.description,
-              content: item.parsed.content,
-              license: item.parsed.license,
-              compatibility: item.parsed.compatibility,
-              allowedTools: item.parsed.allowedTools,
-              templated: item.parsed.templated,
-              metadata: item.parsed.metadata,
               sourceType: "github",
               sourceRef: item.sourceRef,
               sourceCommit: item.sourceCommit,
@@ -1102,6 +1102,12 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
           continue;
         }
         created.push(skill);
+        if (item.skippedFiles.length > 0) {
+          skippedFiles.push({
+            skillPath: item.skillPath,
+            files: item.skippedFiles,
+          });
+        }
       }
 
       logger.info(
@@ -1116,7 +1122,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         skipped,
       };
 
-      return reply.send({ created, skipped });
+      return reply.send({ created, skipped, skippedFiles });
     },
   );
 };

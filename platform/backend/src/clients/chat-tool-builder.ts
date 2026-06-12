@@ -444,6 +444,10 @@ export const __test = {
 
 // === Internal helpers ===
 
+/**
+ * MIME types that indicate a renderable UI resource (SEP-1865).
+ * `text/html;profile=mcp-app` is the canonical type per the spec;
+ */
 const RENDERABLE_UI_MIME_TYPES = [RESOURCE_MIME_TYPE];
 
 function getChatExternalAgentId(): string {

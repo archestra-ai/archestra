@@ -2,8 +2,10 @@
 // wrappers (MCP gateway tools vs agent delegation tools), their approval and
 // hook pipelines, error handling, metric emission, and tool-cache gating.
 // Mocks sit only at process boundaries: the MCP SDK client (gateway transport),
-// mcpClient.executeToolCall (gateway network call), and executeA2AMessage
-// (child-agent execution).
+// mcpClient.executeToolCall (gateway network call), executeA2AMessage
+// (child-agent execution), hookDispatcherService.fire (hook scripts run in
+// Dagger sandbox containers), the browser-stream feature (browser pods), and
+// the external-IdP session token resolver (IdP network call).
 import {
   getArchestraToolFullName,
   TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON,
@@ -576,6 +578,77 @@ describe("getChatMcpTools approval gating", () => {
     await expect(
       needsApproval(
         { tool_name: assignedTool.name, tool_args: {} },
+        execOptions(),
+      ),
+    ).resolves.toBe(false);
+
+    chatClient.clearChatMcpClient(agent.id);
+    await chatClient.__test.clearToolCache();
+  });
+
+  test("delegation needsApproval targets the delegation tool itself, not a tool_name in args", async ({
+    makeAgent,
+    makeAgentTool,
+    makeInternalMcpCatalog,
+    makeTool,
+    makeToolPolicy,
+    makeUser,
+    makeOrganization,
+    makeMember,
+    makeConversation,
+  }) => {
+    const org = await makeOrganization({ globalToolPolicy: "restrictive" });
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "admin" });
+    const agent = await makeAgent({
+      organizationId: org.id,
+      name: "Retarget Agent",
+    });
+    const catalog = await makeInternalMcpCatalog({ organizationId: org.id });
+    const guardedTool = await makeTool({
+      name: "extsrv__guarded_export",
+      catalogId: catalog.id,
+    });
+    await makeToolPolicy(guardedTool.id, {
+      action: "require_approval",
+      conditions: [],
+    });
+    const targetAgent = await makeAgent({
+      organizationId: org.id,
+      name: "Retarget Child",
+    });
+    const delegationTool = await ToolModel.findOrCreateDelegationTool(
+      targetAgent.id,
+    );
+    await makeAgentTool(agent.id, delegationTool.id);
+
+    const conversation = await makeConversation(agent.id, {
+      organizationId: org.id,
+      userId: user.id,
+    });
+    chatClient.clearChatMcpClient(agent.id);
+    await chatClient.__test.clearToolCache();
+    chatClient.__test.setCachedClient(
+      chatClient.__test.getCacheKey(agent.id, user.id, conversation.id),
+      buildMockGatewayClient([]),
+    );
+
+    const tools = await chatClient.getChatMcpTools({
+      agentName: agent.name,
+      agentId: agent.id,
+      userId: user.id,
+      organizationId: org.id,
+      conversationId: conversation.id,
+    });
+
+    const needsApproval = callableNeedsApproval(tools[delegationTool.name]);
+    await expect(
+      needsApproval(
+        {
+          message: "do the work",
+          tool_name: guardedTool.name,
+          tool_args: {},
+        },
         execOptions(),
       ),
     ).resolves.toBe(false);

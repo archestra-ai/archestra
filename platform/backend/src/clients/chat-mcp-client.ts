@@ -19,6 +19,7 @@ import {
   buildAgentDelegationTool,
   buildMcpGatewayTool,
   type ChatToolContext,
+  type McpGatewayToken,
 } from "@/clients/chat-tool-builder";
 import config from "@/config";
 import type { CollectedHookRun } from "@/hooks/hook-run-parts";
@@ -199,13 +200,7 @@ export async function selectMCPGatewayToken(
   agentId: string,
   userId: string,
   organizationId: string,
-): Promise<{
-  tokenValue: string;
-  tokenId: string;
-  teamId: string | null;
-  isOrganizationToken: boolean;
-  isUserToken?: boolean;
-} | null> {
+): Promise<McpGatewayToken | null> {
   // Get user's team IDs and profile's team IDs (needed for fallback token selection)
   const userTeamIds = await TeamModel.getUserTeamIds(userId);
   const profileTeamIds = await AgentTeamModel.getTeamsForAgent(agentId);
@@ -656,7 +651,7 @@ function shouldValidateCachedClient(cacheKey: string): boolean {
 
 /**
  * Get all MCP tools for the specified agent and user in AI SDK Tool format
- * Converts MCP JSON Schema to AI SDK Schema using jsonSchema() helper
+ * (wrapping and schema normalization live in chat-tool-builder)
  *
  * @param agentId - The agent ID to fetch tools for
  * @param userId - The user ID for authentication

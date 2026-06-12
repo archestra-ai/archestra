@@ -40,6 +40,7 @@ The docker-compose command is an alternative local setup with pre-configured dat
 - Follow OTEL GenAI Semantic Conventions (see "Naming new attributes and metrics" — check the registry before adding any attribute): https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-agent-spans/.
 - LLM spans use `gen_ai.agent.id`, `gen_ai.agent.name`, `gen_ai.provider.name`, `gen_ai.request.model`, `gen_ai.operation.name`, and `archestra.label.<key>` for dynamic labels.
 - MCP spans use `gen_ai.tool.name` and `mcp.server.name`.
+- Team metadata uses the custom `archestra.team.*` namespace (no OTEL registry equivalent): `archestra.team.ids` / `archestra.team.names` are array-valued (agents can belong to multiple teams), and `archestra.team.label.<key>` carries team labels merged per key across the agent's teams. Set via `setTeamAttributes` in `observability/tracing/attributes.ts`; team metadata is resolved once per request via `AgentTeamModel.getTeamLabelInfoForAgent`.
 - Session tracking uses `gen_ai.conversation.id` from the `X-Archestra-Session-Id` header.
 - Span names are `chat {model}`, `generate_content {model}`, and `execute_tool {tool_name}`.
 - Agent label keys are fetched from the database on startup and included as resource attributes.

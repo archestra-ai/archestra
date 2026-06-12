@@ -30,9 +30,20 @@ export const catalogSkillSeed: CatalogSearch["results"][number] = {
   fileCount: 2,
 };
 
+// A skill living at the repository root (empty skillPath) — the select step
+// must render and select it even though its path is a falsy string.
+export const catalogRootSkillSeed: CatalogSearch["results"][number] = {
+  repo: "acme/root-skill",
+  skillPath: "",
+  name: "Root skill",
+  description: "Seeded repo-root catalog entry.",
+  compatibility: null,
+  fileCount: 1,
+};
+
 export const skillCatalogSearchSeed: CatalogSearch = {
-  results: [catalogSkillSeed],
-  totalCount: 1,
+  results: [catalogSkillSeed, catalogRootSkillSeed],
+  totalCount: 2,
 };
 
 export function makeDiscoveredSkill(

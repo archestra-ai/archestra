@@ -117,14 +117,17 @@ export function ImportSkillsDialog({
         ? { githubToken: githubToken.trim() }
         : {};
 
-  const previewBody = previewSkillPath
-    ? {
-        repoUrl,
-        ...(path.trim() && { path: path.trim() }),
-        ...githubAuthFields,
-        skillPath: previewSkillPath,
-      }
-    : null;
+  // strict null check: a repo-root skill's path is "", which is still a
+  // previewable selection
+  const previewBody =
+    previewSkillPath !== null
+      ? {
+          repoUrl,
+          ...(path.trim() && { path: path.trim() }),
+          ...githubAuthFields,
+          skillPath: previewSkillPath,
+        }
+      : null;
   const { data: previewData, isPending: isPreviewLoading } =
     usePreviewGithubSkill(previewBody);
 

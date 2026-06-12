@@ -1,5 +1,10 @@
 import { makeConfig } from "../src/mocks/data/config";
-import { catalogSkillSeed } from "../src/mocks/data/skills";
+import {
+  catalogRootSkillSeed,
+  catalogSkillSeed,
+  githubPreviewSeed,
+  makeImportedSkill,
+} from "../src/mocks/data/skills";
 import { expect, test } from "./fixtures";
 
 test.describe("Skills import", () => {
@@ -107,7 +112,8 @@ test.describe("Skills import", () => {
       url: "/api/skills/github/import",
       body: {
         created: [],
-        skipped: [catalogSkillSeed.skillPath],
+        // the backend reports skipped skills by parsed manifest name
+        skipped: [catalogSkillSeed.name],
         skippedFiles: [],
       },
     });
@@ -159,6 +165,72 @@ test.describe("Skills import", () => {
     ).toBeVisible();
     await expect(
       selectDialog.getByRole("button", { name: "Deselect Beta skill" }),
+    ).toBeVisible();
+  });
+
+  test("a repo-root catalog skill (empty skillPath) reaches the confirm step and can be previewed", async ({
+    page,
+    skillsNewPage,
+    mswControl,
+  }) => {
+    await mswControl.use({
+      method: "post",
+      url: "/api/skills/github/preview",
+      body: { ...githubPreviewSeed, name: catalogRootSkillSeed.name },
+    });
+
+    await skillsNewPage.goto();
+    await skillsNewPage.searchInput.fill("root");
+    await skillsNewPage
+      .importResultFor(catalogRootSkillSeed.name, catalogRootSkillSeed.repo)
+      .click();
+
+    const dialog = page.getByRole("dialog", {
+      name: "Select skills to import",
+    });
+    await expect(dialog).toContainText("1 of 1 selected");
+
+    // the root skill's empty path must still be a previewable selection
+    await dialog.getByRole("button", { name: "Preview Root skill" }).click();
+    await expect(
+      page.getByRole("dialog", { name: catalogRootSkillSeed.name }),
+    ).toBeVisible();
+  });
+
+  test("the import toast warns when resource files were dropped", async ({
+    page,
+    skillsNewPage,
+    mswControl,
+  }) => {
+    await mswControl.use({
+      method: "post",
+      url: "/api/skills/github/import",
+      body: {
+        created: [makeImportedSkill()],
+        skipped: [],
+        skippedFiles: [
+          {
+            skillPath: catalogSkillSeed.skillPath,
+            files: ["assets/big.bin", "assets/huge.pdf"],
+          },
+        ],
+      },
+    });
+
+    await skillsNewPage.goto();
+    await skillsNewPage.searchInput.fill("target");
+    await skillsNewPage
+      .importResultFor(catalogSkillSeed.name, catalogSkillSeed.repo)
+      .click();
+    await page
+      .getByRole("dialog", { name: "Select skills to import" })
+      .getByRole("button", { name: /^Import/ })
+      .click();
+
+    await expect(
+      page.getByText(
+        "2 resource files were not imported (oversized or unfetchable)",
+      ),
     ).toBeVisible();
   });
 });

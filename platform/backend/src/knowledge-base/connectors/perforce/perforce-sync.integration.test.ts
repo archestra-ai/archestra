@@ -325,13 +325,13 @@ describe("Perforce connector end-to-end sync", () => {
     const incrementalRun = await ConnectorRunModel.findById(incremental.runId);
     expect(incrementalRun?.documentsProcessed).toBe(1);
 
-    const updatedGuide = await KbDocumentModel.findById(guide!.id);
+    const updatedGuide = await KbDocumentModel.findById(guide?.id);
     expect(updatedGuide?.content).toContain("Now with rollbacks.");
     expect(updatedGuide?.embeddingStatus).toBe("pending");
 
     await alignRunTimestamps(connector.id, incremental.runId);
     await drainEmbeddingTasks();
-    expect((await KbDocumentModel.findById(guide!.id))?.embeddingStatus).toBe(
+    expect((await KbDocumentModel.findById(guide?.id))?.embeddingStatus).toBe(
       "completed",
     );
 

@@ -114,16 +114,14 @@ import {
   ProviderError,
   sanitizeChatErrorForFrontend,
 } from "./errors";
+import { injectSkillActivation } from "./inject-skill-activation";
 import { cloneAttachmentsForFork } from "./normalization/clone-attachments-for-fork";
 import { extractInlineAttachments } from "./normalization/extract-inline-attachments";
 import {
   normalizeChatMessages,
   normalizeChatMessagesForPersistence,
 } from "./normalization/normalize-chat-messages";
-import {
-  buildModelMessages,
-  prepareMessagesForLLM,
-} from "./prepare-model-messages";
+import { buildModelMessages } from "./prepare-model-messages";
 import {
   type ChatStreamTextConfig,
   streamTextWithRecovery,
@@ -513,16 +511,20 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
             // injection (both org flags must be on — the injected block
             // references load_skill) followed by normalization. The original
             // `messages` stay clean for persistence and the visible bubble.
-            const normalizedMessagesForLLM = await prepareMessagesForLLM({
-              messages: messages as ChatMessage[],
-              skillSlashCommandsActive:
-                !!organization?.skillSlashCommandsEnabled &&
-                !!organization?.skillToolsEnabled,
-              organizationId,
-              userId: user.id,
-              agentId: conversation.agentId ?? undefined,
-              conversationId,
-            });
+            const skillSlashCommandsActive =
+              !!organization?.skillSlashCommandsEnabled &&
+              !!organization?.skillToolsEnabled;
+            const normalizedMessagesForLLM = normalizeChatMessages(
+              skillSlashCommandsActive
+                ? await injectSkillActivation({
+                    messages: messages as ChatMessage[],
+                    organizationId,
+                    userId: user.id,
+                    agentId: conversation.agentId ?? undefined,
+                    conversationId,
+                  })
+                : (messages as ChatMessage[]),
+            );
 
             // Perplexity does NOT support tool calling - it has built-in web search instead
             // @see https://docs.perplexity.ai/api-reference/chat-completions-post

@@ -9,47 +9,10 @@ import {
   type ContextCompactionStreamData,
   compactMessagesForChat,
 } from "./context-compaction";
-import { injectSkillActivation } from "./inject-skill-activation";
 import { applyPromptCacheBreakpoints } from "./normalization/apply-prompt-cache";
 import { materializeAttachments } from "./normalization/materialize-attachments";
-import { normalizeChatMessages } from "./normalization/normalize-chat-messages";
 
-/**
- * The message-preparation pipeline between the incoming UI messages and the
- * ModelMessage[] handed to streamText. Split at the stream boundary:
- * `prepareMessagesForLLM` runs before the response stream opens (its failures
- * surface as HTTP errors), `buildModelMessages` runs inside the stream because
- * compaction reports progress to the client while it works.
- */
-
-/**
- * Build the model-bound copy of the incoming messages: inject a slash-command
- * skill activation block (when the org flags allow it), then normalize the
- * history (dedupe tool parts, drop dangling tool calls, strip heavy payloads).
- * The original messages stay untouched for persistence and the visible bubble.
- */
-export async function prepareMessagesForLLM(params: {
-  messages: ChatMessage[];
-  skillSlashCommandsActive: boolean;
-  organizationId: string;
-  userId: string;
-  agentId: string | undefined;
-  conversationId: string;
-}): Promise<ChatMessage[]> {
-  const messagesForLLM = params.skillSlashCommandsActive
-    ? await injectSkillActivation({
-        messages: params.messages,
-        organizationId: params.organizationId,
-        userId: params.userId,
-        agentId: params.agentId,
-        conversationId: params.conversationId,
-      })
-    : params.messages;
-
-  return normalizeChatMessages(messagesForLLM);
-}
-
-export type CompactionStreamEvent =
+type CompactionStreamEvent =
   | { type: "data-context-compaction-start"; data: { trigger: "auto" } }
   | {
       type: "data-context-compaction-finish";
@@ -60,11 +23,8 @@ export type CompactionStreamEvent =
 /**
  * Compact the (already normalized) history when it is over the auto-compaction
  * threshold, then materialize attachment refs, apply provider message shims,
- * convert to ModelMessage[], and mark prompt-cache breakpoints.
- *
- * Compaction progress and the resulting context-window estimate are reported
- * through `emit` as they happen — the client shows a live indicator while the
- * summarization LLM call runs.
+ * convert to ModelMessage[], and mark prompt-cache breakpoints. Compaction
+ * progress and the context-window estimate stream to the client via `emit`.
  */
 export async function buildModelMessages(params: {
   messages: ChatMessage[];

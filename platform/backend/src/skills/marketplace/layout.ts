@@ -65,8 +65,12 @@ export function computeLayout(req: MaterializeRequest): RevisionPayloadFile[] {
       skills: manifestSkills,
     }),
   );
-  files.push(textFile(".claude-plugin/marketplace.json", simpleMarketplaceJson));
-  files.push(textFile(".cursor-plugin/marketplace.json", simpleMarketplaceJson));
+  files.push(
+    textFile(".claude-plugin/marketplace.json", simpleMarketplaceJson),
+  );
+  files.push(
+    textFile(".cursor-plugin/marketplace.json", simpleMarketplaceJson),
+  );
   files.push(
     textFile(
       ".agents/plugins/marketplace.json",
@@ -87,8 +91,12 @@ export function computeLayout(req: MaterializeRequest): RevisionPayloadFile[] {
       skills: manifestSkills,
     }),
   );
-  files.push(textFile(`${pluginRoot}/.claude-plugin/plugin.json`, simplePluginJson));
-  files.push(textFile(`${pluginRoot}/.cursor-plugin/plugin.json`, simplePluginJson));
+  files.push(
+    textFile(`${pluginRoot}/.claude-plugin/plugin.json`, simplePluginJson),
+  );
+  files.push(
+    textFile(`${pluginRoot}/.cursor-plugin/plugin.json`, simplePluginJson),
+  );
   files.push(
     textFile(
       `${pluginRoot}/.codex-plugin/plugin.json`,

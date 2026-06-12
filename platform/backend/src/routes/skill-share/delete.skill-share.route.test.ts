@@ -1,66 +1,31 @@
 import { ADMIN_ROLE_NAME, MEMBER_ROLE_NAME } from "@archestra/shared";
-import { SkillModel, SkillShareLinkModel } from "@/models";
-import type { FastifyInstanceWithZod } from "@/server";
-import { createFastifyInstance } from "@/server";
-import { afterEach, beforeEach, describe, expect, test } from "@/test";
-import type { User } from "@/types";
-
-async function seedSkill(params: { organizationId: string; name: string }) {
-  const skill = await SkillModel.createWithFiles({
-    skill: {
-      organizationId: params.organizationId,
-      authorId: null,
-      name: params.name,
-      description: `${params.name} description`,
-      content: `# ${params.name}`,
-      metadata: {},
-      sourceType: "manual",
-      scope: "org",
-    },
-    files: [],
-  });
-  if (!skill) throw new Error("failed to seed skill");
-  return skill;
-}
+import { SkillShareLinkModel } from "@/models";
+import { describe, expect, test, useRouteTestApp } from "@/test";
+import skillShareRoutes from "./skill-share.routes";
+import { seedSkill } from "./skill-share.test-helpers";
 
 describe("DELETE /api/skill-share-links/:id", () => {
-  let app: FastifyInstanceWithZod;
-  let user: User;
-  let organizationId: string;
-
-  beforeEach(async ({ makeOrganization, makeUser }) => {
-    user = await makeUser();
-    organizationId = (await makeOrganization()).id;
-
-    app = createFastifyInstance();
-    app.addHook("onRequest", async (request) => {
-      (request as typeof request & { user: unknown }).user = user;
-      (request as typeof request & { organizationId: string }).organizationId =
-        organizationId;
-    });
-
-    const { default: skillShareRoutes } = await import("./skill-share.routes");
-    await app.register(skillShareRoutes);
-  });
-
-  afterEach(async () => {
-    await app.close();
-  });
+  const ctx = useRouteTestApp(skillShareRoutes);
 
   test("revoking flips status to revoked and a subsequent token validate returns null", async ({
     makeMember,
   }) => {
-    await makeMember(user.id, organizationId, { role: ADMIN_ROLE_NAME });
-    const skill = await seedSkill({ organizationId, name: "to-revoke" });
+    await makeMember(ctx.user.id, ctx.organizationId, {
+      role: ADMIN_ROLE_NAME,
+    });
+    const skill = await seedSkill({
+      organizationId: ctx.organizationId,
+      name: "to-revoke",
+    });
     const created = (
-      await app.inject({
+      await ctx.app.inject({
         method: "POST",
         url: "/api/skill-share-links",
         payload: { skillIds: [skill.id] },
       })
     ).json();
 
-    const revoke = await app.inject({
+    const revoke = await ctx.app.inject({
       method: "DELETE",
       url: `/api/skill-share-links/${created.link.id}`,
     });
@@ -75,21 +40,26 @@ describe("DELETE /api/skill-share-links/:id", () => {
   });
 
   test("revoke is idempotent", async ({ makeMember }) => {
-    await makeMember(user.id, organizationId, { role: ADMIN_ROLE_NAME });
-    const skill = await seedSkill({ organizationId, name: "idem" });
+    await makeMember(ctx.user.id, ctx.organizationId, {
+      role: ADMIN_ROLE_NAME,
+    });
+    const skill = await seedSkill({
+      organizationId: ctx.organizationId,
+      name: "idem",
+    });
     const created = (
-      await app.inject({
+      await ctx.app.inject({
         method: "POST",
         url: "/api/skill-share-links",
         payload: { skillIds: [skill.id] },
       })
     ).json();
 
-    const first = await app.inject({
+    const first = await ctx.app.inject({
       method: "DELETE",
       url: `/api/skill-share-links/${created.link.id}`,
     });
-    const second = await app.inject({
+    const second = await ctx.app.inject({
       method: "DELETE",
       url: `/api/skill-share-links/${created.link.id}`,
     });
@@ -103,7 +73,9 @@ describe("DELETE /api/skill-share-links/:id", () => {
     makeOrganization,
     makeUser,
   }) => {
-    await makeMember(user.id, organizationId, { role: ADMIN_ROLE_NAME });
+    await makeMember(ctx.user.id, ctx.organizationId, {
+      role: ADMIN_ROLE_NAME,
+    });
 
     const otherOrg = await makeOrganization();
     const otherUser = await makeUser();
@@ -118,7 +90,7 @@ describe("DELETE /api/skill-share-links/:id", () => {
       marketplaceName: "org-other-skills",
     });
 
-    const response = await app.inject({
+    const response = await ctx.app.inject({
       method: "DELETE",
       url: `/api/skill-share-links/${link.id}`,
     });
@@ -126,16 +98,21 @@ describe("DELETE /api/skill-share-links/:id", () => {
   });
 
   test("member without admin role gets 403", async ({ makeMember }) => {
-    await makeMember(user.id, organizationId, { role: MEMBER_ROLE_NAME });
-    const skill = await seedSkill({ organizationId, name: "no-revoke" });
+    await makeMember(ctx.user.id, ctx.organizationId, {
+      role: MEMBER_ROLE_NAME,
+    });
+    const skill = await seedSkill({
+      organizationId: ctx.organizationId,
+      name: "no-revoke",
+    });
     const { link } = await SkillShareLinkModel.create({
-      organizationId,
-      createdByUserId: user.id,
+      organizationId: ctx.organizationId,
+      createdByUserId: ctx.user.id,
       skillIds: [skill.id],
       marketplaceName: "org-x-skills",
     });
 
-    const response = await app.inject({
+    const response = await ctx.app.inject({
       method: "DELETE",
       url: `/api/skill-share-links/${link.id}`,
     });

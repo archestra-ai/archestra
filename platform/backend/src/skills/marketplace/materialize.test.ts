@@ -1,6 +1,8 @@
+import { execFile } from "node:child_process";
 import { promises as fs } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { promisify } from "node:util";
 import { SkillModel, SkillShareLinkModel } from "@/models";
 import SkillShareLinkRevisionModel from "@/models/skill-share-link-revision";
 import { parseSkillManifest } from "@/skills/parser";
@@ -82,24 +84,21 @@ async function seedLink(fx: {
 describe("MarketplaceMaterializer", () => {
   let cacheDir: string;
   let materializer: MarketplaceMaterializer;
+  let linkId: string;
 
-  beforeEach(async () => {
+  beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
     cacheDir = await fs.mkdtemp(
       path.join(tmpdir(), "archestra-materialize-test-"),
     );
     materializer = new MarketplaceMaterializer({ cacheDir });
+    linkId = await seedLink({ makeOrganization, makeUser, makeMember });
   });
 
   afterEach(async () => {
     await fs.rm(cacheDir, { recursive: true, force: true });
   });
 
-  test("produces the documented on-disk layout for a single skill", async ({
-    makeOrganization,
-    makeUser,
-    makeMember,
-  }) => {
-    const linkId = await seedLink({ makeOrganization, makeUser, makeMember });
+  test("produces the documented on-disk layout for a single skill", async () => {
     const req = makeRequest(linkId, {
       skills: [
         makeSkill({
@@ -176,13 +175,7 @@ describe("MarketplaceMaterializer", () => {
     });
   });
 
-  test("recovers from a cross-replica revision sequence collision", async ({
-    makeOrganization,
-    makeUser,
-    makeMember,
-  }) => {
-    const linkId = await seedLink({ makeOrganization, makeUser, makeMember });
-
+  test("recovers from a cross-replica revision sequence collision", async () => {
     // Simulate a concurrent replica winning the same sequence: the first
     // append persists the winner's row for real, then re-appends with the
     // same sequence so the caller receives a genuine unique violation from
@@ -213,12 +206,7 @@ describe("MarketplaceMaterializer", () => {
     }
   });
 
-  test("SKILL.md frontmatter round-trips through the parser", async ({
-    makeOrganization,
-    makeUser,
-    makeMember,
-  }) => {
-    const linkId = await seedLink({ makeOrganization, makeUser, makeMember });
+  test("SKILL.md frontmatter round-trips through the parser", async () => {
     const req = makeRequest(linkId, {
       skills: [
         makeSkill({
@@ -249,12 +237,7 @@ describe("MarketplaceMaterializer", () => {
     expect(parsed.content).toBe("# PDF Helper\n\nDoes the thing.");
   });
 
-  test("resource file with path SKILL.md does not overwrite generated manifest", async ({
-    makeOrganization,
-    makeUser,
-    makeMember,
-  }) => {
-    const linkId = await seedLink({ makeOrganization, makeUser, makeMember });
+  test("resource file with path SKILL.md does not overwrite generated manifest", async () => {
     const req = makeRequest(linkId, {
       skills: [
         makeSkill({
@@ -286,12 +269,7 @@ describe("MarketplaceMaterializer", () => {
     expect(skillMd).not.toContain("attacker-controlled content");
   });
 
-  test("resource file with path SKILL.md/foo does not collide with the generated manifest", async ({
-    makeOrganization,
-    makeUser,
-    makeMember,
-  }) => {
-    const linkId = await seedLink({ makeOrganization, makeUser, makeMember });
+  test("resource file with path SKILL.md/foo does not collide with the generated manifest", async () => {
     const req = makeRequest(linkId, {
       skills: [
         makeSkill({
@@ -330,12 +308,7 @@ describe("MarketplaceMaterializer", () => {
     ).rejects.toThrow();
   });
 
-  test("resource file with double-slash absolute path cannot escape skill root", async ({
-    makeOrganization,
-    makeUser,
-    makeMember,
-  }) => {
-    const linkId = await seedLink({ makeOrganization, makeUser, makeMember });
+  test("resource file with double-slash absolute path cannot escape skill root", async () => {
     const req = makeRequest(linkId, {
       skills: [
         makeSkill({
@@ -360,12 +333,7 @@ describe("MarketplaceMaterializer", () => {
     expect(result.repoPath).toBeTruthy();
   });
 
-  test("binary resource files round-trip via base64", async ({
-    makeOrganization,
-    makeUser,
-    makeMember,
-  }) => {
-    const linkId = await seedLink({ makeOrganization, makeUser, makeMember });
+  test("binary resource files round-trip via base64", async () => {
     const original = Buffer.from([0x00, 0x01, 0x02, 0xff, 0xfe]);
     const req = makeRequest(linkId, {
       skills: [
@@ -394,12 +362,7 @@ describe("MarketplaceMaterializer", () => {
     expect(Buffer.compare(written, original)).toBe(0);
   });
 
-  test("bundle plugin contains a deterministic skills/<slug> dir per shared skill", async ({
-    makeOrganization,
-    makeUser,
-    makeMember,
-  }) => {
-    const linkId = await seedLink({ makeOrganization, makeUser, makeMember });
+  test("bundle plugin contains a deterministic skills/<slug> dir per shared skill", async () => {
     const skills = [
       makeSkill({ id: "b", name: "Beta" }),
       makeSkill({ id: "a", name: "Alpha" }),
@@ -429,12 +392,7 @@ describe("MarketplaceMaterializer", () => {
     ).resolves.toBeUndefined();
   });
 
-  test("identical content reuses the existing HEAD instead of committing again", async ({
-    makeOrganization,
-    makeUser,
-    makeMember,
-  }) => {
-    const linkId = await seedLink({ makeOrganization, makeUser, makeMember });
+  test("identical content reuses the existing HEAD instead of committing again", async () => {
     const req = makeRequest(linkId);
     const first = await materializer.materialize(req);
     expect(first.reused).toBe(false);
@@ -449,12 +407,7 @@ describe("MarketplaceMaterializer", () => {
     expect(revs).toHaveLength(1);
   });
 
-  test("changed content advances HEAD with a child commit (no unrelated histories)", async ({
-    makeOrganization,
-    makeUser,
-    makeMember,
-  }) => {
-    const linkId = await seedLink({ makeOrganization, makeUser, makeMember });
+  test("changed content advances HEAD with a child commit (no unrelated histories)", async () => {
     const first = await materializer.materialize(makeRequest(linkId));
 
     const updatedSkill = makeSkill({
@@ -478,12 +431,7 @@ describe("MarketplaceMaterializer", () => {
     expect(revs[1].parentSha).toBe(revs[0].commitSha);
   });
 
-  test("per-link mutex serializes concurrent calls into a single commit", async ({
-    makeOrganization,
-    makeUser,
-    makeMember,
-  }) => {
-    const linkId = await seedLink({ makeOrganization, makeUser, makeMember });
+  test("per-link mutex serializes concurrent calls into a single commit", async () => {
     const req = makeRequest(linkId);
     const [a, b] = await Promise.all([
       materializer.materialize(req),
@@ -497,12 +445,7 @@ describe("MarketplaceMaterializer", () => {
     expect(count).toBe(1);
   });
 
-  test("revoke removes the per-link directory", async ({
-    makeOrganization,
-    makeUser,
-    makeMember,
-  }) => {
-    const linkId = await seedLink({ makeOrganization, makeUser, makeMember });
+  test("revoke removes the per-link directory", async () => {
     const req = makeRequest(linkId);
     const result = await materializer.materialize(req);
     await expect(fs.access(result.repoPath)).resolves.toBeUndefined();
@@ -516,19 +459,18 @@ describe("MarketplaceMaterializer", () => {
     makeUser,
     makeMember,
   }) => {
-    const liveId = await seedLink({ makeOrganization, makeUser, makeMember });
     const orphanId = await seedLink({ makeOrganization, makeUser, makeMember });
-    await materializer.materialize(makeRequest(liveId));
+    await materializer.materialize(makeRequest(linkId));
     await materializer.materialize(
       makeRequest(orphanId, {
         skills: [makeSkill({ id: "22222222-2222-3333-4444-555555555555" })],
       }),
     );
 
-    const removed = await materializer.sweepOrphans([liveId]);
+    const removed = await materializer.sweepOrphans([linkId]);
     expect(removed).toEqual([orphanId]);
     await expect(
-      fs.access(path.join(cacheDir, liveId)),
+      fs.access(path.join(cacheDir, linkId)),
     ).resolves.toBeUndefined();
     await expect(fs.access(path.join(cacheDir, orphanId))).rejects.toThrow();
   });
@@ -550,12 +492,7 @@ describe("MarketplaceMaterializer", () => {
     await expect(empty.sweepOrphans([])).resolves.toEqual([]);
   });
 
-  test("wiping the cache replays revisions to byte-identical SHAs", async ({
-    makeOrganization,
-    makeUser,
-    makeMember,
-  }) => {
-    const linkId = await seedLink({ makeOrganization, makeUser, makeMember });
+  test("wiping the cache replays revisions to byte-identical SHAs", async () => {
     const req = makeRequest(linkId);
     const first = await materializer.materialize(req);
     const updated = await materializer.materialize(
@@ -590,12 +527,7 @@ describe("MarketplaceMaterializer", () => {
     );
   });
 
-  test("same content materialized twice produces the same commit SHA across instances", async ({
-    makeOrganization,
-    makeUser,
-    makeMember,
-  }) => {
-    const linkId = await seedLink({ makeOrganization, makeUser, makeMember });
+  test("same content materialized twice produces the same commit SHA across instances", async () => {
     const req = makeRequest(linkId);
 
     // first instance writes revision 1
@@ -622,12 +554,7 @@ describe("MarketplaceMaterializer", () => {
     }
   });
 
-  test("commit author and committer use the configured identity", async ({
-    makeOrganization,
-    makeUser,
-    makeMember,
-  }) => {
-    const linkId = await seedLink({ makeOrganization, makeUser, makeMember });
+  test("commit author and committer use the configured identity", async () => {
     const identity = { name: "Test Marketplace", email: "test@example.com" };
     const m = new MarketplaceMaterializer({ cacheDir, identity });
     const result = await m.materialize(makeRequest(linkId));
@@ -641,93 +568,42 @@ describe("MarketplaceMaterializer", () => {
 
 // ===== test helpers =====
 
+const execFileAsync = promisify(execFile);
+
+async function git(repoPath: string, ...args: string[]): Promise<string> {
+  const { stdout } = await execFileAsync("git", args, { cwd: repoPath });
+  return stdout.trim();
+}
+
 async function readParent(repoPath: string): Promise<string | null> {
-  const { spawn } = await import("node:child_process");
-  return new Promise((resolve, reject) => {
-    const proc = spawn("git", ["rev-parse", "HEAD^"], { cwd: repoPath });
-    let stdout = "";
-    let stderr = "";
-    proc.stdout.on("data", (d) => {
-      stdout += d.toString();
-    });
-    proc.stderr.on("data", (d) => {
-      stderr += d.toString();
-    });
-    proc.on("close", (code) => {
-      if (code === 0) resolve(stdout.trim());
-      else if (/unknown revision/.test(stderr)) resolve(null);
-      else reject(new Error(stderr));
-    });
-  });
+  try {
+    return await git(repoPath, "rev-parse", "HEAD^");
+  } catch (error) {
+    const stderr = (error as { stderr?: string }).stderr ?? "";
+    if (/unknown revision/.test(stderr)) return null;
+    throw error;
+  }
 }
 
 async function commitCount(repoPath: string): Promise<number> {
-  const { spawn } = await import("node:child_process");
-  return new Promise((resolve, reject) => {
-    const proc = spawn("git", ["rev-list", "--count", "HEAD"], {
-      cwd: repoPath,
-    });
-    let stdout = "";
-    let stderr = "";
-    proc.stdout.on("data", (d) => {
-      stdout += d.toString();
-    });
-    proc.stderr.on("data", (d) => {
-      stderr += d.toString();
-    });
-    proc.on("close", (code) => {
-      if (code === 0) resolve(Number.parseInt(stdout.trim(), 10));
-      else reject(new Error(stderr));
-    });
-  });
+  return Number.parseInt(
+    await git(repoPath, "rev-list", "--count", "HEAD"),
+    10,
+  );
 }
 
-async function diskHead(repoPath: string): Promise<string> {
-  const { spawn } = await import("node:child_process");
-  return new Promise((resolve, reject) => {
-    const proc = spawn("git", ["rev-parse", "HEAD"], { cwd: repoPath });
-    let stdout = "";
-    let stderr = "";
-    proc.stdout.on("data", (d) => {
-      stdout += d.toString();
-    });
-    proc.stderr.on("data", (d) => {
-      stderr += d.toString();
-    });
-    proc.on("close", (code) => {
-      if (code === 0) resolve(stdout.trim());
-      else reject(new Error(stderr));
-    });
-  });
+function diskHead(repoPath: string): Promise<string> {
+  return git(repoPath, "rev-parse", "HEAD");
 }
 
-interface CommitMeta {
+async function readCommitMeta(repoPath: string): Promise<{
   authorName: string;
   authorEmail: string;
   committerName: string;
   committerEmail: string;
-}
-
-async function readCommitMeta(repoPath: string): Promise<CommitMeta> {
-  const { spawn } = await import("node:child_process");
-  return new Promise((resolve, reject) => {
-    const proc = spawn("git", ["log", "-1", "--pretty=%an%n%ae%n%cn%n%ce"], {
-      cwd: repoPath,
-    });
-    let stdout = "";
-    let stderr = "";
-    proc.stdout.on("data", (d) => {
-      stdout += d.toString();
-    });
-    proc.stderr.on("data", (d) => {
-      stderr += d.toString();
-    });
-    proc.on("close", (code) => {
-      if (code !== 0) return reject(new Error(stderr));
-      const [authorName, authorEmail, committerName, committerEmail] = stdout
-        .trim()
-        .split("\n");
-      resolve({ authorName, authorEmail, committerName, committerEmail });
-    });
-  });
+}> {
+  const [authorName, authorEmail, committerName, committerEmail] = (
+    await git(repoPath, "log", "-1", "--pretty=%an%n%ae%n%cn%n%ce")
+  ).split("\n");
+  return { authorName, authorEmail, committerName, committerEmail };
 }

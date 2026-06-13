@@ -597,3 +597,4 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @rissrice2105-agent
 - @giangtn99dev-boop
 - @Moliqun
+- @andrefeix

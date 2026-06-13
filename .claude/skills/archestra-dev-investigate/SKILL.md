@@ -14,6 +14,15 @@ Orientation for debugging Archestra. For the process itself — evidence-first, 
 - **The pool is per Node process.** Each web and worker pod holds its own pool of `ARCHESTRA_DATABASE_POOL_MAX`, so DB connection demand is roughly pods × pool, pushed higher by rollout surge, readiness probes, and per-request query fanout. A few users can exhaust Postgres without unusual traffic — do that arithmetic before blaming load.
 - **Surprising-for-the-traffic usually means config, not code.** Check `values-staging.yaml`, the helm values, and backend config / DB setup before reaching for a code change.
 
+## Tools, by angle
+
+Reach for the one that matches the question; load `archestra-dev-observability` for URLs, setup, and span/metric names.
+
+- **Sentry** — a specific failure: the error, its nested cause, and the trace for one request.
+- **Tempo** (traces) — where a request spent time or stalled, and how far it fanned out across LLM, MCP, and DB spans.
+- **Prometheus / `llm_*` metrics** (`/metrics`) — is it systemic? Rates and aggregates for tokens/cost, error rate, and throughput over time.
+- **Grafana** — dashboards over traces and metrics; line a spike up against a deploy.
+
 ## Failure classes to expect
 
 Name the class first — it decides whether the fix is sizing, availability, or release ordering:

@@ -126,11 +126,16 @@ pub fn scan_app_html(html: &str) -> ScanResult {
     }
 }
 
+// HTML attribute names are case-insensitive, but `tl`'s `Attributes::get` is an
+// exact-case lookup — so we iterate and compare keys with `eq_ignore_ascii_case`
+// (cheerio's `.attr()` matched `SRC`/`HREF` too). A valueless attribute yields
+// `None`, i.e. nothing to scan.
 fn attr(tag: &tl::HTMLTag, name: &str) -> Option<String> {
     tag.attributes()
-        .get(name)
-        .flatten()
-        .map(|bytes| bytes.as_utf8_str().into_owned())
+        .iter()
+        .find(|(key, _)| key.eq_ignore_ascii_case(name))
+        .and_then(|(_, value)| value)
+        .map(|value| value.into_owned())
 }
 
 fn reject(kind: RejectionKind, offender: String) -> ScanResult {
@@ -219,6 +224,24 @@ mod tests {
         assert_eq!(
             scan_app_html(html).rejection.expect("should reject").kind,
             RejectionKind::SdkBootstrap
+        );
+    }
+
+    #[test]
+    fn uppercase_attribute_names_are_matched() {
+        // HTML attribute names are case-insensitive — `SRC`/`HREF` must be caught
+        // like `src`/`href` (cheerio's `.attr()` did).
+        let script_upper =
+            r#"<html><head><SCRIPT SRC="/_sandbox/archestra-app-sdk.js"></SCRIPT></head></html>"#;
+        assert_eq!(
+            scan_app_html(script_upper).rejection.expect("reject").kind,
+            RejectionKind::PlatformScriptSrc
+        );
+        let link_upper =
+            r#"<html><head><LINK HREF="/_sandbox/archestra-app-base.css"></head></html>"#;
+        assert_eq!(
+            scan_app_html(link_upper).rejection.expect("reject").kind,
+            RejectionKind::PlatformBaseCss
         );
     }
 

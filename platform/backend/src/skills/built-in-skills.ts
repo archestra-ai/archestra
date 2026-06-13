@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import type { SkillFileKind } from "@/types/skill";
+import { applyBuiltInSkillBranding } from "./built-in-skill-branding";
 
 /**
  * Default Agent Skills shipped with Archestra.
@@ -69,6 +70,46 @@ export function builtInSkillVersion(params: {
       .map((file) => ({ path: file.path, content: file.content })),
   });
   return createHash("sha256").update(canonical).digest("hex");
+}
+
+/**
+ * Skill row fields and resource files for writing a shipped definition to the
+ * database, shared by startup sync and reset-to-default so the two can never
+ * drift on what a pristine copy looks like.
+ *
+ * The shipped definitions hardcode the "Archestra" brand and `archestra__` tool
+ * prefix; both are rewritten to the target org's white-label app name and tool
+ * prefix here (a no-op unless full white-labeling is active, just like built-in
+ * MCP tool names). Callers MUST have synced `archestraMcpBranding` to the target
+ * organization first. `sourceCommit` is hashed over the *branded* body and files
+ * so a pristine copy's live hash matches — and a later app-name change yields a
+ * new `sourceCommit`, so `syncBuiltInSkills` re-brands the pristine copy on the
+ * next run (an edited copy stays preserved).
+ */
+export function builtInSkillShippedWrite(definition: BuiltInSkill): {
+  skill: {
+    name: string;
+    description: string;
+    content: string;
+    sourceCommit: string;
+  };
+  files: { path: string; content: string; kind: SkillFileKind }[];
+} {
+  const content = applyBuiltInSkillBranding(definition.content);
+  const files = definition.files.map((file) => ({
+    path: file.path,
+    content: applyBuiltInSkillBranding(file.content),
+    kind: file.kind,
+  }));
+  return {
+    skill: {
+      name: applyBuiltInSkillBranding(definition.name),
+      description: applyBuiltInSkillBranding(definition.description),
+      content,
+      sourceCommit: builtInSkillVersion({ content, files }),
+    },
+    files,
+  };
 }
 
 const BUILT_IN_SKILL_SOURCE_REF_PREFIX = "builtin:";

@@ -925,7 +925,7 @@ export class OpenAIResponseAdapter
   }
 
   getFinishReasons(): string[] {
-    const reason = this.response.choices[0]?.finish_reason;
+    const reason = this.response.choices?.[0]?.finish_reason;
     return reason ? [reason] : [];
   }
 

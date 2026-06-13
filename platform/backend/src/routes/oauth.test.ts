@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
+import { sql } from "drizzle-orm";
 import { type Mock, vi } from "vitest";
-import { cacheManager } from "@/cache-manager";
+import { CacheKey, cacheManager } from "@/cache-manager";
+import db from "@/database";
 import { secretManager } from "@/secrets-manager";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
@@ -13,6 +15,7 @@ import oauthRoutes, {
   generateCodeVerifier,
   getOAuthResource,
   getOAuthResourceUrl,
+  getOAuthTokenResource,
   refreshOAuthToken,
   resolveOAuthScopesForAuthorization,
 } from "./oauth";
@@ -85,12 +88,12 @@ describe("OAuth helper functions", () => {
       ).toBe("api://legacy-audience");
     });
 
-    test("falls back to server URL when no resource or audience is configured", () => {
+    test("does not fall back to server URL for authorization-code resource indicators", () => {
       expect(
         getOAuthResource({
           server_url: "https://mcp.example.com/mcp",
         }),
-      ).toBe("https://mcp.example.com/mcp");
+      ).toBeUndefined();
     });
 
     test("returns undefined when no resource fields are configured", () => {
@@ -132,6 +135,23 @@ describe("OAuth helper functions", () => {
           server_url: "https://mcp.example.com/mcp",
         }),
       ).toThrow("Invalid OAuth resource URL");
+    });
+
+    test("uses only explicit resource indicators for token requests", () => {
+      expect(
+        getOAuthTokenResource({
+          resource: "https://resource.example.com",
+          audience: "api://legacy-audience",
+        }),
+      ).toBe("https://resource.example.com");
+
+      expect(
+        getOAuthTokenResource({
+          audience: "api://legacy-audience",
+        }),
+      ).toBe("api://legacy-audience");
+
+      expect(getOAuthTokenResource({})).toBeUndefined();
     });
   });
 
@@ -623,6 +643,127 @@ describe("OAuth routes", () => {
     );
   });
 
+  test("does not send the MCP endpoint URL as a token resource during callback", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      name: "Direct OAuth MCP",
+      serverType: "remote",
+      serverUrl: "https://mcp.example.com/v1/mcp",
+      oauthConfig: {
+        name: "Direct OAuth MCP",
+        server_url: "https://mcp.example.com/v1/mcp",
+        grant_type: "authorization_code",
+        auth_server_url: "https://login.example.com/oauth",
+        authorization_endpoint: "https://login.example.com/oauth/authorize",
+        token_endpoint: "https://login.example.com/oauth/token",
+        client_id: "public-client-id",
+        client_secret: "public-client-secret",
+        redirect_uris: ["http://localhost:3000/oauth-callback"],
+        scopes: ["read", "write"],
+        default_scopes: ["read", "write"],
+        supports_resource_metadata: false,
+      },
+    });
+
+    const fetchMock = vi.fn(async (input, init) => {
+      const url = String(input);
+
+      if (url === "https://login.example.com/oauth/token") {
+        const body = init?.body as URLSearchParams;
+        if (body.has("resource")) {
+          return {
+            ok: false,
+            status: 400,
+            text: async () =>
+              JSON.stringify({
+                error: "invalid_target",
+                error_description: "Incorrect resource parameters",
+              }),
+          };
+        }
+
+        return {
+          ok: true,
+          json: async () => ({
+            access_token: "new-access-token",
+            refresh_token: "new-refresh-token",
+            expires_in: 3600,
+          }),
+        };
+      }
+
+      return {
+        ok: true,
+        json: async () => ({
+          authorization_endpoint: "https://login.example.com/oauth/authorize",
+          token_endpoint: "https://login.example.com/oauth/token",
+        }),
+      };
+    }) as Mock;
+    globalThis.fetch = fetchMock;
+
+    const initiateResponse = await app.inject({
+      method: "POST",
+      url: "/api/oauth/initiate",
+      payload: {
+        catalogId: catalog.id,
+      },
+    });
+    expect(initiateResponse.statusCode, initiateResponse.body).toBe(200);
+    const authorizationUrl = new URL(initiateResponse.json().authorizationUrl);
+    expect(authorizationUrl.searchParams.has("resource")).toBe(false);
+    const state = initiateResponse.json().state;
+
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS keyv_cache (
+        key text PRIMARY KEY,
+        value text NOT NULL
+      )
+    `);
+    await db.execute(sql`
+      INSERT INTO keyv_cache (key, value)
+      VALUES (
+        ${`keyv:${CacheKey.OAuthState}-${state}`},
+        ${JSON.stringify({
+          value: {
+            catalogId: catalog.id,
+            codeVerifier: "test-code-verifier",
+            clientId: "public-client-id",
+            clientSecret: "public-client-secret",
+          },
+          expires: Date.now() + 60_000,
+        })}
+      )
+      ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
+    `);
+
+    const callbackResponse = await app.inject({
+      method: "POST",
+      url: "/api/oauth/callback",
+      payload: {
+        code: "authorization-code",
+        state,
+      },
+    });
+
+    expect(callbackResponse.statusCode, callbackResponse.body).toBe(200);
+    expect(callbackResponse.json()).toMatchObject({
+      success: true,
+      catalogId: catalog.id,
+      accessToken: "new-access-token",
+      refreshToken: "new-refresh-token",
+    });
+
+    const tokenRequest = fetchMock.mock.calls.find(
+      ([input]) => String(input) === "https://login.example.com/oauth/token",
+    );
+    const requestBody = tokenRequest?.[1]?.body as URLSearchParams;
+    expect(requestBody.get("grant_type")).toBe("authorization_code");
+    expect(requestBody.get("code")).toBe("authorization-code");
+    expect(requestBody.has("resource")).toBe(false);
+  });
+
   test("includes configured OAuth resource when refreshing access tokens", async ({
     makeInternalMcpCatalog,
   }) => {
@@ -673,5 +814,84 @@ describe("OAuth routes", () => {
     expect(requestBody.get("grant_type")).toBe("refresh_token");
     expect(requestBody.get("refresh_token")).toBe("stored-refresh-token");
     expect(requestBody.get("resource")).toBe("https://mcp.example.com");
+  });
+
+  test("does not send the MCP endpoint URL as a token resource during refresh", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      name: "Refresh Direct OAuth MCP",
+      serverType: "remote",
+      serverUrl: "https://mcp.example.com/v1/mcp",
+      oauthConfig: {
+        name: "Refresh Direct OAuth MCP",
+        server_url: "https://mcp.example.com/v1/mcp",
+        grant_type: "authorization_code",
+        auth_server_url: "https://login.example.com/oauth",
+        authorization_endpoint: "https://login.example.com/oauth/authorize",
+        token_endpoint: "https://login.example.com/oauth/token",
+        client_id: "public-client-id",
+        client_secret: "public-client-secret",
+        redirect_uris: ["http://localhost:3000/oauth-callback"],
+        scopes: ["read", "write"],
+        default_scopes: ["read", "write"],
+        supports_resource_metadata: false,
+      },
+    });
+    const secret = await secretManager().createSecret(
+      {
+        refresh_token: "stored-refresh-token",
+        access_token: "old-access-token",
+      },
+      "refresh-direct-token",
+      true,
+    );
+
+    const fetchMock = vi.fn(async (input, init) => {
+      const url = String(input);
+
+      if (url === "https://login.example.com/oauth/token") {
+        const body = init?.body as URLSearchParams;
+        if (body.has("resource")) {
+          return {
+            ok: false,
+            status: 400,
+            text: async () =>
+              JSON.stringify({
+                error: "invalid_target",
+                error_description: "Incorrect resource parameters",
+              }),
+          };
+        }
+
+        return {
+          ok: true,
+          json: async () => ({
+            access_token: "new-access-token",
+            refresh_token: "new-refresh-token",
+            expires_in: 3600,
+          }),
+        };
+      }
+
+      return {
+        ok: true,
+        json: async () => ({
+          authorization_endpoint: "https://login.example.com/oauth/authorize",
+          token_endpoint: "https://login.example.com/oauth/token",
+        }),
+      };
+    }) as Mock;
+    globalThis.fetch = fetchMock;
+
+    await expect(refreshOAuthToken(secret.id, catalog.id)).resolves.toBe(true);
+
+    const tokenRequest = fetchMock.mock.calls.find(
+      ([input]) => String(input) === "https://login.example.com/oauth/token",
+    );
+    const requestBody = tokenRequest?.[1]?.body as URLSearchParams;
+    expect(requestBody.get("grant_type")).toBe("refresh_token");
+    expect(requestBody.get("refresh_token")).toBe("stored-refresh-token");
+    expect(requestBody.has("resource")).toBe(false);
   });
 });

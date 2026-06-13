@@ -8,8 +8,10 @@ import {
 } from "@archestra/shared";
 import type * as k8s from "@kubernetes/client-node";
 import type { Attach, Exec } from "@kubernetes/client-node";
+import { PatchStrategy, setHeaderOptions } from "@kubernetes/client-node";
 import type z from "zod";
 import config from "@/config";
+import { clusterDnsResolver } from "@/k8s/cluster-dns";
 import {
   ensureStringIsRfc1123Compliant,
   isK8sNotFoundError,
@@ -81,6 +83,26 @@ const AWS_APPLICATION_NETWORK_POLICY_RESOURCE = {
 // How long streamLogs will keep an open WS waiting for the pod to become
 // Ready before giving up. 5 minutes covers a slow image pull on first install.
 const POD_READY_WAIT_MS = 5 * TimeInMs.Minute;
+
+// Container waiting reasons that won't resolve without user action (bad
+// config, invalid image name, crashing server) — treat as terminal failures.
+const TERMINAL_CONTAINER_WAITING_REASONS = [
+  "CrashLoopBackOff",
+  "ErrImageNeverPull",
+  "CreateContainerConfigError",
+  "CreateContainerError",
+  "RunContainerError",
+  "InvalidImageName",
+];
+
+// Image pull failures are usually transient (registry hiccup, network blip,
+// rate limiting). The kubelet keeps retrying the pull on its own with
+// exponential backoff, so the pod recovers without intervention once the
+// pull succeeds — treat these as "still starting", not as terminal failures.
+const TRANSIENT_IMAGE_PULL_WAITING_REASONS = [
+  "ImagePullBackOff",
+  "ErrImagePull",
+];
 
 interface ManagedCustomPolicyResource {
   group: string;
@@ -539,176 +561,118 @@ export default class K8sDeployment {
     policyName: string,
     effectivePolicy: EffectiveNetworkPolicy,
   ): Promise<void> {
-    const k8sCustomObjectsApi = this.requireK8sCustomObjectsApi();
-    const networkPolicy = buildManagedCiliumNetworkPolicy({
-      name: policyName,
-      podSelectorLabels: this.getSystemLabels(),
-      effectivePolicy,
+    await this.upsertManagedCustomPolicy({
+      resource: CILIUM_NETWORK_POLICY_RESOURCE,
+      policyName,
+      body: buildManagedCiliumNetworkPolicy({
+        name: policyName,
+        podSelectorLabels: this.getSystemLabels(),
+        effectivePolicy,
+      }),
     });
-
-    try {
-      try {
-        await k8sCustomObjectsApi.createNamespacedCustomObject({
-          group: "cilium.io",
-          version: "v2",
-          namespace: this.namespace,
-          plural: "ciliumnetworkpolicies",
-          body: networkPolicy,
-        });
-        logger.info(
-          {
-            mcpServerId: this.mcpServer.id,
-            networkPolicyName: policyName,
-            namespace: this.namespace,
-          },
-          "Created CiliumNetworkPolicy for MCP server",
-        );
-      } catch (createError: unknown) {
-        if (!isK8sConflictError(createError)) {
-          throw createError;
-        }
-
-        await k8sCustomObjectsApi.replaceNamespacedCustomObject({
-          group: "cilium.io",
-          version: "v2",
-          namespace: this.namespace,
-          plural: "ciliumnetworkpolicies",
-          name: policyName,
-          body: networkPolicy,
-        });
-        logger.info(
-          {
-            mcpServerId: this.mcpServer.id,
-            networkPolicyName: policyName,
-            namespace: this.namespace,
-          },
-          "Updated CiliumNetworkPolicy for MCP server",
-        );
-      }
-    } catch (error) {
-      logger.error(
-        {
-          err: error,
-          mcpServerId: this.mcpServer.id,
-          networkPolicyName: policyName,
-        },
-        "Failed to create or update CiliumNetworkPolicy",
-      );
-      throw error;
-    }
   }
 
   private async applyGkeFqdnNetworkPolicy(
     policyName: string,
     effectivePolicy: EffectiveNetworkPolicy,
   ): Promise<void> {
-    const k8sCustomObjectsApi = this.requireK8sCustomObjectsApi();
-    const networkPolicy = buildManagedGkeFqdnNetworkPolicy({
-      name: policyName,
-      podSelectorLabels: this.getSystemLabels(),
-      effectivePolicy,
+    await this.upsertManagedCustomPolicy({
+      resource: GKE_FQDN_NETWORK_POLICY_RESOURCE,
+      policyName,
+      body: buildManagedGkeFqdnNetworkPolicy({
+        name: policyName,
+        podSelectorLabels: this.getSystemLabels(),
+        effectivePolicy,
+      }),
     });
-
-    try {
-      try {
-        await k8sCustomObjectsApi.createNamespacedCustomObject({
-          group: "networking.gke.io",
-          version: "v1alpha1",
-          namespace: this.namespace,
-          plural: "fqdnnetworkpolicies",
-          body: networkPolicy,
-        });
-        logger.info(
-          {
-            mcpServerId: this.mcpServer.id,
-            networkPolicyName: policyName,
-            namespace: this.namespace,
-          },
-          "Created GKE FQDNNetworkPolicy for MCP server",
-        );
-      } catch (createError: unknown) {
-        if (!isK8sConflictError(createError)) {
-          throw createError;
-        }
-
-        await k8sCustomObjectsApi.replaceNamespacedCustomObject({
-          group: "networking.gke.io",
-          version: "v1alpha1",
-          namespace: this.namespace,
-          plural: "fqdnnetworkpolicies",
-          name: policyName,
-          body: networkPolicy,
-        });
-        logger.info(
-          {
-            mcpServerId: this.mcpServer.id,
-            networkPolicyName: policyName,
-            namespace: this.namespace,
-          },
-          "Updated GKE FQDNNetworkPolicy for MCP server",
-        );
-      }
-    } catch (error) {
-      logger.error(
-        {
-          err: error,
-          mcpServerId: this.mcpServer.id,
-          networkPolicyName: policyName,
-        },
-        "Failed to create or update GKE FQDNNetworkPolicy",
-      );
-      throw error;
-    }
   }
 
   private async applyAwsApplicationNetworkPolicy(
     policyName: string,
     effectivePolicy: EffectiveNetworkPolicy,
   ): Promise<void> {
-    const k8sCustomObjectsApi = this.requireK8sCustomObjectsApi();
-    const networkPolicy = buildManagedAwsApplicationNetworkPolicy({
-      name: policyName,
-      podSelectorLabels: this.getSystemLabels(),
-      effectivePolicy,
+    const clusterDnsIps = await clusterDnsResolver.getClusterDnsIps(
+      this.k8sApi,
+    );
+    if (clusterDnsIps.length === 0) {
+      logger.warn(
+        {
+          mcpServerId: this.mcpServer.id,
+          networkPolicyName: policyName,
+          namespace: this.namespace,
+        },
+        "Cluster DNS service IP could not be resolved; ApplicationNetworkPolicy will allow DNS egress to any IP",
+      );
+    }
+
+    await this.upsertManagedCustomPolicy({
+      resource: AWS_APPLICATION_NETWORK_POLICY_RESOURCE,
+      policyName,
+      body: buildManagedAwsApplicationNetworkPolicy({
+        name: policyName,
+        podSelectorLabels: this.getSystemLabels(),
+        effectivePolicy,
+        clusterDnsIps,
+      }),
     });
+  }
+
+  /**
+   * Create or update a managed custom policy object.
+   *
+   * Updates use a JSON merge patch instead of a PUT: custom resources reject
+   * a PUT without metadata.resourceVersion (so policies created by older
+   * releases would never be corrected in place), and a merge patch also
+   * preserves controller-owned metadata such as finalizers.
+   */
+  private async upsertManagedCustomPolicy(params: {
+    resource: ManagedCustomPolicyResource;
+    policyName: string;
+    body: Record<string, unknown>;
+  }): Promise<void> {
+    const k8sCustomObjectsApi = this.requireK8sCustomObjectsApi();
+    const { group, version, plural, label } = params.resource;
 
     try {
       try {
         await k8sCustomObjectsApi.createNamespacedCustomObject({
-          group: "networking.k8s.aws",
-          version: "v1alpha1",
+          group,
+          version,
           namespace: this.namespace,
-          plural: "applicationnetworkpolicies",
-          body: networkPolicy,
+          plural,
+          body: params.body,
         });
         logger.info(
           {
             mcpServerId: this.mcpServer.id,
-            networkPolicyName: policyName,
+            networkPolicyName: params.policyName,
             namespace: this.namespace,
           },
-          "Created AWS ApplicationNetworkPolicy for MCP server",
+          `Created ${label} for MCP server`,
         );
       } catch (createError: unknown) {
         if (!isK8sConflictError(createError)) {
           throw createError;
         }
 
-        await k8sCustomObjectsApi.replaceNamespacedCustomObject({
-          group: "networking.k8s.aws",
-          version: "v1alpha1",
-          namespace: this.namespace,
-          plural: "applicationnetworkpolicies",
-          name: policyName,
-          body: networkPolicy,
-        });
+        await k8sCustomObjectsApi.patchNamespacedCustomObject(
+          {
+            group,
+            version,
+            namespace: this.namespace,
+            plural,
+            name: params.policyName,
+            body: params.body,
+          },
+          setHeaderOptions("Content-Type", PatchStrategy.MergePatch),
+        );
         logger.info(
           {
             mcpServerId: this.mcpServer.id,
-            networkPolicyName: policyName,
+            networkPolicyName: params.policyName,
             namespace: this.namespace,
           },
-          "Updated AWS ApplicationNetworkPolicy for MCP server",
+          `Updated ${label} for MCP server`,
         );
       }
     } catch (error) {
@@ -716,9 +680,9 @@ export default class K8sDeployment {
         {
           err: error,
           mcpServerId: this.mcpServer.id,
-          networkPolicyName: policyName,
+          networkPolicyName: params.policyName,
         },
-        "Failed to create or update AWS ApplicationNetworkPolicy",
+        `Failed to create or update ${label}`,
       );
       throw error;
     }
@@ -2355,14 +2319,24 @@ export default class K8sDeployment {
 
         // Check pod container statuses for failure states (e.g. CrashLoopBackOff)
         const failureCheck = await this.checkPodContainerStatusesForFailure();
-        if (failureCheck.hasFailed) {
+        if (failureCheck.hasFailed && !failureCheck.isTransientImagePull) {
           this.state = "failed";
           this.errorMessage = failureCheck.message;
           logger.warn(
             `Deployment ${this.deploymentName} is in a failure state: ${failureCheck.message}`,
           );
         } else {
+          // Image pull errors stay "pending": the kubelet retries the pull
+          // on its own and the deployment recovers once it succeeds.
           this.state = "pending";
+          this.errorMessage = failureCheck.isTransientImagePull
+            ? failureCheck.message
+            : null;
+          if (failureCheck.isTransientImagePull) {
+            logger.info(
+              `Deployment ${this.deploymentName} is waiting on an image pull (kubelet will retry): ${failureCheck.message}`,
+            );
+          }
         }
 
         // Even if pending/failed, ensure HTTP configuration (Service + URL) is set up
@@ -2671,12 +2645,18 @@ export default class K8sDeployment {
 
   /**
    * Check all pods for container failure states (e.g. CrashLoopBackOff, ImagePullBackOff).
-   * Used on startup to detect deployments that are stuck in a failure state.
+   * Used on startup and during state refresh to detect deployments stuck in a
+   * failure state. Image pull failures are reported separately
+   * (`isTransientImagePull`) because the kubelet retries pulls on its own and
+   * the pod recovers once the pull succeeds.
    */
   private async checkPodContainerStatusesForFailure(): Promise<{
     hasFailed: boolean;
+    isTransientImagePull: boolean;
     message: string;
   }> {
+    let transientImagePullMessage: string | null = null;
+
     try {
       const sanitizedId = sanitizeLabelValue(this.mcpServer.id);
       const pods = await this.k8sApi.listNamespacedPod({
@@ -2684,26 +2664,19 @@ export default class K8sDeployment {
         labelSelector: `mcp-server-id=${sanitizedId}`,
       });
 
-      const failureStates = [
-        "CrashLoopBackOff",
-        "ImagePullBackOff",
-        "ErrImagePull",
-        "ErrImageNeverPull",
-        "CreateContainerConfigError",
-        "CreateContainerError",
-        "RunContainerError",
-        "InvalidImageName",
-      ];
-
       for (const pod of pods.items) {
         for (const cs of pod.status?.containerStatuses ?? []) {
           const reason = cs.state?.waiting?.reason;
-          if (reason && failureStates.includes(reason)) {
-            return {
-              hasFailed: true,
-              message:
-                cs.state?.waiting?.message || `Container in ${reason} state`,
-            };
+          if (!reason) {
+            continue;
+          }
+          const message =
+            cs.state?.waiting?.message || `Container in ${reason} state`;
+          if (TERMINAL_CONTAINER_WAITING_REASONS.includes(reason)) {
+            return { hasFailed: true, isTransientImagePull: false, message };
+          }
+          if (TRANSIENT_IMAGE_PULL_WAITING_REASONS.includes(reason)) {
+            transientImagePullMessage = message;
           }
         }
       }
@@ -2714,7 +2687,15 @@ export default class K8sDeployment {
       );
     }
 
-    return { hasFailed: false, message: "" };
+    if (transientImagePullMessage) {
+      return {
+        hasFailed: true,
+        isTransientImagePull: true,
+        message: transientImagePullMessage,
+      };
+    }
+
+    return { hasFailed: false, isTransientImagePull: false, message: "" };
   }
 
   private checkPodConditionsForFailure(pod: k8s.V1Pod): {
@@ -2914,6 +2895,8 @@ export default class K8sDeployment {
     maxAttempts = 60,
     intervalMs = 2000,
   ): Promise<void> {
+    let lastImagePullError: string | null = null;
+
     for (let i = 0; i < maxAttempts; i++) {
       try {
         const deployment = await this.k8sAppsApi.readNamespacedDeployment({
@@ -2931,6 +2914,7 @@ export default class K8sDeployment {
             await this.assignHttpPortIfNeeded(pod);
             // Update state to running now that deployment is confirmed ready
             this.state = "running";
+            this.errorMessage = null;
             return;
           }
         }
@@ -2987,25 +2971,28 @@ export default class K8sDeployment {
             for (const containerStatus of pod.status.containerStatuses) {
               const waitingReason = containerStatus.state?.waiting?.reason;
               if (waitingReason) {
-                const failureStates = [
-                  "CrashLoopBackOff",
-                  "ImagePullBackOff",
-                  "ErrImagePull",
-                  "ErrImageNeverPull",
-                  "CreateContainerConfigError",
-                  "CreateContainerError",
-                  "RunContainerError",
-                  "InvalidImageName",
-                ];
-                if (failureStates.includes(waitingReason)) {
-                  const message =
-                    containerStatus.state?.waiting?.message ||
-                    `Container in ${waitingReason} state`;
+                const message =
+                  containerStatus.state?.waiting?.message ||
+                  `Container in ${waitingReason} state`;
+
+                if (
+                  TERMINAL_CONTAINER_WAITING_REASONS.includes(waitingReason)
+                ) {
                   this.state = "failed";
                   this.errorMessage = message;
                   throw new Error(
                     `Deployment ${this.deploymentName} failed: ${waitingReason} - ${message}`,
                   );
+                }
+
+                // Image pull errors are retried by the kubelet itself with
+                // exponential backoff — keep waiting instead of failing fast,
+                // but surface the error so status polling can display it.
+                if (
+                  TRANSIENT_IMAGE_PULL_WAITING_REASONS.includes(waitingReason)
+                ) {
+                  lastImagePullError = `${waitingReason} - ${message}`;
+                  this.errorMessage = message;
                 }
               }
             }
@@ -3026,7 +3013,11 @@ export default class K8sDeployment {
     }
 
     throw new Error(
-      `Deployment ${this.deploymentName} did not become ready after ${maxAttempts} attempts`,
+      `Deployment ${this.deploymentName} did not become ready after ${maxAttempts} attempts${
+        lastImagePullError
+          ? ` (last image pull error: ${lastImagePullError})`
+          : ""
+      }`,
     );
   }
 
@@ -3541,8 +3532,18 @@ export default class K8sDeployment {
       // No available replicas — check for container failure states
       const failureCheck = await this.checkPodContainerStatusesForFailure();
       if (failureCheck.hasFailed) {
-        this.state = "failed";
-        this.errorMessage = failureCheck.message;
+        if (failureCheck.isTransientImagePull) {
+          // Image pull errors self-heal: the kubelet retries the pull with
+          // exponential backoff. Stay "pending" (with the error visible) so
+          // the next refresh flips to "running" once the pull succeeds —
+          // marking it "failed" here would latch the state forever and
+          // require a manual restart.
+          this.state = "pending";
+          this.errorMessage = failureCheck.message;
+        } else {
+          this.state = "failed";
+          this.errorMessage = failureCheck.message;
+        }
         this.runningMissCount = 0;
       } else if (this.state === "running") {
         // Debounce: only downgrade to "pending" after several consecutive

@@ -1,0 +1,81 @@
+suite: test archestra platform -- managed Dagger egress firewall sidecar
+# The engine StatefulSet is rendered by the dagger subchart and its template
+# includes the sibling engine-config, so both are listed here (otherwise the
+# include can't resolve); each test then focuses assertions on the StatefulSet
+# via `template:`. The subchart's off-by-default gating is covered by
+# archestra_code_runtime_dagger_service_account_test.yaml.
+templates:
+  - charts/dagger/templates/engine-statefulset.yaml
+  - charts/dagger/templates/engine-config.yaml
+tests:
+  - it: should add the egress-firewall sidecar to the engine when managed Dagger is enabled
+    set:
+      archestra.codeRuntime.dagger.managed.enabled: true
+    template: charts/dagger/templates/engine-statefulset.yaml
+    asserts:
+      - isKind:
+          of: StatefulSet
+      - equal:
+          path: spec.template.spec.containers[1].name
+          value: dagger-egress-firewall
+      # sidecar must reuse the engine image so its iptables backend matches buildkit's
+      - equal:
+          path: spec.template.spec.containers[1].image
+          value: registry.dagger.io/engine:v0.21.0
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: registry.dagger.io/engine:v0.21.0
+      - contains:
+          path: spec.template.spec.containers[1].securityContext.capabilities.add
+          content: NET_ADMIN
+
+  - it: should block RFC1918 + metadata while returning established replies and DNS
+    set:
+      archestra.codeRuntime.dagger.managed.enabled: true
+    template: charts/dagger/templates/engine-statefulset.yaml
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[1].command[2]
+          pattern: "iptables -w 5 -t mangle"
+      # the return-traffic + DNS carve-outs must be inserted at position 1 (above
+      # the DROPs); a regression to -A would land them below the DROPs and break
+      # DNS / established replies. The leading "1 " is the `-I "$CHAIN" 1` insert.
+      - matchRegex:
+          path: spec.template.spec.containers[1].command[2]
+          pattern: "1 -m conntrack --ctstate RELATED,ESTABLISHED -j RETURN"
+      - matchRegex:
+          path: spec.template.spec.containers[1].command[2]
+          pattern: "1 -p udp --dport 53 -j RETURN"
+      - matchRegex:
+          path: spec.template.spec.containers[1].command[2]
+          pattern: "1 -p tcp --dport 53 -j RETURN"
+      - matchRegex:
+          path: spec.template.spec.containers[1].command[2]
+          pattern: "10\\.0\\.0\\.0/8"
+      - matchRegex:
+          path: spec.template.spec.containers[1].command[2]
+          pattern: "172\\.16\\.0\\.0/12"
+      - matchRegex:
+          path: spec.template.spec.containers[1].command[2]
+          pattern: "192\\.168\\.0\\.0/16"
+      - matchRegex:
+          path: spec.template.spec.containers[1].command[2]
+          pattern: "169\\.254\\.0\\.0/16"
+      - matchRegex:
+          path: spec.template.spec.containers[1].command[2]
+          pattern: "168\\.63\\.129\\.16/32"
+      - matchRegex:
+          path: spec.template.spec.containers[1].command[2]
+          pattern: "100\\.64\\.0\\.0/10"
+      - matchRegex:
+          path: spec.template.spec.containers[1].command[2]
+          pattern: "127\\.0\\.0\\.0/8"
+      - matchRegex:
+          path: spec.template.spec.containers[1].command[2]
+          pattern: "fc00::/7"
+      - matchRegex:
+          path: spec.template.spec.containers[1].command[2]
+          pattern: "-j DROP"
+      - matchRegex:
+          path: spec.template.spec.containers[1].command[2]
+          pattern: "-I FORWARD 1"

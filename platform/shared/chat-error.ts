@@ -298,7 +298,7 @@ export const ChatErrorMessages: Record<ChatErrorCode, string> = {
   [ChatErrorCode.NetworkError]:
     "Connection error. Please check your network and try again.",
   [ChatErrorCode.EmptyResponse]:
-    "The model returned an empty response. Please try again.",
+    "The model ended its turn without a reply. Rephrasing your message may help.",
   [ChatErrorCode.Unknown]: "An unexpected error occurred. Please try again.",
 };
 

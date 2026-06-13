@@ -14,6 +14,14 @@ pub(crate) const SKILL_SANDBOX_ROOT: &str = "/skills";
 pub(crate) const SKILL_SANDBOX_HOME: &str = "/home/sandbox";
 pub(crate) const SKILL_SANDBOX_USER: &str = "1000:1000";
 
+/// validate a skill-relative snapshot file path. rejects absolute paths and
+/// traversal only — intentionally narrower than [`validate_upload_path`] /
+/// [`validate_artifact_path`], and that asymmetry is load-bearing. snapshot
+/// paths are persisted, authored skill content that the upstream skill
+/// validators gate solely on traversal/absolute, so rejecting anything more here
+/// would strand an already-persisted mount as permanently unreplayable. there is
+/// no injection surface to harden: the utf8 branch writes via the Dagger API (no
+/// shell) and the base64 branch shell-quotes the path.
 pub(crate) fn validate_snapshot_file_path(path: &str) -> Result<()> {
     if path.starts_with('/') || path.split('/').any(|segment| segment == "..") {
         return Err(SandboxError::InvalidInput(format!(
@@ -153,6 +161,13 @@ mod tests {
         assert!(validate_snapshot_file_path("/etc/passwd").is_err());
         assert!(validate_snapshot_file_path("../etc/passwd").is_err());
         assert!(validate_snapshot_file_path("a/../../etc/passwd").is_err());
+        // contract: this boundary is intentionally narrower than the
+        // upload/artifact validators. shell metacharacters and control chars are
+        // accepted here because snapshot paths are persisted skill content gated
+        // upstream — rejecting more would strand a persisted mount — and the
+        // downstream writers (Dagger API / shell-quoting) neutralise them.
+        assert!(validate_snapshot_file_path("weights/$MODEL.bin").is_ok());
+        assert!(validate_snapshot_file_path("a\tb").is_ok());
     }
 
     // mirrored with "path validation vectors (mirrored with sandbox-core)" in

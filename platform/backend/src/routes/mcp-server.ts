@@ -34,6 +34,7 @@ import {
 } from "@/services/identity-providers/oidc";
 import { autoReinstallServer } from "@/services/mcp-reinstall";
 import {
+  type Account,
   AgentScopeSchema,
   ApiError,
   constructResponseSchema,
@@ -392,8 +393,12 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           createdSecretId = secret.id;
         }
 
-        // Validate connection for remote servers
-        if (secretId) {
+        // Validate connection for remote servers. Enterprise-managed catalogs
+        // skip this static-secret probe: their MCP servers typically require
+        // the per-user exchanged credential, which is only attached during the
+        // install discovery below, so probing here would hit the server
+        // without an Authorization header and fail the install.
+        if (secretId && !catalogItem.enterpriseManagedConfig) {
           const { isValid, errorMessage } =
             await McpServerModel.validateConnection(
               serverData.name,
@@ -660,6 +665,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
             // Capture catalogId before async callback to ensure it's available
             const capturedCatalogId = catalogItem.id;
             const capturedCatalogName = catalogItem.name;
+            const capturedCatalogItem = catalogItem;
             const capturedEnterpriseManagedConfig =
               catalogItem.enterpriseManagedConfig;
 
@@ -721,15 +727,25 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 fastify.log.info(
                   `Attempting to fetch tools from local server: ${mcpServer.name}`,
                 );
-                const tools =
-                  await McpServerModel.getToolsFromServer(mcpServer);
+                // Enterprise-managed local servers (streamable-http) may
+                // require the per-user exchanged credential for tools/list,
+                // so route discovery through the install-time exchange.
+                const tools = capturedEnterpriseManagedConfig
+                  ? await connectAndGetToolsForInstallation({
+                      catalogItem: capturedCatalogItem,
+                      mcpServerId: mcpServer.id,
+                      secretId: mcpServer.secretId ?? undefined,
+                      userId: user.id,
+                      allowCurrentUserTokenFallback: true,
+                    })
+                  : await McpServerModel.getToolsFromServer(mcpServer);
 
                 // Persist tools in the database
                 // Use catalog item name (without userId) for tool naming to avoid duplicates across users
                 const toolNamePrefix = capturedCatalogName || mcpServer.name;
                 const toolsToCreate = tools.map((tool) => ({
                   name: ToolModel.slugifyName(toolNamePrefix, tool.name),
-                  description: tool.description,
+                  description: tool.description ?? null,
                   parameters: tool.inputSchema,
                   meta: { _meta: tool._meta, annotations: tool.annotations },
                   catalogId: capturedCatalogId,
@@ -879,7 +895,12 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           mcpServerId: mcpServer.id,
           secretId: mcpServer.secretId ?? undefined,
           userId: user.id,
-          allowCurrentUserTokenFallback: mcpServer.scope === "personal",
+          // Shared enterprise-managed installs use the installer's linked IdP
+          // token only for discovery. Runtime tool calls exchange each caller's
+          // own linked IdP token.
+          allowCurrentUserTokenFallback:
+            mcpServer.scope === "personal" ||
+            catalogItem.enterpriseManagedConfig !== null,
         });
 
         // Persist tools in the database with source='mcp_server' and mcpServerId
@@ -1136,7 +1157,9 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 mcpServerId: "validation",
                 secretId: newSecretId,
                 userId: user.id,
-                allowCurrentUserTokenFallback: mcpServer.scope === "personal",
+                allowCurrentUserTokenFallback:
+                  mcpServer.scope === "personal" ||
+                  catalogItem.enterpriseManagedConfig !== null,
               });
             } catch (error) {
               // Clean up the newly created secret
@@ -1776,7 +1799,8 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
                         secretId: server.secretId ?? undefined,
                         userId: user.id,
                         allowCurrentUserTokenFallback:
-                          updatedServer.scope === "personal",
+                          updatedServer.scope === "personal" ||
+                          catalogItem.enterpriseManagedConfig !== null,
                       })
                     ).map((tool) => ({
                       name: tool.name,
@@ -1946,16 +1970,40 @@ async function connectAndGetToolsForInstallation(params: {
   }
 
   const secrets = await getSecretValues(params.secretId);
+  const installDiscoveryAccessToken =
+    params.allowCurrentUserTokenFallback && catalogItem.enterpriseManagedConfig
+      ? await getInstallDiscoveryAccessToken({
+          catalogItem,
+          userId: params.userId,
+        })
+      : undefined;
+  const discoverySecrets = installDiscoveryAccessToken
+    ? { ...secrets, access_token: installDiscoveryAccessToken }
+    : secrets;
+
+  if (catalogItem.enterpriseManagedConfig && !installDiscoveryAccessToken) {
+    const identityProvider = catalogItem.enterpriseManagedConfig
+      .identityProviderId
+      ? await findExternalIdentityProviderById(
+          catalogItem.enterpriseManagedConfig.identityProviderId,
+        )
+      : null;
+    const message = identityProvider
+      ? `Connect ${identityProvider.providerId} before installing this MCP server.`
+      : "Sign in with SSO to link your identity provider before installing this MCP server.";
+    throw new ApiError(401, message);
+  }
 
   try {
     return await mcpClient.connectAndGetTools({
       catalogItem,
       mcpServerId: params.mcpServerId,
-      secrets,
+      secrets: discoverySecrets,
       secretId: params.secretId,
     });
   } catch (error) {
     if (
+      catalogItem.enterpriseManagedConfig ||
       !params.allowCurrentUserTokenFallback ||
       !isInstallDiscoveryAuthError(error)
     ) {
@@ -1966,7 +2014,7 @@ async function connectAndGetToolsForInstallation(params: {
       catalogItem,
       userId: params.userId,
     });
-    if (!accessToken || secrets.access_token === accessToken) {
+    if (!accessToken || discoverySecrets.access_token === accessToken) {
       throw error;
     }
 
@@ -1983,7 +2031,7 @@ async function connectAndGetToolsForInstallation(params: {
       catalogItem,
       mcpServerId: params.mcpServerId,
       secrets: {
-        ...secrets,
+        ...discoverySecrets,
         access_token: accessToken,
       },
       secretId: params.secretId,
@@ -1996,25 +2044,7 @@ async function getCurrentIdentityProviderAccessToken(
 ): Promise<string | undefined> {
   const account =
     await AccountModel.getLatestSsoAccountWithAccessTokenByUserId(userId);
-  if (!account?.accessToken) {
-    return undefined;
-  }
-
-  const isAccessTokenExpired =
-    !!account.accessTokenExpiresAt &&
-    account.accessTokenExpiresAt <= new Date();
-  if (!isAccessTokenExpired) {
-    return account.accessToken;
-  }
-
-  return await refreshLinkedIdentityProviderAccessToken({
-    account: {
-      id: account.id,
-      providerId: account.providerId,
-      refreshToken: account.refreshToken,
-      refreshTokenExpiresAt: account.refreshTokenExpiresAt,
-    },
-  });
+  return account ? ensureFreshSsoAccessToken(account) : undefined;
 }
 
 async function getInstallDiscoveryAccessToken(params: {
@@ -2031,29 +2061,34 @@ async function getInstallDiscoveryAccessToken(params: {
     return accessToken;
   }
 
-  const fallbackAccount =
-    await AccountModel.getLatestSsoAccountWithAccessTokenByUserId(
-      params.userId,
-    );
-  if (!fallbackAccount) {
-    return undefined;
-  }
-
+  const fallbackIdentityProviderResult =
+    enterpriseManagedConfig.identityProviderId
+      ? null
+      : await findInstallDiscoveryFallbackIdentityProvider(params.userId);
   const identityProvider = enterpriseManagedConfig.identityProviderId
     ? await findExternalIdentityProviderById(
         enterpriseManagedConfig.identityProviderId,
       )
-    : await findExternalIdentityProviderByProviderId(
-        fallbackAccount.providerId,
-      );
+    : fallbackIdentityProviderResult?.identityProvider;
+
   if (!identityProvider) {
-    return getCurrentInstallDiscoveryAccessToken(fallbackAccount);
+    if (fallbackIdentityProviderResult?.account) {
+      return await ensureFreshSsoAccessToken(
+        fallbackIdentityProviderResult.account,
+      );
+    }
+
+    return undefined;
   }
 
-  const account = await AccountModel.getLatestSsoAccountByUserIdAndProviderId(
-    params.userId,
-    identityProvider.providerId,
-  );
+  const account =
+    fallbackIdentityProviderResult?.account.providerId ===
+    identityProvider.providerId
+      ? fallbackIdentityProviderResult.account
+      : await AccountModel.getLatestSsoAccountByUserIdAndProviderId(
+          params.userId,
+          identityProvider.providerId,
+        );
   if (!account) {
     return undefined;
   }
@@ -2095,6 +2130,21 @@ async function getInstallDiscoveryAccessToken(params: {
   });
 }
 
+async function findInstallDiscoveryFallbackIdentityProvider(userId: string) {
+  const account =
+    await AccountModel.getLatestSsoAccountWithAccessTokenByUserId(userId);
+  if (!account) {
+    return null;
+  }
+
+  return {
+    account,
+    identityProvider: await findExternalIdentityProviderByProviderId(
+      account.providerId,
+    ),
+  };
+}
+
 async function getInstallDiscoverySubjectToken(params: {
   account: NonNullable<
     Awaited<
@@ -2109,14 +2159,18 @@ async function getInstallDiscoverySubjectToken(params: {
     return params.account.idToken ?? undefined;
   }
 
-  return getCurrentInstallDiscoveryAccessToken(params.account);
+  return ensureFreshSsoAccessToken(params.account);
 }
 
-async function getCurrentInstallDiscoveryAccessToken(
-  account: NonNullable<
-    Awaited<
-      ReturnType<typeof AccountModel.getLatestSsoAccountWithAccessTokenByUserId>
-    >
+async function ensureFreshSsoAccessToken(
+  account: Pick<
+    Account,
+    | "id"
+    | "providerId"
+    | "accessToken"
+    | "accessTokenExpiresAt"
+    | "refreshToken"
+    | "refreshTokenExpiresAt"
   >,
 ): Promise<string | undefined> {
   if (!account.accessToken) {

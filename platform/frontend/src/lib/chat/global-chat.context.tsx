@@ -37,7 +37,14 @@ import {
 } from "react";
 import { toast } from "sonner";
 import { filterOptimisticToolCalls } from "@/components/chat/chat-messages.utils";
-import { useGenerateConversationTitle } from "@/lib/chat/chat.query";
+import {
+  type ChatMcpElicitationRequest,
+  McpElicitationDialog,
+} from "@/components/chat/mcp-elicitation-dialog";
+import {
+  useGenerateConversationTitle,
+  useResolveChatMcpElicitation,
+} from "@/lib/chat/chat.query";
 import { useUpdateChatMessage } from "@/lib/chat/chat-message.query";
 import {
   pruneEmptyTrailingAssistantMessage,
@@ -135,6 +142,7 @@ interface ChatSession {
     toolCallId: string;
     toolName: string;
   } | null;
+  pendingMcpElicitation: ChatMcpElicitationRequest | null;
   /**
    * True while the session is auto-recovering from a transient stream failure
    * (auto-retry scheduled or reattaching to the still-running response).
@@ -420,6 +428,8 @@ function ChatSessionHook({
   const appName = useAppName();
   const [pendingCustomServerToolCall, setPendingCustomServerToolCall] =
     useState<{ toolCallId: string; toolName: string } | null>(null);
+  const [pendingMcpElicitation, setPendingMcpElicitation] =
+    useState<ChatMcpElicitationRequest | null>(null);
   const [optimisticToolCalls, setOptimisticToolCalls] = useState<
     Array<{
       toolCallId: string;
@@ -440,6 +450,7 @@ function ChatSessionHook({
       lastCompaction: null,
     });
   const generateTitleMutation = useGenerateConversationTitle();
+  const resolveMcpElicitationMutation = useResolveChatMcpElicitation();
   // Destructure the stable mutateAsync (not the whole mutation object, whose
   // identity changes every render) so regenerateUserMessage stays referentially
   // stable and doesn't retrigger the session-sync effect on every render.
@@ -555,6 +566,7 @@ function ChatSessionHook({
     id: conversationId,
     onFinish: async ({ message, isAbort, isError }) => {
       setOptimisticToolCalls([]);
+      setPendingMcpElicitation(null);
       clearActiveContextCompaction();
       // The stream concluded — any auto-recovery (retry/reattach) is over.
       // NOT on stream errors: the SDK fires onFinish from a finally block
@@ -684,6 +696,7 @@ function ChatSessionHook({
           // a hard inline error panel; the toast is the only surfaced
           // feedback.
           clearErrorRef.current?.();
+          setPendingMcpElicitation(null);
           return;
         }
         // The 409 was provoked by our own auto-recovery: the stream
@@ -766,6 +779,7 @@ function ChatSessionHook({
       }
 
       // Terminal: no recovery in flight — surface the error.
+      setPendingMcpElicitation(null);
       setIsRecovering(false);
     },
     onToolCall: ({ toolCall }) => {
@@ -897,19 +911,27 @@ function ChatSessionHook({
       // so the frontend can render the MCP App container immediately (before tool finishes)
       const customData = dataPart as unknown as {
         type?: string;
-        data?: ChatSession["earlyToolUiStarts"][string] & {
-          toolCallId?: string;
-          toolName?: string;
-        };
+        data?: unknown;
       };
       if (customData.type === "data-tool-ui-start") {
         const { toolCallId, toolName, uiResourceUri, html, csp, permissions } =
-          customData.data ?? {};
+          (customData.data ??
+            {}) as ChatSession["earlyToolUiStarts"][string] & {
+            toolCallId?: string;
+            toolName?: string;
+          };
         if (toolCallId && uiResourceUri) {
           setEarlyToolUiStarts((prev) => ({
             ...prev,
             [toolCallId]: { uiResourceUri, html, csp, permissions, toolName },
           }));
+        }
+      }
+
+      if (customData.type === "data-mcp-elicitation") {
+        const data = customData.data as ChatMcpElicitationRequest | undefined;
+        if (data?.id && data.conversationId === conversationId) {
+          setPendingMcpElicitation(data);
         }
       }
     },
@@ -1068,6 +1090,7 @@ function ChatSessionHook({
     addToolResult,
     addToolApprovalResponse,
     pendingCustomServerToolCall,
+    pendingMcpElicitation,
     // Computed, not stored: the page paints the SDK error before onError has
     // run (so no flag set inside onError can suppress the first frame), and
     // consumers read the session from a map refreshed an effect-cycle later.
@@ -1117,6 +1140,7 @@ function ChatSessionHook({
     addToolResult,
     addToolApprovalResponse,
     pendingCustomServerToolCall,
+    pendingMcpElicitation,
     isRecoveringState,
     optimisticToolCalls,
     tokenUsage,
@@ -1129,7 +1153,23 @@ function ChatSessionHook({
     notifySessionUpdate,
   ]);
 
-  return null;
+  return (
+    <McpElicitationDialog
+      request={pendingMcpElicitation}
+      isSubmitting={resolveMcpElicitationMutation.isPending}
+      onRespond={async ({ id, action, content }) => {
+        const result = await resolveMcpElicitationMutation.mutateAsync({
+          id,
+          conversationId,
+          action,
+          content,
+        });
+        if (result) {
+          setPendingMcpElicitation(null);
+        }
+      }}
+    />
+  );
 }
 
 function getSwapAgentName(toolCall: unknown): string | null {

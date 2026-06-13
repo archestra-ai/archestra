@@ -31,6 +31,8 @@ const mockClose = vi.fn();
 const mockListTools = vi.fn();
 const mockListResources = vi.fn();
 const mockPing = vi.fn();
+const mockSetRequestHandler = vi.fn();
+const mockSetNotificationHandler = vi.fn();
 
 vi.mock("@modelcontextprotocol/sdk/client/index.js", () => ({
   // biome-ignore lint/suspicious/noExplicitAny: test..
@@ -41,6 +43,8 @@ vi.mock("@modelcontextprotocol/sdk/client/index.js", () => ({
     this.listTools = mockListTools;
     this.listResources = mockListResources;
     this.ping = mockPing;
+    this.setRequestHandler = mockSetRequestHandler;
+    this.setNotificationHandler = mockSetNotificationHandler;
   }),
 }));
 
@@ -127,6 +131,8 @@ describe("McpClient", () => {
     mockListTools.mockReset();
     mockListResources.mockReset();
     mockPing.mockReset();
+    mockSetRequestHandler.mockReset();
+    mockSetNotificationHandler.mockReset();
     mockUsesStreamableHttp.mockReset();
     mockGetHttpEndpointUrl.mockReset();
     mockGetRunningPodHttpEndpoint.mockReset();
@@ -318,7 +324,12 @@ describe("McpClient", () => {
       );
       expect(clientConstructor).toHaveBeenCalled();
       const options = clientConstructor.mock.calls.at(-1)?.[1] as
-        | { capabilities?: { extensions?: Record<string, unknown> } }
+        | {
+            capabilities?: {
+              elicitation?: Record<string, unknown>;
+              extensions?: Record<string, unknown>;
+            };
+          }
         | undefined;
       expect(options?.capabilities?.extensions).toEqual({
         [MCP_APPS_EXTENSION_ID]: {
@@ -326,6 +337,63 @@ describe("McpClient", () => {
         },
         [MCP_ENTERPRISE_AUTH_EXTENSION_ID]: {},
       });
+      expect(options?.capabilities?.elicitation).toBeUndefined();
+      expect(mockSetRequestHandler).not.toHaveBeenCalled();
+      expect(mockSetNotificationHandler).not.toHaveBeenCalled();
+    });
+
+    test("declares elicitation support when a gateway bridge handler is provided", async () => {
+      const tool = await ToolModel.createToolIfNotExists({
+        name: "github-mcp-server__elicitation_bridge",
+        description: "Elicitation bridge test",
+        parameters: {},
+        catalogId,
+      });
+
+      await AgentToolModel.create(agentId, tool.id, {
+        mcpServerId,
+        credentialResolutionMode: "static",
+      });
+
+      mockConnect.mockResolvedValue(undefined);
+      mockCallTool.mockResolvedValue({
+        content: [{ type: "text", text: "ok" }],
+      });
+
+      const result = await mcpClient.executeToolCall(
+        {
+          id: "call_elicitation",
+          name: tool.name,
+          arguments: {},
+        },
+        agentId,
+        undefined,
+        {
+          elicitationHandler: async () => ({
+            action: "accept",
+            content: {},
+          }),
+        },
+      );
+
+      expect(result.isError).toBe(false);
+
+      const clientConstructor = vi.mocked(
+        (await import("@modelcontextprotocol/sdk/client/index.js")).Client,
+      );
+      const options = clientConstructor.mock.calls.at(-1)?.[1] as
+        | {
+            capabilities?: {
+              elicitation?: Record<string, unknown>;
+            };
+          }
+        | undefined;
+      expect(options?.capabilities?.elicitation).toEqual({
+        form: { applyDefaults: true },
+        url: {},
+      });
+      expect(mockSetRequestHandler).toHaveBeenCalledOnce();
+      expect(mockSetNotificationHandler).toHaveBeenCalledOnce();
     });
 
     describe("Secrets caching (N+1 prevention)", () => {
@@ -2013,6 +2081,121 @@ describe("McpClient", () => {
             userId: user.id,
           },
           { conversationId: "enterprise-managed-conv" },
+        );
+
+        expect(result.isError).toBe(false);
+
+        const { StreamableHTTPClientTransport } = await import(
+          "@modelcontextprotocol/sdk/client/streamableHttp.js"
+        );
+        const [, options] =
+          vi.mocked(StreamableHTTPClientTransport).mock.calls.at(-1) ?? [];
+        const headers =
+          options?.requestInit?.headers instanceof Headers
+            ? options.requestInit.headers
+            : new Headers(options?.requestInit?.headers);
+        expect(headers.get("Authorization")).toBe("Bearer ghu_managed_token");
+
+        fetchMock.mockRestore();
+      });
+
+      // Regression: assignments created before enterprise mode existed still
+      // carry the default "static" mode. The catalog-level config must win,
+      // otherwise runtime calls hit the protected server with no credential.
+      test("brokers the managed credential even when the assignment row still says static", async ({
+        makeIdentityProvider,
+        makeOrganization,
+        makeUser,
+      }) => {
+        const organization = await makeOrganization();
+        const user = await makeUser({ email: "stale-static-mcp@example.com" });
+        const managedConfig = {
+          requestedCredentialType: "secret" as const,
+          resourceIdentifier: "orn:okta:pam:github-secret",
+          tokenInjectionMode: "authorization_bearer" as const,
+          responseFieldPath: "token",
+        };
+        const identityProvider = await makeIdentityProvider(organization.id, {
+          providerId: "okta-managed-stale-static",
+          issuer: "https://example.okta.com",
+          oidcConfig: {
+            clientId: "web-client-id",
+            tokenEndpoint: "https://example.okta.com/oauth2/v1/token",
+            enterpriseManagedCredentials: {
+              exchangeStrategy: "okta_managed",
+              clientId: "ai-agent-client-id",
+              tokenEndpoint: "https://example.okta.com/oauth2/v1/token",
+              tokenEndpointAuthentication: "client_secret_post",
+              clientSecret: "ai-agent-client-secret",
+            },
+          },
+        });
+
+        await AgentModel.update(agentId, {
+          organizationId: organization.id,
+          identityProviderId: identityProvider.id,
+        });
+
+        await McpServerModel.update(mcpServerId, { secretId: null });
+        await InternalMcpCatalogModel.update(catalogId, {
+          enterpriseManagedConfig: managedConfig,
+        });
+
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "github-mcp-server__stale_static_tool",
+          description: "Tool assigned before enterprise mode existed",
+          parameters: {},
+          catalogId,
+        });
+
+        await AgentToolModel.create(agentId, tool.id, {
+          mcpServerId,
+          credentialResolutionMode: "static",
+        });
+
+        await db.insert(schema.accountsTable).values({
+          id: randomUUID(),
+          accountId: "acct-stale-static",
+          providerId: identityProvider.providerId,
+          userId: user.id,
+          idToken: createJwt({ exp: futureExpSeconds() }),
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        });
+
+        const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+          new Response(
+            JSON.stringify({
+              issued_token_type: "urn:okta:params:oauth:token-type:secret",
+              secret: { token: "ghu_managed_token" },
+              expires_in: 300,
+            }),
+            {
+              status: 200,
+              headers: { "Content-Type": "application/json" },
+            },
+          ),
+        );
+
+        mockCallTool.mockResolvedValue({
+          content: [{ type: "text", text: "Managed result" }],
+          isError: false,
+        });
+
+        const result = await mcpClient.executeToolCall(
+          {
+            id: "call_stale_static",
+            name: "github-mcp-server__stale_static_tool",
+            arguments: {},
+          },
+          agentId,
+          {
+            tokenId: "session-token",
+            teamId: null,
+            isOrganizationToken: false,
+            userId: user.id,
+          },
+          { conversationId: "stale-static-conv" },
         );
 
         expect(result.isError).toBe(false);

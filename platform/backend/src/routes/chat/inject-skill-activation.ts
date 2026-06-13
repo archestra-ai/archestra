@@ -16,7 +16,7 @@ import { resolveActivationVersion } from "@/skills/skill-version-resolution";
 /**
  * When the last user message was sent via a skill slash command, prepend the
  * skill's activation block to its text so the model receives the skill's
- * instructions directly — no reliance on the model calling `activate_skill`.
+ * instructions directly — no reliance on the model calling `load_skill`.
  *
  * Returns a shallow copy with the block applied; the original `messages` (used
  * for persistence and the visible bubble) are left untouched. If the org flag
@@ -95,8 +95,8 @@ export async function injectSkillActivation({
   });
 
   // resolve the effective version and pin it by mounting (shared with
-  // activate_skill), so the injected block, the mounted bytes, and a later
-  // read_skill_file all expose the same version.
+  // load_skill), so the injected block, the mounted bytes, and a later
+  // load_skill file read all expose the same version.
   const activation = await resolveActivationVersion({
     skill,
     organizationId,

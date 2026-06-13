@@ -34,11 +34,35 @@ network calls.
 
 ## Skill visibility
 After creating skills/agents, `apply.py` calls `POST /api/skills/enable-defaults` once, which enables the
-org `archestra__{list_skills,activate_skill,read_skill_file}` tools and backfills them onto agents — that
+org `archestra__{list_skills,load_skill}` tools and backfills them onto agents — that
 is how the primary agent gains access to the migrated skills (there is no agent↔skill junction).
 It also tries to assign sandbox tools (`run_command`, `upload_file`, `download_file`) to migrated agents
 so bundled local tools can run from activated skills. Missing/disabled sandbox support is reported as a
 non-blocking warning.
+
+## Rewrite environment-specific references before applying (judgment)
+Skill, command, subagent, and hook bodies migrate **verbatim** — `apply.py` ships them unchanged. So any
+path or shell invocation inside a body that assumed the source machine breaks in the Archestra sandbox.
+Before the preview, read each migrating body and surgically rewrite it (ordinary file edits in the source):
+
+- **Paths.** The sandbox is not the source checkout. `$CLAUDE_PROJECT_DIR`/`$CLAUDE_*` are gone, and a
+  skill's bundled files mount writable at `/skills/<name>/` — but `cwd` is the sandbox home
+  (`/home/sandbox`), **never** the skill root, so a bundled script that reads its own files by relative
+  path must use the absolute `/skills/<name>/<rel>` form. Rewrite project-relative (`tools/x.py`,
+  `./data/foo.json`), home (`~/...`), and `$CLAUDE_PROJECT_DIR` paths to absolute sandbox paths:
+  bundled-with-the-skill → `/skills/<name>/<rel>`, scratch output → under `/home/sandbox`. A cross-skill
+  reference (`python3 tools/x.py` in skill A pointing at a script that lands in skill B's mount) is the
+  classic break — see "Local tools" below.
+- **Shell.** Commands run **non-root** (uid 1000) on a Debian-slim image with `python3`/`uv`, `git`, and
+  `curl` baked in — there is **no `apt`/`apk` at runtime**, so host-only OS binaries (`jq`, `rg`,
+  `gtimeout`, GNU-only flags) can't be installed and must be rewritten to portable `python3`/POSIX `sh`.
+  Python deps *are* installable: add a `requirements.txt` at the skill root (auto-installed via `uv` on
+  mount) or run `uv add --project /home/sandbox <pkg>` as part of the command — never `pip install`, which
+  is shimmed off. Also drop inline env (`TOKEN=… cmd`) and absolute host tool paths, and move secrets out
+  (hooks take no env/argv at all).
+
+Every reference you can't safely rewrite goes in the report as a manual follow-up — never leave a body
+pointing at a path or binary that won't exist at runtime.
 
 ## Hooks → native lifecycle hooks (preferred)
 Archestra runs per-agent `.py`/`.sh` lifecycle hooks at `session_start`/`pre_tool_use`/`post_tool_use`,
@@ -46,6 +70,12 @@ in the conversation sandbox, with a **Claude-compatible** stdin payload (`hook_e
 `tool_input`, `tool_response`, `session_id`, `cwd`) and the same exit-code protocol (`2` blocks with
 stderr as the reason; `0` proceeds with stdout injected; errors/timeout fail open). So most Claude Code
 hooks for those three events port near-1:1 as a `hook` target — that is the default.
+
+Native hooks require the **agent-hooks feature**, which is off by default: it needs
+`ARCHESTRA_AGENT_HOOKS_ENABLED=true` **and** the sandbox runtime to be on (hooks run in the conversation
+sandbox). `POST /api/hooks` still persists a migrated hook when the feature is off, but the hook never
+fires and is hidden in the agent UI until an admin enables it — `apply.py` probes `/api/config` after
+creating hooks and warns when the feature is off.
 
 `discover.py` does the mechanical part and records it on each `hook` item's `data.source`:
 - **bundled** — the command referenced a script in the tree (e.g. `python3 "$CLAUDE_PROJECT_DIR/hooks/x.py"`);

@@ -30,6 +30,7 @@ export const RouteId = {
 
   // Agent Tool Routes
   AssignToolToAgent: "assignToolToAgent",
+  GrantToolToAgent: "grantToolToAgent",
   BulkAssignTools: "bulkAssignTools",
   BulkUpdateAgentTools: "bulkUpdateAgentTools",
   AutoConfigureAgentToolPolicies: "autoConfigureAgentToolPolicies",
@@ -111,6 +112,8 @@ export const RouteId = {
   AddTeamMember: "addTeamMember",
   UpdateTeamMember: "updateTeamMember",
   RemoveTeamMember: "removeTeamMember",
+  GetTeamLabelKeys: "getTeamLabelKeys",
+  GetTeamLabelValues: "getTeamLabelValues",
 
   // Team External Group Routes (SSO Team Sync)
   GetTeamExternalGroups: "getTeamExternalGroups",
@@ -275,6 +278,7 @@ export const RouteId = {
 
   // Chat Routes
   StreamChat: "streamChat",
+  ResolveChatMcpElicitation: "resolveChatMcpElicitation",
   StopChatStream: "stopChatStream",
   GetActiveChatRun: "getActiveChatRun",
   GetChatConversations: "getChatConversations",
@@ -405,6 +409,7 @@ export const RouteId = {
   GetIdentityProvider: "getIdentityProvider",
   GetIdentityProviderLatestIdTokenClaims:
     "getIdentityProviderLatestIdTokenClaims",
+  GetIdentityProviderLinkStatus: "getIdentityProviderLinkStatus",
   CreateIdentityProvider: "createIdentityProvider",
   UpdateIdentityProvider: "updateIdentityProvider",
   DeleteIdentityProvider: "deleteIdentityProvider",
@@ -548,6 +553,11 @@ export const RouteId = {
   GetSkillShareLinks: "getSkillShareLinks",
   CreateSkillShareLink: "createSkillShareLink",
   RevokeSkillShareLink: "revokeSkillShareLink",
+  RotateSkillShareLink: "rotateSkillShareLink",
+
+  // Connection Setup Routes
+  CreateConnectionSetup: "createConnectionSetup",
+  GetConnectionSetupScript: "getConnectionSetupScript",
 } as const;
 
 export type RouteId = (typeof RouteId)[keyof typeof RouteId];

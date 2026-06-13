@@ -286,6 +286,14 @@ class MSTeamsProvider implements ChatOpsProvider {
           >[0],
         ),
         authHeader: headers.authorization || headers.Authorization,
+        // Lets the manager frame group conversations for the agent ("personal",
+        // "groupChat", or "channel") and tell it whether it was addressed.
+        conversationType: activity.conversation?.conversationType,
+        botMentioned: this.wasBotMentioned(activity),
+        botName: activity.recipient?.name,
+        // Names of OTHER people @mentioned in the message — a message
+        // @mentioning someone else is most likely addressed to them.
+        mentionedOthers: extractMentionedOthers(activity),
       },
       ...(attachments.length > 0 && { attachments }),
     };
@@ -1724,6 +1732,28 @@ const UUID_REGEX =
 
 function normalizeTeamsId(id: string): string {
   return id.replace(/^28:/, "").toLowerCase();
+}
+
+/** Display names of @mentioned participants other than the bot itself. */
+function extractMentionedOthers(activity: {
+  recipient?: { id?: string };
+  entities?: Array<{
+    type?: string;
+    mentioned?: { id?: string; name?: string };
+  }>;
+}): string[] {
+  const botId = activity.recipient?.id;
+  const names = (activity.entities ?? [])
+    .filter(
+      (e) =>
+        e?.type === "mention" &&
+        e.mentioned?.id != null &&
+        (botId == null ||
+          normalizeTeamsId(e.mentioned.id) !== normalizeTeamsId(botId)),
+    )
+    .map((e) => e.mentioned?.name)
+    .filter((name): name is string => Boolean(name));
+  return [...new Set(names)];
 }
 
 /**

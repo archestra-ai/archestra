@@ -28,7 +28,6 @@ import {
   validateChatLink,
 } from "./_components/chat-links-editor.utils";
 import { ChatPlaceholdersEditor } from "./_components/chat-placeholders-editor";
-import { ConnectSettingsSection } from "./_components/connect-settings-section";
 import { FaviconUpload } from "./_components/favicon-upload";
 import { LogosSection } from "./_components/logos-section";
 import { OAuthTokenLifetimeSection } from "./_components/oauth-token-lifetime-section";
@@ -409,11 +408,6 @@ export default function OrganizationSettingsPage() {
 
           <SiteNotificationsSection />
         </SettingsSectionStack>
-      </div>
-
-      <div>
-        <h3 className="text-lg font-medium mb-4">Connect page</h3>
-        <ConnectSettingsSection />
       </div>
 
       {/* Auth Section */}

@@ -7,10 +7,19 @@ import {
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Pencil, Plus, Trash2, Users } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { useSetSettingsAction } from "@/app/settings/layout";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import {
+  LabelFilterBadges,
+  LabelKeyRowBase,
+  LabelSelect,
+  parseLabelsParam,
+  serializeLabels,
+} from "@/components/label-select";
+import { LabelTags } from "@/components/label-tags";
 import { SearchInput } from "@/components/search-input";
 import {
   type TableRowAction,
@@ -20,7 +29,11 @@ import { DataTable } from "@/components/ui/data-table";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
-import { useTeams } from "@/lib/teams/team.query";
+import {
+  useTeamLabelKeys,
+  useTeamLabelValues,
+  useTeams,
+} from "@/lib/teams/team.query";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { TeamManagementDialog } from "./team-management-dialog";
 
@@ -28,6 +41,8 @@ type Team = archestraApiTypes.GetTeamsResponses["200"]["data"][number];
 
 export function TeamsList() {
   const { searchParams, updateQueryParams } = useDataTableQueryParams();
+  const router = useRouter();
+  const pathname = usePathname();
   const setActionButton = useSetSettingsAction();
   const queryClient = useQueryClient();
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
@@ -37,13 +52,44 @@ export function TeamsList() {
   const [teamToDelete, setTeamToDelete] = useState<Team | null>(null);
 
   const search = searchParams.get("search") || "";
+  const labelsParam = searchParams.get("labels");
+  const parsedLabels = useMemo(
+    () => parseLabelsParam(labelsParam),
+    [labelsParam],
+  );
+  const hasLabelFilters =
+    !!parsedLabels && Object.keys(parsedLabels).length > 0;
 
-  const { data: teams, isLoading } = useTeams();
+  const { data: teams, isLoading } = useTeams({
+    name: search,
+    labels: labelsParam ?? undefined,
+  });
+  const { data: labelKeys } = useTeamLabelKeys();
   const { data: session } = useSession();
   const { data: canUpdateTeams = false } = useHasPermissions({
     team: ["update"],
   });
   const currentUserId = session?.user.id;
+
+  const handleRemoveLabel = useCallback(
+    (key: string, value: string) => {
+      if (!parsedLabels) return;
+      const updated = { ...parsedLabels };
+      updated[key] = (updated[key] ?? []).filter((v) => v !== value);
+      if (updated[key].length === 0) {
+        delete updated[key];
+      }
+      const params = new URLSearchParams(searchParams.toString());
+      const serialized = serializeLabels(updated);
+      if (serialized) {
+        params.set("labels", serialized);
+      } else {
+        params.delete("labels");
+      }
+      router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+    },
+    [parsedLabels, searchParams, router, pathname],
+  );
 
   const deleteMutation = useMutation({
     mutationFn: async (teamId: string) => {
@@ -69,15 +115,6 @@ export function TeamsList() {
     }
   };
 
-  const filteredTeams = useMemo(
-    () =>
-      (teams ?? []).filter((team) => {
-        if (!search) return true;
-        return team.name.toLowerCase().includes(search.toLowerCase());
-      }),
-    [teams, search],
-  );
-
   useEffect(() => {
     setActionButton(
       <PermissionButton
@@ -102,7 +139,12 @@ export function TeamsList() {
         const team = row.original;
         return (
           <div>
-            <div className="font-medium">{team.name}</div>
+            <div className="flex items-center gap-2">
+              <span className="font-medium">{team.name}</span>
+              {team.labels && team.labels.length > 0 && (
+                <LabelTags labels={team.labels} />
+              )}
+            </div>
             {team.description && (
               <div className="text-xs text-muted-foreground truncate max-w-md">
                 {team.description}
@@ -184,15 +226,27 @@ export function TeamsList() {
     <>
       <div className="space-y-6">
         <div className="flex items-center justify-between gap-4">
-          <SearchInput objectNamePlural="teams" searchFields={["name"]} />
+          <div className="flex items-center gap-2">
+            <SearchInput objectNamePlural="teams" searchFields={["name"]} />
+            <LabelSelect
+              labelKeys={labelKeys}
+              LabelKeyRowComponent={TeamLabelKeyRow}
+            />
+          </div>
         </div>
+
+        {hasLabelFilters && (
+          <LabelFilterBadges onRemoveLabel={handleRemoveLabel} />
+        )}
 
         <DataTable
           columns={columns}
-          data={filteredTeams}
+          data={teams ?? []}
           isLoading={isLoading}
-          hasActiveFilters={Boolean(search)}
-          onClearFilters={() => updateQueryParams({ search: null, page: "1" })}
+          hasActiveFilters={Boolean(search) || hasLabelFilters}
+          onClearFilters={() =>
+            updateQueryParams({ search: null, labels: null, page: "1" })
+          }
           emptyIcon={<Users className="h-10 w-10" />}
           emptyMessage="No teams found"
           hideSelectedCount
@@ -227,5 +281,29 @@ export function TeamsList() {
         />
       )}
     </>
+  );
+}
+
+function TeamLabelKeyRow({
+  labelKey,
+  selectedValues,
+  onToggleValue,
+}: {
+  labelKey: string;
+  selectedValues: string[];
+  onToggleValue: (key: string, value: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const { data: values } = useTeamLabelValues({
+    key: open ? labelKey : undefined,
+  });
+  return (
+    <LabelKeyRowBase
+      labelKey={labelKey}
+      selectedValues={selectedValues}
+      onToggleValue={onToggleValue}
+      values={values}
+      onOpenChange={setOpen}
+    />
   );
 }

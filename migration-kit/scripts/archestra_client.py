@@ -299,7 +299,7 @@ class ArchestraClient:
                             ctx="POST /api/skills")
 
     def enable_skill_defaults(self) -> None:
-        """enable org skill tools (list_skills/activate_skill/read_skill_file) and backfill
+        """enable org skill tools (list_skills/load_skill) and backfill
         them onto existing agents. idempotent."""
         self._request("POST", "/api/skills/enable-defaults")
 
@@ -360,6 +360,13 @@ class ArchestraClient:
     def create_hook(self, payload: HookCreate) -> dict[str, JsonValue]:
         return require_dict(self._request("POST", "/api/hooks", json_body=to_payload(payload)),
                             ctx="POST /api/hooks")
+
+    def agent_hooks_enabled(self) -> bool:
+        """whether the instance's agent-hooks feature is on (env flag AND the sandbox runtime).
+        When off, POST /api/hooks still persists hooks but they never fire and are hidden in the UI."""
+        config = require_dict(self._request("GET", "/api/config"), ctx="GET /api/config")
+        features = config.get("features")
+        return bool(features.get("agentHooksEnabled")) if isinstance(features, dict) else False
 
 
 # --- response decoding & shape helpers -----------------------------------------------------

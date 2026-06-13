@@ -877,10 +877,23 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       } else if (body.credentials) {
         if (connector.secretId) {
-          await secretManager().updateSecret(
-            connector.secretId,
-            body.credentials,
-          );
+          // The edit dialog promises "leave empty to keep existing
+          // credentials" and omits the email/username field when blank, but
+          // updateSecret replaces the whole value — preserve the stored email
+          // so rotating only the token doesn't drop the username.
+          let credentials = body.credentials;
+          if (!credentials.email) {
+            const existing = await secretManager().getSecret(
+              connector.secretId,
+            );
+            const storedEmail = (
+              existing?.secret as Record<string, unknown> | undefined
+            )?.email;
+            if (typeof storedEmail === "string" && storedEmail) {
+              credentials = { ...credentials, email: storedEmail };
+            }
+          }
+          await secretManager().updateSecret(connector.secretId, credentials);
         } else {
           const secret = await secretManager().createSecret(
             body.credentials,

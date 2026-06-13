@@ -39,6 +39,18 @@ function messageWithMarkedPart(text: string): ModelMessage {
   };
 }
 
+// A user message carrying a text part plus a file part of the given media type,
+// as `materializeAttachments` produces for an attachment.
+function messageWithFile(text: string, mediaType: string): ModelMessage {
+  return {
+    role: "user",
+    content: [
+      { type: "text", text },
+      { type: "file", mediaType, data: "data:..." },
+    ],
+  };
+}
+
 describe("applyPromptCacheBreakpoints", () => {
   it("marks the first and last message for Anthropic", () => {
     const result = applyPromptCacheBreakpoints({
@@ -173,6 +185,66 @@ describe("applyPromptCacheBreakpoints", () => {
     expect(bedrockCachePoint(result[2])).toEqual({ type: "default" });
     // Bedrock uses cachePoint, not Anthropic's cacheControl.
     expect(anthropicCacheControl(result[0])).toBeUndefined();
+  });
+
+  it("skips the Bedrock cachePoint on a message containing a document", () => {
+    // A trailing standalone cachePoint after a document block makes Bedrock
+    // reject the request, so a document-bearing last message must not be marked.
+    const result = applyPromptCacheBreakpoints({
+      provider: "bedrock",
+      messages: [
+        userMessage("first"),
+        messageWithFile("here is a file", "application/pdf"),
+      ],
+    });
+
+    expect(bedrockCachePoint(result[1])).toBeUndefined();
+    // Budget is spent on the document-free first message instead.
+    expect(bedrockCachePoint(result[0])).toEqual({ type: "default" });
+  });
+
+  it("does not mark either message when both carry a document for Bedrock", () => {
+    const messages = [
+      messageWithFile("doc a", "application/pdf"),
+      messageWithFile("doc b", "text/plain"),
+    ];
+
+    const result = applyPromptCacheBreakpoints({
+      provider: "bedrock",
+      messages,
+    });
+
+    expect(result).toBe(messages);
+    expect(bedrockCachePoint(result[0])).toBeUndefined();
+    expect(bedrockCachePoint(result[1])).toBeUndefined();
+  });
+
+  it("still marks a Bedrock message that carries an image (not a document)", () => {
+    const result = applyPromptCacheBreakpoints({
+      provider: "bedrock",
+      messages: [
+        userMessage("first"),
+        messageWithFile("here is an image", "image/png"),
+      ],
+    });
+
+    // A cachePoint after an image block is accepted by Bedrock, so the
+    // image-bearing last message keeps its breakpoint.
+    expect(bedrockCachePoint(result[1])).toEqual({ type: "default" });
+  });
+
+  it("does not skip document messages for Anthropic", () => {
+    // Anthropic merges the breakpoint into providerOptions (no standalone
+    // block), so a document-bearing message is still marked.
+    const result = applyPromptCacheBreakpoints({
+      provider: "anthropic",
+      messages: [
+        userMessage("first"),
+        messageWithFile("here is a file", "application/pdf"),
+      ],
+    });
+
+    expect(anthropicCacheControl(result[1])).toEqual(EPHEMERAL);
   });
 
   it("ignores Anthropic markers when budgeting Bedrock cachePoints", () => {

@@ -7,7 +7,6 @@ import {
   GITHUB_REPO_URL,
 } from "@archestra/shared";
 import { requiredPagePermissionsMap } from "@archestra/shared/access-control";
-import { SignedIn, UserButton } from "@daveyplate/better-auth-ui";
 import {
   BookOpen,
   Bot,
@@ -21,7 +20,6 @@ import {
   MoreHorizontal,
   Network,
   Route,
-  Settings,
   Slack,
   Star,
 } from "lucide-react";
@@ -29,6 +27,7 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import React from "react";
 import { ChatSidebarSection } from "@/app/_parts/chat-sidebar-section";
+import { SidebarUserMenu } from "@/app/_parts/sidebar-user-menu";
 import { AppLogo } from "@/components/app-logo";
 import { SidebarWarningsAccordion } from "@/components/sidebar-warnings-accordion";
 import {
@@ -492,25 +491,6 @@ export function AppSidebar() {
     }));
   }, [showConnect, skillsEnabled]);
 
-  // Build additional links for UserButton popout menu
-  const userMenuLinks = React.useMemo(() => {
-    const links: {
-      href: string;
-      icon?: React.ReactNode;
-      label: React.ReactNode;
-      separator?: boolean;
-    }[] = [];
-
-    links.push({
-      href: "/settings/account",
-      icon: <Settings className="h-4 w-4" />,
-      label: "Settings",
-      separator: true,
-    });
-
-    return links;
-  }, []);
-
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader className="pt-4 group-data-[collapsible=icon]:pt-2 group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:items-center group-data-[collapsible=icon]:gap-1">
@@ -561,7 +541,7 @@ export function AppSidebar() {
       </SidebarContent>
       <SidebarFooter>
         <SidebarWarningsAccordion />
-        <SignedIn>
+        {isAuthenticated && (
           <SidebarGroup className="mt-auto p-0">
             <SidebarGroupContent>
               <div
@@ -578,18 +558,11 @@ export function AppSidebar() {
                   "group-data-[collapsible=icon]:[&_button>svg]:hidden",
                 )}
               >
-                <UserButton
-                  size="default"
-                  align="center"
-                  side="top"
-                  className="w-full bg-transparent hover:bg-transparent text-foreground"
-                  disableDefaultLinks
-                  additionalLinks={userMenuLinks}
-                />
+                <SidebarUserMenu />
               </div>
             </SidebarGroupContent>
           </SidebarGroup>
-        </SignedIn>
+        )}
       </SidebarFooter>
     </Sidebar>
   );

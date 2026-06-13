@@ -100,7 +100,7 @@ export const CreateBaseToolArgsSchema = z
       .optional()
       .describe("Team IDs to attach when creating a team-scoped resource."),
     toolExposureMode: ToolExposureModeSchema.optional().describe(
-      "How tools should be loaded for MCP clients and models. Use 'search_and_run_only' to keep the initial tool list small while letting search_tools find assigned tools and run_tool execute them. Assigned skill discovery/activation tools (list_skills, activate_skill, read_skill_file) and — when the code runtime is enabled and assigned — sandbox runtime tools (run_command, download_file, upload_file) stay directly available in both modes.",
+      "How tools should be loaded for MCP clients and models. Use 'search_and_run_only' to keep the initial tool list small while letting search_tools find assigned tools and run_tool execute them. Assigned skill discovery/loading tools (list_skills, load_skill) and — when the code runtime is enabled and assigned — sandbox runtime tools (run_command, download_file, upload_file) stay directly available in both modes.",
     ),
   })
   .strict();

@@ -17,6 +17,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import {
   CallToolRequestSchema,
+  ElicitResultSchema,
   ListPromptsRequestSchema,
   ListResourcesRequestSchema,
   ListResourceTemplatesRequestSchema,
@@ -49,6 +50,7 @@ import {
   McpToolCallModel,
   MemberModel,
   OAuthAccessTokenModel,
+  TeamModel,
   TeamTokenModel,
   ToolModel,
   UserModel,
@@ -168,6 +170,17 @@ export async function createAgentServer(
 
   const agent = await AgentModel.findById(agentId);
   if (!agent) throw new Error(`Agent not found: ${agentId}`);
+
+  // Fetch the agent's teams and the calling user's teams (with labels) for
+  // trace span team attributes.
+  const teams = await AgentTeamModel.getTeamLabelInfoForAgent(agentId);
+  const userTeams =
+    tokenAuth?.userId && tokenAuth.organizationId
+      ? await TeamModel.getTeamLabelInfoForUser({
+          userId: tokenAuth.userId,
+          organizationId: tokenAuth.organizationId,
+        })
+      : [];
 
   // Create a map of Archestra tool names to their titles
   // This is needed because the database schema doesn't include a title field
@@ -302,7 +315,7 @@ export async function createAgentServer(
 
   server.setRequestHandler(
     CallToolRequestSchema,
-    async ({ params: { name, arguments: args } }) => {
+    async ({ params: { name, arguments: args } }, extra) => {
       const startTime = Date.now();
       const mcpServerName = parseFullToolName(name).serverName ?? "unknown";
 
@@ -362,6 +375,8 @@ export async function createAgentServer(
             toolName: name,
             mcpServerName,
             agent,
+            teams,
+            userTeams,
             agentType: agent.agentType,
             toolCallId: `archestra-${Date.now()}`,
             toolArgs: args,
@@ -459,6 +474,8 @@ export async function createAgentServer(
           toolName: name,
           mcpServerName,
           agent,
+          teams,
+          userTeams,
           agentType: agent.agentType,
           toolCallId,
           toolArgs: args,
@@ -468,6 +485,27 @@ export async function createAgentServer(
               toolCall,
               agentId,
               tokenAuth,
+              {
+                elicitationHandler: async (request) => {
+                  try {
+                    return await extra.sendRequest(request, ElicitResultSchema);
+                  } catch (error) {
+                    logger.warn(
+                      {
+                        agentId,
+                        toolName: name,
+                        mode: request.params.mode ?? "form",
+                        error:
+                          error instanceof Error
+                            ? error.message
+                            : String(error),
+                      },
+                      "MCP elicitation request was not completed by caller",
+                    );
+                    throw error;
+                  }
+                },
+              },
             );
             span.setAttribute(ATTR_MCP_IS_ERROR_RESULT, r.isError ?? false);
             return r;

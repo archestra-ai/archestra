@@ -437,6 +437,11 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetOrganization]: {},
   [RouteId.CompleteOnboarding]: {},
 
+  // Connection setup: resource-level checks (mcpGateway/llmProxy read access,
+  // skill admin) are conditional on what the setup includes and enforced in
+  // the route handler. The script GET is public (token-authenticated).
+  [RouteId.CreateConnectionSetup]: {},
+
   // Generic agent CRUD routes - enforcement is handled dynamically in route handlers
   // based on agentType (agent, mcp_gateway, llm_proxy map to agent, mcpGateway, llmProxy resources)
   [RouteId.GetAgents]: {},
@@ -467,6 +472,7 @@ export const requiredEndpointPermissionsMap: Partial<
   },
   // Tool-assignment routes: agent-type update checked dynamically in handler
   [RouteId.AssignToolToAgent]: {},
+  [RouteId.GrantToolToAgent]: {},
   [RouteId.BulkAssignTools]: {},
   [RouteId.BulkUpdateAgentTools]: {
     toolPolicy: ["update"],
@@ -682,6 +688,12 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.RemoveTeamMember]: {
     team: ["read"],
   },
+  [RouteId.GetTeamLabelKeys]: {
+    team: ["read"],
+  },
+  [RouteId.GetTeamLabelValues]: {
+    team: ["read"],
+  },
   // Team External Group Routes (SSO Team Sync) - requires team admin permission
   [RouteId.GetTeamExternalGroups]: {
     team: ["read"],
@@ -734,6 +746,9 @@ export const requiredEndpointPermissionsMap: Partial<
     log: ["read"],
   },
   [RouteId.StreamChat]: {
+    chat: ["read"],
+  },
+  [RouteId.ResolveChatMcpElicitation]: {
     chat: ["read"],
   },
   [RouteId.StopChatStream]: {
@@ -1033,6 +1048,11 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetIdentityProviderLatestIdTokenClaims]: {
     identityProvider: ["read"],
   },
+  // Installers need to know whether they must link a downstream IdP, but this
+  // endpoint does not expose identity-provider configuration or secrets.
+  [RouteId.GetIdentityProviderLinkStatus]: {
+    mcpServerInstallation: ["create"],
+  },
   [RouteId.CreateIdentityProvider]: {
     identityProvider: ["create"],
   },
@@ -1252,6 +1272,7 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetSkillShareLinks]: { skill: ["admin"] },
   [RouteId.CreateSkillShareLink]: { skill: ["admin"] },
   [RouteId.RevokeSkillShareLink]: { skill: ["admin"] },
+  [RouteId.RotateSkillShareLink]: { skill: ["admin"] },
 
   // Config endpoint - any authenticated user can access
   [RouteId.GetConfig]: {},

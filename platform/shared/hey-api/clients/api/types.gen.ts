@@ -1300,6 +1300,13 @@ export type AnthropicMessagesRequestInput = {
             } | null;
             cache_control?: unknown;
         } | {
+            type: 'thinking';
+            thinking: string;
+            signature: string;
+        } | {
+            type: 'redacted_thinking';
+            data: string;
+        } | {
             id: string;
             input: unknown;
             name: string;
@@ -1360,8 +1367,14 @@ export type AnthropicMessagesRequestInput = {
                 cache_control?: unknown;
             }>;
             is_error?: boolean;
+        } | {
+            type: 'search_result' | 'server_tool_use' | 'web_search_tool_result' | 'web_fetch_tool_result' | 'code_execution_tool_result' | 'bash_code_execution_tool_result' | 'text_editor_code_execution_tool_result' | 'tool_search_tool_result' | 'container_upload';
+            [key: string]: unknown;
+        } | {
+            type: string;
+            [key: string]: unknown;
         }>;
-        role: 'user' | 'assistant';
+        role: 'user' | 'assistant' | 'system';
     }>;
     max_tokens: number;
     container?: string | null;
@@ -6583,6 +6596,13 @@ export type AnthropicMessagesRequest = {
             } | null;
             cache_control?: unknown;
         } | {
+            type: 'thinking';
+            thinking: string;
+            signature: string;
+        } | {
+            type: 'redacted_thinking';
+            data: string;
+        } | {
             id: string;
             input: unknown;
             name: string;
@@ -6643,8 +6663,14 @@ export type AnthropicMessagesRequest = {
                 cache_control?: unknown;
             }>;
             is_error?: boolean;
+        } | {
+            type: 'search_result' | 'server_tool_use' | 'web_search_tool_result' | 'web_fetch_tool_result' | 'code_execution_tool_result' | 'bash_code_execution_tool_result' | 'text_editor_code_execution_tool_result' | 'tool_search_tool_result' | 'container_upload';
+            [key: string]: unknown;
+        } | {
+            type: string;
+            [key: string]: unknown;
         }>;
-        role: 'user' | 'assistant';
+        role: 'user' | 'assistant' | 'system';
     }>;
     max_tokens: number;
     container?: string | null;
@@ -10864,6 +10890,7 @@ export type GetAgentsResponses = {
             slug: string | null;
             isDefault: boolean;
             isPersonalGateway: boolean;
+            isPersonalProxy: boolean;
             considerContextUntrusted: boolean;
             agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
             systemPrompt: string | null;
@@ -10966,6 +10993,7 @@ export type CreateAgentData = {
         scope: 'personal' | 'team' | 'org';
         name: string;
         isDefault?: boolean;
+        isPersonalProxy?: boolean;
         considerContextUntrusted?: boolean;
         agentType?: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
         systemPrompt?: string | null;
@@ -11091,6 +11119,7 @@ export type CreateAgentResponses = {
         slug: string | null;
         isDefault: boolean;
         isPersonalGateway: boolean;
+        isPersonalProxy: boolean;
         considerContextUntrusted: boolean;
         agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
         systemPrompt: string | null;
@@ -11288,6 +11317,7 @@ export type GetAllAgentsResponses = {
         slug: string | null;
         isDefault: boolean;
         isPersonalGateway: boolean;
+        isPersonalProxy: boolean;
         considerContextUntrusted: boolean;
         agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
         systemPrompt: string | null;
@@ -11460,6 +11490,7 @@ export type GetDefaultMcpGatewayResponses = {
         slug: string | null;
         isDefault: boolean;
         isPersonalGateway: boolean;
+        isPersonalProxy: boolean;
         considerContextUntrusted: boolean;
         agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
         systemPrompt: string | null;
@@ -11632,6 +11663,7 @@ export type GetDefaultLlmProxyResponses = {
         slug: string | null;
         isDefault: boolean;
         isPersonalGateway: boolean;
+        isPersonalProxy: boolean;
         considerContextUntrusted: boolean;
         agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
         systemPrompt: string | null;
@@ -11795,7 +11827,7 @@ export type ImportAgentData = {
             /**
              * Connector type (e.g. confluence, github)
              */
-            connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'file_upload' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler';
+            connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'file_upload' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler' | 'perforce';
         }>;
     };
     path?: never;
@@ -11882,6 +11914,7 @@ export type ImportAgentResponses = {
             slug: string | null;
             isDefault: boolean;
             isPersonalGateway: boolean;
+            isPersonalProxy: boolean;
             considerContextUntrusted: boolean;
             agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
             systemPrompt: string | null;
@@ -12147,6 +12180,7 @@ export type GetAgentResponses = {
         slug: string | null;
         isDefault: boolean;
         isPersonalGateway: boolean;
+        isPersonalProxy: boolean;
         considerContextUntrusted: boolean;
         agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
         systemPrompt: string | null;
@@ -12240,6 +12274,7 @@ export type UpdateAgentData = {
         scope?: 'personal' | 'team' | 'org';
         name?: string;
         isDefault?: boolean;
+        isPersonalProxy?: boolean;
         considerContextUntrusted?: boolean;
         agentType?: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
         systemPrompt?: string | null;
@@ -12367,6 +12402,7 @@ export type UpdateAgentResponses = {
         slug: string | null;
         isDefault: boolean;
         isPersonalGateway: boolean;
+        isPersonalProxy: boolean;
         considerContextUntrusted: boolean;
         agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
         systemPrompt: string | null;
@@ -12541,6 +12577,7 @@ export type CloneAgentResponses = {
         slug: string | null;
         isDefault: boolean;
         isPersonalGateway: boolean;
+        isPersonalProxy: boolean;
         considerContextUntrusted: boolean;
         agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
         systemPrompt: string | null;
@@ -12781,7 +12818,7 @@ export type ExportAgentResponses = {
             /**
              * Connector type (e.g. confluence, github)
              */
-            connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'file_upload' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler';
+            connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'file_upload' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler' | 'perforce';
         }>;
     };
 };
@@ -12875,6 +12912,7 @@ export type RestoreAgentResponses = {
         slug: string | null;
         isDefault: boolean;
         isPersonalGateway: boolean;
+        isPersonalProxy: boolean;
         considerContextUntrusted: boolean;
         agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
         systemPrompt: string | null;
@@ -13702,6 +13740,93 @@ export type AssignToolToAgentResponses = {
 };
 
 export type AssignToolToAgentResponse = AssignToolToAgentResponses[keyof AssignToolToAgentResponses];
+
+export type GrantToolToAgentData = {
+    body: {
+        toolName: string;
+    };
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/api/agents/{agentId}/tools/grant';
+};
+
+export type GrantToolToAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GrantToolToAgentError = GrantToolToAgentErrors[keyof GrantToolToAgentErrors];
+
+export type GrantToolToAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type GrantToolToAgentResponse = GrantToolToAgentResponses[keyof GrantToolToAgentResponses];
 
 export type BulkAssignToolsData = {
     body: {
@@ -19576,6 +19701,97 @@ export type StreamChatErrors = {
 
 export type StreamChatError = StreamChatErrors[keyof StreamChatErrors];
 
+export type ResolveChatMcpElicitationData = {
+    body: {
+        conversationId: string;
+        action: 'accept' | 'decline' | 'cancel';
+        content?: {
+            [key: string]: string | number | boolean | Array<string>;
+        };
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/chat/elicitation/{id}';
+};
+
+export type ResolveChatMcpElicitationErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ResolveChatMcpElicitationError = ResolveChatMcpElicitationErrors[keyof ResolveChatMcpElicitationErrors];
+
+export type ResolveChatMcpElicitationResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type ResolveChatMcpElicitationResponse = ResolveChatMcpElicitationResponses[keyof ResolveChatMcpElicitationResponses];
+
 export type StopChatStreamData = {
     body?: never;
     path: {
@@ -23906,6 +24122,119 @@ export type GetConfigResponses = {
 };
 
 export type GetConfigResponse = GetConfigResponses[keyof GetConfigResponses];
+
+export type CreateConnectionSetupData = {
+    body: {
+        clientId: 'claude-code' | 'codex' | 'copilot-cli' | 'cursor';
+        baseUrl: string;
+        mcpGatewayId?: string;
+        llmProxyId?: string;
+        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'zhipuai' | 'deepseek' | 'minimax' | 'azure';
+        proxyAuth?: 'provider-key' | 'virtual-key';
+        skills?: {
+            skillIds: Array<string>;
+            ttlDays: number | null;
+        };
+    };
+    path?: never;
+    query?: never;
+    url: '/api/connection-setups';
+};
+
+export type CreateConnectionSetupErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type CreateConnectionSetupError = CreateConnectionSetupErrors[keyof CreateConnectionSetupErrors];
+
+export type CreateConnectionSetupResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        command: string;
+        expiresAt: string;
+        tokenStart: string;
+    };
+};
+
+export type CreateConnectionSetupResponse = CreateConnectionSetupResponses[keyof CreateConnectionSetupResponses];
+
+export type GetConnectionSetupScriptData = {
+    body?: never;
+    path: {
+        token: string;
+    };
+    query?: never;
+    url: '/api/connection-setups/script/{token}';
+};
+
+export type GetConnectionSetupScriptResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
 
 export type DeepseekChatCompletionsWithDefaultAgentData = {
     body: DeepSeekChatCompletionRequestInput;
@@ -33593,7 +33922,7 @@ export type GetKnowledgeBasesResponses = {
             connectors: Array<{
                 id: string;
                 name: string;
-                connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'file_upload' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler';
+                connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'file_upload' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler' | 'perforce';
             }>;
             totalDocsIndexed: number;
             assignedAgents: Array<{
@@ -34071,7 +34400,7 @@ export type GetConnectorsData = {
         offset?: number;
         knowledgeBaseId?: string;
         search?: string;
-        connectorType?: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'file_upload' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler';
+        connectorType?: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'file_upload' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler' | 'perforce';
     };
     url: '/api/connectors';
 };
@@ -34153,7 +34482,7 @@ export type GetConnectorsResponses = {
             description: string | null;
             visibility: 'org-wide' | 'team-scoped';
             teamIds: Array<string>;
-            connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'file_upload' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler';
+            connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'file_upload' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler' | 'perforce';
             config: {
                 type: 'jira';
                 jiraBaseUrl: unknown;
@@ -34283,6 +34612,12 @@ export type GetConnectorsResponses = {
                 batchSize?: number;
                 requestDelayMs?: number;
                 userAgent?: string;
+            } | {
+                type: 'perforce';
+                serverUrl: unknown;
+                depotPaths: Array<string>;
+                excludePaths?: Array<string>;
+                fileTypes?: Array<string>;
             };
             secretId: string | null;
             schedule: string;
@@ -34320,7 +34655,7 @@ export type CreateConnectorData = {
         description?: string | null;
         visibility?: 'org-wide' | 'team-scoped';
         teamIds?: Array<string>;
-        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'file_upload' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler';
+        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'file_upload' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler' | 'perforce';
         config: {
             type: 'jira';
             jiraBaseUrl: string;
@@ -34450,6 +34785,12 @@ export type CreateConnectorData = {
             batchSize?: number;
             requestDelayMs?: number;
             userAgent?: string;
+        } | {
+            type: 'perforce';
+            serverUrl: string;
+            depotPaths: Array<string>;
+            excludePaths?: Array<string>;
+            fileTypes?: Array<string>;
         };
         credentials?: {
             email?: string;
@@ -34545,7 +34886,7 @@ export type CreateConnectorResponses = {
         description: string | null;
         visibility: 'org-wide' | 'team-scoped';
         teamIds: Array<string>;
-        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'file_upload' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler';
+        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'file_upload' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler' | 'perforce';
         config: {
             type: 'jira';
             jiraBaseUrl: unknown;
@@ -34675,6 +35016,12 @@ export type CreateConnectorResponses = {
             batchSize?: number;
             requestDelayMs?: number;
             userAgent?: string;
+        } | {
+            type: 'perforce';
+            serverUrl: unknown;
+            depotPaths: Array<string>;
+            excludePaths?: Array<string>;
+            fileTypes?: Array<string>;
         };
         secretId: string | null;
         schedule: string;
@@ -34862,7 +35209,7 @@ export type GetConnectorResponses = {
         description: string | null;
         visibility: 'org-wide' | 'team-scoped';
         teamIds: Array<string>;
-        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'file_upload' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler';
+        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'file_upload' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler' | 'perforce';
         config: {
             type: 'jira';
             jiraBaseUrl: unknown;
@@ -34992,6 +35339,12 @@ export type GetConnectorResponses = {
             batchSize?: number;
             requestDelayMs?: number;
             userAgent?: string;
+        } | {
+            type: 'perforce';
+            serverUrl: unknown;
+            depotPaths: Array<string>;
+            excludePaths?: Array<string>;
+            fileTypes?: Array<string>;
         };
         secretId: string | null;
         schedule: string;
@@ -35145,6 +35498,12 @@ export type UpdateConnectorData = {
             batchSize?: number;
             requestDelayMs?: number;
             userAgent?: string;
+        } | {
+            type: 'perforce';
+            serverUrl: string;
+            depotPaths: Array<string>;
+            excludePaths?: Array<string>;
+            fileTypes?: Array<string>;
         };
         credentials?: {
             email?: string;
@@ -35241,7 +35600,7 @@ export type UpdateConnectorResponses = {
         description: string | null;
         visibility: 'org-wide' | 'team-scoped';
         teamIds: Array<string>;
-        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'file_upload' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler';
+        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'file_upload' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler' | 'perforce';
         config: {
             type: 'jira';
             jiraBaseUrl: unknown;
@@ -35371,6 +35730,12 @@ export type UpdateConnectorResponses = {
             batchSize?: number;
             requestDelayMs?: number;
             userAgent?: string;
+        } | {
+            type: 'perforce';
+            serverUrl: unknown;
+            depotPaths: Array<string>;
+            excludePaths?: Array<string>;
+            fileTypes?: Array<string>;
         };
         secretId: string | null;
         schedule: string;
@@ -35487,7 +35852,7 @@ export type GetConnectorDocumentsResponses = {
             chunkCount: number;
             createdAt: string;
             updatedAt: string;
-            connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'file_upload' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler';
+            connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'file_upload' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler' | 'perforce';
         }>;
         pagination: {
             currentPage: number;
@@ -35684,7 +36049,7 @@ export type GetConnectorDocumentResponses = {
         chunkCount: number;
         createdAt: string;
         updatedAt: string;
-        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'file_upload' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler';
+        connectorType: 'jira' | 'confluence' | 'github' | 'gitlab' | 'servicenow' | 'notion' | 'sharepoint' | 'gdrive' | 'file_upload' | 'dropbox' | 'onedrive' | 'asana' | 'linear' | 'outline' | 'salesforce' | 'web_crawler' | 'perforce';
     };
 };
 
@@ -45955,6 +46320,7 @@ export type GetOrganizationResponses = {
         compressionScope: 'organization' | 'team';
         globalToolPolicy: 'permissive' | 'restrictive';
         allowChatFileUploads: boolean;
+        allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
         embeddingDimensions: EmbeddingDimensions | null;
         embeddingChatApiKeyId: string | null;
@@ -46002,6 +46368,9 @@ export type GetOrganizationResponses = {
             isDefault: boolean;
             visible: boolean;
         }> | null;
+        connectionDefaultProviderKeys: {
+            [key: string]: string;
+        } | null;
         defaultEnvironmentName: string | null;
         defaultEnvironmentNamespace: string | null;
         defaultEnvironmentDescription: string | null;
@@ -46244,6 +46613,7 @@ export type UpdateAppearanceSettingsResponses = {
         compressionScope: 'organization' | 'team';
         globalToolPolicy: 'permissive' | 'restrictive';
         allowChatFileUploads: boolean;
+        allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
         embeddingDimensions: EmbeddingDimensions | null;
         embeddingChatApiKeyId: string | null;
@@ -46291,6 +46661,9 @@ export type UpdateAppearanceSettingsResponses = {
             isDefault: boolean;
             visible: boolean;
         }> | null;
+        connectionDefaultProviderKeys: {
+            [key: string]: string;
+        } | null;
         defaultEnvironmentName: string | null;
         defaultEnvironmentNamespace: string | null;
         defaultEnvironmentDescription: string | null;
@@ -46313,6 +46686,7 @@ export type UpdateSecuritySettingsData = {
     body: {
         globalToolPolicy?: 'permissive' | 'restrictive';
         allowChatFileUploads?: boolean;
+        allowToolAutoAssignment?: boolean;
     };
     path?: never;
     query?: never;
@@ -46404,6 +46778,7 @@ export type UpdateSecuritySettingsResponses = {
         compressionScope: 'organization' | 'team';
         globalToolPolicy: 'permissive' | 'restrictive';
         allowChatFileUploads: boolean;
+        allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
         embeddingDimensions: EmbeddingDimensions | null;
         embeddingChatApiKeyId: string | null;
@@ -46451,6 +46826,9 @@ export type UpdateSecuritySettingsResponses = {
             isDefault: boolean;
             visible: boolean;
         }> | null;
+        connectionDefaultProviderKeys: {
+            [key: string]: string;
+        } | null;
         defaultEnvironmentName: string | null;
         defaultEnvironmentNamespace: string | null;
         defaultEnvironmentDescription: string | null;
@@ -46567,6 +46945,7 @@ export type UpdateLlmSettingsResponses = {
         compressionScope: 'organization' | 'team';
         globalToolPolicy: 'permissive' | 'restrictive';
         allowChatFileUploads: boolean;
+        allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
         embeddingDimensions: EmbeddingDimensions | null;
         embeddingChatApiKeyId: string | null;
@@ -46614,6 +46993,9 @@ export type UpdateLlmSettingsResponses = {
             isDefault: boolean;
             visible: boolean;
         }> | null;
+        connectionDefaultProviderKeys: {
+            [key: string]: string;
+        } | null;
         defaultEnvironmentName: string | null;
         defaultEnvironmentNamespace: string | null;
         defaultEnvironmentDescription: string | null;
@@ -46729,6 +47111,7 @@ export type UpdateAgentSettingsResponses = {
         compressionScope: 'organization' | 'team';
         globalToolPolicy: 'permissive' | 'restrictive';
         allowChatFileUploads: boolean;
+        allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
         embeddingDimensions: EmbeddingDimensions | null;
         embeddingChatApiKeyId: string | null;
@@ -46776,6 +47159,9 @@ export type UpdateAgentSettingsResponses = {
             isDefault: boolean;
             visible: boolean;
         }> | null;
+        connectionDefaultProviderKeys: {
+            [key: string]: string;
+        } | null;
         defaultEnvironmentName: string | null;
         defaultEnvironmentNamespace: string | null;
         defaultEnvironmentDescription: string | null;
@@ -46797,6 +47183,9 @@ export type UpdateAgentSettingsResponse = UpdateAgentSettingsResponses[keyof Upd
 export type UpdateConnectionSettingsData = {
     body: {
         connectionDefaultMcpGatewayId?: string | null;
+        connectionDefaultProviderKeys?: {
+            [key: string]: string;
+        } | null;
         connectionDefaultLlmProxyId?: string | null;
         connectionDefaultClientId?: string | null;
         connectionShownClientIds?: Array<string> | null;
@@ -46898,6 +47287,7 @@ export type UpdateConnectionSettingsResponses = {
         compressionScope: 'organization' | 'team';
         globalToolPolicy: 'permissive' | 'restrictive';
         allowChatFileUploads: boolean;
+        allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
         embeddingDimensions: EmbeddingDimensions | null;
         embeddingChatApiKeyId: string | null;
@@ -46945,6 +47335,9 @@ export type UpdateConnectionSettingsResponses = {
             isDefault: boolean;
             visible: boolean;
         }> | null;
+        connectionDefaultProviderKeys: {
+            [key: string]: string;
+        } | null;
         defaultEnvironmentName: string | null;
         defaultEnvironmentNamespace: string | null;
         defaultEnvironmentDescription: string | null;
@@ -47067,6 +47460,7 @@ export type UpdateDefaultEnvironmentResponses = {
         compressionScope: 'organization' | 'team';
         globalToolPolicy: 'permissive' | 'restrictive';
         allowChatFileUploads: boolean;
+        allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
         embeddingDimensions: EmbeddingDimensions | null;
         embeddingChatApiKeyId: string | null;
@@ -47114,6 +47508,9 @@ export type UpdateDefaultEnvironmentResponses = {
             isDefault: boolean;
             visible: boolean;
         }> | null;
+        connectionDefaultProviderKeys: {
+            [key: string]: string;
+        } | null;
         defaultEnvironmentName: string | null;
         defaultEnvironmentNamespace: string | null;
         defaultEnvironmentDescription: string | null;
@@ -47227,6 +47624,7 @@ export type UpdateAuthSettingsResponses = {
         compressionScope: 'organization' | 'team';
         globalToolPolicy: 'permissive' | 'restrictive';
         allowChatFileUploads: boolean;
+        allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
         embeddingDimensions: EmbeddingDimensions | null;
         embeddingChatApiKeyId: string | null;
@@ -47274,6 +47672,9 @@ export type UpdateAuthSettingsResponses = {
             isDefault: boolean;
             visible: boolean;
         }> | null;
+        connectionDefaultProviderKeys: {
+            [key: string]: string;
+        } | null;
         defaultEnvironmentName: string | null;
         defaultEnvironmentNamespace: string | null;
         defaultEnvironmentDescription: string | null;
@@ -47389,6 +47790,7 @@ export type UpdateKnowledgeSettingsResponses = {
         compressionScope: 'organization' | 'team';
         globalToolPolicy: 'permissive' | 'restrictive';
         allowChatFileUploads: boolean;
+        allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
         embeddingDimensions: EmbeddingDimensions | null;
         embeddingChatApiKeyId: string | null;
@@ -47436,6 +47838,9 @@ export type UpdateKnowledgeSettingsResponses = {
             isDefault: boolean;
             visible: boolean;
         }> | null;
+        connectionDefaultProviderKeys: {
+            [key: string]: string;
+        } | null;
         defaultEnvironmentName: string | null;
         defaultEnvironmentNamespace: string | null;
         defaultEnvironmentDescription: string | null;
@@ -47546,6 +47951,7 @@ export type DropEmbeddingConfigResponses = {
         compressionScope: 'organization' | 'team';
         globalToolPolicy: 'permissive' | 'restrictive';
         allowChatFileUploads: boolean;
+        allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
         embeddingDimensions: EmbeddingDimensions | null;
         embeddingChatApiKeyId: string | null;
@@ -47593,6 +47999,9 @@ export type DropEmbeddingConfigResponses = {
             isDefault: boolean;
             visible: boolean;
         }> | null;
+        connectionDefaultProviderKeys: {
+            [key: string]: string;
+        } | null;
         defaultEnvironmentName: string | null;
         defaultEnvironmentNamespace: string | null;
         defaultEnvironmentDescription: string | null;
@@ -47792,6 +48201,7 @@ export type CompleteOnboardingResponses = {
         compressionScope: 'organization' | 'team';
         globalToolPolicy: 'permissive' | 'restrictive';
         allowChatFileUploads: boolean;
+        allowToolAutoAssignment: boolean;
         embeddingModel: string | null;
         embeddingDimensions: EmbeddingDimensions | null;
         embeddingChatApiKeyId: string | null;
@@ -47839,6 +48249,9 @@ export type CompleteOnboardingResponses = {
             isDefault: boolean;
             visible: boolean;
         }> | null;
+        connectionDefaultProviderKeys: {
+            [key: string]: string;
+        } | null;
         defaultEnvironmentName: string | null;
         defaultEnvironmentNamespace: string | null;
         defaultEnvironmentDescription: string | null;
@@ -51263,9 +51676,18 @@ export type GetSkillsResponse = GetSkillsResponses[keyof GetSkillsResponses];
 
 export type CreateSkillData = {
     body: {
+        /**
+         * A complete SKILL.md manifest: a YAML frontmatter block with `name` and `description` (and optional `license`, `compatibility`, `allowed-tools`, `templated`, `metadata`), followed by the Markdown instruction body. Set `templated: true` to render the body through Handlebars (e.g. `{{user.name}}`) at activation. `allowed-tools` is a space-separated list of tools the skill is pre-approved to use.
+         */
         content: string;
         files?: Array<{
+            /**
+             * Resource path, e.g. references/API.md or scripts/run.py
+             */
             path: string;
+            /**
+             * Text content of the file
+             */
             content: string;
             encoding?: 'utf8' | 'base64';
         }>;
@@ -51811,9 +52233,18 @@ export type GetSkillResponse = GetSkillResponses[keyof GetSkillResponses];
 
 export type UpdateSkillData = {
     body: {
+        /**
+         * A complete SKILL.md manifest: a YAML frontmatter block with `name` and `description` (and optional `license`, `compatibility`, `allowed-tools`, `templated`, `metadata`), followed by the Markdown instruction body. Set `templated: true` to render the body through Handlebars (e.g. `{{user.name}}`) at activation. `allowed-tools` is a space-separated list of tools the skill is pre-approved to use.
+         */
         content: string;
         files?: Array<{
+            /**
+             * Resource path, e.g. references/API.md or scripts/run.py
+             */
             path: string;
+            /**
+             * Text content of the file
+             */
             content: string;
             encoding?: 'utf8' | 'base64';
         }>;
@@ -52515,6 +52946,10 @@ export type PreviewGithubSkillResponses = {
             encoding: 'utf8' | 'base64';
             kind: 'reference' | 'script' | 'asset';
         }>;
+        /**
+         * Resource paths not imported: oversized, beyond the per-skill file cap, or unfetchable
+         */
+        skippedFiles: Array<string>;
         sourceRef: string;
         sourceCommit: string;
     };
@@ -52630,6 +53065,13 @@ export type ImportGithubSkillsResponses = {
             updatedAt: string;
         }>;
         skipped: Array<string>;
+        /**
+         * Per created skill, resource paths not imported: oversized, beyond the per-skill file cap, or unfetchable
+         */
+        skippedFiles: Array<{
+            skillPath: string;
+            files: Array<string>;
+        }>;
     };
 };
 
@@ -52861,6 +53303,116 @@ export type CreateSkillShareLinkResponses = {
 };
 
 export type CreateSkillShareLinkResponse = CreateSkillShareLinkResponses[keyof CreateSkillShareLinkResponses];
+
+export type RotateSkillShareLinkData = {
+    body: {
+        skillIds: Array<string>;
+        name?: string;
+        expiresAt?: string | null;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/skill-share-links/{id}/rotate';
+};
+
+export type RotateSkillShareLinkErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type RotateSkillShareLinkError = RotateSkillShareLinkErrors[keyof RotateSkillShareLinkErrors];
+
+export type RotateSkillShareLinkResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        link: {
+            id: string;
+            organizationId: string;
+            createdByUserId: string;
+            tokenStart: string;
+            name: string | null;
+            marketplaceName: string;
+            expiresAt: string | null;
+            revokedAt: string | null;
+            lastUsedAt: string | null;
+            createdAt: string;
+            updatedAt: string;
+            status: 'active' | 'expired' | 'revoked';
+            skills: Array<{
+                id: string;
+                name: string;
+                description: string;
+            }>;
+        };
+        rawToken: string;
+        cloneUrl: string;
+        marketplaceName: string;
+    };
+};
+
+export type RotateSkillShareLinkResponse = RotateSkillShareLinkResponses[keyof RotateSkillShareLinkResponses];
 
 export type RevokeSkillShareLinkData = {
     body?: never;
@@ -53430,6 +53982,7 @@ export type GetTeamsData = {
         limit?: number;
         offset?: number;
         name?: string;
+        labels?: string;
         mine?: boolean;
     };
     url: '/api/teams';
@@ -53522,6 +54075,12 @@ export type GetTeamsResponses = {
                 syncedFromSso: boolean;
                 createdAt: string;
             }>;
+            labels?: Array<{
+                key: string;
+                value: string;
+                keyId?: string;
+                valueId?: string;
+            }>;
         }>;
         pagination: {
             currentPage: number;
@@ -53540,6 +54099,12 @@ export type CreateTeamData = {
     body: {
         name: string;
         description?: string;
+        labels?: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
     };
     path?: never;
     query?: never;
@@ -53631,6 +54196,12 @@ export type CreateTeamResponses = {
             role: string;
             syncedFromSso: boolean;
             createdAt: string;
+        }>;
+        labels?: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
         }>;
     };
 };
@@ -53817,6 +54388,12 @@ export type GetTeamResponses = {
             syncedFromSso: boolean;
             createdAt: string;
         }>;
+        labels?: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
     };
 };
 
@@ -53827,6 +54404,12 @@ export type UpdateTeamData = {
         name?: string;
         description?: string;
         convertToolResultsToToon?: boolean;
+        labels?: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
     };
     path: {
         id: string;
@@ -53920,6 +54503,12 @@ export type UpdateTeamResponses = {
             role: string;
             syncedFromSso: boolean;
             createdAt: string;
+        }>;
+        labels?: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
         }>;
     };
 };
@@ -54290,6 +54879,173 @@ export type UpdateTeamMemberResponses = {
 };
 
 export type UpdateTeamMemberResponse = UpdateTeamMemberResponses[keyof UpdateTeamMemberResponses];
+
+export type GetTeamLabelKeysData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/teams/labels/keys';
+};
+
+export type GetTeamLabelKeysErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetTeamLabelKeysError = GetTeamLabelKeysErrors[keyof GetTeamLabelKeysErrors];
+
+export type GetTeamLabelKeysResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<string>;
+};
+
+export type GetTeamLabelKeysResponse = GetTeamLabelKeysResponses[keyof GetTeamLabelKeysResponses];
+
+export type GetTeamLabelValuesData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Filter values by label key
+         */
+        key?: string;
+    };
+    url: '/api/teams/labels/values';
+};
+
+export type GetTeamLabelValuesErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetTeamLabelValuesError = GetTeamLabelValuesErrors[keyof GetTeamLabelValuesErrors];
+
+export type GetTeamLabelValuesResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<string>;
+};
+
+export type GetTeamLabelValuesResponse = GetTeamLabelValuesResponses[keyof GetTeamLabelValuesResponses];
 
 export type GetTeamExternalGroupsData = {
     body?: never;
@@ -57294,6 +58050,92 @@ export type GetIdentityProviderIdpLogoutUrlResponses = {
 };
 
 export type GetIdentityProviderIdpLogoutUrlResponse = GetIdentityProviderIdpLogoutUrlResponses[keyof GetIdentityProviderIdpLogoutUrlResponses];
+
+export type GetIdentityProviderLinkStatusData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/identity-providers/{id}/link-status';
+};
+
+export type GetIdentityProviderLinkStatusErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetIdentityProviderLinkStatusError = GetIdentityProviderLinkStatusErrors[keyof GetIdentityProviderLinkStatusErrors];
+
+export type GetIdentityProviderLinkStatusResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        providerId: string;
+        connected: boolean;
+    };
+};
+
+export type GetIdentityProviderLinkStatusResponse = GetIdentityProviderLinkStatusResponses[keyof GetIdentityProviderLinkStatusResponses];
 
 export type GetIdentityProviderLatestIdTokenClaimsData = {
     body?: never;

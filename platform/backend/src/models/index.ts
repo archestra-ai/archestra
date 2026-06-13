@@ -16,6 +16,7 @@ export { default as ChatOpsChannelBindingModel } from "./chatops-channel-binding
 export { default as ChatOpsConfigModel } from "./chatops-config";
 export { default as ChatOpsProcessedMessageModel } from "./chatops-processed-message";
 export { default as ChatOpsThreadAgentOverrideModel } from "./chatops-thread-agent-override";
+export { default as ConnectionSetupModel } from "./connection-setup";
 export { default as ConnectorRunModel } from "./connector-run";
 export { default as ConversationModel } from "./conversation";
 export { default as ConversationAttachmentModel } from "./conversation-attachment";
@@ -78,6 +79,7 @@ export { default as SkillVersionModel } from "./skill-version";
 export { default as StatisticsModel } from "./statistics";
 export { default as TaskModel } from "./task";
 export { default as TeamModel } from "./team";
+export { default as TeamLabelModel } from "./team-label";
 export { default as TeamTokenModel } from "./team-token";
 export { default as ToolModel } from "./tool";
 export { default as ToolInvocationPolicyModel } from "./tool-invocation-policy";

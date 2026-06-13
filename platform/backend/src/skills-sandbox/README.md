@@ -2,9 +2,8 @@
 
 DB-backed, Dagger-materialized execution sandbox for Agent Skills.
 
-> Not released yet: the sandbox is gated behind the sandbox feature flag
-> (`config.skillsSandbox`, derived from `ARCHESTRA_CODE_RUNTIME_ENABLED` + a
-> Dagger runner host).
+> Gated behind the sandbox feature flag (`config.skillsSandbox`, derived from
+> `ARCHESTRA_CODE_RUNTIME_ENABLED` + a Dagger runner host).
 
 ## What this directory contains
 
@@ -12,9 +11,10 @@ DB-backed, Dagger-materialized execution sandbox for Agent Skills.
   client. Materializes a sandbox from its DB replay log, replays it, executes a
   new command, and exports files as artifacts (status FSM, per-sandbox queue,
   lifecycle hooks).
-- `runtime-image.ts` — base image (`ghcr.io/astral-sh/uv:…`), apt-package
-  baseline (bash, curl, git, jq, nodejs, npm, build-essential), non-root user
-  (`1000:1000`), and skill-root layout (`/skills/<skill-name>`).
+- `runtime-image.ts` — container path layout: skill root (`/skills/<skill-name>`),
+  sandbox home, and attachment staging dir. The image itself (base image,
+  apt-package baseline, non-root user) is defined in the Rust Dagger backend
+  (`platform/archestra-rs/sandbox-core/src/backends/dagger.rs`).
 - `types.ts` — `SkillSandboxLimits`, `CommandResult`, `ArtifactRef`,
   `UploadRef`, `SkillSandboxError`, runtime status enum. Tool-layer code in
   `../archestra-mcp-server/sandbox.ts` re-uses these so the service/tool
@@ -128,7 +128,15 @@ input length and the per-sandbox pending queue length.
 The sandbox always runs as the non-root user from `runtime-image.ts`, with no
 host mounts and no backend env exposed inside the container. Network access is
 enabled because npm/uv/npx require it; this is documented in the activation
-prompt.
+prompt, but egress is firewalled: the `dagger-egress-firewall` sidecar
+(`helm/archestra` and `helm/dagger-runtime` values) drops exec egress to RFC1918
+private ranges, cloud-metadata / link-local (`169.254.0.0/16`), the Azure
+WireServer, CGNAT, and loopback at the Dagger Engine pod, so sandboxed code keeps
+public access (npm/uv) but cannot reach the cluster's internal services or the
+node's instance-metadata credentials. Established replies and DNS are returned
+back so name resolution and downloads still work. The rule lives in the engine's
+mangle `FORWARD` chain, so it holds independent of whether the cluster enforces
+`NetworkPolicy`.
 
 ## RBAC
 
@@ -137,7 +145,7 @@ by `sandbox:execute` (`backend/src/archestra-mcp-server/rbac.ts`). Sandboxes are
 scoped to the caller's organization + user + **conversation**: a `target: { id }`
 referencing a sandbox outside that scope is rejected.
 
-Skills are mounted into the default sandbox by `activate_skill` (and
+Skills are mounted into the default sandbox by `load_skill` (and
 slash-command activation), which enforces `skill:read` + per-skill team scope
 for the activating user. Before building any container, `run_command` and
 `download_file` re-check that every mounted skill is still readable by the

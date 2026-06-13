@@ -4,26 +4,28 @@ import {
   type archestraApiTypes,
   buildSlackSlashCommands,
 } from "@archestra/shared";
-import { AlertTriangle, Info } from "lucide-react";
+import { AlertTriangle, Cable, Globe, Info, Waypoints } from "lucide-react";
 import { useEffect, useState } from "react";
 import Divider from "@/components/divider";
 import { NgrokSetupDialog } from "@/components/ngrok-setup-dialog";
 import { SlackSetupDialog } from "@/components/slack-setup-dialog";
 import { Button } from "@/components/ui/button";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useChatOpsStatus } from "@/lib/chatops/chatops.query";
 import { useUpdateSlackChatOpsConfig } from "@/lib/chatops/chatops-config.query";
 import config from "@/lib/config/config";
 import { useConfig, usePublicBaseUrl } from "@/lib/config/config.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useAppName } from "@/lib/hooks/use-app-name";
+import { cn } from "@/lib/utils";
 import { ChannelsSection } from "../_components/channels-section";
 import { CollapsibleSetupSection } from "../_components/collapsible-setup-section";
 import { CredentialField } from "../_components/credential-field";
 import { LlmKeySetupStep } from "../_components/llm-key-setup-step";
+import { ModeTile } from "../_components/mode-tile";
 import { NgrokStatus } from "../_components/ngrok-status";
 import { SetupStep } from "../_components/setup-step";
 import type { ProviderConfig } from "../_components/types";
+import { useReachabilityMode } from "../_components/use-reachability-mode";
 import { useTriggerStatuses } from "../_components/use-trigger-statuses";
 
 function useSlackProviderConfig(): ProviderConfig {
@@ -59,6 +61,9 @@ export default function SlackPage() {
   const appName = useAppName();
   const slackProviderConfig = useSlackProviderConfig();
   const publicBaseUrl = usePublicBaseUrl();
+  // The "I will expose myself" tile must show the instance's own origin, not
+  // the ngrok tunnel URL that usePublicBaseUrl prefers when a tunnel is up.
+  const manualWebhookBaseUrl = usePublicBaseUrl({ ignoreNgrok: true });
   const [slackSetupOpen, setSlackSetupOpen] = useState(false);
   const [ngrokDialogOpen, setNgrokDialogOpen] = useState(false);
 
@@ -67,6 +72,7 @@ export default function SlackPage() {
     useChatOpsStatus();
 
   const ngrokDomain = configData?.features.ngrokDomain;
+  const [reachabilityMode, selectReachabilityMode] = useReachabilityMode();
   const slack = chatOpsProviders?.find((p) => p.id === "slack");
   const slackCreds = slack?.credentials;
 
@@ -99,70 +105,100 @@ export default function SlackPage() {
         providerLabel="Slack"
         docsUrl={getFrontendDocsUrl("platform-slack")}
       >
+        <LlmKeySetupStep />
         <SetupStep
           title="Choose connection mode"
           description={`How Slack delivers events to ${appName}`}
           done={
-            !hasModeChange && (isSocket || (isLocalDev ? !!ngrokDomain : true))
+            !hasModeChange &&
+            (isSocket ||
+              !isLocalDev ||
+              reachabilityMode === "manual" ||
+              !!ngrokDomain)
           }
-          ctaLabel={
-            !isSocket && isLocalDev && !ngrokDomain && !hasModeChange
-              ? "Configure ngrok"
-              : undefined
-          }
-          onAction={() => setNgrokDialogOpen(true)}
         >
-          <RadioGroup
-            value={selectedMode}
-            onValueChange={(v: SlackConnectionMode) => setSelectedMode(v)}
-            className="flex gap-6"
+          <div
+            className={cn(
+              "grid gap-2",
+              isLocalDev ? "grid-cols-3" : "grid-cols-2",
+            )}
           >
-            {/* biome-ignore lint/a11y/noLabelWithoutControl: RadioGroupItem renders an input */}
-            <label className="flex items-start gap-2 cursor-pointer">
-              <RadioGroupItem value="socket" className="mt-1" />
-              <div className="flex flex-col">
-                <span className="text-sm font-medium text-foreground">
-                  WebSocket
-                </span>
-                <span className="text-xs text-muted-foreground">
-                  {appName} exchanges WebSocket messages with Slack, no public
-                  URL needed
-                </span>
-              </div>
-            </label>
-            {/* biome-ignore lint/a11y/noLabelWithoutControl: RadioGroupItem renders an input */}
-            <label className="flex items-start gap-2 cursor-pointer">
-              <RadioGroupItem value="webhook" className="mt-1" />
-              <div className="flex flex-col">
-                <span className="text-sm font-medium text-foreground">
-                  Webhook
-                </span>
-                <span className="text-xs text-muted-foreground">
-                  Slack makes HTTP requests to {appName}, requires a public URL
-                </span>
-              </div>
-            </label>
-          </RadioGroup>
+            <ModeTile
+              selected={selectedMode === "socket"}
+              onSelect={() => setSelectedMode("socket")}
+              icon={Cable}
+              title="WebSocket"
+              badge="Recommended"
+              description={`${appName} exchanges WebSocket messages with Slack — no public URL needed`}
+            />
+            {isLocalDev ? (
+              <>
+                <ModeTile
+                  selected={
+                    selectedMode === "webhook" && reachabilityMode === "ngrok"
+                  }
+                  onSelect={() => {
+                    setSelectedMode("webhook");
+                    selectReachabilityMode("ngrok");
+                    if (!ngrokDomain) setNgrokDialogOpen(true);
+                  }}
+                  icon={Waypoints}
+                  title="Webhook via ngrok"
+                  description={`${appName} opens a tunnel for you — best for local development`}
+                />
+                <ModeTile
+                  selected={
+                    selectedMode === "webhook" && reachabilityMode === "manual"
+                  }
+                  onSelect={() => {
+                    setSelectedMode("webhook");
+                    selectReachabilityMode("manual");
+                  }}
+                  icon={Globe}
+                  title="Webhook"
+                  description={
+                    <>
+                      I will expose{" "}
+                      <code className="bg-muted px-1 py-0.5 rounded text-xs break-all">
+                        {`${manualWebhookBaseUrl}/api/webhooks/chatops/slack`}
+                      </code>{" "}
+                      myself
+                    </>
+                  }
+                />
+              </>
+            ) : (
+              <ModeTile
+                selected={selectedMode === "webhook"}
+                onSelect={() => setSelectedMode("webhook")}
+                icon={Globe}
+                title="Webhook"
+                description={`Slack makes HTTP requests to ${appName}, requires a public URL`}
+              />
+            )}
+          </div>
           {selectedMode === "webhook" &&
             !hasModeChange &&
-            (isLocalDev && ngrokDomain ? (
+            isLocalDev &&
+            reachabilityMode === "ngrok" &&
+            ngrokDomain && (
               <div className="mt-3 text-xs text-muted-foreground">
                 <NgrokStatus domain={ngrokDomain} />
               </div>
-            ) : (
-              <div className="flex items-start gap-3 rounded-lg border border-blue-500/30 bg-blue-500/5 px-3 py-2 mt-3">
-                <Info className="h-4 w-4 text-blue-500 shrink-0 mt-0.5" />
-                <span className="text-muted-foreground text-xs">
-                  The webhook endpoint{" "}
-                  <code className="bg-muted px-1 py-0.5 rounded">
-                    POST {`${publicBaseUrl}/api/webhooks/chatops/slack`}
-                  </code>{" "}
-                  must be publicly accessible so Slack can deliver events to{" "}
-                  {appName}.
-                  {isLocalDev && " Configure ngrok or deploy to a public URL."}
-                </span>
-              </div>
-            ))}
+            )}
+          {selectedMode === "webhook" && !hasModeChange && !isLocalDev && (
+            <div className="flex items-start gap-3 rounded-lg border border-blue-500/30 bg-blue-500/5 px-3 py-2 mt-3">
+              <Info className="h-4 w-4 text-blue-500 shrink-0 mt-0.5" />
+              <span className="text-muted-foreground text-xs">
+                The webhook endpoint{" "}
+                <code className="bg-muted px-1 py-0.5 rounded">
+                  POST {`${publicBaseUrl}/api/webhooks/chatops/slack`}
+                </code>{" "}
+                must be publicly accessible so Slack can deliver events to{" "}
+                {appName}.
+              </span>
+            </div>
+          )}
           {hasModeChange && (
             <div className="mt-3 space-y-3">
               {slack?.configured && (
@@ -199,7 +235,6 @@ export default function SlackPage() {
             </div>
           )}
         </SetupStep>
-        <LlmKeySetupStep />
         <SetupStep
           title="Setup Slack"
           description={`Create a Slack App from manifest and connect it to ${appName}`}

@@ -598,3 +598,4 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @giangtn99dev-boop
 - @Moliqun
 - @andrefeix
+- @sanchal-coder

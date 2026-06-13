@@ -174,12 +174,13 @@ export async function createAgentServer(
   // Fetch the agent's teams and the calling user's teams (with labels) for
   // trace span team attributes.
   const teams = await AgentTeamModel.getTeamLabelInfoForAgent(agentId);
-  const userTeams = tokenAuth?.userId
-    ? await TeamModel.getTeamLabelInfoForUser({
-        userId: tokenAuth.userId,
-        organizationId: tokenAuth.organizationId,
-      })
-    : [];
+  const userTeams =
+    tokenAuth?.userId && tokenAuth.organizationId
+      ? await TeamModel.getTeamLabelInfoForUser({
+          userId: tokenAuth.userId,
+          organizationId: tokenAuth.organizationId,
+        })
+      : [];
 
   // Create a map of Archestra tool names to their titles
   // This is needed because the database schema doesn't include a title field

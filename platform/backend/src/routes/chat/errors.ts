@@ -1614,6 +1614,23 @@ export function mapProviderError(
   // Extract the most meaningful error message
   const errorMessage = extractErrorMessage(parsedError, responseBody, error);
 
+  // OpenRouter ends a streaming turn with "Upstream idle timeout exceeded" when
+  // the routed upstream stops emitting tokens mid-generation (e.g. a reasoning
+  // model that thinks for minutes before its first output token) — a transient
+  // infrastructure timeout, not a request fault. It arrives as a mid-stream SSE
+  // error after the HTTP response already opened 200, so it reaches here with no
+  // status code and no documented/stable error code to key on, and the
+  // per-provider mapper leaves it at the dead-end, non-retryable Unknown card.
+  // Match the message text and reclassify it as a retryable NetworkError. Scoped
+  // to the Unknown fallback so a more specific provider classification is never
+  // overwritten.
+  if (
+    errorCode === ChatErrorCode.Unknown &&
+    isUpstreamIdleTimeoutError(errorMessage)
+  ) {
+    errorCode = ChatErrorCode.NetworkError;
+  }
+
   // Determine error type from parsed error
   const errorType =
     (parsedError as ParsedOpenAIError)?.type ||
@@ -1672,6 +1689,10 @@ function isStreamTerminatedError(error: unknown): boolean {
   // Node.js/undici stream termination can surface as a bare Error("terminated")
   // when an upstream streamed response closes before the AI SDK finishes reading it.
   return error instanceof Error && error.message === "terminated";
+}
+
+function isUpstreamIdleTimeoutError(message: string): boolean {
+  return /idle timeout/i.test(message);
 }
 
 /**

@@ -142,6 +142,7 @@ export { default as skillVersionFilesTable } from "./skill-version-file";
 export { default as tasksTable } from "./task";
 export { team as teamsTable, teamMember as teamMembersTable } from "./team";
 export { default as teamExternalGroupsTable } from "./team-external-group";
+export { default as teamLabelsTable } from "./team-label";
 export { default as teamTokensTable } from "./team-token";
 export { default as teamVaultFoldersTable } from "./team-vault-folder";
 export { default as toolsTable } from "./tool";

@@ -8,8 +8,10 @@ import {
 } from "@archestra/shared";
 import type * as k8s from "@kubernetes/client-node";
 import type { Attach, Exec } from "@kubernetes/client-node";
+import { PatchStrategy, setHeaderOptions } from "@kubernetes/client-node";
 import type z from "zod";
 import config from "@/config";
+import { clusterDnsResolver } from "@/k8s/cluster-dns";
 import {
   ensureStringIsRfc1123Compliant,
   isK8sNotFoundError,
@@ -559,176 +561,118 @@ export default class K8sDeployment {
     policyName: string,
     effectivePolicy: EffectiveNetworkPolicy,
   ): Promise<void> {
-    const k8sCustomObjectsApi = this.requireK8sCustomObjectsApi();
-    const networkPolicy = buildManagedCiliumNetworkPolicy({
-      name: policyName,
-      podSelectorLabels: this.getSystemLabels(),
-      effectivePolicy,
+    await this.upsertManagedCustomPolicy({
+      resource: CILIUM_NETWORK_POLICY_RESOURCE,
+      policyName,
+      body: buildManagedCiliumNetworkPolicy({
+        name: policyName,
+        podSelectorLabels: this.getSystemLabels(),
+        effectivePolicy,
+      }),
     });
-
-    try {
-      try {
-        await k8sCustomObjectsApi.createNamespacedCustomObject({
-          group: "cilium.io",
-          version: "v2",
-          namespace: this.namespace,
-          plural: "ciliumnetworkpolicies",
-          body: networkPolicy,
-        });
-        logger.info(
-          {
-            mcpServerId: this.mcpServer.id,
-            networkPolicyName: policyName,
-            namespace: this.namespace,
-          },
-          "Created CiliumNetworkPolicy for MCP server",
-        );
-      } catch (createError: unknown) {
-        if (!isK8sConflictError(createError)) {
-          throw createError;
-        }
-
-        await k8sCustomObjectsApi.replaceNamespacedCustomObject({
-          group: "cilium.io",
-          version: "v2",
-          namespace: this.namespace,
-          plural: "ciliumnetworkpolicies",
-          name: policyName,
-          body: networkPolicy,
-        });
-        logger.info(
-          {
-            mcpServerId: this.mcpServer.id,
-            networkPolicyName: policyName,
-            namespace: this.namespace,
-          },
-          "Updated CiliumNetworkPolicy for MCP server",
-        );
-      }
-    } catch (error) {
-      logger.error(
-        {
-          err: error,
-          mcpServerId: this.mcpServer.id,
-          networkPolicyName: policyName,
-        },
-        "Failed to create or update CiliumNetworkPolicy",
-      );
-      throw error;
-    }
   }
 
   private async applyGkeFqdnNetworkPolicy(
     policyName: string,
     effectivePolicy: EffectiveNetworkPolicy,
   ): Promise<void> {
-    const k8sCustomObjectsApi = this.requireK8sCustomObjectsApi();
-    const networkPolicy = buildManagedGkeFqdnNetworkPolicy({
-      name: policyName,
-      podSelectorLabels: this.getSystemLabels(),
-      effectivePolicy,
+    await this.upsertManagedCustomPolicy({
+      resource: GKE_FQDN_NETWORK_POLICY_RESOURCE,
+      policyName,
+      body: buildManagedGkeFqdnNetworkPolicy({
+        name: policyName,
+        podSelectorLabels: this.getSystemLabels(),
+        effectivePolicy,
+      }),
     });
-
-    try {
-      try {
-        await k8sCustomObjectsApi.createNamespacedCustomObject({
-          group: "networking.gke.io",
-          version: "v1alpha1",
-          namespace: this.namespace,
-          plural: "fqdnnetworkpolicies",
-          body: networkPolicy,
-        });
-        logger.info(
-          {
-            mcpServerId: this.mcpServer.id,
-            networkPolicyName: policyName,
-            namespace: this.namespace,
-          },
-          "Created GKE FQDNNetworkPolicy for MCP server",
-        );
-      } catch (createError: unknown) {
-        if (!isK8sConflictError(createError)) {
-          throw createError;
-        }
-
-        await k8sCustomObjectsApi.replaceNamespacedCustomObject({
-          group: "networking.gke.io",
-          version: "v1alpha1",
-          namespace: this.namespace,
-          plural: "fqdnnetworkpolicies",
-          name: policyName,
-          body: networkPolicy,
-        });
-        logger.info(
-          {
-            mcpServerId: this.mcpServer.id,
-            networkPolicyName: policyName,
-            namespace: this.namespace,
-          },
-          "Updated GKE FQDNNetworkPolicy for MCP server",
-        );
-      }
-    } catch (error) {
-      logger.error(
-        {
-          err: error,
-          mcpServerId: this.mcpServer.id,
-          networkPolicyName: policyName,
-        },
-        "Failed to create or update GKE FQDNNetworkPolicy",
-      );
-      throw error;
-    }
   }
 
   private async applyAwsApplicationNetworkPolicy(
     policyName: string,
     effectivePolicy: EffectiveNetworkPolicy,
   ): Promise<void> {
-    const k8sCustomObjectsApi = this.requireK8sCustomObjectsApi();
-    const networkPolicy = buildManagedAwsApplicationNetworkPolicy({
-      name: policyName,
-      podSelectorLabels: this.getSystemLabels(),
-      effectivePolicy,
+    const clusterDnsIps = await clusterDnsResolver.getClusterDnsIps(
+      this.k8sApi,
+    );
+    if (clusterDnsIps.length === 0) {
+      logger.warn(
+        {
+          mcpServerId: this.mcpServer.id,
+          networkPolicyName: policyName,
+          namespace: this.namespace,
+        },
+        "Cluster DNS service IP could not be resolved; ApplicationNetworkPolicy will allow DNS egress to any IP",
+      );
+    }
+
+    await this.upsertManagedCustomPolicy({
+      resource: AWS_APPLICATION_NETWORK_POLICY_RESOURCE,
+      policyName,
+      body: buildManagedAwsApplicationNetworkPolicy({
+        name: policyName,
+        podSelectorLabels: this.getSystemLabels(),
+        effectivePolicy,
+        clusterDnsIps,
+      }),
     });
+  }
+
+  /**
+   * Create or update a managed custom policy object.
+   *
+   * Updates use a JSON merge patch instead of a PUT: custom resources reject
+   * a PUT without metadata.resourceVersion (so policies created by older
+   * releases would never be corrected in place), and a merge patch also
+   * preserves controller-owned metadata such as finalizers.
+   */
+  private async upsertManagedCustomPolicy(params: {
+    resource: ManagedCustomPolicyResource;
+    policyName: string;
+    body: Record<string, unknown>;
+  }): Promise<void> {
+    const k8sCustomObjectsApi = this.requireK8sCustomObjectsApi();
+    const { group, version, plural, label } = params.resource;
 
     try {
       try {
         await k8sCustomObjectsApi.createNamespacedCustomObject({
-          group: "networking.k8s.aws",
-          version: "v1alpha1",
+          group,
+          version,
           namespace: this.namespace,
-          plural: "applicationnetworkpolicies",
-          body: networkPolicy,
+          plural,
+          body: params.body,
         });
         logger.info(
           {
             mcpServerId: this.mcpServer.id,
-            networkPolicyName: policyName,
+            networkPolicyName: params.policyName,
             namespace: this.namespace,
           },
-          "Created AWS ApplicationNetworkPolicy for MCP server",
+          `Created ${label} for MCP server`,
         );
       } catch (createError: unknown) {
         if (!isK8sConflictError(createError)) {
           throw createError;
         }
 
-        await k8sCustomObjectsApi.replaceNamespacedCustomObject({
-          group: "networking.k8s.aws",
-          version: "v1alpha1",
-          namespace: this.namespace,
-          plural: "applicationnetworkpolicies",
-          name: policyName,
-          body: networkPolicy,
-        });
+        await k8sCustomObjectsApi.patchNamespacedCustomObject(
+          {
+            group,
+            version,
+            namespace: this.namespace,
+            plural,
+            name: params.policyName,
+            body: params.body,
+          },
+          setHeaderOptions("Content-Type", PatchStrategy.MergePatch),
+        );
         logger.info(
           {
             mcpServerId: this.mcpServer.id,
-            networkPolicyName: policyName,
+            networkPolicyName: params.policyName,
             namespace: this.namespace,
           },
-          "Updated AWS ApplicationNetworkPolicy for MCP server",
+          `Updated ${label} for MCP server`,
         );
       }
     } catch (error) {
@@ -736,9 +680,9 @@ export default class K8sDeployment {
         {
           err: error,
           mcpServerId: this.mcpServer.id,
-          networkPolicyName: policyName,
+          networkPolicyName: params.policyName,
         },
-        "Failed to create or update AWS ApplicationNetworkPolicy",
+        `Failed to create or update ${label}`,
       );
       throw error;
     }

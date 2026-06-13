@@ -1,4 +1,5 @@
 import { vi } from "vitest";
+import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import type * as originalConfigModule from "@/config";
 import * as embeddingClients from "@/knowledge-base/embedding-clients";
 import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
@@ -53,6 +54,9 @@ describe("organization routes", () => {
 
   afterEach(async () => {
     vi.restoreAllMocks();
+    // appearance-settings updates sync the branding singleton; reset it so an
+    // app name never leaks into a later (shuffled) test.
+    archestraMcpBranding.syncFromOrganization(null);
     await app.close();
   });
 
@@ -75,6 +79,40 @@ describe("organization routes", () => {
         appName: "Acme Copilot",
       }),
     });
+  });
+
+  test("re-brands the built-in skill rows when appName changes", async () => {
+    vi.spyOn(ToolModel, "syncArchestraBuiltInCatalog").mockResolvedValue();
+    const { syncBuiltInSkillsForOrganization } = await import(
+      "@/database/seed"
+    );
+    const { SkillModel } = await import("@/models");
+    const { BUILT_IN_SKILLS, builtInSkillSourceRef } = await import(
+      "@/skills/built-in-skills"
+    );
+    const [base] = BUILT_IN_SKILLS;
+    const sourceRef = builtInSkillSourceRef(base.builtInSkillId);
+
+    // seed the canonical (un-branded) built-in skill first.
+    await syncBuiltInSkillsForOrganization({
+      id: organizationId,
+      appName: null,
+      iconLogo: null,
+    });
+    const before = await SkillModel.findBuiltIn({ organizationId, sourceRef });
+    expect(before?.name).toBe("Archestra Platform Operations");
+
+    const response = await app.inject({
+      method: "PATCH",
+      url: "/api/organization/appearance-settings",
+      payload: { appName: "Acme Copilot" },
+    });
+    expect(response.statusCode).toBe(200);
+
+    // the stored row re-brands immediately — no backend restart needed.
+    const after = await SkillModel.findBuiltIn({ organizationId, sourceRef });
+    expect(after?.name).toBe("Acme Copilot Platform Operations");
+    expect(after?.content).not.toContain("Archestra");
   });
 
   describe("PATCH /api/organization/agent-settings - model/key pair", () => {

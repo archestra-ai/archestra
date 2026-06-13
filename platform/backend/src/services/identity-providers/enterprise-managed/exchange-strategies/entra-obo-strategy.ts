@@ -86,8 +86,7 @@ class EntraOboStrategy implements EnterpriseCredentialExchangeStrategy {
         "Enterprise-managed Entra OBO exchange failed",
       );
       throw new Error(
-        extractProviderErrorMessage(responseBody) ??
-          "Enterprise-managed credential exchange failed",
+        buildExchangeErrorMessage(extractProviderErrorMessage(responseBody)),
       );
     }
 
@@ -188,6 +187,27 @@ async function buildAuthenticatedHeaders(params: {
   );
 
   return headers;
+}
+
+function buildExchangeErrorMessage(
+  providerMessage: string | null | undefined,
+): string {
+  // AADSTS50013 ("assertion failed signature validation") on an OBO request
+  // almost always means the linked Entra access token was issued for
+  // Microsoft Graph: Graph tokens use a proprietary nonce-transformed
+  // signature that no token endpoint can verify. That happens when the
+  // linked IdP's scopes don't include a delegated scope exposed by the app
+  // registration used for the exchange.
+  if (providerMessage?.includes("AADSTS50013")) {
+    return (
+      "Entra rejected the on-behalf-of assertion because its signature could not be validated (AADSTS50013). " +
+      "This usually means the linked Entra access token was issued for Microsoft Graph instead of the app registration used for the exchange. " +
+      "Add a delegated scope exposed by that app registration (for example api://<client-id>/access_as_user) to the identity provider's scopes, then reconnect the Entra account. " +
+      `Provider error: ${providerMessage}`
+    );
+  }
+
+  return providerMessage ?? "Enterprise-managed credential exchange failed";
 }
 
 function resolveScope(

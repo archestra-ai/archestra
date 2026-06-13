@@ -1,6 +1,6 @@
 {
-  "id": "3d574443-1db9-40b3-ad77-6b7908b116ef",
-  "prevId": "82375a19-752d-4af9-8027-835ba3dfa82f",
+  "id": "4f509422-0f86-4e17-a465-26a2cfdc4f24",
+  "prevId": "8207e88e-5bac-46b5-bc27-8aa65b22dac8",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -1935,6 +1935,112 @@
         "app_render_diagnostics_user_id_user_id_fk": {
           "name": "app_render_diagnostics_user_id_user_id_fk",
           "tableFrom": "app_render_diagnostics",
+          "tableTo": "user",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.app_render_screenshots": {
+      "name": "app_render_screenshots",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "app_id": {
+          "name": "app_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "version": {
+          "name": "version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "mime_type": {
+          "name": "mime_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "data": {
+          "name": "data",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "rendered_at": {
+          "name": "rendered_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "app_render_screenshots_app_user_idx": {
+          "name": "app_render_screenshots_app_user_idx",
+          "columns": [
+            {
+              "expression": "app_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "app_render_screenshots_app_id_apps_id_fk": {
+          "name": "app_render_screenshots_app_id_apps_id_fk",
+          "tableFrom": "app_render_screenshots",
+          "tableTo": "apps",
+          "columnsFrom": [
+            "app_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "app_render_screenshots_user_id_user_id_fk": {
+          "name": "app_render_screenshots_user_id_user_id_fk",
+          "tableFrom": "app_render_screenshots",
           "tableTo": "user",
           "columnsFrom": [
             "user_id"
@@ -12825,6 +12931,92 @@
           ]
         }
       },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.team_labels": {
+      "name": "team_labels",
+      "schema": "",
+      "columns": {
+        "team_id": {
+          "name": "team_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "key_id": {
+          "name": "key_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "value_id": {
+          "name": "value_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "team_labels_team_id_team_id_fk": {
+          "name": "team_labels_team_id_team_id_fk",
+          "tableFrom": "team_labels",
+          "tableTo": "team",
+          "columnsFrom": [
+            "team_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "team_labels_key_id_label_keys_id_fk": {
+          "name": "team_labels_key_id_label_keys_id_fk",
+          "tableFrom": "team_labels",
+          "tableTo": "label_keys",
+          "columnsFrom": [
+            "key_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "team_labels_value_id_label_values_id_fk": {
+          "name": "team_labels_value_id_label_values_id_fk",
+          "tableFrom": "team_labels",
+          "tableTo": "label_values",
+          "columnsFrom": [
+            "value_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "team_labels_team_id_key_id_pk": {
+          "name": "team_labels_team_id_key_id_pk",
+          "columns": [
+            "team_id",
+            "key_id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false

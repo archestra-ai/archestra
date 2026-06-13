@@ -55287,6 +55287,7 @@ export type GetTeamsData = {
         limit?: number;
         offset?: number;
         name?: string;
+        labels?: string;
         mine?: boolean;
     };
     url: '/api/teams';
@@ -55379,6 +55380,12 @@ export type GetTeamsResponses = {
                 syncedFromSso: boolean;
                 createdAt: string;
             }>;
+            labels?: Array<{
+                key: string;
+                value: string;
+                keyId?: string;
+                valueId?: string;
+            }>;
         }>;
         pagination: {
             currentPage: number;
@@ -55397,6 +55404,12 @@ export type CreateTeamData = {
     body: {
         name: string;
         description?: string;
+        labels?: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
     };
     path?: never;
     query?: never;
@@ -55488,6 +55501,12 @@ export type CreateTeamResponses = {
             role: string;
             syncedFromSso: boolean;
             createdAt: string;
+        }>;
+        labels?: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
         }>;
     };
 };
@@ -55674,6 +55693,12 @@ export type GetTeamResponses = {
             syncedFromSso: boolean;
             createdAt: string;
         }>;
+        labels?: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
     };
 };
 
@@ -55684,6 +55709,12 @@ export type UpdateTeamData = {
         name?: string;
         description?: string;
         convertToolResultsToToon?: boolean;
+        labels?: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
     };
     path: {
         id: string;
@@ -55777,6 +55808,12 @@ export type UpdateTeamResponses = {
             role: string;
             syncedFromSso: boolean;
             createdAt: string;
+        }>;
+        labels?: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
         }>;
     };
 };
@@ -56147,6 +56184,173 @@ export type UpdateTeamMemberResponses = {
 };
 
 export type UpdateTeamMemberResponse = UpdateTeamMemberResponses[keyof UpdateTeamMemberResponses];
+
+export type GetTeamLabelKeysData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/teams/labels/keys';
+};
+
+export type GetTeamLabelKeysErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetTeamLabelKeysError = GetTeamLabelKeysErrors[keyof GetTeamLabelKeysErrors];
+
+export type GetTeamLabelKeysResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<string>;
+};
+
+export type GetTeamLabelKeysResponse = GetTeamLabelKeysResponses[keyof GetTeamLabelKeysResponses];
+
+export type GetTeamLabelValuesData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Filter values by label key
+         */
+        key?: string;
+    };
+    url: '/api/teams/labels/values';
+};
+
+export type GetTeamLabelValuesErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetTeamLabelValuesError = GetTeamLabelValuesErrors[keyof GetTeamLabelValuesErrors];
+
+export type GetTeamLabelValuesResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<string>;
+};
+
+export type GetTeamLabelValuesResponse = GetTeamLabelValuesResponses[keyof GetTeamLabelValuesResponses];
 
 export type GetTeamExternalGroupsData = {
     body?: never;
@@ -59151,6 +59355,92 @@ export type GetIdentityProviderIdpLogoutUrlResponses = {
 };
 
 export type GetIdentityProviderIdpLogoutUrlResponse = GetIdentityProviderIdpLogoutUrlResponses[keyof GetIdentityProviderIdpLogoutUrlResponses];
+
+export type GetIdentityProviderLinkStatusData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/identity-providers/{id}/link-status';
+};
+
+export type GetIdentityProviderLinkStatusErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetIdentityProviderLinkStatusError = GetIdentityProviderLinkStatusErrors[keyof GetIdentityProviderLinkStatusErrors];
+
+export type GetIdentityProviderLinkStatusResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        providerId: string;
+        connected: boolean;
+    };
+};
+
+export type GetIdentityProviderLinkStatusResponse = GetIdentityProviderLinkStatusResponses[keyof GetIdentityProviderLinkStatusResponses];
 
 export type GetIdentityProviderLatestIdTokenClaimsData = {
     body?: never;

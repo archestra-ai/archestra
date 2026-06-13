@@ -1,0 +1,455 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Team To-Do</title>
+  <style>
+    :root {
+      --ink: var(--color-text-primary, #17211b);
+      --muted: var(--color-text-secondary, #667167);
+      --paper: var(--color-background-primary, #f7f7f1);
+      --panel: var(--color-background-secondary, #ffffff);
+      --line: var(--color-border-primary, #d9ded3);
+      --accent: var(--color-accent, #2f7d56);
+      --accent-strong: #225d40;
+      --danger: #a94d3f;
+      --radius: var(--border-radius-md, 10px);
+      --font: var(--font-sans, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--ink);
+      background:
+        linear-gradient(135deg, rgba(47, 125, 86, .08), transparent 36%),
+        linear-gradient(315deg, rgba(169, 77, 63, .07), transparent 32%),
+        var(--paper);
+      font-family: var(--font);
+    }
+
+    .shell {
+      width: min(980px, calc(100vw - 32px));
+      margin: 0 auto;
+      padding: 32px 0;
+    }
+
+    .topbar {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 18px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(2rem, 4vw, 4.25rem);
+      line-height: .92;
+      letter-spacing: 0;
+      max-width: 620px;
+    }
+
+    .subtitle {
+      margin: 10px 0 0;
+      color: var(--muted);
+      font-size: 1rem;
+    }
+
+    .user-pill {
+      white-space: nowrap;
+      border: 1px solid var(--line);
+      background: color-mix(in srgb, var(--panel) 82%, transparent);
+      padding: 9px 12px;
+      border-radius: 999px;
+      color: var(--muted);
+      font-size: .9rem;
+    }
+
+    .composer {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 10px;
+      padding: 14px;
+      margin-bottom: 16px;
+    }
+
+    .arch-input {
+      min-height: 44px;
+      font: inherit;
+    }
+
+    .arch-btn {
+      min-height: 44px;
+      font: inherit;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      cursor: pointer;
+    }
+
+    .arch-btn:disabled {
+      cursor: not-allowed;
+      opacity: .55;
+    }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+
+    .stat {
+      padding: 14px;
+      border: 1px solid var(--line);
+      background: color-mix(in srgb, var(--panel) 78%, transparent);
+      border-radius: var(--radius);
+    }
+
+    .stat strong {
+      display: block;
+      font-size: 1.55rem;
+      line-height: 1;
+    }
+
+    .stat span {
+      display: block;
+      margin-top: 6px;
+      color: var(--muted);
+      font-size: .84rem;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+    }
+
+    .list-wrap {
+      overflow: hidden;
+    }
+
+    .toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .toolbar-title {
+      font-weight: 750;
+    }
+
+    .status {
+      color: var(--muted);
+      font-size: .9rem;
+    }
+
+    .tasks {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+    }
+
+    .task {
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      gap: 12px;
+      align-items: center;
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .task:last-child {
+      border-bottom: 0;
+    }
+
+    .check {
+      width: 28px;
+      height: 28px;
+      border: 1px solid var(--line);
+      border-radius: 50%;
+      background: var(--panel);
+      color: var(--accent);
+      font-size: 1rem;
+      line-height: 1;
+      cursor: pointer;
+    }
+
+    .task.done .check {
+      background: color-mix(in srgb, var(--accent) 14%, var(--panel));
+      border-color: var(--accent);
+    }
+
+    .title {
+      overflow-wrap: anywhere;
+      font-weight: 650;
+    }
+
+    .task.done .title {
+      color: var(--muted);
+      text-decoration: line-through;
+    }
+
+    .meta {
+      margin-top: 4px;
+      color: var(--muted);
+      font-size: .86rem;
+    }
+
+    .delete {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      border: 1px solid transparent;
+      background: transparent;
+      color: var(--danger);
+      cursor: pointer;
+      font-size: 1.2rem;
+    }
+
+    .delete:hover, .check:hover {
+      border-color: currentColor;
+    }
+
+    .empty {
+      padding: 34px 16px;
+      text-align: center;
+      color: var(--muted);
+    }
+
+    .error {
+      margin-top: 12px;
+      color: var(--danger);
+      min-height: 1.3em;
+    }
+
+    @media (max-width: 680px) {
+      .topbar {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+
+      .composer {
+        grid-template-columns: 1fr;
+      }
+
+      .stats {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <div class="topbar">
+      <div>
+        <h1>Team To-Do</h1>
+        <p class="subtitle">A shared queue for the whole org.</p>
+      </div>
+      <div class="user-pill" id="userPill">Loading user</div>
+    </div>
+
+    <form class="arch-card composer" id="taskForm">
+      <input class="arch-input" id="taskInput" name="task" maxlength="180" autocomplete="off" placeholder="Add a task for the team" required>
+      <button class="arch-btn arch-btn--primary" id="addButton" type="submit">+ Add task</button>
+    </form>
+
+    <section class="stats" aria-label="Task totals">
+      <div class="stat"><strong id="totalCount">0</strong><span>Total</span></div>
+      <div class="stat"><strong id="openCount">0</strong><span>Open</span></div>
+      <div class="stat"><strong id="doneCount">0</strong><span>Done</span></div>
+    </section>
+
+    <section class="arch-card list-wrap">
+      <div class="toolbar">
+        <div class="toolbar-title">Shared list</div>
+        <div class="status" id="statusText">Starting</div>
+      </div>
+      <ul class="tasks" id="taskList"></ul>
+    </section>
+    <div class="error" id="errorText" role="alert"></div>
+  </main>
+
+  <script>
+    (function () {
+      var PREFIX = "todo:codex:task:";
+      var listEl = document.getElementById("taskList");
+      var form = document.getElementById("taskForm");
+      var input = document.getElementById("taskInput");
+      var addButton = document.getElementById("addButton");
+      var statusText = document.getElementById("statusText");
+      var errorText = document.getElementById("errorText");
+      var userPill = document.getElementById("userPill");
+      var totalCount = document.getElementById("totalCount");
+      var openCount = document.getElementById("openCount");
+      var doneCount = document.getElementById("doneCount");
+      var currentUser = { id: "unknown", name: "Unknown user" };
+
+      function taskKey(id) {
+        return PREFIX + id;
+      }
+
+      function setBusy(isBusy) {
+        addButton.disabled = isBusy;
+        input.disabled = isBusy;
+      }
+
+      function showError(message) {
+        errorText.textContent = message || "";
+      }
+
+      function formatTime(value) {
+        try {
+          return new Intl.DateTimeFormat(undefined, {
+            month: "short",
+            day: "numeric",
+            hour: "numeric",
+            minute: "2-digit"
+          }).format(new Date(value));
+        } catch (error) {
+          return "";
+        }
+      }
+
+      function normalizeTask(entry) {
+        var value = entry && entry.value ? entry.value : null;
+        if (!value || !value.id || !value.title) return null;
+        return {
+          id: String(value.id),
+          title: String(value.title),
+          done: Boolean(value.done),
+          addedById: value.addedById ? String(value.addedById) : "unknown",
+          addedByName: value.addedByName ? String(value.addedByName) : "Unknown user",
+          createdAt: value.createdAt || new Date().toISOString(),
+          updatedAt: value.updatedAt || value.createdAt || new Date().toISOString()
+        };
+      }
+
+      async function loadTasks() {
+        var entries = await archestra.storage.shared.list();
+        return entries
+          .filter(function (entry) { return entry.key && entry.key.indexOf(PREFIX) === 0; })
+          .map(normalizeTask)
+          .filter(Boolean)
+          .sort(function (a, b) {
+            return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime() || a.id.localeCompare(b.id);
+          });
+      }
+
+      function render(tasks) {
+        var open = tasks.filter(function (task) { return !task.done; }).length;
+        var done = tasks.length - open;
+        totalCount.textContent = String(tasks.length);
+        openCount.textContent = String(open);
+        doneCount.textContent = String(done);
+        statusText.textContent = tasks.length ? "Synced" : "No tasks yet";
+
+        if (!tasks.length) {
+          listEl.innerHTML = '<li class="empty">Add the first shared task.</li>';
+          return;
+        }
+
+        listEl.innerHTML = tasks.map(function (task) {
+          var checked = task.done ? "✓" : "";
+          return [
+            '<li class="task ' + (task.done ? "done" : "") + '" data-id="' + task.id + '">',
+            '<button class="check" type="button" aria-label="' + (task.done ? "Mark open" : "Mark done") + '">' + checked + '</button>',
+            '<div><div class="title"></div><div class="meta"></div></div>',
+            '<button class="delete" type="button" aria-label="Delete task">×</button>',
+            '</li>'
+          ].join("");
+        }).join("");
+
+        tasks.forEach(function (task) {
+          var row = listEl.querySelector('[data-id="' + CSS.escape(task.id) + '"]');
+          if (!row) return;
+          row.querySelector(".title").textContent = task.title;
+          row.querySelector(".meta").textContent = "Added by " + task.addedByName + " · " + formatTime(task.createdAt);
+        });
+      }
+
+      async function refresh() {
+        try {
+          showError("");
+          statusText.textContent = "Syncing";
+          render(await loadTasks());
+        } catch (error) {
+          statusText.textContent = "Sync failed";
+          showError(error && error.message ? error.message : "Unable to load tasks.");
+        }
+      }
+
+      form.addEventListener("submit", async function (event) {
+        event.preventDefault();
+        var title = input.value.trim();
+        if (!title) return;
+        var now = new Date().toISOString();
+        var id = (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(16).slice(2));
+        var task = {
+          id: id,
+          title: title,
+          done: false,
+          addedById: currentUser.id,
+          addedByName: currentUser.name,
+          createdAt: now,
+          updatedAt: now
+        };
+        setBusy(true);
+        try {
+          await archestra.storage.shared.set(taskKey(id), task);
+          input.value = "";
+          await refresh();
+        } catch (error) {
+          showError(error && error.message ? error.message : "Unable to add task.");
+        } finally {
+          setBusy(false);
+          input.focus();
+        }
+      });
+
+      listEl.addEventListener("click", async function (event) {
+        var row = event.target.closest(".task");
+        if (!row) return;
+        var id = row.getAttribute("data-id");
+        try {
+          showError("");
+          if (event.target.closest(".delete")) {
+            await archestra.storage.shared.delete(taskKey(id));
+          } else if (event.target.closest(".check")) {
+            var current = await archestra.storage.shared.get(taskKey(id));
+            if (current) {
+              current.done = !current.done;
+              current.updatedAt = new Date().toISOString();
+              await archestra.storage.shared.set(taskKey(id), current);
+            }
+          }
+          await refresh();
+        } catch (error) {
+          showError(error && error.message ? error.message : "Unable to update task.");
+        }
+      });
+
+      async function init() {
+        try {
+          await archestra.ready;
+          currentUser = {
+            id: archestra.user && archestra.user.id ? archestra.user.id : "unknown",
+            name: archestra.user && archestra.user.name ? archestra.user.name : "Unknown user"
+          };
+          userPill.textContent = currentUser.name;
+          await refresh();
+        } catch (error) {
+          statusText.textContent = "Unavailable";
+          showError(error && error.message ? error.message : "Archestra is unavailable.");
+        }
+      }
+
+      init();
+    }());
+  </script>
+</body>
+</html>

@@ -17,7 +17,7 @@ import type { FastifyReply } from "fastify";
 import logger from "@/logging";
 import { metrics } from "@/observability";
 import { SESSION_ID_KEY } from "@/observability/request-context";
-import type { SpanUserInfo } from "@/observability/tracing";
+import type { SpanTeamInfo, SpanUserInfo } from "@/observability/tracing";
 import type {
   Agent,
   DualLlmAnalysis,
@@ -198,6 +198,8 @@ export function recordBlockedToolCallMetrics(params: {
   allToolCallNames: string[];
   reason: string;
   agent: Agent;
+  teams?: SpanTeamInfo[];
+  userTeams?: SpanTeamInfo[];
   sessionId?: string | null;
   resolvedUser?: { id: string; email: string; name: string } | null;
   providerName: SupportedProvider;
@@ -210,6 +212,8 @@ export function recordBlockedToolCallMetrics(params: {
     toolCallNames: params.allToolCallNames,
     blockedReason: params.reason,
     agent: params.agent,
+    teams: params.teams,
+    userTeams: params.userTeams,
     sessionId: params.sessionId,
     agentType: params.agent.agentType ?? undefined,
     user: toSpanUserInfo(params.resolvedUser),

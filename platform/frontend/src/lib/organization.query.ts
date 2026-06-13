@@ -328,7 +328,7 @@ export function useUpdateAppearanceSettings(
 
       return updatedOrganization;
     },
-    onSuccess: (updatedOrganization) => {
+    onSuccess: (updatedOrganization, variables) => {
       if (!updatedOrganization) return;
       queryClient.setQueryData(organizationKeys.details(), updatedOrganization);
       queryClient.setQueryData(appearanceKeys.public(), {
@@ -348,6 +348,13 @@ export function useUpdateAppearanceSettings(
         slimChatErrorUi: updatedOrganization.slimChatErrorUi,
         animateChatPlaceholders: updatedOrganization.animateChatPlaceholders,
       });
+      // The app name is baked into the built-in skills' and tools' names on the
+      // backend, so a rename re-brands those rows. Drop their cached lists so the
+      // Skills/Tools pages show the new name without a manual page refresh.
+      if (variables.appName !== undefined) {
+        queryClient.invalidateQueries({ queryKey: ["skills"] });
+        queryClient.invalidateQueries({ queryKey: ["tools"] });
+      }
       toast.success(onSuccessMessage);
     },
   });

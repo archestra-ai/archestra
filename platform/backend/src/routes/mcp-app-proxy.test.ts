@@ -410,7 +410,7 @@ describe("mcpAppProxyRoutes POST /api/mcp/app/:appId", () => {
         userId: user.id,
         key: "secret",
       }),
-    ).toEqual({ n: 42 });
+    ).toMatchObject({ key: "secret", value: { n: 42 }, owner: null });
     expect(
       await AppDataModel.get({
         appId: routeApp.id,

@@ -2007,22 +2007,15 @@
     {
       "idx": 286,
       "version": "7",
-      "when": 1781280058372,
-      "tag": "0286_mcp_apps",
+      "when": 1781294131210,
+      "tag": "0286_glamorous_the_fury",
       "breakpoints": true
     },
     {
       "idx": 287,
       "version": "7",
-      "when": 1781303339191,
-      "tag": "0287_stormy_miek",
-      "breakpoints": true
-    },
-    {
-      "idx": 288,
-      "version": "7",
-      "when": 1781304344275,
-      "tag": "0288_slow_sebastian_shaw",
+      "when": 1781344711260,
+      "tag": "0287_mcp_apps",
       "breakpoints": true
     }
   ]

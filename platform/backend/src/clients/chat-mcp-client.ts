@@ -808,10 +808,14 @@ export async function getChatMcpTools({
       "Fetched tools from MCP Gateway for agent/user",
     );
 
-    // Fetch globalToolPolicy for approval checks (needed for both chat and autonomous contexts).
-    const [org, agent] = await Promise.all([
+    // Fetch globalToolPolicy for approval checks (needed for both chat and
+    // autonomous contexts) and the agent's + user's teams (for trace span
+    // attributes).
+    const [org, agent, teams, userTeams] = await Promise.all([
       OrganizationModel.getById(organizationId),
       AgentModel.findById(agentId),
+      AgentTeamModel.getTeamLabelInfoForAgent(agentId),
+      TeamModel.getTeamLabelInfoForUser({ userId, organizationId }),
     ]);
     const globalToolPolicy: GlobalToolPolicy =
       org?.globalToolPolicy ?? "permissive";
@@ -838,6 +842,8 @@ export async function getChatMcpTools({
       mcpGwToken,
       globalToolPolicy,
       considerContextUntrusted,
+      teams,
+      userTeams,
     };
     const aiTools: Record<string, Tool> = {};
 

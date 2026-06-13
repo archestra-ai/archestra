@@ -8,6 +8,7 @@ import {
 } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import {
   getAgentTypePermissionChecker,
   requireAgentModifyPermission,
@@ -810,6 +811,12 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userTeamIds,
         userId: user.id,
       });
+
+      // brand the shipped default under this org's white-label identity before
+      // writing it, matching syncBuiltInSkills (no-op unless full white-labeling
+      // is active). builtInSkillShippedWrite reads the synced singleton.
+      const organization = await OrganizationModel.getById(organizationId);
+      archestraMcpBranding.syncFromOrganization(organization);
 
       const shipped = builtInSkillShippedWrite(definition);
       const reset = await SkillModel.updateWithFiles({

@@ -1,0 +1,580 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Laptops Marketplace</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --market-ink: var(--color-text-primary, #151712);
+      --market-muted: var(--color-text-secondary, #61695d);
+      --market-bg: var(--color-background-primary, #f7f7f1);
+      --market-panel: var(--color-background-secondary, #ffffff);
+      --market-border: var(--color-border-primary, #d9ddcf);
+      --market-accent: var(--color-accent, #2f6b4f);
+      --market-radius: var(--border-radius-md, 8px);
+      --market-font: var(--font-sans, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+      --market-warn: #a35d10;
+      --market-sold: #676b73;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--market-ink);
+      background:
+        linear-gradient(90deg, rgba(47, 107, 79, 0.07) 1px, transparent 1px),
+        linear-gradient(0deg, rgba(47, 107, 79, 0.055) 1px, transparent 1px),
+        var(--market-bg);
+      background-size: 28px 28px;
+      font-family: var(--market-font);
+    }
+
+    .shell {
+      width: min(1180px, calc(100vw - 32px));
+      margin: 0 auto;
+      padding: 28px 0 40px;
+    }
+
+    .topbar {
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      gap: 18px;
+      padding-bottom: 20px;
+      border-bottom: 1px solid var(--market-border);
+    }
+
+    .eyebrow {
+      margin: 0 0 8px;
+      color: var(--market-muted);
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: 0;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      margin: 0;
+      max-width: 760px;
+      font-size: clamp(34px, 6vw, 70px);
+      line-height: 0.95;
+      letter-spacing: 0;
+    }
+
+    .user-chip {
+      flex: 0 0 auto;
+      display: grid;
+      gap: 4px;
+      min-width: 180px;
+      padding: 12px 14px;
+      border: 1px solid var(--market-border);
+      border-radius: var(--market-radius);
+      background: color-mix(in srgb, var(--market-panel) 86%, transparent);
+    }
+
+    .user-chip span {
+      color: var(--market-muted);
+      font-size: 12px;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: minmax(280px, 360px) 1fr;
+      gap: 18px;
+      align-items: start;
+      margin-top: 18px;
+    }
+
+    .arch-card {
+      border: 1px solid var(--market-border);
+      border-radius: var(--market-radius);
+      background: var(--market-panel);
+      box-shadow: 0 18px 45px rgba(21, 23, 18, 0.07);
+    }
+
+    .panel {
+      padding: 18px;
+    }
+
+    .panel h2,
+    .list-head h2 {
+      margin: 0;
+      font-size: 18px;
+      line-height: 1.2;
+      letter-spacing: 0;
+    }
+
+    .subtle {
+      color: var(--market-muted);
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    .form-grid {
+      display: grid;
+      gap: 12px;
+      margin-top: 16px;
+    }
+
+    label {
+      display: grid;
+      gap: 6px;
+      color: var(--market-muted);
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0;
+    }
+
+    .arch-input,
+    select,
+    textarea {
+      width: 100%;
+      min-height: 42px;
+      border: 1px solid var(--market-border);
+      border-radius: var(--market-radius);
+      padding: 10px 11px;
+      color: var(--market-ink);
+      background: var(--market-panel);
+      font: inherit;
+      outline: none;
+    }
+
+    textarea {
+      min-height: 78px;
+      resize: vertical;
+    }
+
+    .arch-input:focus,
+    select:focus,
+    textarea:focus {
+      border-color: var(--market-accent);
+      box-shadow: 0 0 0 3px color-mix(in srgb, var(--market-accent) 18%, transparent);
+    }
+
+    .arch-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 40px;
+      border: 1px solid var(--market-border);
+      border-radius: var(--market-radius);
+      padding: 9px 13px;
+      color: var(--market-ink);
+      background: var(--market-panel);
+      font: inherit;
+      font-weight: 800;
+      cursor: pointer;
+    }
+
+    .arch-btn--primary {
+      border-color: var(--market-accent);
+      color: #fff;
+      background: var(--market-accent);
+    }
+
+    .arch-btn--ghost {
+      background: transparent;
+    }
+
+    .arch-btn:disabled {
+      cursor: not-allowed;
+      opacity: 0.56;
+    }
+
+    .status {
+      min-height: 20px;
+      margin: 12px 0 0;
+      color: var(--market-muted);
+      font-size: 13px;
+    }
+
+    .list-area {
+      min-width: 0;
+    }
+
+    .list-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    .count {
+      color: var(--market-muted);
+      font-size: 13px;
+      white-space: nowrap;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(245px, 1fr));
+      gap: 12px;
+    }
+
+    .listing {
+      display: grid;
+      gap: 14px;
+      padding: 16px;
+      min-height: 230px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .listing::before {
+      content: "";
+      position: absolute;
+      inset: 0 0 auto 0;
+      height: 5px;
+      background: var(--market-accent);
+    }
+
+    .listing.sold::before {
+      background: var(--market-sold);
+    }
+
+    .listing-title {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .listing h3 {
+      margin: 0;
+      font-size: 18px;
+      line-height: 1.16;
+      letter-spacing: 0;
+      overflow-wrap: anywhere;
+    }
+
+    .price {
+      margin: 2px 0 0;
+      font-size: 26px;
+      font-weight: 900;
+      line-height: 1;
+    }
+
+    .arch-badge {
+      display: inline-flex;
+      align-items: center;
+      min-height: 24px;
+      border: 1px solid var(--market-border);
+      border-radius: 999px;
+      padding: 3px 8px;
+      color: var(--market-muted);
+      background: color-mix(in srgb, var(--market-bg) 72%, var(--market-panel));
+      font-size: 12px;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+
+    .meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .notes,
+    .contact {
+      margin: 0;
+      color: var(--market-muted);
+      font-size: 13px;
+      line-height: 1.45;
+      overflow-wrap: anywhere;
+    }
+
+    .contact strong {
+      color: var(--market-ink);
+    }
+
+    .listing-foot {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-top: auto;
+    }
+
+    .empty {
+      padding: 44px 18px;
+      text-align: center;
+      color: var(--market-muted);
+    }
+
+    .loading {
+      display: grid;
+      place-items: center;
+      min-height: 260px;
+      color: var(--market-muted);
+    }
+
+    @media (max-width: 760px) {
+      .shell {
+        width: min(100vw - 20px, 680px);
+        padding-top: 18px;
+      }
+
+      .topbar {
+        align-items: stretch;
+        flex-direction: column;
+      }
+
+      .user-chip {
+        min-width: 0;
+      }
+
+      .layout {
+        grid-template-columns: 1fr;
+      }
+
+      .list-head {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">Shared org marketplace</p>
+        <h1>Used laptops moving desk to desk.</h1>
+      </div>
+      <aside class="user-chip" aria-live="polite">
+        <span>Signed in</span>
+        <strong id="currentUser">Loading...</strong>
+      </aside>
+    </header>
+
+    <section class="layout">
+      <form id="listingForm" class="arch-card panel" autocomplete="off">
+        <h2>Post a laptop</h2>
+        <p class="subtle">Your listing is saved to shared storage and visible to everyone in this app.</p>
+        <div class="form-grid">
+          <label>
+            Model
+            <input class="arch-input" id="model" name="model" required maxlength="90" placeholder="ThinkPad X1 Carbon Gen 9">
+          </label>
+          <label>
+            Condition
+            <select class="arch-input" id="condition" name="condition" required>
+              <option value="Excellent">Excellent</option>
+              <option value="Good">Good</option>
+              <option value="Fair">Fair</option>
+              <option value="For parts">For parts</option>
+            </select>
+          </label>
+          <label>
+            Price
+            <input class="arch-input" id="price" name="price" required inputmode="decimal" maxlength="18" placeholder="$650">
+          </label>
+          <label>
+            Contact
+            <input class="arch-input" id="contact" name="contact" required maxlength="120" placeholder="Slack @alex or alex@example.com">
+          </label>
+          <label>
+            Details
+            <textarea id="details" name="details" maxlength="260" placeholder="Battery health, RAM, storage, cosmetic notes"></textarea>
+          </label>
+          <button class="arch-btn arch-btn--primary" type="submit">Post listing</button>
+          <p id="formStatus" class="status" role="status"></p>
+        </div>
+      </form>
+
+      <section class="list-area">
+        <div class="list-head">
+          <div>
+            <h2>Available laptops</h2>
+            <p class="subtle">Sold controls appear only on listings created by you.</p>
+          </div>
+          <span id="listingCount" class="count">0 listings</span>
+        </div>
+        <div id="listings" class="grid" aria-live="polite">
+          <div class="arch-card loading">Waiting for Archestra...</div>
+        </div>
+      </section>
+    </section>
+  </main>
+
+  <script>
+    (function () {
+      const storagePrefix = "listing:";
+      const state = {
+        user: null,
+        listings: []
+      };
+
+      const els = {
+        currentUser: document.getElementById("currentUser"),
+        form: document.getElementById("listingForm"),
+        formStatus: document.getElementById("formStatus"),
+        listings: document.getElementById("listings"),
+        listingCount: document.getElementById("listingCount")
+      };
+
+      function escapeHtml(value) {
+        return String(value || "").replace(/[&<>"']/g, function (char) {
+          return {
+            "&": "&amp;",
+            "<": "&lt;",
+            ">": "&gt;",
+            '"': "&quot;",
+            "'": "&#039;"
+          }[char];
+        });
+      }
+
+      function listingId() {
+        if (window.crypto && typeof window.crypto.randomUUID === "function") {
+          return window.crypto.randomUUID();
+        }
+        return Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 10);
+      }
+
+      function normalizePrice(value) {
+        const trimmed = String(value || "").trim();
+        if (!trimmed) return "";
+        return trimmed.startsWith("$") ? trimmed : "$" + trimmed;
+      }
+
+      function sortListings(items) {
+        return items.slice().sort(function (a, b) {
+          if (Boolean(a.sold) !== Boolean(b.sold)) return a.sold ? 1 : -1;
+          return String(b.createdAt || "").localeCompare(String(a.createdAt || ""));
+        });
+      }
+
+      async function loadListings() {
+        const rows = await window.archestra.storage.shared.list();
+        state.listings = sortListings(
+          rows
+            .filter(function (row) { return row && row.key && row.key.indexOf(storagePrefix) === 0 && row.value; })
+            .map(function (row) { return row.value; })
+        );
+        renderListings();
+      }
+
+      function renderListings() {
+        els.listingCount.textContent = state.listings.length + (state.listings.length === 1 ? " listing" : " listings");
+        if (!state.listings.length) {
+          els.listings.innerHTML = '<div class="arch-card empty">No laptops yet. Post the first listing.</div>';
+          return;
+        }
+
+        els.listings.innerHTML = state.listings.map(function (item) {
+          const mine = state.user && item.ownerId === state.user.id;
+          const sold = Boolean(item.sold);
+          return [
+            '<article class="arch-card listing ' + (sold ? 'sold' : '') + '">',
+              '<div class="listing-title">',
+                '<div>',
+                  '<h3>' + escapeHtml(item.model) + '</h3>',
+                  '<p class="price">' + escapeHtml(item.price) + '</p>',
+                '</div>',
+                sold ? '<span class="arch-badge">Sold</span>' : '<span class="arch-badge">Available</span>',
+              '</div>',
+              '<div class="meta">',
+                '<span class="arch-badge">' + escapeHtml(item.condition) + '</span>',
+                mine ? '<span class="arch-badge">Your listing</span>' : '',
+              '</div>',
+              item.details ? '<p class="notes">' + escapeHtml(item.details) + '</p>' : '<p class="notes">No extra details added.</p>',
+              '<p class="contact"><strong>Contact:</strong> ' + escapeHtml(item.contact) + '</p>',
+              '<div class="listing-foot">',
+                '<span class="subtle">' + escapeHtml(item.ownerName || "Unknown seller") + '</span>',
+                mine && !sold ? '<button class="arch-btn arch-btn--ghost" data-sold="' + escapeHtml(item.id) + '" type="button">Mark sold</button>' : '',
+              '</div>',
+            '</article>'
+          ].join("");
+        }).join("");
+      }
+
+      async function createListing(event) {
+        event.preventDefault();
+        const form = new FormData(els.form);
+        const item = {
+          id: listingId(),
+          model: String(form.get("model") || "").trim(),
+          condition: String(form.get("condition") || "").trim(),
+          price: normalizePrice(form.get("price")),
+          contact: String(form.get("contact") || "").trim(),
+          details: String(form.get("details") || "").trim(),
+          ownerId: state.user.id,
+          ownerName: state.user.name || "Archestra user",
+          sold: false,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        };
+
+        if (!item.model || !item.condition || !item.price || !item.contact) {
+          els.formStatus.textContent = "Model, condition, price, and contact are required.";
+          return;
+        }
+
+        els.formStatus.textContent = "Posting...";
+        await window.archestra.storage.shared.set(storagePrefix + item.id, item);
+        els.form.reset();
+        els.formStatus.textContent = "Posted.";
+        await loadListings();
+      }
+
+      async function markSold(id) {
+        const key = storagePrefix + id;
+        const item = await window.archestra.storage.shared.get(key);
+        if (!item) {
+          await loadListings();
+          return;
+        }
+        if (!state.user || item.ownerId !== state.user.id) {
+          await loadListings();
+          return;
+        }
+        item.sold = true;
+        item.updatedAt = new Date().toISOString();
+        await window.archestra.storage.shared.set(key, item);
+        await loadListings();
+      }
+
+      els.form.addEventListener("submit", function (event) {
+        createListing(event).catch(function (error) {
+          els.formStatus.textContent = "Could not post listing: " + error.message;
+        });
+      });
+
+      els.listings.addEventListener("click", function (event) {
+        const button = event.target.closest("[data-sold]");
+        if (!button) return;
+        button.disabled = true;
+        button.textContent = "Saving...";
+        markSold(button.getAttribute("data-sold")).catch(function () {
+          button.disabled = false;
+          button.textContent = "Mark sold";
+        });
+      });
+
+      async function boot() {
+        if (!window.archestra || !window.archestra.ready) {
+          els.listings.innerHTML = '<div class="arch-card empty">Archestra runtime was not injected.</div>';
+          return;
+        }
+        await window.archestra.ready;
+        state.user = window.archestra.user || { id: "unknown", name: "Unknown user" };
+        els.currentUser.textContent = state.user.name || state.user.id || "Unknown user";
+        await loadListings();
+      }
+
+      boot().catch(function (error) {
+        els.listings.innerHTML = '<div class="arch-card empty">Could not load marketplace: ' + escapeHtml(error.message) + '</div>';
+      });
+    })();
+  </script>
+</body>
+</html>

@@ -32,11 +32,9 @@ const deleteTool = getArchestraToolFullName(TOOL_APP_DATA_DELETE_SHORT_NAME);
 
 describe("app data store typed errors", () => {
   let context: ArchestraContext;
-  let appId: string;
 
   beforeEach(async ({ makeApp, makeUser, makeMember }) => {
     const app = await makeApp();
-    appId = app.id;
     const user = await makeUser();
     await makeMember(user.id, app.organizationId, { role: "member" });
     context = {

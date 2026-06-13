@@ -112,6 +112,8 @@ export const RouteId = {
   AddTeamMember: "addTeamMember",
   UpdateTeamMember: "updateTeamMember",
   RemoveTeamMember: "removeTeamMember",
+  GetTeamLabelKeys: "getTeamLabelKeys",
+  GetTeamLabelValues: "getTeamLabelValues",
 
   // Team External Group Routes (SSO Team Sync)
   GetTeamExternalGroups: "getTeamExternalGroups",
@@ -407,6 +409,7 @@ export const RouteId = {
   GetIdentityProvider: "getIdentityProvider",
   GetIdentityProviderLatestIdTokenClaims:
     "getIdentityProviderLatestIdTokenClaims",
+  GetIdentityProviderLinkStatus: "getIdentityProviderLinkStatus",
   CreateIdentityProvider: "createIdentityProvider",
   UpdateIdentityProvider: "updateIdentityProvider",
   DeleteIdentityProvider: "deleteIdentityProvider",

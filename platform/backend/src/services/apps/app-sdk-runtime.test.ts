@@ -83,8 +83,14 @@ describe("Apps SDK runtime", () => {
   });
 
   test("storage partitions wire key, scope, and value through the data tools", async () => {
-    results.push({ structuredContent: { value: { n: 1 } } });
-    expect(await archestra.storage.user.get("fav")).toEqual({ n: 1 });
+    results.push({
+      structuredContent: { value: { n: 1 }, revision: 1, owner: null },
+    });
+    expect(await archestra.storage.user.get("fav")).toEqual({
+      value: { n: 1 },
+      revision: 1,
+      owner: null,
+    });
     expect(calls.pop()).toEqual({
       name: "archestra__app_data_get",
       arguments: { key: "fav", scope: "user" },

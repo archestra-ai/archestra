@@ -699,6 +699,12 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.RemoveTeamMember]: {
     team: ["read"],
   },
+  [RouteId.GetTeamLabelKeys]: {
+    team: ["read"],
+  },
+  [RouteId.GetTeamLabelValues]: {
+    team: ["read"],
+  },
   // Team External Group Routes (SSO Team Sync) - requires team admin permission
   [RouteId.GetTeamExternalGroups]: {
     team: ["read"],
@@ -1052,6 +1058,11 @@ export const requiredEndpointPermissionsMap: Partial<
   },
   [RouteId.GetIdentityProviderLatestIdTokenClaims]: {
     identityProvider: ["read"],
+  },
+  // Installers need to know whether they must link a downstream IdP, but this
+  // endpoint does not expose identity-provider configuration or secrets.
+  [RouteId.GetIdentityProviderLinkStatus]: {
+    mcpServerInstallation: ["create"],
   },
   [RouteId.CreateIdentityProvider]: {
     identityProvider: ["create"],

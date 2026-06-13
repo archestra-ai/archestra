@@ -1,10 +1,12 @@
 -- drizzle-migration-linter: allow-breaking
--- drizzle-migration-linter: reason=all flagged constraints and unique indexes target the brand-new apps/app_versions/app_tools/app_data/app_team/app_render_diagnostics tables created in this migration (no existing rows); the only existing-table change is mcp_tool_calls gaining a defaulted owner_type column and a nullable app_id column, whose FK validates trivially because every existing row is NULL.
+-- drizzle-migration-linter: reason=all flagged constraints and unique indexes target the brand-new apps/app_versions/app_tools/app_data/app_team/app_render_diagnostics/app_render_screenshots tables created in this migration (no existing rows); the only existing-table change is mcp_tool_calls gaining a defaulted owner_type column and a nullable app_id column, whose FK validates trivially because every existing row is NULL.
 CREATE TABLE "app_data" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"app_id" uuid NOT NULL,
 	"user_id" text,
 	"key" text NOT NULL,
+	"revision" integer DEFAULT 1 NOT NULL,
+	"owner_user_id" text,
 	"value" jsonb NOT NULL,
 	"created_at" timestamp DEFAULT now() NOT NULL,
 	"updated_at" timestamp DEFAULT now() NOT NULL
@@ -16,6 +18,16 @@ CREATE TABLE "app_render_diagnostics" (
 	"user_id" text NOT NULL,
 	"version" integer NOT NULL,
 	"entries" jsonb NOT NULL,
+	"rendered_at" timestamp DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE "app_render_screenshots" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"app_id" uuid NOT NULL,
+	"user_id" text NOT NULL,
+	"version" integer NOT NULL,
+	"mime_type" text NOT NULL,
+	"data" text NOT NULL,
 	"rendered_at" timestamp DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
@@ -65,8 +77,11 @@ ALTER TABLE "mcp_tool_calls" ADD COLUMN "owner_type" varchar(16) DEFAULT 'agent'
 ALTER TABLE "mcp_tool_calls" ADD COLUMN "app_id" uuid;--> statement-breakpoint
 ALTER TABLE "app_data" ADD CONSTRAINT "app_data_app_id_apps_id_fk" FOREIGN KEY ("app_id") REFERENCES "public"."apps"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "app_data" ADD CONSTRAINT "app_data_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app_data" ADD CONSTRAINT "app_data_owner_user_id_user_id_fk" FOREIGN KEY ("owner_user_id") REFERENCES "public"."user"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "app_render_diagnostics" ADD CONSTRAINT "app_render_diagnostics_app_id_apps_id_fk" FOREIGN KEY ("app_id") REFERENCES "public"."apps"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "app_render_diagnostics" ADD CONSTRAINT "app_render_diagnostics_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app_render_screenshots" ADD CONSTRAINT "app_render_screenshots_app_id_apps_id_fk" FOREIGN KEY ("app_id") REFERENCES "public"."apps"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "app_render_screenshots" ADD CONSTRAINT "app_render_screenshots_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "app_team" ADD CONSTRAINT "app_team_app_id_apps_id_fk" FOREIGN KEY ("app_id") REFERENCES "public"."apps"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "app_team" ADD CONSTRAINT "app_team_team_id_team_id_fk" FOREIGN KEY ("team_id") REFERENCES "public"."team"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "app_tools" ADD CONSTRAINT "app_tools_app_id_apps_id_fk" FOREIGN KEY ("app_id") REFERENCES "public"."apps"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
@@ -78,6 +93,7 @@ CREATE INDEX "app_data_app_id_user_id_idx" ON "app_data" USING btree ("app_id","
 CREATE UNIQUE INDEX "app_data_shared_partition_key_idx" ON "app_data" USING btree ("app_id","key") WHERE "app_data"."user_id" IS NULL;--> statement-breakpoint
 CREATE UNIQUE INDEX "app_data_user_partition_key_idx" ON "app_data" USING btree ("app_id","user_id","key") WHERE "app_data"."user_id" IS NOT NULL;--> statement-breakpoint
 CREATE UNIQUE INDEX "app_render_diagnostics_app_user_idx" ON "app_render_diagnostics" USING btree ("app_id","user_id");--> statement-breakpoint
+CREATE UNIQUE INDEX "app_render_screenshots_app_user_idx" ON "app_render_screenshots" USING btree ("app_id","user_id");--> statement-breakpoint
 CREATE INDEX "app_versions_app_id_idx" ON "app_versions" USING btree ("app_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "app_versions_app_version_uidx" ON "app_versions" USING btree ("app_id","version");--> statement-breakpoint
 CREATE INDEX "apps_organization_id_idx" ON "apps" USING btree ("organization_id");--> statement-breakpoint

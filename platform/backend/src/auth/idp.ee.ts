@@ -107,6 +107,18 @@ export async function syncSsoRole(
     return;
   }
 
+  // Providers with SSO login disabled exist only to supply linked tokens for
+  // downstream authentication (e.g. enterprise-managed MCP token exchange).
+  // Their claims say nothing about the user's Archestra role, so completing
+  // a link flow against them must never rewrite the membership role.
+  if (idpProvider.ssoLoginEnabled === false) {
+    logger.info(
+      { providerId, userEmail },
+      "[syncSsoRole] Provider is not used for SSO login, skipping role sync",
+    );
+    return;
+  }
+
   // Check if role mapping is configured
   const roleMapping = idpProvider.roleMapping;
   if (!roleMapping) {
@@ -325,6 +337,16 @@ export async function syncSsoTeams(
     logger.debug(
       { providerId, userEmail },
       "[syncSsoTeams] SSO provider not found or has no organization, skipping team sync",
+    );
+    return;
+  }
+
+  // Mirrors syncSsoRole: linked-token-only providers (SSO login disabled)
+  // must never rewrite team memberships from their group claims.
+  if (idpProvider.ssoLoginEnabled === false) {
+    logger.info(
+      { providerId, userEmail },
+      "[syncSsoTeams] Provider is not used for SSO login, skipping team sync",
     );
     return;
   }

@@ -21,11 +21,144 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import { vi } from "vitest";
+import logger from "@/logging";
 import { ModelModel, VirtualApiKeyModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { createAnthropicTestClient } from "@/test/llm-provider-stubs";
 import { anthropicAdapterFactory } from "../adapters";
 import anthropicProxyRoutes from "./anthropic";
+
+vi.mock("@/logging", () => ({
+  default: {
+    debug: vi.fn(),
+    error: vi.fn(),
+    info: vi.fn(),
+    trace: vi.fn(),
+    warn: vi.fn(),
+  },
+}));
+
+function findAnthropicRequestLog(message: string) {
+  return vi
+    .mocked(logger.info)
+    .mock.calls.find((call) => call[1] === message)?.[0] as
+    | {
+        headers?: Record<string, unknown>;
+      }
+    | undefined;
+}
+
+describe("Anthropic request logging", () => {
+  beforeEach(() => {
+    vi.spyOn(anthropicAdapterFactory, "createClient").mockImplementation(
+      () => createAnthropicTestClient() as never,
+    );
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  test("summarizes default-agent headers without logging secret values", async () => {
+    const app = Fastify().withTypeProvider<ZodTypeProvider>();
+    app.setValidatorCompiler(validatorCompiler);
+    app.setSerializerCompiler(serializerCompiler);
+
+    try {
+      await app.register(anthropicProxyRoutes);
+      vi.mocked(logger.info).mockClear();
+
+      await app.inject({
+        method: "POST",
+        url: "/v1/anthropic/v1/messages",
+        headers: {
+          "content-type": "application/json",
+          authorization: "Bearer leaked-authorization-token",
+          "anthropic-version": "2023-06-01",
+          "x-api-key": "leaked-x-api-key",
+        },
+        payload: {
+          model: "claude-opus-4-20250514",
+          messages: [{ role: "user", content: "Hello!" }],
+          max_tokens: 128,
+        },
+      });
+
+      const requestLog = findAnthropicRequestLog(
+        "[UnifiedProxy] Handling Anthropic request (default agent)",
+      );
+
+      expect(requestLog).toBeDefined();
+      expect(JSON.stringify(requestLog)).not.toContain(
+        "leaked-authorization-token",
+      );
+      expect(JSON.stringify(requestLog)).not.toContain("leaked-x-api-key");
+      expect(requestLog?.headers).toEqual(
+        expect.objectContaining({
+          contentType: "application/json",
+          anthropicVersion: "2023-06-01",
+          hasAuthorization: true,
+          hasXApiKey: true,
+        }),
+      );
+    } finally {
+      await app.close();
+    }
+  });
+
+  test("summarizes agent headers without logging secret values", async ({
+    makeAgent,
+  }) => {
+    const app = Fastify().withTypeProvider<ZodTypeProvider>();
+    app.setValidatorCompiler(validatorCompiler);
+    app.setSerializerCompiler(serializerCompiler);
+
+    try {
+      await app.register(anthropicProxyRoutes);
+      vi.mocked(logger.info).mockClear();
+
+      const agent = await makeAgent({ name: "Request Logging Agent" });
+
+      await app.inject({
+        method: "POST",
+        url: `/v1/anthropic/${agent.id}/v1/messages`,
+        headers: {
+          "content-type": "application/json",
+          authorization: "Bearer leaked-agent-authorization-token",
+          "anthropic-version": "2023-06-01",
+          "x-api-key": "leaked-agent-x-api-key",
+        },
+        payload: {
+          model: "claude-opus-4-20250514",
+          messages: [{ role: "user", content: "Hello!" }],
+          max_tokens: 128,
+        },
+      });
+
+      const requestLog = findAnthropicRequestLog(
+        "[UnifiedProxy] Handling Anthropic request (with agent)",
+      );
+
+      expect(requestLog).toBeDefined();
+      expect(JSON.stringify(requestLog)).not.toContain(
+        "leaked-agent-authorization-token",
+      );
+      expect(JSON.stringify(requestLog)).not.toContain(
+        "leaked-agent-x-api-key",
+      );
+      expect(requestLog?.headers).toEqual(
+        expect.objectContaining({
+          contentType: "application/json",
+          anthropicVersion: "2023-06-01",
+          hasAuthorization: true,
+          hasXApiKey: true,
+        }),
+      );
+    } finally {
+      await app.close();
+    }
+  });
+});
 
 describe("Anthropic cost tracking", () => {
   beforeEach(() => {

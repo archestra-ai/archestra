@@ -9,6 +9,7 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import config from "@/config";
 import db, { schema } from "@/database";
+import { syncBuiltInSkillsForOrganization } from "@/database/seed";
 import mcpServerRuntimeManager from "@/k8s/mcp-server-runtime/manager";
 import { callEmbedding } from "@/knowledge-base/embedding-clients";
 import { resolveApiKeyFromChatApiKey } from "@/knowledge-base/kb-llm-client";
@@ -108,6 +109,14 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
           await ToolModel.syncArchestraBuiltInCatalog({
             organization: organization,
           });
+        }
+
+        // appName is baked into the built-in skills' stored rows (name, body,
+        // tool-prefix references), so re-brand them now — without this the
+        // catalog/load_skill output only updates after a backend restart. A
+        // pristine copy auto-rebrands; an admin-edited copy is preserved.
+        if (appNameChanged) {
+          await syncBuiltInSkillsForOrganization(organization);
         }
       }
 

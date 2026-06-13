@@ -1,4 +1,4 @@
-import type { ContextWindowBreakdown } from "@shared";
+import type { ContextWindowBreakdown } from "@archestra/shared";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";

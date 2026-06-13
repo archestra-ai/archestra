@@ -6,7 +6,7 @@ import {
   type ContextWindowCategory,
   type ContextWindowItem,
   E2eTestId,
-} from "@shared";
+} from "@archestra/shared";
 import { ChevronRight, Sparkles } from "lucide-react";
 import type { ReactNode } from "react";
 import { useState } from "react";
@@ -82,6 +82,8 @@ interface ContextWindowDialogProps {
   /** Live token count seeding the view before a breakdown arrives. */
   tokensUsed: number;
   maxTokens: number | null;
+  /** Input tokens served from the prompt cache on the latest response. */
+  cachedTokens?: number;
   lastCompaction?: LastCompaction | null;
   /** The trigger element (the circular context indicator). */
   children: ReactNode;

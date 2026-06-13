@@ -1,4 +1,4 @@
-import type { ContextWindowBreakdown, TokenUsage } from "@shared";
+import type { ContextWindowBreakdown, TokenUsage } from "@archestra/shared";
 
 export type ContextWindowState = {
   /**

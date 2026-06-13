@@ -15,7 +15,7 @@ import {
   type ContextWindowCategory,
   type ContextWindowItem,
   type SupportedProvider,
-} from "@shared";
+} from "@archestra/shared";
 import { getTokenizer, type Tokenizer } from "@/tokenizers";
 import type { ChatMessage, ChatMessagePart } from "@/types";
 

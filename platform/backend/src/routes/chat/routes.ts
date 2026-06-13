@@ -67,6 +67,7 @@ import {
   LlmProviderApiKeyModel,
   MemberModel,
   MessageModel,
+  ModelModel,
   OrganizationModel,
   ScheduleTriggerModel,
   ScheduleTriggerRunModel,
@@ -733,7 +734,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                     selectedModel,
                   );
                   breakdownPricePerToken = resolveInputPricePerToken(modelRow);
-                  latestBreakdown = buildContextWindowBreakdown({
+                  const breakdown = buildContextWindowBreakdown({
                     provider,
                     model: selectedModel,
                     contextLength: modelRow?.contextLength ?? null,
@@ -742,9 +743,10 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                     tools: supportsToolCalling ? mcpTools : undefined,
                     messages: modelMessages,
                   });
+                  latestBreakdown = breakdown;
                   writer.write({
                     type: CONTEXT_WINDOW_BREAKDOWN_EVENT,
-                    data: latestBreakdown satisfies ContextWindowBreakdown,
+                    data: breakdown,
                   });
                 } catch (error) {
                   // The visualizer is non-essential; never let it break a chat turn.

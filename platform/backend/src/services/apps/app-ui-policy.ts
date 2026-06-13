@@ -1,4 +1,3 @@
-import * as cheerio from "cheerio";
 import type { VersionPayload } from "@/models/app-version";
 import { ApiError } from "@/types";
 import {
@@ -7,6 +6,7 @@ import {
   type AppUiPermissions,
   AppUiPermissionsSchema,
 } from "@/types/app";
+import { loadAppRuntimeNative } from "./app-runtime-native";
 
 /**
  * Save-time security policy for an app's UI envelope (iframe permissions) and
@@ -26,9 +26,9 @@ import {
  * sandbox CSP builders — that is the deliberate allowance for client-side
  * libraries and fonts. No `connectDomains` ⇒ connect-src 'none' (fetch/XHR/WS
  * to anything external fails); no frame/baseUri domains ⇒ 'none'. Bare
- * hostnames only: both the save-path grammar and the serve-time
- * `sanitizeCspDomains` filter accept exactly this form. A future feature may
- * make this list org-configurable.
+ * hostnames only: the proxy HTML's client-side CSP builder (`buildCSP` in
+ * static/mcp-sandbox-proxy.html) injects these into the guest meta-tag CSP.
+ * A future feature may make this list org-configurable.
  */
 export const APP_PLATFORM_CSP_RESOURCE_DOMAINS = [
   "cdn.jsdelivr.net",
@@ -61,10 +61,10 @@ const ALLOWED_PERMISSION_KEYS = [
  * model — see them. Versions carry no CSP: the serve path always pins
  * {@link APP_PLATFORM_CSP}.
  */
-export function buildValidatedVersionPayload(params: {
+export async function buildValidatedVersionPayload(params: {
   html: string;
   uiPermissions?: AppUiPermissions | null;
-}): { payload: VersionPayload; warnings: string[] } {
+}): Promise<{ payload: VersionPayload; warnings: string[] }> {
   // Hard byte cap, enforced here so every save path is covered: create/update
   // also bound it at the input-schema level, but edit_app assembles the html
   // from str_replace edits that never touch that field.
@@ -75,7 +75,14 @@ export function buildValidatedVersionPayload(params: {
       `app html exceeds the ${APP_HTML_MAX_BYTES}-byte limit (${byteSize} bytes).`,
     );
   }
-  const warnings = validateAppHtml(params.html);
+  // The HTML scan (SDK self-bootstrap, platform-asset self-loads, structural
+  // warnings) runs in the app_runtime_core Rust crate; it returns a structured
+  // rejection so the user-facing message stays here.
+  const { scanAppHtml } = await loadAppRuntimeNative();
+  const { rejection, warnings } = scanAppHtml(params.html);
+  if (rejection) {
+    throw new ApiError(400, rejectionMessage(rejection));
+  }
   return {
     payload: {
       html: params.html,
@@ -85,77 +92,20 @@ export function buildValidatedVersionPayload(params: {
   };
 }
 
-// Markers of the SDK self-bootstrap the injected Apps SDK replaces. An app
-// that wires the SDK itself would race the platform's connection handshake, so
-// this is a hard reject — but only inside <script> elements: prose that merely
-// mentions a marker (docs, comments rendered as text) must save fine.
-const SDK_BOOTSTRAP_MARKERS = [
-  "__ARCHESTRA_APP_SDK_URL__",
-  "__ARCHESTRA_APP_CONTEXT__",
-  "PostMessageTransport",
-] as const;
-
-// Platform-served scripts an app must not load itself: the backend injects the
-// Apps SDK (with its per-viewer bootstrap) at serve time; a second, authored
-// load would run with no bootstrap and race the injected one.
-const PLATFORM_SCRIPT_SRC_MARKERS = [
-  "archestra-app-sdk",
-  "ext-apps-app",
-] as const;
-
-// The platform baseline stylesheet is injected at serve time (a <link> in
-// <head>); stored HTML must not load it itself, mirroring the SDK rejection.
-const PLATFORM_BASE_CSS_MARKER = "archestra-app-base";
-
-function validateAppHtml(html: string): string[] {
-  const $ = cheerio.load(html);
-  const scriptText = $("script")
-    .map((_, el) => $(el).text())
-    .get()
-    .join("\n");
-  for (const marker of SDK_BOOTSTRAP_MARKERS) {
-    if (scriptText.includes(marker)) {
-      throw new ApiError(
-        400,
-        `app html must not bootstrap the MCP App SDK itself (found "${marker}" in a <script>). The platform injects window.archestra (storage, tools, user identity, host features) at render time — remove the SDK import and transport wiring and use window.archestra directly.`,
-      );
-    }
+function rejectionMessage(rejection: {
+  kind: string;
+  offender: string;
+}): string {
+  switch (rejection.kind) {
+    case "sdk_bootstrap":
+      return `app html must not bootstrap the MCP App SDK itself (found "${rejection.offender}" in a <script>). The platform injects window.archestra (storage, tools, user identity, host features) at render time — remove the SDK import and transport wiring and use window.archestra directly.`;
+    case "platform_script_src":
+      return `app html must not load the platform SDK itself (found <script src="${rejection.offender}">). The platform injects window.archestra at render time — remove the script tag and use window.archestra directly.`;
+    case "platform_base_css":
+      return `app html must not load the platform stylesheet itself (found <link href="${rejection.offender}">). The platform injects archestra-app-base.css at render time — remove the link; its theme variables, element defaults, and .arch-* components are already available.`;
+    default:
+      return "app html could not be parsed as HTML.";
   }
-  const scriptSrcs = $("script[src]")
-    .map((_, el) => $(el).attr("src") ?? "")
-    .get();
-  for (const src of scriptSrcs) {
-    if (PLATFORM_SCRIPT_SRC_MARKERS.some((marker) => src.includes(marker))) {
-      throw new ApiError(
-        400,
-        `app html must not load the platform SDK itself (found <script src="${src}">). The platform injects window.archestra at render time — remove the script tag and use window.archestra directly.`,
-      );
-    }
-  }
-  const linkHrefs = $("link[href]")
-    .map((_, el) => $(el).attr("href") ?? "")
-    .get();
-  for (const href of linkHrefs) {
-    // Strip whitespace the browser would ignore when resolving the URL, so a
-    // tab/newline spliced into the marker can't slip the self-link past.
-    if (href.replace(/\s/g, "").includes(PLATFORM_BASE_CSS_MARKER)) {
-      throw new ApiError(
-        400,
-        `app html must not load the platform stylesheet itself (found <link href="${href}">). The platform injects archestra-app-base.css at render time — remove the link; its theme variables, element defaults, and .arch-* components are already available.`,
-      );
-    }
-  }
-
-  const warnings: string[] = [];
-  // cheerio normalizes fragments into a full document, so anchor checks run on
-  // the raw input. Without <head>/<html> the bridge injection falls back to
-  // prepending — workable, but the document is likely malformed.
-  if (!/<head[\s>]/i.test(html) && !/<html[\s>]/i.test(html)) {
-    warnings.push(
-      "html has no <head> or <html> element; provide a complete HTML document (the injected runtime is prepended as a fallback).",
-    );
-  }
-  return warnings;
 }
 
 function validateAppUiPermissions(

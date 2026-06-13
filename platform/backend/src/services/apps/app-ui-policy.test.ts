@@ -13,8 +13,8 @@ describe("APP_PLATFORM_CSP", () => {
     expect(APP_PLATFORM_CSP.connectDomains).toBeUndefined();
     expect(APP_PLATFORM_CSP.frameDomains).toBeUndefined();
     expect(APP_PLATFORM_CSP.baseUriDomains).toBeUndefined();
-    // bare hostnames only: both the inner sandbox CSP builder and the
-    // serve-time sanitizeCspDomains filter accept exactly this form
+    // bare hostnames only: the proxy HTML's client-side CSP builder injects
+    // these into the guest meta-tag CSP
     for (const domain of APP_PLATFORM_CSP.resourceDomains ?? []) {
       expect(domain).toMatch(/^[a-z0-9.-]+$/);
     }
@@ -22,8 +22,8 @@ describe("APP_PLATFORM_CSP", () => {
 });
 
 describe("buildValidatedVersionPayload", () => {
-  test("assembles the payload — html and permissions only, no CSP", () => {
-    const { payload, warnings } = buildValidatedVersionPayload({
+  test("assembles the payload — html and permissions only, no CSP", async () => {
+    const { payload, warnings } = await buildValidatedVersionPayload({
       html: "<html><head></head><body><h1/></body></html>",
     });
     expect(payload).toEqual({
@@ -33,18 +33,18 @@ describe("buildValidatedVersionPayload", () => {
     expect(warnings).toEqual([]);
   });
 
-  test("rejects an unknown permission key", () => {
-    expect(() =>
+  test("rejects an unknown permission key", async () => {
+    await expect(
       buildValidatedVersionPayload({
         html: "<h1/>",
         // @ts-expect-error — exercising the runtime guard against unknown keys
         uiPermissions: { usb: {} },
       }),
-    ).toThrow(/unknown app permission/);
+    ).rejects.toThrow(/unknown app permission/);
   });
 
-  test("accepts the whitelisted permission keys", () => {
-    const { payload } = buildValidatedVersionPayload({
+  test("accepts the whitelisted permission keys", async () => {
+    const { payload } = await buildValidatedVersionPayload({
       html: "<h1/>",
       uiPermissions: { camera: {}, clipboardWrite: {} },
     });
@@ -54,73 +54,73 @@ describe("buildValidatedVersionPayload", () => {
   test.each([
     "__ARCHESTRA_APP_SDK_URL__",
     "PostMessageTransport",
-  ])("rejects html whose <script> bootstraps the SDK (%s)", (marker) => {
-    expect(() =>
+  ])("rejects html whose <script> bootstraps the SDK (%s)", async (marker) => {
+    await expect(
       buildValidatedVersionPayload({
         html: `<html><head><script>const x = window.${marker};</script></head><body/></html>`,
       }),
-    ).toThrow(/must not bootstrap the MCP App SDK/);
+    ).rejects.toThrow(/must not bootstrap the MCP App SDK/);
   });
 
-  test("a marker mentioned outside <script> does not reject", () => {
-    const { warnings } = buildValidatedVersionPayload({
+  test("a marker mentioned outside <script> does not reject", async () => {
+    const { warnings } = await buildValidatedVersionPayload({
       html: "<html><head></head><body><p>Docs about PostMessageTransport and __ARCHESTRA_APP_SDK_URL__.</p><!-- PostMessageTransport --></body></html>",
     });
     expect(warnings).toEqual([]);
   });
 
-  test("a module script using window.archestra passes clean", () => {
-    const { warnings } = buildValidatedVersionPayload({
+  test("a module script using window.archestra passes clean", async () => {
+    const { warnings } = await buildValidatedVersionPayload({
       html: '<html><head><script type="module">await window.archestra.storage.user.set("k", 1);</script></head><body/></html>',
     });
     expect(warnings).toEqual([]);
   });
 
-  test("warns on a fragment without <head> or <html>", () => {
-    const { warnings } = buildValidatedVersionPayload({
+  test("warns on a fragment without <head> or <html>", async () => {
+    const { warnings } = await buildValidatedVersionPayload({
       html: "<h1>fragment</h1>",
     });
     expect(warnings).toHaveLength(1);
     expect(warnings[0]).toContain("no <head> or <html>");
   });
 
-  test("rejects html that <link>s the platform stylesheet itself", () => {
-    expect(() =>
+  test("rejects html that <link>s the platform stylesheet itself", async () => {
+    await expect(
       buildValidatedVersionPayload({
         html: '<html><head><link rel="stylesheet" href="/_sandbox/archestra-app-base.css"></head><body/></html>',
       }),
-    ).toThrow(/must not load the platform stylesheet/);
+    ).rejects.toThrow(/must not load the platform stylesheet/);
   });
 
-  test("a whitespace-spliced href cannot slip the self-link past", () => {
-    expect(() =>
+  test("a whitespace-spliced href cannot slip the self-link past", async () => {
+    await expect(
       buildValidatedVersionPayload({
         html: '<html><head><link rel="stylesheet" href="/_sandbox/archestra-app-\n base.css"></head><body/></html>',
       }),
-    ).toThrow(/must not load the platform stylesheet/);
+    ).rejects.toThrow(/must not load the platform stylesheet/);
   });
 
-  test("an unrelated stylesheet link is allowed", () => {
-    const { warnings } = buildValidatedVersionPayload({
+  test("an unrelated stylesheet link is allowed", async () => {
+    const { warnings } = await buildValidatedVersionPayload({
       html: '<html><head><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/normalize.css"></head><body/></html>',
     });
     expect(warnings).toEqual([]);
   });
 
-  test("rejects html over the byte cap", () => {
-    expect(() =>
+  test("rejects html over the byte cap", async () => {
+    await expect(
       buildValidatedVersionPayload({
         html: `<html><head></head><body>${"z".repeat(APP_HTML_MAX_BYTES)}</body></html>`,
       }),
-    ).toThrow(/byte limit/);
+    ).rejects.toThrow(/byte limit/);
   });
 });
 
 describe("starter templates pass the save gate", () => {
   test.each(
     getAppTemplates().map((t) => [t.id, t.html] as const),
-  )("%s validates with no warnings (vars resolve against the base sheet)", (_id, html) => {
-    const { warnings } = buildValidatedVersionPayload({ html });
+  )("%s validates with no warnings (vars resolve against the base sheet)", async (_id, html) => {
+    const { warnings } = await buildValidatedVersionPayload({ html });
     expect(warnings).toEqual([]);
   });
 

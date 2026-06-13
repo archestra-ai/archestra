@@ -314,7 +314,7 @@ Alternatively omit html and pass templateId (one of: ${templateIds}) to scaffold
           templateId: args.templateId,
         });
         seededFromTemplate = resolved.seededFromTemplate;
-        const validated = buildValidatedVersionPayload({
+        const validated = await buildValidatedVersionPayload({
           html: resolved.html,
           uiPermissions: args.uiPermissions,
         });
@@ -597,7 +597,7 @@ When viewed in chat the app's head version is rendered inline automatically; its
           app.latestVersion,
         );
         try {
-          const validated = buildValidatedVersionPayload({
+          const validated = await buildValidatedVersionPayload({
             html: args.html,
             uiPermissions:
               args.uiPermissions !== undefined
@@ -717,7 +717,7 @@ When viewed in chat the app's head version is rendered inline automatically; its
         const editedHtml = applyStrReplaceEdits(base.html, args.edits);
         // Permissions ride the version envelope; an HTML-only edit inherits the
         // base version's permissions rather than dropping them.
-        const validated = buildValidatedVersionPayload({
+        const validated = await buildValidatedVersionPayload({
           html: editedHtml,
           uiPermissions: base.uiPermissions,
         });
@@ -898,7 +898,7 @@ When viewed in chat the app's head version is rendered inline automatically; its
       const head = app.latestVersion;
       // The app name is author-set; collapse whitespace and escape angle
       // brackets so it can't break the diagnostics framing in the text below.
-      const safeName = escapeAngleBrackets(app.name)
+      const safeName = (await escapeAngleBrackets(app.name))
         .replace(/\s+/g, " ")
         .trim();
       const deadline = Date.now() + GET_APP_DIAGNOSTICS_WAIT_MS;
@@ -938,11 +938,13 @@ When viewed in chat the app's head version is rendered inline automatically; its
       // Re-cap and escape for the structured surface too — diagnostics are
       // untrusted iframe content wherever they appear, and the read side must
       // not trust the stored jsonb to have been capped.
-      const capped = capDiagnosticEntries(snapshot.entries);
-      const safeEntries = capped.map((entry) => ({
-        type: entry.type,
-        message: escapeAngleBrackets(entry.message),
-      }));
+      const capped = await capDiagnosticEntries(snapshot.entries);
+      const safeEntries = await Promise.all(
+        capped.map(async (entry) => ({
+          type: entry.type,
+          message: await escapeAngleBrackets(entry.message),
+        })),
+      );
       // Attach the render screenshot (if one was captured for this version) as an
       // image so the model can judge how the app actually looks, not just whether
       // it threw. Only the current version's capture is relevant.
@@ -951,9 +953,12 @@ When viewed in chat the app's head version is rendered inline automatically; its
         context.userId,
       );
       const screenshot = shot && shot.version >= snapshot.version ? shot : null;
+      const diagnosticLines = await formatDiagnosticEntryLines(
+        snapshot.entries,
+      );
       const text =
         status === "errors"
-          ? `App "${safeName}" version ${snapshot.version} (rendered ${renderedAt}) reported ${capped.length} diagnostic(s):\n${DIAGNOSTICS_BLOCK_OPEN}\n${DIAGNOSTICS_UNTRUSTED_PREAMBLE}\n\n${formatDiagnosticEntryLines(snapshot.entries)}\n${DIAGNOSTICS_BLOCK_CLOSE}`
+          ? `App "${safeName}" version ${snapshot.version} (rendered ${renderedAt}) reported ${capped.length} diagnostic(s):\n${DIAGNOSTICS_BLOCK_OPEN}\n${DIAGNOSTICS_UNTRUSTED_PREAMBLE}\n\n${diagnosticLines}\n${DIAGNOSTICS_BLOCK_CLOSE}`
           : `App "${safeName}" version ${snapshot.version} rendered clean (no runtime errors or CSP violations) at ${renderedAt}.`;
       const structuredContent = {
         status,

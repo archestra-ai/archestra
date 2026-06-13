@@ -529,7 +529,8 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
             // user message's metadata; inject them (delimited, framed as
             // untrusted) so the model can fix the app via update_app. No-op
             // when absent or when the apps feature is off.
-            const messagesForLLM = injectAppDiagnostics(messagesWithSkill);
+            const messagesForLLM =
+              await injectAppDiagnostics(messagesWithSkill);
 
             // Normalize chat history before replaying it to the model.
             // This dedupes repeated tool parts, drops dangling interrupted tool calls,

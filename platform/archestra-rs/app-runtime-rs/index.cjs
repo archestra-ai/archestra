@@ -20,9 +20,14 @@ const candidates = [
 
 const nativeBinding = loadBinding();
 
-// explicit per-name assignment so Node's cjs-module-lexer exposes it as a named
-// ESM export (consumers do `import { prepareAppEnvelope } from ...`)
+// explicit per-name assignment so Node's cjs-module-lexer exposes each as a
+// named ESM export (consumers do `import { prepareAppEnvelope } from ...`)
 module.exports.prepareAppEnvelope = wrapNativeSync("prepareAppEnvelope");
+module.exports.scanAppHtml = wrapNativeSync("scanAppHtml");
+module.exports.escapeAngleBrackets = wrapNativeSync("escapeAngleBrackets");
+module.exports.capDiagnosticEntries = wrapNativeSync("capDiagnosticEntries");
+module.exports.mergeDiagnosticEntries = wrapNativeSync("mergeDiagnosticEntries");
+module.exports.formatDiagnosticEntryLines = wrapNativeSync("formatDiagnosticEntryLines");
 
 function loadBinding() {
   const errors = [];

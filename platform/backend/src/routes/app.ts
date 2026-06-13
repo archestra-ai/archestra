@@ -155,7 +155,7 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
         html: body.html,
         templateId: body.templateId,
       });
-      const { payload, warnings } = buildValidatedVersionPayload({
+      const { payload, warnings } = await buildValidatedVersionPayload({
         html,
         uiPermissions: body.uiPermissions,
       });
@@ -279,7 +279,7 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
           app.id,
           app.latestVersion,
         );
-        const validated = buildValidatedVersionPayload({
+        const validated = await buildValidatedVersionPayload({
           html: body.html,
           uiPermissions:
             body.uiPermissions !== undefined

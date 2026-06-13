@@ -26,7 +26,7 @@ class AppRenderDiagnosticsModel {
     version: number;
     entries: AppRenderDiagnosticEntry[];
   }): Promise<void> {
-    const entries = capDiagnosticEntries(params.entries);
+    const entries = await capDiagnosticEntries(params.entries);
 
     // Claim the (app, user) row if it does not exist yet; otherwise fall through
     // to the version-aware update under a row lock. ON CONFLICT DO NOTHING makes
@@ -60,7 +60,7 @@ class AppRenderDiagnosticsModel {
           .where(eq(table.id, existing.id));
         return;
       }
-      const merged = mergeDiagnosticEntries(existing.entries, entries);
+      const merged = await mergeDiagnosticEntries(existing.entries, entries);
       await tx
         .update(table)
         .set({ entries: merged, renderedAt: new Date() })

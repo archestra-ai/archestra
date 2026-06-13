@@ -545,12 +545,16 @@ describe("read_app / edit_app", () => {
 
   test("AppModel.update CAS rejects a stale expectedLatestVersion at the model layer", async () => {
     const appId = await createApp("<h1>v1</h1>");
-    const payloadA = buildValidatedVersionPayload({
-      html: "<h1>a</h1>",
-    }).payload;
-    const payloadB = buildValidatedVersionPayload({
-      html: "<h1>b</h1>",
-    }).payload;
+    const payloadA = (
+      await buildValidatedVersionPayload({
+        html: "<h1>a</h1>",
+      })
+    ).payload;
+    const payloadB = (
+      await buildValidatedVersionPayload({
+        html: "<h1>b</h1>",
+      })
+    ).payload;
 
     // first writer (based on v1) wins, forking v2
     const bumped = await AppModel.update({

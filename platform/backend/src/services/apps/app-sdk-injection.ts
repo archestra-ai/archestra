@@ -5,6 +5,8 @@
 // boundary: it owns the serve-time route paths and the context shape, and
 // delegates the transform to the native core.
 
+import { loadAppRuntimeNative } from "./app-runtime-native";
+
 /**
  * Path the backend serves the Apps SDK on (see server.ts). Must match
  * `app_runtime_core::contract::APP_SDK_PATH` — the injected `<script src>` and
@@ -52,19 +54,6 @@ export async function injectAppSdk(
   html: string,
   context: AppSdkContext,
 ): Promise<string> {
-  const { prepareAppEnvelope } = await loadNative();
+  const { prepareAppEnvelope } = await loadAppRuntimeNative();
   return prepareAppEnvelope(html, JSON.stringify(context));
-}
-
-// =============================================================================
-// Internal helpers
-// =============================================================================
-
-// Loaded lazily (dynamic import, mirroring the sandbox runtime) so codegen and
-// any code path that never injects an app do not require the built .node.
-type NativeBindings = typeof import("@archestra/app-runtime-rs");
-let nativeBindings: Promise<NativeBindings> | null = null;
-function loadNative(): Promise<NativeBindings> {
-  nativeBindings ??= import("@archestra/app-runtime-rs");
-  return nativeBindings;
 }

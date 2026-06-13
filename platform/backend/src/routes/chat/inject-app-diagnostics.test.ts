@@ -36,9 +36,9 @@ afterAll(() => {
 });
 
 describe("injectAppDiagnostics", () => {
-  test("appends a delimited untrusted block to the last user message", () => {
+  test("appends a delimited untrusted block to the last user message", async () => {
     const messages = [userMessage(diagnosticsMetadata)];
-    const result = injectAppDiagnostics(messages);
+    const result = await injectAppDiagnostics(messages);
 
     const text = result[0].parts?.find((p) => p.type === "text")?.text as
       | string
@@ -54,16 +54,16 @@ describe("injectAppDiagnostics", () => {
     expect(messages[0].parts?.[0].text).toBe("it looks broken");
   });
 
-  test("no-op without metadata, with empty entries, and for non-last user messages", () => {
+  test("no-op without metadata, with empty entries, and for non-last user messages", async () => {
     const noMetadata = [userMessage()];
-    expect(injectAppDiagnostics(noMetadata)).toBe(noMetadata);
+    expect(await injectAppDiagnostics(noMetadata)).toBe(noMetadata);
 
     const emptyEntries = [
       userMessage({
         appDiagnostics: [{ appId: APP_ID, version: 1, entries: [] }],
       }),
     ];
-    expect(injectAppDiagnostics(emptyEntries)).toBe(emptyEntries);
+    expect(await injectAppDiagnostics(emptyEntries)).toBe(emptyEntries);
 
     // diagnostics on an OLDER user message are not re-injected
     const history = [
@@ -71,11 +71,11 @@ describe("injectAppDiagnostics", () => {
       { id: "a1", role: "assistant" as const, parts: [] },
       { ...userMessage(), id: "u2" },
     ];
-    const result = injectAppDiagnostics(history);
+    const result = await injectAppDiagnostics(history);
     expect(result[2].parts?.[0].text).toBe("it looks broken");
   });
 
-  test("caps apps and entries and truncates messages", () => {
+  test("caps apps and entries and truncates messages", async () => {
     // within the wire schema's bounds (10 apps / 50 entries / 1000 chars) but
     // above the injection caps (5 / 20 / 500) — the injection must re-cap
     const manyApps = Array.from({ length: 10 }, (_, appIndex) => ({
@@ -86,7 +86,7 @@ describe("injectAppDiagnostics", () => {
         message: `e${entryIndex} ${"x".repeat(950)}`,
       })),
     }));
-    const result = injectAppDiagnostics([
+    const result = await injectAppDiagnostics([
       userMessage({ appDiagnostics: manyApps }),
     ]);
     const text = result[0].parts?.find((p) => p.type === "text")
@@ -96,8 +96,8 @@ describe("injectAppDiagnostics", () => {
     expect(text).not.toContain("x".repeat(600));
   });
 
-  test("a forged closing tag cannot break out of the delimiter block", () => {
-    const result = injectAppDiagnostics([
+  test("a forged closing tag cannot break out of the delimiter block", async () => {
+    const result = await injectAppDiagnostics([
       userMessage({
         appDiagnostics: [
           {
@@ -123,8 +123,8 @@ describe("injectAppDiagnostics", () => {
     expect(text).toContain("[unknown]");
   });
 
-  test("non-UUID appIds are dropped entirely", () => {
-    const result = injectAppDiagnostics([
+  test("non-UUID appIds are dropped entirely", async () => {
+    const result = await injectAppDiagnostics([
       userMessage({
         appDiagnostics: [
           {
@@ -138,19 +138,19 @@ describe("injectAppDiagnostics", () => {
     expect(result[0].parts?.[0].text).toBe("it looks broken");
   });
 
-  test("malformed metadata is ignored", () => {
+  test("malformed metadata is ignored", async () => {
     const malformed = [
       userMessage({ appDiagnostics: [{ appId: 42, entries: "nope" }] }),
     ];
-    const result = injectAppDiagnostics(malformed);
+    const result = await injectAppDiagnostics(malformed);
     expect(result[0].parts?.[0].text).toBe("it looks broken");
   });
 
-  test("inert when the apps feature is disabled", () => {
+  test("inert when the apps feature is disabled", async () => {
     (config.apps as { enabled: boolean }).enabled = false;
     try {
       const messages = [userMessage(diagnosticsMetadata)];
-      expect(injectAppDiagnostics(messages)).toBe(messages);
+      expect(await injectAppDiagnostics(messages)).toBe(messages);
     } finally {
       (config.apps as { enabled: boolean }).enabled = true;
     }

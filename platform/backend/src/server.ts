@@ -27,7 +27,6 @@ import {
 import fastifyCors from "@fastify/cors";
 import fastifyFormbody from "@fastify/formbody";
 import fastifySwagger from "@fastify/swagger";
-import type { McpUiResourceCsp } from "@modelcontextprotocol/ext-apps";
 import * as Sentry from "@sentry/node";
 import Fastify, { type FastifyRequest } from "fastify";
 import metricsPlugin from "fastify-metrics";
@@ -94,7 +93,6 @@ import {
   Xai,
   Zhipuai,
 } from "@/types";
-import { isCspSource } from "@/utils/csp-domain";
 import websocketService from "@/websocket";
 import * as routes from "./routes";
 import { publicConfigRoutes } from "./routes/config";
@@ -627,41 +625,6 @@ const startMetricsServer = async () => {
 };
 
 // ============ MCP Sandbox Server ============
-
-/**
- * Allowlist-validate CSP domain entries.
- * Only permits valid hostnames and wildcard-subdomain patterns (e.g. *.example.com),
- * optionally scheme-prefixed (https://, wss://) and with a port (:8443).
- * Blocks dangerous CSP sources like *, data:, blob:, https: that a denylist would miss.
- * Shares the host grammar with the app save-time gate (see utils/csp-domain.ts).
- */
-export function sanitizeCspDomains(domains?: string[]): string[] {
-  if (!domains) return [];
-  return domains.filter((d) => typeof d === "string" && isCspSource(d));
-}
-
-export function buildCspHeader(csp?: McpUiResourceCsp): string {
-  const resourceDomains = sanitizeCspDomains(csp?.resourceDomains).join(" ");
-  const connectDomains = sanitizeCspDomains(csp?.connectDomains).join(" ");
-  const frameDomains = sanitizeCspDomains(csp?.frameDomains).join(" ") || null;
-  const baseUriDomains =
-    sanitizeCspDomains(csp?.baseUriDomains).join(" ") || null;
-
-  const directives = [
-    "default-src 'none'",
-    `script-src 'self' 'unsafe-inline' blob: data: ${resourceDomains}`.trim(),
-    `style-src 'self' 'unsafe-inline' blob: data: ${resourceDomains}`.trim(),
-    `img-src 'self' data: blob: ${resourceDomains}`.trim(),
-    `font-src 'self' data: blob: ${resourceDomains}`.trim(),
-    `connect-src 'self' ${connectDomains}`.trim(),
-    `worker-src 'self' blob: ${resourceDomains}`.trim(),
-    frameDomains ? `frame-src ${frameDomains}` : "frame-src 'none'",
-    "object-src 'none'",
-    baseUriDomains ? `base-uri ${baseUriDomains}` : "base-uri 'none'",
-  ];
-
-  return directives.join("; ");
-}
 
 /**
  * Read and prepare the sandbox proxy HTML at startup.

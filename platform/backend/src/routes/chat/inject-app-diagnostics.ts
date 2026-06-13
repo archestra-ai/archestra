@@ -29,7 +29,9 @@ const UUID_PATTERN =
  * persisted messages and the visible bubble stay untouched. Inert when the
  * apps feature is disabled or the metadata is absent/malformed.
  */
-export function injectAppDiagnostics(messages: ChatMessage[]): ChatMessage[] {
+export async function injectAppDiagnostics(
+  messages: ChatMessage[],
+): Promise<ChatMessage[]> {
   if (!config.apps.enabled) {
     return messages;
   }
@@ -47,14 +49,17 @@ export function injectAppDiagnostics(messages: ChatMessage[]): ChatMessage[] {
     return messages;
   }
 
-  const blocks = diagnostics
-    .filter((d) => d.entries.length > 0 && UUID_PATTERN.test(d.appId))
-    .slice(0, MAX_APPS)
-    .map((d) => {
-      const entries = formatDiagnosticEntryLines(d.entries);
-      const versionLabel = d.version !== null ? ` (version ${d.version})` : "";
-      return `App ${d.appId}${versionLabel}:\n${entries}`;
-    });
+  const blocks = await Promise.all(
+    diagnostics
+      .filter((d) => d.entries.length > 0 && UUID_PATTERN.test(d.appId))
+      .slice(0, MAX_APPS)
+      .map(async (d) => {
+        const entries = await formatDiagnosticEntryLines(d.entries);
+        const versionLabel =
+          d.version !== null ? ` (version ${d.version})` : "";
+        return `App ${d.appId}${versionLabel}:\n${entries}`;
+      }),
+  );
   if (blocks.length === 0) {
     return messages;
   }

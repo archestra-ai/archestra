@@ -40,6 +40,14 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   Form,
   FormControl,
   FormDescription,
@@ -99,6 +107,8 @@ import {
   type McpCatalogFormValues,
 } from "./mcp-catalog-form.types";
 import {
+  mergePastedMcpServerConfigValues,
+  parsePastedMcpServerConfig,
   transformCatalogItemToFormValues,
   transformFormToApiData,
 } from "./mcp-catalog-form.utils";
@@ -732,6 +742,9 @@ export function McpCatalogForm({
   const [headerDialog, setHeaderDialog] = useState<
     { mode: "add" } | { mode: "edit"; index: number } | null
   >(null);
+  const [pasteConfigOpen, setPasteConfigOpen] = useState(false);
+  const [pasteConfigText, setPasteConfigText] = useState("");
+  const [pasteConfigError, setPasteConfigError] = useState<string | null>(null);
 
   // Fetch available k8s docker-registry secrets for the "existing" dropdown
   const { data: k8sSecrets = [] } = useK8sImagePullSecrets();
@@ -867,6 +880,35 @@ export function McpCatalogForm({
     await performSubmit(values);
   };
 
+  const handlePasteConfigImport = () => {
+    const result = parsePastedMcpServerConfig(pasteConfigText);
+    if (!result.ok) {
+      setPasteConfigError(result.error);
+      return;
+    }
+
+    const currentValues = form.getValues();
+    form.reset(
+      mergePastedMcpServerConfigValues({
+        currentValues,
+        importedValues: result.values,
+        currentLabels: labels,
+      }),
+      // Keep the pre-import defaults so importing marks the form as changed
+      // and the footer can enable Save.
+      { keepDefaultValues: true },
+    );
+    setLabels(
+      labels.map((label) => ({
+        key: label.key,
+        value: label.value,
+      })),
+    );
+    setPasteConfigError(null);
+    setPasteConfigText("");
+    setPasteConfigOpen(false);
+  };
+
   return (
     <Form {...form}>
       <form
@@ -904,6 +946,18 @@ export function McpCatalogForm({
           >
             {notice}
             {catalogButton}
+
+            <div className="flex justify-end">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setPasteConfigOpen(true)}
+              >
+                <Code className="h-4 w-4" />
+                Paste config
+              </Button>
+            </div>
 
             <div className="space-y-4">
               <div className="flex items-stretch gap-3">
@@ -2510,6 +2564,49 @@ export function McpCatalogForm({
           footer
         )}
       </form>
+
+      <Dialog open={pasteConfigOpen} onOpenChange={setPasteConfigOpen}>
+        <DialogContent className="sm:max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Paste MCP config</DialogTitle>
+            <DialogDescription>
+              Import JSON from Cursor, VS Code, Claude Desktop, the official MCP
+              Registry, or an Archestra catalog manifest.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 px-4">
+            <Textarea
+              value={pasteConfigText}
+              onChange={(event) => {
+                setPasteConfigText(event.target.value);
+                setPasteConfigError(null);
+              }}
+              placeholder={`{\n  "mcpServers": {\n    "github": {\n      "type": "http",\n      "url": "https://api.example.com/mcp/"\n    }\n  }\n}`}
+              className="min-h-72 font-mono"
+              autoComplete={MCP_CONFIG_AUTOCOMPLETE}
+            />
+            {pasteConfigError ? (
+              <p className="text-sm text-destructive">{pasteConfigError}</p>
+            ) : null}
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setPasteConfigOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={handlePasteConfigImport}
+              disabled={!pasteConfigText.trim()}
+            >
+              Import
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Form>
   );
 }

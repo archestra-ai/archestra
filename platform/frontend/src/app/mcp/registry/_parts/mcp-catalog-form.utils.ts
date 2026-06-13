@@ -34,13 +34,7 @@ export function transformFormToApiData(
 
   // Handle local configuration
   if (values.serverType === "local" && values.localConfig) {
-    // Parse arguments string into array
-    const argumentsArray = values.localConfig.arguments
-      ? values.localConfig.arguments
-          .split("\n")
-          .map((arg) => arg.trim())
-          .filter((arg) => arg.length > 0)
-      : [];
+    const argumentsArray = parseArgumentsField(values.localConfig.arguments);
 
     data.localConfig = {
       command: values.localConfig.command || undefined,
@@ -245,6 +239,363 @@ export function transformFormToApiData(
   data.environmentId = values.environmentId ?? null;
 
   return data;
+}
+
+export function parseArgumentsField(argumentsText?: string): string[] {
+  const text = argumentsText?.trim() ?? "";
+  if (!text) {
+    return [];
+  }
+
+  if (text.startsWith("[")) {
+    try {
+      const parsed = JSON.parse(text);
+      if (Array.isArray(parsed)) {
+        return parsed
+          .map((arg) => (typeof arg === "string" ? arg : String(arg)))
+          .map((arg) => arg.trim())
+          .filter((arg) => arg.length > 0);
+      }
+    } catch {
+      // Fall back to the existing one-argument-per-line behavior below.
+    }
+  }
+
+  return text
+    .split("\n")
+    .map((arg) => arg.trim())
+    .filter((arg) => arg.length > 0);
+}
+
+export type ParsePastedMcpServerConfigResult =
+  | { ok: true; values: McpCatalogFormValues }
+  | { ok: false; error: string };
+
+const MAX_PASTED_CONFIG_LENGTH = 64_000;
+const MAX_PASTED_NAME_LENGTH = 256;
+const DANGEROUS_CONFIG_KEYS = new Set([
+  "__proto__",
+  "constructor",
+  "prototype",
+]);
+
+export function mergePastedMcpServerConfigValues(params: {
+  currentValues: McpCatalogFormValues;
+  importedValues: McpCatalogFormValues;
+  currentLabels: NonNullable<McpCatalogFormValues["labels"]>;
+}): McpCatalogFormValues {
+  const { currentValues, importedValues, currentLabels } = params;
+  return {
+    ...currentValues,
+    ...importedValues,
+    environmentId: currentValues.environmentId,
+    labels: currentLabels,
+    scope: currentValues.scope,
+    teams: currentValues.teams,
+  };
+}
+
+export function parsePastedMcpServerConfig(
+  configText: string,
+): ParsePastedMcpServerConfigResult {
+  if (configText.length > MAX_PASTED_CONFIG_LENGTH) {
+    return {
+      ok: false,
+      error: "Config is too large to import safely.",
+    };
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(configText);
+  } catch {
+    return { ok: false, error: "Config must be valid JSON." };
+  }
+
+  const manifest = normalizePastedMcpConfigToManifest(parsed);
+  if (!manifest) {
+    return {
+      ok: false,
+      error:
+        "Config must include an MCP server under mcpServers, servers, server, or a command/url object.",
+    };
+  }
+
+  return {
+    ok: true,
+    values: transformExternalCatalogToFormValues(manifest),
+  };
+}
+
+function normalizePastedMcpConfigToManifest(
+  parsed: unknown,
+): archestraCatalogTypes.ArchestraMcpServerManifest | null {
+  if (!isRecord(parsed)) {
+    return null;
+  }
+
+  const manifest = normalizeManifestLikeConfig(parsed);
+  if (manifest) {
+    return manifest;
+  }
+
+  const officialManifest = normalizeOfficialRegistryConfig(parsed);
+  if (officialManifest) {
+    return officialManifest;
+  }
+
+  const inputs = readInputs(parsed.inputs);
+  const serverEntry =
+    getFirstNamedServer(parsed.mcpServers) ??
+    getFirstNamedServer(parsed.servers) ??
+    (isMcpServerConfig(parsed) ? ["custom-mcp-server", parsed] : null) ??
+    getFirstNamedServer(parsed);
+
+  if (!serverEntry) {
+    return null;
+  }
+
+  const [serverName, serverConfig] = serverEntry;
+  return buildManifestFromServerConfig(serverName, serverConfig, inputs);
+}
+
+function createImportedManifestBase(params: {
+  name: string;
+  displayName?: string;
+  description?: string;
+}): Omit<archestraCatalogTypes.ArchestraMcpServerManifest, "server"> {
+  return {
+    name: params.name,
+    display_name: params.displayName ?? params.name,
+    description: params.description ?? "",
+    author: { name: "Imported MCP config" },
+    readme: null,
+    category: null,
+    quality_score: null,
+    github_info: null,
+    programming_language: null,
+    framework: null,
+    last_scraped_at: null,
+    evaluation_model: null,
+    raw_dependencies: null,
+  };
+}
+
+function normalizeManifestLikeConfig(
+  parsed: Record<string, unknown>,
+): archestraCatalogTypes.ArchestraMcpServerManifest | null {
+  if (!isRecord(parsed.server)) {
+    return null;
+  }
+
+  const serverType = parsed.server.type;
+  if (serverType !== "remote" && serverType !== "local") {
+    return null;
+  }
+  if (serverType === "remote" && !readHttpUrl(parsed.server.url)) {
+    return null;
+  }
+
+  const explicitName = getOptionalStringProperty(parsed, "name");
+  const displayName =
+    getOptionalStringProperty(parsed, "display_name") ??
+    getOptionalStringProperty(parsed.oauth_config, "name") ??
+    explicitName ??
+    "Imported MCP Server";
+
+  return {
+    ...createImportedManifestBase({
+      name: explicitName ?? displayName,
+      displayName,
+      description: getOptionalStringProperty(parsed, "description"),
+    }),
+    user_config: isRecord(parsed.user_config)
+      ? (parsed.user_config as never)
+      : undefined,
+    oauth_config: isRecord(parsed.oauth_config)
+      ? (parsed.oauth_config as never)
+      : undefined,
+    server: parsed.server as never,
+  };
+}
+
+function normalizeOfficialRegistryConfig(
+  parsed: Record<string, unknown>,
+): archestraCatalogTypes.ArchestraMcpServerManifest | null {
+  const serverDetail = getOfficialServerDetail(parsed);
+  if (!serverDetail) {
+    return null;
+  }
+
+  const remote = Array.isArray(serverDetail.remotes)
+    ? serverDetail.remotes.find(isOfficialRemoteTransport)
+    : undefined;
+
+  const name = getOfficialDisplayName(serverDetail);
+  const base = createImportedManifestBase({
+    name,
+    displayName: name,
+    description: getOptionalStringProperty(serverDetail, "description"),
+  });
+
+  if (remote) {
+    const userConfig = buildOfficialHeaderUserConfig(remote.headers);
+    return {
+      ...base,
+      user_config: Object.keys(userConfig).length > 0 ? userConfig : undefined,
+      server: {
+        type: "remote",
+        url: remote.url,
+        docs_url: getOptionalStringProperty(serverDetail, "websiteUrl") ?? null,
+      },
+    };
+  }
+
+  const officialPackage = Array.isArray(serverDetail.packages)
+    ? serverDetail.packages.find(isOfficialStdioPackage)
+    : undefined;
+  if (!officialPackage) {
+    return null;
+  }
+
+  return buildOfficialPackageManifest(base, officialPackage);
+}
+
+function buildOfficialPackageManifest(
+  manifestBase: Omit<
+    archestraCatalogTypes.ArchestraMcpServerManifest,
+    "server"
+  >,
+  officialPackage: Record<string, unknown>,
+): archestraCatalogTypes.ArchestraMcpServerManifest | null {
+  const command = getOfficialPackageCommand(officialPackage);
+  const packageSpec = getOfficialPackageSpecifier(officialPackage);
+  if (!command || !packageSpec) {
+    return null;
+  }
+
+  const officialEnv = buildOfficialEnvironmentConfig(
+    officialPackage.environmentVariables,
+  );
+  const args = [
+    ...readOfficialArguments(officialPackage.runtimeArguments),
+    ...getOfficialPackageRuntimeArgs(officialPackage, packageSpec),
+    ...readOfficialArguments(officialPackage.packageArguments),
+  ];
+
+  return {
+    ...manifestBase,
+    user_config:
+      Object.keys(officialEnv.userConfig).length > 0
+        ? officialEnv.userConfig
+        : undefined,
+    server: {
+      type: "local",
+      command,
+      args,
+      env:
+        Object.keys(officialEnv.env).length > 0 ? officialEnv.env : undefined,
+    },
+  };
+}
+
+function buildManifestFromServerConfig(
+  serverName: string,
+  serverConfig: Record<string, unknown>,
+  inputs: Map<string, PastedInputDefinition>,
+): archestraCatalogTypes.ArchestraMcpServerManifest {
+  const manifestBase = createImportedManifestBase({ name: serverName });
+
+  const userConfig: NonNullable<
+    archestraCatalogTypes.ArchestraMcpServerManifest["user_config"]
+  > = {};
+
+  if (isRemoteServerConfig(serverConfig)) {
+    const headers = isRecord(serverConfig.headers) ? serverConfig.headers : {};
+    const staticHeaders: Record<string, string> = {};
+
+    for (const [headerName, headerValue] of Object.entries(headers)) {
+      if (
+        !isSafePastedConfigName(headerName) ||
+        typeof headerValue !== "string"
+      ) {
+        continue;
+      }
+      const headerConfig = buildHeaderUserConfig(
+        headerName,
+        headerValue,
+        inputs,
+      );
+      if (headerConfig) {
+        userConfig[headerConfig.fieldName] = headerConfig.config as never;
+      } else {
+        staticHeaders[headerName] = headerValue;
+      }
+    }
+
+    for (const [index, [headerName, headerValue]] of Object.entries(
+      staticHeaders,
+    ).entries()) {
+      const fieldName = getAdditionalHeaderFieldName({
+        headerName,
+        fieldName: undefined,
+        index,
+        usedFieldNames: new Set(Object.keys(userConfig)),
+      });
+      userConfig[fieldName] = {
+        type: "string",
+        title: headerName,
+        description: `Sent as ${headerName}`,
+        required: false,
+        default: headerValue,
+        headerName,
+        promptOnInstallation: false,
+        sensitive: false,
+      } as never;
+    }
+
+    return {
+      ...manifestBase,
+      user_config: Object.keys(userConfig).length > 0 ? userConfig : undefined,
+      server: {
+        type: "remote",
+        url: readHttpUrl(serverConfig.url) ?? "",
+        docs_url:
+          typeof serverConfig.docs_url === "string"
+            ? serverConfig.docs_url
+            : null,
+      },
+    } as archestraCatalogTypes.ArchestraMcpServerManifest;
+  }
+
+  const env = isRecord(serverConfig.env) ? serverConfig.env : {};
+  const normalizedEnv: Record<string, string> = {};
+
+  for (const [envKey, envValue] of Object.entries(env)) {
+    if (!isSafePastedConfigName(envKey) || typeof envValue !== "string") {
+      continue;
+    }
+    const envConfig = buildEnvUserConfig(envKey, envValue, inputs);
+    if (envConfig) {
+      userConfig[envConfig.fieldName] = envConfig.config;
+      normalizedEnv[envKey] = `\${user_config.${envConfig.fieldName}}`;
+    } else {
+      normalizedEnv[envKey] = envValue;
+    }
+  }
+
+  return {
+    ...manifestBase,
+    user_config: Object.keys(userConfig).length > 0 ? userConfig : undefined,
+    server: {
+      type: "local",
+      command:
+        typeof serverConfig.command === "string" ? serverConfig.command : "",
+      args: readStringArray(serverConfig.args),
+      env: Object.keys(normalizedEnv).length > 0 ? normalizedEnv : undefined,
+      docker_image: readDockerImage(serverConfig),
+    },
+  } as archestraCatalogTypes.ArchestraMcpServerManifest;
 }
 
 // Build create-form values from an existing catalog item for cloning. A clone
@@ -784,6 +1135,533 @@ export function transformExternalCatalogToFormValues(
     scope: "personal",
     teams: [],
   } as McpCatalogFormValues;
+}
+
+type PastedInputDefinition = {
+  id: string;
+  title?: string;
+  description?: string;
+  password?: boolean;
+  required?: boolean;
+};
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function readInputs(value: unknown): Map<string, PastedInputDefinition> {
+  const inputs = new Map<string, PastedInputDefinition>();
+  if (!Array.isArray(value)) {
+    return inputs;
+  }
+
+  for (const input of value) {
+    if (!isRecord(input) || typeof input.id !== "string") {
+      continue;
+    }
+    if (!isSafePastedConfigName(input.id)) {
+      continue;
+    }
+    inputs.set(input.id, {
+      id: input.id,
+      title: typeof input.title === "string" ? input.title : undefined,
+      description:
+        typeof input.description === "string" ? input.description : undefined,
+      password: input.password === true,
+      required: input.required !== false,
+    });
+  }
+
+  return inputs;
+}
+
+function getFirstNamedServer(
+  value: unknown,
+): [string, Record<string, unknown>] | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  for (const [serverName, serverConfig] of Object.entries(value)) {
+    if (isRecord(serverConfig) && isMcpServerConfig(serverConfig)) {
+      return [serverName, serverConfig];
+    }
+  }
+
+  return null;
+}
+
+function isMcpServerConfig(value: Record<string, unknown>): boolean {
+  return typeof value.command === "string" || readHttpUrl(value.url) !== null;
+}
+
+function isOfficialServerDetail(
+  value: unknown,
+): value is Record<string, unknown> {
+  return (
+    isRecord(value) &&
+    typeof value.name === "string" &&
+    (Array.isArray(value.remotes) || Array.isArray(value.packages))
+  );
+}
+
+function getOfficialServerDetail(
+  parsed: Record<string, unknown>,
+): Record<string, unknown> | null {
+  if (isOfficialServerDetail(parsed)) {
+    return parsed;
+  }
+
+  if (isRecord(parsed.server) && isOfficialServerDetail(parsed.server)) {
+    return parsed.server;
+  }
+
+  if (!Array.isArray(parsed.servers)) {
+    return null;
+  }
+
+  for (const entry of parsed.servers) {
+    if (isOfficialServerDetail(entry)) {
+      return entry;
+    }
+    if (isRecord(entry) && isOfficialServerDetail(entry.server)) {
+      return entry.server;
+    }
+  }
+
+  return null;
+}
+
+function isOfficialRemoteTransport(
+  value: unknown,
+): value is { type?: string; url: string; headers?: unknown } {
+  return isRecord(value) && typeof readHttpUrl(value.url) === "string";
+}
+
+function isOfficialStdioPackage(
+  value: unknown,
+): value is Record<string, unknown> {
+  return (
+    isRecord(value) &&
+    isRecord(value.transport) &&
+    value.transport.type === "stdio" &&
+    typeof value.identifier === "string" &&
+    typeof value.registryType === "string"
+  );
+}
+
+function getOfficialDisplayName(serverDetail: Record<string, unknown>): string {
+  const title = getOptionalStringProperty(serverDetail, "title");
+  if (title) {
+    return title;
+  }
+
+  const name =
+    getOptionalStringProperty(serverDetail, "name") ?? "Imported MCP";
+  return name.split("/").at(-1) ?? name;
+}
+
+function getOfficialPackageCommand(
+  officialPackage: Record<string, unknown>,
+): string | null {
+  if (typeof officialPackage.runtimeHint === "string") {
+    return officialPackage.runtimeHint;
+  }
+
+  switch (officialPackage.registryType) {
+    case "npm":
+      return "npx";
+    case "pypi":
+      return "uvx";
+    default:
+      return null;
+  }
+}
+
+function getOfficialPackageSpecifier(
+  officialPackage: Record<string, unknown>,
+): string | null {
+  const identifier = getOptionalStringProperty(officialPackage, "identifier");
+  if (!identifier) {
+    return null;
+  }
+
+  const version = getOptionalStringProperty(officialPackage, "version");
+  if (!version) {
+    return identifier;
+  }
+
+  switch (officialPackage.registryType) {
+    case "npm":
+      return `${identifier}@${version}`;
+    case "pypi":
+      return `${identifier}==${version}`;
+    default:
+      return identifier;
+  }
+}
+
+function getOfficialPackageRuntimeArgs(
+  officialPackage: Record<string, unknown>,
+  packageSpec: string,
+): string[] {
+  return officialPackage.registryType === "npm"
+    ? ["-y", packageSpec]
+    : [packageSpec];
+}
+
+function readOfficialArguments(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.flatMap((argument) => {
+    if (!isRecord(argument)) {
+      return [];
+    }
+    const argumentValue = getOptionalStringProperty(argument, "value");
+    if (argument.type === "positional" && argumentValue) {
+      return [argumentValue];
+    }
+    if (argument.type === "named") {
+      const name = getOptionalStringProperty(argument, "name");
+      if (!name) {
+        return [];
+      }
+      return argumentValue ? [`${name}=${argumentValue}`] : [name];
+    }
+    return [];
+  });
+}
+
+function buildOfficialEnvironmentConfig(value: unknown): {
+  env: Record<string, string>;
+  userConfig: NonNullable<
+    archestraCatalogTypes.ArchestraMcpServerManifest["user_config"]
+  >;
+} {
+  const env: Record<string, string> = {};
+  const userConfig: NonNullable<
+    archestraCatalogTypes.ArchestraMcpServerManifest["user_config"]
+  > = {};
+
+  for (const envVar of readOfficialKeyValueInputs(value)) {
+    const staticValue = getOfficialStaticConfigValue(envVar);
+    if (staticValue !== undefined) {
+      env[envVar.name] = staticValue;
+      continue;
+    }
+
+    userConfig[envVar.name] = buildOfficialUserConfig(envVar);
+    env[envVar.name] = `\${user_config.${envVar.name}}`;
+  }
+
+  return { env, userConfig };
+}
+
+function buildOfficialHeaderUserConfig(
+  value: unknown,
+): NonNullable<
+  archestraCatalogTypes.ArchestraMcpServerManifest["user_config"]
+> {
+  const userConfig: NonNullable<
+    archestraCatalogTypes.ArchestraMcpServerManifest["user_config"]
+  > = {};
+  const usedFieldNames = new Set<string>();
+
+  for (const [index, header] of readOfficialKeyValueInputs(value).entries()) {
+    const staticValue = getOfficialStaticConfigValue(header);
+    if (isDefaultAuthorizationHeader(header.name)) {
+      const description = getOptionalStringProperty(header, "description");
+      userConfig.access_token = {
+        ...buildOfficialUserConfig(header),
+        description: description ?? "Bearer token for authentication",
+        headerName: header.name,
+        valuePrefix: "Bearer ",
+      } as never;
+      continue;
+    }
+
+    const fieldName = getAdditionalHeaderFieldName({
+      headerName: header.name,
+      index,
+      usedFieldNames,
+    });
+    usedFieldNames.add(fieldName);
+    if (staticValue !== undefined) {
+      userConfig[fieldName] = {
+        type: "string",
+        title: header.name,
+        description:
+          getOptionalStringProperty(header, "description") ??
+          `Sent as ${header.name}`,
+        required: false,
+        default: staticValue,
+        headerName: header.name,
+        promptOnInstallation: false,
+        sensitive: false,
+      } as never;
+      continue;
+    }
+
+    userConfig[fieldName] = {
+      ...buildOfficialUserConfig(header),
+      headerName: header.name,
+      promptOnInstallation: true,
+    } as never;
+  }
+
+  return userConfig;
+}
+
+function readOfficialKeyValueInputs(
+  value: unknown,
+): Array<Record<string, unknown> & { name: string }> {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.filter(
+    (entry): entry is Record<string, unknown> & { name: string } =>
+      isRecord(entry) &&
+      typeof entry.name === "string" &&
+      isSafePastedConfigName(entry.name),
+  );
+}
+
+function buildOfficialUserConfig(
+  input: Record<string, unknown> & { name: string },
+): NonNullable<
+  archestraCatalogTypes.ArchestraMcpServerManifest["user_config"]
+>[string] {
+  const format = getOptionalStringProperty(input, "format");
+  const configuredValue =
+    getOptionalStringProperty(input, "value") ??
+    getOptionalStringProperty(input, "default");
+  const placeholder = getOptionalStringProperty(input, "placeholder");
+  return {
+    type:
+      format === "number"
+        ? "number"
+        : format === "boolean"
+          ? "boolean"
+          : "string",
+    title: input.name,
+    description: getOptionalStringProperty(input, "description") ?? input.name,
+    required: input.isRequired === true,
+    sensitive:
+      input.isSecret === true ||
+      isSensitiveConfigName(input.name) ||
+      isSensitivePlaceholder(configuredValue) ||
+      isSensitivePlaceholder(placeholder),
+  };
+}
+
+function getOfficialStaticConfigValue(
+  input: Record<string, unknown> & { name: string },
+): string | undefined {
+  const configuredValue =
+    getOptionalStringProperty(input, "value") ??
+    getOptionalStringProperty(input, "default");
+  if (configuredValue === undefined) {
+    return undefined;
+  }
+  if (input.isSecret === true || isSensitiveConfigName(input.name)) {
+    return undefined;
+  }
+  if (configuredValue.trim() && isSensitivePlaceholder(configuredValue)) {
+    return undefined;
+  }
+  return configuredValue;
+}
+
+function isRemoteServerConfig(value: Record<string, unknown>): boolean {
+  return readHttpUrl(value.url) !== null;
+}
+
+function readHttpUrl(value: unknown): string | null {
+  if (typeof value !== "string" || !value.trim()) {
+    return null;
+  }
+
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === "http:" || parsed.protocol === "https:"
+      ? value
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function isSafePastedConfigName(name: string): boolean {
+  const trimmed = name.trim();
+  return (
+    trimmed.length > 0 &&
+    trimmed.length <= MAX_PASTED_NAME_LENGTH &&
+    !DANGEROUS_CONFIG_KEYS.has(trimmed)
+  );
+}
+
+function readStringArray(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+
+  const args = value
+    .map((entry) => (typeof entry === "string" ? entry : String(entry)))
+    .filter((entry) => entry.length > 0);
+
+  return args.length > 0 ? args : undefined;
+}
+
+function readDockerImage(
+  serverConfig: Record<string, unknown>,
+): string | undefined {
+  if (typeof serverConfig.docker_image === "string") {
+    return serverConfig.docker_image;
+  }
+  if (typeof serverConfig.dockerImage === "string") {
+    return serverConfig.dockerImage;
+  }
+  return undefined;
+}
+
+function buildHeaderUserConfig(
+  headerName: string,
+  headerValue: string,
+  inputs: Map<string, PastedInputDefinition>,
+): {
+  fieldName: string;
+  config: Record<string, unknown>;
+} | null {
+  const trimmedHeaderName = headerName.trim();
+  const bearerMatch = headerValue.match(/^Bearer\s+(.+)$/i);
+  const isAuthorization = isDefaultAuthorizationHeader(trimmedHeaderName);
+  const inputRef = extractSafeInputReference(headerValue);
+  const input = inputRef ? inputs.get(inputRef) : undefined;
+  const isSensitiveHeader = isSensitiveConfigName(trimmedHeaderName);
+
+  if (isAuthorization && bearerMatch) {
+    return {
+      fieldName: "access_token",
+      config: {
+        type: "string",
+        title: input?.title ?? "Access Token",
+        description: input?.description ?? "Bearer token for authentication",
+        required: input?.required ?? true,
+        sensitive: true,
+        headerName: trimmedHeaderName,
+        valuePrefix: "Bearer ",
+      },
+    };
+  }
+
+  if (isAuthorization && (inputRef || isSensitivePlaceholder(headerValue))) {
+    return {
+      fieldName: "raw_access_token",
+      config: {
+        type: "string",
+        title: input?.title ?? "Access Token",
+        description: input?.description ?? "Token for authentication",
+        required: input?.required ?? true,
+        sensitive: true,
+        headerName: trimmedHeaderName,
+      },
+    };
+  }
+
+  if (!inputRef && !isSensitivePlaceholder(headerValue) && !isSensitiveHeader) {
+    return null;
+  }
+
+  const usedFieldNames = new Set<string>();
+  const fieldName = getAdditionalHeaderFieldName({
+    headerName: trimmedHeaderName,
+    index: 0,
+    usedFieldNames,
+  });
+
+  return {
+    fieldName,
+    config: {
+      type: "string",
+      title: input?.title ?? trimmedHeaderName,
+      description: input?.description ?? `Sent as ${trimmedHeaderName}`,
+      required: input?.required ?? true,
+      sensitive:
+        input?.password === true ||
+        isSensitiveHeader ||
+        isSensitivePlaceholder(headerValue),
+      headerName: trimmedHeaderName,
+      promptOnInstallation: true,
+    },
+  };
+}
+
+function buildEnvUserConfig(
+  envKey: string,
+  envValue: string,
+  inputs: Map<string, PastedInputDefinition>,
+): {
+  fieldName: string;
+  config: NonNullable<
+    archestraCatalogTypes.ArchestraMcpServerManifest["user_config"]
+  >[string];
+} | null {
+  const inputRef = extractSafeInputReference(envValue);
+  const input = inputRef ? inputs.get(inputRef) : undefined;
+  const shouldPrompt =
+    Boolean(inputRef) ||
+    isSensitivePlaceholder(envValue) ||
+    isSensitiveConfigName(envKey);
+
+  if (!shouldPrompt) {
+    return null;
+  }
+
+  return {
+    fieldName: inputRef ?? envKey,
+    config: {
+      type: "string",
+      title: input?.title ?? envKey,
+      description: input?.description ?? `${envKey} value`,
+      required: input?.required ?? true,
+      sensitive: input?.password === true || isSensitiveConfigName(envKey),
+    },
+  };
+}
+
+function extractInputReference(value: string): string | null {
+  return value.match(/\$\{input:([^}]+)\}/)?.[1] ?? null;
+}
+
+function extractSafeInputReference(value: string): string | null {
+  const inputRef = extractInputReference(value);
+  return inputRef && isSafePastedConfigName(inputRef) ? inputRef : null;
+}
+
+export function isSensitivePlaceholder(value: unknown): boolean {
+  if (typeof value !== "string") {
+    return false;
+  }
+
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) {
+    return true;
+  }
+
+  return (
+    /^<[^>]+>$/.test(normalized) ||
+    /<[^>]*(token|secret|password|api[_ -]?key)[^>]*>/.test(normalized) ||
+    /\byour[_ -]?[a-z0-9_ -]*(token|secret|password|api[_ -]?key)\b/.test(
+      normalized,
+    ) ||
+    normalized.includes("${input:")
+  );
+}
+
+function isSensitiveConfigName(name: string): boolean {
+  return /(token|secret|password|api[_-]?key|authorization)/i.test(name);
 }
 
 function buildStaticHeaderUserConfig(

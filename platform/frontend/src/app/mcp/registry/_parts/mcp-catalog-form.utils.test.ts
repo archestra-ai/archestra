@@ -1,6 +1,8 @@
 import type { McpCatalogFormValues } from "./mcp-catalog-form.types";
 import {
   buildCloneFormValues,
+  mergePastedMcpServerConfigValues,
+  parsePastedMcpServerConfig,
   transformCatalogItemToFormValues,
   transformExternalCatalogToFormValues,
   transformFormToApiData,
@@ -962,6 +964,678 @@ describe("transformFormToApiData - secret env var preservation", () => {
     expect(env[0]).toMatchObject({ key: "EDITED", value: "fresh" });
     expect(env[1]?.key).toBe("UNTOUCHED");
     expect(env[1]?.value ?? "").toBe("");
+  });
+});
+
+describe("parsePastedMcpServerConfig", () => {
+  function buildLocalArgumentsFormValues(
+    argumentsText: string,
+  ): McpCatalogFormValues {
+    return {
+      name: "json-args",
+      description: "",
+      icon: null,
+      serverType: "local",
+      serverUrl: "",
+      authMethod: "none",
+      includeBearerPrefix: true,
+      authHeaderName: "",
+      additionalHeaders: [],
+      oauthConfig: undefined,
+      enterpriseManagedConfig: null,
+      localConfig: {
+        command: "node",
+        arguments: argumentsText,
+        environment: [],
+        envFrom: [],
+        dockerImage: "",
+        transportType: "stdio",
+        httpPort: "",
+        httpPath: "",
+        serviceAccount: "",
+        imagePullSecrets: [],
+      },
+      deploymentSpecYaml: "",
+      originalDeploymentSpecYaml: "",
+      oauthClientSecretVaultPath: "",
+      oauthClientSecretVaultKey: "",
+      localConfigVaultPath: "",
+      localConfigVaultKey: "",
+      labels: [],
+      scope: "personal",
+      teams: [],
+    };
+  }
+
+  it("imports servers plus inputs token placeholder as sensitive remote auth", () => {
+    const result = parsePastedMcpServerConfig(
+      JSON.stringify({
+        servers: {
+          github: {
+            type: "http",
+            url: "https://api.githubcopilot.com/mcp/",
+            headers: {
+              Authorization: `Bearer ${"$"}{input:github_mcp_pat}`,
+            },
+          },
+        },
+        inputs: [
+          {
+            type: "promptString",
+            id: "github_mcp_pat",
+            description: "GitHub Personal Access Token",
+            password: true,
+          },
+        ],
+      }),
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    expect(result.values).toMatchObject({
+      name: "github",
+      serverType: "remote",
+      serverUrl: "https://api.githubcopilot.com/mcp/",
+      authMethod: "bearer",
+      includeBearerPrefix: true,
+    });
+  });
+
+  it("imports Claude Desktop command args env placeholders without persisting placeholder values", () => {
+    const result = parsePastedMcpServerConfig(
+      JSON.stringify({
+        mcpServers: {
+          sonarqube: {
+            command: "docker",
+            args: [
+              "run",
+              "--init",
+              "--pull=always",
+              "-i",
+              "--rm",
+              "-e",
+              "SONARQUBE_TOKEN",
+              "-e",
+              "SONARQUBE_ORG",
+              "mcp/sonarqube",
+            ],
+            env: {
+              SONARQUBE_TOKEN: "<token>",
+              SONARQUBE_ORG: "<org>",
+            },
+          },
+        },
+      }),
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    expect(result.values.serverType).toBe("local");
+    expect(result.values.localConfig).toMatchObject({
+      command: "docker",
+      arguments:
+        "run\n--init\n--pull=always\n-i\n--rm\n-e\nSONARQUBE_TOKEN\n-e\nSONARQUBE_ORG\nmcp/sonarqube",
+    });
+    expect(result.values.localConfig?.environment).toEqual([
+      expect.objectContaining({
+        key: "SONARQUBE_TOKEN",
+        type: "secret",
+        value: "",
+        promptOnInstallation: true,
+        required: true,
+      }),
+      expect.objectContaining({
+        key: "SONARQUBE_ORG",
+        type: "plain_text",
+        value: "",
+        promptOnInstallation: true,
+        required: true,
+      }),
+    ]);
+  });
+
+  it("imports top-level named server configs from documentation examples", () => {
+    const result = parsePastedMcpServerConfig(
+      JSON.stringify({
+        sonarqube: {
+          command: "docker",
+          args: ["run", "--rm", "-e", "SONARQUBE_TOKEN", "mcp/sonarqube"],
+          env: {
+            SONARQUBE_TOKEN: "YOUR_TOKEN_HERE",
+          },
+        },
+      }),
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    expect(result.values).toMatchObject({
+      name: "sonarqube",
+      serverType: "local",
+      localConfig: {
+        command: "docker",
+        arguments: "run\n--rm\n-e\nSONARQUBE_TOKEN\nmcp/sonarqube",
+      },
+    });
+    expect(result.values.localConfig?.environment).toEqual([
+      expect.objectContaining({
+        key: "SONARQUBE_TOKEN",
+        type: "secret",
+        value: "",
+        promptOnInstallation: true,
+      }),
+    ]);
+  });
+
+  it("imports Archestra manifest-like objects without requiring a top-level name", () => {
+    const result = parsePastedMcpServerConfig(
+      JSON.stringify({
+        user_config: {
+          access_token: {
+            sensitive: true,
+            type: "string",
+            title: "Access Token",
+            description: "A GitHub Personal Access Token",
+            required: true,
+          },
+        },
+        oauth_config: {
+          name: "GitHub Copilot MCP",
+          server_url: "https://api.githubcopilot.com/mcp",
+          client_id: "dummy-client-id",
+          client_secret: "REDACTED",
+          redirect_uris: ["http://localhost:8080/oauth/callback"],
+          scopes: ["read", "write"],
+          default_scopes: ["read", "write"],
+          supports_resource_metadata: true,
+          requires_proxy: true,
+        },
+        server: {
+          type: "remote",
+          url: "https://api.githubcopilot.com/mcp/",
+          docs_url: "https://example.com/docs",
+        },
+      }),
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    expect(result.values).toMatchObject({
+      name: "GitHub Copilot MCP",
+      serverType: "remote",
+      serverUrl: "https://api.githubcopilot.com/mcp/",
+      authMethod: "bearer",
+    });
+  });
+
+  it("imports official registry remote server details", () => {
+    const result = parsePastedMcpServerConfig(
+      JSON.stringify({
+        $schema:
+          "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+        name: "ac.example/search",
+        title: "Example Search",
+        description: "Search example content",
+        version: "1.0.0",
+        remotes: [
+          {
+            type: "streamable-http",
+            url: "https://api.example.com/mcp",
+          },
+        ],
+      }),
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    expect(result.values).toMatchObject({
+      name: "Example Search",
+      description: "Search example content",
+      serverType: "remote",
+      serverUrl: "https://api.example.com/mcp",
+      authMethod: "none",
+    });
+  });
+
+  it("imports official registry API list wrappers", () => {
+    const result = parsePastedMcpServerConfig(
+      JSON.stringify({
+        servers: [
+          {
+            server: {
+              name: "io.example/browser",
+              title: "Browser MCP",
+              description: "Browser automation",
+              version: "1.0.0",
+              remotes: [
+                {
+                  type: "sse",
+                  url: "https://browser.example.com/sse",
+                },
+              ],
+            },
+            _meta: {
+              official: true,
+            },
+          },
+        ],
+      }),
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    expect(result.values).toMatchObject({
+      name: "Browser MCP",
+      description: "Browser automation",
+      serverType: "remote",
+      serverUrl: "https://browser.example.com/sse",
+    });
+  });
+
+  it("imports official registry remote authorization headers as prompted bearer auth", () => {
+    const result = parsePastedMcpServerConfig(
+      JSON.stringify({
+        name: "ai.example/ads",
+        title: "Example Ads",
+        description: "Ad reporting",
+        version: "1.0.0",
+        remotes: [
+          {
+            type: "streamable-http",
+            url: "https://api.example.com/mcp",
+            headers: [
+              {
+                name: "Authorization",
+                description: "Bearer token for Example Ads",
+                isRequired: true,
+                isSecret: true,
+              },
+            ],
+          },
+        ],
+      }),
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    expect(result.values).toMatchObject({
+      authMethod: "bearer",
+      includeBearerPrefix: true,
+      authHeaderName: "",
+    });
+  });
+
+  it("imports official registry npm packages as local stdio servers", () => {
+    const result = parsePastedMcpServerConfig(
+      JSON.stringify({
+        name: "ai.example/search",
+        title: "Example Search",
+        description: "Search example content",
+        version: "1.0.0",
+        packages: [
+          {
+            registryType: "npm",
+            identifier: "@example/search-mcp",
+            version: "1.2.3",
+            transport: {
+              type: "stdio",
+            },
+            environmentVariables: [
+              {
+                name: "EXAMPLE_API_KEY",
+                description: "Example API key",
+                isRequired: true,
+                isSecret: true,
+              },
+              {
+                name: "EXAMPLE_BASE_URL",
+                default: "https://api.example.com",
+              },
+              {
+                name: "EXAMPLE_REGION",
+                value: "us-east-1",
+              },
+            ],
+          },
+        ],
+      }),
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    expect(result.values).toMatchObject({
+      name: "Example Search",
+      serverType: "local",
+      localConfig: {
+        command: "npx",
+        arguments: "-y\n@example/search-mcp@1.2.3",
+      },
+    });
+    expect(result.values.localConfig?.environment).toEqual([
+      expect.objectContaining({
+        key: "EXAMPLE_API_KEY",
+        type: "secret",
+        value: "",
+        promptOnInstallation: true,
+        required: true,
+      }),
+      expect.objectContaining({
+        key: "EXAMPLE_BASE_URL",
+        type: "plain_text",
+        value: "https://api.example.com",
+        promptOnInstallation: false,
+      }),
+      expect.objectContaining({
+        key: "EXAMPLE_REGION",
+        type: "plain_text",
+        value: "us-east-1",
+        promptOnInstallation: false,
+      }),
+    ]);
+  });
+
+  it("imports official registry static remote headers without prompting", () => {
+    const result = parsePastedMcpServerConfig(
+      JSON.stringify({
+        name: "ai.example/static-header",
+        title: "Static Header",
+        description: "Static header example",
+        version: "1.0.0",
+        remotes: [
+          {
+            type: "streamable-http",
+            url: "https://api.example.com/mcp",
+            headers: [
+              {
+                name: "X-Client-Version",
+                value: "2026-06",
+              },
+            ],
+          },
+        ],
+      }),
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    expect(result.values.additionalHeaders).toEqual([
+      expect.objectContaining({
+        headerName: "X-Client-Version",
+        promptOnInstallation: false,
+        required: false,
+        sensitive: false,
+        value: "2026-06",
+      }),
+    ]);
+  });
+
+  it("treats official registry placeholder tokens as prompted sensitive values", () => {
+    const result = parsePastedMcpServerConfig(
+      JSON.stringify({
+        name: "ai.example/placeholder-header",
+        title: "Placeholder Header",
+        description: "Placeholder token example",
+        version: "1.0.0",
+        remotes: [
+          {
+            type: "streamable-http",
+            url: "https://api.example.com/mcp",
+            headers: [
+              {
+                name: "X-Auth-Value",
+                placeholder: "Bearer <token>",
+              },
+            ],
+          },
+        ],
+      }),
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    expect(result.values.additionalHeaders).toEqual([
+      expect.objectContaining({
+        headerName: "X-Auth-Value",
+        promptOnInstallation: true,
+        required: false,
+        sensitive: true,
+      }),
+    ]);
+    expect(result.values.additionalHeaders?.[0]?.value).toBeUndefined();
+  });
+
+  it("imports official registry pypi packages as local stdio servers", () => {
+    const result = parsePastedMcpServerConfig(
+      JSON.stringify({
+        name: "ai.example/python-search",
+        title: "Python Search",
+        description: "Python package example",
+        version: "2.0.0",
+        packages: [
+          {
+            registryType: "pypi",
+            identifier: "example-search-mcp",
+            version: "2.0.1",
+            transport: {
+              type: "stdio",
+            },
+            runtimeArguments: [
+              {
+                type: "named",
+                name: "--verbose",
+              },
+            ],
+          },
+        ],
+      }),
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    expect(result.values).toMatchObject({
+      name: "Python Search",
+      serverType: "local",
+      localConfig: {
+        command: "uvx",
+        arguments: "--verbose\nexample-search-mcp==2.0.1",
+      },
+    });
+  });
+
+  it("prompts for sensitive remote headers instead of importing static values", () => {
+    const result = parsePastedMcpServerConfig(
+      JSON.stringify({
+        mcpServers: {
+          acme: {
+            type: "http",
+            url: "https://api.example.com/mcp",
+            headers: {
+              "X-API-Key": "dummy-api-key",
+            },
+          },
+        },
+      }),
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    expect(result.values.additionalHeaders?.[0]).toMatchObject({
+      headerName: "X-API-Key",
+      promptOnInstallation: true,
+      required: true,
+      sensitive: true,
+    });
+    expect(result.values.additionalHeaders?.[0]?.value).toBeUndefined();
+  });
+
+  it("rejects remote server urls with non-http protocols", () => {
+    const result = parsePastedMcpServerConfig(
+      JSON.stringify({
+        mcpServers: {
+          bad: {
+            type: "http",
+            url: "javascript:alert(1)",
+          },
+        },
+      }),
+    );
+
+    expect(result).toEqual({
+      ok: false,
+      error:
+        "Config must include an MCP server under mcpServers, servers, server, or a command/url object.",
+    });
+  });
+
+  it("rejects oversized pasted configs before parsing", () => {
+    const result = parsePastedMcpServerConfig(
+      JSON.stringify({
+        mcpServers: {
+          huge: {
+            command: "npx",
+            args: ["x".repeat(70_000)],
+          },
+        },
+      }),
+    );
+
+    expect(result).toEqual({
+      ok: false,
+      error: "Config is too large to import safely.",
+    });
+  });
+
+  it("drops dangerous pasted env keys", () => {
+    const result = parsePastedMcpServerConfig(
+      '{"mcpServers":{"safe":{"command":"node","args":["server.js"],"env":{"__proto__":"x","constructor":"y","prototype":"z","OK_ENV":"safe"}}}}',
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    expect(result.values.localConfig?.environment).toEqual([
+      {
+        key: "OK_ENV",
+        type: "plain_text",
+        value: "safe",
+        promptOnInstallation: false,
+        required: false,
+        description: "",
+      },
+    ]);
+    expect(({} as Record<string, unknown>).x).toBeUndefined();
+  });
+
+  it("does not use dangerous input references as user-config field names", () => {
+    const result = parsePastedMcpServerConfig(
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: intentional ${input:...} placeholder fixture
+      '{"mcpServers":{"safe":{"command":"node","args":["server.js"],"env":{"SAFE_TOKEN":"${input:__proto__}"}}},"inputs":[{"id":"__proto__","type":"promptString","password":true}]}',
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    expect(result.values.localConfig?.environment).toEqual([
+      expect.objectContaining({
+        key: "SAFE_TOKEN",
+        type: "secret",
+        promptOnInstallation: true,
+      }),
+    ]);
+    expect(({} as Record<string, unknown>).SAFE_TOKEN).toBeUndefined();
+  });
+
+  it("drops dangerous pasted remote header keys", () => {
+    const result = parsePastedMcpServerConfig(
+      '{"mcpServers":{"safe":{"type":"http","url":"https://api.example.com/mcp","headers":{"__proto__":"x","constructor":"y","prototype":"z","X-Trace":"safe"}}}}',
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    expect(result.values.additionalHeaders).toEqual([
+      expect.objectContaining({
+        headerName: "X-Trace",
+        value: "safe",
+        promptOnInstallation: false,
+        sensitive: false,
+      }),
+    ]);
+  });
+
+  it("returns a readable error for objects without a server config", () => {
+    const result = parsePastedMcpServerConfig(
+      JSON.stringify({
+        metadata: {
+          description: "not an MCP server config",
+        },
+      }),
+    );
+
+    expect(result).toEqual({
+      ok: false,
+      error:
+        "Config must include an MCP server under mcpServers, servers, server, or a command/url object.",
+    });
+  });
+
+  it("parses JSON array arguments while preserving newline fallback", () => {
+    expect(
+      transformFormToApiData(
+        buildLocalArgumentsFormValues('["server.js","--verbose"]'),
+      ).localConfig?.arguments,
+    ).toEqual(["server.js", "--verbose"]);
+
+    expect(
+      transformFormToApiData(
+        buildLocalArgumentsFormValues("server.js\n--verbose"),
+      ).localConfig?.arguments,
+    ).toEqual(["server.js", "--verbose"]);
+  });
+
+  it("returns a readable error for invalid JSON without producing form values", () => {
+    const result = parsePastedMcpServerConfig("{ not-json");
+
+    expect(result).toEqual({
+      ok: false,
+      error: "Config must be valid JSON.",
+    });
+  });
+
+  it("merges pasted config without losing current visibility, environment, or label state", () => {
+    const currentValues = buildLocalArgumentsFormValues("old.js");
+    const importedValues = buildLocalArgumentsFormValues("new.js");
+    currentValues.environmentId = "123e4567-e89b-12d3-a456-426614174000";
+    currentValues.labels = [{ key: "stale", value: "form" }];
+    currentValues.scope = "team";
+    currentValues.teams = ["team-1"];
+    importedValues.labels = [];
+    importedValues.scope = "personal";
+    importedValues.teams = [];
+
+    const merged = mergePastedMcpServerConfigValues({
+      currentValues,
+      importedValues,
+      currentLabels: [{ key: "draft", value: "label" }],
+    });
+
+    expect(merged.localConfig?.arguments).toBe("new.js");
+    expect(merged.environmentId).toBe(currentValues.environmentId);
+    expect(merged.labels).toEqual([{ key: "draft", value: "label" }]);
+    expect(merged.scope).toBe("team");
+    expect(merged.teams).toEqual(["team-1"]);
   });
 });
 

@@ -1581,6 +1581,43 @@ describe("mcpToolToModelOutput", () => {
 
     expect(result).toEqual({ type: "text", value: "Just text, no metadata" });
   });
+
+  test("forwards a bounded image block as a media model-output part", () => {
+    const result = mcpToolToModelOutput({
+      output: {
+        content: "App rendered clean.",
+        rawContent: [
+          { type: "text", text: "App rendered clean." },
+          { type: "image", data: "QUJD", mimeType: "image/jpeg" },
+        ],
+      },
+    });
+
+    expect(result).toEqual({
+      type: "content",
+      value: [
+        { type: "text", text: "App rendered clean." },
+        { type: "media", data: "QUJD", mediaType: "image/jpeg" },
+      ],
+    });
+  });
+
+  test("drops an oversized image block, keeping the text", () => {
+    const result = mcpToolToModelOutput({
+      output: {
+        content: "App rendered clean.",
+        rawContent: [
+          {
+            type: "image",
+            data: "A".repeat(2_000_001),
+            mimeType: "image/jpeg",
+          },
+        ],
+      },
+    });
+
+    expect(result).toEqual({ type: "text", value: "App rendered clean." });
+  });
 });
 
 describe("buildArchestraToolOutput", () => {
@@ -1602,6 +1639,60 @@ describe("buildArchestraToolOutput", () => {
     });
 
     expect(result).toBe("Diagram displayed!");
+  });
+
+  test("carries an image block as one media part without base64 in the text (end to end)", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent();
+    const base64 = "QUJDREVG".repeat(4); // valid base64, not a placeholder
+    const built = await buildArchestraToolOutput({
+      response: {
+        content: [
+          { type: "text" as const, text: "App rendered clean." },
+          { type: "image" as const, data: base64, mimeType: "image/jpeg" },
+        ],
+        isError: false,
+      },
+      toolName: "archestra__get_app_diagnostics",
+      toolArguments: {},
+      agentId: agent.id,
+    });
+
+    // the base64 must NOT be stringified into the text summary (it rides
+    // rawContent instead, to be stripped from history later)
+    expect(built).toMatchObject({ content: "App rendered clean.\n[image]" });
+    const richContent = (built as { content: string }).content;
+    expect(richContent).not.toContain(base64);
+
+    // and toModelOutput forwards it exactly once, as a media part
+    const modelOutput = mcpToolToModelOutput({ output: built });
+    expect(modelOutput.type).toBe("content");
+    const value = (modelOutput as { value: Array<Record<string, unknown>> })
+      .value;
+    const media = value.filter((p) => p.type === "media");
+    const textParts = value.filter((p) => p.type === "text");
+    expect(media).toEqual([
+      { type: "media", data: base64, mediaType: "image/jpeg" },
+    ]);
+    expect(textParts[0].text).not.toContain(base64);
+  });
+
+  test("does not re-forward a history-stripped image placeholder as media", () => {
+    const modelOutput = mcpToolToModelOutput({
+      output: {
+        content: "App rendered clean.",
+        rawContent: [
+          {
+            type: "image",
+            // what the history image-stripper leaves behind
+            data: "[Image data stripped to save context]",
+            mimeType: "image/jpeg",
+          },
+        ],
+      },
+    });
+    expect(modelOutput).toEqual({ type: "text", value: "App rendered clean." });
   });
 
   test.for([

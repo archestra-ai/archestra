@@ -39,10 +39,9 @@ describe("the Apps SDK static file", () => {
       "storage:",
       "tools:",
       "ui:",
-      "chat:",
+      "context:",
       "openLink",
       "requestDisplayMode",
-      "sendMessage",
     ]) {
       expect(sdk).toContain(member);
     }
@@ -50,7 +49,13 @@ describe("the Apps SDK static file", () => {
 
   test("installs runtime-error diagnostics hooks and stays eval-free", () => {
     expect(sdk).toContain("mcp-apps:runtime-error");
-    for (const hook of ['"error"', '"unhandledrejection"', "console.error ="]) {
+    for (const hook of [
+      '"error"',
+      '"unhandledrejection"',
+      'hookConsole("error", "console.error"',
+      'hookConsole("warn", "console.warn"',
+      'hookConsole("log", "console.log"',
+    ]) {
       expect(sdk).toContain(hook);
     }
     // the sandbox CSP forbids code generation, and the violation listener only

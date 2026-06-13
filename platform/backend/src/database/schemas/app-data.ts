@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import {
   customType,
   index,
+  integer,
   pgTable,
   text,
   timestamp,
@@ -50,6 +51,21 @@ const appDataTable = pgTable(
     }),
     /** Caller-chosen key, unique within a partition. */
     key: text("key").notNull(),
+    // Monotonic per-entry version for optimistic concurrency: every successful
+    // write bumps it (new row → 1, update → current+1). Callers opt into
+    // compare-and-set by passing an expectedRevision; omitting it keeps the
+    // last-writer-wins default. Enforced in AppDataModel under the app-row lock.
+    revision: integer("revision").notNull().default(1),
+    // Optional owner of a SHARED-partition key (user_id IS NULL). When set, only
+    // the owner — or a caller the model is told may override — may overwrite or
+    // delete the key. NULL means collaborative (anyone with access may write),
+    // which is the pre-ownership default. User-partition keys are already
+    // private, so this is unused there. Owner-deletion is decoupled from the
+    // entry's lifetime: set null so an owned shared key survives the owner's
+    // departure as a collaborative key rather than vanishing.
+    ownerUserId: text("owner_user_id").references(() => usersTable.id, {
+      onDelete: "set null",
+    }),
     // Arbitrary JSON document. Key length, value size, and per-partition entry
     // count are enforced in AppDataModel, not in DDL: the platform's model-only
     // DB access makes the model the single writer, and the caps are

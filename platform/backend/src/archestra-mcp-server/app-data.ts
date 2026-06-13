@@ -4,8 +4,10 @@ import {
   TOOL_APP_DATA_LIST_SHORT_NAME,
   TOOL_APP_DATA_SET_SHORT_NAME,
 } from "@archestra/shared";
+import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
-import { AppDataModel } from "@/models";
+import { AppDataModel, AppModel } from "@/models";
+import { callerIsAppAdmin } from "@/services/apps/app-authorization";
 import { ApiError } from "@/types";
 import { APP_DATA_KEY_MAX_LENGTH } from "@/types/app";
 import {
@@ -73,6 +75,25 @@ const scopeField = z
     'Storage partition: "user" (default) is private to the viewing user, "app" is shared by everyone using the app.',
   );
 
+const revisionField = z
+  .number()
+  .int()
+  .min(0)
+  .describe(
+    "Optimistic concurrency guard. Omit for last-writer-wins. 0 = create only if the key is absent. A positive value = overwrite only if the key is still at that revision (from a prior get/set); otherwise the write is rejected as a conflict.",
+  );
+
+const claimOwnerField = z
+  .boolean()
+  .describe(
+    'Shared-scope only: when creating a NEW key, claim it so only you (or an app admin/author) may later overwrite or delete it. Has no effect on the "user" scope or on an existing key.',
+  );
+
+const ownerOutputField = z
+  .string()
+  .nullable()
+  .describe("User id owning a shared key, or null if collaborative.");
+
 const GetSchema = z.strictObject({ key: keyField, scope: scopeField });
 const SetSchema = z.strictObject({
   key: keyField,
@@ -82,9 +103,32 @@ const SetSchema = z.strictObject({
       "Any JSON-serializable value except null (use app_data_delete to clear a key). Pass objects/arrays directly — get returns exactly what was stored, no JSON.stringify needed.",
     ),
   scope: scopeField,
+  expectedRevision: revisionField.optional(),
+  claimOwner: claimOwnerField.optional(),
 });
 const ListSchema = z.strictObject({ scope: scopeField });
 const DeleteSchema = z.strictObject({ key: keyField, scope: scopeField });
+
+const GetOutputSchema = z.object({
+  value: z.unknown(),
+  revision: z.number().int().nullable(),
+  owner: ownerOutputField,
+});
+const SetOutputSchema = z.object({
+  key: z.string(),
+  revision: z.number().int(),
+  owner: ownerOutputField,
+});
+const ListOutputSchema = z.object({
+  entries: z.array(
+    z.object({
+      key: z.string(),
+      value: z.unknown(),
+      revision: z.number().int(),
+      owner: ownerOutputField,
+    }),
+  ),
+});
 
 const registry = defineArchestraTools([
   defineArchestraTool({
@@ -93,15 +137,19 @@ const registry = defineArchestraTools([
     description:
       "Read a value from the calling app's data store (per-user or shared partition).",
     schema: GetSchema,
-    outputSchema: z.object({ value: z.unknown() }),
+    outputSchema: GetOutputSchema,
     async handler({ args, context }) {
       const resolution = resolvePartition(context, args.scope);
       if (!resolution.ok) return errorResult(resolution.error);
-      const value = await AppDataModel.get({
+      const entry = await AppDataModel.get({
         ...resolution.partition,
         key: args.key,
       });
-      return structuredSuccessResult({ value });
+      return structuredSuccessResult({
+        value: entry?.value ?? null,
+        revision: entry?.revision ?? null,
+        owner: entry?.owner ?? null,
+      });
     },
   }),
   defineArchestraTool({
@@ -110,22 +158,28 @@ const registry = defineArchestraTools([
     description:
       "Write a value to the calling app's data store (per-user or shared partition).",
     schema: SetSchema,
-    outputSchema: z.object({ key: z.string() }),
+    outputSchema: SetOutputSchema,
     async handler({ args, context }) {
       const resolution = resolvePartition(context, args.scope);
       if (!resolution.ok) return errorResult(resolution.error);
+      const caller = await resolveCaller(context);
+      if (!caller.ok) return errorResult(caller.error);
       try {
         const entry = await AppDataModel.set({
           ...resolution.partition,
+          ...caller.caller,
           key: args.key,
           value: args.value,
+          expectedRevision: args.expectedRevision,
+          claimOwner: args.claimOwner,
         });
-        return structuredSuccessResult({ key: entry.key });
+        return structuredSuccessResult({
+          key: entry.key,
+          revision: entry.revision,
+          owner: entry.owner,
+        });
       } catch (error) {
-        if (error instanceof ApiError) {
-          return errorResult(error.message);
-        }
-        throw error;
+        return mapAppDataError(error);
       }
     },
   }),
@@ -135,9 +189,7 @@ const registry = defineArchestraTools([
     description:
       "List all entries in one partition of the calling app's data store.",
     schema: ListSchema,
-    outputSchema: z.object({
-      entries: z.array(z.object({ key: z.string(), value: z.unknown() })),
-    }),
+    outputSchema: ListOutputSchema,
     async handler({ args, context }) {
       const resolution = resolvePartition(context, args.scope);
       if (!resolution.ok) return errorResult(resolution.error);
@@ -154,16 +206,81 @@ const registry = defineArchestraTools([
     async handler({ args, context }) {
       const resolution = resolvePartition(context, args.scope);
       if (!resolution.ok) return errorResult(resolution.error);
-      const deleted = await AppDataModel.delete({
-        ...resolution.partition,
-        key: args.key,
-      });
-      return successResult(
-        deleted ? `Deleted "${args.key}".` : `No entry for "${args.key}".`,
-      );
+      const caller = await resolveCaller(context);
+      if (!caller.ok) return errorResult(caller.error);
+      try {
+        const deleted = await AppDataModel.delete({
+          ...resolution.partition,
+          ...caller.caller,
+          key: args.key,
+        });
+        return successResult(
+          deleted ? `Deleted "${args.key}".` : `No entry for "${args.key}".`,
+        );
+      } catch (error) {
+        return mapAppDataError(error);
+      }
     },
   }),
 ] as const);
 
 export const toolEntries = registry.toolEntries;
 export const tools = registry.tools;
+
+// =============================================================================
+// Internal helpers
+// =============================================================================
+
+type CallerResolution =
+  | {
+      ok: true;
+      caller: { callerUserId: string; callerCanOverrideOwner: boolean };
+    }
+  | { ok: false; error: string };
+
+// Identifies the writer and decides the ownership-override policy: the app's
+// author or an org app-admin may overwrite/delete keys owned by other users.
+// The mechanism lives in the model; this resolves the policy bit per call.
+async function resolveCaller(
+  context: ArchestraContext,
+): Promise<CallerResolution> {
+  const { userId, organizationId, appId } = context;
+  if (!userId || !organizationId || !appId) {
+    return {
+      ok: false,
+      error: "Writing app data requires an authenticated viewer.",
+    };
+  }
+  const app = await AppModel.findById(appId);
+  const callerCanOverrideOwner =
+    app?.authorId === userId ||
+    (await callerIsAppAdmin(userId, organizationId));
+  return {
+    ok: true,
+    caller: { callerUserId: userId, callerCanOverrideOwner },
+  };
+}
+
+// Conflict (409) and ownership (403) failures carry a machine-readable code in
+// both _meta.archestraError and structuredContent.archestraError so the app SDK
+// can branch on result._meta.archestraError || result.structuredContent.
+// archestraError. Any other ApiError stays a plain text errorResult.
+function mapAppDataError(error: unknown): CallToolResult {
+  if (
+    error instanceof ApiError &&
+    (error.statusCode === 409 || error.statusCode === 403)
+  ) {
+    const type = error.statusCode === 409 ? "conflict" : "forbidden";
+    const archestraError = { type, message: error.message } as const;
+    return {
+      content: [{ type: "text" as const, text: `Error: ${error.message}` }],
+      structuredContent: { archestraError },
+      _meta: { archestraError },
+      isError: true,
+    };
+  }
+  if (error instanceof ApiError) {
+    return errorResult(error.message);
+  }
+  throw error;
+}

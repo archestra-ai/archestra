@@ -123,6 +123,52 @@ describe("appRoutes /api/apps", () => {
     expect(deleted.json().success).toBe(true);
   });
 
+  test("records a render screenshot and rejects bad input", async ({
+    makeUser,
+    makeOrganization,
+    makeMember,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: ADMIN_ROLE_NAME });
+    app = await buildApp(user.id, org.id);
+
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/apps",
+      headers: JSON_HEADERS,
+      payload: { name: "Shots", html: "<h1>v1</h1>", scope: "org" },
+    });
+    const appId = created.json().id as string;
+
+    const ok = await app.inject({
+      method: "POST",
+      url: `/api/apps/${appId}/screenshot`,
+      headers: JSON_HEADERS,
+      payload: { version: 1, dataUrl: "data:image/jpeg;base64,QUJD" },
+    });
+    expect(ok.statusCode).toBe(200);
+    expect(ok.json().success).toBe(true);
+
+    // a non-image data URL is rejected by the body schema (not stored)
+    const badUrl = await app.inject({
+      method: "POST",
+      url: `/api/apps/${appId}/screenshot`,
+      headers: JSON_HEADERS,
+      payload: { version: 1, dataUrl: "data:text/plain;base64,QUJD" },
+    });
+    expect(badUrl.statusCode).not.toBe(200);
+
+    // a version ahead of the app's head is rejected by the handler
+    const futureVersion = await app.inject({
+      method: "POST",
+      url: `/api/apps/${appId}/screenshot`,
+      headers: JSON_HEADERS,
+      payload: { version: 99, dataUrl: "data:image/png;base64,QUJD" },
+    });
+    expect(futureVersion.statusCode).toBe(400);
+  });
+
   test("create resolves templateId server-side when html is omitted", async ({
     makeUser,
     makeOrganization,

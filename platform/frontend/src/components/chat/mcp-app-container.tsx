@@ -177,7 +177,9 @@ export function McpAppSection({
     getAppDiagnosticCounts,
     getAppDiagnosticCounts,
   );
-  const diagnosticCount = appId ? (diagnosticCounts.get(appId) ?? 0) : 0;
+  const appDiagnosticCounts = appId ? diagnosticCounts.get(appId) : undefined;
+  const errorCount = appDiagnosticCounts?.errors ?? 0;
+  const logCount = appDiagnosticCounts?.logs ?? 0;
 
   if (effectiveResourceState === "empty") {
     return null;
@@ -194,12 +196,21 @@ export function McpAppSection({
         }
         fillContainer={renderInSidebar}
       >
-        {diagnosticCount > 0 && (
-          <div className="mb-2 w-fit rounded-md border border-destructive/50 bg-destructive/10 px-2 py-0.5 text-xs text-destructive">
-            {diagnosticCount === 1
-              ? "1 runtime error"
-              : `${diagnosticCount} runtime errors`}{" "}
-            in this app
+        {(errorCount > 0 || logCount > 0) && (
+          <div className="mb-2 flex w-fit flex-wrap items-center gap-1.5">
+            {errorCount > 0 && (
+              <div className="rounded-md border border-destructive/50 bg-destructive/10 px-2 py-0.5 text-xs text-destructive">
+                {errorCount === 1
+                  ? "1 runtime error"
+                  : `${errorCount} runtime errors`}{" "}
+                in this app
+              </div>
+            )}
+            {logCount > 0 && (
+              <div className="rounded-md border border-border bg-muted/50 px-2 py-0.5 text-xs text-muted-foreground">
+                {logCount === 1 ? "1 log" : `${logCount} logs`} from this app
+              </div>
+            )}
           </div>
         )}
         <McpAppRuntime

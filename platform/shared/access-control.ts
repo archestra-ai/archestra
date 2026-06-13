@@ -1289,6 +1289,9 @@ export const requiredEndpointPermissionsMap: Partial<
   // The trusted host page reports a viewer's render diagnostics; the handler
   // re-checks app-visibility, so app:read is the right coarse gate.
   [RouteId.PostAppRenderDiagnostics]: { app: ["read"] },
+  // Same trust model as diagnostics: the host page posts the viewer's render
+  // screenshot, the handler re-checks app-visibility.
+  [RouteId.PostAppRenderScreenshot]: { app: ["read"] },
 
   // Config endpoint - any authenticated user can access
   [RouteId.GetConfig]: {},

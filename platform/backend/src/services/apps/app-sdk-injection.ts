@@ -33,6 +33,12 @@ export interface AppSdkTool {
 export interface AppSdkContext {
   user: { id: string; name: string } | null;
   tools: AppSdkTool[];
+  appId: string;
+  version: number;
+  // Only the app's author self-captures a render screenshot — they are the one
+  // who reads it back via get_app_diagnostics. Other viewers skip the capture
+  // (no wasted rasterize, no DOM snapshot of their session).
+  captureScreenshot: boolean;
 }
 
 /**

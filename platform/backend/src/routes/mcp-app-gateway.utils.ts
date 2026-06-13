@@ -126,6 +126,10 @@ export async function createAppServer(
             text: await injectAppSdk(head.html, {
               user: viewer ? { id: viewer.id, name: viewer.name } : null,
               tools: await buildAppSdkTools(appId, tokenAuth),
+              appId,
+              version: head.version,
+              captureScreenshot:
+                viewer != null && current?.authorId === viewer.id,
             }),
             _meta: {
               ui: {

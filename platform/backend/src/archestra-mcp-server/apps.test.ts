@@ -20,6 +20,7 @@ import config from "@/config";
 import {
   AppModel,
   AppRenderDiagnosticsModel,
+  AppRenderScreenshotModel,
   AppToolModel,
   AppVersionModel,
 } from "@/models";
@@ -727,6 +728,35 @@ describe("get_app_diagnostics", () => {
     const result = await getDiagnostics(appId);
     expect(structured(result).status).toBe("clean");
     expect((result.content[0] as any).text).toContain("rendered clean");
+    // no screenshot recorded → no image attached
+    expect(structured(result).screenshot).toBe(false);
+    expect(result.content.some((c: any) => c.type === "image")).toBe(false);
+  });
+
+  test("attaches the render screenshot as an image content block", async () => {
+    const appId = await createApp();
+    await AppRenderDiagnosticsModel.record({
+      appId,
+      // biome-ignore lint/style/noNonNullAssertion: set in beforeEach
+      userId: context.userId!,
+      version: 1,
+      entries: [],
+    });
+    await AppRenderScreenshotModel.record({
+      appId,
+      // biome-ignore lint/style/noNonNullAssertion: set in beforeEach
+      userId: context.userId!,
+      version: 1,
+      mimeType: "image/jpeg",
+      data: "QUJD",
+    });
+    const result = await getDiagnostics(appId);
+    expect(structured(result).status).toBe("clean");
+    expect(structured(result).screenshot).toBe(true);
+    const image = result.content.find((c: any) => c.type === "image") as any;
+    expect(image).toBeDefined();
+    expect(image.data).toBe("QUJD");
+    expect(image.mimeType).toBe("image/jpeg");
   });
 
   test("reports errors and escapes hostile diagnostic messages", async () => {
@@ -806,7 +836,7 @@ describe("app data store tools", () => {
       context,
     );
     expect((listed.structuredContent as any).entries).toEqual([
-      { key: "counter", value: { n: 1 } },
+      { key: "counter", value: { n: 1 }, revision: 1, owner: null },
     ]);
 
     const deleted = await executeArchestraTool(

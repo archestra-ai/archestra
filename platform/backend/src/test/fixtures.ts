@@ -475,7 +475,16 @@ async function makeAppData(
   value: unknown,
   userId: string | null = null,
 ) {
-  return await AppDataModel.set({ appId, userId, key, value });
+  return await AppDataModel.set({
+    appId,
+    userId,
+    key,
+    value,
+    // Fixtures write collaborative (unowned) data; override keeps any future
+    // ownership check a no-op and callerUserId is otherwise unused here.
+    callerUserId: userId ?? "fixture",
+    callerCanOverrideOwner: true,
+  });
 }
 
 /**

@@ -7,19 +7,21 @@
  *   archestra.user                  — { id, name } of the authenticated viewer (auto-auth)
  *   archestra.storage.user.*        — get/set/list/delete, private to the viewer
  *   archestra.storage.shared.*      — get/set/list/delete, shared by all users of the app
- *     (values are plain JSON: get returns exactly what set stored, or null when
- *     absent — set rejects top-level null, delete clears a key; list() returns
- *     [{key, value}] entries, not keys)
+ *     (values are plain JSON; get(key) resolves to an entry { value, revision,
+ *     owner } or null when absent, list() to [{key, value, revision, owner}];
+ *     set(key, value, { ifRevision, owned }) resolves to { revision, owner } and
+ *     rejects with { code: "conflict" } on a stale ifRevision or
+ *     { code: "forbidden" } on an owned-key violation; delete clears a key)
  *   archestra.tools.call(name,args) — call an assigned tool with the viewer's credentials;
  *                                     throws { code: "auth_required", url } when the
  *                                     upstream MCP server needs (re)authentication
  *   archestra.tools.list()          — the app's assigned tools (name/description/inputSchema)
  *   archestra.ui.openLink(url) / archestra.ui.requestDisplayMode(mode)
- *   archestra.chat.sendMessage(text)
+ *   archestra.context               — { appId, version } of the running app (sync)
  *
  * Delivery contract (both globals are injected before this file loads):
  *   window.__ARCHESTRA_APP_SDK_URL__  — ext-apps guest SDK bundle URL (sandbox proxy)
- *   window.__ARCHESTRA_APP_CONTEXT__  — per-viewer bootstrap { user, tools } (backend)
+ *   window.__ARCHESTRA_APP_CONTEXT__  — per-viewer bootstrap { user, tools, appId, version } (backend)
  *
  * Classic (non-module) script: `window.archestra` exists synchronously before
  * any app script. Connects eagerly at load — the host only delivers
@@ -65,24 +67,43 @@
       (r && (r.stack || r.message)) || String(r),
     );
   });
-  const consoleError = console.error.bind(console);
-  console.error = (...args) => {
-    consoleError(...args);
-    postDiagnostic(
-      "console.error",
-      args
-        .map((a) => {
-          if (a instanceof Error) return a.message;
-          if (typeof a === "string") return a;
-          try {
-            return JSON.stringify(a);
-          } catch {
-            return String(a);
-          }
-        })
-        .join(" "),
-    );
+  const formatConsoleArgs = (args) =>
+    args
+      .map((a) => {
+        if (a instanceof Error) return a.message;
+        if (typeof a === "string") return a;
+        try {
+          return JSON.stringify(a);
+        } catch {
+          return String(a);
+        }
+      })
+      .join(" ");
+  // console.error is always reported (it's a failure signal). console.log/warn/
+  // info are reported too — so the authoring model can see what the app logged —
+  // but throttled per second so a chatty render can't crowd out real errors.
+  let logBudget = 10;
+  let logWindowStart = Date.now();
+  const hookConsole = (level, errorType, throttled) => {
+    const original = console[level].bind(console);
+    console[level] = (...args) => {
+      original(...args);
+      if (throttled) {
+        const now = Date.now();
+        if (now - logWindowStart > 1000) {
+          logBudget = 10;
+          logWindowStart = now;
+        }
+        if (logBudget <= 0) return;
+        logBudget--;
+      }
+      postDiagnostic(errorType, formatConsoleArgs(args));
+    };
   };
+  hookConsole("error", "console.error", false);
+  hookConsole("warn", "console.warn", true);
+  hookConsole("info", "console.info", true);
+  hookConsole("log", "console.log", true);
 
   const context = window.__ARCHESTRA_APP_CONTEXT__ || {};
 
@@ -174,6 +195,23 @@
           { code: "auth_required", url },
         );
       }
+      // Storage writes surface optimistic-concurrency and ownership rejections
+      // as typed codes so apps can branch (retry on conflict, warn on forbidden)
+      // instead of parsing a message string.
+      if (
+        platformError &&
+        (platformError.type === "conflict" ||
+          platformError.type === "forbidden")
+      ) {
+        throw Object.assign(
+          new Error(
+            textOf(result) ||
+              platformError.message ||
+              'Tool "' + name + '" was rejected',
+          ),
+          { code: platformError.type },
+        );
+      }
       throw Object.assign(
         new Error(textOf(result) || 'Tool "' + name + '" failed'),
         { code: "tool_error" },
@@ -182,17 +220,40 @@
     return result;
   };
 
+  // Each value is an entry { value, revision, owner }: revision powers optimistic
+  // concurrency (pass it back as set opts.ifRevision to fail a write that raced
+  // another viewer — the call rejects with { code: "conflict" }); owner is the
+  // viewer id that claimed the (shared) key, or null when unclaimed. delete is
+  // guarded by ownership rather than revision.
   const storagePartition = (scope) =>
     Object.freeze({
-      get: async (key) =>
-        (await callTool(APP_DATA_TOOLS.get, { key, scope })).structuredContent
-          ?.value,
-      set: async (key, value) => {
-        await callTool(APP_DATA_TOOLS.set, { key, value, scope });
+      get: async (key) => {
+        const sc = (await callTool(APP_DATA_TOOLS.get, { key, scope }))
+          .structuredContent;
+        return sc && sc.revision != null
+          ? { value: sc.value, revision: sc.revision, owner: sc.owner ?? null }
+          : null;
+      },
+      // opts.ifRevision: write only if the stored revision matches (0 = create,
+      // i.e. fail if the key already exists). opts.owned: claim a new shared key
+      // for the viewer so only they (or the app's author/admins) may overwrite it.
+      set: async (key, value, opts) => {
+        const sc = (
+          await callTool(APP_DATA_TOOLS.set, {
+            key,
+            value,
+            scope,
+            expectedRevision: opts?.ifRevision,
+            claimOwner: opts?.owned,
+          })
+        ).structuredContent;
+        return { revision: sc?.revision, owner: sc?.owner ?? null };
       },
       list: async () =>
         (await callTool(APP_DATA_TOOLS.list, { scope })).structuredContent
           ?.entries || [],
+      // delete is guarded by ownership (an owned shared key can only be removed
+      // by its owner or the app's author/admins), not by revision.
       delete: async (key) => {
         await callTool(APP_DATA_TOOLS.delete, { key, scope });
       },
@@ -220,13 +281,64 @@
         await (await connectPromise).requestDisplayMode({ mode });
       },
     }),
-    chat: Object.freeze({
-      sendMessage: async (text) => {
-        await (await connectPromise).sendMessage({
-          role: "user",
-          content: [{ type: "text", text }],
-        });
-      },
+    // Read-only app metadata so an app can reference itself (e.g. build a link
+    // to its own run page, show its version). Injected at serve time.
+    context: Object.freeze({
+      appId: context.appId || null,
+      version: context.version ?? null,
     }),
   });
+
+  // Best-effort render screenshot. The host can't capture the app (the iframe is
+  // cross-origin), so the app self-captures its own DOM and posts it to the
+  // parent, which forwards it to the server to feed get_app_diagnostics — letting
+  // the authoring model see how the app actually looks. The capture library is
+  // pulled lazily from the platform CDN allowlist (script-src, not the blocked
+  // connect-src). Never blocks or breaks the app; any failure is silent.
+  const loadCaptureLib = () =>
+    new Promise((resolve, reject) => {
+      if (window.html2canvas) return resolve(window.html2canvas);
+      const s = document.createElement("script");
+      s.src =
+        "https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js";
+      s.onload = () => resolve(window.html2canvas);
+      s.onerror = () => reject(new Error("capture lib failed to load"));
+      document.head.appendChild(s);
+    });
+  const captureRenderScreenshot = async () => {
+    try {
+      if (!document.body) return;
+      const html2canvas = await loadCaptureLib();
+      if (typeof html2canvas !== "function") return;
+      const canvas = await html2canvas(document.body, {
+        scale: 0.5,
+        logging: false,
+        backgroundColor: null,
+        useCORS: true,
+      });
+      const dataUrl = canvas.toDataURL("image/jpeg", 0.6);
+      // ~1.1MB of binary once base64 is decoded; the ingest endpoint caps too.
+      if (dataUrl.length > 1_500_000) return;
+      window.parent.postMessage(
+        {
+          type: "mcp-apps:screenshot",
+          version: context.version ?? null,
+          dataUrl,
+        },
+        "*",
+      );
+    } catch {
+      // diagnostics are best-effort; never surface a capture failure to the app
+    }
+  };
+  // Only the author captures (they read it back via get_app_diagnostics); other
+  // viewers skip it entirely — no third-party lib load, no DOM rasterize. Wait
+  // for the handshake, then give the app a beat to paint before capturing.
+  if (context.captureScreenshot) {
+    ready
+      .then(() => {
+        setTimeout(captureRenderScreenshot, 1500);
+      })
+      .catch(() => {});
+  }
 })();

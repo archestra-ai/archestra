@@ -352,11 +352,58 @@ export function mcpToolToModelOutput({
         structuredContent?: unknown;
         rawContent?: unknown;
       };
-}): { type: "text"; value: string } {
+}):
+  | { type: "text"; value: string }
+  | {
+      type: "content";
+      value: Array<
+        | { type: "text"; text: string }
+        | { type: "media"; data: string; mediaType: string }
+      >;
+    } {
+  if (typeof output === "string") return { type: "text", value: output };
+  const images = extractModelOutputImages(output.rawContent);
+  if (images.length === 0) return { type: "text", value: output.content };
   return {
-    type: "text",
-    value: typeof output === "string" ? output : output.content,
+    type: "content",
+    value: [
+      { type: "text" as const, text: output.content },
+      ...images.map((img) => ({
+        type: "media" as const,
+        data: img.data,
+        mediaType: img.mediaType,
+      })),
+    ],
   };
+}
+
+// A tool result's images only reach the model when bounded: a base64 payload
+// larger than this, or more than a couple of images, is dropped (the text
+// summary still goes through). Matches the screenshot ingest cap.
+const MAX_MODEL_OUTPUT_IMAGE_BASE64_LENGTH = 2_000_000;
+const MAX_MODEL_OUTPUT_IMAGES = 2;
+const BASE64_PATTERN = /^[A-Za-z0-9+/]+={0,2}$/;
+function extractModelOutputImages(
+  rawContent: unknown,
+): Array<{ data: string; mediaType: string }> {
+  if (!Array.isArray(rawContent)) return [];
+  const images: Array<{ data: string; mediaType: string }> = [];
+  for (const block of rawContent) {
+    if (
+      isRecord(block) &&
+      block.type === "image" &&
+      typeof block.data === "string" &&
+      typeof block.mimeType === "string" &&
+      block.data.length <= MAX_MODEL_OUTPUT_IMAGE_BASE64_LENGTH &&
+      // reject a history-stripped placeholder (the strip pass blanks the base64
+      // but leaves the image block) so it isn't re-forwarded as garbage media
+      BASE64_PATTERN.test(block.data)
+    ) {
+      images.push({ data: block.data, mediaType: block.mimeType });
+      if (images.length >= MAX_MODEL_OUTPUT_IMAGES) break;
+    }
+  }
+  return images;
 }
 
 /**
@@ -382,9 +429,25 @@ export async function buildArchestraToolOutput(params: {
     }
 > {
   const { response, toolName, toolArguments, agentId } = params;
+  // Never stringify an image block into the text summary — its base64 would
+  // bloat context and evade the history image-stripper. Images ride rawContent
+  // and reach the model as bounded media parts via toModelOutput instead.
   const text = response.content
-    .map((item) => (item.type === "text" ? item.text : JSON.stringify(item)))
+    .map((item) =>
+      item.type === "text"
+        ? item.text
+        : item.type === "image"
+          ? "[image]"
+          : JSON.stringify(item),
+    )
     .join("\n");
+
+  // Carry self-captured images (e.g. a get_app_diagnostics render screenshot)
+  // through so the model can see them — toModelOutput turns them into media
+  // parts, bounded by size/count there. Image-free results are unaffected.
+  if (!response.isError && response.content.some((c) => c.type === "image")) {
+    return { content: text, rawContent: response.content as ContentBlock[] };
+  }
 
   const targetToolName = resolveRunToolTargetName(toolName, toolArguments);
 

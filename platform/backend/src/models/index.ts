@@ -12,6 +12,7 @@ export { default as AgentToolModel } from "./agent-tool";
 export { default as AppModel } from "./app";
 export { default as AppDataModel } from "./app-data";
 export { default as AppRenderDiagnosticsModel } from "./app-render-diagnostics";
+export { default as AppRenderScreenshotModel } from "./app-render-screenshot";
 export { default as AppTeamModel } from "./app-team";
 export { default as AppToolModel } from "./app-tool";
 export { default as AppVersionModel } from "./app-version";

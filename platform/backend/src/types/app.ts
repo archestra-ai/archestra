@@ -100,6 +100,10 @@ export const SelectAppRenderDiagnosticsSchema = createSelectSchema(
   { entries: z.array(AppRenderDiagnosticEntrySchema) },
 );
 
+export const SelectAppRenderScreenshotSchema = createSelectSchema(
+  schema.appRenderScreenshotTable,
+);
+
 // Public payloads (create_app/update_app tools + REST CRUD). HTML and its
 // security envelope live in app_versions, so these are hand-authored composites
 // rather than table inserts.
@@ -153,4 +157,7 @@ export type UpdateApp = z.infer<typeof UpdateAppSchema>;
 export type AppTemplate = z.infer<typeof AppTemplateSchema>;
 export type AppRenderDiagnostics = z.infer<
   typeof SelectAppRenderDiagnosticsSchema
+>;
+export type AppRenderScreenshot = z.infer<
+  typeof SelectAppRenderScreenshotSchema
 >;

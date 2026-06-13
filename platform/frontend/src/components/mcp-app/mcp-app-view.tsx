@@ -189,6 +189,27 @@ export const McpAppRuntime = function McpAppRuntime({
     [ownedAppId, postRenderSnapshot],
   );
 
+  // Screenshot capture: the SDK lane posts a JPEG data URL tagged with the app
+  // version it captured. Fire-and-forget POST it for the current head version,
+  // ignoring stale captures from an older mount (mirrors diagnostics ordering).
+  const handleScreenshot = useCallback(
+    (data: unknown) => {
+      if (!ownedAppId) return;
+      const record = data as { version?: unknown; dataUrl?: unknown } | null;
+      const version = record?.version;
+      const dataUrl = record?.dataUrl;
+      if (typeof version !== "number" || typeof dataUrl !== "string") return;
+      if (version !== appVersionRef.current) return;
+      void archestraApiSdk
+        .postAppRenderScreenshot({
+          path: { appId: ownedAppId },
+          body: { version, dataUrl },
+        })
+        .catch(() => {});
+    },
+    [ownedAppId],
+  );
+
   // Once the resource is renderable, post one snapshot after a short settle
   // window — including the empty (rendered-clean) case — keyed on the version so
   // each new render reports.
@@ -600,6 +621,7 @@ export const McpAppRuntime = function McpAppRuntime({
           }}
           useDedicatedOrigin={sandboxResult.hasCrossOrigin}
           onDiagnostic={ownedAppId ? handleDiagnostic : undefined}
+          onScreenshot={ownedAppId ? handleScreenshot : undefined}
         />
       )}
     </div>
@@ -634,6 +656,7 @@ function SandboxIframe({
   onSizeChanged,
   useDedicatedOrigin,
   onDiagnostic,
+  onScreenshot,
 }: {
   html: string;
   sandboxUrl: URL;
@@ -648,6 +671,8 @@ function SandboxIframe({
   useDedicatedOrigin?: boolean;
   /** Raw runtime-error / csp-violation payloads forwarded by the sandbox proxy. */
   onDiagnostic?: (data: unknown) => void;
+  /** Raw screenshot payload forwarded by the sandbox proxy. */
+  onScreenshot?: (data: unknown) => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
@@ -657,11 +682,13 @@ function SandboxIframe({
   const onSizeChangedRef = useRef(onSizeChanged);
   const onErrorRef = useRef(onError);
   const onDiagnosticRef = useRef(onDiagnostic);
+  const onScreenshotRef = useRef(onScreenshot);
 
   useEffect(() => {
     onSizeChangedRef.current = onSizeChanged;
     onErrorRef.current = onError;
     onDiagnosticRef.current = onDiagnostic;
+    onScreenshotRef.current = onScreenshot;
   });
 
   // Create iframe, wait for proxy-ready, connect bridge
@@ -728,9 +755,9 @@ function SandboxIframe({
       }
     };
 
-    // Persistent diagnostics listener: the proxy forwards runtime errors and
-    // CSP violations from the inner app frame; payloads are untrusted and are
-    // validated by the consumer (parseForwardedDiagnostic).
+    // Persistent diagnostics listener: the proxy forwards runtime errors,
+    // CSP violations, and screenshots from the inner app frame; payloads are
+    // untrusted and are validated by the consumers.
     const onDiagnosticMessage = (event: MessageEvent) => {
       if (
         event.source !== iframe.contentWindow ||
@@ -744,6 +771,8 @@ function SandboxIframe({
         type === "mcp-apps:csp-violation"
       ) {
         onDiagnosticRef.current?.(event.data);
+      } else if (type === "mcp-apps:screenshot") {
+        onScreenshotRef.current?.(event.data);
       }
     };
 

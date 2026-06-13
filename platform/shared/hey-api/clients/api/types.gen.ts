@@ -16383,6 +16383,94 @@ export type PostAppRenderDiagnosticsResponses = {
 
 export type PostAppRenderDiagnosticsResponse = PostAppRenderDiagnosticsResponses[keyof PostAppRenderDiagnosticsResponses];
 
+export type PostAppRenderScreenshotData = {
+    body: {
+        version: number;
+        dataUrl: string;
+    };
+    path: {
+        appId: string;
+    };
+    query?: never;
+    url: '/api/apps/{appId}/screenshot';
+};
+
+export type PostAppRenderScreenshotErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type PostAppRenderScreenshotError = PostAppRenderScreenshotErrors[keyof PostAppRenderScreenshotErrors];
+
+export type PostAppRenderScreenshotResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type PostAppRenderScreenshotResponse = PostAppRenderScreenshotResponses[keyof PostAppRenderScreenshotResponses];
+
 export type UnassignToolFromAppData = {
     body?: never;
     path: {

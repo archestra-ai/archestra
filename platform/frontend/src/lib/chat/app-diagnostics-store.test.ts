@@ -23,6 +23,19 @@ describe("parseForwardedDiagnostic", () => {
     expect(entry?.message).toHaveLength(MAX_DIAGNOSTIC_MESSAGE_LENGTH);
   });
 
+  it.each([
+    "console.log",
+    "console.warn",
+    "console.info",
+  ] as const)("accepts %s forwarded over the runtime-error lane", (errorType) => {
+    const entry = parseForwardedDiagnostic({
+      type: "mcp-apps:runtime-error",
+      errorType,
+      message: "hello from the app",
+    });
+    expect(entry).toEqual({ type: errorType, message: "hello from the app" });
+  });
+
   it("maps a CSP violation to a readable message", () => {
     const entry = parseForwardedDiagnostic({
       type: "mcp-apps:csp-violation",
@@ -73,7 +86,10 @@ describe("diagnostics store", () => {
     for (let i = 0; i < MAX_DIAGNOSTICS_PER_APP + 10; i++) {
       reportAppDiagnostic(APP, 1, { type: "error", message: `error ${i}` });
     }
-    expect(getAppDiagnosticCounts().get(APP)).toBe(MAX_DIAGNOSTICS_PER_APP);
+    expect(getAppDiagnosticCounts().get(APP)).toEqual({
+      errors: MAX_DIAGNOSTICS_PER_APP,
+      logs: 0,
+    });
   });
 
   it("dedupes by type and message prefix", () => {
@@ -83,7 +99,16 @@ describe("diagnostics store", () => {
       type: "console.error",
       message: "same thing",
     });
-    expect(getAppDiagnosticCounts().get(APP)).toBe(2);
+    expect(getAppDiagnosticCounts().get(APP)).toEqual({ errors: 2, logs: 0 });
+  });
+
+  it("splits counts into error-class diagnostics vs ordinary logs", () => {
+    reportAppDiagnostic(APP, 1, { type: "error", message: "boom" });
+    reportAppDiagnostic(APP, 1, { type: "console.error", message: "bad" });
+    reportAppDiagnostic(APP, 1, { type: "console.log", message: "hi" });
+    reportAppDiagnostic(APP, 1, { type: "console.warn", message: "careful" });
+    reportAppDiagnostic(APP, 1, { type: "console.info", message: "fyi" });
+    expect(getAppDiagnosticCounts().get(APP)).toEqual({ errors: 2, logs: 3 });
   });
 
   it("a newer version resets the collection; a stale mount is ignored", () => {

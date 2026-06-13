@@ -11,6 +11,9 @@ import {
 interface AppDataEntry {
   key: string;
   value: unknown;
+  revision: number;
+  /** Owner of a shared-partition key; null = collaborative / user partition. */
+  owner: string | null;
 }
 
 /**
@@ -20,6 +23,16 @@ interface AppDataEntry {
 interface AppDataPartition {
   appId: string;
   userId: string | null;
+}
+
+/**
+ * Who is performing a write, for shared-partition ownership enforcement.
+ * `callerCanOverrideOwner` is the caller's *policy decision* (e.g. app author
+ * or admin) handed to the model; the model only enforces the mechanism.
+ */
+interface AppDataCaller {
+  callerUserId: string;
+  callerCanOverrideOwner: boolean;
 }
 
 /**
@@ -33,19 +46,41 @@ interface AppDataPartition {
 class AppDataModel {
   static async get(
     params: AppDataPartition & { key: string },
-  ): Promise<unknown | null> {
+  ): Promise<AppDataEntry | null> {
     const [row] = await db
-      .select({ value: schema.appDataTable.value })
+      .select({
+        key: schema.appDataTable.key,
+        value: schema.appDataTable.value,
+        revision: schema.appDataTable.revision,
+        owner: schema.appDataTable.ownerUserId,
+      })
       .from(schema.appDataTable)
       .where(
         and(partitionFilter(params), eq(schema.appDataTable.key, params.key)),
       );
-    return row ? row.value : null;
+    return row ?? null;
   }
 
-  /** Upsert a value. Enforces caps; a new key beyond the limit fails cleanly. */
+  /**
+   * Upsert a value. Enforces caps; a new key beyond the limit fails cleanly.
+   *
+   * Optimistic concurrency via `expectedRevision` (opt-in):
+   *   - omitted    → last-writer-wins (unchanged); revision is still bumped.
+   *   - `=== 0`    → insert-if-absent; an existing key throws `ApiError(409)`.
+   *   - `> 0`      → key must exist with `revision === expectedRevision`, else
+   *                  `ApiError(409)`.
+   * Shared-partition ownership: a new key with `claimOwner` is owned by the
+   * caller; overwriting an owned key requires being the owner or holding
+   * override. All checks run under the per-app `FOR UPDATE` lock.
+   */
   static async set(
-    params: AppDataPartition & { key: string; value: unknown },
+    params: AppDataPartition &
+      AppDataCaller & {
+        key: string;
+        value: unknown;
+        expectedRevision?: number;
+        claimOwner?: boolean;
+      },
   ): Promise<AppDataEntry> {
     const { appId, userId, key, value } = params;
     if (key.length === 0 || key.length > APP_DATA_KEY_MAX_LENGTH) {
@@ -99,7 +134,11 @@ class AppDataModel {
       }
 
       const [existing] = await tx
-        .select({ id: schema.appDataTable.id })
+        .select({
+          id: schema.appDataTable.id,
+          revision: schema.appDataTable.revision,
+          owner: schema.appDataTable.ownerUserId,
+        })
         .from(schema.appDataTable)
         .where(and(partitionFilter(params), eq(schema.appDataTable.key, key)))
         .limit(1);
@@ -108,16 +147,43 @@ class AppDataModel {
       // lives in two partial indexes, which upsert conflict targets cannot
       // address; writers are already serialized by the app-row lock above.
       if (existing) {
+        // insert-if-absent contract: a present key is a conflict.
+        if (params.expectedRevision === 0) {
+          throw new ApiError(409, `key "${key}" already exists`);
+        }
+        if (
+          params.expectedRevision !== undefined &&
+          existing.revision !== params.expectedRevision
+        ) {
+          throw new ApiError(
+            409,
+            `key "${key}" is at revision ${existing.revision}, not ${params.expectedRevision}; re-read and retry`,
+          );
+        }
+        assertMayWriteOwnedKey({ params, owner: existing.owner, key });
+
         const [row] = await tx
           .update(schema.appDataTable)
-          .set({ value: normalizedValue, updatedAt: new Date() })
+          .set({
+            value: normalizedValue,
+            revision: existing.revision + 1,
+            updatedAt: new Date(),
+          })
           .where(eq(schema.appDataTable.id, existing.id))
-          .returning({
-            key: schema.appDataTable.key,
-            value: schema.appDataTable.value,
-          });
+          .returning(returningEntry);
         if (!row) throw new Error("failed to update app data entry");
         return row;
+      }
+
+      // key absent: a positive expectedRevision targeted a row that isn't there.
+      if (
+        params.expectedRevision !== undefined &&
+        params.expectedRevision > 0
+      ) {
+        throw new ApiError(
+          409,
+          `key "${key}" does not exist (expected revision ${params.expectedRevision})`,
+        );
       }
 
       const [{ value: entryCount }] = await tx
@@ -131,13 +197,17 @@ class AppDataModel {
         );
       }
 
+      // Ownership is a shared-partition concept; a claimed user-partition key
+      // would be redundant (already private), so never stamp an owner there.
+      const ownerUserId =
+        userId === null && params.claimOwner === true
+          ? params.callerUserId
+          : null;
+
       const [row] = await tx
         .insert(schema.appDataTable)
-        .values({ appId, userId, key, value: normalizedValue })
-        .returning({
-          key: schema.appDataTable.key,
-          value: schema.appDataTable.value,
-        });
+        .values({ appId, userId, key, value: normalizedValue, ownerUserId })
+        .returning(returningEntry);
       if (!row) throw new Error("failed to insert app data entry");
       return row;
     });
@@ -146,10 +216,7 @@ class AppDataModel {
   /** All entries in a partition, ordered by key. */
   static async list(params: AppDataPartition): Promise<AppDataEntry[]> {
     return await db
-      .select({
-        key: schema.appDataTable.key,
-        value: schema.appDataTable.value,
-      })
+      .select(returningEntry)
       .from(schema.appDataTable)
       .where(partitionFilter(params))
       .orderBy(asc(schema.appDataTable.key));
@@ -166,7 +233,7 @@ class AppDataModel {
   }
 
   static async delete(
-    params: AppDataPartition & { key: string },
+    params: AppDataPartition & AppDataCaller & { key: string },
   ): Promise<boolean> {
     return await withDbTransaction(async (tx) => {
       // take the same app-row lock as set(): its update-else-insert reads
@@ -177,11 +244,27 @@ class AppDataModel {
         .from(schema.appsTable)
         .where(eq(schema.appsTable.id, params.appId))
         .for("update");
-      const rows = await tx
-        .delete(schema.appDataTable)
+
+      const [existing] = await tx
+        .select({
+          id: schema.appDataTable.id,
+          owner: schema.appDataTable.ownerUserId,
+        })
+        .from(schema.appDataTable)
         .where(
           and(partitionFilter(params), eq(schema.appDataTable.key, params.key)),
         )
+        .limit(1);
+      if (!existing) return false;
+      assertMayWriteOwnedKey({
+        params,
+        owner: existing.owner,
+        key: params.key,
+      });
+
+      const rows = await tx
+        .delete(schema.appDataTable)
+        .where(eq(schema.appDataTable.id, existing.id))
         .returning({ id: schema.appDataTable.id });
       return rows.length > 0;
     });
@@ -191,6 +274,34 @@ class AppDataModel {
 // =============================================================================
 // Internal helpers
 // =============================================================================
+
+// The column projection every read/write returns, so the AppDataEntry shape
+// (key/value/revision/owner) is defined once.
+const returningEntry = {
+  key: schema.appDataTable.key,
+  value: schema.appDataTable.value,
+  revision: schema.appDataTable.revision,
+  owner: schema.appDataTable.ownerUserId,
+};
+
+// Shared-partition ownership gate. An unowned key (owner null — including all
+// pre-migration rows) is collaborative and writable by anyone; an owned one is
+// writable only by its owner or a caller granted override. User-partition keys
+// never carry an owner, so this is a no-op there.
+function assertMayWriteOwnedKey(args: {
+  params: AppDataCaller;
+  owner: string | null;
+  key: string;
+}): void {
+  const { owner, params, key } = args;
+  if (
+    owner !== null &&
+    owner !== params.callerUserId &&
+    !params.callerCanOverrideOwner
+  ) {
+    throw new ApiError(403, `key "${key}" is owned by another user`);
+  }
+}
 
 // `eq(column, null)` compiles to `= NULL`, which matches nothing — the shared
 // partition must be addressed with IS NULL.

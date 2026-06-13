@@ -9,6 +9,7 @@ import {
   TOOL_RENDER_APP_SHORT_NAME,
   TOOL_UPDATE_APP_SHORT_NAME,
 } from "@archestra/shared";
+import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import { getAppTemplates, resolveCreateAppHtml } from "@/app-templates";
 import mcpClient, { type TokenAuthContext } from "@/clients/mcp-client";
@@ -16,6 +17,7 @@ import logger from "@/logging";
 import {
   AppModel,
   AppRenderDiagnosticsModel,
+  AppRenderScreenshotModel,
   AppTeamModel,
   AppVersionModel,
 } from "@/models";
@@ -88,9 +90,9 @@ const templateIds = getAppTemplates()
 // enforces it (APP_PLATFORM_CSP) so the two can never disagree.
 const APP_AUTHORING_CONTRACT = `Author PURE UI HTML against the Archestra Apps SDK the platform injects at render time as window.archestra — never import an SDK, read __ARCHESTRA_APP_SDK_URL__, or wire postMessage yourself (that glue is provided; hand-rolling it breaks the app). window.archestra exists synchronously; await archestra.ready (a promise) before the first call. Every archestra method below is async — await it; archestra.user is the one plain property:
 - archestra.user — the authenticated viewer ({id, name}), readable synchronously after ready, so no login flow is needed.
-- archestra.storage.user.{get,set,list,delete} (all async) persist state private to each viewer (favorites, drafts, settings — the right default); archestra.storage.shared.* is one store all viewers share. Values are plain JSON: set(key, value) stores the value as-is and get(key) resolves to it unchanged (null for an absent key; top-level null is not storable), and list() resolves to [{key, value}] entries (NOT an array of keys) in no guaranteed order — sort client-side.
+- archestra.storage.user.{get,set,list,delete} (all async) persist state private to each viewer (favorites, drafts, settings — the right default); archestra.storage.shared.* is one store all viewers share. Values are plain JSON (top-level null is not storable; use delete to clear a key). get(key) resolves to an entry {value, revision, owner} or null when absent; list() resolves to [{key, value, revision, owner}] (NOT an array of keys) in no guaranteed order — sort client-side. set(key, value) resolves to {revision, owner}. For multi-user writes use optimistic concurrency: pass set(key, value, {ifRevision}) with the revision you last read — a stale write rejects with {code: "conflict"} (re-read and retry). set(key, value, {owned: true}) claims a new shared key for the viewer so only they (or the app's author/admins) may overwrite it; an unauthorized write rejects with {code: "forbidden"}. Generate ids for new records with crypto.randomUUID().
 - archestra.tools.call(name, args) (async) calls an assigned tool as the viewing user with their credentials — pass name exactly as archestra.tools.list() returns it (the full assigned name, e.g. github__list_issues) — and it rejects with {code: "auth_required", url} when that tool's server still needs connecting (render the url as a link and let the user retry). archestra.tools.list() returns the assigned tools.
-- archestra.ui.openLink(url), archestra.ui.requestDisplayMode(mode), and archestra.chat.sendMessage(text) reach the host.
+- archestra.ui.openLink(url) and archestra.ui.requestDisplayMode(mode) reach the host; archestra.context is the running app's {appId, version} (a plain property, readable after ready).
 TOOLS-ONLY DATA RULE: ALL external data must come through assigned MCP tools — find one with search_tools, assign it via the tools param, call it with archestra.tools.call. The sandbox blocks network access (connect-src 'none'): fetch/XHR/WebSocket to any external API WILL FAIL and there is no per-app CSP override. The one exception is static assets (scripts, styles, fonts, images) from the platform CDN allowlist (${APP_PLATFORM_CSP_RESOURCE_DOMAINS.join(", ")}) — use it for client-side libraries, never as a data channel. A platform stylesheet is also injected: style against its theme variables (e.g. --color-text-primary/-secondary, --color-background-primary/-secondary, --color-border-primary, --color-accent, --border-radius-md, --font-sans/-mono; light/dark aware) and its .arch-* components (.arch-card, .arch-btn with --primary/--ghost, .arch-input, .arch-badge, .arch-spinner, .arch-tabs) — write only app-specific CSS, never a full theme, and never <link> the platform stylesheet yourself.`;
 
 // Authoring-loop guidance, honest about what is and isn't available outside the
@@ -207,6 +209,11 @@ const GetAppDiagnosticsOutputSchema = z.object({
     .describe("The rendered version, or the current head when none observed."),
   entries: z.array(z.object({ type: z.string(), message: z.string() })),
   renderedAt: z.string().nullable(),
+  screenshot: z
+    .boolean()
+    .describe(
+      "Whether a screenshot of the render is attached as an image to this result.",
+    ),
 });
 
 const UpdateAppSchema = z.strictObject({
@@ -920,6 +927,7 @@ When viewed in chat the app's head version is rendered inline automatically; its
             version: head,
             entries: [],
             renderedAt: null,
+            screenshot: false,
           },
           `No render of app "${safeName}" version ${head} has been observed for you yet. Open or re-render the app, then check again.`,
         );
@@ -935,19 +943,36 @@ When viewed in chat the app's head version is rendered inline automatically; its
         type: entry.type,
         message: escapeAngleBrackets(entry.message),
       }));
+      // Attach the render screenshot (if one was captured for this version) as an
+      // image so the model can judge how the app actually looks, not just whether
+      // it threw. Only the current version's capture is relevant.
+      const shot = await AppRenderScreenshotModel.getForUser(
+        app.id,
+        context.userId,
+      );
+      const screenshot = shot && shot.version >= snapshot.version ? shot : null;
       const text =
         status === "errors"
           ? `App "${safeName}" version ${snapshot.version} (rendered ${renderedAt}) reported ${capped.length} diagnostic(s):\n${DIAGNOSTICS_BLOCK_OPEN}\n${DIAGNOSTICS_UNTRUSTED_PREAMBLE}\n\n${formatDiagnosticEntryLines(snapshot.entries)}\n${DIAGNOSTICS_BLOCK_CLOSE}`
           : `App "${safeName}" version ${snapshot.version} rendered clean (no runtime errors or CSP violations) at ${renderedAt}.`;
-      return structuredSuccessResult(
-        {
-          status,
-          version: snapshot.version,
-          entries: safeEntries,
-          renderedAt,
-        },
-        text,
-      );
+      const structuredContent = {
+        status,
+        version: snapshot.version,
+        entries: safeEntries,
+        renderedAt,
+        screenshot: screenshot !== null,
+      };
+      const content: CallToolResult["content"] = [
+        { type: "text" as const, text },
+      ];
+      if (screenshot) {
+        content.push({
+          type: "image" as const,
+          data: screenshot.data,
+          mimeType: screenshot.mimeType,
+        });
+      }
+      return { content, structuredContent, isError: false };
     },
   }),
   defineArchestraTool({

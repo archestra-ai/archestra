@@ -1838,6 +1838,7 @@ Required RBAC permission: `app:read`
 | `entries[].type` | `string` | Yes |  |
 | `entries[].message` | `string` | Yes |  |
 | `renderedAt` | `string \| null` | Yes |  |
+| `screenshot` | `boolean` | Yes | Whether a screenshot of the render is attached as an image to this result. |
 
 #### delete_app
 
@@ -1866,6 +1867,8 @@ Required RBAC permission: `app:read`
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `value` | `any` | Yes |  |
+| `revision` | `integer \| null` | Yes |  |
+| `owner` | `string \| null` | Yes | User id owning a shared key, or null if collaborative. |
 
 #### app_data_set
 
@@ -1878,12 +1881,16 @@ Required RBAC permission: `app:update`
 | `key` | `string` | Yes | The data store key. |
 | `value` | `any` | Yes | Any JSON-serializable value except null (use app_data_delete to clear a key). Pass objects/arrays directly — get returns exactly what was stored, no JSON.stringify needed. |
 | `scope` | `"user" \| "app"` | No | Storage partition: "user" (default) is private to the viewing user, "app" is shared by everyone using the app. |
+| `expectedRevision` | `integer` | No | Optimistic concurrency guard. Omit for last-writer-wins. 0 = create only if the key is absent. A positive value = overwrite only if the key is still at that revision (from a prior get/set); otherwise the write is rejected as a conflict. |
+| `claimOwner` | `boolean` | No | Shared-scope only: when creating a NEW key, claim it so only you (or an app admin/author) may later overwrite or delete it. Has no effect on the "user" scope or on an existing key. |
 
 ##### Output
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `key` | `string` | Yes |  |
+| `revision` | `integer` | Yes |  |
+| `owner` | `string \| null` | Yes | User id owning a shared key, or null if collaborative. |
 
 #### app_data_list
 
@@ -1902,6 +1909,8 @@ Required RBAC permission: `app:read`
 | `entries` | `object[]` | Yes |  |
 | `entries[].key` | `string` | Yes |  |
 | `entries[].value` | `any` | Yes |  |
+| `entries[].revision` | `integer` | Yes |  |
+| `entries[].owner` | `string \| null` | Yes | User id owning a shared key, or null if collaborative. |
 
 #### app_data_delete
 

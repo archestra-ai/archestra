@@ -13,7 +13,23 @@ export type AppDiagnosticType =
   | "error"
   | "unhandledrejection"
   | "console.error"
-  | "csp-violation";
+  | "csp-violation"
+  | "console.log"
+  | "console.warn"
+  | "console.info";
+
+// Error-class diagnostics signal an actual failure (rendered prominently);
+// the remaining console.{log,warn,info} types are ordinary log output.
+const ERROR_DIAGNOSTIC_TYPES: ReadonlySet<AppDiagnosticType> = new Set([
+  "error",
+  "unhandledrejection",
+  "console.error",
+  "csp-violation",
+]);
+
+export function isErrorDiagnostic(type: AppDiagnosticType): boolean {
+  return ERROR_DIAGNOSTIC_TYPES.has(type);
+}
 
 export interface AppDiagnosticEntry {
   type: AppDiagnosticType;
@@ -37,6 +53,9 @@ const DIAGNOSTIC_TYPES: readonly AppDiagnosticType[] = [
   "unhandledrejection",
   "console.error",
   "csp-violation",
+  "console.log",
+  "console.warn",
+  "console.info",
 ];
 
 /**
@@ -87,17 +106,26 @@ export function parseForwardedDiagnostic(
 
 type Listener = () => void;
 
+/** Per-app diagnostic counts split into error-class vs ordinary log output. */
+export interface AppDiagnosticCounts {
+  errors: number;
+  logs: number;
+}
+
 const diagnosticsByApp = new Map<string, AppDiagnostics>();
 const listeners = new Set<Listener>();
 // Immutable snapshot of per-app entry counts for useSyncExternalStore.
-let countsSnapshot: ReadonlyMap<string, number> = new Map();
+let countsSnapshot: ReadonlyMap<string, AppDiagnosticCounts> = new Map();
 
 function emit() {
   countsSnapshot = new Map(
-    [...diagnosticsByApp.entries()].map(([appId, d]) => [
-      appId,
-      d.entries.length,
-    ]),
+    [...diagnosticsByApp.entries()].map(([appId, d]) => {
+      let errors = 0;
+      for (const entry of d.entries) {
+        if (isErrorDiagnostic(entry.type)) errors += 1;
+      }
+      return [appId, { errors, logs: d.entries.length - errors }];
+    }),
   );
   for (const listener of listeners) listener();
 }
@@ -166,7 +194,10 @@ export function subscribeAppDiagnostics(listener: Listener): () => void {
   return () => listeners.delete(listener);
 }
 
-export function getAppDiagnosticCounts(): ReadonlyMap<string, number> {
+export function getAppDiagnosticCounts(): ReadonlyMap<
+  string,
+  AppDiagnosticCounts
+> {
   return countsSnapshot;
 }
 

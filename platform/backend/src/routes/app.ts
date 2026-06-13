@@ -12,6 +12,7 @@ import logger from "@/logging";
 import {
   AppModel,
   AppRenderDiagnosticsModel,
+  AppRenderScreenshotModel,
   AppTeamModel,
   AppToolModel,
   AppVersionModel,
@@ -434,6 +435,65 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
         version: body.version,
         entries: body.entries,
+      });
+      return reply.send({ success: true });
+    },
+  );
+
+  fastify.post(
+    "/api/apps/:appId/screenshot",
+    {
+      schema: {
+        operationId: RouteId.PostAppRenderScreenshot,
+        description:
+          "Record the calling user's latest render screenshot for an app (a base64 image data URL the app self-captured).",
+        tags: ["Apps"],
+        params: z.object({ appId: UuidIdSchema }),
+        body: z.object({
+          version: z.number().int().positive(),
+          // ~2MB of base64 covers a downscaled JPEG; the SDK caps before posting.
+          dataUrl: z
+            .string()
+            .max(2_000_000)
+            .regex(
+              /^data:image\/(png|jpeg|webp);base64,/,
+              "must be a base64 image data URL",
+            ),
+        }),
+        response: constructResponseSchema(z.object({ success: z.boolean() })),
+      },
+    },
+    async ({ params: { appId }, body, user, organizationId }, reply) => {
+      // Same trust model as diagnostics: the trusted host page posts this, never
+      // the iframe, but the appId is still re-checked and user_id comes only from
+      // the session.
+      const app = await loadViewableApp({
+        appId,
+        userId: user.id,
+        organizationId,
+      });
+      if (body.version > app.latestVersion) {
+        throw new ApiError(
+          400,
+          `version ${body.version} exceeds the app's latest version ${app.latestVersion}.`,
+        );
+      }
+      const match = /^data:(image\/(?:png|jpeg|webp));base64,(.+)$/s.exec(
+        body.dataUrl,
+      );
+      if (!match) {
+        throw new ApiError(400, "invalid image data URL.");
+      }
+      const [, mimeType, data] = match;
+      if (!/^[A-Za-z0-9+/]+={0,2}$/.test(data)) {
+        throw new ApiError(400, "image data is not valid base64.");
+      }
+      await AppRenderScreenshotModel.record({
+        appId,
+        userId: user.id,
+        version: body.version,
+        mimeType,
+        data,
       });
       return reply.send({ success: true });
     },

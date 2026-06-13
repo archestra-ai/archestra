@@ -3,7 +3,7 @@ title: MS Teams
 category: Agents
 order: 5
 description: Connect Archestra agents to Microsoft Teams channels
-lastUpdated: 2026-06-09
+lastUpdated: 2026-06-12
 ---
 
 <!--
@@ -106,9 +106,11 @@ Admins can view autoprovisioned users on the **Settings → Members** page — f
 
 ## Attachments
 
-Messages sent to the bot can include file attachments (images, PDFs, documents, etc.). Attachments are automatically downloaded and passed to the agent for processing. Image attachments are included inline in the agent's context; non-image attachments are noted but not processed as inline content.
+Messages sent to the bot can include file attachments (images, PDFs, documents, etc.) in channels, group chats, and direct messages. Attachments are automatically downloaded and passed to the agent for processing. Image attachments are included inline in the agent's context; non-image attachments are noted but not processed as inline content.
 
 Adaptive Cards and other Teams-specific card types are not treated as file attachments.
+
+> If you set up the bot with an older manifest, re-upload the latest manifest to enable file attachments in 1:1 direct messages. Channel and group-chat attachments work regardless of the manifest version.
 
 **Limits:**
 - Max 20 attachments per message

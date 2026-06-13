@@ -27,7 +27,7 @@ import {
   type AppSdkTool,
   injectAppSdk,
 } from "@/services/apps/app-sdk-injection";
-import { APP_DATA_SHORT_NAMES } from "@/services/apps/app-tool-runtime-gate";
+import { APP_RUNTIME_BUILTIN_SHORT_NAMES } from "@/services/apps/app-tool-runtime-gate";
 import { APP_PLATFORM_CSP } from "@/services/apps/app-ui-policy";
 import type { CommonToolCall } from "@/types";
 import { appOwner } from "@/types";
@@ -151,12 +151,13 @@ export async function createAppServer(
   server.setRequestHandler(
     CallToolRequestSchema,
     async ({ params: { name, arguments: args } }) => {
-      // App Data Store tools run in-process with the route-bound appId so they
-      // can only ever touch this app's own store. Other Archestra tools (the
-      // management/chat surface) are NOT dispatchable from an app runtime.
+      // Reserved app-runtime built-ins (App Data Store + the LLM completion)
+      // run in-process with the route-bound appId so they can only ever act for
+      // this app. Other Archestra tools (the management/chat surface) are NOT
+      // dispatchable from an app runtime.
       if (archestraMcpBranding.isToolName(name)) {
         const shortName = archestraMcpBranding.getToolShortName(name);
-        if (!shortName || !APP_DATA_SHORT_NAMES.has(shortName)) {
+        if (!shortName || !APP_RUNTIME_BUILTIN_SHORT_NAMES.has(shortName)) {
           throw {
             code: -32601,
             message: `Tool "${name}" is not available to apps.`,
@@ -278,10 +279,10 @@ async function buildAppToolList(appId: string): Promise<McpListTool[]> {
     };
   });
 
-  const appDataTools = getArchestraMcpTools().filter((tool) => {
+  const builtInTools = getArchestraMcpTools().filter((tool) => {
     const shortName = archestraMcpBranding.getToolShortName(tool.name);
-    return shortName !== null && APP_DATA_SHORT_NAMES.has(shortName);
+    return shortName !== null && APP_RUNTIME_BUILTIN_SHORT_NAMES.has(shortName);
   });
 
-  return [...upstreamTools, ...appDataTools];
+  return [...upstreamTools, ...builtInTools];
 }

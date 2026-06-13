@@ -181,4 +181,59 @@ describe("Apps SDK runtime", () => {
       message: "boom: bad arguments",
     });
   });
+
+  test("llm.complete wires prompt/opts through the reserved tool and returns text", async () => {
+    results.push({
+      content: [{ type: "text", text: "a summary" }],
+      structuredContent: { text: "a summary" },
+    });
+    const text = await archestra.llm.complete("summarize this", {
+      system: "be terse",
+      jsonMode: false,
+    });
+    expect(text).toBe("a summary");
+    expect(calls.pop()).toEqual({
+      name: "archestra__llm_complete",
+      arguments: {
+        prompt: "summarize this",
+        system: "be terse",
+        jsonMode: false,
+      },
+    });
+  });
+
+  test("llm.complete maps llm_quota to a typed error code", async () => {
+    results.push({
+      isError: true,
+      content: [{ type: "text", text: "limit reached" }],
+      _meta: {
+        archestraError: { type: "llm_quota", message: "limit reached" },
+      },
+    });
+    await expect(archestra.llm.complete("x")).rejects.toMatchObject({
+      code: "llm_quota",
+    });
+  });
+
+  test("llm.complete maps llm_unavailable to a typed error code", async () => {
+    results.push({
+      isError: true,
+      content: [],
+      structuredContent: {
+        archestraError: { type: "llm_unavailable", message: "no key" },
+      },
+    });
+    await expect(archestra.llm.complete("x")).rejects.toMatchObject({
+      code: "llm_unavailable",
+    });
+  });
+
+  test("llm.prompt builds a string with no host round-trip", () => {
+    const before = calls.length;
+    const built = archestra.llm.prompt`Hello ${"world"} (${42})`;
+    expect(built).toBe("Hello world (42)");
+    // a template with no interpolations returns the literal unchanged
+    expect(archestra.llm.prompt`just text`).toBe("just text");
+    expect(calls.length).toBe(before);
+  });
 });

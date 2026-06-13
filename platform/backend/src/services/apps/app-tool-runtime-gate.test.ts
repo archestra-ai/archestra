@@ -3,6 +3,7 @@ import {
   CONTEXT_TEAM_IDS,
   getArchestraToolFullName,
   TOOL_APP_DATA_GET_SHORT_NAME,
+  TOOL_APP_LLM_COMPLETE_SHORT_NAME,
   TOOL_CREATE_APP_SHORT_NAME,
 } from "@archestra/shared";
 import { expect, test } from "@/test";
@@ -111,7 +112,7 @@ test("refuses a tool not assigned to the app", async ({
   if (!decision.allowed) expect(decision.reason).toContain("not assigned");
 });
 
-test("refuses a management Archestra tool, allows the data store", async ({
+test("refuses a management Archestra tool, allows the reserved app built-ins", async ({
   makeOrganization,
   makeUser,
   makeApp,
@@ -145,7 +146,17 @@ test("refuses a management Archestra tool, allows the data store", async ({
     toolInput: {},
     ...BASE,
   });
-  expect(dataStore).toEqual({ allowed: true, kind: "app-data" });
+  expect(dataStore).toEqual({ allowed: true, kind: "app-builtin" });
+
+  const llm = await gateAppToolCall({
+    appId,
+    organizationId,
+    userId,
+    toolName: getArchestraToolFullName(TOOL_APP_LLM_COMPLETE_SHORT_NAME),
+    toolInput: {},
+    ...BASE,
+  });
+  expect(llm).toEqual({ allowed: true, kind: "app-builtin" });
 });
 
 test("refuses a tool whose visibility excludes the app surface", async ({

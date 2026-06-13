@@ -157,6 +157,7 @@ const toolGroups: Record<ArchestraToolShortName, ToolGroup> = {
   app_data_set: ToolGroup.Apps,
   app_data_list: ToolGroup.Apps,
   app_data_delete: ToolGroup.Apps,
+  llm_complete: ToolGroup.Apps,
 };
 
 // === Script entry point ===

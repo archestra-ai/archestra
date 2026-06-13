@@ -19,6 +19,10 @@ import {
   toolEntries as appDataToolEntries,
   tools as appDataTools,
 } from "./app-data";
+import {
+  toolEntries as appLlmToolEntries,
+  tools as appLlmTools,
+} from "./app-llm";
 import { toolEntries as appToolEntries, tools as appTools } from "./apps";
 import { archestraMcpBranding } from "./branding";
 import { toolEntries as chatToolEntries, tools as chatTools } from "./chat";
@@ -104,6 +108,7 @@ const toolEntries: Partial<
   ...sandboxToolEntries,
   ...appToolEntries,
   ...appDataToolEntries,
+  ...appLlmToolEntries,
 };
 
 // App tools are registered above so they remain unit-testable, but when the
@@ -111,6 +116,7 @@ const toolEntries: Partial<
 const appToolFullNames = new Set<string>([
   ...Object.keys(appToolEntries),
   ...Object.keys(appDataToolEntries),
+  ...Object.keys(appLlmToolEntries),
 ]);
 
 export function getArchestraMcpTools() {
@@ -129,7 +135,9 @@ export function getArchestraMcpTools() {
     ...runToolTools,
     ...skillTools,
     ...(config.skillsSandbox.enabled ? sandboxTools : []),
-    ...(config.apps.enabled ? [...appTools, ...appDataTools] : []),
+    ...(config.apps.enabled
+      ? [...appTools, ...appDataTools, ...appLlmTools]
+      : []),
   ];
 
   if (archestraMcpBranding.toolPrefix === ARCHESTRA_TOOL_PREFIX) {

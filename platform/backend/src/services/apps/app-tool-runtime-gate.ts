@@ -4,6 +4,7 @@ import {
   TOOL_APP_DATA_GET_SHORT_NAME,
   TOOL_APP_DATA_LIST_SHORT_NAME,
   TOOL_APP_DATA_SET_SHORT_NAME,
+  TOOL_APP_LLM_COMPLETE_SHORT_NAME,
 } from "@archestra/shared";
 import type { McpUiToolMeta } from "@modelcontextprotocol/ext-apps";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
@@ -27,8 +28,14 @@ export const APP_DATA_SHORT_NAMES = new Set<string>([
   TOOL_APP_DATA_DELETE_SHORT_NAME,
 ]);
 
+/** Reserved Archestra built-ins an app runtime may dispatch via the SDK. */
+export const APP_RUNTIME_BUILTIN_SHORT_NAMES = new Set<string>([
+  ...APP_DATA_SHORT_NAMES,
+  TOOL_APP_LLM_COMPLETE_SHORT_NAME,
+]);
+
 type AppToolGateDecision =
-  | { allowed: true; kind: "app-data" }
+  | { allowed: true; kind: "app-builtin" }
   | { allowed: true; kind: "upstream"; resolvedToolName: string }
   | { allowed: false; code: number; reason: string };
 
@@ -64,12 +71,13 @@ export async function gateAppToolCall(params: {
 }): Promise<AppToolGateDecision> {
   const { appId, organizationId, userId, toolName, toolInput } = params;
 
-  // Archestra built-ins: only the App Data Store tools are dispatchable from an
-  // app; they bypass invocation policy (consistent with the rest of the engine).
+  // Archestra built-ins: only the reserved app-runtime tools (App Data Store +
+  // the LLM completion) are dispatchable from an app; they bypass invocation
+  // policy (consistent with the rest of the engine).
   if (archestraMcpBranding.isToolName(toolName)) {
     const shortName = archestraMcpBranding.getToolShortName(toolName);
-    if (shortName && APP_DATA_SHORT_NAMES.has(shortName)) {
-      return { allowed: true, kind: "app-data" };
+    if (shortName && APP_RUNTIME_BUILTIN_SHORT_NAMES.has(shortName)) {
+      return { allowed: true, kind: "app-builtin" };
     }
     return {
       allowed: false,

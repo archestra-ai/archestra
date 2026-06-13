@@ -35822,6 +35822,21 @@
                                   "name"
                                 ],
                                 "additionalProperties": false
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "name": {
+                                    "type": "string",
+                                    "enum": [
+                                      "app-runtime-llm-agent"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "name"
+                                ],
+                                "additionalProperties": false
                               }
                             ]
                           },
@@ -36580,6 +36595,20 @@
                         "required": [
                           "name"
                         ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "enum": [
+                              "app-runtime-llm-agent"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "name"
+                        ]
                       }
                     ]
                   },
@@ -36866,6 +36895,21 @@
                               "type": "string",
                               "enum": [
                                 "chat-title-generation-subagent"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "name"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "enum": [
+                                "app-runtime-llm-agent"
                               ]
                             }
                           },
@@ -37686,6 +37730,21 @@
                               "name"
                             ],
                             "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string",
+                                "enum": [
+                                  "app-runtime-llm-agent"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "name"
+                            ],
+                            "additionalProperties": false
                           }
                         ]
                       },
@@ -38417,6 +38476,21 @@
                             "name"
                           ],
                           "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "enum": [
+                                "app-runtime-llm-agent"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "name"
+                          ],
+                          "additionalProperties": false
                         }
                       ]
                     },
@@ -39141,6 +39215,21 @@
                               "type": "string",
                               "enum": [
                                 "chat-title-generation-subagent"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "name"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "enum": [
+                                "app-runtime-llm-agent"
                               ]
                             }
                           },
@@ -40225,6 +40314,21 @@
                                 "name"
                               ],
                               "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "name": {
+                                  "type": "string",
+                                  "enum": [
+                                    "app-runtime-llm-agent"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "name"
+                              ],
+                              "additionalProperties": false
                             }
                           ]
                         },
@@ -41003,6 +41107,21 @@
                             "name"
                           ],
                           "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "enum": [
+                                "app-runtime-llm-agent"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "name"
+                          ],
+                          "additionalProperties": false
                         }
                       ]
                     },
@@ -41713,6 +41832,20 @@
                         "required": [
                           "name"
                         ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "enum": [
+                              "app-runtime-llm-agent"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "name"
+                        ]
                       }
                     ]
                   },
@@ -42004,6 +42137,21 @@
                               "type": "string",
                               "enum": [
                                 "chat-title-generation-subagent"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "name"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "enum": [
+                                "app-runtime-llm-agent"
                               ]
                             }
                           },
@@ -43019,6 +43167,21 @@
                               "type": "string",
                               "enum": [
                                 "chat-title-generation-subagent"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "name"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "enum": [
+                                "app-runtime-llm-agent"
                               ]
                             }
                           },
@@ -44363,6 +44526,21 @@
                               "type": "string",
                               "enum": [
                                 "chat-title-generation-subagent"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "name"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "enum": [
+                                "app-runtime-llm-agent"
                               ]
                             }
                           },
@@ -98477,7 +98655,8 @@
                                   "schedule-trigger",
                                   "knowledge:embedding",
                                   "knowledge:reranker",
-                                  "knowledge:query-expansion"
+                                  "knowledge:query-expansion",
+                                  "app:llm_complete"
                                 ]
                               },
                               "authMethod": {
@@ -98920,7 +99099,8 @@
                                   "schedule-trigger",
                                   "knowledge:embedding",
                                   "knowledge:reranker",
-                                  "knowledge:query-expansion"
+                                  "knowledge:query-expansion",
+                                  "app:llm_complete"
                                 ]
                               },
                               "authMethod": {
@@ -99780,7 +99960,8 @@
                                   "schedule-trigger",
                                   "knowledge:embedding",
                                   "knowledge:reranker",
-                                  "knowledge:query-expansion"
+                                  "knowledge:query-expansion",
+                                  "app:llm_complete"
                                 ]
                               },
                               "authMethod": {
@@ -100337,7 +100518,8 @@
                                   "schedule-trigger",
                                   "knowledge:embedding",
                                   "knowledge:reranker",
-                                  "knowledge:query-expansion"
+                                  "knowledge:query-expansion",
+                                  "app:llm_complete"
                                 ]
                               },
                               "authMethod": {
@@ -100780,7 +100962,8 @@
                                   "schedule-trigger",
                                   "knowledge:embedding",
                                   "knowledge:reranker",
-                                  "knowledge:query-expansion"
+                                  "knowledge:query-expansion",
+                                  "app:llm_complete"
                                 ]
                               },
                               "authMethod": {
@@ -101223,7 +101406,8 @@
                                   "schedule-trigger",
                                   "knowledge:embedding",
                                   "knowledge:reranker",
-                                  "knowledge:query-expansion"
+                                  "knowledge:query-expansion",
+                                  "app:llm_complete"
                                 ]
                               },
                               "authMethod": {
@@ -103489,7 +103673,8 @@
                                   "schedule-trigger",
                                   "knowledge:embedding",
                                   "knowledge:reranker",
-                                  "knowledge:query-expansion"
+                                  "knowledge:query-expansion",
+                                  "app:llm_complete"
                                 ]
                               },
                               "authMethod": {
@@ -103932,7 +104117,8 @@
                                   "schedule-trigger",
                                   "knowledge:embedding",
                                   "knowledge:reranker",
-                                  "knowledge:query-expansion"
+                                  "knowledge:query-expansion",
+                                  "app:llm_complete"
                                 ]
                               },
                               "authMethod": {
@@ -104375,7 +104561,8 @@
                                   "schedule-trigger",
                                   "knowledge:embedding",
                                   "knowledge:reranker",
-                                  "knowledge:query-expansion"
+                                  "knowledge:query-expansion",
+                                  "app:llm_complete"
                                 ]
                               },
                               "authMethod": {
@@ -104818,7 +105005,8 @@
                                   "schedule-trigger",
                                   "knowledge:embedding",
                                   "knowledge:reranker",
-                                  "knowledge:query-expansion"
+                                  "knowledge:query-expansion",
+                                  "app:llm_complete"
                                 ]
                               },
                               "authMethod": {
@@ -105261,7 +105449,8 @@
                                   "schedule-trigger",
                                   "knowledge:embedding",
                                   "knowledge:reranker",
-                                  "knowledge:query-expansion"
+                                  "knowledge:query-expansion",
+                                  "app:llm_complete"
                                 ]
                               },
                               "authMethod": {
@@ -105704,7 +105893,8 @@
                                   "schedule-trigger",
                                   "knowledge:embedding",
                                   "knowledge:reranker",
-                                  "knowledge:query-expansion"
+                                  "knowledge:query-expansion",
+                                  "app:llm_complete"
                                 ]
                               },
                               "authMethod": {
@@ -106147,7 +106337,8 @@
                                   "schedule-trigger",
                                   "knowledge:embedding",
                                   "knowledge:reranker",
-                                  "knowledge:query-expansion"
+                                  "knowledge:query-expansion",
+                                  "app:llm_complete"
                                 ]
                               },
                               "authMethod": {
@@ -106579,7 +106770,8 @@
                                   "schedule-trigger",
                                   "knowledge:embedding",
                                   "knowledge:reranker",
-                                  "knowledge:query-expansion"
+                                  "knowledge:query-expansion",
+                                  "app:llm_complete"
                                 ]
                               },
                               "authMethod": {
@@ -107011,7 +107203,8 @@
                                   "schedule-trigger",
                                   "knowledge:embedding",
                                   "knowledge:reranker",
-                                  "knowledge:query-expansion"
+                                  "knowledge:query-expansion",
+                                  "app:llm_complete"
                                 ]
                               },
                               "authMethod": {
@@ -107454,7 +107647,8 @@
                                   "schedule-trigger",
                                   "knowledge:embedding",
                                   "knowledge:reranker",
-                                  "knowledge:query-expansion"
+                                  "knowledge:query-expansion",
+                                  "app:llm_complete"
                                 ]
                               },
                               "authMethod": {
@@ -107897,7 +108091,8 @@
                                   "schedule-trigger",
                                   "knowledge:embedding",
                                   "knowledge:reranker",
-                                  "knowledge:query-expansion"
+                                  "knowledge:query-expansion",
+                                  "app:llm_complete"
                                 ]
                               },
                               "authMethod": {
@@ -108340,7 +108535,8 @@
                                   "schedule-trigger",
                                   "knowledge:embedding",
                                   "knowledge:reranker",
-                                  "knowledge:query-expansion"
+                                  "knowledge:query-expansion",
+                                  "app:llm_complete"
                                 ]
                               },
                               "authMethod": {
@@ -108783,7 +108979,8 @@
                                   "schedule-trigger",
                                   "knowledge:embedding",
                                   "knowledge:reranker",
-                                  "knowledge:query-expansion"
+                                  "knowledge:query-expansion",
+                                  "app:llm_complete"
                                 ]
                               },
                               "authMethod": {
@@ -109452,7 +109649,8 @@
                                   "schedule-trigger",
                                   "knowledge:embedding",
                                   "knowledge:reranker",
-                                  "knowledge:query-expansion"
+                                  "knowledge:query-expansion",
+                                  "app:llm_complete"
                                 ]
                               },
                               "authMethod": {
@@ -110590,7 +110788,8 @@
                 "schedule-trigger",
                 "knowledge:embedding",
                 "knowledge:reranker",
-                "knowledge:query-expansion"
+                "knowledge:query-expansion",
+                "app:llm_complete"
               ]
             },
             "in": "query",
@@ -110698,7 +110897,8 @@
                               "schedule-trigger",
                               "knowledge:embedding",
                               "knowledge:reranker",
-                              "knowledge:query-expansion"
+                              "knowledge:query-expansion",
+                              "app:llm_complete"
                             ]
                           },
                           "sources": {
@@ -110718,7 +110918,8 @@
                                 "schedule-trigger",
                                 "knowledge:embedding",
                                 "knowledge:reranker",
-                                "knowledge:query-expansion"
+                                "knowledge:query-expansion",
+                                "app:llm_complete"
                               ]
                             }
                           },
@@ -111804,7 +112005,8 @@
                             "schedule-trigger",
                             "knowledge:embedding",
                             "knowledge:reranker",
-                            "knowledge:query-expansion"
+                            "knowledge:query-expansion",
+                            "app:llm_complete"
                           ]
                         },
                         "authMethod": {
@@ -112247,7 +112449,8 @@
                             "schedule-trigger",
                             "knowledge:embedding",
                             "knowledge:reranker",
-                            "knowledge:query-expansion"
+                            "knowledge:query-expansion",
+                            "app:llm_complete"
                           ]
                         },
                         "authMethod": {
@@ -113107,7 +113310,8 @@
                             "schedule-trigger",
                             "knowledge:embedding",
                             "knowledge:reranker",
-                            "knowledge:query-expansion"
+                            "knowledge:query-expansion",
+                            "app:llm_complete"
                           ]
                         },
                         "authMethod": {
@@ -113664,7 +113868,8 @@
                             "schedule-trigger",
                             "knowledge:embedding",
                             "knowledge:reranker",
-                            "knowledge:query-expansion"
+                            "knowledge:query-expansion",
+                            "app:llm_complete"
                           ]
                         },
                         "authMethod": {
@@ -114107,7 +114312,8 @@
                             "schedule-trigger",
                             "knowledge:embedding",
                             "knowledge:reranker",
-                            "knowledge:query-expansion"
+                            "knowledge:query-expansion",
+                            "app:llm_complete"
                           ]
                         },
                         "authMethod": {
@@ -114550,7 +114756,8 @@
                             "schedule-trigger",
                             "knowledge:embedding",
                             "knowledge:reranker",
-                            "knowledge:query-expansion"
+                            "knowledge:query-expansion",
+                            "app:llm_complete"
                           ]
                         },
                         "authMethod": {
@@ -116816,7 +117023,8 @@
                             "schedule-trigger",
                             "knowledge:embedding",
                             "knowledge:reranker",
-                            "knowledge:query-expansion"
+                            "knowledge:query-expansion",
+                            "app:llm_complete"
                           ]
                         },
                         "authMethod": {
@@ -117259,7 +117467,8 @@
                             "schedule-trigger",
                             "knowledge:embedding",
                             "knowledge:reranker",
-                            "knowledge:query-expansion"
+                            "knowledge:query-expansion",
+                            "app:llm_complete"
                           ]
                         },
                         "authMethod": {
@@ -117702,7 +117911,8 @@
                             "schedule-trigger",
                             "knowledge:embedding",
                             "knowledge:reranker",
-                            "knowledge:query-expansion"
+                            "knowledge:query-expansion",
+                            "app:llm_complete"
                           ]
                         },
                         "authMethod": {
@@ -118145,7 +118355,8 @@
                             "schedule-trigger",
                             "knowledge:embedding",
                             "knowledge:reranker",
-                            "knowledge:query-expansion"
+                            "knowledge:query-expansion",
+                            "app:llm_complete"
                           ]
                         },
                         "authMethod": {
@@ -118588,7 +118799,8 @@
                             "schedule-trigger",
                             "knowledge:embedding",
                             "knowledge:reranker",
-                            "knowledge:query-expansion"
+                            "knowledge:query-expansion",
+                            "app:llm_complete"
                           ]
                         },
                         "authMethod": {
@@ -119031,7 +119243,8 @@
                             "schedule-trigger",
                             "knowledge:embedding",
                             "knowledge:reranker",
-                            "knowledge:query-expansion"
+                            "knowledge:query-expansion",
+                            "app:llm_complete"
                           ]
                         },
                         "authMethod": {
@@ -119474,7 +119687,8 @@
                             "schedule-trigger",
                             "knowledge:embedding",
                             "knowledge:reranker",
-                            "knowledge:query-expansion"
+                            "knowledge:query-expansion",
+                            "app:llm_complete"
                           ]
                         },
                         "authMethod": {
@@ -119906,7 +120120,8 @@
                             "schedule-trigger",
                             "knowledge:embedding",
                             "knowledge:reranker",
-                            "knowledge:query-expansion"
+                            "knowledge:query-expansion",
+                            "app:llm_complete"
                           ]
                         },
                         "authMethod": {
@@ -120338,7 +120553,8 @@
                             "schedule-trigger",
                             "knowledge:embedding",
                             "knowledge:reranker",
-                            "knowledge:query-expansion"
+                            "knowledge:query-expansion",
+                            "app:llm_complete"
                           ]
                         },
                         "authMethod": {
@@ -120781,7 +120997,8 @@
                             "schedule-trigger",
                             "knowledge:embedding",
                             "knowledge:reranker",
-                            "knowledge:query-expansion"
+                            "knowledge:query-expansion",
+                            "app:llm_complete"
                           ]
                         },
                         "authMethod": {
@@ -121224,7 +121441,8 @@
                             "schedule-trigger",
                             "knowledge:embedding",
                             "knowledge:reranker",
-                            "knowledge:query-expansion"
+                            "knowledge:query-expansion",
+                            "app:llm_complete"
                           ]
                         },
                         "authMethod": {
@@ -121667,7 +121885,8 @@
                             "schedule-trigger",
                             "knowledge:embedding",
                             "knowledge:reranker",
-                            "knowledge:query-expansion"
+                            "knowledge:query-expansion",
+                            "app:llm_complete"
                           ]
                         },
                         "authMethod": {
@@ -122110,7 +122329,8 @@
                             "schedule-trigger",
                             "knowledge:embedding",
                             "knowledge:reranker",
-                            "knowledge:query-expansion"
+                            "knowledge:query-expansion",
+                            "app:llm_complete"
                           ]
                         },
                         "authMethod": {
@@ -122779,7 +122999,8 @@
                             "schedule-trigger",
                             "knowledge:embedding",
                             "knowledge:reranker",
-                            "knowledge:query-expansion"
+                            "knowledge:query-expansion",
+                            "app:llm_complete"
                           ]
                         },
                         "authMethod": {

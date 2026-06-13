@@ -6,6 +6,7 @@ import {
   TOOL_APP_DATA_GET_SHORT_NAME,
   TOOL_APP_DATA_LIST_SHORT_NAME,
   TOOL_APP_DATA_SET_SHORT_NAME,
+  TOOL_APP_LLM_COMPLETE_SHORT_NAME,
 } from "@archestra/shared";
 import { describe, expect, test } from "vitest";
 
@@ -20,12 +21,13 @@ describe("the Apps SDK static file", () => {
     "utf-8",
   );
 
-  test("dispatches the canonical app data tool names (drift guard)", () => {
+  test("dispatches the canonical reserved tool names (drift guard)", () => {
     for (const shortName of [
       TOOL_APP_DATA_GET_SHORT_NAME,
       TOOL_APP_DATA_SET_SHORT_NAME,
       TOOL_APP_DATA_LIST_SHORT_NAME,
       TOOL_APP_DATA_DELETE_SHORT_NAME,
+      TOOL_APP_LLM_COMPLETE_SHORT_NAME,
     ]) {
       expect(sdk).toContain(`"${ARCHESTRA_TOOL_PREFIX}${shortName}"`);
     }
@@ -37,11 +39,14 @@ describe("the Apps SDK static file", () => {
       "ready",
       "user:",
       "storage:",
+      "llm:",
       "tools:",
       "ui:",
       "context:",
       "openLink",
       "requestDisplayMode",
+      "complete:",
+      "prompt:",
     ]) {
       expect(sdk).toContain(member);
     }

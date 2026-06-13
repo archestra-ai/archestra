@@ -131,6 +131,7 @@ export const TOOL_APP_DATA_GET_SHORT_NAME = "app_data_get";
 export const TOOL_APP_DATA_SET_SHORT_NAME = "app_data_set";
 export const TOOL_APP_DATA_LIST_SHORT_NAME = "app_data_list";
 export const TOOL_APP_DATA_DELETE_SHORT_NAME = "app_data_delete";
+export const TOOL_APP_LLM_COMPLETE_SHORT_NAME = "llm_complete";
 
 export const ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_WHOAMI_SHORT_NAME,
@@ -216,6 +217,7 @@ export const ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_APP_DATA_SET_SHORT_NAME,
   TOOL_APP_DATA_LIST_SHORT_NAME,
   TOOL_APP_DATA_DELETE_SHORT_NAME,
+  TOOL_APP_LLM_COMPLETE_SHORT_NAME,
 ] as const;
 
 export type ArchestraToolShortName =

@@ -12,6 +12,10 @@
  *     set(key, value, { ifRevision, owned }) resolves to { revision, owner } and
  *     rejects with { code: "conflict" } on a stale ifRevision or
  *     { code: "forbidden" } on an owned-key violation; delete clears a key)
+ *   archestra.llm.complete(prompt, opts) — one host LLM completion (opts: { system, jsonMode });
+ *                                     resolves to the text, rejects with { code: "llm_quota" }
+ *                                     on a usage limit or { code: "llm_unavailable" } otherwise
+ *   archestra.llm.prompt`...`       — tagged-template prompt builder (pure string, no round-trip)
  *   archestra.tools.call(name,args) — call an assigned tool with the viewer's credentials;
  *                                     throws { code: "auth_required", url } when the
  *                                     upstream MCP server needs (re)authentication
@@ -149,6 +153,7 @@
     list: "archestra__app_data_list",
     delete: "archestra__app_data_delete",
   };
+  const LLM_COMPLETE_TOOL = "archestra__llm_complete";
 
   const textOf = (result) =>
     (result.content || [])
@@ -195,13 +200,16 @@
           { code: "auth_required", url },
         );
       }
-      // Storage writes surface optimistic-concurrency and ownership rejections
-      // as typed codes so apps can branch (retry on conflict, warn on forbidden)
+      // Storage writes surface optimistic-concurrency and ownership rejections,
+      // and llm.complete surfaces quota/unavailable, as typed codes so apps can
+      // branch (retry on conflict, warn on forbidden, back off on llm_quota)
       // instead of parsing a message string.
       if (
         platformError &&
         (platformError.type === "conflict" ||
-          platformError.type === "forbidden")
+          platformError.type === "forbidden" ||
+          platformError.type === "llm_quota" ||
+          platformError.type === "llm_unavailable")
       ) {
         throw Object.assign(
           new Error(
@@ -259,12 +267,38 @@
       },
     });
 
+  // A single host LLM completion. Runs as the viewer through the org's app
+  // runtime model (the app can't pick one); jsonMode steers the model to emit
+  // a single JSON value the app then parses. Rejects with { code: "llm_quota" }
+  // when usage limits are hit and { code: "llm_unavailable" } otherwise.
+  const llmComplete = async (prompt, opts) => {
+    const result = await callTool(LLM_COMPLETE_TOOL, {
+      prompt,
+      system: opts && opts.system,
+      jsonMode: opts && opts.jsonMode,
+    });
+    return textOf(result);
+  };
+
+  // Tagged-template prompt builder (Spark's llmPrompt): interpolates values into
+  // a plain string. A pure client helper — no host round-trip.
+  const llmPrompt = (strings, ...values) =>
+    strings.reduce(
+      (out, str, i) =>
+        out + str + (i < values.length ? String(values[i]) : ""),
+      "",
+    );
+
   window.archestra = Object.freeze({
     ready,
     user: Object.freeze(context.user || null),
     storage: Object.freeze({
       user: storagePartition("user"),
       shared: storagePartition("app"),
+    }),
+    llm: Object.freeze({
+      complete: llmComplete,
+      prompt: llmPrompt,
     }),
     tools: Object.freeze({
       call: callTool,

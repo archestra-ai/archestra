@@ -159,6 +159,8 @@ export const TOOL_PERMISSIONS: Record<
   app_data_set: { resource: "app", action: "update" },
   app_data_list: { resource: "app", action: "read" },
   app_data_delete: { resource: "app", action: "update" },
+  // A viewer who can use an app can run its archestra.llm.complete() calls.
+  llm_complete: { resource: "app", action: "read" },
 };
 
 /**

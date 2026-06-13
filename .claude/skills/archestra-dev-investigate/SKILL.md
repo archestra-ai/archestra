@@ -18,10 +18,11 @@ Orientation for debugging Archestra. For the process itself — evidence-first, 
 
 Reach for the one that matches the question; load `archestra-dev-observability` for URLs, setup, and span/metric names.
 
-- **Sentry** — a specific failure: the error, its nested cause, and the trace for one request.
+- **Sentry** (via the `sentry-cli` skill) — a specific failure: the error, its nested cause, and the trace for one request.
 - **Tempo** (traces) — where a request spent time or stalled, and how far it fanned out across LLM, MCP, and DB spans.
 - **Prometheus / `llm_*` metrics** (`/metrics`) — is it systemic? Rates and aggregates for tokens/cost, error rate, and throughput over time.
 - **Grafana** — dashboards over traces and metrics; line a spike up against a deploy.
+- **kubectl** (staging only, read-only) — runtime ground truth the dashboards miss: pod restarts/OOM, service endpoints, live Postgres connection counts. Verify the context points at staging first.
 
 ## Failure classes to expect
 

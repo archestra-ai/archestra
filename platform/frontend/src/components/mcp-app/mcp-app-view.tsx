@@ -18,6 +18,7 @@ import {
 } from "@modelcontextprotocol/ext-apps/app-bridge";
 import { useTheme } from "next-themes";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { INITIAL_INLINE_HEIGHT } from "@/components/mcp-app/app-height";
 import {
   getAppDiagnostics,
   parseForwardedDiagnostic,
@@ -53,6 +54,19 @@ export interface AppResourceMeta {
 
 const AVAILABLE_DISPLAY_MODES: McpUiDisplayMode[] = ["inline", "fullscreen"];
 
+/** Default pre-report iframe height on surfaces that supply no inline ceiling
+ * (standalone run page, app preview) — those fill their own layout instead. */
+const UNCAPPED_INITIAL_HEIGHT = 600;
+
+/** The `containerDimensions` hint sent to the guest: an honest inline ceiling,
+ * or `{}` when uncapped (fullscreen, or a surface that supplies no ceiling). */
+function containerDimensionsHint(
+  displayMode: McpUiDisplayMode,
+  maxHeight: number | null | undefined,
+): { maxHeight?: number } {
+  return displayMode === "fullscreen" || maxHeight == null ? {} : { maxHeight };
+}
+
 /**
  * Renders an MCP App using AppBridge + SandboxIframe directly so we can handle
  * ui/request-display-mode requests with the proper protocol response. Decoupled
@@ -72,6 +86,7 @@ export const McpAppRuntime = function McpAppRuntime({
   preloadedResource,
   onResourceStateChange,
   appVersion,
+  containerMaxHeight,
 }: {
   toolResourceUri: string;
   endpoint: McpAppEndpoint;
@@ -88,6 +103,9 @@ export const McpAppRuntime = function McpAppRuntime({
   onResourceStateChange: (state: "renderable" | "empty") => void;
   /** Owned-app version this render shows — keys the render-loop diagnostics. */
   appVersion?: number | null;
+  /** Inline visual ceiling from the host card; absent on full-bleed surfaces
+   * (run page, preview). Drives the guest size hint and pre-report height. */
+  containerMaxHeight?: number;
 }) {
   const { resolvedTheme } = useTheme();
   const [bridge, setBridge] = useState<AppBridge | null>(null);
@@ -139,6 +157,8 @@ export const McpAppRuntime = function McpAppRuntime({
   const ownedAppId = endpoint.kind === "app" ? endpoint.appId : null;
   const appVersionRef = useRef(appVersion);
   appVersionRef.current = appVersion;
+  const containerMaxHeightRef = useRef(containerMaxHeight);
+  containerMaxHeightRef.current = containerMaxHeight;
 
   // Persist a snapshot of this render server-side so get_app_diagnostics can
   // read it within the authoring turn (the next-user-message attachment path is
@@ -248,7 +268,10 @@ export const McpAppRuntime = function McpAppRuntime({
           theme: (resolvedThemeRef.current ?? "light") as "light" | "dark",
           platform: "web",
           availableDisplayModes: AVAILABLE_DISPLAY_MODES,
-          containerDimensions: { maxHeight: 500 },
+          containerDimensions: containerDimensionsHint(
+            displayModeRef.current,
+            containerMaxHeightRef.current,
+          ),
           locale: navigator.language,
           timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
           userAgent: `Archestra/${process.env.NEXT_PUBLIC_APP_VERSION ?? "0.0.0"}`,
@@ -526,11 +549,13 @@ export const McpAppRuntime = function McpAppRuntime({
       bridge.setHostContext({
         displayMode,
         availableDisplayModes: AVAILABLE_DISPLAY_MODES,
-        containerDimensions:
-          displayMode === "fullscreen" ? {} : { maxHeight: 500 },
+        containerDimensions: containerDimensionsHint(
+          displayMode,
+          containerMaxHeight,
+        ),
       });
     }
-  }, [bridge, displayMode]);
+  }, [bridge, displayMode, containerMaxHeight]);
 
   // Sync theme/style changes → bridge via MutationObserver on html[class].
   // Covers both light/dark toggling (adds/removes "dark" class) and color-theme
@@ -620,6 +645,11 @@ export const McpAppRuntime = function McpAppRuntime({
             });
           }}
           useDedicatedOrigin={sandboxResult.hasCrossOrigin}
+          initialHeight={
+            containerMaxHeight != null
+              ? INITIAL_INLINE_HEIGHT
+              : UNCAPPED_INITIAL_HEIGHT
+          }
           onDiagnostic={ownedAppId ? handleDiagnostic : undefined}
           onScreenshot={ownedAppId ? handleScreenshot : undefined}
         />
@@ -655,6 +685,7 @@ function SandboxIframe({
   onError,
   onSizeChanged,
   useDedicatedOrigin,
+  initialHeight = UNCAPPED_INITIAL_HEIGHT,
   onDiagnostic,
   onScreenshot,
 }: {
@@ -669,6 +700,8 @@ function SandboxIframe({
   onSizeChanged?: (size: { width?: number; height?: number }) => void;
   /** When true, sandbox iframe uses allow-same-origin (dedicated subdomain provides isolation). */
   useDedicatedOrigin?: boolean;
+  /** Iframe height before the first app size report. */
+  initialHeight?: number;
   /** Raw runtime-error / csp-violation payloads forwarded by the sandbox proxy. */
   onDiagnostic?: (data: unknown) => void;
   /** Raw screenshot payload forwarded by the sandbox proxy. */
@@ -683,12 +716,16 @@ function SandboxIframe({
   const onErrorRef = useRef(onError);
   const onDiagnosticRef = useRef(onDiagnostic);
   const onScreenshotRef = useRef(onScreenshot);
+  // Read at iframe-creation time only; a ref keeps it out of the effect deps so
+  // the iframe never remounts when the height changes.
+  const initialHeightRef = useRef(initialHeight);
 
   useEffect(() => {
     onSizeChangedRef.current = onSizeChanged;
     onErrorRef.current = onError;
     onDiagnosticRef.current = onDiagnostic;
     onScreenshotRef.current = onScreenshot;
+    initialHeightRef.current = initialHeight;
   });
 
   // Create iframe, wait for proxy-ready, connect bridge
@@ -699,7 +736,7 @@ function SandboxIframe({
 
     const iframe = document.createElement("iframe");
     iframe.style.width = "100%";
-    iframe.style.height = "600px";
+    iframe.style.height = `${initialHeightRef.current}px`;
     iframe.style.border = "none";
     iframe.style.backgroundColor = "transparent";
     // With dedicated subdomain: allow-same-origin is safe (different origin from backend).

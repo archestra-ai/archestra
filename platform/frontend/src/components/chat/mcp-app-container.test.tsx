@@ -1,5 +1,6 @@
 import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useEffect } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // ── Mock heavy dependencies before module import ─────────────────────────────
@@ -49,6 +50,7 @@ vi.mock("@/lib/config/config.query", () => ({
 // ── Import component under test after mocks ───────────────────────────────────
 
 import { McpAppSection } from "./mcp-app-container";
+import { PinnedCanvasProvider, usePinnedCanvas } from "./pinned-canvas-context";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -265,6 +267,160 @@ describe("McpAppContainer (via McpAppSection)", () => {
     expect(
       screen.queryByRole("button", { name: /exit fullscreen/i }),
     ).not.toBeInTheDocument();
+  });
+});
+
+describe("McpAppContainer inline height (via McpAppSection)", () => {
+  const SANDBOX_PROXY_READY = "ui/notifications/sandbox-proxy-ready";
+  // Matches the mocked getMcpSandboxBaseUrl baseUrl origin.
+  const SANDBOX_ORIGIN = "http://127.0.0.1:9000";
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  // Drives the canvas into the sidebar portal so renderInSidebar becomes true.
+  function SidebarDriver({ target }: { target: HTMLElement }) {
+    const { setPortalTarget, select } = usePinnedCanvas();
+    useEffect(() => {
+      setPortalTarget(target);
+      select("tc1");
+    }, [setPortalTarget, select, target]);
+    return null;
+  }
+
+  // Capture the live bridge and drive the sandbox-proxy handshake so the
+  // runtime binds `onsizechange` (it is gated on sandbox-ready). The iframe
+  // proxy is a true process boundary, so faking its ready message is legitimate.
+  async function renderReadyApp(
+    viewportHeight: number,
+    { sidebar = false }: { sidebar?: boolean } = {},
+  ) {
+    Object.defineProperty(window, "innerHeight", {
+      value: viewportHeight,
+      configurable: true,
+    });
+
+    const { AppBridge } = await import(
+      "@modelcontextprotocol/ext-apps/app-bridge"
+    );
+    // biome-ignore lint/suspicious/noExplicitAny: accessing mock internals
+    const bridgeInstances: any[] = [];
+    (AppBridge as ReturnType<typeof vi.fn>).mockImplementation(function (
+      this: Record<string, unknown>,
+    ) {
+      this.onrequestdisplaymode = null;
+      this.onopenlink = null;
+      this.oncalltool = null;
+      this.onreadresource = null;
+      this.onlistresources = null;
+      this.onlistresourcetemplates = null;
+      this.onlistprompts = null;
+      this.onloggingmessage = null;
+      this.onmessage = null;
+      this.onsizechange = null;
+      this.oninitialized = null;
+      this.onsandboxready = null;
+      this.connect = vi.fn().mockReturnValue(Promise.resolve());
+      this.sendSandboxResourceReady = vi
+        .fn()
+        .mockReturnValue(Promise.resolve());
+      this.sendToolInput = vi.fn().mockReturnValue(Promise.resolve());
+      this.sendToolInputPartial = vi.fn().mockReturnValue(Promise.resolve());
+      this.sendToolResult = vi.fn().mockReturnValue(Promise.resolve());
+      this.setHostContext = vi.fn();
+      this.teardownResource = vi.fn().mockReturnValue(Promise.resolve());
+      bridgeInstances.push(this);
+    });
+
+    await act(async () => {
+      render(
+        sidebar ? (
+          <PinnedCanvasProvider
+            conversationId="conv-1"
+            canvases={[{ toolCallId: "tc1", label: "app", createdAt: 0 }]}
+          >
+            <SidebarDriver target={document.body} />
+            <McpAppSection
+              {...defaultProps}
+              toolCallId="tc1"
+              preloadedResource={preloadedResource}
+            />
+          </PinnedCanvasProvider>
+        ) : (
+          <McpAppSection
+            {...defaultProps}
+            preloadedResource={preloadedResource}
+          />
+        ),
+      );
+    });
+
+    const iframe = document.querySelector("iframe");
+    if (!iframe) throw new Error("iframe did not mount");
+
+    await act(async () => {
+      window.dispatchEvent(
+        new MessageEvent("message", {
+          source: iframe.contentWindow,
+          origin: SANDBOX_ORIGIN,
+          data: { method: SANDBOX_PROXY_READY },
+        }),
+      );
+    });
+
+    const bridge = bridgeInstances[bridgeInstances.length - 1];
+    if (typeof bridge?.onsizechange !== "function") {
+      throw new Error("onsizechange was not bound after sandbox-ready");
+    }
+    return bridge;
+  }
+
+  function inlineMaxHeightPx(): number {
+    const el = Array.from(document.querySelectorAll<HTMLElement>("*")).find(
+      (e) => e.style.maxHeight !== "",
+    );
+    if (!el) throw new Error("no element carries a max-height style");
+    return Number.parseFloat(el.style.maxHeight);
+  }
+
+  // biome-ignore lint/suspicious/noExplicitAny: reading mock call args
+  function lastGuestContainerDimensions(bridge: any): unknown {
+    const calls = bridge.setHostContext.mock.calls;
+    return calls[calls.length - 1]?.[0]?.containerDimensions;
+  }
+
+  it("caps the inline card at a viewport fraction, well above the legacy 500px", async () => {
+    const bridge = await renderReadyApp(2000);
+
+    await act(async () => {
+      bridge.onsizechange({ height: 700 });
+    });
+
+    expect(inlineMaxHeightPx()).toBe(700);
+    expect(inlineMaxHeightPx()).not.toBe(500);
+  });
+
+  it("clamps a report taller than the ceiling to the ceiling", async () => {
+    const bridge = await renderReadyApp(2000);
+
+    await act(async () => {
+      bridge.onsizechange({ height: 100_000 });
+    });
+
+    // ceiling = round(2000 * 0.6) = 1200
+    expect(inlineMaxHeightPx()).toBe(1200);
+  });
+
+  it("hints the viewport ceiling to the guest, not the legacy 500px", async () => {
+    const bridge = await renderReadyApp(2000);
+    // ceiling = round(2000 * 0.6) = 1200
+    expect(lastGuestContainerDimensions(bridge)).toEqual({ maxHeight: 1200 });
+  });
+
+  it("hints no cap to the guest when the canvas fills the sidebar", async () => {
+    const bridge = await renderReadyApp(2000, { sidebar: true });
+    expect(lastGuestContainerDimensions(bridge)).toEqual({});
   });
 });
 

@@ -14,6 +14,11 @@ import {
 import { createPortal } from "react-dom";
 import { usePinnedCanvas } from "@/components/chat/pinned-canvas-context";
 import {
+  clampInlineHeight,
+  INITIAL_INLINE_HEIGHT,
+  useInlineCeiling,
+} from "@/components/mcp-app/app-height";
+import {
   type AppResourceMeta,
   isRenderableMcpAppHtml,
   McpAppRuntime,
@@ -109,6 +114,7 @@ export function McpAppSection({
   onSendMessage?: (text: string) => void;
 }) {
   const resourceKey = `${agentId}:${uiResourceUri}`;
+  const inlineCeiling = useInlineCeiling();
   const [displayMode, setDisplayMode] = useState<McpUiDisplayMode>("inline");
   const [size, setSize] = useState<{ width: number; height: number } | null>(
     null,
@@ -191,6 +197,7 @@ export function McpAppSection({
         displayMode={displayMode}
         onClose={() => setDisplayMode("inline")}
         size={size}
+        inlineCeiling={inlineCeiling}
         onShowInSidebar={
           toolCallId && !renderInSidebar ? handleShowInSidebar : undefined
         }
@@ -228,6 +235,7 @@ export function McpAppSection({
           displayMode={displayMode}
           onDisplayModeChange={setDisplayMode}
           onSizeChange={setSize}
+          containerMaxHeight={renderInSidebar ? undefined : inlineCeiling}
           toolInput={appId ? undefined : toolInput}
           toolResult={toolResult}
           preloadedResource={preloadedResource}
@@ -310,6 +318,7 @@ function McpAppContainer({
   onClose,
   children,
   size,
+  inlineCeiling,
   onShowInSidebar,
   fillContainer = false,
 }: {
@@ -317,6 +326,8 @@ function McpAppContainer({
   onClose: () => void;
   children: React.ReactNode;
   size: { width: number; height: number } | null;
+  /** Viewport-derived max height for the inline card; reacts to window resize. */
+  inlineCeiling: number;
   /** Inline-mode action: send this canvas to the sidebar. */
   onShowInSidebar?: () => void;
   /** When true, the canvas fills its parent container (used when portaled to sidebar). */
@@ -448,7 +459,7 @@ function McpAppContainer({
             : {
                 maxHeight: isFullscreen
                   ? `${bounds?.height || 1000}px`
-                  : `${Math.min(size?.height || 150, 500)}px`,
+                  : `${clampInlineHeight(size?.height ?? INITIAL_INLINE_HEIGHT, inlineCeiling)}px`,
               }
         }
         className={cn(

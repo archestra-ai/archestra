@@ -324,6 +324,27 @@ class InternalMcpCatalogModel {
       );
   }
 
+  static async findDefaultEnvironmentLocalCatalogs(
+    organizationId: string,
+  ): Promise<{ id: string; multitenant: boolean }[]> {
+    return db
+      .select({
+        id: schema.internalMcpCatalogTable.id,
+        multitenant: schema.internalMcpCatalogTable.multitenant,
+      })
+      .from(schema.internalMcpCatalogTable)
+      .where(
+        and(
+          isNull(schema.internalMcpCatalogTable.environmentId),
+          eq(schema.internalMcpCatalogTable.serverType, "local"),
+          or(
+            eq(schema.internalMcpCatalogTable.organizationId, organizationId),
+            isNull(schema.internalMcpCatalogTable.organizationId),
+          ),
+        ),
+      );
+  }
+
   /**
    * Batch fetch multiple catalog items by IDs.
    * Returns a Map of catalog ID to catalog item.

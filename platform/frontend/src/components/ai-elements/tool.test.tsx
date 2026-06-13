@@ -28,9 +28,6 @@ describe("Tool copy actions", () => {
 
     render(<ToolInput input={{ city: "Toronto", limit: 5 }} />);
 
-    // Expand the collapsible to reveal the copy button
-    await user.click(screen.getByText("Parameters"));
-
     await user.click(screen.getByRole("button", { name: "Copy to clipboard" }));
 
     expect(writeText).toHaveBeenCalledWith(
@@ -59,16 +56,11 @@ describe("Tool copy actions", () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     mockClipboard(writeText);
 
-    render(
-      <ToolInput
-        defaultOpen
-        input={{ command: "echo hi\necho bye", cwd: "/tmp" }}
-      />,
-    );
+    render(<ToolInput input={{ command: "echo hi\necho bye", cwd: "/tmp" }} />);
 
-    // per-field labels instead of one JSON dump with escaped \n
-    expect(screen.getByText("command")).toBeInTheDocument();
-    expect(screen.getByText("cwd")).toBeInTheDocument();
+    // per-field blocks instead of one JSON dump with escaped \n
+    expect(screen.getByText("echo hi")).toBeInTheDocument();
+    expect(screen.getByText("echo bye")).toBeInTheDocument();
     expect(screen.queryByText(/\\n/)).not.toBeInTheDocument();
 
     // the field copy button copies the raw string, not JSON

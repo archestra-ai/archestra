@@ -4,6 +4,7 @@ import { useIncomingEmailStatus } from "@/lib/chatops/incoming-email.query";
 import config from "@/lib/config/config";
 import { useConfig } from "@/lib/config/config.query";
 import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
+import { useReachabilityMode } from "./use-reachability-mode";
 
 export function useTriggerStatuses() {
   const { data: chatOpsProviders, isLoading: chatOpsLoading } =
@@ -18,13 +19,16 @@ export function useTriggerStatuses() {
   });
 
   const hasLlmKey = chatApiKeys.length > 0;
-  const ngrokDomain = configData?.features.ngrokDomain;
+  const [reachabilityMode] = useReachabilityMode();
+  // "manual" means the user exposes the instance themselves — trust them.
+  const reachable =
+    reachabilityMode === "manual" || !!configData?.features.ngrokDomain;
   const isLocalDev =
     configData?.features.isQuickstart || config.environment === "development";
 
   const msTeams = chatOpsProviders?.find((p) => p.id === "ms-teams");
   const msTeamsActive = isLocalDev
-    ? !!ngrokDomain && hasLlmKey && !!msTeams?.configured
+    ? reachable && hasLlmKey && !!msTeams?.configured
     : hasLlmKey && !!msTeams?.configured;
 
   const slack = chatOpsProviders?.find((p) => p.id === "slack");
@@ -33,7 +37,7 @@ export function useTriggerStatuses() {
   const slackActive = isSlackSocket
     ? hasLlmKey && !!slack?.configured
     : isLocalDev
-      ? !!ngrokDomain && hasLlmKey && !!slack?.configured
+      ? reachable && hasLlmKey && !!slack?.configured
       : hasLlmKey && !!slack?.configured;
 
   const emailActive =

@@ -1,3 +1,5 @@
+import { ARCHESTRA_MCP_CATALOG_ID } from "@archestra/shared";
+import { sql } from "drizzle-orm";
 import {
   boolean,
   index,
@@ -6,11 +8,16 @@ import {
   text,
   timestamp,
   unique,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 import type { ToolParametersContent } from "@/types";
 import agentsTable from "./agent";
 import mcpCatalogTable from "./internal-mcp-catalog";
+
+/** Partial unique index enforcing one row per (catalog_id, name) for built-in Archestra tools. */
+export const ARCHESTRA_TOOL_NAME_UNIQUE_INDEX =
+  "tools_archestra_catalog_name_uidx";
 
 const toolsTable = pgTable(
   "tools",
@@ -79,6 +86,15 @@ const toolsTable = pgTable(
       table.agentId,
       table.delegateToAgentId,
     ),
+    // Built-in Archestra tools have agent_id and delegate_to_agent_id NULL, so the
+    // composite unique() above is NULLS-DISTINCT and never enforces uniqueness for them.
+    // Enforce one row per (catalog_id, name) within the Archestra built-in catalog.
+    // The catalog id is inlined as a literal (index predicates can't be parameterized).
+    uniqueIndex(ARCHESTRA_TOOL_NAME_UNIQUE_INDEX)
+      .on(table.catalogId, table.name)
+      .where(
+        sql`${table.catalogId} = ${sql.raw(`'${ARCHESTRA_MCP_CATALOG_ID}'`)} and ${table.agentId} is null and ${table.delegateToAgentId} is null`,
+      ),
     // Index for delegation tool lookups
     index("tools_delegate_to_agent_id_idx").on(table.delegateToAgentId),
     index("tools_cloned_pending_discovery_idx").on(

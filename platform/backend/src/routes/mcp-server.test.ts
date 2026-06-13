@@ -1147,7 +1147,7 @@ describe("mcp server inspect route", () => {
     }
   });
 
-  test("automatically retries protected remote MCP server installation with an exchanged enterprise-managed credential", async ({
+  test("installs a protected remote MCP server with an exchanged enterprise-managed credential on first discovery", async ({
     makeAccount,
     makeIdentityProvider,
     makeInternalMcpCatalog,
@@ -1192,19 +1192,13 @@ describe("mcp server inspect route", () => {
       value: "exchanged-github-token",
     });
 
-    connectAndGetToolsMock
-      .mockRejectedValueOnce(
-        new Error(
-          "Failed to connect to MCP server GitHub: Streamable HTTP error: Error POSTing to endpoint: bad request: missing required Authorization header",
-        ),
-      )
-      .mockResolvedValueOnce([
-        {
-          name: "add_issue_comment",
-          description: "Post a comment to a GitHub issue",
-          inputSchema: { type: "object", properties: {} },
-        },
-      ]);
+    connectAndGetToolsMock.mockResolvedValueOnce([
+      {
+        name: "add_issue_comment",
+        description: "Post a comment to a GitHub issue",
+        inputSchema: { type: "object", properties: {} },
+      },
+    ]);
 
     const response = await app.inject({
       method: "POST",
@@ -1223,12 +1217,204 @@ describe("mcp server inspect route", () => {
         requestedIssuer: "github",
       }),
     });
-    expect(connectAndGetToolsMock.mock.calls[1][0]).toMatchObject({
+    expect(connectAndGetToolsMock).toHaveBeenCalledTimes(1);
+    expect(connectAndGetToolsMock.mock.calls[0][0]).toMatchObject({
       secrets: { access_token: "exchanged-github-token" },
     });
   });
 
-  test("recognizes broad missing authorization header errors before enterprise-managed install retry", async ({
+  // Regression: enterprise-managed catalogs with install-time userConfig used
+  // to run the static-secret `validateConnection` probe before discovery,
+  // which hit the MCP server without any Authorization header and failed the
+  // install on servers that require auth for tools/list.
+  test("enterprise-managed install with install-time config skips the unauthenticated connection probe", async ({
+    makeAccount,
+    makeIdentityProvider,
+    makeInternalMcpCatalog,
+  }) => {
+    const identityProvider = await makeIdentityProvider(user.id, {
+      providerId: "keycloak",
+      issuer: "http://localhost:30081/realms/archestra",
+      oidcConfig: {
+        clientId: "archestra-oidc",
+        clientSecret: "archestra-oidc-secret",
+        tokenEndpoint:
+          "http://localhost:30081/realms/archestra/protocol/openid-connect/token",
+        tokenEndpointAuthentication: "client_secret_post",
+        enterpriseManagedCredentials: {
+          exchangeStrategy: "rfc8693",
+          subjectTokenType: OAUTH_TOKEN_TYPE.AccessToken,
+        },
+      },
+    });
+
+    const catalog = await makeInternalMcpCatalog({
+      name: "Protected Remote With Config",
+      serverType: "remote",
+      serverUrl: "https://mcp.example.com/mcp",
+      enterpriseManagedConfig: {
+        identityProviderId: identityProvider.id,
+        requestedCredentialType: "bearer_token",
+        tokenInjectionMode: "authorization_bearer",
+      },
+      userConfig: {
+        header_x_tenant: {
+          type: "string",
+          title: "x-tenant",
+          description: "Tenant header",
+          promptOnInstallation: true,
+          required: true,
+          sensitive: false,
+          headerName: "x-tenant",
+        },
+      },
+    });
+
+    await makeAccount(user.id, {
+      providerId: "keycloak",
+      accessToken: "session-access-token",
+    });
+
+    exchangeEnterpriseManagedCredentialMock.mockResolvedValueOnce({
+      credentialType: "bearer_token",
+      expiresInSeconds: null,
+      issuedTokenType: OAUTH_TOKEN_TYPE.AccessToken,
+      value: "exchanged-downstream-token",
+    });
+
+    connectAndGetToolsMock.mockResolvedValueOnce([
+      {
+        name: "get-server-info",
+        description: "Returns server details",
+        inputSchema: { type: "object", properties: {} },
+      },
+    ]);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/mcp_server",
+      payload: {
+        name: "Protected Remote With Config",
+        catalogId: catalog.id,
+        userConfigValues: {
+          header_x_tenant: "tenant-a",
+        },
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    // Exactly one connect for this catalog: the discovery call carrying the
+    // exchanged credential — no prior unauthenticated validateConnection
+    // probe. Filter by catalog id so deferred background discovery leaked
+    // from sibling tests can't pollute the count.
+    const callsForCatalog = connectAndGetToolsMock.mock.calls.filter(
+      ([params]) =>
+        (params as { catalogItem?: { id?: string } }).catalogItem?.id ===
+        catalog.id,
+    );
+    expect(callsForCatalog).toHaveLength(1);
+    expect(callsForCatalog[0][0]).toMatchObject({
+      secrets: {
+        header_x_tenant: "tenant-a",
+        access_token: "exchanged-downstream-token",
+      },
+    });
+  });
+
+  test("enterprise-managed local server install discovery sends the exchanged credential", async ({
+    makeAccount,
+    makeIdentityProvider,
+    makeInternalMcpCatalog,
+  }) => {
+    const identityProvider = await makeIdentityProvider(user.id, {
+      providerId: "keycloak",
+      issuer: "http://localhost:30081/realms/archestra",
+      oidcConfig: {
+        clientId: "archestra-oidc",
+        clientSecret: "archestra-oidc-secret",
+        tokenEndpoint:
+          "http://localhost:30081/realms/archestra/protocol/openid-connect/token",
+        tokenEndpointAuthentication: "client_secret_post",
+        enterpriseManagedCredentials: {
+          exchangeStrategy: "rfc8693",
+          subjectTokenType: OAUTH_TOKEN_TYPE.AccessToken,
+        },
+      },
+    });
+
+    const catalog = await makeInternalMcpCatalog({
+      name: "Protected Local Http",
+      serverType: "local",
+      enterpriseManagedConfig: {
+        identityProviderId: identityProvider.id,
+        requestedCredentialType: "bearer_token",
+        tokenInjectionMode: "authorization_bearer",
+      },
+      localConfig: {
+        transportType: "streamable-http",
+        dockerImage: "example/protected-mcp:latest",
+      },
+    });
+
+    await makeAccount(user.id, {
+      providerId: "keycloak",
+      accessToken: "session-access-token",
+    });
+
+    exchangeEnterpriseManagedCredentialMock.mockResolvedValueOnce({
+      credentialType: "bearer_token",
+      expiresInSeconds: null,
+      issuedTokenType: OAUTH_TOKEN_TYPE.AccessToken,
+      value: "exchanged-local-token",
+    });
+
+    connectAndGetToolsMock.mockResolvedValueOnce([
+      {
+        name: "get-server-info",
+        description: "Returns server details",
+        inputSchema: { type: "object", properties: {} },
+      },
+    ]);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/mcp_server",
+      payload: {
+        name: "Protected Local Http",
+        catalogId: catalog.id,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const serverId = response.json().id as string;
+
+    // Local discovery runs in a deferred background task; wait for it.
+    let finalStatus: string | null | undefined;
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+      const [serverRow] = await db
+        .select()
+        .from(schema.mcpServersTable)
+        .where(eq(schema.mcpServersTable.id, serverId));
+      finalStatus = serverRow?.localInstallationStatus;
+      if (finalStatus && finalStatus !== "pending") {
+        break;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+
+    expect(finalStatus).toBe("success");
+    const callsForCatalog = connectAndGetToolsMock.mock.calls.filter(
+      ([params]) =>
+        (params as { catalogItem?: { id?: string } }).catalogItem?.id ===
+        catalog.id,
+    );
+    expect(callsForCatalog).toHaveLength(1);
+    expect(callsForCatalog[0][0]).toMatchObject({
+      secrets: { access_token: "exchanged-local-token" },
+    });
+  });
+
+  test("sends enterprise-managed credentials on first discovery without depending on auth-error retry matching", async ({
     makeAccount,
     makeIdentityProvider,
     makeInternalMcpCatalog,
@@ -1273,19 +1459,13 @@ describe("mcp server inspect route", () => {
       value: "downstream-user-token",
     });
 
-    connectAndGetToolsMock
-      .mockRejectedValueOnce(
-        new Error(
-          "Failed to connect to MCP server Header Required Remote: Streamable HTTP error: Error POSTing to endpoint: Missing X-User, X-Ticket, or Authorization header",
-        ),
-      )
-      .mockResolvedValueOnce([
-        {
-          name: "debug_auth",
-          description: "Debug auth",
-          inputSchema: { type: "object", properties: {} },
-        },
-      ]);
+    connectAndGetToolsMock.mockResolvedValueOnce([
+      {
+        name: "debug_auth",
+        description: "Debug auth",
+        inputSchema: { type: "object", properties: {} },
+      },
+    ]);
 
     const response = await app.inject({
       method: "POST",
@@ -1297,7 +1477,7 @@ describe("mcp server inspect route", () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(connectAndGetToolsMock).toHaveBeenCalledTimes(2);
+    expect(connectAndGetToolsMock).toHaveBeenCalledTimes(1);
     expect(exchangeEnterpriseManagedCredentialMock).toHaveBeenCalledWith({
       identityProviderId: identityProvider.id,
       assertion: "session-access-token",
@@ -1305,8 +1485,145 @@ describe("mcp server inspect route", () => {
         resourceIdentifier: "api://downstream-app",
       }),
     });
-    expect(connectAndGetToolsMock.mock.calls[1][0]).toMatchObject({
+    expect(connectAndGetToolsMock.mock.calls[0][0]).toMatchObject({
       secrets: { access_token: "downstream-user-token" },
+    });
+  });
+
+  test("uses the current SSO access token for implicit enterprise-managed install discovery without a matching IdP", async ({
+    makeAccount,
+    makeInternalMcpCatalog,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      name: "Implicit Protected Remote",
+      serverType: "remote",
+      serverUrl: "https://mcp.example.com/mcp",
+      enterpriseManagedConfig: {
+        requestedCredentialType: "bearer_token",
+        resourceIdentifier: "api://downstream-app",
+        tokenInjectionMode: "authorization_bearer",
+      },
+    });
+
+    await makeAccount(user.id, {
+      providerId: "external-sso-without-idp-row",
+      accessToken: "raw-session-access-token",
+    });
+
+    connectAndGetToolsMock.mockResolvedValueOnce([
+      {
+        name: "debug_auth",
+        description: "Debug auth",
+        inputSchema: { type: "object", properties: {} },
+      },
+    ]);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/mcp_server",
+      payload: {
+        name: catalog.name,
+        catalogId: catalog.id,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(exchangeEnterpriseManagedCredentialMock).not.toHaveBeenCalled();
+    expect(connectAndGetToolsMock).toHaveBeenCalledTimes(1);
+    expect(connectAndGetToolsMock.mock.calls[0][0]).toMatchObject({
+      secrets: { access_token: "raw-session-access-token" },
+    });
+  });
+
+  test("uses the configured token-exchange identity provider for shared install discovery", async ({
+    makeAccount,
+    makeIdentityProvider,
+    makeInternalMcpCatalog,
+    makeTeam,
+  }) => {
+    await makeIdentityProvider(user.id, {
+      providerId: "login-sso",
+      issuer: "https://login-sso.example.com",
+      oidcConfig: {
+        clientId: "login-client",
+        clientSecret: "login-secret",
+        tokenEndpoint: "https://login-sso.example.com/oauth/token",
+      },
+    });
+    const exchangeIdentityProvider = await makeIdentityProvider(user.id, {
+      providerId: "mcp-exchange-idp",
+      issuer: "https://exchange-idp.example.com/tenant/v2.0",
+      oidcConfig: {
+        clientId: "exchange-client",
+        clientSecret: "exchange-secret",
+        tokenEndpoint: "https://exchange-idp.example.com/oauth2/v2.0/token",
+        enterpriseManagedCredentials: {
+          exchangeStrategy: "entra_obo",
+          subjectTokenType: OAUTH_TOKEN_TYPE.AccessToken,
+          tokenEndpoint: "https://exchange-idp.example.com/oauth2/v2.0/token",
+          tokenEndpointAuthentication: "client_secret_post",
+        },
+      },
+    });
+    const team = await makeTeam(organizationId, user.id);
+
+    const catalog = await makeInternalMcpCatalog({
+      name: "Shared Protected Remote",
+      serverType: "remote",
+      serverUrl: "https://mcp.example.com/mcp",
+      enterpriseManagedConfig: {
+        identityProviderId: exchangeIdentityProvider.id,
+        requestedCredentialType: "bearer_token",
+        resourceIdentifier: "api://downstream-app",
+        tokenInjectionMode: "authorization_bearer",
+      },
+    });
+
+    await makeAccount(user.id, {
+      providerId: "login-sso",
+      accessToken: "login-sso-access-token",
+    });
+    await makeAccount(user.id, {
+      providerId: "mcp-exchange-idp",
+      accessToken: "exchange-idp-access-token",
+    });
+
+    exchangeEnterpriseManagedCredentialMock.mockResolvedValueOnce({
+      credentialType: "bearer_token",
+      expiresInSeconds: 300,
+      issuedTokenType: OAUTH_TOKEN_TYPE.AccessToken,
+      value: "shared-install-discovery-token",
+    });
+    connectAndGetToolsMock.mockResolvedValueOnce([
+      {
+        name: "list_records",
+        description: "List records",
+        inputSchema: { type: "object", properties: {} },
+      },
+    ]);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/mcp_server",
+      payload: {
+        name: catalog.name,
+        catalogId: catalog.id,
+        scope: "team",
+        teamId: team.id,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(exchangeEnterpriseManagedCredentialMock).toHaveBeenCalledWith({
+      identityProviderId: exchangeIdentityProvider.id,
+      assertion: "exchange-idp-access-token",
+      enterpriseManagedConfig: expect.objectContaining({
+        resourceIdentifier: "api://downstream-app",
+      }),
+    });
+    expect(connectAndGetToolsMock).toHaveBeenCalledTimes(1);
+    expect(connectAndGetToolsMock.mock.calls[0][0]).toMatchObject({
+      secrets: { access_token: "shared-install-discovery-token" },
     });
   });
 
@@ -1402,22 +1719,16 @@ describe("mcp server inspect route", () => {
     });
     global.fetch = fetchMock as typeof fetch;
 
-    connectAndGetToolsMock
-      .mockRejectedValueOnce(
-        new Error(
-          "Failed to connect to MCP server Protected Resource: Streamable HTTP error: unauthorized",
-        ),
-      )
-      .mockResolvedValueOnce([
-        {
-          name: "read_resource_todos",
-          description: "Read todos",
-          inputSchema: { type: "object", properties: {} },
-          _meta: {
-            archestraResourceUri: "todo://todos",
-          },
+    connectAndGetToolsMock.mockResolvedValueOnce([
+      {
+        name: "read_resource_todos",
+        description: "Read todos",
+        inputSchema: { type: "object", properties: {} },
+        _meta: {
+          archestraResourceUri: "todo://todos",
         },
-      ]);
+      },
+    ]);
 
     const response = await app.inject({
       method: "POST",
@@ -1437,7 +1748,7 @@ describe("mcp server inspect route", () => {
         requestedCredentialType: "id_jag",
       }),
     });
-    expect(connectAndGetToolsMock.mock.calls[1][0]).toMatchObject({
+    expect(connectAndGetToolsMock.mock.calls[0][0]).toMatchObject({
       secrets: { access_token: "mcp-server-access-token" },
     });
 
@@ -1471,6 +1782,7 @@ describe("mcp server inspect route", () => {
   });
 
   test("persists enterprise-managed config on installed MCP servers", async ({
+    makeAccount,
     makeInternalMcpCatalog,
   }) => {
     const catalog = await makeInternalMcpCatalog({
@@ -1492,6 +1804,11 @@ describe("mcp server inspect route", () => {
         inputSchema: { type: "object", properties: {} },
       },
     ]);
+
+    await makeAccount(user.id, {
+      providerId: "session-provider",
+      accessToken: "session-access-token",
+    });
 
     const response = await app.inject({
       method: "POST",

@@ -1,5 +1,5 @@
 {
-  "id": "5e6fbb79-346e-4be7-b71f-c5803874aaff",
+  "id": "97025ace-1ee5-4ee9-87da-c51d974709b8",
   "prevId": "2813db77-d3d9-4acf-afb5-6a666eee1ded",
   "version": "7",
   "dialect": "postgresql",
@@ -1087,148 +1087,6 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.agent_versions": {
-      "name": "agent_versions",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "agent_id": {
-          "name": "agent_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "organization_id": {
-          "name": "organization_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "version_number": {
-          "name": "version_number",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "snapshot": {
-          "name": "snapshot",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "source": {
-          "name": "source",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_by": {
-          "name": "created_by",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_by_name": {
-          "name": "created_by_name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "agent_versions_agent_id_created_at_idx": {
-          "name": "agent_versions_agent_id_created_at_idx",
-          "columns": [
-            {
-              "expression": "agent_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "created_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "agent_versions_org_id_idx": {
-          "name": "agent_versions_org_id_idx",
-          "columns": [
-            {
-              "expression": "organization_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "agent_versions_agent_id_agents_id_fk": {
-          "name": "agent_versions_agent_id_agents_id_fk",
-          "tableFrom": "agent_versions",
-          "tableTo": "agents",
-          "columnsFrom": [
-            "agent_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "agent_versions_created_by_user_id_fk": {
-          "name": "agent_versions_created_by_user_id_fk",
-          "tableFrom": "agent_versions",
-          "tableTo": "user",
-          "columnsFrom": [
-            "created_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "agent_versions_agent_id_version_number_uniq": {
-          "name": "agent_versions_agent_id_version_number_uniq",
-          "nullsNotDistinct": false,
-          "columns": [
-            "agent_id",
-            "version_number"
-          ]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
     "public.agents": {
       "name": "agents",
       "schema": "",
@@ -1280,6 +1138,13 @@
         },
         "is_personal_gateway": {
           "name": "is_personal_gateway",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "is_personal_proxy": {
+          "name": "is_personal_proxy",
           "type": "boolean",
           "primaryKey": false,
           "notNull": true,
@@ -1521,6 +1386,28 @@
           ],
           "isUnique": true,
           "where": "\"agents\".\"agent_type\" = 'mcp_gateway' AND \"agents\".\"is_personal_gateway\" = true AND \"agents\".\"deleted_at\" IS NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "agents_personal_proxy_per_member_idx": {
+          "name": "agents_personal_proxy_per_member_idx",
+          "columns": [
+            {
+              "expression": "organization_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "author_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"agents\".\"agent_type\" = 'llm_proxy' AND \"agents\".\"is_personal_proxy\" = true AND \"agents\".\"deleted_at\" IS NULL",
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -2782,6 +2669,332 @@
             "id"
           ],
           "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.connection_setup_skills": {
+      "name": "connection_setup_skills",
+      "schema": "",
+      "columns": {
+        "connection_setup_id": {
+          "name": "connection_setup_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "skill_id": {
+          "name": "skill_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "connection_setup_skills_skill_id_idx": {
+          "name": "connection_setup_skills_skill_id_idx",
+          "columns": [
+            {
+              "expression": "skill_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "connection_setup_skills_connection_setup_id_connection_setups_id_fk": {
+          "name": "connection_setup_skills_connection_setup_id_connection_setups_id_fk",
+          "tableFrom": "connection_setup_skills",
+          "tableTo": "connection_setups",
+          "columnsFrom": [
+            "connection_setup_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "connection_setup_skills_skill_id_skills_id_fk": {
+          "name": "connection_setup_skills_skill_id_skills_id_fk",
+          "tableFrom": "connection_setup_skills",
+          "tableTo": "skills",
+          "columnsFrom": [
+            "skill_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "connection_setup_skills_connection_setup_id_skill_id_pk": {
+          "name": "connection_setup_skills_connection_setup_id_skill_id_pk",
+          "columns": [
+            "connection_setup_id",
+            "skill_id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.connection_setups": {
+      "name": "connection_setups",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "organization_id": {
+          "name": "organization_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "client_id": {
+          "name": "client_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "base_url": {
+          "name": "base_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "mcp_gateway_id": {
+          "name": "mcp_gateway_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "llm_proxy_id": {
+          "name": "llm_proxy_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "provider": {
+          "name": "provider",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "proxy_auth": {
+          "name": "proxy_auth",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'provider-key'"
+        },
+        "virtual_api_key_id": {
+          "name": "virtual_api_key_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "include_skills": {
+          "name": "include_skills",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "skill_link_ttl_days": {
+          "name": "skill_link_ttl_days",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "skill_share_link_id": {
+          "name": "skill_share_link_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "token_hash": {
+          "name": "token_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "token_start": {
+          "name": "token_start",
+          "type": "varchar(22)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "consumed_at": {
+          "name": "consumed_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "connection_setups_token_hash_idx": {
+          "name": "connection_setups_token_hash_idx",
+          "columns": [
+            {
+              "expression": "token_hash",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "connection_setups_org_id_idx": {
+          "name": "connection_setups_org_id_idx",
+          "columns": [
+            {
+              "expression": "organization_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "connection_setups_token_start_idx": {
+          "name": "connection_setups_token_start_idx",
+          "columns": [
+            {
+              "expression": "token_start",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "connection_setups_organization_id_organization_id_fk": {
+          "name": "connection_setups_organization_id_organization_id_fk",
+          "tableFrom": "connection_setups",
+          "tableTo": "organization",
+          "columnsFrom": [
+            "organization_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "connection_setups_user_id_user_id_fk": {
+          "name": "connection_setups_user_id_user_id_fk",
+          "tableFrom": "connection_setups",
+          "tableTo": "user",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "connection_setups_mcp_gateway_id_agents_id_fk": {
+          "name": "connection_setups_mcp_gateway_id_agents_id_fk",
+          "tableFrom": "connection_setups",
+          "tableTo": "agents",
+          "columnsFrom": [
+            "mcp_gateway_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "connection_setups_llm_proxy_id_agents_id_fk": {
+          "name": "connection_setups_llm_proxy_id_agents_id_fk",
+          "tableFrom": "connection_setups",
+          "tableTo": "agents",
+          "columnsFrom": [
+            "llm_proxy_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "connection_setups_virtual_api_key_id_virtual_api_keys_id_fk": {
+          "name": "connection_setups_virtual_api_key_id_virtual_api_keys_id_fk",
+          "tableFrom": "connection_setups",
+          "tableTo": "virtual_api_keys",
+          "columnsFrom": [
+            "virtual_api_key_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "connection_setups_skill_share_link_id_skill_share_link_id_fk": {
+          "name": "connection_setups_skill_share_link_id_skill_share_link_id_fk",
+          "tableFrom": "connection_setups",
+          "tableTo": "skill_share_link",
+          "columnsFrom": [
+            "skill_share_link_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
           "onUpdate": "no action"
         }
       },
@@ -8984,6 +9197,12 @@
         },
         "connection_base_urls": {
           "name": "connection_base_urls",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "connection_default_provider_keys": {
+          "name": "connection_default_provider_keys",
           "type": "jsonb",
           "primaryKey": false,
           "notNull": false

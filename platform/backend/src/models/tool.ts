@@ -36,6 +36,7 @@ import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { getArchestraMcpCatalogMetadata } from "@/archestra-mcp-server/metadata";
 import db, { schema } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
+import { ARCHESTRA_TOOL_NAME_UNIQUE_INDEX } from "@/database/schemas/tool";
 import {
   createPaginatedResult,
   type PaginatedResult,
@@ -54,10 +55,12 @@ import type {
   ToolWithAssignments,
   UpdateTool,
 } from "@/types";
+import { isUniqueConstraintError } from "@/utils/db";
 import AgentModel from "./agent";
 import AgentConnectorAssignmentModel from "./agent-connector-assignment";
 import AgentTeamModel from "./agent-team";
 import AgentToolModel from "./agent-tool";
+import McpCatalogTeamModel from "./mcp-catalog-team";
 import McpServerModel from "./mcp-server";
 import OrganizationModel from "./organization";
 import ToolInvocationPolicyModel from "./tool-invocation-policy";
@@ -581,6 +584,47 @@ class ToolModel {
   }
 
   /**
+   * Catalog-backed MCP tools from every catalog the user can access
+   * (org-visible, own personal, and team catalogs). The user-wide discovery
+   * space for search_tools and run_tool auto-assignment — independent of any
+   * agent's assignments. Excludes clones still pending discovery (they cannot
+   * be assigned yet).
+   */
+  static async getMcpToolsAccessibleToUser(params: {
+    userId: string;
+    organizationId: string;
+    isAdmin: boolean;
+    /** Exact-name filter for single-tool resolution (avoids loading the whole corpus). */
+    name?: string;
+  }): Promise<Tool[]> {
+    const catalogIds = await McpCatalogTeamModel.getUserAccessibleCatalogIds(
+      params.userId,
+      params.isAdmin,
+      params.organizationId,
+    );
+    if (catalogIds.length === 0) {
+      return [];
+    }
+
+    // Secondary sort on id keeps the ordering deterministic when createdAt
+    // ties (bulk-inserted MCP tools share a timestamp), so search_tools and
+    // run_tool auto-assignment resolve a duplicate name to the same row.
+    return db
+      .select()
+      .from(schema.toolsTable)
+      .where(
+        and(
+          inArray(schema.toolsTable.catalogId, catalogIds),
+          eq(schema.toolsTable.clonedPendingDiscovery, false),
+          params.name !== undefined
+            ? eq(schema.toolsTable.name, params.name)
+            : undefined,
+        ),
+      )
+      .orderBy(desc(schema.toolsTable.createdAt), asc(schema.toolsTable.id));
+  }
+
+  /**
    * Names of the MCP tools assigned to an agent, as a membership set. Single
    * source of truth for "is tool X enabled for this agent" checks, shared by the
    * run_tool dispatch pre-check and the tool-invocation guardrail.
@@ -932,25 +976,43 @@ class ToolModel {
         ),
       );
 
-    const discoveredToolIdsToMigrate = discoveredTools
-      .filter((tool) => {
-        const { serverName, shortName } = parseArchestraBuiltInName(tool.name);
-        if (!shortName) {
-          return false;
+    const discoveredArchestraTools = discoveredTools.filter((tool) => {
+      const { serverName, shortName } = parseArchestraBuiltInName(tool.name);
+      return (
+        shortName !== null &&
+        (serverName === archestraMcpBranding.serverName ||
+          serverName === "archestra")
+      );
+    });
+
+    if (discoveredArchestraTools.length > 0) {
+      // Promote only names not already present in the catalog, and at most one
+      // discovered row per name. Promoting a colliding/duplicate name would violate
+      // the (catalog_id, name) unique index. Redundant discovered rows are left as-is
+      // (catalog_id = NULL, not surfaced as catalog tools) rather than deleted, to avoid
+      // cascading their agent assignments.
+      const claimedNames = new Set(
+        (
+          await db
+            .select({ name: schema.toolsTable.name })
+            .from(schema.toolsTable)
+            .where(eq(schema.toolsTable.catalogId, catalogId))
+        ).map((tool) => tool.name),
+      );
+      const idsToPromote: string[] = [];
+      for (const tool of discoveredArchestraTools) {
+        if (!claimedNames.has(tool.name)) {
+          claimedNames.add(tool.name);
+          idsToPromote.push(tool.id);
         }
+      }
 
-        return (
-          serverName === archestraMcpBranding.serverName ||
-          serverName === "archestra"
-        );
-      })
-      .map((tool) => tool.id);
-
-    if (discoveredToolIdsToMigrate.length > 0) {
-      await db
-        .update(schema.toolsTable)
-        .set({ catalogId })
-        .where(inArray(schema.toolsTable.id, discoveredToolIdsToMigrate));
+      if (idsToPromote.length > 0) {
+        await db
+          .update(schema.toolsTable)
+          .set({ catalogId })
+          .where(inArray(schema.toolsTable.id, idsToPromote));
+      }
     }
 
     // Get all existing Archestra tools in a single query (now including migrated ones)
@@ -1003,21 +1065,63 @@ class ToolModel {
           JSON.stringify(archestraTool.inputSchema);
 
         if (nameChanged || descChanged || paramsChanged) {
-          await db
-            .update(schema.toolsTable)
-            .set({
-              name: archestraTool.name,
-              description: newDescription,
-              parameters: archestraTool.inputSchema,
-            })
-            .where(eq(schema.toolsTable.id, existingTool.id));
+          try {
+            await db
+              .update(schema.toolsTable)
+              .set({
+                name: archestraTool.name,
+                description: newDescription,
+                parameters: archestraTool.inputSchema,
+              })
+              .where(eq(schema.toolsTable.id, existingTool.id));
+          } catch (error) {
+            // A sibling row already holds the branded name (a legacy/branded
+            // dual-prefix duplicate that reduces to the same short name). The
+            // 0285 dedup migration collapses these on deploy; one built-in
+            // failing to reconcile must not crash platform startup, so log and
+            // keep seeding the rest.
+            if (
+              !isUniqueConstraintError(error, ARCHESTRA_TOOL_NAME_UNIQUE_INDEX)
+            ) {
+              throw error;
+            }
+            logger.warn(
+              { shortName, targetName: archestraTool.name },
+              "Skipped reconciling built-in Archestra tool: a duplicate row already holds its name",
+            );
+          }
         }
       }
     }
 
-    // Bulk insert new tools if any
+    // Bulk insert new tools if any. A concurrent seed (the API and worker processes
+    // both seed at startup) may insert the same (catalog_id, name) first; converge on
+    // the partial unique index instead of throwing. DO UPDATE (not DO NOTHING) so the
+    // conflict still produces a RETURNING row whose xmax marks it as updated, not inserted.
+    const insertedNames: string[] = [];
     if (toolsToInsert.length > 0) {
-      await db.insert(schema.toolsTable).values(toolsToInsert).returning();
+      const insertedRows = await db
+        .insert(schema.toolsTable)
+        .values(toolsToInsert)
+        .onConflictDoUpdate({
+          target: [schema.toolsTable.catalogId, schema.toolsTable.name],
+          targetWhere: sql`${schema.toolsTable.catalogId} = ${sql.raw(`'${ARCHESTRA_MCP_CATALOG_ID}'`)} and ${schema.toolsTable.agentId} is null and ${schema.toolsTable.delegateToAgentId} is null`,
+          set: {
+            description: sql`excluded.description`,
+            parameters: sql`excluded.parameters`,
+          },
+        })
+        .returning({
+          name: schema.toolsTable.name,
+          // xmax = 0 marks a freshly inserted row; non-zero means the conflict path
+          // updated an existing row (a concurrent seed won the insert).
+          inserted: sql<boolean>`(xmax = 0)`,
+        });
+      for (const row of insertedRows) {
+        if (row.inserted) {
+          insertedNames.push(row.name);
+        }
+      }
     }
 
     // Remove stale tools that no longer exist in the Archestra tool definitions
@@ -1043,15 +1147,15 @@ class ToolModel {
       );
     }
 
-    // Names of tools created on this run — used by callers to trigger
-    // one-time backfills when a new built-in tool first appears.
-    return toolsToInsert.map((tool) => tool.name);
+    // Names of tools actually inserted on this run — used by callers to trigger
+    // one-time backfills when a new built-in tool first appears. Excludes rows the
+    // conflict path updated, so a concurrent-seed loser doesn't re-trigger backfills.
+    return insertedNames;
   }
 
   /**
-   * Assign the Agent Skill tools (list_skills / activate_skill /
-   * read_skill_file) to every existing agent in the given organization.
-   * Idempotent.
+   * Assign the Agent Skill tools (list_skills / load_skill) to every existing
+   * agent in the given organization. Idempotent.
    *
    * Triggered by the "Enable and create a new skill" empty-state button
    * (POST /api/skills/enable-defaults).

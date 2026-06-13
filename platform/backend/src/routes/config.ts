@@ -1,4 +1,3 @@
-import { readFileSync } from "node:fs";
 import { RouteId, SupportedProvidersSchema } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
@@ -10,6 +9,7 @@ import config from "@/config";
 import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
 import logger from "@/logging";
 import { OrganizationModel } from "@/models";
+import { ngrokTunnelManager } from "@/ngrok-tunnel-manager";
 import { getByosVaultKvVersion, isByosEnabled } from "@/secrets-manager";
 import { skillSandboxRuntimeService } from "@/skills-sandbox/skill-sandbox-runtime-service";
 import { EmailProviderTypeSchema, type GlobalToolPolicy } from "@/types";
@@ -114,7 +114,7 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
           environmentNamespaces:
             config.orchestrator.kubernetes.environmentNamespaces,
           isQuickstart: config.isQuickstart,
-          ngrokDomain: getNgrokDomain(),
+          ngrokDomain: ngrokTunnelManager.getPublicDomain(),
           virtualKeyDefaultExpirationSeconds:
             config.llmProxy.virtualKeyDefaultExpirationSeconds,
           mcpSandboxDomain: config.mcpSandbox.domain,
@@ -209,18 +209,5 @@ async function loadAnalyticsInstanceId(): Promise<string | null> {
       hasLoggedAnalyticsInstanceIdError = true;
     }
     return null;
-  }
-}
-
-/**
- * Get the ngrok domain from env var or from the file written by the
- * detect-ngrok-domain.sh script (for dynamically assigned domains).
- */
-function getNgrokDomain(): string {
-  if (config.ngrokDomain) return config.ngrokDomain;
-  try {
-    return readFileSync("/app/data/.ngrok_domain", "utf-8").trim();
-  } catch {
-    return "";
   }
 }

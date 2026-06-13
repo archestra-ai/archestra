@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field, fields, is_dataclass
-from typing import Literal, Mapping, Union, cast
+from typing import Literal, Mapping, TypeVar, Union, cast
 
 SCHEMA_VERSION = 1
 
@@ -42,6 +42,12 @@ SECRET_TOKEN_RE = re.compile(
     r"|AIza[A-Za-z0-9_-]{8,}|ya29\.[A-Za-z0-9_-]{8,}|eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)"
 )
 
+
+def redact_tokens(text: str) -> str:
+    """replace credential-shaped tokens embedded in a string (a hook command, an MCP launch
+    command, a URL) before it is stored or printed."""
+    return SECRET_TOKEN_RE.sub("<redacted>", text)
+
 # --- shared Literal vocabularies (imported by archestra_client to avoid a cycle) ----------
 
 Scope = Literal["personal", "team", "org"]
@@ -59,9 +65,40 @@ ConditionOperator = Literal[
 ItemKind = Literal[
     "claude_md", "subagent", "skill", "command", "local_tool", "mcp_server", "hook", "openclaw"
 ]
-TargetKind = Literal["agent", "skill", "mcp_catalog", "mcp_install", "llm_key", "tool_policy"]
+TargetKind = Literal[
+    "agent", "skill", "mcp_catalog", "mcp_install", "llm_key", "tool_policy", "hook"
+]
 Outcome = Literal["created", "skipped", "failed", "manual", "planned", "invalid"]
 HookIntent = Literal["guard", "passive"]
+# the three lifecycle events archestra runs hooks for (the rest have no native target).
+HookEvent = Literal["session_start", "pre_tool_use", "post_tool_use"]
+# how a discovered hook's script body was obtained: a bundled referenced file, an inline shell
+# snippet to synthesize a wrapper from, or unresolvable (missing/escaping/unparsable -> manual).
+HookSource = Literal["bundled", "inline", "unresolved"]
+
+# archestra hook-file constraints (single source, mirrors InsertHookFileSchema in the backend).
+HOOK_FILE_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*\.(py|sh)$")
+HOOK_FILE_NAME_MAX = 255
+HOOK_CONTENT_MAX = 65_536
+HOOK_REQUIREMENTS_MAX = 20
+HOOK_REQUIREMENT_MAX_LEN = 200
+_UUID_RE = re.compile(
+    r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+)
+
+
+def archestra_hook_event(claude_event: str) -> HookEvent | None:
+    """map a Claude Code hook event name to its archestra lifecycle event, or None when archestra
+    has no equivalent (UserPromptSubmit, Stop, SubagentStop, PreCompact, Notification, SessionEnd…)."""
+    match claude_event:
+        case "SessionStart":
+            return "session_start"
+        case "PreToolUse":
+            return "pre_tool_use"
+        case "PostToolUse":
+            return "post_tool_use"
+        case _:
+            return None
 
 # an arbitrary decoded-JSON value. used only where the schema is genuinely open (openclaw
 # config, model-authored answer payloads); everything else is precisely typed.
@@ -122,7 +159,13 @@ class HookData:
     event: str
     command: str
     intent: HookIntent
+    source: HookSource
     matcher: str | None = None
+    # set when source == "bundled": the referenced script's basename + source-relative path.
+    file_name: str | None = None
+    script_path: str | None = None
+    # PEP-723 dependencies extracted from a bundled .py hook (empty otherwise / for bash).
+    requirements: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -345,24 +388,33 @@ _ACTIONS: tuple[PolicyAction, ...] = (
 _SCOPES: tuple[Scope, ...] = ("personal", "team", "org")
 _SERVER_TYPES: tuple[ServerType, ...] = ("local", "remote")
 _INTENTS: tuple[HookIntent, ...] = ("guard", "passive")
+_HOOK_SOURCES: tuple[HookSource, ...] = ("bundled", "inline", "unresolved")
 _TARGET_KINDS: tuple[TargetKind, ...] = (
-    "agent", "skill", "mcp_catalog", "mcp_install", "llm_key", "tool_policy",
+    "agent", "skill", "mcp_catalog", "mcp_install", "llm_key", "tool_policy", "hook",
 )
 _PLAN_ACTIONS: tuple[Literal["migrate", "skip", "manual"], ...] = ("migrate", "skip", "manual")
+_ENCODINGS: tuple[Literal["utf8", "base64"], ...] = ("utf8", "base64")
+
+_LiteralT = TypeVar("_LiteralT", bound=str)
+
+
+def _require_literal(
+    value: object, allowed: tuple[_LiteralT, ...], *, what: str, ctx: str
+) -> _LiteralT:
+    """the one mechanism behind enum-shaped fields crossing a trust boundary."""
+    if value not in allowed:
+        raise ContractError(f"{ctx}: {what} {value!r} must be one of {'|'.join(allowed)}")
+    return cast("_LiteralT", value)
 
 
 def require_provider(answers: Mapping[str, JsonValue], *, ctx: str) -> Provider:
     value = require_str_field(answers, "provider", ctx=ctx)
-    if value not in _PROVIDERS:
-        raise ContractError(f"{ctx}: provider {value!r} is not a known provider")
-    return cast("Provider", value)
+    return _require_literal(value, _PROVIDERS, what="provider", ctx=ctx)
 
 
 def require_operator(answers: Mapping[str, JsonValue], *, ctx: str) -> ConditionOperator:
     value = require_str_field(answers, "operator", ctx=ctx)
-    if value not in _OPERATORS:
-        raise ContractError(f"{ctx}: operator {value!r} is not a known condition operator")
-    return cast("ConditionOperator", value)
+    return _require_literal(value, _OPERATORS, what="operator", ctx=ctx)
 
 
 def optional_action(answers: Mapping[str, JsonValue], *, ctx: str) -> PolicyAction:
@@ -370,9 +422,76 @@ def optional_action(answers: Mapping[str, JsonValue], *, ctx: str) -> PolicyActi
     value = answers.get("action")
     if value is None:
         return "block_always"
-    if value not in _ACTIONS:
-        raise ContractError(f"{ctx}: action {value!r} is not a known policy action")
-    return cast("PolicyAction", value)
+    return _require_literal(value, _ACTIONS, what="action", ctx=ctx)
+
+
+# --- hook validators (shared by discover PEP-723 extraction + apply build) -----------------
+
+
+def archestra_file_name(value: str, *, ctx: str) -> str:
+    """a plain hook file name ending in .py or .sh (mirrors HookFileNameSchema)."""
+    if len(value) > HOOK_FILE_NAME_MAX or HOOK_FILE_NAME_RE.match(value) is None:
+        raise ContractError(
+            f"{ctx}: hook file name {value!r} must match {HOOK_FILE_NAME_RE.pattern} "
+            f"and be at most {HOOK_FILE_NAME_MAX} chars"
+        )
+    return value
+
+
+def validate_requirements(value: object, *, ctx: str) -> list[str]:
+    """validate a list of pip requirements (mirrors HookRequirementsSchema): each is trimmed,
+    non-empty, single-line, <= 200 chars; at most 20 entries. trimmed values are returned."""
+    raw = _str_list(value, ctx=ctx)
+    if len(raw) > HOOK_REQUIREMENTS_MAX:
+        raise ContractError(f"{ctx}: at most {HOOK_REQUIREMENTS_MAX} requirements, got {len(raw)}")
+    out: list[str] = []
+    for i, item in enumerate(raw):
+        req = item.strip()
+        if not req:
+            raise ContractError(f"{ctx}[{i}]: requirement must be a non-empty string")
+        if len(req) > HOOK_REQUIREMENT_MAX_LEN:
+            raise ContractError(f"{ctx}[{i}]: requirement exceeds {HOOK_REQUIREMENT_MAX_LEN} chars")
+        if any(c in req for c in "\r\n\0"):
+            raise ContractError(f"{ctx}[{i}]: requirement must be a single line")
+        out.append(req)
+    return out
+
+
+def require_requirements(answers: Mapping[str, JsonValue], *, ctx: str) -> list[str] | None:
+    """user-supplied requirements override, or None when the answer omits the key."""
+    raw = answers.get("requirements")
+    if raw is None:
+        return None
+    return validate_requirements(raw, ctx=f"{ctx}.requirements")
+
+
+def optional_agent_id(answers: Mapping[str, JsonValue], *, ctx: str) -> str | None:
+    """a hook may pin an explicit agent id (UUID); absent -> apply attaches the primary agent."""
+    raw = answers.get("agentId")
+    if raw is None:
+        return None
+    if not isinstance(raw, str) or _UUID_RE.match(raw) is None:
+        raise ContractError(f"{ctx}.agentId: must be a UUID string, got {raw!r}")
+    return raw
+
+
+def optional_file_name(answers: Mapping[str, JsonValue], *, ctx: str) -> str | None:
+    """an explicit hook file name override (kept distinct from name_override, a display name)."""
+    raw = answers.get("fileName")
+    if raw is None:
+        return None
+    if not isinstance(raw, str):
+        raise ContractError(f"{ctx}.fileName: must be a string, got {raw!r}")
+    return archestra_file_name(raw, ctx=f"{ctx}.fileName")
+
+
+def require_hook_content(text: str, *, ctx: str) -> str:
+    """hook script body must be non-empty and within the backend's content cap."""
+    if not 1 <= len(text) <= HOOK_CONTENT_MAX:
+        raise ContractError(
+            f"{ctx}: hook content length {len(text)} must be between 1 and {HOOK_CONTENT_MAX}"
+        )
+    return text
 
 
 # --- parsing external JSON into typed objects --------------------------------------------
@@ -380,44 +499,13 @@ def optional_action(answers: Mapping[str, JsonValue], *, ctx: str) -> PolicyActi
 
 def parse_bundled_file(value: object, *, ctx: str) -> BundledFile:
     obj = require_dict(value, ctx=ctx)
-    encoding = require_str_field(obj, "encoding", ctx=ctx)
-    if encoding not in ("utf8", "base64"):
-        raise ContractError(f"{ctx}.encoding: {encoding!r} must be 'utf8' or 'base64'")
     return BundledFile(
         path=require_str_field(obj, "path", ctx=ctx),
         content=require_str_field(obj, "content", ctx=ctx),
-        encoding=cast('Literal["utf8", "base64"]', encoding),
+        encoding=_require_literal(
+            require_str_field(obj, "encoding", ctx=ctx), _ENCODINGS, what="encoding", ctx=ctx
+        ),
     )
-
-
-def _scope(value: object, *, ctx: str) -> Scope:
-    if value not in _SCOPES:
-        raise ContractError(f"{ctx}: scope {value!r} must be personal|team|org")
-    return cast("Scope", value)
-
-
-def _server_type(value: object, *, ctx: str) -> ServerType:
-    if value not in _SERVER_TYPES:
-        raise ContractError(f"{ctx}: transport {value!r} must be local|remote")
-    return cast("ServerType", value)
-
-
-def _intent(value: object, *, ctx: str) -> HookIntent:
-    if value not in _INTENTS:
-        raise ContractError(f"{ctx}: intent {value!r} must be guard|passive")
-    return cast("HookIntent", value)
-
-
-def _target_kind(value: object, *, ctx: str) -> TargetKind:
-    if value not in _TARGET_KINDS:
-        raise ContractError(f"{ctx}: {value!r} is not a known target kind")
-    return cast("TargetKind", value)
-
-
-def _plan_action(value: object, *, ctx: str) -> Literal["migrate", "skip", "manual"]:
-    if value not in _PLAN_ACTIONS:
-        raise ContractError(f"{ctx}: {value!r} must be migrate|skip|manual")
-    return cast('Literal["migrate", "skip", "manual"]', value)
 
 
 def parse_item(value: object, *, ctx: str) -> Item:
@@ -480,7 +568,9 @@ def parse_item(value: object, *, ctx: str) -> Item:
             return McpServerItem(
                 id=item_id, name=name, path=path, summary=summary, files=files, redacted_refs=refs,
                 data=McpServerData(
-                    transport=_server_type(data.get("transport"), ctx=dctx),
+                    transport=_require_literal(
+                        data.get("transport"), _SERVER_TYPES, what="transport", ctx=dctx
+                    ),
                     command=_opt_str(data, "command", ctx=dctx),
                     args=_str_list(data.get("args", []), ctx=f"{dctx}.args"),
                     env=_str_map(data.get("env", {}), ctx=f"{dctx}.env"),
@@ -493,8 +583,12 @@ def parse_item(value: object, *, ctx: str) -> Item:
                 data=HookData(
                     event=require_str_field(data, "event", ctx=dctx),
                     command=require_str_field(data, "command", ctx=dctx),
-                    intent=_intent(data.get("intent"), ctx=dctx),
+                    intent=_require_literal(data.get("intent"), _INTENTS, what="intent", ctx=dctx),
+                    source=_require_literal(data.get("source"), _HOOK_SOURCES, what="source", ctx=dctx),
                     matcher=_opt_str(data, "matcher", ctx=dctx),
+                    file_name=_opt_str(data, "file_name", ctx=dctx),
+                    script_path=_opt_str(data, "script_path", ctx=dctx),
+                    requirements=_str_list(data.get("requirements", []), ctx=f"{dctx}.requirements"),
                 ),
             )
         case "openclaw":
@@ -537,9 +631,13 @@ def parse_decision(value: object, *, ctx: str) -> Decision:
     obj = require_dict(value, ctx=ctx)
     return Decision(
         source_id=require_str_field(obj, "source_id", ctx=ctx),
-        target_kind=_target_kind(obj.get("target_kind"), ctx=f"{ctx}.target_kind"),
-        scope=_scope(obj.get("scope"), ctx=f"{ctx}.scope"),
-        action=_plan_action(obj.get("action", "migrate"), ctx=f"{ctx}.action"),
+        target_kind=_require_literal(
+            obj.get("target_kind"), _TARGET_KINDS, what="target kind", ctx=f"{ctx}.target_kind"
+        ),
+        scope=_require_literal(obj.get("scope"), _SCOPES, what="scope", ctx=f"{ctx}.scope"),
+        action=_require_literal(
+            obj.get("action", "migrate"), _PLAN_ACTIONS, what="action", ctx=f"{ctx}.action"
+        ),
         name_override=_opt_str(obj, "name_override", ctx=ctx),
         notes=_opt_str(obj, "notes", ctx=ctx),
         user_answers=require_dict(obj.get("user_answers", {}), ctx=f"{ctx}.user_answers"),
@@ -554,7 +652,9 @@ def parse_plan(value: object, *, ctx: str = "plan") -> MigrationPlan:
     ]
     return MigrationPlan(
         schema_version=_require_int(obj.get("schema_version", SCHEMA_VERSION), ctx=f"{ctx}.schema_version"),
-        default_scope=_scope(obj.get("default_scope"), ctx=f"{ctx}.default_scope"),
+        default_scope=_require_literal(
+            obj.get("default_scope"), _SCOPES, what="scope", ctx=f"{ctx}.default_scope"
+        ),
         decisions=decisions,
     )
 

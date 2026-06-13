@@ -169,6 +169,7 @@ describe("BedrockOpenai response adapter", () => {
       outputTokens: 1,
       cacheReadTokens: 0,
       cacheWriteTokens: 0,
+      cacheWrite1hTokens: 0,
     });
     expect(resp.getFinishReasons()).toEqual(["tool_use"]);
   });

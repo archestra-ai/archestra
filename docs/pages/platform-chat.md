@@ -3,7 +3,7 @@ title: Chat
 category: Agents
 order: 2
 description: Built-in Chat interface for working with agents and MCP tools
-lastUpdated: 2026-05-19
+lastUpdated: 2026-06-11
 ---
 
 <!--
@@ -24,6 +24,10 @@ Chat supports the LLM providers configured for your workspace. See [Supported LL
 Type `/` in the prompt input to open available chat commands.
 
 - [`/compact`](#context-compaction) summarizes older conversation history to reduce context usage and help prevent hitting the selected model's context limit. The full chat history remains visible in the conversation.
+
+### MCP Elicitation
+
+Some MCP tools can ask for additional information while they run. Chat shows these requests as a modal form, validates required fields, and resumes the tool call after you continue. If the request points to an external URL, Chat only opens HTTP or HTTPS links.
 
 #### Context Compaction
 

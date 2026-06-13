@@ -1265,6 +1265,16 @@ These environment variables configure the ChatOps feature, which allows users to
   - Optional: Only required if you want to fetch conversation history for context
   - Note: Keep this value secure; do not commit to version control
 
+#### Public URL (ngrok)
+
+Inbound chatops webhooks (MS Teams, Slack webhook mode) require this instance to be reachable from the Internet. When `ARCHESTRA_NGROK_AUTH_TOKEN` is set, the backend opens an [ngrok](https://ngrok.com) tunnel in-process on startup — no separate ngrok process or CLI binary is needed.
+
+- **`ARCHESTRA_NGROK_AUTH_TOKEN`** - ngrok auth token. When set, the backend tunnels the API port so webhooks are reachable.
+  - Get one at [dashboard.ngrok.com](https://dashboard.ngrok.com/get-started/your-authtoken)
+- **`ARCHESTRA_NGROK_DOMAIN`** - Reserved ngrok domain for a stable public URL.
+  - Optional: without it ngrok assigns an ephemeral domain that rotates on each restart
+  - Recommended for MS Teams, whose messaging endpoint is registered statically in Azure
+
 #### Slack
 
 See [Slack](/docs/platform-slack) for setup instructions.

@@ -2043,9 +2043,9 @@ export function McpCatalogForm({
                                       </FormControl>
                                       <FormDescription>
                                         Optional OAuth resource/audience sent in
-                                        the authorization request. Leave blank
-                                        to use the Default Audience, if set, or
-                                        the MCP endpoint URL.
+                                        the authorization request and token
+                                        exchange. Leave blank to omit the OAuth
+                                        resource parameter.
                                       </FormDescription>
                                       <FormMessage />
                                     </FormItem>

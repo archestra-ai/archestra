@@ -840,6 +840,26 @@ class BedrockRequestAdapter
 // RESPONSE ADAPTER
 // =============================================================================
 
+/**
+ * Cache-creation tokens written at the 1-hour TTL, from Bedrock's per-TTL
+ * `cacheDetails` breakdown (the remainder of cacheWriteInputTokens is 5m). Used
+ * to bill the 1h write portion at the higher rate.
+ */
+function bedrockCacheWrite1hTokens(
+  usage:
+    | {
+        cacheDetails?: ({ ttl?: string; inputTokens?: number } | null)[] | null;
+      }
+    | null
+    | undefined,
+): number {
+  return (usage?.cacheDetails ?? []).reduce(
+    (sum, detail) =>
+      detail?.ttl === "1h" ? sum + (detail.inputTokens ?? 0) : sum,
+    0,
+  );
+}
+
 class BedrockResponseAdapter implements LLMResponseAdapter<BedrockResponse> {
   readonly provider = "bedrock" as const;
   private response: BedrockResponse;
@@ -899,6 +919,7 @@ class BedrockResponseAdapter implements LLMResponseAdapter<BedrockResponse> {
       outputTokens: this.response.usage?.outputTokens ?? 0,
       cacheReadTokens: this.response.usage?.cacheReadInputTokens ?? 0,
       cacheWriteTokens: this.response.usage?.cacheWriteInputTokens ?? 0,
+      cacheWrite1hTokens: bedrockCacheWrite1hTokens(this.response.usage),
     };
   }
 
@@ -1088,6 +1109,7 @@ class BedrockStreamAdapter
           outputTokens?: number;
           cacheReadInputTokens?: number;
           cacheWriteInputTokens?: number;
+          cacheDetails?: ({ ttl?: string; inputTokens?: number } | null)[];
         };
         metrics?: { latencyMs?: number };
         trace?: unknown;
@@ -1098,6 +1120,7 @@ class BedrockStreamAdapter
           outputTokens: metadata.usage.outputTokens ?? 0,
           cacheReadTokens: metadata.usage.cacheReadInputTokens ?? 0,
           cacheWriteTokens: metadata.usage.cacheWriteInputTokens ?? 0,
+          cacheWrite1hTokens: bedrockCacheWrite1hTokens(metadata.usage),
         };
       }
       if (metadata.metrics?.latencyMs !== undefined) {
@@ -1737,6 +1760,11 @@ export const bedrockAdapterFactory: LLMProvider<
       usage: {
         inputTokens: response.usage?.inputTokens ?? 0,
         outputTokens: response.usage?.outputTokens ?? 0,
+        // Preserve cache usage so getUsage() can report it on the non-streaming
+        // path; cacheDetails carries the per-TTL write split for 1h cost.
+        cacheReadInputTokens: response.usage?.cacheReadInputTokens,
+        cacheWriteInputTokens: response.usage?.cacheWriteInputTokens,
+        cacheDetails: response.usage?.cacheDetails,
       },
       metrics: response.metrics,
       additionalModelResponseFields: response.additionalModelResponseFields as

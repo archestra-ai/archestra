@@ -105,6 +105,33 @@ describe("ChatOpsConfigModel", () => {
     });
   });
 
+  describe("ngrok config", () => {
+    test("returns null when no config exists", async () => {
+      const result = await ChatOpsConfigModel.getNgrokConfig();
+      expect(result).toBeNull();
+    });
+
+    test("saves, retrieves, and updates ngrok config", async () => {
+      await ChatOpsConfigModel.saveNgrokConfig({
+        authToken: "tok_1",
+        domain: "",
+      });
+      expect(await ChatOpsConfigModel.getNgrokConfig()).toEqual({
+        authToken: "tok_1",
+        domain: "",
+      });
+
+      await ChatOpsConfigModel.saveNgrokConfig({
+        authToken: "tok_2",
+        domain: "my-app.ngrok.app",
+      });
+      expect(await ChatOpsConfigModel.getNgrokConfig()).toEqual({
+        authToken: "tok_2",
+        domain: "my-app.ngrok.app",
+      });
+    });
+  });
+
   describe("independent storage", () => {
     test("MS Teams and Slack configs are stored independently", async () => {
       const msTeamsConfig = {

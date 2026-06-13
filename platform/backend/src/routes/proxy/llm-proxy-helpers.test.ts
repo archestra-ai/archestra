@@ -199,7 +199,7 @@ describe("calculateInteractionCosts", () => {
       cacheSavings: 0.0009,
     });
     expect(mockCalculateCost).toHaveBeenCalledTimes(2);
-    const cacheTokens = { readTokens: 0, writeTokens: 0 };
+    const cacheTokens = { readTokens: 0, writeTokens: 0, write1hTokens: 0 };
     expect(mockCalculateCost).toHaveBeenCalledWith(
       "gpt-4",
       100,

@@ -555,14 +555,14 @@ class AnthropicResponseAdapter
   }
 
   getUsage(): UsageView {
-    const { input, output, cacheRead, cacheWrite } = getUsageTokens(
-      this.response.usage,
-    );
+    const { input, output, cacheRead, cacheWrite, cacheWrite1h } =
+      getUsageTokens(this.response.usage);
     return {
       inputTokens: input,
       outputTokens: output,
       cacheReadTokens: cacheRead,
       cacheWriteTokens: cacheWrite,
+      cacheWrite1hTokens: cacheWrite1h,
     };
   }
 
@@ -642,15 +642,16 @@ class AnthropicStreamAdapter
             cacheReadTokens: chunk.message.usage.cache_read_input_tokens ?? 0,
             cacheWriteTokens:
               chunk.message.usage.cache_creation_input_tokens ?? 0,
+            cacheWrite1hTokens:
+              chunk.message.usage.cache_creation?.ephemeral_1h_input_tokens ??
+              0,
           };
         }
         sseData = `event: message_start\ndata: ${JSON.stringify(chunk)}\n\n`;
         break;
 
       case "content_block_start":
-        if (chunk.content_block.type === "text") {
-          sseData = `event: content_block_start\ndata: ${JSON.stringify(chunk)}\n\n`;
-        } else if (chunk.content_block.type === "tool_use") {
+        if (chunk.content_block.type === "tool_use") {
           this.toolUseBlockIndices.add(chunk.index);
           this.currentToolCallIndex = this.state.toolCalls.length;
           this.state.toolCalls.push({
@@ -661,14 +662,21 @@ class AnthropicStreamAdapter
           // Store raw event for replay after policy approval
           this.state.rawToolCallEvents.push(chunk);
           isToolCallChunk = true;
+        } else {
+          // Everything except client tool calls (text, thinking,
+          // redacted_thinking, server_tool_use, ...) streams through
+          // unmodified. Thinking blocks in particular must reach the client:
+          // it has to replay them (with signature) on the next turn or the
+          // upstream API rejects the conversation.
+          sseData = `event: content_block_start\ndata: ${JSON.stringify(chunk)}\n\n`;
         }
         break;
 
       case "content_block_delta":
-        if (chunk.delta.type === "text_delta") {
-          this.state.text += chunk.delta.text;
-          sseData = `event: content_block_delta\ndata: ${JSON.stringify(chunk)}\n\n`;
-        } else if (chunk.delta.type === "input_json_delta") {
+        if (
+          chunk.delta.type === "input_json_delta" &&
+          this.toolUseBlockIndices.has(chunk.index)
+        ) {
           if (this.currentToolCallIndex >= 0) {
             this.state.toolCalls[this.currentToolCallIndex].arguments +=
               chunk.delta.partial_json;
@@ -676,6 +684,13 @@ class AnthropicStreamAdapter
           // Store raw event for replay after policy approval
           this.state.rawToolCallEvents.push(chunk);
           isToolCallChunk = true;
+        } else {
+          // input_json_delta outside a tool_use block belongs to a
+          // server-side tool and is not subject to invocation policies.
+          if (chunk.delta.type === "text_delta") {
+            this.state.text += chunk.delta.text;
+          }
+          sseData = `event: content_block_delta\ndata: ${JSON.stringify(chunk)}\n\n`;
         }
         break;
 
@@ -1099,8 +1114,17 @@ export function getUsageTokens(usage: Anthropic.Types.Usage) {
     output: usage.output_tokens,
     cacheRead: usage.cache_read_input_tokens ?? 0,
     cacheWrite: usage.cache_creation_input_tokens ?? 0,
+    cacheWrite1h: usage.cache_creation?.ephemeral_1h_input_tokens ?? 0,
   };
 }
+
+// Same value as the SDK default, but passing it explicitly opts out of the
+// SDK's client-side guard that throws "Streaming is required for operations
+// that may take longer than 10 minutes" on non-streaming requests with large
+// max_tokens (Claude Code sends max_tokens=32000 non-streaming). The proxy
+// must forward such requests — the upstream API is the authority on whether
+// they need streaming.
+const ANTHROPIC_CLIENT_TIMEOUT_MS = 10 * 60 * 1000;
 
 export const anthropicAdapterFactory: LLMProvider<
   AnthropicRequest,
@@ -1176,6 +1200,7 @@ export const anthropicAdapterFactory: LLMProvider<
         authToken: null,
         baseURL: options.baseUrl,
         fetch: createAnthropicAzureFoundryFetch(customFetch),
+        timeout: ANTHROPIC_CLIENT_TIMEOUT_MS,
         defaultHeaders: {
           ...options.defaultHeaders,
           // The fetch wrapper replaces this sentinel with a fresh Entra ID token on every request.
@@ -1189,6 +1214,7 @@ export const anthropicAdapterFactory: LLMProvider<
       authToken: token,
       baseURL: options.baseUrl,
       fetch: customFetch,
+      timeout: ANTHROPIC_CLIENT_TIMEOUT_MS,
       defaultHeaders: options.defaultHeaders,
     });
   },

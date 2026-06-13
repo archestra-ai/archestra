@@ -86,8 +86,7 @@ describe("archestra MCP tool names", () => {
   test("flags the skill and sandbox runtime path as always-exposed", () => {
     for (const shortName of [
       "list_skills",
-      "activate_skill",
-      "read_skill_file",
+      "load_skill",
       "run_command",
       "download_file",
       "upload_file",
@@ -98,13 +97,10 @@ describe("archestra MCP tool names", () => {
 
   test("recognizes always-exposed tools through a white-label prefix", () => {
     const branding = { appName: "Acme Control Plane", fullWhiteLabeling: true };
-    const brandedActivate = getArchestraToolFullName(
-      "activate_skill",
-      branding,
-    );
-    const shortName = getArchestraToolShortName(brandedActivate, branding);
+    const brandedLoad = getArchestraToolFullName("load_skill", branding);
+    const shortName = getArchestraToolShortName(brandedLoad, branding);
 
-    expect(shortName).toBe("activate_skill");
+    expect(shortName).toBe("load_skill");
     expect(
       shortName !== null && isAlwaysExposedArchestraToolShortName(shortName),
     ).toBe(true);

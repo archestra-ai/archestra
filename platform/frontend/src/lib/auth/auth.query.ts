@@ -7,6 +7,7 @@ export const authQueryKeys = {
   all: ["auth"] as const,
   session: () => [...authQueryKeys.all, "session"] as const,
   orgMembers: () => [...authQueryKeys.all, "orgMembers"] as const,
+  sessions: () => [...authQueryKeys.all, "sessions"] as const,
   userPermissions: () => [...authQueryKeys.all, "userPermissions"] as const,
   defaultCredentialsEnabled: () =>
     [...authQueryKeys.all, "defaultCredentialsEnabled"] as const,

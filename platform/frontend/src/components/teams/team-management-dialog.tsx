@@ -9,9 +9,21 @@ import {
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useDebounce } from "@uidotdev/usehooks";
 import { Check, Copy, Key, RefreshCw, Trash2, Users } from "lucide-react";
-import { type ComponentType, useEffect, useMemo, useState } from "react";
+import {
+  type ComponentType,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { toast } from "sonner";
+import {
+  type ProfileLabel,
+  ProfileLabels,
+  type ProfileLabelsRef,
+} from "@/components/agent-labels";
 import { TabbedDialogShell } from "@/components/tabbed-dialog-shell";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -91,6 +103,8 @@ export function TeamManagementDialog(props: TeamManagementDialogProps) {
   const [activeSection, setActiveSection] = useState<TeamDialogSection>("team");
   const [name, setName] = useState(team?.name ?? "");
   const [description, setDescription] = useState(team?.description ?? "");
+  const [labels, setLabels] = useState<ProfileLabel[]>(team?.labels ?? []);
+  const labelsRef = useRef<ProfileLabelsRef>(null);
   const TeamManagementExternalSyncSection =
     useTeamManagementExternalSyncSection();
   const TeamManagementVaultFolderSection =
@@ -130,11 +144,13 @@ export function TeamManagementDialog(props: TeamManagementDialogProps) {
       setCreatedTeam(null);
       setName("");
       setDescription("");
+      setLabels([]);
       return;
     }
 
     setName(editTeam?.name ?? "");
     setDescription(editTeam?.description ?? "");
+    setLabels(editTeam?.labels ?? []);
   }, [editTeam, mode, open]);
 
   useEffect(() => {
@@ -151,9 +167,12 @@ export function TeamManagementDialog(props: TeamManagementDialogProps) {
 
   const saveTeam = useMutation({
     mutationFn: async () => {
+      // Flush any label typed into the picker but not yet committed.
+      const finalLabels = labelsRef.current?.saveUnsavedLabel() ?? labels;
       const body = {
         name: name.trim(),
         description: description.trim() || undefined,
+        labels: finalLabels.map(({ key, value }) => ({ key, value })),
       };
       const { data, error } = !team
         ? await archestraApiSdk.createTeam({ body })
@@ -244,8 +263,11 @@ export function TeamManagementDialog(props: TeamManagementDialogProps) {
           showMembers={Boolean(team)}
           name={name}
           description={description}
+          labels={labels}
+          labelsRef={labelsRef}
           onNameChange={setName}
           onDescriptionChange={setDescription}
+          onLabelsChange={setLabels}
           readOnlyDetails={!canEditDetails}
         />
       )}
@@ -268,8 +290,11 @@ function TeamSection(props: {
   showMembers: boolean;
   name: string;
   description: string;
+  labels: ProfileLabel[];
+  labelsRef: React.Ref<ProfileLabelsRef>;
   onNameChange: (value: string) => void;
   onDescriptionChange: (value: string) => void;
+  onLabelsChange: (labels: ProfileLabel[]) => void;
   readOnlyDetails: boolean;
 }) {
   return (
@@ -293,6 +318,31 @@ function TeamSection(props: {
             disabled={props.readOnlyDetails}
           />
         </div>
+        {props.readOnlyDetails ? (
+          props.labels.length > 0 && (
+            <div className="space-y-2">
+              <Label>Labels</Label>
+              <div className="flex flex-wrap gap-2">
+                {props.labels.map((label) => (
+                  <Badge
+                    key={label.key}
+                    variant="secondary"
+                    className="flex items-center gap-1"
+                  >
+                    <span className="font-semibold">{label.key}:</span>
+                    <span>{label.value}</span>
+                  </Badge>
+                ))}
+              </div>
+            </div>
+          )
+        ) : (
+          <ProfileLabels
+            ref={props.labelsRef}
+            labels={props.labels}
+            onLabelsChange={props.onLabelsChange}
+          />
+        )}
       </div>
 
       {props.showMembers && props.team && (

@@ -34,7 +34,14 @@ import {
 } from "react";
 import { toast } from "sonner";
 import { filterOptimisticToolCalls } from "@/components/chat/chat-messages.utils";
-import { useGenerateConversationTitle } from "@/lib/chat/chat.query";
+import {
+  type ChatMcpElicitationRequest,
+  McpElicitationDialog,
+} from "@/components/chat/mcp-elicitation-dialog";
+import {
+  useGenerateConversationTitle,
+  useResolveChatMcpElicitation,
+} from "@/lib/chat/chat.query";
 import { useUpdateChatMessage } from "@/lib/chat/chat-message.query";
 import {
   pruneEmptyTrailingAssistantMessage,
@@ -42,8 +49,10 @@ import {
   shouldFreezeChatMessages,
 } from "@/lib/chat/chat-session-utils";
 import {
+  applyTextEditToMessages,
   getChatExternalAgentId,
   getConversationDisplayTitle,
+  resolveCanonicalMessageId,
 } from "@/lib/chat/chat-utils";
 import {
   extractSwapTargetAgentName,
@@ -130,6 +139,7 @@ interface ChatSession {
     toolCallId: string;
     toolName: string;
   } | null;
+  pendingMcpElicitation: ChatMcpElicitationRequest | null;
   /**
    * True while the session is auto-recovering from a transient stream failure
    * (auto-retry scheduled or reattaching to the still-running response).
@@ -413,6 +423,8 @@ function ChatSessionHook({
   const appName = useAppName();
   const [pendingCustomServerToolCall, setPendingCustomServerToolCall] =
     useState<{ toolCallId: string; toolName: string } | null>(null);
+  const [pendingMcpElicitation, setPendingMcpElicitation] =
+    useState<ChatMcpElicitationRequest | null>(null);
   const [optimisticToolCalls, setOptimisticToolCalls] = useState<
     Array<{
       toolCallId: string;
@@ -431,6 +443,7 @@ function ChatSessionHook({
       lastCompaction: null,
     });
   const generateTitleMutation = useGenerateConversationTitle();
+  const resolveMcpElicitationMutation = useResolveChatMcpElicitation();
   // Destructure the stable mutateAsync (not the whole mutation object, whose
   // identity changes every render) so regenerateUserMessage stays referentially
   // stable and doesn't retrigger the session-sync effect on every render.
@@ -546,6 +559,7 @@ function ChatSessionHook({
     id: conversationId,
     onFinish: async ({ message, isAbort, isError }) => {
       setOptimisticToolCalls([]);
+      setPendingMcpElicitation(null);
       clearActiveContextCompaction();
       // The stream concluded — any auto-recovery (retry/reattach) is over.
       // NOT on stream errors: the SDK fires onFinish from a finally block
@@ -675,6 +689,7 @@ function ChatSessionHook({
           // a hard inline error panel; the toast is the only surfaced
           // feedback.
           clearErrorRef.current?.();
+          setPendingMcpElicitation(null);
           return;
         }
         // The 409 was provoked by our own auto-recovery: the stream
@@ -757,6 +772,7 @@ function ChatSessionHook({
       }
 
       // Terminal: no recovery in flight — surface the error.
+      setPendingMcpElicitation(null);
       setIsRecovering(false);
     },
     onToolCall: ({ toolCall }) => {
@@ -875,19 +891,27 @@ function ChatSessionHook({
       // so the frontend can render the MCP App container immediately (before tool finishes)
       const customData = dataPart as unknown as {
         type?: string;
-        data?: ChatSession["earlyToolUiStarts"][string] & {
-          toolCallId?: string;
-          toolName?: string;
-        };
+        data?: unknown;
       };
       if (customData.type === "data-tool-ui-start") {
         const { toolCallId, toolName, uiResourceUri, html, csp, permissions } =
-          customData.data ?? {};
+          (customData.data ??
+            {}) as ChatSession["earlyToolUiStarts"][string] & {
+            toolCallId?: string;
+            toolName?: string;
+          };
         if (toolCallId && uiResourceUri) {
           setEarlyToolUiStarts((prev) => ({
             ...prev,
             [toolCallId]: { uiResourceUri, html, csp, permissions, toolName },
           }));
+        }
+      }
+
+      if (customData.type === "data-mcp-elicitation") {
+        const data = customData.data as ChatMcpElicitationRequest | undefined;
+        if (data?.id && data.conversationId === conversationId) {
+          setPendingMcpElicitation(data);
         }
       }
     },
@@ -972,17 +996,41 @@ function ChatSessionHook({
       partIndex: number;
       text: string;
     }) => {
+      // Snapshot the live thread before touching any state — it is the only
+      // place that knows the live↔saved id mapping for in-session messages
+      // (metadata.persistedMessageId, stamped by mergePersistedMessageMetadata).
+      const liveMessages = previousMessagesRef.current;
+
       // Persist the (possibly edited) text and get the saved thread back, which
       // carries each message under its DB id.
       const data = await updateChatMessageAsync({ messageId, partIndex, text });
       const canonical = data?.messages as UIMessage[] | undefined;
-      const anchor = canonical?.find((m) => m.id === messageId);
+      // In-session messages keep their AI SDK nanoid as the live id while the
+      // saved thread keys them by DB UUID, so a plain id lookup misses them.
+      // Resolve through metadata.persistedMessageId too — otherwise the first
+      // edit before a reload falls into the regenerate-in-place path below and
+      // re-sends the pre-edit text, making the model answer the old prompt.
+      const anchorId = resolveCanonicalMessageId({
+        messageId,
+        liveMessages,
+        canonicalMessages: canonical,
+      });
 
-      if (canonical && anchor) {
+      // Break the restore-on-regression chain before regenerating, like the
+      // auto-retry and 409-reattach paths do: regenerate() rebuilds the edited
+      // turn's assistant message from empty, and a buffer still holding the
+      // pre-edit answer would keep resurrecting it while the new stream writes
+      // the same message id — two writers fighting over one message in an
+      // update loop that crashes the page (React #185, "Maximum update
+      // depth"). The pre-edit answer is meant to disappear here, so no frozen
+      // snapshot is taken.
+      previousMessagesRef.current = [];
+
+      if (canonical && anchorId) {
         // Normal path: the message is persisted. Sync to the saved thread and
         // regenerate from it. The server replaces the turn atomically.
         setMessages(canonical);
-        void regenerate({ messageId: anchor.id });
+        void regenerate({ messageId: anchorId });
         return;
       }
 
@@ -990,7 +1038,17 @@ function ChatSessionHook({
       // After switching agents the target message can still be in-session: its
       // id is an AI SDK nanoid, so it isn't found in the saved thread above.
       // Regenerate in place using the live id (the backend matches it to the
-      // stored row by content id).
+      // stored row by content id). Apply the edited text to the live message
+      // first: regenerate() re-sends the live thread, which otherwise still
+      // holds the pre-edit text.
+      setMessages((current) =>
+        applyTextEditToMessages({
+          messages: current,
+          messageId,
+          partIndex,
+          text,
+        }),
+      );
       void regenerate({ messageId });
     },
     [updateChatMessageAsync, setMessages, regenerate],
@@ -1012,6 +1070,7 @@ function ChatSessionHook({
     addToolResult,
     addToolApprovalResponse,
     pendingCustomServerToolCall,
+    pendingMcpElicitation,
     // Computed, not stored: the page paints the SDK error before onError has
     // run (so no flag set inside onError can suppress the first frame), and
     // consumers read the session from a map refreshed an effect-cycle later.
@@ -1060,6 +1119,7 @@ function ChatSessionHook({
     addToolResult,
     addToolApprovalResponse,
     pendingCustomServerToolCall,
+    pendingMcpElicitation,
     isRecoveringState,
     optimisticToolCalls,
     tokenUsage,
@@ -1071,7 +1131,23 @@ function ChatSessionHook({
     notifySessionUpdate,
   ]);
 
-  return null;
+  return (
+    <McpElicitationDialog
+      request={pendingMcpElicitation}
+      isSubmitting={resolveMcpElicitationMutation.isPending}
+      onRespond={async ({ id, action, content }) => {
+        const result = await resolveMcpElicitationMutation.mutateAsync({
+          id,
+          conversationId,
+          action,
+          content,
+        });
+        if (result) {
+          setPendingMcpElicitation(null);
+        }
+      }}
+    />
+  );
 }
 
 function getSwapAgentName(toolCall: unknown): string | null {

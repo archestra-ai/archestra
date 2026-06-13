@@ -18,6 +18,7 @@ import {
   testMcpServerCommand,
 } from "@archestra/shared";
 import { and, eq, inArray, isNull } from "drizzle-orm";
+import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import config, {
   getProviderConfiguredBaseUrl,
   getProviderEnvApiKey,
@@ -211,6 +212,13 @@ export async function syncBuiltInSkills(): Promise<void> {
   const organizations = await getOrganizationsForBuiltInAgentSync();
 
   for (const organization of organizations) {
+    // Brand the shipped built-in skills under this org's white-label identity
+    // (a no-op unless full white-labeling is active), mirroring how built-in MCP
+    // tools are seeded under the org's branded tool name. builtInSkillShippedWrite
+    // reads the synced singleton, so this must run before it.
+    const orgRecord = await OrganizationModel.getById(organization.id);
+    archestraMcpBranding.syncFromOrganization(orgRecord);
+
     for (const builtInSkill of BUILT_IN_SKILLS) {
       const sourceRef = builtInSkillSourceRef(builtInSkill.builtInSkillId);
       const shipped = builtInSkillShippedWrite(builtInSkill);

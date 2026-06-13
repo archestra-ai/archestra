@@ -110,8 +110,6 @@ Messages sent to the bot can include file attachments (images, PDFs, documents, 
 
 Adaptive Cards and other Teams-specific card types are not treated as file attachments.
 
-> If you set up the bot with an older manifest, re-upload the latest manifest to enable file attachments in 1:1 direct messages. Channel and group-chat attachments work regardless of the manifest version.
-
 **Limits:**
 - Max 20 attachments per message
 - Max 10 MB per individual file

@@ -1126,16 +1126,25 @@ class ToolModel {
       }
     }
 
-    // Remove stale tools that no longer exist in the Archestra tool definitions
-    // FK constraints use onDelete: "cascade" so related records are cleaned up automatically
+    // Remove stale tools that no longer exist in the Archestra tool definitions.
+    // FK constraints use onDelete: "cascade" so related records are cleaned up
+    // automatically — which is also why a feature-flagged-off built-in must NOT
+    // be treated as stale: `archestraToolNames` only lists the tools enabled
+    // this boot, so deleting rows missing from it would wipe a disabled
+    // feature's tools (apps, sandbox) and cascade away every agent/conversation
+    // assignment. A built-in is stale only when its short name is gone from the
+    // full registry; flag-gating governs visibility, not catalog reconciliation.
+    const knownBuiltInShortNames = new Set<string>(ARCHESTRA_TOOL_SHORT_NAMES);
     const allCatalogTools = await db
       .select({ id: schema.toolsTable.id, name: schema.toolsTable.name })
       .from(schema.toolsTable)
       .where(eq(schema.toolsTable.catalogId, catalogId));
 
-    const staleTools = allCatalogTools.filter(
-      (t) => !archestraToolNames.has(t.name),
-    );
+    const staleTools = allCatalogTools.filter((t) => {
+      if (archestraToolNames.has(t.name)) return false;
+      const shortName = extractArchestraBuiltInShortName(t.name);
+      return shortName === null || !knownBuiltInShortNames.has(shortName);
+    });
     if (staleTools.length > 0) {
       await db.delete(schema.toolsTable).where(
         inArray(

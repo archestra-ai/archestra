@@ -39,6 +39,11 @@ import { DataTable } from "@/components/ui/data-table";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { TruncatedTooltip } from "@/components/ui/truncated-tooltip";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
 import {
   formatFileSize,
@@ -490,7 +495,8 @@ function FileStatusBadge({ file }: { file: KnowledgeFile }) {
         : file.processingStatus === "failed"
           ? "Failed"
           : "Queued";
-    return (
+
+    const badge = (
       <Badge
         variant={
           file.processingStatus === "failed" ? "destructive" : "secondary"
@@ -503,9 +509,22 @@ function FileStatusBadge({ file }: { file: KnowledgeFile }) {
         {label}
       </Badge>
     );
+
+    if (file.processingStatus === "failed" && file.processingError) {
+      return (
+        <Tooltip>
+          <TooltipTrigger asChild>{badge}</TooltipTrigger>
+          <TooltipContent className="max-w-xs break-words">
+            {file.processingError}
+          </TooltipContent>
+        </Tooltip>
+      );
+    }
+
+    return badge;
   }
 
-  return (
+  const badge = (
     <Badge
       variant={file.embeddingStatus === "failed" ? "destructive" : "secondary"}
       className="text-xs"
@@ -516,6 +535,19 @@ function FileStatusBadge({ file }: { file: KnowledgeFile }) {
       {file.embeddingStatus === "completed" ? "Indexed" : file.embeddingStatus}
     </Badge>
   );
+
+  if (file.embeddingStatus === "failed" && file.embeddingError) {
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>{badge}</TooltipTrigger>
+        <TooltipContent className="max-w-xs break-words">
+          {file.embeddingError}
+        </TooltipContent>
+      </Tooltip>
+    );
+  }
+
+  return badge;
 }
 
 function VisibilityBadge({ file }: { file: KnowledgeFile }) {

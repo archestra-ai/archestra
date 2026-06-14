@@ -490,7 +490,7 @@ function FileStatusBadge({ file }: { file: KnowledgeFile }) {
         : file.processingStatus === "failed"
           ? "Failed"
           : "Queued";
-    return (
+    const badge = (
       <Badge
         variant={
           file.processingStatus === "failed" ? "destructive" : "secondary"
@@ -503,9 +503,21 @@ function FileStatusBadge({ file }: { file: KnowledgeFile }) {
         {label}
       </Badge>
     );
+
+    if (file.processingStatus === "failed" && file.processingError) {
+      return (
+        <TruncatedTooltip content={file.processingError}>
+          {badge}
+        </TruncatedTooltip>
+      );
+    }
+
+    return badge;
   }
 
-  return (
+  const label =
+    file.embeddingStatus === "completed" ? "Indexed" : file.embeddingStatus;
+  const badge = (
     <Badge
       variant={file.embeddingStatus === "failed" ? "destructive" : "secondary"}
       className="text-xs"
@@ -513,9 +525,19 @@ function FileStatusBadge({ file }: { file: KnowledgeFile }) {
       {file.embeddingStatus === "processing" && (
         <Loader2 className="h-3 w-3 animate-spin" />
       )}
-      {file.embeddingStatus === "completed" ? "Indexed" : file.embeddingStatus}
+      {label}
     </Badge>
   );
+
+  if (file.embeddingStatus === "failed" && file.embeddingError) {
+    return (
+      <TruncatedTooltip content={file.embeddingError}>
+        {badge}
+      </TruncatedTooltip>
+    );
+  }
+
+  return badge;
 }
 
 function VisibilityBadge({ file }: { file: KnowledgeFile }) {

@@ -69,6 +69,7 @@ export const UpdateKbDocumentSchema = createUpdateSchema(
   acl: true,
   metadata: true,
   embeddingStatus: true,
+  embeddingError: true,
   chunkCount: true,
 });
 

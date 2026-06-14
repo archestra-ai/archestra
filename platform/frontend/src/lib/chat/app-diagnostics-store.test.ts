@@ -135,6 +135,32 @@ describe("diagnostics store", () => {
     expect(getAppDiagnosticCounts().get(APP)).toBeUndefined();
   });
 
+  it("rejects a late stale-version report that arrives after the version was drained", () => {
+    reportAppDiagnostic(APP, 2, { type: "error", message: "v2 error" });
+    expect(drainAppDiagnostics()).toHaveLength(1);
+
+    // An older still-mounted card reports after the drain cleared the map.
+    const accepted = reportAppDiagnostic(APP, 1, {
+      type: "error",
+      message: "stale late v1",
+    });
+    expect(accepted).toBe(false);
+    expect(getAppDiagnostics(APP)).toBeNull();
+    expect(drainAppDiagnostics()).toHaveLength(0);
+  });
+
+  it("clearAllAppDiagnostics resets the drained high-water so a version can report again", () => {
+    reportAppDiagnostic(APP, 2, { type: "error", message: "v2 error" });
+    drainAppDiagnostics();
+    clearAllAppDiagnostics();
+
+    const accepted = reportAppDiagnostic(APP, 1, {
+      type: "error",
+      message: "v1 after reset",
+    });
+    expect(accepted).toBe(true);
+  });
+
   it("getAppDiagnostics returns the current snapshot (for the render POST)", () => {
     expect(getAppDiagnostics(APP)).toBeNull();
     reportAppDiagnostic(APP, 3, { type: "error", message: "boom" });

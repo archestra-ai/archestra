@@ -113,6 +113,11 @@ export interface AppDiagnosticCounts {
 }
 
 const diagnosticsByApp = new Map<string, AppDiagnostics>();
+// Highest version drained per app. A drain clears the live map, so without this
+// a late report from an already-drained older version would see no `current`,
+// skip the ordering guard, and mis-attach to a later prompt. Cleared only on
+// lifecycle reset, not on drain.
+const lastDrainedVersionByApp = new Map<string, number>();
 const listeners = new Set<Listener>();
 // Immutable snapshot of per-app entry counts for useSyncExternalStore.
 let countsSnapshot: ReadonlyMap<string, AppDiagnosticCounts> = new Map();
@@ -150,6 +155,12 @@ export function reportAppDiagnostic(
   version: number | null,
   entry: AppDiagnosticEntry,
 ): boolean {
+  // A known version at or below the last drained one is stale (its render was
+  // already reported); unknown (null) versions keep their existing semantics.
+  const lastDrained = lastDrainedVersionByApp.get(appId);
+  if (lastDrained !== undefined && version !== null && version <= lastDrained) {
+    return false;
+  }
   let current = diagnosticsByApp.get(appId);
   if (current && versionRank(version) < versionRank(current.version)) {
     return false;
@@ -168,8 +179,9 @@ export function reportAppDiagnostic(
 
 /** Drop everything (conversation switch / chat mount). */
 export function clearAllAppDiagnostics(): void {
-  if (diagnosticsByApp.size === 0) return;
+  if (diagnosticsByApp.size === 0 && lastDrainedVersionByApp.size === 0) return;
   diagnosticsByApp.clear();
+  lastDrainedVersionByApp.clear();
   emit();
 }
 
@@ -181,6 +193,13 @@ export function drainAppDiagnostics(): AppDiagnostics[] {
   const drained = [...diagnosticsByApp.values()].filter(
     (d) => d.entries.length > 0,
   );
+  for (const d of diagnosticsByApp.values()) {
+    if (d.version === null) continue;
+    const prev = lastDrainedVersionByApp.get(d.appId);
+    if (prev === undefined || d.version > prev) {
+      lastDrainedVersionByApp.set(d.appId, d.version);
+    }
+  }
   if (diagnosticsByApp.size > 0) {
     diagnosticsByApp.clear();
     emit();

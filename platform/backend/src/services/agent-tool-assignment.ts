@@ -267,13 +267,14 @@ function appToolsValidationError(message: string): ToolAssignmentError {
  */
 export async function assignToolToApp(params: {
   appId: string;
+  organizationId: string;
   toolId: string;
   mcpServerId?: string | null;
   credentialResolutionMode?: CredentialResolutionMode;
 }): Promise<ToolAssignmentError | "duplicate" | "updated" | null> {
   const credentialResolutionMode = normalizeCredentialResolutionMode(params);
 
-  const app = await AppModel.findById(params.appId);
+  const app = await AppModel.findByIdInOrg(params.appId, params.organizationId);
   if (!app) {
     return {
       code: "not_found",
@@ -284,7 +285,12 @@ export async function assignToolToApp(params: {
     };
   }
 
-  const tool = await ToolModel.findById(params.toolId);
+  // Org-scoped: a tool from another organization is indistinguishable from a
+  // nonexistent one, so this raw-id endpoint cannot attach or probe foreign tools.
+  const tool = await ToolModel.findAppAssignableToolById(
+    params.organizationId,
+    params.toolId,
+  );
   if (!tool) {
     return {
       code: "not_found",
@@ -316,10 +322,27 @@ export async function assignToolToApp(params: {
   }
 
   if (params.mcpServerId) {
+    // Same org-scoping for the server: resolve within the org first so a
+    // foreign-org server (even one sharing a global catalog with the tool) is
+    // rejected as not_found before reaching the scope-assignability check.
+    const mcpServer = await McpServerModel.findByIdInOrg(
+      params.mcpServerId,
+      params.organizationId,
+    );
+    if (!mcpServer) {
+      return {
+        code: "not_found",
+        error: {
+          message: `MCP server with ID ${params.mcpServerId} not found`,
+          type: "not_found",
+        },
+      };
+    }
     const validationError = await validateAssignedMcpServer({
       getOwnerContext: () => getAppAssignmentTargetContext(params.appId),
       mcpServerId: params.mcpServerId,
       tool,
+      preFetchedServer: mcpServer,
     });
     if (validationError) {
       return validationError;

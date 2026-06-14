@@ -54,6 +54,13 @@ export interface AppResourceMeta {
 
 const AVAILABLE_DISPLAY_MODES: McpUiDisplayMode[] = ["inline", "fullscreen"];
 
+// Screenshot payloads arrive over an untrusted postMessage lane and a forged
+// one can bypass the SDK's self-cap, so the host re-checks size and MIME before
+// posting — matching the backend cap (routes/app.ts) so an oversized/invalid
+// payload never traverses the wire.
+const MAX_SCREENSHOT_DATA_URL_LENGTH = 2_000_000;
+const SCREENSHOT_DATA_URL_PREFIX = /^data:image\/(png|jpeg|webp);base64,/;
+
 /** Default pre-report iframe height on surfaces that supply no inline ceiling
  * (standalone run page, app preview) — those fill their own layout instead. */
 const UNCAPPED_INITIAL_HEIGHT = 600;
@@ -220,6 +227,12 @@ export const McpAppRuntime = function McpAppRuntime({
       const dataUrl = record?.dataUrl;
       if (typeof version !== "number" || typeof dataUrl !== "string") return;
       if (version !== appVersionRef.current) return;
+      if (
+        dataUrl.length > MAX_SCREENSHOT_DATA_URL_LENGTH ||
+        !SCREENSHOT_DATA_URL_PREFIX.test(dataUrl)
+      ) {
+        return;
+      }
       void archestraApiSdk
         .postAppRenderScreenshot({
           path: { appId: ownedAppId },

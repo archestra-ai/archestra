@@ -21,7 +21,7 @@ import type { GlobalToolPolicy } from "@/types";
  * dispatch — they run in-process keyed by the route-bound appId. Every other
  * Archestra tool (the management/chat surface) is rejected by the gate.
  */
-export const APP_DATA_SHORT_NAMES = new Set<string>([
+const APP_DATA_SHORT_NAMES = new Set<string>([
   TOOL_APP_DATA_GET_SHORT_NAME,
   TOOL_APP_DATA_SET_SHORT_NAME,
   TOOL_APP_DATA_LIST_SHORT_NAME,

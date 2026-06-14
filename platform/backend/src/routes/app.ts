@@ -527,6 +527,7 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
       });
       const result = await assignToolToApp({
         appId,
+        organizationId,
         toolId,
         mcpServerId: body?.mcpServerId,
         credentialResolutionMode: body?.credentialResolutionMode,

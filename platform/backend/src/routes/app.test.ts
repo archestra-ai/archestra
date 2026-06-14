@@ -481,6 +481,7 @@ describe("appRoutes /api/apps", () => {
     await makeMember(user.id, org.id, { role: ADMIN_ROLE_NAME });
     const created = await makeApp({ organizationId: org.id, scope: "org" });
     const catalog = await makeInternalMcpCatalog({
+      organizationId: org.id,
       name: "srv",
       serverUrl: "https://example.com/mcp/",
     });
@@ -511,6 +512,40 @@ describe("appRoutes /api/apps", () => {
       url: `/api/apps/${created.id}/tools/${tool.id}`,
     });
     expect(unassigned.statusCode).toBe(200);
+  });
+
+  test("assigning a tool from another organization returns 404", async ({
+    makeUser,
+    makeOrganization,
+    makeMember,
+    makeApp,
+    makeTool,
+    makeInternalMcpCatalog,
+  }) => {
+    const org = await makeOrganization();
+    const otherOrg = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: ADMIN_ROLE_NAME });
+    const created = await makeApp({ organizationId: org.id, scope: "org" });
+    const foreignCatalog = await makeInternalMcpCatalog({
+      organizationId: otherOrg.id,
+      name: "foreign-srv",
+      serverUrl: "https://example.com/mcp/",
+    });
+    const foreignTool = await makeTool({
+      name: "foreign__do_thing",
+      parameters: {},
+      catalogId: foreignCatalog.id,
+    });
+    app = await buildApp(user.id, org.id);
+
+    const assigned = await app.inject({
+      method: "POST",
+      url: `/api/apps/${created.id}/tools/${foreignTool.id}`,
+      headers: JSON_HEADERS,
+      payload: { credentialResolutionMode: "dynamic" },
+    });
+    expect(assigned.statusCode).toBe(404);
   });
 
   test("lists app templates when enabled, 404 when disabled", async ({

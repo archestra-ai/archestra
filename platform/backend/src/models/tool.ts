@@ -1580,6 +1580,37 @@ class ToolModel {
       );
   }
 
+  /**
+   * By-id counterpart of {@link findAppAssignableToolsByNames}: resolves a tool
+   * only within the caller's organization (catalog-backed, org-owned or global).
+   * A tool from another org — or a non-catalog/built-in tool — returns null, so
+   * the raw-id assignment endpoint cannot attach (or probe for) foreign tools.
+   */
+  static async findAppAssignableToolById(
+    organizationId: string,
+    toolId: string,
+  ): Promise<Tool | null> {
+    const [row] = await db
+      .select({ tool: schema.toolsTable })
+      .from(schema.toolsTable)
+      .innerJoin(
+        schema.internalMcpCatalogTable,
+        eq(schema.toolsTable.catalogId, schema.internalMcpCatalogTable.id),
+      )
+      .where(
+        and(
+          eq(schema.toolsTable.id, toolId),
+          ne(schema.toolsTable.catalogId, ARCHESTRA_MCP_CATALOG_ID),
+          or(
+            eq(schema.internalMcpCatalogTable.organizationId, organizationId),
+            isNull(schema.internalMcpCatalogTable.organizationId),
+          ),
+        ),
+      )
+      .limit(1);
+    return row?.tool ?? null;
+  }
+
   /** App-owner counterpart of {@link getMcpToolsAssignedToAgent}. */
   static async getMcpToolsAssignedToApp(
     toolNames: string[],

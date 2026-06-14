@@ -1,6 +1,11 @@
-import { addNomicTaskPrefix, EMBEDDING_BATCH_SIZE } from "@archestra/shared";
+import {
+  addNomicTaskPrefix,
+  EMBEDDING_BATCH_SIZE,
+  type EmbeddingErrorCode,
+} from "@archestra/shared";
 import logger from "@/logging";
 import { KbChunkModel, KbDocumentModel } from "@/models";
+import { classifyEmbeddingError } from "./embedder.classify";
 import {
   callEmbedding,
   type EmbeddingApiResponse,
@@ -40,7 +45,10 @@ class EmbeddingService {
       return;
     }
 
-    await KbDocumentModel.update(documentId, { embeddingStatus: "processing" });
+    await KbDocumentModel.update(documentId, {
+      embeddingStatus: "processing",
+      embeddingError: null,
+    });
 
     try {
       const chunks = await KbChunkModel.findByDocument(documentId);
@@ -89,9 +97,6 @@ class EmbeddingService {
         "[Embedder] Document embeddings completed",
       );
     } catch (error) {
-      await KbDocumentModel.update(documentId, {
-        embeddingStatus: "failed",
-      });
       logger.error(
         {
           documentId,
@@ -99,6 +104,23 @@ class EmbeddingService {
         },
         "[Embedder] Failed to embed document",
       );
+      try {
+        await KbDocumentModel.update(documentId, {
+          embeddingStatus: "failed",
+          embeddingError: classifyEmbeddingError(error),
+        });
+      } catch (updateError) {
+        logger.error(
+          {
+            documentId,
+            error:
+              updateError instanceof Error
+                ? updateError.message
+                : String(updateError),
+          },
+          "[Embedder] Failed to mark document as failed — document may be stuck in processing",
+        );
+      }
     }
   }
 
@@ -149,29 +171,49 @@ class EmbeddingService {
         continue;
       }
 
-      await KbDocumentModel.update(documentId, {
-        embeddingStatus: "processing",
-      });
-
-      const chunks = await KbChunkModel.findByDocument(documentId);
-
-      if (chunks.length === 0) {
+      try {
         await KbDocumentModel.update(documentId, {
-          embeddingStatus: "completed",
-          chunkCount: 0,
+          embeddingStatus: "processing",
+          embeddingError: null,
         });
-        continue;
-      }
 
-      const chunkIds = chunks.map((c) => c.id);
-      docChunkMap.push({ documentId, chunkIds, chunkCount: chunks.length });
+        const chunks = await KbChunkModel.findByDocument(documentId);
 
-      for (const chunk of chunks) {
-        allChunks.push({
-          chunkId: chunk.id,
-          content: chunk.content,
-          metadataSuffix: chunk.metadataSuffixSemantic,
-        });
+        if (chunks.length === 0) {
+          await KbDocumentModel.update(documentId, {
+            embeddingStatus: "completed",
+            chunkCount: 0,
+          });
+          continue;
+        }
+
+        const chunkIds = chunks.map((c) => c.id);
+        docChunkMap.push({ documentId, chunkIds, chunkCount: chunks.length });
+
+        for (const chunk of chunks) {
+          allChunks.push({
+            chunkId: chunk.id,
+            content: chunk.content,
+            metadataSuffix: chunk.metadataSuffixSemantic,
+          });
+        }
+      } catch (error) {
+        logger.error(
+          {
+            documentId,
+            runId: connectorRunId,
+            error: error instanceof Error ? error.message : String(error),
+          },
+          "[Embedder] Failed to prepare document for embedding",
+        );
+        try {
+          await KbDocumentModel.update(documentId, {
+            embeddingStatus: "failed",
+            embeddingError: classifyEmbeddingError(error),
+          });
+        } catch {
+          // DB is unhealthy; document may be stuck — will be retried on next run
+        }
       }
     }
 
@@ -195,6 +237,7 @@ class EmbeddingService {
     const ctx = orgConfig.config;
     const embeddingResults = new Map<string, number[]>();
     const failedChunkIds = new Set<string>();
+    const failedChunksErrors = new Map<string, EmbeddingErrorCode>();
 
     for (let i = 0; i < allChunks.length; i += EMBEDDING_BATCH_SIZE) {
       const batch = allChunks.slice(i, i + EMBEDDING_BATCH_SIZE);
@@ -222,6 +265,7 @@ class EmbeddingService {
           "[Embedder] Batch embedding API call failed",
         );
         for (const chunk of batch) {
+          failedChunksErrors.set(chunk.chunkId, classifyEmbeddingError(error));
           failedChunkIds.add(chunk.chunkId);
         }
       }
@@ -232,14 +276,30 @@ class EmbeddingService {
       ([chunkId, embedding]) => ({ chunkId, embedding }),
     );
     if (successfulUpdates.length > 0) {
-      await KbChunkModel.updateEmbeddings(successfulUpdates, ctx.dimensions);
+      try {
+        await KbChunkModel.updateEmbeddings(successfulUpdates, ctx.dimensions);
+      } catch (error) {
+        logger.error(
+          {
+            runId: connectorRunId,
+            error: error instanceof Error ? error.message : String(error),
+          },
+          "[Embedder] Failed to write chunk embeddings — affected documents will be marked failed",
+        );
+        const embeddingError = classifyEmbeddingError(error);
+        for (const { chunkId } of successfulUpdates) {
+          failedChunkIds.add(chunkId);
+          failedChunksErrors.set(chunkId, embeddingError);
+        }
+      }
     }
 
     for (const { documentId, chunkIds, chunkCount } of docChunkMap) {
-      const anyFailed = chunkIds.some((id) => failedChunkIds.has(id));
-      if (anyFailed) {
+      const failedChunk = chunkIds.find((id) => failedChunkIds.has(id));
+      if (failedChunk !== undefined) {
         await KbDocumentModel.update(documentId, {
           embeddingStatus: "failed",
+          embeddingError: failedChunksErrors.get(failedChunk),
         });
         logger.error(
           { documentId, runId: connectorRunId },

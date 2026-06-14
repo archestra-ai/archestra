@@ -69683,7 +69683,6 @@
                                     "content_filtered",
                                     "server_error",
                                     "network_error",
-                                    "empty_response",
                                     "unknown"
                                   ]
                                 },
@@ -69700,12 +69699,6 @@
                                   "type": "string"
                                 },
                                 "spanId": {
-                                  "type": "string"
-                                },
-                                "usageLimitExceeded": {
-                                  "type": "boolean"
-                                },
-                                "usageLimitEntityType": {
                                   "type": "string"
                                 },
                                 "originalError": {
@@ -70372,7 +70365,6 @@
                                   "content_filtered",
                                   "server_error",
                                   "network_error",
-                                  "empty_response",
                                   "unknown"
                                 ]
                               },
@@ -70389,12 +70381,6 @@
                                 "type": "string"
                               },
                               "spanId": {
-                                "type": "string"
-                              },
-                              "usageLimitExceeded": {
-                                "type": "boolean"
-                              },
-                              "usageLimitEntityType": {
                                 "type": "string"
                               },
                               "originalError": {
@@ -71038,7 +71024,6 @@
                                   "content_filtered",
                                   "server_error",
                                   "network_error",
-                                  "empty_response",
                                   "unknown"
                                 ]
                               },
@@ -71055,12 +71040,6 @@
                                 "type": "string"
                               },
                               "spanId": {
-                                "type": "string"
-                              },
-                              "usageLimitExceeded": {
-                                "type": "boolean"
-                              },
-                              "usageLimitEntityType": {
                                 "type": "string"
                               },
                               "originalError": {
@@ -71745,7 +71724,6 @@
                                   "content_filtered",
                                   "server_error",
                                   "network_error",
-                                  "empty_response",
                                   "unknown"
                                 ]
                               },
@@ -71762,12 +71740,6 @@
                                 "type": "string"
                               },
                               "spanId": {
-                                "type": "string"
-                              },
-                              "usageLimitExceeded": {
-                                "type": "boolean"
-                              },
-                              "usageLimitEntityType": {
                                 "type": "string"
                               },
                               "originalError": {
@@ -73919,7 +73891,6 @@
                                   "content_filtered",
                                   "server_error",
                                   "network_error",
-                                  "empty_response",
                                   "unknown"
                                 ]
                               },
@@ -73936,12 +73907,6 @@
                                 "type": "string"
                               },
                               "spanId": {
-                                "type": "string"
-                              },
-                              "usageLimitExceeded": {
-                                "type": "boolean"
-                              },
-                              "usageLimitEntityType": {
                                 "type": "string"
                               },
                               "originalError": {
@@ -74952,7 +74917,6 @@
                                       "content_filtered",
                                       "server_error",
                                       "network_error",
-                                      "empty_response",
                                       "unknown"
                                     ]
                                   },
@@ -74969,12 +74933,6 @@
                                     "type": "string"
                                   },
                                   "spanId": {
-                                    "type": "string"
-                                  },
-                                  "usageLimitExceeded": {
-                                    "type": "boolean"
-                                  },
-                                  "usageLimitEntityType": {
                                     "type": "string"
                                   },
                                   "originalError": {
@@ -76574,7 +76532,6 @@
                                   "content_filtered",
                                   "server_error",
                                   "network_error",
-                                  "empty_response",
                                   "unknown"
                                 ]
                               },
@@ -76591,12 +76548,6 @@
                                 "type": "string"
                               },
                               "spanId": {
-                                "type": "string"
-                              },
-                              "usageLimitExceeded": {
-                                "type": "boolean"
-                              },
-                              "usageLimitEntityType": {
                                 "type": "string"
                               },
                               "originalError": {
@@ -77264,7 +77215,6 @@
                                   "content_filtered",
                                   "server_error",
                                   "network_error",
-                                  "empty_response",
                                   "unknown"
                                 ]
                               },
@@ -77281,12 +77231,6 @@
                                 "type": "string"
                               },
                               "spanId": {
-                                "type": "string"
-                              },
-                              "usageLimitExceeded": {
-                                "type": "boolean"
-                              },
-                              "usageLimitEntityType": {
                                 "type": "string"
                               },
                               "originalError": {
@@ -77946,7 +77890,6 @@
                                   "content_filtered",
                                   "server_error",
                                   "network_error",
-                                  "empty_response",
                                   "unknown"
                                 ]
                               },
@@ -77963,12 +77906,6 @@
                                 "type": "string"
                               },
                               "spanId": {
-                                "type": "string"
-                              },
-                              "usageLimitExceeded": {
-                                "type": "boolean"
-                              },
-                              "usageLimitEntityType": {
                                 "type": "string"
                               },
                               "originalError": {
@@ -78638,7 +78575,6 @@
                                   "content_filtered",
                                   "server_error",
                                   "network_error",
-                                  "empty_response",
                                   "unknown"
                                 ]
                               },
@@ -78655,12 +78591,6 @@
                                 "type": "string"
                               },
                               "spanId": {
-                                "type": "string"
-                              },
-                              "usageLimitExceeded": {
-                                "type": "boolean"
-                              },
-                              "usageLimitEntityType": {
                                 "type": "string"
                               },
                               "originalError": {
@@ -94359,7 +94289,6 @@
                                             "content_filtered",
                                             "server_error",
                                             "network_error",
-                                            "empty_response",
                                             "unknown"
                                           ]
                                         },
@@ -94376,12 +94305,6 @@
                                           "type": "string"
                                         },
                                         "spanId": {
-                                          "type": "string"
-                                        },
-                                        "usageLimitExceeded": {
-                                          "type": "boolean"
-                                        },
-                                        "usageLimitEntityType": {
                                           "type": "string"
                                         },
                                         "originalError": {
@@ -95219,7 +95142,6 @@
                                             "content_filtered",
                                             "server_error",
                                             "network_error",
-                                            "empty_response",
                                             "unknown"
                                           ]
                                         },
@@ -95236,12 +95158,6 @@
                                           "type": "string"
                                         },
                                         "spanId": {
-                                          "type": "string"
-                                        },
-                                        "usageLimitExceeded": {
-                                          "type": "boolean"
-                                        },
-                                        "usageLimitEntityType": {
                                           "type": "string"
                                         },
                                         "originalError": {
@@ -95787,7 +95703,6 @@
                                             "content_filtered",
                                             "server_error",
                                             "network_error",
-                                            "empty_response",
                                             "unknown"
                                           ]
                                         },
@@ -95804,12 +95719,6 @@
                                           "type": "string"
                                         },
                                         "spanId": {
-                                          "type": "string"
-                                        },
-                                        "usageLimitExceeded": {
-                                          "type": "boolean"
-                                        },
-                                        "usageLimitEntityType": {
                                           "type": "string"
                                         },
                                         "originalError": {
@@ -96219,7 +96128,6 @@
                                             "content_filtered",
                                             "server_error",
                                             "network_error",
-                                            "empty_response",
                                             "unknown"
                                           ]
                                         },
@@ -96236,12 +96144,6 @@
                                           "type": "string"
                                         },
                                         "spanId": {
-                                          "type": "string"
-                                        },
-                                        "usageLimitExceeded": {
-                                          "type": "boolean"
-                                        },
-                                        "usageLimitEntityType": {
                                           "type": "string"
                                         },
                                         "originalError": {
@@ -96662,7 +96564,6 @@
                                             "content_filtered",
                                             "server_error",
                                             "network_error",
-                                            "empty_response",
                                             "unknown"
                                           ]
                                         },
@@ -96679,12 +96580,6 @@
                                           "type": "string"
                                         },
                                         "spanId": {
-                                          "type": "string"
-                                        },
-                                        "usageLimitExceeded": {
-                                          "type": "boolean"
-                                        },
-                                        "usageLimitEntityType": {
                                           "type": "string"
                                         },
                                         "originalError": {
@@ -98928,7 +98823,6 @@
                                             "content_filtered",
                                             "server_error",
                                             "network_error",
-                                            "empty_response",
                                             "unknown"
                                           ]
                                         },
@@ -98945,12 +98839,6 @@
                                           "type": "string"
                                         },
                                         "spanId": {
-                                          "type": "string"
-                                        },
-                                        "usageLimitExceeded": {
-                                          "type": "boolean"
-                                        },
-                                        "usageLimitEntityType": {
                                           "type": "string"
                                         },
                                         "originalError": {
@@ -99371,7 +99259,6 @@
                                             "content_filtered",
                                             "server_error",
                                             "network_error",
-                                            "empty_response",
                                             "unknown"
                                           ]
                                         },
@@ -99388,12 +99275,6 @@
                                           "type": "string"
                                         },
                                         "spanId": {
-                                          "type": "string"
-                                        },
-                                        "usageLimitExceeded": {
-                                          "type": "boolean"
-                                        },
-                                        "usageLimitEntityType": {
                                           "type": "string"
                                         },
                                         "originalError": {
@@ -99814,7 +99695,6 @@
                                             "content_filtered",
                                             "server_error",
                                             "network_error",
-                                            "empty_response",
                                             "unknown"
                                           ]
                                         },
@@ -99831,12 +99711,6 @@
                                           "type": "string"
                                         },
                                         "spanId": {
-                                          "type": "string"
-                                        },
-                                        "usageLimitExceeded": {
-                                          "type": "boolean"
-                                        },
-                                        "usageLimitEntityType": {
                                           "type": "string"
                                         },
                                         "originalError": {
@@ -100257,7 +100131,6 @@
                                             "content_filtered",
                                             "server_error",
                                             "network_error",
-                                            "empty_response",
                                             "unknown"
                                           ]
                                         },
@@ -100274,12 +100147,6 @@
                                           "type": "string"
                                         },
                                         "spanId": {
-                                          "type": "string"
-                                        },
-                                        "usageLimitExceeded": {
-                                          "type": "boolean"
-                                        },
-                                        "usageLimitEntityType": {
                                           "type": "string"
                                         },
                                         "originalError": {
@@ -100700,7 +100567,6 @@
                                             "content_filtered",
                                             "server_error",
                                             "network_error",
-                                            "empty_response",
                                             "unknown"
                                           ]
                                         },
@@ -100717,12 +100583,6 @@
                                           "type": "string"
                                         },
                                         "spanId": {
-                                          "type": "string"
-                                        },
-                                        "usageLimitExceeded": {
-                                          "type": "boolean"
-                                        },
-                                        "usageLimitEntityType": {
                                           "type": "string"
                                         },
                                         "originalError": {
@@ -101143,7 +101003,6 @@
                                             "content_filtered",
                                             "server_error",
                                             "network_error",
-                                            "empty_response",
                                             "unknown"
                                           ]
                                         },
@@ -101160,12 +101019,6 @@
                                           "type": "string"
                                         },
                                         "spanId": {
-                                          "type": "string"
-                                        },
-                                        "usageLimitExceeded": {
-                                          "type": "boolean"
-                                        },
-                                        "usageLimitEntityType": {
                                           "type": "string"
                                         },
                                         "originalError": {
@@ -101586,7 +101439,6 @@
                                             "content_filtered",
                                             "server_error",
                                             "network_error",
-                                            "empty_response",
                                             "unknown"
                                           ]
                                         },
@@ -101603,12 +101455,6 @@
                                           "type": "string"
                                         },
                                         "spanId": {
-                                          "type": "string"
-                                        },
-                                        "usageLimitExceeded": {
-                                          "type": "boolean"
-                                        },
-                                        "usageLimitEntityType": {
                                           "type": "string"
                                         },
                                         "originalError": {
@@ -102029,7 +101875,6 @@
                                             "content_filtered",
                                             "server_error",
                                             "network_error",
-                                            "empty_response",
                                             "unknown"
                                           ]
                                         },
@@ -102046,12 +101891,6 @@
                                           "type": "string"
                                         },
                                         "spanId": {
-                                          "type": "string"
-                                        },
-                                        "usageLimitExceeded": {
-                                          "type": "boolean"
-                                        },
-                                        "usageLimitEntityType": {
                                           "type": "string"
                                         },
                                         "originalError": {
@@ -102461,7 +102300,6 @@
                                             "content_filtered",
                                             "server_error",
                                             "network_error",
-                                            "empty_response",
                                             "unknown"
                                           ]
                                         },
@@ -102478,12 +102316,6 @@
                                           "type": "string"
                                         },
                                         "spanId": {
-                                          "type": "string"
-                                        },
-                                        "usageLimitExceeded": {
-                                          "type": "boolean"
-                                        },
-                                        "usageLimitEntityType": {
                                           "type": "string"
                                         },
                                         "originalError": {
@@ -102893,7 +102725,6 @@
                                             "content_filtered",
                                             "server_error",
                                             "network_error",
-                                            "empty_response",
                                             "unknown"
                                           ]
                                         },
@@ -102910,12 +102741,6 @@
                                           "type": "string"
                                         },
                                         "spanId": {
-                                          "type": "string"
-                                        },
-                                        "usageLimitExceeded": {
-                                          "type": "boolean"
-                                        },
-                                        "usageLimitEntityType": {
                                           "type": "string"
                                         },
                                         "originalError": {
@@ -103336,7 +103161,6 @@
                                             "content_filtered",
                                             "server_error",
                                             "network_error",
-                                            "empty_response",
                                             "unknown"
                                           ]
                                         },
@@ -103353,12 +103177,6 @@
                                           "type": "string"
                                         },
                                         "spanId": {
-                                          "type": "string"
-                                        },
-                                        "usageLimitExceeded": {
-                                          "type": "boolean"
-                                        },
-                                        "usageLimitEntityType": {
                                           "type": "string"
                                         },
                                         "originalError": {
@@ -103779,7 +103597,6 @@
                                             "content_filtered",
                                             "server_error",
                                             "network_error",
-                                            "empty_response",
                                             "unknown"
                                           ]
                                         },
@@ -103796,12 +103613,6 @@
                                           "type": "string"
                                         },
                                         "spanId": {
-                                          "type": "string"
-                                        },
-                                        "usageLimitExceeded": {
-                                          "type": "boolean"
-                                        },
-                                        "usageLimitEntityType": {
                                           "type": "string"
                                         },
                                         "originalError": {
@@ -104222,7 +104033,6 @@
                                             "content_filtered",
                                             "server_error",
                                             "network_error",
-                                            "empty_response",
                                             "unknown"
                                           ]
                                         },
@@ -104239,12 +104049,6 @@
                                           "type": "string"
                                         },
                                         "spanId": {
-                                          "type": "string"
-                                        },
-                                        "usageLimitExceeded": {
-                                          "type": "boolean"
-                                        },
-                                        "usageLimitEntityType": {
                                           "type": "string"
                                         },
                                         "originalError": {
@@ -104891,7 +104695,6 @@
                                             "content_filtered",
                                             "server_error",
                                             "network_error",
-                                            "empty_response",
                                             "unknown"
                                           ]
                                         },
@@ -104908,12 +104711,6 @@
                                           "type": "string"
                                         },
                                         "spanId": {
-                                          "type": "string"
-                                        },
-                                        "usageLimitExceeded": {
-                                          "type": "boolean"
-                                        },
-                                        "usageLimitEntityType": {
                                           "type": "string"
                                         },
                                         "originalError": {
@@ -105751,7 +105548,6 @@
                                             "content_filtered",
                                             "server_error",
                                             "network_error",
-                                            "empty_response",
                                             "unknown"
                                           ]
                                         },
@@ -105768,12 +105564,6 @@
                                           "type": "string"
                                         },
                                         "spanId": {
-                                          "type": "string"
-                                        },
-                                        "usageLimitExceeded": {
-                                          "type": "boolean"
-                                        },
-                                        "usageLimitEntityType": {
                                           "type": "string"
                                         },
                                         "originalError": {
@@ -107686,7 +107476,6 @@
                                       "content_filtered",
                                       "server_error",
                                       "network_error",
-                                      "empty_response",
                                       "unknown"
                                     ]
                                   },
@@ -107703,12 +107492,6 @@
                                     "type": "string"
                                   },
                                   "spanId": {
-                                    "type": "string"
-                                  },
-                                  "usageLimitExceeded": {
-                                    "type": "boolean"
-                                  },
-                                  "usageLimitEntityType": {
                                     "type": "string"
                                   },
                                   "originalError": {
@@ -108546,7 +108329,6 @@
                                       "content_filtered",
                                       "server_error",
                                       "network_error",
-                                      "empty_response",
                                       "unknown"
                                     ]
                                   },
@@ -108563,12 +108345,6 @@
                                     "type": "string"
                                   },
                                   "spanId": {
-                                    "type": "string"
-                                  },
-                                  "usageLimitExceeded": {
-                                    "type": "boolean"
-                                  },
-                                  "usageLimitEntityType": {
                                     "type": "string"
                                   },
                                   "originalError": {
@@ -109114,7 +108890,6 @@
                                       "content_filtered",
                                       "server_error",
                                       "network_error",
-                                      "empty_response",
                                       "unknown"
                                     ]
                                   },
@@ -109131,12 +108906,6 @@
                                     "type": "string"
                                   },
                                   "spanId": {
-                                    "type": "string"
-                                  },
-                                  "usageLimitExceeded": {
-                                    "type": "boolean"
-                                  },
-                                  "usageLimitEntityType": {
                                     "type": "string"
                                   },
                                   "originalError": {
@@ -109546,7 +109315,6 @@
                                       "content_filtered",
                                       "server_error",
                                       "network_error",
-                                      "empty_response",
                                       "unknown"
                                     ]
                                   },
@@ -109563,12 +109331,6 @@
                                     "type": "string"
                                   },
                                   "spanId": {
-                                    "type": "string"
-                                  },
-                                  "usageLimitExceeded": {
-                                    "type": "boolean"
-                                  },
-                                  "usageLimitEntityType": {
                                     "type": "string"
                                   },
                                   "originalError": {
@@ -109989,7 +109751,6 @@
                                       "content_filtered",
                                       "server_error",
                                       "network_error",
-                                      "empty_response",
                                       "unknown"
                                     ]
                                   },
@@ -110006,12 +109767,6 @@
                                     "type": "string"
                                   },
                                   "spanId": {
-                                    "type": "string"
-                                  },
-                                  "usageLimitExceeded": {
-                                    "type": "boolean"
-                                  },
-                                  "usageLimitEntityType": {
                                     "type": "string"
                                   },
                                   "originalError": {
@@ -112255,7 +112010,6 @@
                                       "content_filtered",
                                       "server_error",
                                       "network_error",
-                                      "empty_response",
                                       "unknown"
                                     ]
                                   },
@@ -112272,12 +112026,6 @@
                                     "type": "string"
                                   },
                                   "spanId": {
-                                    "type": "string"
-                                  },
-                                  "usageLimitExceeded": {
-                                    "type": "boolean"
-                                  },
-                                  "usageLimitEntityType": {
                                     "type": "string"
                                   },
                                   "originalError": {
@@ -112698,7 +112446,6 @@
                                       "content_filtered",
                                       "server_error",
                                       "network_error",
-                                      "empty_response",
                                       "unknown"
                                     ]
                                   },
@@ -112715,12 +112462,6 @@
                                     "type": "string"
                                   },
                                   "spanId": {
-                                    "type": "string"
-                                  },
-                                  "usageLimitExceeded": {
-                                    "type": "boolean"
-                                  },
-                                  "usageLimitEntityType": {
                                     "type": "string"
                                   },
                                   "originalError": {
@@ -113141,7 +112882,6 @@
                                       "content_filtered",
                                       "server_error",
                                       "network_error",
-                                      "empty_response",
                                       "unknown"
                                     ]
                                   },
@@ -113158,12 +112898,6 @@
                                     "type": "string"
                                   },
                                   "spanId": {
-                                    "type": "string"
-                                  },
-                                  "usageLimitExceeded": {
-                                    "type": "boolean"
-                                  },
-                                  "usageLimitEntityType": {
                                     "type": "string"
                                   },
                                   "originalError": {
@@ -113584,7 +113318,6 @@
                                       "content_filtered",
                                       "server_error",
                                       "network_error",
-                                      "empty_response",
                                       "unknown"
                                     ]
                                   },
@@ -113601,12 +113334,6 @@
                                     "type": "string"
                                   },
                                   "spanId": {
-                                    "type": "string"
-                                  },
-                                  "usageLimitExceeded": {
-                                    "type": "boolean"
-                                  },
-                                  "usageLimitEntityType": {
                                     "type": "string"
                                   },
                                   "originalError": {
@@ -114027,7 +113754,6 @@
                                       "content_filtered",
                                       "server_error",
                                       "network_error",
-                                      "empty_response",
                                       "unknown"
                                     ]
                                   },
@@ -114044,12 +113770,6 @@
                                     "type": "string"
                                   },
                                   "spanId": {
-                                    "type": "string"
-                                  },
-                                  "usageLimitExceeded": {
-                                    "type": "boolean"
-                                  },
-                                  "usageLimitEntityType": {
                                     "type": "string"
                                   },
                                   "originalError": {
@@ -114470,7 +114190,6 @@
                                       "content_filtered",
                                       "server_error",
                                       "network_error",
-                                      "empty_response",
                                       "unknown"
                                     ]
                                   },
@@ -114487,12 +114206,6 @@
                                     "type": "string"
                                   },
                                   "spanId": {
-                                    "type": "string"
-                                  },
-                                  "usageLimitExceeded": {
-                                    "type": "boolean"
-                                  },
-                                  "usageLimitEntityType": {
                                     "type": "string"
                                   },
                                   "originalError": {
@@ -114913,7 +114626,6 @@
                                       "content_filtered",
                                       "server_error",
                                       "network_error",
-                                      "empty_response",
                                       "unknown"
                                     ]
                                   },
@@ -114930,12 +114642,6 @@
                                     "type": "string"
                                   },
                                   "spanId": {
-                                    "type": "string"
-                                  },
-                                  "usageLimitExceeded": {
-                                    "type": "boolean"
-                                  },
-                                  "usageLimitEntityType": {
                                     "type": "string"
                                   },
                                   "originalError": {
@@ -115356,7 +115062,6 @@
                                       "content_filtered",
                                       "server_error",
                                       "network_error",
-                                      "empty_response",
                                       "unknown"
                                     ]
                                   },
@@ -115373,12 +115078,6 @@
                                     "type": "string"
                                   },
                                   "spanId": {
-                                    "type": "string"
-                                  },
-                                  "usageLimitExceeded": {
-                                    "type": "boolean"
-                                  },
-                                  "usageLimitEntityType": {
                                     "type": "string"
                                   },
                                   "originalError": {
@@ -115788,7 +115487,6 @@
                                       "content_filtered",
                                       "server_error",
                                       "network_error",
-                                      "empty_response",
                                       "unknown"
                                     ]
                                   },
@@ -115805,12 +115503,6 @@
                                     "type": "string"
                                   },
                                   "spanId": {
-                                    "type": "string"
-                                  },
-                                  "usageLimitExceeded": {
-                                    "type": "boolean"
-                                  },
-                                  "usageLimitEntityType": {
                                     "type": "string"
                                   },
                                   "originalError": {
@@ -116220,7 +115912,6 @@
                                       "content_filtered",
                                       "server_error",
                                       "network_error",
-                                      "empty_response",
                                       "unknown"
                                     ]
                                   },
@@ -116237,12 +115928,6 @@
                                     "type": "string"
                                   },
                                   "spanId": {
-                                    "type": "string"
-                                  },
-                                  "usageLimitExceeded": {
-                                    "type": "boolean"
-                                  },
-                                  "usageLimitEntityType": {
                                     "type": "string"
                                   },
                                   "originalError": {
@@ -116663,7 +116348,6 @@
                                       "content_filtered",
                                       "server_error",
                                       "network_error",
-                                      "empty_response",
                                       "unknown"
                                     ]
                                   },
@@ -116680,12 +116364,6 @@
                                     "type": "string"
                                   },
                                   "spanId": {
-                                    "type": "string"
-                                  },
-                                  "usageLimitExceeded": {
-                                    "type": "boolean"
-                                  },
-                                  "usageLimitEntityType": {
                                     "type": "string"
                                   },
                                   "originalError": {
@@ -117106,7 +116784,6 @@
                                       "content_filtered",
                                       "server_error",
                                       "network_error",
-                                      "empty_response",
                                       "unknown"
                                     ]
                                   },
@@ -117123,12 +116800,6 @@
                                     "type": "string"
                                   },
                                   "spanId": {
-                                    "type": "string"
-                                  },
-                                  "usageLimitExceeded": {
-                                    "type": "boolean"
-                                  },
-                                  "usageLimitEntityType": {
                                     "type": "string"
                                   },
                                   "originalError": {
@@ -117549,7 +117220,6 @@
                                       "content_filtered",
                                       "server_error",
                                       "network_error",
-                                      "empty_response",
                                       "unknown"
                                     ]
                                   },
@@ -117566,12 +117236,6 @@
                                     "type": "string"
                                   },
                                   "spanId": {
-                                    "type": "string"
-                                  },
-                                  "usageLimitExceeded": {
-                                    "type": "boolean"
-                                  },
-                                  "usageLimitEntityType": {
                                     "type": "string"
                                   },
                                   "originalError": {
@@ -118218,7 +117882,6 @@
                                       "content_filtered",
                                       "server_error",
                                       "network_error",
-                                      "empty_response",
                                       "unknown"
                                     ]
                                   },
@@ -118235,12 +117898,6 @@
                                     "type": "string"
                                   },
                                   "spanId": {
-                                    "type": "string"
-                                  },
-                                  "usageLimitExceeded": {
-                                    "type": "boolean"
-                                  },
-                                  "usageLimitEntityType": {
                                     "type": "string"
                                   },
                                   "originalError": {
@@ -119078,7 +118735,6 @@
                                       "content_filtered",
                                       "server_error",
                                       "network_error",
-                                      "empty_response",
                                       "unknown"
                                     ]
                                   },
@@ -119095,12 +118751,6 @@
                                     "type": "string"
                                   },
                                   "spanId": {
-                                    "type": "string"
-                                  },
-                                  "usageLimitExceeded": {
-                                    "type": "boolean"
-                                  },
-                                  "usageLimitEntityType": {
                                     "type": "string"
                                   },
                                   "originalError": {
@@ -132017,7 +131667,8 @@
                 "required": [
                   "name",
                   "connectorType",
-                  "config"
+                  "config",
+                  "credentials"
                 ]
               }
             }
@@ -136751,6 +136402,24 @@
                               "failed"
                             ]
                           },
+                          "embeddingError": {
+                            "nullable": true,
+                            "type": "string",
+                            "enum": [
+                              "rate_limit",
+                              "authentication",
+                              "permission_denied",
+                              "invalid_request",
+                              "not_found",
+                              "context_too_long",
+                              "content_filtered",
+                              "server_error",
+                              "network_error",
+                              "unknown",
+                              "length_mismatch",
+                              "dimensions_mismatch"
+                            ]
+                          },
                           "chunkCount": {
                             "type": "integer",
                             "minimum": -2147483648,
@@ -136882,6 +136551,7 @@
                           "acl",
                           "metadata",
                           "embeddingStatus",
+                          "embeddingError",
                           "chunkCount",
                           "createdAt",
                           "updatedAt",
@@ -137265,6 +136935,24 @@
                         "failed"
                       ]
                     },
+                    "embeddingError": {
+                      "nullable": true,
+                      "type": "string",
+                      "enum": [
+                        "rate_limit",
+                        "authentication",
+                        "permission_denied",
+                        "invalid_request",
+                        "not_found",
+                        "context_too_long",
+                        "content_filtered",
+                        "server_error",
+                        "network_error",
+                        "unknown",
+                        "length_mismatch",
+                        "dimensions_mismatch"
+                      ]
+                    },
                     "chunkCount": {
                       "type": "integer",
                       "minimum": -2147483648,
@@ -137397,6 +137085,7 @@
                     "acl",
                     "metadata",
                     "embeddingStatus",
+                    "embeddingError",
                     "chunkCount",
                     "createdAt",
                     "updatedAt",
@@ -140946,6 +140635,24 @@
                               "failed"
                             ]
                           },
+                          "embeddingError": {
+                            "nullable": true,
+                            "type": "string",
+                            "enum": [
+                              "rate_limit",
+                              "authentication",
+                              "permission_denied",
+                              "invalid_request",
+                              "not_found",
+                              "context_too_long",
+                              "content_filtered",
+                              "server_error",
+                              "network_error",
+                              "unknown",
+                              "length_mismatch",
+                              "dimensions_mismatch"
+                            ]
+                          },
                           "assignedAgents": {
                             "type": "array",
                             "items": {
@@ -140983,6 +140690,7 @@
                           "processingStatus",
                           "processingError",
                           "embeddingStatus",
+                          "embeddingError",
                           "assignedAgents"
                         ],
                         "additionalProperties": false
@@ -141719,6 +141427,24 @@
                         "failed"
                       ]
                     },
+                    "embeddingError": {
+                      "nullable": true,
+                      "type": "string",
+                      "enum": [
+                        "rate_limit",
+                        "authentication",
+                        "permission_denied",
+                        "invalid_request",
+                        "not_found",
+                        "context_too_long",
+                        "content_filtered",
+                        "server_error",
+                        "network_error",
+                        "unknown",
+                        "length_mismatch",
+                        "dimensions_mismatch"
+                      ]
+                    },
                     "assignedAgents": {
                       "type": "array",
                       "items": {
@@ -141756,6 +141482,7 @@
                     "processingStatus",
                     "processingError",
                     "embeddingStatus",
+                    "embeddingError",
                     "assignedAgents"
                   ],
                   "additionalProperties": false
@@ -142128,6 +141855,24 @@
                         "failed"
                       ]
                     },
+                    "embeddingError": {
+                      "nullable": true,
+                      "type": "string",
+                      "enum": [
+                        "rate_limit",
+                        "authentication",
+                        "permission_denied",
+                        "invalid_request",
+                        "not_found",
+                        "context_too_long",
+                        "content_filtered",
+                        "server_error",
+                        "network_error",
+                        "unknown",
+                        "length_mismatch",
+                        "dimensions_mismatch"
+                      ]
+                    },
                     "assignedAgents": {
                       "type": "array",
                       "items": {
@@ -142165,6 +141910,7 @@
                     "processingStatus",
                     "processingError",
                     "embeddingStatus",
+                    "embeddingError",
                     "assignedAgents"
                   ],
                   "additionalProperties": false
@@ -190454,7 +190200,6 @@
                                   "content_filtered",
                                   "server_error",
                                   "network_error",
-                                  "empty_response",
                                   "unknown"
                                 ]
                               },
@@ -190471,12 +190216,6 @@
                                 "type": "string"
                               },
                               "spanId": {
-                                "type": "string"
-                              },
-                              "usageLimitExceeded": {
-                                "type": "boolean"
-                              },
-                              "usageLimitEntityType": {
                                 "type": "string"
                               },
                               "originalError": {

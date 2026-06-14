@@ -1,11 +1,14 @@
 "use client";
 
 import {
+  EmbeddingErrorCode,
+  KbEmbeddingErrorMessages,
   KNOWLEDGE_FILE_ACCEPT_ATTRIBUTE,
   KNOWLEDGE_FILE_SUPPORTED_FORMATS_LABEL,
   type ResourceVisibilityScope,
 } from "@archestra/shared";
 import type { ColumnDef } from "@tanstack/react-table";
+import type { VariantProps } from "class-variance-authority";
 import { formatDistanceToNow } from "date-fns";
 import {
   Download,
@@ -33,7 +36,7 @@ import {
   type TableRowAction,
   TableRowActions,
 } from "@/components/table-row-actions";
-import { Badge } from "@/components/ui/badge";
+import { Badge, type badgeVariants } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import { Input } from "@/components/ui/input";
@@ -50,6 +53,11 @@ import {
   useUploadKnowledgeFiles,
 } from "@/lib/knowledge/knowledge-files.query";
 import { cn, formatDate } from "@/lib/utils";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { KnowledgeFileAccessFields } from "./_parts/knowledge-file-access-fields";
 
 export default function KnowledgeFilesPage() {
@@ -482,39 +490,107 @@ function EditKnowledgeFileDialog({
   );
 }
 
-function FileStatusBadge({ file }: { file: KnowledgeFile }) {
-  if (file.processingStatus !== "completed") {
-    const label =
-      file.processingStatus === "processing"
-        ? "Extracting"
-        : file.processingStatus === "failed"
-          ? "Failed"
-          : "Queued";
+function BadgeWithTooltip({
+  label,
+  variant,
+  isLoading,
+  tooltip,
+}: {
+  variant: VariantProps<typeof badgeVariants>["variant"];
+  label: string;
+  isLoading?: boolean;
+  tooltip?: string | null;
+}) {
+  if (tooltip) {
     return (
-      <Badge
-        variant={
-          file.processingStatus === "failed" ? "destructive" : "secondary"
-        }
-        className="text-xs"
-      >
-        {file.processingStatus === "processing" && (
-          <Loader2 className="h-3 w-3 animate-spin" />
-        )}
-        {label}
-      </Badge>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Badge variant={variant} className="capitalize text-xs cursor-help">
+            {isLoading && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
+            {label}
+          </Badge>
+        </TooltipTrigger>
+        <TooltipContent>{tooltip}</TooltipContent>
+      </Tooltip>
     );
   }
 
   return (
-    <Badge
-      variant={file.embeddingStatus === "failed" ? "destructive" : "secondary"}
-      className="text-xs"
-    >
-      {file.embeddingStatus === "processing" && (
-        <Loader2 className="h-3 w-3 animate-spin" />
-      )}
-      {file.embeddingStatus === "completed" ? "Indexed" : file.embeddingStatus}
+    <Badge variant={variant} className="capitalize text-xs cursor-default">
+      {isLoading && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
+      {label}
     </Badge>
+  );
+}
+
+function FileStatusBadge({ file }: { file: KnowledgeFile }) {
+  const { processingStatus, processingError, embeddingStatus, embeddingError } =
+    file;
+
+  if (processingStatus && processingStatus !== "completed") {
+    const variants = {
+      pending: "secondary",
+      processing: "secondary",
+      failed: "destructive",
+    } as const;
+
+    const labels = {
+      pending: "Queued",
+      processing: "Extracting…",
+      failed: "Processing Failed",
+    };
+
+    const variant =
+      variants[processingStatus as keyof typeof variants] ?? "secondary";
+    const label =
+      labels[processingStatus as keyof typeof labels] ?? processingStatus;
+
+    return (
+      <BadgeWithTooltip
+        variant={variant}
+        label={label}
+        isLoading={processingStatus === "processing"}
+        tooltip={
+          processingStatus === "failed" && processingError
+            ? processingError
+            : processingStatus === "pending"
+              ? "File is queued for text extraction"
+              : "Extracting text from file…"
+        }
+      />
+    );
+  }
+
+  const variants = {
+    completed: "default",
+    pending: "secondary",
+    processing: "secondary",
+    failed: "destructive",
+  } as const;
+
+  const labels = {
+    completed: "Indexed",
+    pending: "Pending",
+    processing: "Indexing…",
+    failed: "Failed",
+  } as const;
+
+  const variant = variants[embeddingStatus] ?? "secondary";
+  const label = labels[embeddingStatus] ?? embeddingStatus;
+
+  return (
+    <BadgeWithTooltip
+      label={label}
+      variant={variant}
+      isLoading={embeddingStatus === "processing"}
+      tooltip={
+        embeddingStatus === "failed"
+          ? (embeddingError
+              ? KbEmbeddingErrorMessages[embeddingError]
+              : KbEmbeddingErrorMessages[EmbeddingErrorCode.Unknown])
+          : null
+      }
+    />
   );
 }
 

@@ -1,3 +1,4 @@
+import type { EmbeddingErrorCode } from "@archestra/shared";
 import {
   index,
   integer,
@@ -32,6 +33,7 @@ const kbDocumentsTable = pgTable(
       .$type<EmbeddingStatus>()
       .notNull()
       .default("pending"),
+    embeddingError: text("embedding_error").$type<EmbeddingErrorCode>(),
     chunkCount: integer("chunk_count").notNull().default(0),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" })

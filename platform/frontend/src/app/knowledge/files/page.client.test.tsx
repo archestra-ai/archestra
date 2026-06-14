@@ -52,6 +52,7 @@ vi.mock("@/lib/knowledge/knowledge-files.query", () => ({
           processingStatus: "completed",
           processingError: null,
           embeddingStatus: "completed",
+          embeddingError: null,
           visibility: "personal",
           teamIds: [],
           assignedAgents: [

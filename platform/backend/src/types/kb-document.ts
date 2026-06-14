@@ -1,3 +1,4 @@
+import { EmbeddingErrorCodeSchema } from "@archestra/shared";
 import {
   createInsertSchema,
   createSelectSchema,
@@ -31,6 +32,9 @@ export const EmbeddingStatusSchema = z.enum([
 ]);
 export type EmbeddingStatus = z.infer<typeof EmbeddingStatusSchema>;
 
+export { EmbeddingErrorCodeSchema };
+export type EmbeddingError = z.infer<typeof EmbeddingErrorCodeSchema>;
+
 export const KbDocumentMetadataSchema = z.record(z.string(), z.unknown());
 export type KbDocumentMetadata = z.infer<typeof KbDocumentMetadataSchema>;
 
@@ -43,13 +47,17 @@ const extendedFields = {
 
 export const SelectKbDocumentSchema = createSelectSchema(
   schema.kbDocumentsTable,
-  extendedFields,
+  {
+    ...extendedFields,
+    embeddingError: EmbeddingErrorCodeSchema.nullable(),
+  },
 );
 export const InsertKbDocumentSchema = createInsertSchema(
   schema.kbDocumentsTable,
   {
     ...extendedFields,
     embeddingStatus: EmbeddingStatusSchema.optional(),
+    embeddingError: EmbeddingErrorCodeSchema.nullable().optional(),
     acl: z.array(AclEntrySchema).optional(),
     metadata: KbDocumentMetadataSchema.optional(),
   },
@@ -58,6 +66,7 @@ export const UpdateKbDocumentSchema = createUpdateSchema(
   schema.kbDocumentsTable,
   {
     embeddingStatus: EmbeddingStatusSchema.optional(),
+    embeddingError: EmbeddingErrorCodeSchema.nullable().optional(),
     acl: z.array(AclEntrySchema).optional(),
     metadata: KbDocumentMetadataSchema.optional(),
   },
@@ -69,6 +78,7 @@ export const UpdateKbDocumentSchema = createUpdateSchema(
   acl: true,
   metadata: true,
   embeddingStatus: true,
+  embeddingError: true,
   chunkCount: true,
 });
 

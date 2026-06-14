@@ -251,30 +251,29 @@ export const MinimaxErrorTypes = {
  * Normalized error codes for chat errors across all LLM providers.
  * These provide a consistent set of error categories regardless of the underlying provider.
  */
-export enum ChatErrorCode {
+export const ChatErrorCode = {
   /** Rate/quota exceeded - retryable after delay */
-  RateLimit = "rate_limit",
+  RateLimit: "rate_limit",
   /** Invalid or missing API key */
-  Authentication = "authentication",
+  Authentication: "authentication",
   /** API key lacks permissions for the requested resource */
-  PermissionDenied = "permission_denied",
+  PermissionDenied: "permission_denied",
   /** Malformed or invalid request */
-  InvalidRequest = "invalid_request",
+  InvalidRequest: "invalid_request",
   /** Model or resource not found */
-  NotFound = "not_found",
+  NotFound: "not_found",
   /** Input exceeds the model's context window */
-  ContextTooLong = "context_too_long",
+  ContextTooLong: "context_too_long",
   /** Content blocked by safety filters */
-  ContentFiltered = "content_filtered",
+  ContentFiltered: "content_filtered",
   /** Provider server error - retryable */
-  ServerError = "server_error",
+  ServerError: "server_error",
   /** Network/connection issues - retryable */
-  NetworkError = "network_error",
-  /** Provider finished cleanly but produced no content - retryable */
-  EmptyResponse = "empty_response",
+  NetworkError: "network_error",
   /** Catch-all for unrecognized errors */
-  Unknown = "unknown",
-}
+  Unknown: "unknown",
+} as const;
+export type ChatErrorCode = (typeof ChatErrorCode)[keyof typeof ChatErrorCode];
 
 /**
  * User-friendly error messages for each error code
@@ -297,10 +296,38 @@ export const ChatErrorMessages: Record<ChatErrorCode, string> = {
   [ChatErrorCode.ServerError]: "The AI provider is experiencing issues.",
   [ChatErrorCode.NetworkError]:
     "Connection error. Please check your network and try again.",
-  [ChatErrorCode.EmptyResponse]:
-    "The model ended its turn without a reply. Rephrasing your message may help.",
   [ChatErrorCode.Unknown]: "An unexpected error occurred. Please try again.",
 };
+
+/**
+ * Maps an HTTP status code to a normalized ChatErrorCode.
+ * Embedding error classification reuses this via mapHttpStatusToEmbeddingError.
+ */
+export function mapHttpStatusToChatError(
+  status: number | undefined,
+): ChatErrorCode {
+  switch (status) {
+    case 400:
+    case 409:
+    case 422:
+      return ChatErrorCode.InvalidRequest;
+    case 401:
+      return ChatErrorCode.Authentication;
+    case 403:
+      return ChatErrorCode.PermissionDenied;
+    case 404:
+      return ChatErrorCode.NotFound;
+    case 413:
+      return ChatErrorCode.ContextTooLong;
+    case 429:
+      return ChatErrorCode.RateLimit;
+    default:
+      if (status !== undefined && status >= 500) {
+        return ChatErrorCode.ServerError;
+      }
+      return ChatErrorCode.Unknown;
+  }
+}
 
 /**
  * Error codes that indicate the operation can be retried
@@ -309,7 +336,6 @@ export const RetryableErrorCodes: Set<ChatErrorCode> = new Set([
   ChatErrorCode.RateLimit,
   ChatErrorCode.ServerError,
   ChatErrorCode.NetworkError,
-  ChatErrorCode.EmptyResponse,
 ]);
 
 /**
@@ -329,10 +355,6 @@ export interface ChatErrorResponse {
   traceId?: string;
   /** OpenTelemetry span ID for correlating with backend logs */
   spanId?: string;
-  /** True when the request was blocked by a configured usage-limit budget */
-  usageLimitExceeded?: boolean;
-  /** The usage-limit entity that blocked the request, when known */
-  usageLimitEntityType?: string;
   /** Original error details for debugging (provider-specific) */
   originalError?: {
     /** Provider name (anthropic, openai, gemini) */
@@ -355,8 +377,6 @@ export const ChatErrorResponseSchema: z.ZodType<ChatErrorResponse> = z.object({
   sessionId: z.string().optional(),
   traceId: z.string().optional(),
   spanId: z.string().optional(),
-  usageLimitExceeded: z.boolean().optional(),
-  usageLimitEntityType: z.string().optional(),
   originalError: z
     .object({
       provider: SupportedProvidersSchema.optional(),
